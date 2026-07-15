@@ -26,18 +26,6 @@ impl KeyboardManager {
         manager
     }
 
-    pub fn update_mappings(&self, mappings: KeyMappings) {
-        let mut mappings_guard = self.mappings.write();
-        let current_mode = self.current_mode.read();
-        let next_valid_keys = Self::valid_keys_for_mode(&mappings, &current_mode);
-        let mut valid_keys = self.valid_keys.write();
-        let mut active_keys = self.active_keys.write();
-
-        Self::retain_active_keys(&mut active_keys, &current_mode, &next_valid_keys);
-        *mappings_guard = mappings;
-        *valid_keys = next_valid_keys;
-    }
-
     pub fn set_mode(&self, mode: impl Into<String>) -> bool {
         let mode = mode.into();
         let mappings = self.mappings.read();
@@ -265,14 +253,17 @@ mod tests {
         );
         assert!(manager.register_key_down("custom", "KeyD"));
 
-        manager.update_mappings(HashMap::from([("custom".to_string(), Vec::new())]));
+        manager.update_mappings_and_set_mode(
+            HashMap::from([("custom".to_string(), Vec::new())]),
+            "custom".to_string(),
+        );
 
         assert!(manager.pressed_keys().is_empty());
         assert!(!manager.register_key_up("custom", "KeyD"));
     }
 
     #[test]
-    fn update_mappings_prunes_removed_active_keys() {
+    fn update_mappings_and_mode_prunes_removed_active_keys() {
         let manager = KeyboardManager::new(
             HashMap::from([(
                 "4key".to_string(),
@@ -283,10 +274,13 @@ mod tests {
         assert!(manager.register_key_down("4key", "KeyD"));
         assert!(manager.register_key_down("4key", "KeyF"));
 
-        manager.update_mappings(HashMap::from([(
+        manager.update_mappings_and_set_mode(
+            HashMap::from([(
+                "4key".to_string(),
+                vec!["KeyF".to_string(), "KeyJ".to_string()],
+            )]),
             "4key".to_string(),
-            vec!["KeyF".to_string(), "KeyJ".to_string()],
-        )]));
+        );
 
         assert_eq!(manager.pressed_keys(), vec!["KeyF"]);
         assert!(!manager.register_key_up("4key", "KeyD"));

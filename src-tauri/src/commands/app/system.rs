@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
 use crate::errors::CmdResult;
@@ -30,8 +30,7 @@ pub fn app_open_external(_app: AppHandle, url: String) -> CmdResult<()> {
 
 #[tauri::command]
 pub fn app_restart(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
-    state.shutdown();
-    app.request_restart();
+    state.request_frontend_restart(app);
     Ok(())
 }
 
@@ -43,7 +42,24 @@ pub fn window_show_main(app: AppHandle, state: State<'_, AppState>) -> CmdResult
 
 #[tauri::command]
 pub fn app_quit(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
-    state.request_shutdown(app);
+    state.request_frontend_shutdown(app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn app_quit_after_editor_flush(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    handshake_id: String,
+) -> CmdResult<()> {
+    state.acknowledge_frontend_lifecycle(app, &handshake_id, window.label());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn app_cancel_editor_flush(state: State<'_, AppState>, handshake_id: String) -> CmdResult<()> {
+    state.cancel_frontend_lifecycle(&handshake_id);
     Ok(())
 }
 

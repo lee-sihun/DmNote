@@ -1,0 +1,265 @@
+use serde::{Deserialize, Serialize};
+
+use super::{
+    AppStoreData, CustomTab, GraphPositions, KeyCounters, KeyMappings, KeyPositions, KnobPositions,
+    LayerGroups, SettingsPatchInput, StatPositions, TabNoteOverrides,
+};
+
+pub const EDITOR_SCHEMA_VERSION: u16 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorHistoryRestoreRequest {
+    pub base_revision: u64,
+    pub document: EditorDocumentV1,
+    pub custom_tabs: Vec<CustomTab>,
+    pub selected_key_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_counters: Option<KeyCounters>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings_patch: Option<SettingsPatchInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_note_overrides: Option<TabNoteOverrides>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EditorField {
+    Keys,
+    KeyPositions,
+    StatPositions,
+    GraphPositions,
+    KnobPositions,
+    LayerGroups,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorDocumentV1 {
+    pub schema_version: u16,
+    pub keys: KeyMappings,
+    pub key_positions: KeyPositions,
+    pub stat_positions: StatPositions,
+    pub graph_positions: GraphPositions,
+    pub knob_positions: KnobPositions,
+    pub layer_groups: LayerGroups,
+}
+
+impl EditorDocumentV1 {
+    pub fn from_store(store: &AppStoreData) -> Self {
+        Self {
+            schema_version: EDITOR_SCHEMA_VERSION,
+            keys: store.keys.clone(),
+            key_positions: store.key_positions.clone(),
+            stat_positions: store.stat_positions.clone(),
+            graph_positions: store.graph_positions.clone(),
+            knob_positions: store.knob_positions.clone(),
+            layer_groups: store.layer_groups.clone(),
+        }
+    }
+
+    pub fn apply_to_store(&self, store: &mut AppStoreData) {
+        store.keys = self.keys.clone();
+        store.key_positions = self.key_positions.clone();
+        store.stat_positions = self.stat_positions.clone();
+        store.graph_positions = self.graph_positions.clone();
+        store.knob_positions = self.knob_positions.clone();
+        store.layer_groups = self.layer_groups.clone();
+    }
+
+    pub fn apply_patch(&mut self, patch: &EditorPatchV1) {
+        if let Some(value) = patch.keys.as_ref() {
+            self.keys = value.clone();
+        }
+        if let Some(value) = patch.key_positions.as_ref() {
+            self.key_positions = value.clone();
+        }
+        if let Some(value) = patch.stat_positions.as_ref() {
+            self.stat_positions = value.clone();
+        }
+        if let Some(value) = patch.graph_positions.as_ref() {
+            self.graph_positions = value.clone();
+        }
+        if let Some(value) = patch.knob_positions.as_ref() {
+            self.knob_positions = value.clone();
+        }
+        if let Some(value) = patch.layer_groups.as_ref() {
+            self.layer_groups = value.clone();
+        }
+    }
+
+    pub fn changed_fields(&self, next: &Self) -> Vec<EditorField> {
+        let mut fields = Vec::new();
+        if self.keys != next.keys {
+            fields.push(EditorField::Keys);
+        }
+        if self.key_positions != next.key_positions {
+            fields.push(EditorField::KeyPositions);
+        }
+        if self.stat_positions != next.stat_positions {
+            fields.push(EditorField::StatPositions);
+        }
+        if self.graph_positions != next.graph_positions {
+            fields.push(EditorField::GraphPositions);
+        }
+        if self.knob_positions != next.knob_positions {
+            fields.push(EditorField::KnobPositions);
+        }
+        if self.layer_groups != next.layer_groups {
+            fields.push(EditorField::LayerGroups);
+        }
+        fields
+    }
+
+    pub fn patch_for_fields(&self, fields: &[EditorField]) -> EditorPatchV1 {
+        let mut patch = EditorPatchV1::default();
+        for field in fields {
+            match field {
+                EditorField::Keys => patch.keys = Some(self.keys.clone()),
+                EditorField::KeyPositions => {
+                    patch.key_positions = Some(self.key_positions.clone());
+                }
+                EditorField::StatPositions => {
+                    patch.stat_positions = Some(self.stat_positions.clone());
+                }
+                EditorField::GraphPositions => {
+                    patch.graph_positions = Some(self.graph_positions.clone());
+                }
+                EditorField::KnobPositions => {
+                    patch.knob_positions = Some(self.knob_positions.clone());
+                }
+                EditorField::LayerGroups => {
+                    patch.layer_groups = Some(self.layer_groups.clone());
+                }
+            }
+        }
+        patch
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorPatchV1 {
+    pub schema_version: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keys: Option<KeyMappings>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_positions: Option<KeyPositions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stat_positions: Option<StatPositions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_positions: Option<GraphPositions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub knob_positions: Option<KnobPositions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer_groups: Option<LayerGroups>,
+}
+
+impl Default for EditorPatchV1 {
+    fn default() -> Self {
+        Self {
+            schema_version: EDITOR_SCHEMA_VERSION,
+            keys: None,
+            key_positions: None,
+            stat_positions: None,
+            graph_positions: None,
+            knob_positions: None,
+            layer_groups: None,
+        }
+    }
+}
+
+impl EditorPatchV1 {
+    pub fn includes(&self, field: EditorField) -> bool {
+        match field {
+            EditorField::Keys => self.keys.is_some(),
+            EditorField::KeyPositions => self.key_positions.is_some(),
+            EditorField::StatPositions => self.stat_positions.is_some(),
+            EditorField::GraphPositions => self.graph_positions.is_some(),
+            EditorField::KnobPositions => self.knob_positions.is_some(),
+            EditorField::LayerGroups => self.layer_groups.is_some(),
+        }
+    }
+
+    pub fn included_fields(&self) -> Vec<EditorField> {
+        [
+            EditorField::Keys,
+            EditorField::KeyPositions,
+            EditorField::StatPositions,
+            EditorField::GraphPositions,
+            EditorField::KnobPositions,
+            EditorField::LayerGroups,
+        ]
+        .into_iter()
+        .filter(|field| self.includes(*field))
+        .collect()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorCommitRequest {
+    pub base_revision: u64,
+    pub mutation_id: String,
+    pub changes: EditorPatchV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorCommitResult {
+    pub revision: u64,
+    pub changed_fields: Vec<EditorField>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorGetResult {
+    pub revision: u64,
+    pub document: EditorDocumentV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorCommittedV1 {
+    pub schema_version: u16,
+    pub revision: u64,
+    pub mutation_id: String,
+    pub origin: String,
+    pub changed_fields: Vec<EditorField>,
+    pub patch: EditorPatchV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EditorCommitOrigin {
+    StrictEditorCommit,
+    LegacyAdapter(String),
+    // 이벤트 없는 부팅 복구용 origin 계약
+    #[allow(dead_code)]
+    LoadRecovery,
+}
+
+impl EditorCommitOrigin {
+    pub fn event_name(&self) -> Option<String> {
+        match self {
+            Self::StrictEditorCommit => Some("editorCommit".to_string()),
+            Self::LegacyAdapter(command) => Some(format!("legacy:{command}")),
+            Self::LoadRecovery => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CommittedEditorChange {
+    pub result: EditorCommitResult,
+    pub event: Option<EditorCommittedV1>,
+    pub replayed: bool,
+    pub document: EditorDocumentV1,
+    pub selected_key_type: String,
+    pub key_counters: KeyCounters,
+}
+
+#[derive(Debug, Clone)]
+pub struct EditorTransactionResult<T> {
+    pub value: T,
+    pub change: CommittedEditorChange,
+}

@@ -162,6 +162,8 @@ fn main() {
             commands::app::system::app_open_external,
             commands::app::system::app_restart,
             commands::app::system::app_quit,
+            commands::app::system::app_quit_after_editor_flush,
+            commands::app::system::app_cancel_editor_flush,
             commands::app::system::window_open_devtools_all,
             commands::app::system::get_cursor_settings,
             // OBS 모드
@@ -195,6 +197,8 @@ fn main() {
             commands::editor::note_tab::note_tab_get,
             commands::editor::note_tab::note_tab_set,
             commands::editor::note_tab::note_tab_clear,
+            commands::editor::state::editor_get,
+            commands::editor::state::editor_commit,
             // 키 입력/설정
             commands::keys::keys::keys_get,
             commands::keys::keys::keys_get_counters,
@@ -216,6 +220,7 @@ fn main() {
             commands::keys::keys::custom_tabs_delete,
             commands::keys::keys::custom_tabs_select,
             commands::keys::keys::custom_tabs_restore,
+            commands::keys::keys::editor_history_restore,
             commands::keys::keys::layer_groups_get,
             commands::keys::keys::layer_groups_update,
             commands::keys::key_sound::key_sound_get_status,
@@ -277,6 +282,18 @@ fn main() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { code, api, .. } if code.is_none() => {
+            api.prevent_exit();
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                if let Some(main) = app_handle.get_webview_window("main") {
+                    let _ = main.hide();
+                }
+                if let Some(overlay) = app_handle.get_webview_window("overlay") {
+                    let _ = overlay.hide();
+                }
+                state.request_frontend_shutdown(app_handle.clone());
+            }
+        }
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
             if let Some(state) = app_handle.try_state::<AppState>() {
                 state.arm_shutdown_watchdog("RunEvent state shutdown");

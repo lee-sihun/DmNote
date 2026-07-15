@@ -79,14 +79,8 @@ pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResul
         use_custom_js: Some(snapshot.use_custom_js),
         custom_js: Some(snapshot.custom_js),
         font_settings: Some(font_settings),
-        tab_note_overrides: {
-            let overrides = snapshot.tab_note_overrides;
-            if overrides.is_empty() {
-                None
-            } else {
-                Some(overrides)
-            }
-        },
+        // 현재 형식은 빈 맵도 명시해 "필드 없음(과거 버전)"과 "비우기"를 구분
+        tab_note_overrides: Some(snapshot.tab_note_overrides),
         layer_groups: Some(snapshot.layer_groups),
         tab_css_overrides: Some(snapshot.tab_css_overrides),
         embedded_local_fonts: (!embedded_local_fonts.is_empty()).then_some(embedded_local_fonts),
@@ -195,11 +189,7 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
         if let Some(settings) = snapshot.tab_note_overrides.get(&tab_id) {
             m.insert(tab_id.clone(), settings.clone());
         }
-        if m.is_empty() {
-            None
-        } else {
-            Some(m)
-        }
+        Some(m)
     };
 
     let mut tab_layer_groups = LayerGroups::new();

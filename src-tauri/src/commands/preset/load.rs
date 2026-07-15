@@ -6,17 +6,21 @@ use std::{
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use rfd::FileDialog;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 use crate::{
-    commands::editor::css::TabCssResponse,
+    commands::editor::{
+        css::TabCssResponse,
+        state::{emit_best_effort, publish_editor_change},
+    },
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
-        CustomCssPatch, CustomJsPatch, FontSettings, FontType, GraphPositions, KeyMappings,
-        KeyPositions, KnobPositions, NoteSettingsPatch, SettingsPatchInput, StatPositions,
-        TabCssOverrides,
+        AppStoreData, CommittedEditorChange, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch,
+        EditorCommitOrigin, EditorField, FontSettings, FontType, GraphPositions, KeyMappings,
+        KeyPosition, KeyPositions, KnobPositions, LayerGroups, NoteSettings, NoteSettingsPatch,
+        SettingsPatchInput, StatPositions, TabCssOverrides, TabNoteSettings,
     },
     services::settings::apply_patch_to_store,
     state::AppState,
@@ -28,6 +32,70 @@ use super::{
     EmbeddedLocalSound, PresetFile, PresetOperationResult, PRESET_LOCAL_IMAGE_PREFIX,
     PRESET_LOCAL_SOUND_PREFIX,
 };
+
+fn apply_editor_runtime_best_effort(
+    state: &AppState,
+    app: &AppHandle,
+    change: &CommittedEditorChange,
+) {
+    if let Err(error) = state.apply_committed_editor_key_runtime(
+        app,
+        &change.document.keys,
+        &change.selected_key_type,
+        &change.key_counters,
+    ) {
+        log::error!("[Preset] failed to publish committed key counters: {error:#}");
+    }
+    state.obs_broadcast_counters();
+    state.refresh_obs_snapshot();
+}
+
+fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
+    let content = fs::read_to_string(path)?;
+    serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))
+}
+
+struct ResolvedFullPresetSettings {
+    background_color: String,
+    note_settings: NoteSettings,
+    note_effect: bool,
+    laboratory_enabled: bool,
+    use_custom_css: bool,
+    custom_css: CustomCss,
+    use_custom_js: bool,
+    custom_js: CustomJs,
+}
+
+/// 과거 프리셋에 없던 전역 필드는 현재 값을 보존해 신규 설정을 지우지 않음
+fn resolve_full_preset_settings(
+    preset: &mut PresetFile,
+    current: &AppStoreData,
+) -> ResolvedFullPresetSettings {
+    ResolvedFullPresetSettings {
+        background_color: preset
+            .background_color
+            .take()
+            .unwrap_or_else(|| current.background_color.clone()),
+        note_settings: preset
+            .note_settings
+            .take()
+            .unwrap_or_else(|| current.note_settings.clone()),
+        note_effect: preset.note_effect.unwrap_or(current.note_effect),
+        laboratory_enabled: preset
+            .laboratory_enabled
+            .unwrap_or(current.laboratory_enabled),
+        use_custom_css: preset.use_custom_css.unwrap_or(current.use_custom_css),
+        custom_css: preset
+            .custom_css
+            .take()
+            .unwrap_or_else(|| current.custom_css.clone()),
+        use_custom_js: preset.use_custom_js.unwrap_or(current.use_custom_js),
+        custom_js: preset
+            .custom_js
+            .take()
+            .unwrap_or_else(|| current.custom_js.clone()),
+    }
+}
 
 #[tauri::command]
 pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<PresetOperationResult> {
@@ -42,11 +110,11 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         });
     };
 
-    let content = fs::read_to_string(&path)?;
-    let preset: PresetFile =
-        serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))?;
+    let mut preset = read_preset_file(&path)?;
+    let current = state.store.snapshot();
+    let resolved_settings = resolve_full_preset_settings(&mut preset, &current);
 
-    let keys = preset.keys.unwrap_or_else(|| default_keys().clone());
+    let mut keys = preset.keys.unwrap_or_else(|| default_keys().clone());
     let mut positions = preset
         .key_positions
         .unwrap_or_else(|| default_positions().clone());
@@ -56,14 +124,11 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     let custom_tabs = preset
         .custom_tabs
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
-    let snapshot = state.store.snapshot();
-    let previous_tab_css_overrides = snapshot.tab_css_overrides.clone();
-    let selected_key_type =
-        choose_selected_key_type(preset.selected_key_type, &keys, snapshot.selected_key_type);
-    let preset_layer_groups = preset.layer_groups;
+    let requested_selected_key_type = preset.selected_key_type;
+    let preset_layer_groups = resolve_full_preset_layer_groups(preset.layer_groups, &keys);
     let preset_tab_css_overrides = preset.tab_css_overrides;
 
-    let mut desired_settings = preset.note_settings.unwrap_or_default();
+    let mut desired_settings = resolved_settings.note_settings;
     desired_settings.migrate_fade_position();
     let note_patch = NoteSettingsPatch {
         frame_limit: Some(desired_settings.frame_limit),
@@ -81,10 +146,10 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         key_display_delay_ms: Some(desired_settings.key_display_delay_ms),
     };
 
-    let css_use = preset.use_custom_css.unwrap_or(false);
-    let custom_css = preset.custom_css.unwrap_or_default();
-    let js_use = preset.use_custom_js.unwrap_or(false);
-    let custom_js = preset.custom_js.unwrap_or_default();
+    let css_use = resolved_settings.use_custom_css;
+    let custom_css = resolved_settings.custom_css;
+    let js_use = resolved_settings.use_custom_js;
+    let custom_js = resolved_settings.custom_js;
     let has_font_settings = preset.font_settings.is_some();
     let mut preset_font_settings = preset.font_settings.clone().unwrap_or_default();
     if has_font_settings {
@@ -110,21 +175,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         &mut knob_positions,
         preset.embedded_local_sounds.as_deref(),
     )?;
-
-    // 임포트 경계 — 정의와 참조가 함께 확정되므로 dangling groupId 정리
-    // (프리셋에 그룹 정의가 없으면 현재 스토어의 그룹이 유지되므로 그 기준으로 검사)
-    {
-        let effective_layer_groups = preset_layer_groups
-            .clone()
-            .unwrap_or_else(|| snapshot.layer_groups.clone());
-        crate::state::migration::clear_dangling_group_ids_in(
-            &mut positions,
-            &mut stat_positions,
-            &mut graph_positions,
-            &mut knob_positions,
-            &effective_layer_groups,
-        );
-    }
+    align_imported_key_collections(&mut keys, &mut positions);
 
     // 탭별 노트 설정 복원 (없으면 빈 맵으로 초기화 → 전역 폴백)
     let mut tab_note_overrides = preset.tab_note_overrides.unwrap_or_default();
@@ -133,14 +184,10 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     }
 
     let settings_patch = SettingsPatchInput {
-        background_color: Some(
-            preset
-                .background_color
-                .unwrap_or_else(|| "transparent".to_string()),
-        ),
+        background_color: Some(resolved_settings.background_color),
         note_settings: Some(note_patch),
-        note_effect: Some(preset.note_effect.unwrap_or(false)),
-        laboratory_enabled: Some(preset.laboratory_enabled.unwrap_or(false)),
+        note_effect: Some(resolved_settings.note_effect),
+        laboratory_enabled: Some(resolved_settings.laboratory_enabled),
         use_custom_css: Some(css_use),
         custom_css: Some(CustomCssPatch {
             path: Some(custom_css.path.clone()),
@@ -155,53 +202,80 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         }),
         ..SettingsPatchInput::default()
     };
-    let mut settings_diff = None;
-    let normalized = state.store.update(|store| {
-        store.keys = keys.clone();
-        store.key_positions = positions.clone();
-        store.stat_positions = stat_positions.clone();
-        store.graph_positions = graph_positions.clone();
-        store.knob_positions = knob_positions.clone();
-        store.custom_tabs = custom_tabs.clone();
-        store.selected_key_type = selected_key_type.clone();
-        store.tab_note_overrides = tab_note_overrides.clone();
-        if let Some(layer_groups) = preset_layer_groups.as_ref() {
-            store.layer_groups = layer_groups.clone();
-        }
-        if let Some(tab_css_overrides) = preset_tab_css_overrides.as_ref() {
-            store.tab_css_overrides = tab_css_overrides.clone();
-        }
-        settings_diff = Some(apply_patch_to_store(store, &settings_patch));
-    })?;
-    let diff = settings_diff
-        .ok_or_else(|| CommandError::msg("preset settings transaction did not produce a diff"))?;
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
+        &[
+            EditorField::Keys,
+            EditorField::KeyPositions,
+            EditorField::StatPositions,
+            EditorField::GraphPositions,
+            EditorField::KnobPositions,
+            EditorField::LayerGroups,
+        ],
+        move |store| {
+            let previous_tab_css_overrides = store.tab_css_overrides.clone();
+            let selected_key_type = choose_selected_key_type(
+                requested_selected_key_type,
+                &keys,
+                store.selected_key_type.clone(),
+            );
+            store.keys = keys;
+            store.key_positions = positions;
+            store.stat_positions = stat_positions;
+            store.graph_positions = graph_positions;
+            store.knob_positions = knob_positions;
+            store.custom_tabs = custom_tabs;
+            store.selected_key_type = selected_key_type;
+            store.tab_note_overrides = tab_note_overrides;
+            store.layer_groups = preset_layer_groups;
+            if let Some(tab_css_overrides) = preset_tab_css_overrides {
+                store.tab_css_overrides = tab_css_overrides;
+            }
+            crate::state::migration::clear_dangling_group_ids(store);
+            let diff = apply_patch_to_store(store, &settings_patch);
+            Ok((
+                diff,
+                previous_tab_css_overrides,
+                store.custom_tabs.clone(),
+                store.tab_note_overrides.clone(),
+                store.tab_css_overrides.clone(),
+            ))
+        },
+    )?;
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    if !transaction
+        .change
+        .result
+        .changed_fields
+        .contains(&EditorField::Keys)
+    {
+        apply_editor_runtime_best_effort(state.inner(), &app, &transaction.change);
+    }
 
-    let keys = normalized.keys;
-    let positions = normalized.key_positions;
-    let stat_positions = normalized.stat_positions;
-    let graph_positions = normalized.graph_positions;
-    let knob_positions = normalized.knob_positions;
-    let custom_tabs = normalized.custom_tabs;
-    let selected_key_type = normalized.selected_key_type;
-    let tab_note_overrides = normalized.tab_note_overrides;
-    let layer_groups = normalized.layer_groups;
-    let tab_css_overrides = normalized.tab_css_overrides;
+    let (diff, previous_tab_css_overrides, custom_tabs, tab_note_overrides, tab_css_overrides) =
+        transaction.value;
+    let selected_key_type = transaction.change.selected_key_type.clone();
+    let keys = transaction.change.document.keys;
+    let positions = transaction.change.document.key_positions;
+    let stat_positions = transaction.change.document.stat_positions;
+    let graph_positions = transaction.change.document.graph_positions;
+    let knob_positions = transaction.change.document.knob_positions;
+    let layer_groups = transaction.change.document.layer_groups;
 
-    state
-        .keyboard
-        .update_mappings_and_set_mode(keys.clone(), selected_key_type.clone());
-
-    state.emit_settings_changed(&diff, &app)?;
-    app.emit("layerGroups:changed", &layer_groups)?;
+    if let Err(error) = state.emit_settings_changed(&diff, &app) {
+        log::error!("[Preset] failed to publish settings change: {error:#}");
+    }
+    emit_best_effort(&app, "layerGroups:changed", &layer_groups);
     sync_tab_css_runtime(
         state.inner(),
         &app,
         &previous_tab_css_overrides,
         &tab_css_overrides,
-    )?;
+    );
 
     // 프리셋 데이터를 단일 이벤트로 원자적 전달
-    app.emit(
+    emit_best_effort(
+        &app,
         "preset:snapshot",
         &super::PresetSnapshot {
             keys,
@@ -213,11 +287,11 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
             selected_key_type,
             tab_note_overrides,
         },
-    )?;
-    app.emit("css:use", &serde_json::json!({ "enabled": css_use }))?;
-    app.emit("css:content", &custom_css)?;
-    app.emit("js:use", &serde_json::json!({ "enabled": js_use }))?;
-    app.emit("js:content", &custom_js)?;
+    );
+    emit_best_effort(&app, "css:use", &serde_json::json!({ "enabled": css_use }));
+    emit_best_effort(&app, "css:content", &custom_css);
+    emit_best_effort(&app, "js:use", &serde_json::json!({ "enabled": js_use }));
+    emit_best_effort(&app, "js:content", &custom_js);
 
     // OBS 브릿지: 프리셋 로드 시 전체 스냅샷 재전송
     state.refresh_obs_snapshot();
@@ -244,9 +318,7 @@ pub fn preset_load_tab(
         });
     };
 
-    let content = fs::read_to_string(&path)?;
-    let preset: PresetFile =
-        serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))?;
+    let preset = read_preset_file(&path)?;
 
     let PresetFile {
         keys,
@@ -265,9 +337,9 @@ pub fn preset_load_tab(
         ..
     } = preset;
 
-    let mut snapshot = state.store.snapshot();
-    let current_tab_id = snapshot.selected_key_type.clone();
-    let previous_tab_css_overrides = snapshot.tab_css_overrides.clone();
+    let (current_tab_id, existing_font_settings) = state
+        .store
+        .with_state(|store| (store.selected_key_type.clone(), store.font_settings.clone()));
 
     let imported_keys = keys.unwrap_or_default();
     let source_tab_id = choose_tab_preset_source_tab(
@@ -304,6 +376,7 @@ pub fn preset_load_tab(
         src_knob_positions.insert(current_tab_id.clone(), v.clone());
     }
 
+    let has_tab_note_overrides = tab_note_overrides.is_some();
     let mut imported_tab_note_overrides = tab_note_overrides.unwrap_or_default();
     for tab in imported_tab_note_overrides.values_mut() {
         tab.migrate_fade_position();
@@ -327,108 +400,133 @@ pub fn preset_load_tab(
         embedded_local_sounds.as_deref(),
     )?;
 
-    // 전체 스토어 스냅샷에 병합
-    snapshot
-        .keys
-        .insert(current_tab_id.clone(), src_keys.clone());
-    if let Some(v) = src_key_positions.remove(&current_tab_id) {
-        snapshot.key_positions.insert(current_tab_id.clone(), v);
-    }
-    if let Some(v) = src_stat_positions.remove(&current_tab_id) {
-        snapshot.stat_positions.insert(current_tab_id.clone(), v);
-    }
-    if let Some(v) = src_graph_positions.remove(&current_tab_id) {
-        snapshot.graph_positions.insert(current_tab_id.clone(), v);
-    }
-    if let Some(v) = src_knob_positions.remove(&current_tab_id) {
-        snapshot.knob_positions.insert(current_tab_id.clone(), v);
-    }
+    let imported_key_positions = src_key_positions.remove(&current_tab_id);
+    let imported_stat_positions = src_stat_positions.remove(&current_tab_id);
+    let imported_graph_positions = src_graph_positions.remove(&current_tab_id);
+    let imported_knob_positions = src_knob_positions.remove(&current_tab_id);
     let imported_override = imported_tab_note_overrides.get(&source_tab_id).cloned();
-    if let Some(override_settings) = imported_override {
-        snapshot
-            .tab_note_overrides
-            .insert(current_tab_id.clone(), override_settings);
-    } else {
-        snapshot.tab_note_overrides.remove(&current_tab_id);
-    }
-
-    if let Some(imported_layer_groups) = layer_groups {
-        let groups = imported_layer_groups
-            .get(&source_tab_id)
-            .cloned()
-            .unwrap_or_default();
-        snapshot.layer_groups.insert(current_tab_id.clone(), groups);
-    }
-
-    if let Some(imported_tab_css_overrides) = tab_css_overrides {
-        if let Some(css) = imported_tab_css_overrides.get(&source_tab_id) {
-            snapshot
-                .tab_css_overrides
-                .insert(current_tab_id.clone(), css.clone());
-        } else {
-            snapshot.tab_css_overrides.remove(&current_tab_id);
-        }
-    }
+    let imported_groups =
+        layer_groups.map(|groups| groups.get(&source_tab_id).cloned().unwrap_or_default());
+    let imported_tab_css =
+        tab_css_overrides.map(|overrides| overrides.get(&source_tab_id).cloned());
 
     // 프리셋에 담긴 폰트를 현재 폰트 목록에 병합 (탭 로드는 전역 설정을 덮지 않음)
-    let merged_font_settings = if let Some(imported_fonts) = font_settings {
-        merge_tab_preset_fonts(&snapshot.font_settings, imported_fonts, |filtered_fonts| {
+    let prepared_font_settings = if let Some(imported_fonts) = font_settings {
+        prepare_tab_preset_fonts(&existing_font_settings, imported_fonts, |filtered_fonts| {
             restore_preset_local_fonts(&app, filtered_fonts, embedded_local_fonts.as_deref())
         })?
     } else {
         None
     };
 
-    // 임포트 경계 — 병합이 끝난 전체 상태 기준으로 dangling groupId 정리
-    crate::state::migration::clear_dangling_group_ids(&mut snapshot);
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("preset_load_tab".to_string()),
+        &[
+            EditorField::Keys,
+            EditorField::KeyPositions,
+            EditorField::StatPositions,
+            EditorField::GraphPositions,
+            EditorField::KnobPositions,
+            EditorField::LayerGroups,
+        ],
+        move |store| {
+            let previous_tab_css_overrides = store.tab_css_overrides.clone();
+            merge_tab_preset_key_pair(store, &current_tab_id, src_keys, imported_key_positions);
+            if let Some(positions) = imported_stat_positions {
+                store
+                    .stat_positions
+                    .insert(current_tab_id.clone(), positions);
+            }
+            if let Some(positions) = imported_graph_positions {
+                store
+                    .graph_positions
+                    .insert(current_tab_id.clone(), positions);
+            }
+            if let Some(positions) = imported_knob_positions {
+                store
+                    .knob_positions
+                    .insert(current_tab_id.clone(), positions);
+            }
+            apply_tab_note_override(
+                store,
+                &current_tab_id,
+                has_tab_note_overrides,
+                imported_override,
+            );
+            if let Some(groups) = imported_groups {
+                store.layer_groups.insert(current_tab_id.clone(), groups);
+            }
+            if let Some(css) = imported_tab_css {
+                if let Some(css) = css {
+                    store.tab_css_overrides.insert(current_tab_id.clone(), css);
+                } else {
+                    store.tab_css_overrides.remove(&current_tab_id);
+                }
+            }
 
-    let font_settings_patch = merged_font_settings.map(|font_settings| SettingsPatchInput {
-        font_settings: Some(font_settings),
-        ..SettingsPatchInput::default()
-    });
-    let mut settings_diff = None;
-    let normalized = state.store.update(|store| {
-        store.keys = snapshot.keys.clone();
-        store.key_positions = snapshot.key_positions.clone();
-        store.stat_positions = snapshot.stat_positions.clone();
-        store.graph_positions = snapshot.graph_positions.clone();
-        store.knob_positions = snapshot.knob_positions.clone();
-        store.tab_note_overrides = snapshot.tab_note_overrides.clone();
-        store.layer_groups = snapshot.layer_groups.clone();
-        store.tab_css_overrides = snapshot.tab_css_overrides.clone();
-        if let Some(patch) = font_settings_patch.as_ref() {
-            settings_diff = Some(apply_patch_to_store(store, patch));
-        }
-    })?;
-
-    let full_keys = normalized.keys;
-    let full_positions = normalized.key_positions;
-    let full_stat_positions = normalized.stat_positions;
-    let full_graph_positions = normalized.graph_positions;
-    let full_knob_positions = normalized.knob_positions;
-    let full_tab_note_overrides = normalized.tab_note_overrides;
-    let full_layer_groups = normalized.layer_groups;
-    let full_tab_css_overrides = normalized.tab_css_overrides;
-
-    state.keyboard.update_mappings(full_keys.clone());
+            let settings_diff = prepared_font_settings
+                .and_then(|prepared| {
+                    merge_prepared_tab_preset_fonts(&store.font_settings, prepared)
+                })
+                .map(|font_settings| {
+                    apply_patch_to_store(
+                        store,
+                        &SettingsPatchInput {
+                            font_settings: Some(font_settings),
+                            ..SettingsPatchInput::default()
+                        },
+                    )
+                });
+            crate::state::migration::clear_dangling_group_ids(store);
+            Ok((
+                settings_diff,
+                previous_tab_css_overrides,
+                store.tab_note_overrides.clone(),
+                store.tab_css_overrides.clone(),
+            ))
+        },
+    )?;
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    if !transaction
+        .change
+        .result
+        .changed_fields
+        .contains(&EditorField::Keys)
+    {
+        apply_editor_runtime_best_effort(state.inner(), &app, &transaction.change);
+    }
+    let (
+        settings_diff,
+        previous_tab_css_overrides,
+        full_tab_note_overrides,
+        full_tab_css_overrides,
+    ) = transaction.value;
+    let full_keys = transaction.change.document.keys;
+    let full_positions = transaction.change.document.key_positions;
+    let full_stat_positions = transaction.change.document.stat_positions;
+    let full_graph_positions = transaction.change.document.graph_positions;
+    let full_knob_positions = transaction.change.document.knob_positions;
+    let full_layer_groups = transaction.change.document.layer_groups;
 
     if let Some(diff) = settings_diff.as_ref() {
-        state.emit_settings_changed(diff, &app)?;
+        if let Err(error) = state.emit_settings_changed(diff, &app) {
+            log::error!("[Preset] failed to publish tab preset settings: {error:#}");
+        }
     }
 
-    app.emit("layerGroups:changed", &full_layer_groups)?;
+    emit_best_effort(&app, "layerGroups:changed", &full_layer_groups);
     sync_tab_css_runtime(
         state.inner(),
         &app,
         &previous_tab_css_overrides,
         &full_tab_css_overrides,
-    )?;
-    app.emit("keys:changed", &full_keys)?;
-    app.emit("positions:changed", &full_positions)?;
-    app.emit("statPositions:changed", &full_stat_positions)?;
-    app.emit("graphPositions:changed", &full_graph_positions)?;
-    app.emit("knobPositions:changed", &full_knob_positions)?;
-    app.emit("tabNote:changed_all", &full_tab_note_overrides)?;
+    );
+    emit_best_effort(&app, "keys:changed", &full_keys);
+    emit_best_effort(&app, "positions:changed", &full_positions);
+    emit_best_effort(&app, "statPositions:changed", &full_stat_positions);
+    emit_best_effort(&app, "graphPositions:changed", &full_graph_positions);
+    emit_best_effort(&app, "knobPositions:changed", &full_knob_positions);
+    emit_best_effort(&app, "tabNote:changed_all", &full_tab_note_overrides);
 
     // OBS 브릿지: 탭 프리셋 로드 시 전체 스냅샷 재전송
     state.refresh_obs_snapshot();
@@ -444,7 +542,7 @@ fn sync_tab_css_runtime(
     app: &AppHandle,
     previous: &TabCssOverrides,
     current: &TabCssOverrides,
-) -> CmdResult<()> {
+) {
     let tab_ids: BTreeSet<String> = previous.keys().chain(current.keys()).cloned().collect();
 
     for tab_id in tab_ids {
@@ -464,16 +562,15 @@ fn sync_tab_css_runtime(
             }
         }
 
-        app.emit(
+        emit_best_effort(
+            app,
             "tabCss:changed",
             &TabCssResponse {
                 tab_id: tab_id.clone(),
                 css,
             },
-        )?;
+        );
     }
-
-    Ok(())
 }
 
 fn choose_tab_preset_source_tab(
@@ -504,7 +601,68 @@ fn choose_tab_preset_source_tab(
     Err(CommandError::msg("tab-preset-ambiguous-source"))
 }
 
+fn align_imported_key_pair(keys: &mut Vec<String>, positions: &mut Vec<KeyPosition>) {
+    if keys.len() < positions.len() {
+        keys.resize(positions.len(), String::new());
+    } else if positions.len() < keys.len() {
+        positions.resize(keys.len(), KeyPosition::default());
+    }
+}
+
+fn align_imported_key_collections(keys: &mut KeyMappings, positions: &mut KeyPositions) {
+    let modes = keys
+        .keys()
+        .chain(positions.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    for mode in modes {
+        let mode_keys = keys.entry(mode.clone()).or_default();
+        let mode_positions = positions.entry(mode).or_default();
+        align_imported_key_pair(mode_keys, mode_positions);
+    }
+}
+
+fn merge_tab_preset_key_pair(
+    store: &mut AppStoreData,
+    current_tab_id: &str,
+    mut keys: Vec<String>,
+    imported_positions: Option<Vec<KeyPosition>>,
+) {
+    let mut positions = imported_positions.unwrap_or_else(|| {
+        store
+            .key_positions
+            .get(current_tab_id)
+            .cloned()
+            .unwrap_or_default()
+    });
+    align_imported_key_pair(&mut keys, &mut positions);
+    store.keys.insert(current_tab_id.to_string(), keys);
+    store
+        .key_positions
+        .insert(current_tab_id.to_string(), positions);
+}
+
+#[cfg(test)]
 fn merge_tab_preset_fonts(
+    existing_font_settings: &FontSettings,
+    imported_font_settings: FontSettings,
+    restore_fonts: impl FnOnce(&mut FontSettings) -> CmdResult<()>,
+) -> CmdResult<Option<FontSettings>> {
+    let Some(prepared) = prepare_tab_preset_fonts(
+        existing_font_settings,
+        imported_font_settings,
+        restore_fonts,
+    )?
+    else {
+        return Ok(None);
+    };
+    Ok(merge_prepared_tab_preset_fonts(
+        existing_font_settings,
+        prepared,
+    ))
+}
+
+fn prepare_tab_preset_fonts(
     existing_font_settings: &FontSettings,
     mut imported_font_settings: FontSettings,
     restore_fonts: impl FnOnce(&mut FontSettings) -> CmdResult<()>,
@@ -538,11 +696,40 @@ fn merge_tab_preset_fonts(
         existing_ids.insert(font.id.clone());
     }
 
-    let mut merged = existing_font_settings.clone();
-    merged
+    Ok(Some(imported_font_settings))
+}
+
+fn merge_prepared_tab_preset_fonts(
+    existing_font_settings: &FontSettings,
+    mut prepared: FontSettings,
+) -> Option<FontSettings> {
+    let mut existing_names = existing_font_settings
         .custom_fonts
-        .extend(imported_font_settings.custom_fonts);
-    Ok(Some(merged))
+        .iter()
+        .map(|font| font.name.clone())
+        .collect::<HashSet<_>>();
+    prepared
+        .custom_fonts
+        .retain(|font| existing_names.insert(font.name.clone()));
+    if prepared.custom_fonts.is_empty() {
+        return None;
+    }
+
+    let mut existing_ids = existing_font_settings
+        .custom_fonts
+        .iter()
+        .map(|font| font.id.clone())
+        .collect::<HashSet<_>>();
+    for font in &mut prepared.custom_fonts {
+        if existing_ids.contains(&font.id) {
+            font.id = Uuid::new_v4().to_string();
+        }
+        existing_ids.insert(font.id.clone());
+    }
+
+    let mut merged = existing_font_settings.clone();
+    merged.custom_fonts.extend(prepared.custom_fonts);
+    Some(merged)
 }
 
 fn restore_preset_local_fonts(
@@ -1053,13 +1240,281 @@ fn choose_selected_key_type(
     "4key".to_string()
 }
 
+fn apply_tab_note_override(
+    store: &mut AppStoreData,
+    tab_id: &str,
+    field_present: bool,
+    imported: Option<TabNoteSettings>,
+) {
+    if !field_present {
+        return;
+    }
+    if let Some(settings) = imported {
+        store
+            .tab_note_overrides
+            .insert(tab_id.to_string(), settings);
+    } else {
+        store.tab_note_overrides.remove(tab_id);
+    }
+}
+
+fn resolve_full_preset_layer_groups(
+    imported: Option<LayerGroups>,
+    keys: &KeyMappings,
+) -> LayerGroups {
+    imported.unwrap_or_else(|| {
+        keys.keys()
+            .cloned()
+            .map(|mode| (mode, Vec::new()))
+            .collect()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        defaults::default_positions,
-        models::{CustomFont, KnobPosition},
+        defaults::{default_keys, default_positions},
+        models::{CustomFont, JsPlugin, KnobPosition},
     };
+
+    #[test]
+    fn preset_source_bytes_remain_unchanged_on_success_and_parse_failure() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-read-only-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let source_path = temp_dir.join("source.json");
+
+        let valid_source = br#"{
+  "keys": { "custom": ["Q"] },
+  "keyPositions": {
+    "custom": [{ "dx": 12.5, "dy": -4.0, "width": 61.0, "count": 3 }]
+  },
+  "customJS": {
+    "path": null,
+    "content": "globalThis.oldPreset = true",
+    "plugins": [{
+      "id": "plugin-source",
+      "name": "Source plugin",
+      "path": null,
+      "content": "void 0",
+      "enabled": true
+    }]
+  },
+  "embeddedLocalImages": [{
+    "imageId": "image-source",
+    "extension": "png",
+    "dataBase64": "AA=="
+  }]
+}"#;
+        std::fs::write(&source_path, valid_source).unwrap();
+        let parsed = read_preset_file(&source_path).unwrap();
+        assert_eq!(parsed.keys.as_ref().unwrap()["custom"], ["Q"]);
+        assert_eq!(parsed.key_positions.as_ref().unwrap()["custom"][0].dx, 12.5);
+        assert_eq!(
+            parsed.custom_js.as_ref().unwrap().plugins[0].id,
+            "plugin-source"
+        );
+        assert_eq!(
+            parsed.embedded_local_images.as_ref().unwrap()[0].image_id,
+            "image-source"
+        );
+        assert_eq!(std::fs::read(&source_path).unwrap(), valid_source);
+
+        let invalid_source = b"{ invalid preset";
+        std::fs::write(&source_path, invalid_source).unwrap();
+        assert!(read_preset_file(&source_path).is_err());
+        assert_eq!(std::fs::read(&source_path).unwrap(), invalid_source);
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn missing_legacy_global_fields_preserve_current_plugin_and_style_settings() {
+        let current = AppStoreData {
+            background_color: "#123456".to_string(),
+            note_settings: NoteSettings {
+                speed: 777,
+                ..NoteSettings::default()
+            },
+            note_effect: true,
+            laboratory_enabled: true,
+            use_custom_css: true,
+            custom_css: CustomCss {
+                path: Some("/current/style.css".to_string()),
+                content: ".current {}".to_string(),
+            },
+            use_custom_js: true,
+            custom_js: CustomJs {
+                path: None,
+                content: "globalThis.current = true".to_string(),
+                plugins: vec![JsPlugin {
+                    id: "current-plugin".to_string(),
+                    name: "Current plugin".to_string(),
+                    path: None,
+                    content: "void 0".to_string(),
+                    enabled: true,
+                }],
+            },
+            ..AppStoreData::default()
+        };
+        let mut legacy = PresetFile::default();
+
+        let resolved = resolve_full_preset_settings(&mut legacy, &current);
+
+        assert_eq!(resolved.background_color, current.background_color);
+        assert_eq!(resolved.note_settings, current.note_settings);
+        assert_eq!(resolved.note_effect, current.note_effect);
+        assert_eq!(resolved.laboratory_enabled, current.laboratory_enabled);
+        assert_eq!(resolved.use_custom_css, current.use_custom_css);
+        assert_eq!(resolved.custom_css, current.custom_css);
+        assert_eq!(resolved.use_custom_js, current.use_custom_js);
+        assert_eq!(resolved.custom_js, current.custom_js);
+    }
+
+    #[test]
+    fn tauri_130_literal_without_js_fields_preserves_installed_plugins() {
+        let current = AppStoreData {
+            use_custom_js: true,
+            custom_js: CustomJs {
+                path: None,
+                content: "globalThis.current = true".to_string(),
+                plugins: vec![JsPlugin {
+                    id: "installed-plugin".to_string(),
+                    name: "Installed plugin".to_string(),
+                    path: None,
+                    content: "globalThis.installed = true".to_string(),
+                    enabled: true,
+                }],
+            },
+            ..AppStoreData::default()
+        };
+        let mut preset: PresetFile = serde_json::from_value(serde_json::json!({
+            "keys": { "4key": ["Q"] },
+            "keyPositions": { "4key": [{ "dx": 1, "dy": 2, "width": 60, "count": 0 }] },
+            "backgroundColor": "transparent"
+        }))
+        .unwrap();
+
+        let resolved = resolve_full_preset_settings(&mut preset, &current);
+
+        assert!(resolved.use_custom_js);
+        assert_eq!(resolved.custom_js, current.custom_js);
+    }
+
+    #[test]
+    fn tauri_161_literal_imports_its_plugin_list_exactly() {
+        let mut current = AppStoreData::default();
+        current.custom_js.plugins.push(JsPlugin {
+            id: "current-plugin".to_string(),
+            name: "Current plugin".to_string(),
+            path: None,
+            content: "void 0".to_string(),
+            enabled: true,
+        });
+        let mut preset: PresetFile = serde_json::from_value(serde_json::json!({
+            "useCustomJS": true,
+            "customJS": {
+                "path": null,
+                "content": "globalThis.legacy = true",
+                "plugins": [{
+                    "id": "plugin-161",
+                    "name": "Legacy plugin",
+                    "path": null,
+                    "content": "globalThis.plugin161 = true",
+                    "enabled": true
+                }]
+            }
+        }))
+        .unwrap();
+
+        let resolved = resolve_full_preset_settings(&mut preset, &current);
+
+        assert!(resolved.use_custom_js);
+        assert_eq!(resolved.custom_js.plugins.len(), 1);
+        assert_eq!(resolved.custom_js.plugins[0].id, "plugin-161");
+        assert!(!resolved
+            .custom_js
+            .plugins
+            .iter()
+            .any(|plugin| plugin.id == "current-plugin"));
+    }
+
+    #[test]
+    fn explicit_empty_plugin_settings_still_clear_current_plugins() {
+        let current = AppStoreData {
+            use_custom_js: true,
+            custom_js: CustomJs {
+                plugins: vec![JsPlugin {
+                    id: "current-plugin".to_string(),
+                    name: "Current plugin".to_string(),
+                    path: None,
+                    content: "void 0".to_string(),
+                    enabled: true,
+                }],
+                ..CustomJs::default()
+            },
+            ..AppStoreData::default()
+        };
+        let mut preset = PresetFile {
+            use_custom_js: Some(false),
+            custom_js: Some(CustomJs::default()),
+            ..PresetFile::default()
+        };
+
+        let resolved = resolve_full_preset_settings(&mut preset, &current);
+
+        assert!(!resolved.use_custom_js);
+        assert_eq!(resolved.custom_js, CustomJs::default());
+    }
+
+    #[test]
+    fn legacy_tab_preset_without_note_override_preserves_current_override() {
+        let mut store = AppStoreData::default();
+        let current = TabNoteSettings {
+            speed: Some(654),
+            ..TabNoteSettings::default()
+        };
+        store
+            .tab_note_overrides
+            .insert("4key".to_string(), current.clone());
+
+        apply_tab_note_override(&mut store, "4key", false, None);
+
+        assert_eq!(store.tab_note_overrides["4key"], current);
+    }
+
+    #[test]
+    fn explicit_empty_tab_note_override_removes_current_override() {
+        let mut store = AppStoreData::default();
+        store.tab_note_overrides.insert(
+            "4key".to_string(),
+            TabNoteSettings {
+                speed: Some(654),
+                ..TabNoteSettings::default()
+            },
+        );
+
+        apply_tab_note_override(&mut store, "4key", true, None);
+
+        assert!(!store.tab_note_overrides.contains_key("4key"));
+    }
+
+    #[test]
+    fn historical_full_preset_without_groups_starts_each_imported_mode_ungrouped() {
+        let keys = KeyMappings::from([
+            ("4key".to_string(), vec!["A".to_string()]),
+            ("custom-old".to_string(), vec!["B".to_string()]),
+        ]);
+
+        let groups = resolve_full_preset_layer_groups(None, &keys);
+
+        assert_eq!(groups.len(), 2);
+        assert!(groups["4key"].is_empty());
+        assert!(groups["custom-old"].is_empty());
+    }
 
     #[test]
     fn tab_preset_duplicate_font_does_not_create_embedded_file() {
@@ -1116,6 +1571,94 @@ mod tests {
     }
 
     #[test]
+    fn tab_preset_key_pair_merge_preserves_other_modes_and_latest_target_positions() {
+        let mut store = AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        };
+        store.key_positions.get_mut("4key").unwrap()[0].dx = 777.0;
+        let untouched_keys = store.keys["5key"].clone();
+        let untouched_positions = store.key_positions["5key"].clone();
+
+        merge_tab_preset_key_pair(&mut store, "4key", vec!["Imported".to_string()], None);
+
+        assert_eq!(store.keys["5key"], untouched_keys);
+        assert_eq!(store.key_positions["5key"], untouched_positions);
+        assert_eq!(store.key_positions["4key"][0].dx, 777.0);
+        assert_eq!(store.keys["4key"][0], "Imported");
+        assert_eq!(store.keys["4key"].len(), store.key_positions["4key"].len());
+    }
+
+    #[test]
+    fn preset_import_alignment_repairs_each_mode_without_dropping_values() {
+        let mut keys = KeyMappings::from([
+            ("keys-only".to_string(), vec!["A".to_string()]),
+            ("positions-long".to_string(), vec!["B".to_string()]),
+        ]);
+        let mut positions = KeyPositions::from([
+            (
+                "positions-only".to_string(),
+                vec![KeyPosition {
+                    dx: 123.0,
+                    ..KeyPosition::default()
+                }],
+            ),
+            (
+                "positions-long".to_string(),
+                vec![KeyPosition::default(), KeyPosition::default()],
+            ),
+        ]);
+
+        align_imported_key_collections(&mut keys, &mut positions);
+
+        assert_eq!(keys["keys-only"], vec!["A".to_string()]);
+        assert_eq!(positions["keys-only"], vec![KeyPosition::default()]);
+        assert_eq!(keys["positions-only"], vec![String::new()]);
+        assert_eq!(positions["positions-only"][0].dx, 123.0);
+        assert_eq!(keys["positions-long"], vec!["B".to_string(), String::new()]);
+        assert_eq!(
+            keys["positions-long"].len(),
+            positions["positions-long"].len()
+        );
+    }
+
+    #[test]
+    fn tab_preset_font_restore_failure_keeps_existing_settings_unchanged() {
+        let existing = FontSettings {
+            custom_fonts: vec![CustomFont {
+                id: "existing-id".to_string(),
+                font_type: FontType::Local,
+                name: "ExistingFont".to_string(),
+                display_name: "Existing Font".to_string(),
+                enabled: true,
+                local_path: Some("/existing/font.ttf".to_string()),
+                css_content: None,
+            }],
+        };
+        let before = existing.clone();
+        let imported = FontSettings {
+            custom_fonts: vec![CustomFont {
+                id: "imported-id".to_string(),
+                font_type: FontType::Local,
+                name: "ImportedFont".to_string(),
+                display_name: "Imported Font".to_string(),
+                enabled: true,
+                local_path: None,
+                css_content: None,
+            }],
+        };
+
+        let result = prepare_tab_preset_fonts(&existing, imported, |fonts| {
+            fonts.custom_fonts[0].local_path = Some("/staged/font.ttf".to_string());
+            Err(CommandError::msg("restore-failed"))
+        });
+
+        assert!(result.is_err());
+        assert_eq!(existing, before);
+    }
+
+    #[test]
     fn legacy_percent_encoded_file_url_is_copied_on_import() {
         let temp_dir = std::env::temp_dir().join(format!(
             "dmnote-preset-image-url-load-test-{}",
@@ -1140,6 +1683,7 @@ mod tests {
         let restored_path = Path::new(image_ref.as_deref().unwrap());
         assert!(restored_path.starts_with(&images_dir));
         assert_eq!(std::fs::read(restored_path).unwrap(), b"legacy-image");
+        assert_eq!(std::fs::read(&source_path).unwrap(), b"legacy-image");
         let _ = std::fs::remove_dir_all(temp_dir);
     }
 

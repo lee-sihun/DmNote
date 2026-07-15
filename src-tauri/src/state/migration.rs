@@ -57,6 +57,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                     if migrate_legacy_knob_sensitivity(&mut data) {
                         needs_persist = true;
                     }
+                    let editor_revision_repaired = repair_editor_revision(&mut data);
+                    needs_persist |= editor_revision_repaired;
                     let semantic_repaired = repair_semantic_identities(&mut data);
                     needs_persist |= semantic_repaired;
                     let layout_repaired = repair_custom_tab_key_layout_pairs(
@@ -70,7 +72,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                     (
                         normalize_state(data),
                         needs_persist,
-                        layout_repaired || semantic_repaired,
+                        layout_repaired || semantic_repaired || editor_revision_repaired,
                     )
                 }
                 Err(err) => {
@@ -490,6 +492,8 @@ fn has_convertible_note_border_color(data: &AppStoreData) -> bool {
 
 /// store 데이터 정규화 및 레거시 마이그레이션 적용
 pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
+    repair_editor_revision(&mut data);
+
     if data.keys.is_empty() {
         data.keys = default_keys().clone();
     } else {
@@ -567,6 +571,19 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     let _ = data.custom_js.normalize();
 
     data
+}
+
+fn repair_editor_revision(data: &mut AppStoreData) -> bool {
+    if data.editor_revision <= super::editor::MAX_SAFE_EDITOR_REVISION {
+        return false;
+    }
+
+    log::warn!(
+        "[Store] Resetting unsafe editorRevision {} to 0 during load recovery",
+        data.editor_revision
+    );
+    data.editor_revision = 0;
+    true
 }
 
 fn has_valid_selected_key_type(data: &AppStoreData) -> bool {
@@ -1461,6 +1478,281 @@ mod tests {
         },
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    use serde::{Deserialize, Serialize};
+
+    fn tauri_store_fixture_base() -> serde_json::Value {
+        serde_json::json!({
+            "hardwareAcceleration": true,
+            "alwaysOnTop": false,
+            "overlayLocked": false,
+            "noteEffect": true,
+            "selectedKeyType": "fixture-tab",
+            "customTabs": [{ "id": "fixture-tab", "name": "Fixture" }],
+            "angleMode": "d3d11",
+            "language": "ko",
+            "laboratoryEnabled": false,
+            "keys": { "fixture-tab": ["F13"] },
+            "keyPositions": {
+                "fixture-tab": [{
+                    "dx": 13.0,
+                    "dy": 14.0,
+                    "width": 60.0,
+                    "height": 60.0,
+                    "activeImage": "",
+                    "inactiveImage": "",
+                    "count": 0,
+                    "noteColor": "#FFFFFF",
+                    "noteOpacity": 80
+                }]
+            },
+            "keyCounters": { "fixture-tab": { "F13": 17 } },
+            "backgroundColor": "#131415",
+            "useCustomCss": false,
+            "customCss": { "path": null, "content": "" },
+            "overlayResizeAnchor": "top-left",
+            "overlayBounds": null,
+            "overlayLastContentTopOffset": null,
+            "overlayBoundsAreLogical": false,
+            "keyCounterEnabled": true
+        })
+    }
+
+    fn load_literal_fixture(version: &str, fixture: &serde_json::Value) -> AppStoreData {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-tauri-{version}-store-fixture-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(&path, serde_json::to_vec_pretty(fixture).unwrap()).unwrap();
+        let loaded = load_store_from_path(&path)
+            .unwrap_or_else(|error| panic!("Tauri {version} fixture must load: {error:#}"));
+        let _ = std::fs::remove_file(path);
+        loaded.data
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct HistoricalTauri13Store {
+        #[serde(default)]
+        keys: crate::models::KeyMappings,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct HistoricalTauri14PlusStore {
+        #[serde(default)]
+        keys: crate::models::KeyMappings,
+        #[serde(default, flatten)]
+        plugin_data: std::collections::HashMap<String, serde_json::Value>,
+    }
+
+    #[test]
+    fn tauri_era_store_schema_transitions_preserve_editor_data() {
+        let v1_3 = tauri_store_fixture_base();
+
+        let mut v1_4 = tauri_store_fixture_base();
+        v1_4.as_object_mut().unwrap().extend([
+            ("developerModeEnabled".to_string(), serde_json::json!(true)),
+            ("tabCssOverrides".to_string(), serde_json::json!({})),
+            ("useCustomJs".to_string(), serde_json::json!(true)),
+            (
+                "customJs".to_string(),
+                serde_json::json!({ "path": null, "content": "void 0" }),
+            ),
+            (
+                "plugin:fixture".to_string(),
+                serde_json::json!({ "kept": true }),
+            ),
+        ]);
+
+        let mut v1_5 = v1_4.clone();
+        v1_5.as_object_mut().unwrap().extend([
+            (
+                "statPositions".to_string(),
+                serde_json::json!({
+                    "fixture-tab": [{
+                        "statType": "kps",
+                        "dx": 80.0,
+                        "dy": 14.0,
+                        "width": 80.0,
+                        "height": 40.0,
+                        "activeImage": "",
+                        "inactiveImage": "",
+                        "count": 0,
+                        "noteColor": "#FFFFFF",
+                        "noteOpacity": 80
+                    }]
+                }),
+            ),
+            (
+                "fontSettings".to_string(),
+                serde_json::json!({ "customFonts": [] }),
+            ),
+            ("gridSettings".to_string(), serde_json::json!({})),
+            ("shortcuts".to_string(), serde_json::json!({})),
+        ]);
+
+        let mut v1_6 = v1_5.clone();
+        v1_6["keyPositions"]["fixture-tab"][0]["groupId"] = serde_json::json!("fixture-group");
+        v1_6.as_object_mut().unwrap().extend([
+            (
+                "graphPositions".to_string(),
+                serde_json::json!({
+                    "fixture-tab": [{
+                        "statType": "kpsAvg",
+                        "graphType": "line",
+                        "graphSpeed": 1000,
+                        "graphColor": "#24BBB4",
+                        "showAvgLine": true,
+                        "dx": 170.0,
+                        "dy": 14.0,
+                        "width": 160.0,
+                        "height": 80.0,
+                        "activeImage": "",
+                        "inactiveImage": "",
+                        "count": 0,
+                        "noteColor": "#FFFFFF",
+                        "noteOpacity": 80
+                    }]
+                }),
+            ),
+            (
+                "layerGroups".to_string(),
+                serde_json::json!({
+                    "fixture-tab": [{ "id": "fixture-group", "name": "Fixture group" }]
+                }),
+            ),
+            ("counterAnimationPresets".to_string(), serde_json::json!([])),
+            ("tabNoteOverrides".to_string(), serde_json::json!({})),
+            ("soundLibrary".to_string(), serde_json::json!({})),
+            ("obsModeEnabled".to_string(), serde_json::json!(false)),
+            ("obsPort".to_string(), serde_json::json!(34891)),
+            ("obsToken".to_string(), serde_json::Value::Null),
+        ]);
+
+        let mut v1_6_1 = v1_6.clone();
+        v1_6_1.as_object_mut().unwrap().extend([
+            (
+                "knobPositions".to_string(),
+                serde_json::json!({
+                    "fixture-tab": [{
+                        "axisId": "axis-x",
+                        "sensitivity": 1.0,
+                        "reverse": false,
+                        "dx": 340.0,
+                        "dy": 14.0,
+                        "width": 80.0,
+                        "height": 80.0,
+                        "activeImage": "",
+                        "inactiveImage": "",
+                        "count": 0,
+                        "noteColor": "#FFFFFF",
+                        "noteOpacity": 80
+                    }]
+                }),
+            ),
+            ("keySoundOutputBackend".to_string(), serde_json::Value::Null),
+        ]);
+
+        for (version, fixture) in [
+            ("1.3.0", v1_3),
+            ("1.4.0", v1_4),
+            ("1.5.1", v1_5),
+            ("1.6.0", v1_6),
+            ("1.6.1", v1_6_1),
+        ] {
+            let loaded = load_literal_fixture(version, &fixture);
+            assert_eq!(loaded.editor_revision, 0, "{version}");
+            assert_eq!(loaded.keys["fixture-tab"], vec!["F13"], "{version}");
+            assert_eq!(loaded.key_positions["fixture-tab"][0].dx, 13.0, "{version}");
+            assert_eq!(loaded.key_counters["fixture-tab"]["F13"], 17, "{version}");
+
+            if version >= "1.4.0" {
+                assert_eq!(loaded.plugin_data["plugin:fixture"]["kept"], true);
+            }
+            if version >= "1.5.1" {
+                assert_eq!(loaded.stat_positions["fixture-tab"].len(), 1);
+            }
+            if version >= "1.6.0" {
+                assert_eq!(loaded.graph_positions["fixture-tab"].len(), 1);
+                assert_eq!(loaded.layer_groups["fixture-tab"][0].id, "fixture-group");
+            }
+            if version >= "1.6.1" {
+                assert_eq!(loaded.knob_positions["fixture-tab"].len(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn reverse_downgrade_models_document_unknown_revision_behavior() {
+        let fixture = serde_json::json!({
+            "keys": { "4key": ["Q"] },
+            "editorRevision": 23
+        });
+
+        let v1_3: HistoricalTauri13Store = serde_json::from_value(fixture.clone()).unwrap();
+        let v1_3_resaved = serde_json::to_value(v1_3).unwrap();
+        assert!(v1_3_resaved.get("editorRevision").is_none());
+
+        let mut v1_4_plus: HistoricalTauri14PlusStore = serde_json::from_value(fixture).unwrap();
+        assert_eq!(v1_4_plus.plugin_data["editorRevision"], 23);
+        let preserved = serde_json::to_value(&v1_4_plus).unwrap();
+        assert_eq!(preserved["editorRevision"], 23);
+
+        v1_4_plus.plugin_data.clear();
+        let cleared = serde_json::to_value(v1_4_plus).unwrap();
+        assert!(cleared.get("editorRevision").is_none());
+    }
+
+    #[test]
+    fn load_repairs_unsafe_editor_revision_without_touching_editor_data() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-unsafe-editor-revision-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        data.editor_revision = crate::state::editor::MAX_SAFE_EDITOR_REVISION + 1;
+        data.key_positions.get_mut("4key").unwrap()[0].dx = 12_345.0;
+        let expected_keys = data.keys.clone();
+        let expected_positions = data.key_positions.clone();
+        std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+
+        assert_eq!(loaded.data.editor_revision, 0);
+        assert_eq!(loaded.data.keys, expected_keys);
+        assert_eq!(loaded.data.key_positions, expected_positions);
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn load_preserves_max_safe_editor_revision() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-max-safe-editor-revision-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        data.editor_revision = crate::state::editor::MAX_SAFE_EDITOR_REVISION;
+        std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+
+        assert_eq!(
+            loaded.data.editor_revision,
+            crate::state::editor::MAX_SAFE_EDITOR_REVISION
+        );
+        assert!(!loaded.repaired);
+        let _ = std::fs::remove_file(path);
+    }
 
     #[test]
     fn clear_dangling_group_ids_removes_ghosts_and_keeps_valid_ones() {

@@ -1,4 +1,4 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::errors::{CmdResult, CommandError};
 use crate::state::AppState;
@@ -23,8 +23,15 @@ pub struct AutoUpdateResult {
 pub fn app_auto_update(
     app: AppHandle,
     state: State<'_, AppState>,
+    window: WebviewWindow,
     tag: String,
 ) -> CmdResult<AutoUpdateResult> {
+    if window.label() != "main" {
+        return Err(CommandError::msg(
+            "automatic update is only available in the main window",
+        ));
+    }
+
     #[cfg(target_os = "windows")]
     {
         app_auto_update_windows(app, &state, &tag)
@@ -44,7 +51,7 @@ pub fn app_auto_update(
 #[cfg(target_os = "windows")]
 fn app_auto_update_windows(
     app: AppHandle,
-    state: &AppState,
+    _state: &AppState,
     tag: &str,
 ) -> CmdResult<AutoUpdateResult> {
     use std::time::Duration;
@@ -111,11 +118,6 @@ fn app_auto_update_windows(
     std::fs::write(&temp_exe, &bytes)?;
 
     self_replace::self_replace(&temp_exe)?;
-
-    // 업데이트 종료 경로도 워치독 커버 — 여기서 행이면 커맨드가 무기한 매달림
-    state.arm_shutdown_watchdog("update-restart");
-    state.shutdown();
-    app.request_restart();
 
     Ok(AutoUpdateResult {
         previous_version,

@@ -1,6 +1,11 @@
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
-use crate::{errors::CmdResult, models::StatPositions, state::AppState};
+use crate::{
+    commands::editor::state::{emit_best_effort, publish_editor_change},
+    errors::CmdResult,
+    models::{EditorCommitOrigin, EditorField, StatPositions},
+    state::AppState,
+};
 
 #[tauri::command]
 pub fn stat_positions_get(state: State<'_, AppState>) -> CmdResult<StatPositions> {
@@ -13,8 +18,19 @@ pub fn stat_positions_update(
     app: AppHandle,
     positions: StatPositions,
 ) -> CmdResult<StatPositions> {
-    let updated = state.store.update_stat_positions(positions)?;
-    app.emit("statPositions:changed", &updated)?;
-    state.refresh_obs_snapshot();
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("stat_positions_update".to_string()),
+        &[EditorField::StatPositions],
+        move |store| {
+            store.stat_positions = positions;
+            Ok(())
+        },
+    )?;
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    let updated = transaction.change.document.stat_positions;
+    emit_best_effort(&app, "statPositions:changed", &updated);
+    if transaction.change.event.is_none() {
+        state.refresh_obs_snapshot();
+    }
     Ok(updated)
 }

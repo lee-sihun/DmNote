@@ -270,6 +270,238 @@ mod tests {
         assert!(preset.tab_css_overrides.is_none());
     }
 
+    #[test]
+    fn tauri_era_preset_schema_transitions_remain_readable() {
+        let tauri_130: PresetFile = serde_json::from_value(json!({
+            "keys": { "custom-130": ["Q"] },
+            "keyPositions": {
+                "custom-130": [{
+                    "dx": 12.5,
+                    "dy": -3.0,
+                    "width": 64.0,
+                    "count": 7,
+                    "displayText": "Tauri 1.3"
+                }]
+            },
+            "backgroundColor": "#112233",
+            "noteSettings": { "speed": 321, "trackHeight": 222 },
+            "noteEffect": false,
+            "laboratoryEnabled": true,
+            "customTabs": [{ "id": "custom-130", "name": "Old tab" }],
+            "selectedKeyType": "custom-130",
+            "useCustomCSS": true,
+            "customCSS": { "path": "/tmp/old.css", "content": ".old {}" }
+        }))
+        .expect("1.3.0 preset must deserialize");
+
+        assert_eq!(tauri_130.keys.as_ref().unwrap()["custom-130"], ["Q"]);
+        let old_position = &tauri_130.key_positions.as_ref().unwrap()["custom-130"][0];
+        assert_eq!(old_position.dx, 12.5);
+        assert_eq!(old_position.dy, -3.0);
+        assert_eq!(old_position.width, 64.0);
+        assert_eq!(old_position.count, 7);
+        assert_eq!(old_position.display_text.as_deref(), Some("Tauri 1.3"));
+        assert_eq!(tauri_130.background_color.as_deref(), Some("#112233"));
+        assert_eq!(tauri_130.note_settings.as_ref().unwrap().speed, 321);
+        assert_eq!(tauri_130.note_settings.as_ref().unwrap().track_height, 222);
+        assert_eq!(tauri_130.note_effect, Some(false));
+        assert_eq!(tauri_130.laboratory_enabled, Some(true));
+        assert_eq!(tauri_130.custom_tabs.as_ref().unwrap()[0].id, "custom-130");
+        assert_eq!(tauri_130.selected_key_type.as_deref(), Some("custom-130"));
+        assert_eq!(tauri_130.use_custom_css, Some(true));
+        assert_eq!(tauri_130.custom_css.as_ref().unwrap().content, ".old {}");
+
+        let transition_fixtures = [
+            (
+                "1.4.0",
+                json!({
+                    "keys": { "4key": ["Q"] },
+                    "keyPositions": {},
+                    "useCustomJS": true,
+                    "customJS": { "path": null, "content": "void 0", "plugins": [] }
+                }),
+            ),
+            (
+                "1.5.1",
+                json!({
+                    "keys": { "4key": ["Q"] },
+                    "keyPositions": {},
+                    "statPositions": {},
+                    "fontSettings": { "customFonts": [] },
+                    "embeddedLocalFonts": [],
+                    "embeddedLocalImages": []
+                }),
+            ),
+            (
+                "1.6.0",
+                json!({
+                    "keys": { "4key": ["Q"] },
+                    "keyPositions": {},
+                    "statPositions": {},
+                    "graphPositions": {},
+                    "tabNoteOverrides": {},
+                    "embeddedLocalSounds": []
+                }),
+            ),
+        ];
+
+        for (version, fixture) in transition_fixtures {
+            let preset: PresetFile = serde_json::from_value(fixture)
+                .unwrap_or_else(|error| panic!("{version} preset must deserialize: {error}"));
+            assert_eq!(preset.keys.as_ref().unwrap()["4key"], vec!["Q"]);
+        }
+
+        let tauri_161: PresetFile = serde_json::from_value(json!({
+            "keys": { "custom-161": ["W"] },
+            "keyPositions": {
+                "custom-161": [{
+                    "dx": 10.0,
+                    "dy": 20.0,
+                    "width": 70.0,
+                    "height": 80.0,
+                    "count": 9,
+                    "groupId": "historic-group",
+                    "activeImage": "dmnote-local-image://image-1",
+                    "soundPath": "dmnote-local-sound://sound-1"
+                }]
+            },
+            "statPositions": {
+                "custom-161": [{
+                    "statType": "total",
+                    "dx": 1.0,
+                    "dy": 2.0,
+                    "width": 100.0,
+                    "count": 0
+                }]
+            },
+            "graphPositions": {
+                "custom-161": [{
+                    "statType": "kpsAvg",
+                    "graphType": "line",
+                    "graphSpeed": 4,
+                    "graphColor": "#abcdef",
+                    "dx": 3.0,
+                    "dy": 4.0,
+                    "width": 120.0,
+                    "count": 0
+                }]
+            },
+            "knobPositions": {
+                "custom-161": [{
+                    "axisId": "HIDA:1:2:3:4",
+                    "sensitivity": 1.5,
+                    "reverse": true,
+                    "dx": 5.0,
+                    "dy": 6.0,
+                    "width": 90.0,
+                    "count": 0
+                }]
+            },
+            "useCustomJS": true,
+            "customJS": {
+                "path": null,
+                "content": "globalThis.legacy = true",
+                "plugins": [{
+                    "id": "plugin-161",
+                    "name": "Legacy plugin",
+                    "path": null,
+                    "content": "globalThis.plugin161 = true",
+                    "enabled": true
+                }]
+            },
+            "fontSettings": {
+                "customFonts": [{
+                    "id": "font-1",
+                    "type": "local",
+                    "name": "LegacyFont",
+                    "displayName": "Legacy Font",
+                    "enabled": true,
+                    "localPath": null,
+                    "cssContent": null
+                }]
+            },
+            "tabNoteOverrides": {
+                "custom-161": { "speed": 444, "reverse": true }
+            },
+            "embeddedLocalFonts": [{
+                "fontId": "font-1",
+                "extension": "ttf",
+                "dataBase64": "AA=="
+            }],
+            "embeddedLocalImages": [{
+                "imageId": "image-1",
+                "extension": "png",
+                "dataBase64": "AA=="
+            }],
+            "embeddedLocalSounds": [{
+                "soundId": "sound-1",
+                "extension": "wav",
+                "dataBase64": "AA=="
+            }]
+        }))
+        .expect("1.6.1 preset must deserialize");
+
+        assert_eq!(tauri_161.keys.as_ref().unwrap()["custom-161"], ["W"]);
+        let position_161 = &tauri_161.key_positions.as_ref().unwrap()["custom-161"][0];
+        assert_eq!(position_161.group_id.as_deref(), Some("historic-group"));
+        assert_eq!(
+            position_161.active_image.as_deref(),
+            Some("dmnote-local-image://image-1")
+        );
+        assert_eq!(
+            position_161.sound_path.as_deref(),
+            Some("dmnote-local-sound://sound-1")
+        );
+        assert_eq!(
+            tauri_161.stat_positions.as_ref().unwrap()["custom-161"].len(),
+            1
+        );
+        assert_eq!(
+            tauri_161.graph_positions.as_ref().unwrap()["custom-161"][0].graph_speed,
+            4
+        );
+        assert_eq!(
+            tauri_161.knob_positions.as_ref().unwrap()["custom-161"][0].axis_id,
+            "HIDA:1:2:3:4"
+        );
+        assert_eq!(
+            tauri_161.custom_js.as_ref().unwrap().plugins[0].id,
+            "plugin-161"
+        );
+        assert_eq!(
+            tauri_161.font_settings.as_ref().unwrap().custom_fonts[0].id,
+            "font-1"
+        );
+        assert_eq!(
+            tauri_161.tab_note_overrides.as_ref().unwrap()["custom-161"].speed,
+            Some(444)
+        );
+        assert_eq!(
+            tauri_161.embedded_local_fonts.as_ref().unwrap()[0].font_id,
+            "font-1"
+        );
+        assert_eq!(
+            tauri_161.embedded_local_images.as_ref().unwrap()[0].image_id,
+            "image-1"
+        );
+        assert_eq!(
+            tauri_161.embedded_local_sounds.as_ref().unwrap()[0].sound_id,
+            "sound-1"
+        );
+    }
+
+    #[test]
+    fn internal_editor_revision_never_becomes_part_of_a_preset() {
+        let preset: PresetFile = serde_json::from_value(json!({
+            "keys": { "4key": ["Q"] },
+            "editorRevision": 42
+        }))
+        .unwrap();
+        let serialized = serde_json::to_value(preset).unwrap();
+
+        assert!(serialized.get("editorRevision").is_none());
+    }
+
     #[cfg(not(target_os = "windows"))]
     #[test]
     fn file_url_image_source_preserves_its_absolute_path() {

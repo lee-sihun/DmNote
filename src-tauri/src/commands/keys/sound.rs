@@ -10,8 +10,12 @@ use std::{
 use tauri::{Emitter, Manager, State};
 use uuid::Uuid;
 
+use crate::commands::editor::state::publish_editor_change;
 use crate::errors::{CmdResult, CommandError};
-use crate::models::{AppStoreData, PendingProcessedWavReplacement, SoundLibraryEntry, SoundSource};
+use crate::models::{
+    AppStoreData, EditorCommitOrigin, EditorField, PendingProcessedWavReplacement,
+    SoundLibraryEntry, SoundSource,
+};
 use crate::state::{
     atomic_file::{prepare_atomic_replace, PreparedAtomicReplace},
     local_asset_path::paths_have_same_identity,
@@ -40,6 +44,16 @@ impl SoundReferenceChangeEvent {
             Self::Stat => "statPositions:changed",
             Self::Graph => "graphPositions:changed",
             Self::Knob => "knobPositions:changed",
+        }
+    }
+
+    fn from_editor_field(field: EditorField) -> Option<Self> {
+        match field {
+            EditorField::KeyPositions => Some(Self::Key),
+            EditorField::StatPositions => Some(Self::Stat),
+            EditorField::GraphPositions => Some(Self::Graph),
+            EditorField::KnobPositions => Some(Self::Knob),
+            _ => None,
         }
     }
 }
@@ -469,14 +483,17 @@ pub fn sound_delete(
     let staged = stage_sound_files_for_deletion(&source_paths)
         .map_err(|error| CommandError::msg(format!("사운드 파일 삭제 준비 실패: {error:#}")))?;
 
-    let mut references_changed = false;
-    let updated = commit_staged_sound_deletion(&staged, || {
-        state
-            .store
-            .update(|store| {
-                references_changed = remove_sound_entry_and_references(store, &path_key);
-            })
-            .map_err(Into::into)
+    let transaction = commit_staged_sound_deletion(&staged, || {
+        Ok(state.store.commit_legacy_editor_transaction(
+            EditorCommitOrigin::LegacyAdapter("sound_delete".to_string()),
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ],
+            |store| Ok(remove_sound_entry_and_references(store, &path_key)),
+        )?)
     })?;
 
     state.key_sound_invalidate_file_cache(&path_key);
@@ -485,12 +502,23 @@ pub fn sound_delete(
         log::warn!("[Sound] 삭제 파일 trash 이동 지연: {error:#}");
     }
 
-    if references_changed {
-        emit_sound_reference_changes_with(|event| match event {
-            SoundReferenceChangeEvent::Key => app.emit(event.name(), &updated.key_positions),
-            SoundReferenceChangeEvent::Stat => app.emit(event.name(), &updated.stat_positions),
-            SoundReferenceChangeEvent::Graph => app.emit(event.name(), &updated.graph_positions),
-            SoundReferenceChangeEvent::Knob => app.emit(event.name(), &updated.knob_positions),
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    if transaction.value {
+        emit_sound_reference_changes_with(&transaction.change.result.changed_fields, |event| {
+            match event {
+                SoundReferenceChangeEvent::Key => {
+                    app.emit(event.name(), &transaction.change.document.key_positions)
+                }
+                SoundReferenceChangeEvent::Stat => {
+                    app.emit(event.name(), &transaction.change.document.stat_positions)
+                }
+                SoundReferenceChangeEvent::Graph => {
+                    app.emit(event.name(), &transaction.change.document.graph_positions)
+                }
+                SoundReferenceChangeEvent::Knob => {
+                    app.emit(event.name(), &transaction.change.document.knob_positions)
+                }
+            }
         });
     }
 
@@ -572,17 +600,15 @@ where
     }
 }
 
-fn emit_sound_reference_changes_with<Emit, Error>(mut emit: Emit)
+fn emit_sound_reference_changes_with<Emit, Error>(changed_fields: &[EditorField], mut emit: Emit)
 where
     Emit: FnMut(SoundReferenceChangeEvent) -> Result<(), Error>,
     Error: std::fmt::Display,
 {
-    for event in [
-        SoundReferenceChangeEvent::Key,
-        SoundReferenceChangeEvent::Stat,
-        SoundReferenceChangeEvent::Graph,
-        SoundReferenceChangeEvent::Knob,
-    ] {
+    for event in changed_fields
+        .iter()
+        .filter_map(|field| SoundReferenceChangeEvent::from_editor_field(*field))
+    {
         if let Err(error) = emit(event) {
             log::warn!(
                 "[Sound] 삭제 후 '{}' 이벤트 전송 실패: {error}",
@@ -1188,7 +1214,10 @@ mod tests {
     use crate::{
         defaults::default_positions,
         errors::{CmdResult, CommandError},
-        models::AppStoreData,
+        models::{
+            AppStoreData, EditorDocumentV1, EditorField, GraphPosition, GraphStatType, GraphType,
+            KeyPosition, KnobPosition, StatPosition, StatType,
+        },
         state::{
             atomic_file::prepare_atomic_replace,
             store::{
@@ -1245,6 +1274,82 @@ mod tests {
         position.sound_path = Some(path_key.to_string());
         position.sound_enabled = Some(true);
         data
+    }
+
+    fn position_with_sound(path_key: &str) -> KeyPosition {
+        KeyPosition {
+            sound_path: Some(path_key.to_string()),
+            sound_enabled: Some(true),
+            ..Default::default()
+        }
+    }
+
+    fn sound_delete_all_position_data(path_key: &str) -> AppStoreData {
+        let mut data = AppStoreData::default();
+        data.sound_library
+            .insert(path_key.to_string(), Default::default());
+        data.keys
+            .insert("4key".to_string(), vec!["KeyA".to_string()]);
+        data.key_positions
+            .insert("4key".to_string(), vec![position_with_sound(path_key)]);
+        data.stat_positions.insert(
+            "4key".to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: position_with_sound(path_key),
+            }],
+        );
+        data.graph_positions.insert(
+            "4key".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 1,
+                graph_color: "#ffffff".to_string(),
+                show_avg_line: true,
+                position: position_with_sound(path_key),
+            }],
+        );
+        data.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position: position_with_sound(path_key),
+            }],
+        );
+        data
+    }
+
+    #[test]
+    fn sound_delete_clears_all_position_references_and_reports_actual_fields() {
+        let path_key = "/sounds/deleted.wav";
+        let mut data = sound_delete_all_position_data(path_key);
+        let before = EditorDocumentV1::from_store(&data);
+
+        assert!(remove_sound_entry_and_references(&mut data, path_key));
+
+        let after = EditorDocumentV1::from_store(&data);
+        assert!(!data.sound_library.contains_key(path_key));
+        assert_eq!(
+            before.changed_fields(&after),
+            vec![
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        for position in [
+            &data.key_positions["4key"][0],
+            &data.stat_positions["4key"][0].position,
+            &data.graph_positions["4key"][0].position,
+            &data.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.sound_path, None);
+            assert_eq!(position.sound_enabled, Some(false));
+        }
     }
 
     #[test]
@@ -1609,20 +1714,26 @@ mod tests {
     fn sound_delete_event_failure_does_not_stop_remaining_notifications() {
         let attempted = RefCell::new(Vec::new());
 
-        emit_sound_reference_changes_with(|event| {
-            attempted.borrow_mut().push(event.name());
-            if event == SoundReferenceChangeEvent::Key {
-                Err("injected emit failure")
-            } else {
-                Ok(())
-            }
-        });
+        emit_sound_reference_changes_with(
+            &[
+                EditorField::KeyPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ],
+            |event| {
+                attempted.borrow_mut().push(event.name());
+                if event == SoundReferenceChangeEvent::Key {
+                    Err("injected emit failure")
+                } else {
+                    Ok(())
+                }
+            },
+        );
 
         assert_eq!(
             *attempted.borrow(),
             [
                 "positions:changed",
-                "statPositions:changed",
                 "graphPositions:changed",
                 "knobPositions:changed",
             ]

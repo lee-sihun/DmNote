@@ -1,5 +1,6 @@
 use std::time::Instant;
 use std::{
+    collections::HashSet,
     io::{BufRead, BufReader},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
@@ -13,6 +14,7 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
+use serde::Serialize;
 use serde_json::json;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -32,10 +34,9 @@ use crate::{
     },
     keyboard::KeyboardManager,
     models::{
-        overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
-        DefaultsPayload, KeyCounterSettings, KeyCounters, KeyMappings,
-        KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, SettingsDiff,
-        SettingsState,
+        overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, DefaultsPayload,
+        KeyCounterSettings, KeyCounters, KeyMappings, KeySoundOutputBackendPersist, OverlayBounds,
+        OverlayResizeAnchor, SettingsDiff, SettingsState,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
 };
@@ -49,12 +50,33 @@ const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const OVERLAY_MARGIN: f64 = 40.0;
 const OVERLAY_BOUNDS_DEBOUNCE_MS: u64 = 400;
 const OVERLAY_CREATION_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
+const EDITOR_FLUSH_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const SHUTDOWN_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_WATCHDOG_EXIT_CODE: i32 = 1;
 
 struct ShutdownWatchdogState {
     armed: bool,
     stage: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum FrontendLifecycleAction {
+    Quit,
+    Restart,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorFlushRequest {
+    handshake_id: String,
+    action: FrontendLifecycleAction,
+}
+
+struct EditorFlushHandshake {
+    id: String,
+    action: FrontendLifecycleAction,
+    pending_windows: HashSet<String>,
 }
 
 /// 카운터 write lock 내부 전용 이벤트 송신 경계
@@ -117,6 +139,7 @@ pub struct AppState {
     obs_previous_overlay_visible: Arc<RwLock<Option<bool>>>,
     shutdown_started: AtomicBool,
     shutdown_watchdog: Arc<Mutex<ShutdownWatchdogState>>,
+    editor_flush_handshake: Arc<Mutex<Option<EditorFlushHandshake>>>,
 }
 
 impl AppState {
@@ -165,6 +188,7 @@ impl AppState {
                 armed: false,
                 stage: "shutdown initialization",
             })),
+            editor_flush_handshake: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -257,8 +281,6 @@ impl AppState {
         )?;
         let quit_item = MenuItem::with_id(app, TRAY_MENU_QUIT_ID, quit_label, true, None::<&str>)?;
         let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
-        let overlay_force_close = self.overlay_force_close.clone();
-
         let mut tray_builder = TrayIconBuilder::with_id(TRAY_ICON_ID)
             .menu(&menu)
             .show_menu_on_left_click(false);
@@ -290,11 +312,9 @@ impl AppState {
                 }
 
                 if event.id() == TRAY_MENU_QUIT_ID {
-                    let app_for_shutdown = app_handle.clone();
-                    let overlay_force_close_for_shutdown = overlay_force_close.clone();
-                    thread::spawn(move || {
-                        shutdown_application(app_for_shutdown, overlay_force_close_for_shutdown);
-                    });
+                    app_handle
+                        .state::<AppState>()
+                        .request_frontend_shutdown(app_handle.clone());
                 }
             })
             .build(app)?;
@@ -367,6 +387,7 @@ impl AppState {
             layer_groups: state.layer_groups.clone(),
             tab_note_overrides: state.tab_note_overrides.clone(),
             tab_css_overrides: state.tab_css_overrides.clone(),
+            editor_revision: state.editor_revision,
         }
     }
 
@@ -606,9 +627,6 @@ impl AppState {
         if !visible {
             flush_deferred_overlay_bounds(&self.store, &self.overlay_bounds_generation)?;
         }
-        self.store.update(|state| {
-            state.overlay_visible = visible;
-        })?;
 
         if visible {
             // 오버레이를 열 때: 창이 없으면 생성하고 표시
@@ -627,6 +645,33 @@ impl AppState {
             if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
                 hide_overlay_window(&window)?;
             }
+        }
+
+        // 창 조작 성공 후에만 영속. 저장 실패면 창 조작을 보상해 전 계층을 이전 상태로 복원
+        if let Err(persist_err) = self.store.update(|state| {
+            state.overlay_visible = visible;
+        }) {
+            let compensation = if visible {
+                app.get_webview_window(OVERLAY_LABEL)
+                    .map_or(Ok(()), |window| hide_overlay_window(&window))
+            } else {
+                match app.get_webview_window(OVERLAY_LABEL) {
+                    Some(window) => {
+                        let snapshot = self.store.snapshot();
+                        show_overlay_window(&window, snapshot.always_on_top)
+                    }
+                    None => Ok(()),
+                }
+            };
+            if let Err(comp_err) = compensation {
+                // 보상 실패 — 실제 창 상태를 권위로 runtime과 이벤트를 동기화
+                log::error!(
+                    "[Overlay] 저장 실패 후 보상도 실패({comp_err}) — 창 상태({visible})를 권위로 동기화"
+                );
+                *self.overlay_visible.write() = visible;
+                let _ = app.emit("overlay:visibility", &json!({ "visible": visible }));
+            }
+            return Err(persist_err);
         }
 
         *self.overlay_visible.write() = visible;
@@ -704,10 +749,143 @@ impl AppState {
         self.shutdown_watchdog.lock().stage = stage;
     }
 
-    pub fn request_shutdown(&self, app_handle: AppHandle) {
+    pub fn request_frontend_shutdown(&self, app_handle: AppHandle) {
+        self.request_frontend_lifecycle(app_handle, FrontendLifecycleAction::Quit);
+    }
+
+    pub fn request_frontend_restart(&self, app_handle: AppHandle) {
+        self.request_frontend_lifecycle(app_handle, FrontendLifecycleAction::Restart);
+    }
+
+    pub fn acknowledge_frontend_lifecycle(
+        &self,
+        app_handle: AppHandle,
+        handshake_id: &str,
+        window_label: &str,
+    ) {
+        let action = {
+            let mut handshake = self.editor_flush_handshake.lock();
+            let Some(active) = handshake.as_mut() else {
+                return;
+            };
+            if active.id != handshake_id || !active.pending_windows.remove(window_label) {
+                return;
+            }
+            if active.pending_windows.is_empty() {
+                handshake.take().map(|completed| completed.action)
+            } else {
+                None
+            }
+        };
+
+        if let Some(action) = action {
+            execute_frontend_lifecycle(app_handle, action, self.overlay_force_close.clone());
+        }
+    }
+
+    pub fn cancel_frontend_lifecycle(&self, handshake_id: &str) {
+        let mut handshake = self.editor_flush_handshake.lock();
+        if handshake
+            .as_ref()
+            .is_some_and(|active| active.id == handshake_id)
+        {
+            handshake.take();
+        }
+    }
+
+    fn request_frontend_lifecycle(&self, app_handle: AppHandle, action: FrontendLifecycleAction) {
+        let targets = ["main", OVERLAY_LABEL]
+            .into_iter()
+            .filter_map(|label| {
+                app_handle
+                    .get_webview_window(label)
+                    .map(|window| (label.to_string(), window))
+            })
+            .collect::<Vec<_>>();
+
+        if targets.is_empty() {
+            execute_frontend_lifecycle(app_handle, action, self.overlay_force_close.clone());
+            return;
+        }
+
+        let handshake_id = uuid::Uuid::new_v4().to_string();
+        {
+            let mut handshake = self.editor_flush_handshake.lock();
+            if handshake.is_some() {
+                return;
+            }
+            *handshake = Some(EditorFlushHandshake {
+                id: handshake_id.clone(),
+                action,
+                pending_windows: targets.iter().map(|(label, _)| label.clone()).collect(),
+            });
+        }
+
+        let request = EditorFlushRequest {
+            handshake_id: handshake_id.clone(),
+            action,
+        };
+        let mut failed_windows = Vec::new();
+        for (label, window) in &targets {
+            if let Err(error) = window.emit("app:close-requested", &request) {
+                log::warn!("failed to request editor flush from {label}: {error}");
+                failed_windows.push(label.clone());
+            }
+        }
+
+        if !failed_windows.is_empty() {
+            let mut handshake = self.editor_flush_handshake.lock();
+            let Some(active) = handshake.as_ref() else {
+                return;
+            };
+            if active.id != handshake_id {
+                return;
+            }
+            handshake.take();
+            drop(handshake);
+            log::warn!(
+                "editor flush request failed for {:?}; lifecycle action canceled",
+                failed_windows
+            );
+            if let Err(error) = self.show_main_window(&app_handle) {
+                log::warn!("failed to restore main window after canceled lifecycle: {error}");
+            }
+            if *self.overlay_visible.read() {
+                if let Err(error) = self.set_overlay_visibility(&app_handle, true) {
+                    log::warn!("failed to restore overlay after canceled lifecycle: {error}");
+                }
+            }
+            return;
+        }
+
+        let handshake = self.editor_flush_handshake.clone();
         let overlay_force_close = self.overlay_force_close.clone();
         thread::spawn(move || {
-            shutdown_application(app_handle, overlay_force_close);
+            thread::sleep(EDITOR_FLUSH_HANDSHAKE_TIMEOUT);
+            let main_is_visible = app_handle
+                .get_webview_window("main")
+                .and_then(|window| window.is_visible().ok())
+                .unwrap_or(false);
+            let timed_out_action = {
+                let mut active = handshake.lock();
+                if active
+                    .as_ref()
+                    .is_some_and(|pending| pending.id == handshake_id)
+                {
+                    active.take().map(|pending| pending.action)
+                } else {
+                    None
+                }
+            };
+
+            if let Some(action) = timed_out_action {
+                if main_is_visible {
+                    log::warn!("editor flush handshake timed out; lifecycle action canceled");
+                } else {
+                    log::warn!("editor flush handshake timed out while windows were hidden");
+                    execute_frontend_lifecycle(app_handle, action, overlay_force_close);
+                }
+            }
         });
     }
 
@@ -1472,14 +1650,23 @@ impl AppState {
                         log::warn!("failed to flush overlay bounds on close: {err}");
                         return;
                     }
+                    // 숨김 먼저, 저장은 성공 후 — set_overlay_visibility와 같은 전환 계약
+                    if let Err(err) = overlay_window.hide() {
+                        log::error!("failed to hide overlay window on close: {err}");
+                        return;
+                    }
                     if let Err(err) = store.update(|state| {
                         state.overlay_visible = false;
                     }) {
                         log::warn!("failed to persist overlay visibility on close: {err}");
-                        return;
-                    }
-                    if let Err(err) = overlay_window.hide() {
-                        log::error!("failed to hide overlay window on close: {err}");
+                        // 보상: 숨김을 되돌려 전 계층을 이전 상태로 일치
+                        if let Err(show_err) = overlay_window.show() {
+                            // 보상 실패 — 실제 창 상태(숨김)를 권위로 runtime과 이벤트만 동기화
+                            log::error!("failed to compensate overlay hide: {show_err}");
+                            *overlay_visible.write() = false;
+                            let _ = app_handle
+                                .emit("overlay:visibility", &json!({ "visible": false }));
+                        }
                         return;
                     }
                     *overlay_visible.write() = false;
@@ -1760,41 +1947,23 @@ impl AppState {
         self.keyboard.clear_active_keys();
     }
 
-    /// 카운터 스냅샷·store 커밋·runtime mirror·전체 emit의 단일 write lock 경계
-    pub(crate) fn update_store_with_key_counter_mirror_and_emit(
-        &self,
-        emitter: &dyn KeyCounterEventEmitter,
-        updater: impl FnOnce(&mut AppStoreData),
-    ) -> Result<AppStoreData> {
-        self.with_key_counters_write_and_emit(emitter, |guard| {
-            let runtime_counters = guard.clone();
-            let updated = self.store.update(move |store| {
-                store.key_counters = runtime_counters;
-                updater(store);
-            })?;
-            *guard = updated.key_counters.clone();
-            Ok(updated)
-        })
-    }
-
     pub fn persist_key_counters(&self) -> Result<KeyCounters> {
         let snapshot = self.key_counters.read().clone();
         self.store.set_key_counters(snapshot.clone())?;
         Ok(snapshot)
     }
 
-    pub fn sync_counters_with_keys(&self, keys: &KeyMappings) {
-        let mut guard = self.key_counters.write();
-        Self::sync_counters_with_keys_impl(&mut guard, keys);
-    }
-
-    pub(crate) fn sync_counters_with_keys_and_emit(
+    pub(crate) fn apply_committed_editor_key_runtime(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
         keys: &KeyMappings,
+        selected_key_type: &str,
+        counters: &KeyCounters,
     ) -> Result<()> {
+        self.keyboard
+            .update_mappings_and_set_mode(keys.clone(), selected_key_type.to_string());
         self.with_key_counters_write_and_emit(emitter, |guard| {
-            Self::sync_counters_with_keys_impl(guard, keys);
+            *guard = counters.clone();
             Ok(())
         })
     }
@@ -2017,8 +2186,6 @@ fn attach_main_window_close_handler(
     }
 
     let main_window = window.clone();
-    let shutdown_started = Arc::new(AtomicBool::new(false));
-
     window.on_window_event(move |event| {
         if let WindowEvent::CloseRequested { api, .. } = event {
             if overlay_force_close.load(Ordering::SeqCst) {
@@ -2040,12 +2207,6 @@ fn attach_main_window_close_handler(
                 return;
             }
 
-            // 중복 종료 요청 방지
-            if shutdown_started.swap(true, Ordering::SeqCst) {
-                api.prevent_close();
-                return;
-            }
-
             // 즉시 종료 효과를 위해 윈도우 먼저 숨김
             // 실제 정리/프로세스 종료는 백그라운드 스레드에서 수행
             api.prevent_close();
@@ -2058,13 +2219,27 @@ fn attach_main_window_close_handler(
                 }
             }
 
-            let app_for_shutdown = app_handle.clone();
-            let overlay_force_close_for_shutdown = overlay_force_close.clone();
-            thread::spawn(move || {
-                shutdown_application(app_for_shutdown, overlay_force_close_for_shutdown);
-            });
+            state.request_frontend_shutdown(app_handle.clone());
         }
     });
+}
+
+fn execute_frontend_lifecycle(
+    app_handle: AppHandle,
+    action: FrontendLifecycleAction,
+    overlay_force_close: Arc<AtomicBool>,
+) {
+    match action {
+        FrontendLifecycleAction::Quit => {
+            thread::spawn(move || shutdown_application(app_handle, overlay_force_close));
+        }
+        FrontendLifecycleAction::Restart => {
+            let state = app_handle.state::<AppState>();
+            state.arm_shutdown_watchdog("app-restart");
+            state.shutdown();
+            app_handle.request_restart();
+        }
+    }
 }
 
 fn tray_menu_labels(_language: &str) -> (&'static str, &'static str) {

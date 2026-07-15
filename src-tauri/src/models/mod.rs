@@ -1,4 +1,7 @@
+pub mod editor;
 pub mod obs;
+
+pub use editor::*;
 
 use serde::de::Error as DeError;
 use serde::ser::SerializeMap;
@@ -1352,6 +1355,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub main_window_hidden: bool,
     #[serde(default)]
+    pub editor_revision: u64,
+    #[serde(default)]
     pub keys: KeyMappings,
     #[serde(default)]
     pub key_positions: KeyPositions,
@@ -1440,6 +1445,7 @@ impl Default for AppStoreData {
             tray_enabled: false,
             auto_update_enabled: default_auto_update_enabled(),
             main_window_hidden: false,
+            editor_revision: 0,
             keys: KeyMappings::new(),
             key_positions: KeyPositions::new(),
             stat_positions: StatPositions::new(),
@@ -1693,6 +1699,7 @@ pub struct BootstrapPayload {
     pub layer_groups: LayerGroups,
     pub tab_note_overrides: TabNoteOverrides,
     pub tab_css_overrides: TabCssOverrides,
+    pub editor_revision: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

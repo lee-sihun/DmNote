@@ -1,19 +1,42 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 use crate::{
+    commands::editor::state::{
+        emit_best_effort, publish_editor_change, publish_legacy_editor_fields,
+    },
     defaults::{default_keys, default_positions},
     errors::CmdResult,
     models::{
-        AppStoreData, CustomCssPatch, CustomTab, KeyCounters, KeyMappings, KeyPositions,
-        LayerGroups, NoteSettings, NoteSettingsPatch, SettingsPatchInput,
+        AppStoreData, CommittedEditorChange, CustomCssPatch, CustomTab, EditorCommitOrigin,
+        EditorCommitResult, EditorDocumentV1, EditorField, EditorHistoryRestoreRequest,
+        KeyCounters, KeyMappings, KeyPositions, LayerGroups, NoteSettings, NoteSettingsPatch,
+        SettingsPatchInput,
     },
-    state::AppState,
+    services::settings::apply_patch_to_store,
+    state::{editor::validate_history_restore_metadata, AppState},
 };
 
 const MAX_CUSTOM_TABS: usize = 30;
+
+fn publish_legacy_key_noop_runtime(
+    state: &AppState,
+    app: &AppHandle,
+    change: &CommittedEditorChange,
+) {
+    if let Err(error) = state.apply_committed_editor_key_runtime(
+        app,
+        &change.document.keys,
+        &change.selected_key_type,
+        &change.key_counters,
+    ) {
+        log::error!("[Keys] failed to publish committed key counters: {error:#}");
+    }
+    state.obs_broadcast_counters();
+    state.refresh_obs_snapshot();
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ModeResetKind {
@@ -237,20 +260,32 @@ pub fn keys_update(
     mappings: KeyMappings,
 ) -> CmdResult<KeyMappings> {
     let previous_mode = state.keyboard.current_mode();
-    let (updated, selected_key_type) = state.store.update_keys(mappings)?;
-    state
-        .keyboard
-        .update_mappings_and_set_mode(updated.clone(), selected_key_type.clone());
-    app.emit("keys:changed", &updated)?;
-    if previous_mode != selected_key_type {
-        app.emit(
-            "keys:mode-changed",
-            &serde_json::json!({ "mode": &selected_key_type }),
-        )?;
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("keys_update".to_string()),
+        &[EditorField::Keys],
+        move |store| {
+            store.keys = mappings;
+            Ok(())
+        },
+    )?;
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    if !transaction
+        .change
+        .result
+        .changed_fields
+        .contains(&EditorField::Keys)
+    {
+        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
     }
-    state.sync_counters_with_keys_and_emit(&app, &updated)?;
-    state.obs_broadcast_counters();
-    state.refresh_obs_snapshot();
+    let updated = transaction.change.document.keys;
+    emit_best_effort(&app, "keys:changed", &updated);
+    if previous_mode != transaction.change.selected_key_type {
+        emit_best_effort(
+            &app,
+            "keys:mode-changed",
+            &serde_json::json!({ "mode": &transaction.change.selected_key_type }),
+        );
+    }
     Ok(updated)
 }
 
@@ -262,23 +297,35 @@ pub fn keys_update_with_positions(
     positions: KeyPositions,
 ) -> CmdResult<KeysWithPositionsResponse> {
     let previous_mode = state.keyboard.current_mode();
-    let (keys, positions, selected_key_type) = state
-        .store
-        .update_keys_with_positions(mappings, positions)?;
-    state
-        .keyboard
-        .update_mappings_and_set_mode(keys.clone(), selected_key_type.clone());
-    app.emit("keys:changed", &keys)?;
-    app.emit("positions:changed", &positions)?;
-    if previous_mode != selected_key_type {
-        app.emit(
-            "keys:mode-changed",
-            &serde_json::json!({ "mode": &selected_key_type }),
-        )?;
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("keys_update_with_positions".to_string()),
+        &[EditorField::Keys, EditorField::KeyPositions],
+        move |store| {
+            store.keys = mappings;
+            store.key_positions = positions;
+            Ok(())
+        },
+    )?;
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    if !transaction
+        .change
+        .result
+        .changed_fields
+        .contains(&EditorField::Keys)
+    {
+        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
     }
-    state.sync_counters_with_keys_and_emit(&app, &keys)?;
-    state.obs_broadcast_counters();
-    state.refresh_obs_snapshot();
+    let keys = transaction.change.document.keys;
+    let positions = transaction.change.document.key_positions;
+    emit_best_effort(&app, "keys:changed", &keys);
+    emit_best_effort(&app, "positions:changed", &positions);
+    if previous_mode != transaction.change.selected_key_type {
+        emit_best_effort(
+            &app,
+            "keys:mode-changed",
+            &serde_json::json!({ "mode": &transaction.change.selected_key_type }),
+        );
+    }
     Ok(KeysWithPositionsResponse { keys, positions })
 }
 
@@ -288,9 +335,20 @@ pub fn positions_update(
     app: AppHandle,
     positions: KeyPositions,
 ) -> CmdResult<KeyPositions> {
-    let updated = state.store.update_positions(positions)?;
-    app.emit("positions:changed", &updated)?;
-    state.refresh_obs_snapshot();
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("positions_update".to_string()),
+        &[EditorField::KeyPositions],
+        move |store| {
+            store.key_positions = positions;
+            Ok(())
+        },
+    )?;
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    let updated = transaction.change.document.key_positions;
+    emit_best_effort(&app, "positions:changed", &updated);
+    if transaction.change.event.is_none() {
+        state.refresh_obs_snapshot();
+    }
     Ok(updated)
 }
 
@@ -312,10 +370,11 @@ pub fn keys_set_mode(
         },
         |effective| {
             state.keyboard.set_mode(effective.to_string());
-            app.emit(
+            emit_best_effort(
+                &app,
                 "keys:mode-changed",
                 &serde_json::json!({ "mode": effective }),
-            )?;
+            );
             state.refresh_obs_snapshot();
             Ok(())
         },
@@ -326,33 +385,6 @@ pub fn keys_set_mode(
 pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<ResetAllResponse> {
     let keys = default_keys().clone();
     let positions = default_positions().clone();
-    let stat_positions = crate::models::StatPositions::new();
-    let graph_positions = crate::models::GraphPositions::new();
-    let knob_positions = crate::models::KnobPositions::new();
-    let layer_groups = LayerGroups::new();
-    let tab_note_overrides = crate::models::TabNoteOverrides::new();
-    let selected_key_type = "4key".to_string();
-    let custom_tabs: Vec<CustomTab> = Vec::new();
-    let cleared_tab_css_ids: Vec<String> = state
-        .store
-        .snapshot()
-        .tab_css_overrides
-        .keys()
-        .cloned()
-        .collect();
-
-    state.update_store_with_key_counter_mirror_and_emit(&app, |store| {
-        reset_all_editor_data(store, &keys, &positions);
-    })?;
-
-    state
-        .keyboard
-        .update_mappings_and_set_mode(keys.clone(), selected_key_type.clone());
-
-    for tab_id in &cleared_tab_css_ids {
-        state.unwatch_tab_css(tab_id);
-    }
-
     let mut note_patch = NoteSettingsPatch::default();
     let defaults = NoteSettings::default();
     note_patch.frame_limit = Some(defaults.frame_limit);
@@ -368,8 +400,7 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
     note_patch.short_note_threshold_ms = Some(defaults.short_note_threshold_ms);
     note_patch.short_note_min_length_px = Some(defaults.short_note_min_length_px);
     note_patch.key_display_delay_ms = Some(defaults.key_display_delay_ms);
-
-    let settings_diff = state.settings.apply_patch(SettingsPatchInput {
+    let settings_patch = SettingsPatchInput {
         background_color: Some("transparent".to_string()),
         note_settings: Some(note_patch),
         laboratory_enabled: Some(false),
@@ -381,41 +412,85 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
         note_effect: Some(false),
         overlay_locked: Some(false),
         ..SettingsPatchInput::default()
-    })?;
+    };
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
+        &[
+            EditorField::Keys,
+            EditorField::KeyPositions,
+            EditorField::StatPositions,
+            EditorField::GraphPositions,
+            EditorField::KnobPositions,
+            EditorField::LayerGroups,
+        ],
+        move |store| {
+            let cleared_tab_css_ids = store.tab_css_overrides.keys().cloned().collect::<Vec<_>>();
+            reset_all_editor_data(store, &keys, &positions);
+            let settings_diff = apply_patch_to_store(store, &settings_patch);
+            Ok((settings_diff, cleared_tab_css_ids))
+        },
+    )?;
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    if !transaction
+        .change
+        .result
+        .changed_fields
+        .contains(&EditorField::Keys)
+    {
+        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
+    }
 
-    state.emit_settings_changed(&settings_diff, &app)?;
+    let (settings_diff, cleared_tab_css_ids) = transaction.value;
+    let keys = transaction.change.document.keys;
+    let positions = transaction.change.document.key_positions;
+    let stat_positions = transaction.change.document.stat_positions;
+    let graph_positions = transaction.change.document.graph_positions;
+    let knob_positions = transaction.change.document.knob_positions;
+    let layer_groups = transaction.change.document.layer_groups;
+    let selected_key_type = transaction.change.selected_key_type;
+    let custom_tabs: Vec<CustomTab> = Vec::new();
+    let tab_note_overrides = crate::models::TabNoteOverrides::new();
 
-    app.emit("keys:changed", &keys)?;
-    app.emit("positions:changed", &positions)?;
-    app.emit("statPositions:changed", &stat_positions)?;
-    app.emit("graphPositions:changed", &graph_positions)?;
-    app.emit("knobPositions:changed", &knob_positions)?;
-    app.emit("layerGroups:changed", &layer_groups)?;
-    app.emit(
+    for tab_id in &cleared_tab_css_ids {
+        state.unwatch_tab_css(tab_id);
+    }
+    if let Err(error) = state.emit_settings_changed(&settings_diff, &app) {
+        log::error!("[Keys] failed to publish reset settings: {error:#}");
+    }
+
+    emit_best_effort(&app, "keys:changed", &keys);
+    emit_best_effort(&app, "positions:changed", &positions);
+    emit_best_effort(&app, "statPositions:changed", &stat_positions);
+    emit_best_effort(&app, "graphPositions:changed", &graph_positions);
+    emit_best_effort(&app, "knobPositions:changed", &knob_positions);
+    emit_best_effort(&app, "layerGroups:changed", &layer_groups);
+    emit_best_effort(
+        &app,
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs: custom_tabs.clone(),
             selected_key_type: selected_key_type.clone(),
         },
-    )?;
-    app.emit(
+    );
+    emit_best_effort(
+        &app,
         "keys:mode-changed",
         &serde_json::json!({ "mode": &selected_key_type }),
-    )?;
-    app.emit("css:use", &serde_json::json!({ "enabled": false }))?;
-    app.emit(
+    );
+    emit_best_effort(&app, "css:use", &serde_json::json!({ "enabled": false }));
+    emit_best_effort(
+        &app,
         "css:content",
         &serde_json::json!({ "path": serde_json::Value::Null, "content": "" }),
-    )?;
-    app.emit("tabNote:changed_all", &tab_note_overrides)?;
+    );
+    emit_best_effort(&app, "tabNote:changed_all", &tab_note_overrides);
     for tab_id in cleared_tab_css_ids {
-        app.emit(
+        emit_best_effort(
+            &app,
             "tabCss:changed",
             &crate::commands::editor::css::TabCssResponse { tab_id, css: None },
-        )?;
+        );
     }
-    state.obs_broadcast_counters();
-    state.refresh_obs_snapshot();
 
     Ok(ResetAllResponse {
         keys,
@@ -431,42 +506,82 @@ pub fn keys_reset_mode(
     app: AppHandle,
     mode: String,
 ) -> CmdResult<ResetModeResponse> {
-    let snapshot = state.store.snapshot();
-    let Some(kind) = reset_mode_kind(&snapshot, &mode) else {
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
+        &[
+            EditorField::Keys,
+            EditorField::KeyPositions,
+            EditorField::StatPositions,
+            EditorField::GraphPositions,
+            EditorField::KnobPositions,
+            EditorField::LayerGroups,
+        ],
+        |store| {
+            let Some(kind) = reset_mode_kind(store, &mode) else {
+                return Ok(None);
+            };
+            let cleared_tab_css = store.tab_css_overrides.contains_key(&mode);
+            reset_mode_data(store, &mode, kind);
+            Ok(Some((cleared_tab_css, store.tab_note_overrides.clone())))
+        },
+    )?;
+    let Some((cleared_tab_css, tab_note_overrides)) = transaction.value else {
         return Ok(ResetModeResponse {
             success: false,
             mode,
         });
     };
-    let cleared_tab_css = snapshot.tab_css_overrides.contains_key(&mode);
-    let updated = state.update_store_with_key_counter_mirror_and_emit(&app, |store| {
-        reset_mode_data(store, &mode, kind);
-    })?;
-
-    state.keyboard.update_mappings(updated.keys.clone());
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    if !transaction
+        .change
+        .result
+        .changed_fields
+        .contains(&EditorField::Keys)
+    {
+        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
+    }
 
     if cleared_tab_css {
         state.unwatch_tab_css(&mode);
     }
 
-    app.emit("keys:changed", &updated.keys)?;
-    app.emit("positions:changed", &updated.key_positions)?;
-    app.emit("statPositions:changed", &updated.stat_positions)?;
-    app.emit("graphPositions:changed", &updated.graph_positions)?;
-    app.emit("knobPositions:changed", &updated.knob_positions)?;
-    app.emit("layerGroups:changed", &updated.layer_groups)?;
-    app.emit("tabNote:changed_all", &updated.tab_note_overrides)?;
+    emit_best_effort(&app, "keys:changed", &transaction.change.document.keys);
+    emit_best_effort(
+        &app,
+        "positions:changed",
+        &transaction.change.document.key_positions,
+    );
+    emit_best_effort(
+        &app,
+        "statPositions:changed",
+        &transaction.change.document.stat_positions,
+    );
+    emit_best_effort(
+        &app,
+        "graphPositions:changed",
+        &transaction.change.document.graph_positions,
+    );
+    emit_best_effort(
+        &app,
+        "knobPositions:changed",
+        &transaction.change.document.knob_positions,
+    );
+    emit_best_effort(
+        &app,
+        "layerGroups:changed",
+        &transaction.change.document.layer_groups,
+    );
+    emit_best_effort(&app, "tabNote:changed_all", &tab_note_overrides);
     if cleared_tab_css {
-        app.emit(
+        emit_best_effort(
+            &app,
             "tabCss:changed",
             &crate::commands::editor::css::TabCssResponse {
                 tab_id: mode.clone(),
                 css: None,
             },
-        )?;
+        );
     }
-    state.obs_broadcast_counters();
-    state.refresh_obs_snapshot();
 
     Ok(ResetModeResponse {
         success: true,
@@ -493,59 +608,62 @@ pub fn custom_tabs_create(
     }
 
     let trimmed = name.trim().to_string();
-    let snapshot = state.store.snapshot();
-    if snapshot.custom_tabs.iter().any(|tab| tab.name == trimmed) {
-        return Ok(CustomTabCreateResult {
-            result: None,
-            error: Some("duplicate-name".to_string()),
-        });
-    }
-    if snapshot.custom_tabs.len() >= MAX_CUSTOM_TABS {
-        return Ok(CustomTabCreateResult {
-            result: None,
-            error: Some("max-reached".to_string()),
-        });
-    }
-
     let id = generate_custom_tab_id();
     let tab = CustomTab {
         id: id.clone(),
-        name: trimmed.clone(),
+        name: trimmed,
     };
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("custom_tabs_create".to_string()),
+        &[EditorField::Keys, EditorField::KeyPositions],
+        |store| {
+            if store
+                .custom_tabs
+                .iter()
+                .any(|existing| existing.name == tab.name)
+            {
+                return Ok(Err("duplicate-name".to_string()));
+            }
+            if store.custom_tabs.len() >= MAX_CUSTOM_TABS {
+                return Ok(Err("max-reached".to_string()));
+            }
+            store.custom_tabs.push(tab.clone());
+            store.keys.insert(id.clone(), Vec::new());
+            store.key_positions.insert(id.clone(), Vec::new());
+            store.selected_key_type = id.clone();
+            Ok(Ok((tab.clone(), store.custom_tabs.clone())))
+        },
+    )?;
+    let (tab, custom_tabs) = match transaction.value {
+        Ok(result) => result,
+        Err(error) => {
+            return Ok(CustomTabCreateResult {
+                result: None,
+                error: Some(error),
+            });
+        }
+    };
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
 
-    let mut custom_tabs = snapshot.custom_tabs.clone();
-    custom_tabs.push(tab.clone());
-
-    let mut keys = snapshot.keys.clone();
-    keys.insert(id.clone(), Vec::new());
-    let mut positions = snapshot.key_positions.clone();
-    positions.insert(id.clone(), Vec::new());
-
-    state.store.update(|store| {
-        store.custom_tabs = custom_tabs.clone();
-        store.keys = keys.clone();
-        store.key_positions = positions.clone();
-        store.selected_key_type = id.clone();
-    })?;
-
-    state
-        .keyboard
-        .update_mappings_and_set_mode(keys.clone(), id.clone());
-    state.sync_counters_with_keys(&keys);
-    state.reset_mode_counters(&app, &id)?;
-
-    app.emit(
+    emit_best_effort(
+        &app,
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs: custom_tabs.clone(),
             selected_key_type: id.clone(),
         },
-    )?;
-    app.emit("keys:changed", &keys)?;
-    app.emit("positions:changed", &positions)?;
-    app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))?;
-    state.obs_broadcast_counters();
-    state.refresh_obs_snapshot();
+    );
+    emit_best_effort(&app, "keys:changed", &transaction.change.document.keys);
+    emit_best_effort(
+        &app,
+        "positions:changed",
+        &transaction.change.document.key_positions,
+    );
+    emit_best_effort(
+        &app,
+        "keys:mode-changed",
+        &serde_json::json!({ "mode": &id }),
+    );
 
     Ok(CustomTabCreateResult {
         result: Some(tab),
@@ -559,54 +677,93 @@ pub fn custom_tabs_delete(
     app: AppHandle,
     id: String,
 ) -> CmdResult<CustomTabDeleteResult> {
-    let snapshot = state.store.snapshot();
-    let Some(plan) = plan_custom_tab_delete(&snapshot, &id) else {
-        return Ok(CustomTabDeleteResult {
-            success: false,
-            selected: snapshot.selected_key_type,
-            error: Some("not-found".to_string()),
-        });
-    };
-    let updated = state.update_store_with_key_counter_mirror_and_emit(&app, |store| {
-        delete_custom_tab_data(store, &id, &plan);
-    })?;
-
-    state
-        .keyboard
-        .update_mappings_and_set_mode(updated.keys.clone(), updated.selected_key_type.clone());
-    state.unwatch_tab_css(&id);
-
-    app.emit(
-        "customTabs:changed",
-        &CustomTabChangePayload {
-            custom_tabs: updated.custom_tabs.clone(),
-            selected_key_type: updated.selected_key_type.clone(),
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
+        &[
+            EditorField::Keys,
+            EditorField::KeyPositions,
+            EditorField::StatPositions,
+            EditorField::GraphPositions,
+            EditorField::KnobPositions,
+            EditorField::LayerGroups,
+        ],
+        |store| {
+            let Some(plan) = plan_custom_tab_delete(store, &id) else {
+                return Ok(Err(store.selected_key_type.clone()));
+            };
+            delete_custom_tab_data(store, &id, &plan);
+            Ok(Ok((
+                store.custom_tabs.clone(),
+                store.selected_key_type.clone(),
+                store.tab_note_overrides.clone(),
+            )))
         },
     )?;
-    app.emit("keys:changed", &updated.keys)?;
-    app.emit("positions:changed", &updated.key_positions)?;
-    app.emit("statPositions:changed", &updated.stat_positions)?;
-    app.emit("graphPositions:changed", &updated.graph_positions)?;
-    app.emit("knobPositions:changed", &updated.knob_positions)?;
-    app.emit("layerGroups:changed", &updated.layer_groups)?;
-    app.emit("tabNote:changed_all", &updated.tab_note_overrides)?;
-    app.emit(
+    let (custom_tabs, selected_key_type, tab_note_overrides) = match transaction.value {
+        Ok(result) => result,
+        Err(selected) => {
+            return Ok(CustomTabDeleteResult {
+                success: false,
+                selected,
+                error: Some("not-found".to_string()),
+            });
+        }
+    };
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    state.unwatch_tab_css(&id);
+
+    emit_best_effort(
+        &app,
+        "customTabs:changed",
+        &CustomTabChangePayload {
+            custom_tabs,
+            selected_key_type: selected_key_type.clone(),
+        },
+    );
+    emit_best_effort(&app, "keys:changed", &transaction.change.document.keys);
+    emit_best_effort(
+        &app,
+        "positions:changed",
+        &transaction.change.document.key_positions,
+    );
+    emit_best_effort(
+        &app,
+        "statPositions:changed",
+        &transaction.change.document.stat_positions,
+    );
+    emit_best_effort(
+        &app,
+        "graphPositions:changed",
+        &transaction.change.document.graph_positions,
+    );
+    emit_best_effort(
+        &app,
+        "knobPositions:changed",
+        &transaction.change.document.knob_positions,
+    );
+    emit_best_effort(
+        &app,
+        "layerGroups:changed",
+        &transaction.change.document.layer_groups,
+    );
+    emit_best_effort(&app, "tabNote:changed_all", &tab_note_overrides);
+    emit_best_effort(
+        &app,
         "tabCss:changed",
         &crate::commands::editor::css::TabCssResponse {
             tab_id: id,
             css: None,
         },
-    )?;
-    app.emit(
+    );
+    emit_best_effort(
+        &app,
         "keys:mode-changed",
-        &serde_json::json!({ "mode": &updated.selected_key_type }),
-    )?;
-    state.obs_broadcast_counters();
-    state.refresh_obs_snapshot();
+        &serde_json::json!({ "mode": &selected_key_type }),
+    );
 
     Ok(CustomTabDeleteResult {
         success: true,
-        selected: updated.selected_key_type,
+        selected: selected_key_type,
         error: None,
     })
 }
@@ -637,10 +794,11 @@ pub fn custom_tabs_select(
     let selected = state.store.set_selected_key_type(id)?;
     state.keyboard.set_mode(selected.clone());
 
-    app.emit(
+    emit_best_effort(
+        &app,
         "keys:mode-changed",
         &serde_json::json!({ "mode": &selected }),
-    )?;
+    );
     state.refresh_obs_snapshot();
 
     Ok(CustomTabSelectResult {
@@ -658,26 +816,91 @@ pub fn custom_tabs_restore(
     custom_tabs: Vec<CustomTab>,
     selected_key_type: String,
 ) -> CmdResult<()> {
-    let updated = state.store.update(|store| {
-        store.custom_tabs = custom_tabs.clone();
-        store.selected_key_type = selected_key_type.clone();
-    })?;
-
-    state.keyboard.set_mode(updated.selected_key_type.clone());
-
-    app.emit(
-        "customTabs:changed",
-        &CustomTabChangePayload {
-            custom_tabs: updated.custom_tabs,
-            selected_key_type: updated.selected_key_type.clone(),
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("custom_tabs_restore".to_string()),
+        &[],
+        move |store| {
+            validate_history_restore_metadata(
+                &EditorDocumentV1::from_store(store),
+                &custom_tabs,
+                &selected_key_type,
+            )?;
+            store.custom_tabs = custom_tabs;
+            store.selected_key_type = selected_key_type;
+            Ok((store.custom_tabs.clone(), store.selected_key_type.clone()))
         },
     )?;
-    app.emit(
+    let (custom_tabs, selected_key_type) = transaction.value;
+
+    state.keyboard.set_mode(selected_key_type.clone());
+
+    emit_best_effort(
+        &app,
+        "customTabs:changed",
+        &CustomTabChangePayload {
+            custom_tabs,
+            selected_key_type: selected_key_type.clone(),
+        },
+    );
+    emit_best_effort(
+        &app,
         "keys:mode-changed",
-        &serde_json::json!({ "mode": &updated.selected_key_type }),
-    )?;
+        &serde_json::json!({ "mode": &selected_key_type }),
+    );
     state.refresh_obs_snapshot();
     Ok(())
+}
+
+/// Undo/Redo의 결합 상태를 revision 선조건 아래 한 번에 복원
+#[tauri::command]
+pub fn editor_history_restore(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    request: EditorHistoryRestoreRequest,
+) -> CmdResult<EditorCommitResult> {
+    let transaction = state.store.restore_editor_history(request)?;
+    let changed_fields = transaction.change.result.changed_fields.clone();
+
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    publish_legacy_editor_fields(state.inner(), &app, &transaction.change, &changed_fields);
+    if !changed_fields.contains(&EditorField::Keys) {
+        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
+    }
+
+    let snapshot = state.store.snapshot();
+    emit_best_effort(
+        &app,
+        "customTabs:changed",
+        &CustomTabChangePayload {
+            custom_tabs: snapshot.custom_tabs.clone(),
+            selected_key_type: snapshot.selected_key_type.clone(),
+        },
+    );
+    emit_best_effort(
+        &app,
+        "keys:mode-changed",
+        &serde_json::json!({ "mode": &snapshot.selected_key_type }),
+    );
+    emit_best_effort(&app, "tabNote:changed_all", &snapshot.tab_note_overrides);
+    emit_best_effort(
+        &app,
+        "css:use",
+        &serde_json::json!({ "enabled": snapshot.use_custom_css }),
+    );
+    emit_best_effort(&app, "css:content", &snapshot.custom_css);
+    emit_best_effort(
+        &app,
+        "js:use",
+        &serde_json::json!({ "enabled": snapshot.use_custom_js }),
+    );
+    emit_best_effort(&app, "js:content", &snapshot.custom_js);
+
+    if let Some(diff) = transaction.value.as_ref() {
+        if let Err(error) = state.emit_settings_changed(diff, &app) {
+            log::error!("[History] failed to publish restored settings: {error:#}");
+        }
+    }
+    Ok(transaction.change.result)
 }
 
 #[tauri::command]
@@ -733,9 +956,20 @@ pub fn layer_groups_update(
     app: AppHandle,
     groups: LayerGroups,
 ) -> CmdResult<LayerGroups> {
-    let updated = state.store.update_layer_groups(groups)?;
-    app.emit("layerGroups:changed", &updated)?;
-    state.refresh_obs_snapshot();
+    let transaction = state.store.commit_legacy_editor_transaction(
+        EditorCommitOrigin::LegacyAdapter("layer_groups_update".to_string()),
+        &[EditorField::LayerGroups],
+        move |store| {
+            store.layer_groups = groups;
+            Ok(())
+        },
+    )?;
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    let updated = transaction.change.document.layer_groups;
+    emit_best_effort(&app, "layerGroups:changed", &updated);
+    if transaction.change.event.is_none() {
+        state.refresh_obs_snapshot();
+    }
     Ok(updated)
 }
 

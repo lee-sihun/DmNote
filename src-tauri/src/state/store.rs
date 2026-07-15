@@ -1,15 +1,18 @@
 use std::{
-    collections::HashSet,
+    collections::{HashSet, VecDeque},
     fs,
     path::{Component, Path, PathBuf},
     sync::mpsc,
     thread::{self, JoinHandle},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use crate::errors::{EditorCommitError, EditorCommitErrorCode};
 use crate::models::{
-    AppStoreData, FontType, GraphPositions, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
-    KnobPositions, LayerGroups, SettingsState, StatPositions,
+    AppStoreData, CommittedEditorChange, EditorCommitOrigin, EditorCommitRequest,
+    EditorCommitResult, EditorCommittedV1, EditorDocumentV1, EditorField, EditorGetResult,
+    EditorHistoryRestoreRequest, EditorTransactionResult, FontType, KeyCounters, KeyPosition,
+    SettingsDiff, SettingsState, EDITOR_SCHEMA_VERSION,
 };
 use anyhow::{anyhow, Context, Result};
 use parking_lot::{Mutex, RwLock, RwLockWriteGuard};
@@ -19,6 +22,12 @@ use tauri::Runtime;
 
 use super::atomic_file::atomic_replace;
 use super::builtin_sounds::seed_builtin_sounds;
+use super::editor::{
+    next_revision, repair_selected_mode, request_fingerprint, request_payload_size,
+    sync_key_counters, touched_pair, validate_document_transition,
+    validate_history_restore_envelope, validate_history_restore_metadata, validate_paired_update,
+    validate_request_envelope, RequestFingerprint, MUTATION_ACK_CAPACITY,
+};
 use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
 use super::migration::{
     find_legacy_store_file, load_store_from_path, migrate_key_images_to_app_data,
@@ -61,6 +70,14 @@ struct VersionedStoreState {
     revision: u64,
     dirty: bool,
     accepting_writes: bool,
+    mutation_acks: VecDeque<MutationAck>,
+}
+
+#[derive(Clone)]
+struct MutationAck {
+    id: String,
+    fingerprint: RequestFingerprint,
+    result: EditorCommitResult,
 }
 
 struct PersistTicket {
@@ -143,16 +160,16 @@ impl AppStore {
         warn_unresolved_asset_references(&state);
 
         if needs_persist && had_existing_default_store && !skip_asset_sweep {
-            match preserve_pre_migration_store(&path) {
-                Ok(Some(backup_path)) => log::info!(
+            if let Some(backup_path) = preserve_pre_migration_store(&path).with_context(|| {
+                format!(
+                    "failed to preserve store before migration at {}",
+                    path.display()
+                )
+            })? {
+                log::info!(
                     "[Store] Preserved pre-migration store at {}",
                     backup_path.display()
-                ),
-                Ok(None) => {}
-                Err(err) => log::warn!(
-                    "[Store] Failed to preserve pre-migration store at {}: {err:#}",
-                    path.display()
-                ),
+                );
             }
         }
 
@@ -186,6 +203,7 @@ impl AppStore {
                 revision: 0,
                 dirty: false,
                 accepting_writes: true,
+                mutation_acks: VecDeque::with_capacity(MUTATION_ACK_CAPACITY),
             }),
         })
     }
@@ -222,9 +240,10 @@ impl AppStore {
         reader: impl FnOnce(&AppStoreData) -> T,
     ) -> Result<T> {
         let mut guard = self.lock_for_update()?;
+        let before = guard.data.clone();
         let mut scratch = guard.data.clone();
         updater(&mut scratch);
-        scratch = normalize_state(scratch);
+        ensure_generic_editor_unchanged(&before, &scratch)?;
         let result = reader(&scratch);
         self.commit_locked(&mut guard, scratch, result)
     }
@@ -239,7 +258,10 @@ impl AppStore {
     /// 다른 데이터에는 일반 update를 사용해 성공한 저장만 committed로 공개해야 함
     pub(crate) fn update_deferred(&self, updater: impl FnOnce(&mut AppStoreData)) -> Result<()> {
         let mut guard = self.lock_for_update()?;
-        updater(&mut guard.data);
+        let mut scratch = guard.data.clone();
+        updater(&mut scratch);
+        ensure_generic_editor_unchanged(&guard.data, &scratch)?;
+        guard.data = scratch;
         guard.dirty = true;
         Ok(())
     }
@@ -292,66 +314,329 @@ impl AppStore {
         self.update_committed(updater, AppStoreData::clone)
     }
 
-    pub fn update_keys(&self, mappings: KeyMappings) -> Result<(KeyMappings, String)> {
-        self.update_committed(
-            move |state| state.keys = mappings,
-            |state| (state.keys.clone(), state.selected_key_type.clone()),
-        )
+    pub fn editor_get(&self) -> EditorGetResult {
+        let guard = self.state.read();
+        EditorGetResult {
+            revision: guard.data.editor_revision,
+            document: EditorDocumentV1::from_store(&guard.data),
+        }
     }
 
-    pub fn update_keys_with_positions(
+    pub(crate) fn restore_editor_history(
         &self,
-        mappings: KeyMappings,
-        positions: KeyPositions,
-    ) -> Result<(KeyMappings, KeyPositions, String)> {
-        self.update_committed(
-            move |state| {
-                state.keys = mappings;
-                state.key_positions = positions;
+        request: EditorHistoryRestoreRequest,
+    ) -> std::result::Result<EditorTransactionResult<Option<SettingsDiff>>, EditorCommitError> {
+        validate_history_restore_envelope(&request)?;
+        let EditorHistoryRestoreRequest {
+            base_revision,
+            document,
+            custom_tabs,
+            selected_key_type,
+            key_counters,
+            settings_patch,
+            tab_note_overrides,
+        } = request;
+
+        self.commit_legacy_editor_transaction(
+            EditorCommitOrigin::LegacyAdapter("editor_history_restore".to_string()),
+            &[
+                EditorField::Keys,
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ],
+            move |store| {
+                if store.editor_revision != base_revision {
+                    return Err(EditorCommitError::revision_conflict(store.editor_revision));
+                }
+                validate_history_restore_metadata(&document, &custom_tabs, &selected_key_type)?;
+
+                store.custom_tabs = custom_tabs;
+                store.selected_key_type = selected_key_type;
+                document.apply_to_store(store);
+                if let Some(counters) = key_counters {
+                    store.key_counters = counters;
+                }
+                if let Some(overrides) = tab_note_overrides {
+                    store.tab_note_overrides = overrides;
+                }
+                let settings_diff = settings_patch
+                    .as_ref()
+                    .map(|patch| crate::services::settings::apply_patch_to_store(store, patch));
+                Ok(settings_diff)
             },
-            |state| {
-                (
-                    state.keys.clone(),
-                    state.key_positions.clone(),
-                    state.selected_key_type.clone(),
-                )
+        )
+    }
+
+    pub fn commit_editor_document(
+        &self,
+        request: EditorCommitRequest,
+    ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
+        let started = Instant::now();
+        let base_revision = request.base_revision;
+        let mutation_id = uuid::Uuid::parse_str(&request.mutation_id)
+            .map(|id| id.hyphenated().to_string())
+            .unwrap_or_else(|_| "<invalid>".to_string());
+        let payload_size = request_payload_size(&request);
+        let payload_bytes = payload_size.as_ref().copied().unwrap_or(0);
+        let result = match payload_size {
+            Ok(_) => self.commit_editor_document_inner(request),
+            Err(error) => Err(error),
+        };
+        let current_revision = result
+            .as_ref()
+            .err()
+            .and_then(|error| error.details.as_ref())
+            .and_then(|details| details.current_revision)
+            .unwrap_or_else(|| self.state.read().data.editor_revision);
+        let (outcome, changed_fields) = match &result {
+            Ok(change) if change.event.is_some() => {
+                ("committed", change.result.changed_fields.as_slice())
+            }
+            Ok(change) if change.result.changed_fields.is_empty() => {
+                ("no_op", change.result.changed_fields.as_slice())
+            }
+            Ok(change) => ("replay", change.result.changed_fields.as_slice()),
+            Err(error) => (editor_error_outcome(error.error_code), &[][..]),
+        };
+        // 문서·patch 원문 없이 경계 메타데이터만 기록
+        log::info!(
+            target: "editor_commit",
+            "command=editor_commit mutationId={mutation_id} baseRevision={base_revision} currentRevision={current_revision} outcome={outcome} changedFields={changed_fields:?} durationMs={} payloadBytes={payload_bytes}",
+            started.elapsed().as_millis()
+        );
+        result
+    }
+
+    fn commit_editor_document_inner(
+        &self,
+        request: EditorCommitRequest,
+    ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
+        validate_request_envelope(&request)?;
+        let fingerprint = request_fingerprint(&request)?;
+        let mut guard = self
+            .lock_for_update()
+            .map_err(|error| EditorCommitError::io(error.to_string()))?;
+
+        if let Some(ack) = guard
+            .mutation_acks
+            .iter()
+            .find(|ack| ack.id == request.mutation_id)
+        {
+            if ack.fingerprint != fingerprint {
+                return Err(EditorCommitError::mutation_id_reused());
+            }
+            return Ok(CommittedEditorChange {
+                result: ack.result.clone(),
+                event: None,
+                replayed: true,
+                document: EditorDocumentV1::from_store(&guard.data),
+                selected_key_type: guard.data.selected_key_type.clone(),
+                key_counters: guard.data.key_counters.clone(),
+            });
+        }
+
+        if request.base_revision != guard.data.editor_revision {
+            return Err(EditorCommitError::revision_conflict(
+                guard.data.editor_revision,
+            ));
+        }
+
+        let current_store = guard.data.clone();
+        let current = EditorDocumentV1::from_store(&current_store);
+        let mut candidate = current.clone();
+        candidate.apply_patch(&request.changes);
+
+        validate_paired_update(
+            &current,
+            &candidate,
+            request.changes.includes(EditorField::Keys),
+            request.changes.includes(EditorField::KeyPositions),
+        )?;
+
+        let mut scratch = current_store.clone();
+        candidate.apply_to_store(&mut scratch);
+        scratch.editor_revision = current_store.editor_revision;
+        validate_document_transition(&current, &candidate, &current_store, &scratch)?;
+
+        let changed_fields = current.changed_fields(&candidate);
+        if changed_fields.is_empty() {
+            let result = EditorCommitResult {
+                revision: current_store.editor_revision,
+                changed_fields,
+            };
+            insert_mutation_ack(
+                &mut guard.mutation_acks,
+                request.mutation_id,
+                fingerprint,
+                result.clone(),
+            );
+            return Ok(CommittedEditorChange {
+                result,
+                event: None,
+                replayed: false,
+                document: current,
+                selected_key_type: current_store.selected_key_type,
+                key_counters: current_store.key_counters,
+            });
+        }
+
+        let revision = next_revision(current_store.editor_revision)?;
+        if changed_fields.contains(&EditorField::Keys) {
+            sync_key_counters(&mut scratch.key_counters, &candidate.keys);
+            repair_selected_mode(&mut scratch);
+        }
+        scratch.editor_revision = revision;
+        let selected_key_type = scratch.selected_key_type.clone();
+        let key_counters = scratch.key_counters.clone();
+
+        self.commit_locked(&mut guard, scratch, ())
+            .map_err(|error| EditorCommitError::io(error.to_string()))?;
+
+        let result = EditorCommitResult {
+            revision,
+            changed_fields: changed_fields.clone(),
+        };
+        insert_mutation_ack(
+            &mut guard.mutation_acks,
+            request.mutation_id.clone(),
+            fingerprint,
+            result.clone(),
+        );
+        let event = EditorCommittedV1 {
+            schema_version: EDITOR_SCHEMA_VERSION,
+            revision,
+            mutation_id: request.mutation_id,
+            origin: EditorCommitOrigin::StrictEditorCommit
+                .event_name()
+                .expect("strict editor commit always has an event origin"),
+            changed_fields: changed_fields.clone(),
+            patch: candidate.patch_for_fields(&changed_fields),
+        };
+
+        Ok(CommittedEditorChange {
+            result,
+            event: Some(event),
+            replayed: false,
+            document: candidate,
+            selected_key_type,
+            key_counters,
+        })
+    }
+
+    pub(crate) fn commit_legacy_editor_transaction<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<EditorTransactionResult<T>, EditorCommitError> {
+        let started = Instant::now();
+        let origin_name = origin
+            .event_name()
+            .unwrap_or_else(|| "loadRecovery".to_string());
+        let result = self.commit_legacy_editor_transaction_inner(origin, touched_fields, updater);
+        let (outcome, changed_fields) = match &result {
+            Ok(transaction) if transaction.change.result.changed_fields.is_empty() => (
+                "no_editor_change",
+                transaction.change.result.changed_fields.as_slice(),
+            ),
+            Ok(transaction) => (
+                "committed",
+                transaction.change.result.changed_fields.as_slice(),
+            ),
+            Err(error) => (editor_error_outcome(error.error_code), &[][..]),
+        };
+        // adapter 입력 원문 없이 origin과 결과만 기록
+        log::info!(
+            target: "editor_commit",
+            "origin={origin_name} outcome={outcome} changedFields={changed_fields:?} durationMs={}",
+            started.elapsed().as_millis()
+        );
+        result
+    }
+
+    fn commit_legacy_editor_transaction_inner<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<EditorTransactionResult<T>, EditorCommitError> {
+        let mut guard = self
+            .lock_for_update()
+            .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        let current_store = guard.data.clone();
+        let current = EditorDocumentV1::from_store(&current_store);
+        let mut scratch = current_store.clone();
+        let value = updater(&mut scratch)?;
+
+        // editorRevision은 이 트랜잭션만 관리
+        scratch.editor_revision = current_store.editor_revision;
+        let candidate = EditorDocumentV1::from_store(&scratch);
+        let changed_fields = current.changed_fields(&candidate);
+        if let Some(field) = changed_fields
+            .iter()
+            .find(|field| !touched_fields.contains(field))
+        {
+            return Err(EditorCommitError::validation(
+                "UNDECLARED_EDITOR_FIELD",
+                format!("editor field {field:?} changed outside the declared transaction scope"),
+            ));
+        }
+        if changed_fields.contains(&EditorField::Keys) {
+            repair_selected_mode(&mut scratch);
+        }
+
+        let (keys_touched, key_positions_touched) = touched_pair(touched_fields);
+        validate_paired_update(&current, &candidate, keys_touched, key_positions_touched)?;
+        validate_document_transition(&current, &candidate, &current_store, &scratch)?;
+
+        if changed_fields.contains(&EditorField::Keys) {
+            sync_key_counters(&mut scratch.key_counters, &candidate.keys);
+        }
+
+        let revision = if changed_fields.is_empty() {
+            current_store.editor_revision
+        } else {
+            let revision = next_revision(current_store.editor_revision)?;
+            scratch.editor_revision = revision;
+            revision
+        };
+
+        let has_store_changes = scratch != current_store;
+        let selected_key_type = scratch.selected_key_type.clone();
+        let key_counters = scratch.key_counters.clone();
+        if has_store_changes {
+            self.commit_locked(&mut guard, scratch, ())
+                .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        }
+
+        let event = if changed_fields.is_empty() {
+            None
+        } else {
+            origin.event_name().map(|origin| EditorCommittedV1 {
+                schema_version: EDITOR_SCHEMA_VERSION,
+                revision,
+                mutation_id: uuid::Uuid::new_v4().to_string(),
+                origin,
+                changed_fields: changed_fields.clone(),
+                patch: candidate.patch_for_fields(&changed_fields),
+            })
+        };
+        let change = CommittedEditorChange {
+            result: EditorCommitResult {
+                revision,
+                changed_fields,
             },
-        )
-    }
+            event,
+            replayed: false,
+            document: candidate,
+            selected_key_type,
+            key_counters,
+        };
 
-    pub fn update_positions(&self, positions: KeyPositions) -> Result<KeyPositions> {
-        self.update_committed(
-            move |state| state.key_positions = positions,
-            |state| state.key_positions.clone(),
-        )
-    }
-
-    pub fn update_layer_groups(&self, groups: LayerGroups) -> Result<LayerGroups> {
-        self.update_committed(
-            move |state| state.layer_groups = groups,
-            |state| state.layer_groups.clone(),
-        )
-    }
-
-    pub fn update_stat_positions(&self, positions: StatPositions) -> Result<StatPositions> {
-        self.update_committed(
-            move |state| state.stat_positions = positions,
-            |state| state.stat_positions.clone(),
-        )
-    }
-
-    pub fn update_graph_positions(&self, positions: GraphPositions) -> Result<GraphPositions> {
-        self.update_committed(
-            move |state| state.graph_positions = positions,
-            |state| state.graph_positions.clone(),
-        )
-    }
-
-    pub fn update_knob_positions(&self, positions: KnobPositions) -> Result<KnobPositions> {
-        self.update_committed(
-            move |state| state.knob_positions = positions,
-            |state| state.knob_positions.clone(),
-        )
+        Ok(EditorTransactionResult { value, change })
     }
 
     pub fn set_key_counters(&self, counters: KeyCounters) -> Result<KeyCounters> {
@@ -827,7 +1112,39 @@ fn preserve_pre_migration_store(path: &Path) -> Result<Option<PathBuf>> {
     let backup_path = pre_migration_backup_path(path)?;
     match fs::hard_link(path, &backup_path) {
         Ok(()) => Ok(Some(backup_path)),
-        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            let metadata = fs::symlink_metadata(&backup_path).with_context(|| {
+                format!(
+                    "failed to inspect existing pre-migration backup at {}",
+                    backup_path.display()
+                )
+            })?;
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err(anyhow!(
+                    "pre-migration backup path is not a regular file: {}",
+                    backup_path.display()
+                ));
+            }
+            let backup = fs::read(&backup_path).with_context(|| {
+                format!(
+                    "failed to read existing pre-migration backup at {}",
+                    backup_path.display()
+                )
+            })?;
+            let value: Value = serde_json::from_slice(&backup).with_context(|| {
+                format!(
+                    "existing pre-migration backup is not valid JSON at {}",
+                    backup_path.display()
+                )
+            })?;
+            if !value.is_object() {
+                return Err(anyhow!(
+                    "existing pre-migration backup is not a JSON object: {}",
+                    backup_path.display()
+                ));
+            }
+            Ok(None)
+        }
         Err(err) => Err(err).with_context(|| {
             format!(
                 "failed to create pre-migration backup at {}",
@@ -846,6 +1163,43 @@ fn initialize_default_state() -> AppStoreData {
         ..Default::default()
     };
     normalize_state(data)
+}
+
+fn ensure_generic_editor_unchanged(before: &AppStoreData, after: &AppStoreData) -> Result<()> {
+    if before.editor_revision != after.editor_revision
+        || EditorDocumentV1::from_store(before) != EditorDocumentV1::from_store(after)
+    {
+        return Err(anyhow!(
+            "editor fields must be changed through an editor transaction"
+        ));
+    }
+    Ok(())
+}
+
+fn editor_error_outcome(code: EditorCommitErrorCode) -> &'static str {
+    match code {
+        EditorCommitErrorCode::RevisionConflict => "revision_conflict",
+        EditorCommitErrorCode::ValidationFailed => "validation_failed",
+        EditorCommitErrorCode::PairedUpdateRequired => "paired_update_required",
+        EditorCommitErrorCode::MutationIdReused => "mutation_id_reused",
+        EditorCommitErrorCode::IoError => "io_error",
+    }
+}
+
+fn insert_mutation_ack(
+    acks: &mut VecDeque<MutationAck>,
+    id: String,
+    fingerprint: RequestFingerprint,
+    result: EditorCommitResult,
+) {
+    if acks.len() == MUTATION_ACK_CAPACITY {
+        acks.pop_front();
+    }
+    acks.push_back(MutationAck {
+        id,
+        fingerprint,
+        result,
+    });
 }
 
 struct AssetReferencePaths {
@@ -1833,20 +2187,27 @@ mod tests {
     };
     use crate::{
         defaults::default_positions,
+        errors::{EditorCommitError, EditorCommitErrorCode},
         keyboard::KeyboardManager,
         models::{
-            AppStoreData, CustomFont, CustomTab, FontType, GraphPosition, GraphStatType, GraphType,
-            KeyCounters, KeyPosition, KnobPosition, OverlayBounds, PendingProcessedWavReplacement,
+            AppStoreData, CommittedEditorChange, CustomFont, CustomTab, EditorCommitOrigin,
+            EditorCommitRequest, EditorDocumentV1, EditorField, EditorHistoryRestoreRequest,
+            EditorPatchV1, FontType, GraphPosition, GraphStatType, GraphType, KeyCounters,
+            KeyPosition, KnobPosition, OverlayBounds, PendingProcessedWavReplacement,
             SettingsPatchInput, SoundLibraryEntry, SoundSource, StatPosition, StatType,
+            TabNoteSettings,
         },
         services::settings::apply_patch_to_store,
         state::{app_state::KeyCounterEventEmitter, local_asset_path::path_identity_key, AppState},
     };
     use serde_json::{json, Value};
     use std::{
-        collections::HashSet,
+        collections::{HashMap, HashSet},
         path::Path,
-        sync::{mpsc, Arc, Barrier, Mutex},
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            mpsc, Arc, Barrier, Mutex,
+        },
         time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
@@ -1912,23 +2273,483 @@ mod tests {
         }
     }
 
+    fn editor_request(
+        base_revision: u64,
+        mutation_id: impl Into<String>,
+        changes: EditorPatchV1,
+    ) -> EditorCommitRequest {
+        EditorCommitRequest {
+            base_revision,
+            mutation_id: mutation_id.into(),
+            changes,
+        }
+    }
+
+    fn position_patch(store: &AppStore, dx: f64) -> EditorPatchV1 {
+        let mut positions = store.editor_get().document.key_positions;
+        positions.get_mut("4key").unwrap()[0].dx = dx;
+        EditorPatchV1 {
+            key_positions: Some(positions),
+            ..EditorPatchV1::default()
+        }
+    }
+
+    fn legacy_editor_commit(
+        store: &AppStore,
+        fields: &[EditorField],
+        updater: impl FnOnce(&mut AppStoreData),
+    ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
+        store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("test_adapter".to_string()),
+                fields,
+                |data| {
+                    updater(data);
+                    Ok(())
+                },
+            )
+            .map(|transaction| transaction.change)
+    }
+
     #[test]
-    fn keys_update_returns_the_normalized_mode_for_runtime_sync() {
+    fn strict_editor_commit_persists_once_and_synchronizes_key_counters() {
+        let dir = test_directory("strict-editor-success-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let persist_count = store.writer.persist_count();
+        let before = store.snapshot();
+        let old_key = before.keys["4key"][0].clone();
+        let mut keys = before.keys.clone();
+        keys.get_mut("4key").unwrap()[0] = "StrictKey".to_string();
+        let request = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                keys: Some(keys),
+                ..EditorPatchV1::default()
+            },
+        );
+
+        let change = store.commit_editor_document(request).unwrap();
+
+        assert_eq!(change.result.revision, 1);
+        assert_eq!(change.result.changed_fields, vec![EditorField::Keys]);
+        assert_eq!(change.event.as_ref().unwrap().origin, "editorCommit");
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        let snapshot = store.snapshot();
+        assert_eq!(snapshot.editor_revision, 1);
+        assert_eq!(snapshot.keys["4key"][0], "StrictKey");
+        assert_eq!(snapshot.key_counters["4key"]["StrictKey"], 0);
+        assert!(!snapshot.key_counters["4key"].contains_key(&old_key));
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let reloaded = crate::state::migration::load_store_from_path(&dir.join("store.json"))
+            .unwrap()
+            .data;
+        assert_eq!(reloaded.editor_revision, 1);
+        assert_eq!(reloaded.keys["4key"][0], "StrictKey");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn strict_editor_noop_is_acknowledged_without_persist_or_event() {
+        let dir = test_directory("strict-editor-noop-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let persist_count = store.writer.persist_count();
+        let request = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1::default(),
+        );
+
+        let change = store.commit_editor_document(request).unwrap();
+
+        assert_eq!(change.result.revision, 0);
+        assert!(change.result.changed_fields.is_empty());
+        assert!(change.event.is_none());
+        assert!(!change.replayed);
+        assert_eq!(store.writer.persist_count(), persist_count);
+        assert_eq!(store.snapshot().editor_revision, 0);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn strict_editor_conflict_does_not_persist() {
+        let dir = test_directory("strict-editor-conflict-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let persist_count = store.writer.persist_count();
+        let error = store
+            .commit_editor_document(editor_request(
+                1,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, 123.0),
+            ))
+            .unwrap_err();
+
+        assert_eq!(error.error_code, EditorCommitErrorCode::RevisionConflict);
+        assert_eq!(error.details.unwrap().current_revision, Some(0));
+        assert_eq!(store.writer.persist_count(), persist_count);
+        assert_eq!(store.snapshot().editor_revision, 0);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn strict_editor_io_failure_is_not_committed_or_acknowledged() {
+        let dir = test_directory("strict-editor-io-failure-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.snapshot();
+        let disk_before = std::fs::read(dir.join("store.json")).unwrap();
+        let request = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, 456.0),
+        );
+
+        store.writer.fail_next_persist();
+        let error = store.commit_editor_document(request.clone()).unwrap_err();
+        assert_eq!(error.error_code, EditorCommitErrorCode::IoError);
+        assert_eq!(store.snapshot(), before);
+        assert_eq!(std::fs::read(dir.join("store.json")).unwrap(), disk_before);
+
+        let retried = store.commit_editor_document(request).unwrap();
+        assert_eq!(retried.result.revision, 1);
+        assert_eq!(store.snapshot().key_positions["4key"][0].dx, 456.0);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn strict_editor_structural_single_field_update_requires_pair() {
+        let dir = test_directory("strict-editor-paired-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.snapshot();
+        let mut keys = before.keys.clone();
+        keys.get_mut("4key").unwrap().push("F5".to_string());
+        let error = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    keys: Some(keys),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap_err();
+
+        assert_eq!(
+            error.error_code,
+            EditorCommitErrorCode::PairedUpdateRequired
+        );
+        assert_eq!(store.snapshot(), before);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn strict_editor_retry_returns_original_ack_before_base_check() {
+        let dir = test_directory("strict-editor-idempotency-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let request = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, 789.0),
+        );
+        let first = store.commit_editor_document(request.clone()).unwrap();
+        let persist_count = store.writer.persist_count();
+
+        let retry = store.commit_editor_document(request).unwrap();
+
+        assert_eq!(retry.result, first.result);
+        assert!(retry.event.is_none());
+        assert!(retry.replayed);
+        assert_eq!(store.writer.persist_count(), persist_count);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn strict_editor_rejects_reused_mutation_id_with_different_request() {
+        let dir = test_directory("strict-editor-mutation-reuse-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        store
+            .commit_editor_document(editor_request(
+                0,
+                mutation_id.clone(),
+                EditorPatchV1::default(),
+            ))
+            .unwrap();
+
+        let error = store
+            .commit_editor_document(editor_request(
+                0,
+                mutation_id,
+                position_patch(&store, 321.0),
+            ))
+            .unwrap_err();
+        assert_eq!(error.error_code, EditorCommitErrorCode::MutationIdReused);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mutation_ack_ring_retains_only_the_latest_32_results() {
+        let dir = test_directory("strict-editor-ring-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let ids = (0..33)
+            .map(|_| uuid::Uuid::new_v4().to_string())
+            .collect::<Vec<_>>();
+        for id in &ids {
+            store
+                .commit_editor_document(editor_request(0, id.clone(), EditorPatchV1::default()))
+                .unwrap();
+        }
+        store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, 654.0),
+            ))
+            .unwrap();
+
+        let evicted = store
+            .commit_editor_document(editor_request(0, ids[0].clone(), EditorPatchV1::default()))
+            .unwrap_err();
+        assert_eq!(evicted.error_code, EditorCommitErrorCode::RevisionConflict);
+
+        let retained = store
+            .commit_editor_document(editor_request(0, ids[32].clone(), EditorPatchV1::default()))
+            .unwrap();
+        assert_eq!(retained.result.revision, 0);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn canonical_request_hash_makes_map_order_idempotent() {
+        let dir = test_directory("strict-editor-canonical-hash-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let current = store.snapshot().keys;
+        let mut entries = current.into_iter().collect::<Vec<_>>();
+        entries.sort_by(|left, right| left.0.cmp(&right.0));
+        let forward = entries.iter().cloned().collect::<HashMap<_, _>>();
+        let reverse = entries.into_iter().rev().collect::<HashMap<_, _>>();
+
+        let first = store
+            .commit_editor_document(editor_request(
+                0,
+                mutation_id.clone(),
+                EditorPatchV1 {
+                    keys: Some(forward),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        let retry = store
+            .commit_editor_document(editor_request(
+                0,
+                mutation_id,
+                EditorPatchV1 {
+                    keys: Some(reverse),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+
+        assert_eq!(retry.result, first.result);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_get_never_observes_a_revision_document_mismatch() {
+        let dir = test_directory("editor-get-atomic-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = Arc::new(AppStore::initialize_in_dir(&dir).unwrap());
+        let done = Arc::new(AtomicBool::new(false));
+        let reader_store = Arc::clone(&store);
+        let reader_done = Arc::clone(&done);
+        let reader = std::thread::spawn(move || {
+            while !reader_done.load(Ordering::Acquire) {
+                let snapshot = reader_store.editor_get();
+                if snapshot.revision > 0 {
+                    assert_eq!(
+                        snapshot.document.key_positions["4key"][0].dx,
+                        10_000.0 + snapshot.revision as f64
+                    );
+                }
+            }
+        });
+
+        for expected_revision in 1..=20 {
+            let base = store.editor_get().revision;
+            store
+                .commit_editor_document(editor_request(
+                    base,
+                    uuid::Uuid::new_v4().to_string(),
+                    position_patch(&store, 10_000.0 + expected_revision as f64),
+                ))
+                .unwrap();
+        }
+        done.store(true, Ordering::Release);
+        reader.join().unwrap();
+        let final_snapshot = store.editor_get();
+        assert_eq!(final_snapshot.revision, 20);
+        assert_eq!(
+            final_snapshot.document.key_positions["4key"][0].dx,
+            10_020.0
+        );
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn metadata_only_legacy_transaction_persists_without_editor_revision_or_event() {
+        let dir = test_directory("editor-metadata-only-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let persist_count = store.writer.persist_count();
+
+        let transaction = store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("metadata_test".to_string()),
+                &[],
+                |data| {
+                    data.language = "en".to_string();
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        assert_eq!(transaction.change.result.revision, 0);
+        assert!(transaction.change.result.changed_fields.is_empty());
+        assert!(transaction.change.event.is_none());
+        assert_eq!(store.snapshot().language, "en");
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn strict_editor_commit_preserves_existing_ghost_modes_losslessly() {
+        let dir = test_directory("editor-grandfather-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut data = super::initialize_default_state();
+        data.keys
+            .insert("ghost".to_string(), vec!["GhostKey".to_string()]);
+        data.key_positions
+            .insert("ghost".to_string(), vec![KeyPosition::default()]);
+        let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+
+        store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, 222.0),
+            ))
+            .unwrap();
+
+        let snapshot = store.snapshot();
+        assert_eq!(snapshot.keys["ghost"], vec!["GhostKey".to_string()]);
+        assert_eq!(
+            snapshot.key_positions["ghost"],
+            vec![KeyPosition::default()]
+        );
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_get_exposes_recovered_safe_revision_after_loading_unsafe_wire_value() {
+        let dir = test_directory("editor-revision-load-recovery-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut data = super::initialize_default_state();
+        data.editor_revision = crate::state::editor::MAX_SAFE_EDITOR_REVISION + 1;
+        data.key_positions.get_mut("4key").unwrap()[0].dx = 12_345.0;
+        std::fs::write(
+            dir.join("store.json"),
+            serde_json::to_vec_pretty(&data).unwrap(),
+        )
+        .unwrap();
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let editor = store.editor_get();
+
+        assert_eq!(editor.revision, 0);
+        assert_eq!(editor.document.key_positions["4key"][0].dx, 12_345.0);
+        let on_disk: AppStoreData =
+            serde_json::from_slice(&std::fs::read(dir.join("store.json")).unwrap()).unwrap();
+        assert_eq!(on_disk.editor_revision, 0);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn generic_update_cannot_mutate_editor_fields_or_revision() {
+        let dir = test_directory("editor-generic-escape-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.snapshot();
+
+        assert!(store
+            .update(|data| data.key_positions.get_mut("4key").unwrap()[0].dx = 999.0)
+            .is_err());
+        assert!(store.update(|data| data.editor_revision += 1).is_err());
+        assert_eq!(store.snapshot(), before);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn paired_keys_update_returns_the_normalized_mode_for_runtime_sync() {
         let dir = test_directory("keys-update-mode-sync-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let custom_mode = "custom-mode".to_string();
-        let initialized = store
-            .update(|data| {
-                data.custom_tabs.push(CustomTab {
-                    id: custom_mode.clone(),
-                    name: "Custom".to_string(),
-                });
-                data.keys
-                    .insert(custom_mode.clone(), vec!["KeyA".to_string()]);
-                data.selected_key_type = custom_mode.clone();
-            })
+        store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("test_setup".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |data| {
+                    data.custom_tabs.push(CustomTab {
+                        id: custom_mode.clone(),
+                        name: "Custom".to_string(),
+                    });
+                    data.keys
+                        .insert(custom_mode.clone(), vec!["KeyA".to_string()]);
+                    data.key_positions
+                        .insert(custom_mode.clone(), vec![KeyPosition::default()]);
+                    data.selected_key_type = custom_mode.clone();
+                    Ok(())
+                },
+            )
             .unwrap();
+        let initialized = store.snapshot();
         let keyboard = KeyboardManager::new(
             initialized.keys.clone(),
             initialized.selected_key_type.clone(),
@@ -1936,7 +2757,19 @@ mod tests {
 
         let mut mappings = initialized.keys;
         mappings.remove(&custom_mode);
-        let (updated, selected_key_type) = store.update_keys(mappings).unwrap();
+        let mut positions = initialized.key_positions;
+        positions.remove(&custom_mode);
+        let change = legacy_editor_commit(
+            &store,
+            &[EditorField::Keys, EditorField::KeyPositions],
+            move |data| {
+                data.keys = mappings;
+                data.key_positions = positions;
+            },
+        )
+        .unwrap();
+        let updated = change.document.keys;
+        let selected_key_type = change.selected_key_type;
         keyboard.update_mappings_and_set_mode(updated, selected_key_type.clone());
 
         assert_eq!(selected_key_type, "4key");
@@ -1949,7 +2782,7 @@ mod tests {
     }
 
     #[test]
-    fn keys_with_positions_commit_is_atomic_and_pads_without_deletion() {
+    fn keys_with_positions_commit_is_atomic_without_implicit_padding() {
         let dir = test_directory("keys-positions-atomic-commit-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
@@ -1957,23 +2790,44 @@ mod tests {
         let disk_before = std::fs::read(dir.join("store.json")).unwrap();
         let mut mappings = before.keys.clone();
         mappings.get_mut("4key").unwrap().push("F5".to_string());
+        mappings.get_mut("5key").unwrap().push(String::new());
         let mut positions = before.key_positions.clone();
+        positions
+            .get_mut("4key")
+            .unwrap()
+            .push(KeyPosition::default());
         positions
             .get_mut("5key")
             .unwrap()
             .push(KeyPosition::default());
 
         store.writer.fail_next_persist();
-        assert!(store
-            .update_keys_with_positions(mappings.clone(), positions.clone())
-            .is_err());
+        let failed_mappings = mappings.clone();
+        let failed_positions = positions.clone();
+        assert!(legacy_editor_commit(
+            &store,
+            &[EditorField::Keys, EditorField::KeyPositions],
+            move |data| {
+                data.keys = failed_mappings;
+                data.key_positions = failed_positions;
+            },
+        )
+        .is_err());
         assert_eq!(store.snapshot(), before);
         assert_eq!(std::fs::read(dir.join("store.json")).unwrap(), disk_before);
 
         let persist_count = store.writer.persist_count();
-        let (keys, positions, _) = store
-            .update_keys_with_positions(mappings, positions)
-            .unwrap();
+        let change = legacy_editor_commit(
+            &store,
+            &[EditorField::Keys, EditorField::KeyPositions],
+            move |data| {
+                data.keys = mappings;
+                data.key_positions = positions;
+            },
+        )
+        .unwrap();
+        let keys = change.document.keys;
+        let positions = change.document.key_positions;
         assert_eq!(store.writer.persist_count(), persist_count + 1);
         assert_eq!(keys["4key"].last().unwrap(), "F5");
         assert_eq!(positions["4key"].last().unwrap(), &KeyPosition::default());
@@ -1987,49 +2841,37 @@ mod tests {
     }
 
     #[test]
-    fn legacy_single_collection_commits_preserve_key_position_lengths() {
+    fn legacy_structural_single_collection_commits_are_rejected() {
         let dir = test_directory("legacy-key-position-commit-length-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
 
-        let mut mappings = store.snapshot().keys;
+        let before = store.snapshot();
+        let mut mappings = before.keys.clone();
         mappings.get_mut("4key").unwrap().push("F5".to_string());
-        store.update_keys(mappings).unwrap();
-        let after_keys = store.snapshot();
-        assert_eq!(
-            after_keys.keys["4key"].len(),
-            after_keys.key_positions["4key"].len()
+        assert!(
+            legacy_editor_commit(&store, &[EditorField::Keys], move |data| {
+                data.keys = mappings;
+            })
+            .is_err()
         );
-        assert_eq!(
-            after_keys.key_positions["4key"].last(),
-            Some(&KeyPosition::default())
-        );
+        assert_eq!(store.snapshot(), before);
 
-        let mut positions = after_keys.key_positions;
+        let mut positions = before.key_positions.clone();
         positions
             .get_mut("5key")
             .unwrap()
             .push(KeyPosition::default());
-        store.update_positions(positions).unwrap();
-        let after_positions = store.snapshot();
-        assert_eq!(
-            after_positions.keys["5key"].len(),
-            after_positions.key_positions["5key"].len()
+        assert!(
+            legacy_editor_commit(&store, &[EditorField::KeyPositions], move |data| {
+                data.key_positions = positions;
+            },)
+            .is_err()
         );
-        assert!(after_positions.keys["5key"].last().unwrap().is_empty());
+        assert_eq!(store.snapshot(), before);
 
         store.flush_and_shutdown().unwrap();
         drop(store);
-        let reloaded = crate::state::migration::load_store_from_path(&dir.join("store.json"))
-            .unwrap()
-            .data;
-        for mode in reloaded.keys.keys().chain(reloaded.key_positions.keys()) {
-            assert_eq!(
-                reloaded.keys.get(mode).map_or(0, Vec::len),
-                reloaded.key_positions.get(mode).map_or(0, Vec::len)
-            );
-        }
-
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2095,41 +2937,60 @@ mod tests {
         let dir = test_directory("preset-single-transaction-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .set_plugin_data("plugin_data_fixture", json!({ "kept": true }))
+            .unwrap();
         let initial_persist_count = store.writer.persist_count();
 
-        let updated = store
-            .update(|data| {
-                data.key_positions.get_mut("4key").unwrap()[0].dx = 321.0;
-                apply_patch_to_store(
-                    data,
-                    &SettingsPatchInput {
-                        background_color: Some("#123456".to_string()),
-                        ..SettingsPatchInput::default()
-                    },
-                );
-            })
+        store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("preset_test".to_string()),
+                &[EditorField::KeyPositions],
+                |data| {
+                    data.key_positions.get_mut("4key").unwrap()[0].dx = 321.0;
+                    apply_patch_to_store(
+                        data,
+                        &SettingsPatchInput {
+                            background_color: Some("#123456".to_string()),
+                            ..SettingsPatchInput::default()
+                        },
+                    );
+                    Ok(())
+                },
+            )
             .unwrap();
+        let updated = store.snapshot();
 
         assert_eq!(store.writer.persist_count(), initial_persist_count + 1);
         assert_eq!(updated.key_positions["4key"][0].dx, 321.0);
         assert_eq!(updated.background_color, "#123456");
+        assert_eq!(updated.plugin_data["plugin_data_fixture"]["kept"], true);
 
         let before_failure = store.snapshot();
         let disk_before_failure = std::fs::read(dir.join("store.json")).unwrap();
         store.writer.fail_next_persist();
-        let result = store.update(|data| {
-            data.key_positions.get_mut("4key").unwrap()[0].dx = 999.0;
-            apply_patch_to_store(
-                data,
-                &SettingsPatchInput {
-                    background_color: Some("#FFFFFF".to_string()),
-                    ..SettingsPatchInput::default()
-                },
-            );
-        });
+        let result = store.commit_legacy_editor_transaction(
+            EditorCommitOrigin::LegacyAdapter("preset_test".to_string()),
+            &[EditorField::KeyPositions],
+            |data| {
+                data.key_positions.get_mut("4key").unwrap()[0].dx = 999.0;
+                apply_patch_to_store(
+                    data,
+                    &SettingsPatchInput {
+                        background_color: Some("#FFFFFF".to_string()),
+                        ..SettingsPatchInput::default()
+                    },
+                );
+                Ok(())
+            },
+        );
 
         assert!(result.is_err());
         assert_eq!(store.snapshot(), before_failure);
+        assert_eq!(
+            store.snapshot().plugin_data["plugin_data_fixture"]["kept"],
+            true
+        );
         assert_eq!(
             std::fs::read(dir.join("store.json")).unwrap(),
             disk_before_failure
@@ -2140,10 +3001,154 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    // 프론트 저장 순서 재현: positions(groupId 포함) 먼저 → layerGroups 정의 나중
-    // 부분 저장 중간 정규화가 신규 그룹 참조를 지우면 그룹 생성이 통째로 깨진다
     #[test]
-    fn group_ids_survive_positions_saved_before_group_definitions() {
+    fn history_restore_commits_all_core_state_once_and_fails_closed() {
+        let dir = test_directory("history-restore-transaction-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .set_plugin_data("history_fixture", json!({ "kept": true }))
+            .unwrap();
+        let before = store.snapshot();
+        let persist_count = store.writer.persist_count();
+        let mut document = EditorDocumentV1::from_store(&before);
+        document.key_positions.get_mut("4key").unwrap()[0].dx = 456.0;
+        let mut counters = before.key_counters.clone();
+        let first_key = before.keys["4key"][0].clone();
+        counters
+            .get_mut("4key")
+            .unwrap()
+            .insert(first_key.clone(), 77);
+        let mut tab_note_overrides = HashMap::new();
+        tab_note_overrides.insert(
+            "4key".to_string(),
+            TabNoteSettings {
+                speed: Some(777),
+                ..TabNoteSettings::default()
+            },
+        );
+
+        let transaction = store
+            .restore_editor_history(EditorHistoryRestoreRequest {
+                base_revision: before.editor_revision,
+                document,
+                custom_tabs: before.custom_tabs.clone(),
+                selected_key_type: before.selected_key_type.clone(),
+                key_counters: Some(counters),
+                settings_patch: Some(SettingsPatchInput {
+                    background_color: Some("#123456".to_string()),
+                    ..SettingsPatchInput::default()
+                }),
+                tab_note_overrides: Some(tab_note_overrides),
+            })
+            .unwrap();
+
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        assert_eq!(
+            transaction.change.result.revision,
+            before.editor_revision + 1
+        );
+        assert_eq!(
+            transaction.change.result.changed_fields,
+            vec![EditorField::KeyPositions]
+        );
+        assert!(transaction.value.is_some());
+        let committed = store.snapshot();
+        assert_eq!(committed.key_positions["4key"][0].dx, 456.0);
+        assert_eq!(committed.key_counters["4key"][&first_key], 77);
+        assert_eq!(committed.background_color, "#123456");
+        assert_eq!(committed.tab_note_overrides["4key"].speed, Some(777));
+        assert_eq!(committed.plugin_data["history_fixture"]["kept"], true);
+
+        let before_failure = store.snapshot();
+        let disk_before_failure = std::fs::read(dir.join("store.json")).unwrap();
+        let mut failed_document = EditorDocumentV1::from_store(&before_failure);
+        failed_document.key_positions.get_mut("4key").unwrap()[0].dx = 999.0;
+        store.writer.fail_next_persist();
+        let failed = store.restore_editor_history(EditorHistoryRestoreRequest {
+            base_revision: before_failure.editor_revision,
+            document: failed_document.clone(),
+            custom_tabs: before_failure.custom_tabs.clone(),
+            selected_key_type: before_failure.selected_key_type.clone(),
+            key_counters: None,
+            settings_patch: Some(SettingsPatchInput {
+                background_color: Some("#FFFFFF".to_string()),
+                ..SettingsPatchInput::default()
+            }),
+            tab_note_overrides: None,
+        });
+
+        assert_eq!(
+            failed.unwrap_err().error_code,
+            EditorCommitErrorCode::IoError
+        );
+        assert_eq!(store.snapshot(), before_failure);
+        assert_eq!(
+            std::fs::read(dir.join("store.json")).unwrap(),
+            disk_before_failure
+        );
+
+        let persist_count = store.writer.persist_count();
+        let stale = store.restore_editor_history(EditorHistoryRestoreRequest {
+            base_revision: before_failure.editor_revision - 1,
+            document: failed_document,
+            custom_tabs: before_failure.custom_tabs.clone(),
+            selected_key_type: before_failure.selected_key_type.clone(),
+            key_counters: None,
+            settings_patch: None,
+            tab_note_overrides: None,
+        });
+        assert_eq!(
+            stale.unwrap_err().error_code,
+            EditorCommitErrorCode::RevisionConflict
+        );
+        assert_eq!(store.writer.persist_count(), persist_count);
+        assert_eq!(store.snapshot(), before_failure);
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn failed_preset_style_commit_keeps_revision_and_key_runtime_unchanged() {
+        let dir = test_directory("preset-runtime-failure-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let state = AppState::initialize(store).unwrap();
+        let before_store = state.store.snapshot();
+        let before_disk = std::fs::read(dir.join("store.json")).unwrap();
+        let before_mode = state.keyboard.current_mode();
+        let before_counters = state.snapshot_key_counters();
+        let mut keys = before_store.keys.clone();
+        keys.get_mut("4key").unwrap()[0] = "PresetKey".to_string();
+
+        state.store.writer.fail_next_persist();
+        let result = state.store.commit_legacy_editor_transaction(
+            EditorCommitOrigin::LegacyAdapter("preset_failure_test".to_string()),
+            &[EditorField::Keys],
+            move |data| {
+                data.keys = keys;
+                data.selected_key_type = "5key".to_string();
+                data.background_color = "#123456".to_string();
+                Ok(())
+            },
+        );
+
+        assert!(result.is_err());
+        assert_eq!(state.store.snapshot(), before_store);
+        assert_eq!(std::fs::read(dir.join("store.json")).unwrap(), before_disk);
+        assert_eq!(state.keyboard.current_mode(), before_mode);
+        assert_eq!(state.snapshot_key_counters(), before_counters);
+
+        state.shutdown();
+        drop(state);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    // 그룹 정의와 참조는 같은 editor 트랜잭션에서 함께 저장
+    #[test]
+    fn group_ids_and_definitions_commit_atomically() {
         let dir = test_directory("group-order-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
@@ -2153,8 +3158,6 @@ mod tests {
             list[0].group_id = Some("new-group".to_string());
             list[1].group_id = Some("new-group".to_string());
         }
-        store.update_positions(positions).unwrap();
-
         let mut groups = crate::models::LayerGroups::new();
         groups.insert(
             "4key".to_string(),
@@ -2163,7 +3166,24 @@ mod tests {
                 name: "New Group".to_string(),
             }],
         );
-        store.update_layer_groups(groups).unwrap();
+        let rejected_positions = positions.clone();
+        assert!(
+            legacy_editor_commit(&store, &[EditorField::KeyPositions], move |data| {
+                data.key_positions = rejected_positions;
+            },)
+            .is_err()
+        );
+        store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("group_test".to_string()),
+                &[EditorField::KeyPositions, EditorField::LayerGroups],
+                move |data| {
+                    data.key_positions = positions;
+                    data.layer_groups = groups;
+                    Ok(())
+                },
+            )
+            .unwrap();
 
         let data = store.snapshot();
         assert_eq!(
@@ -2750,11 +3770,12 @@ mod tests {
         assert!(image_url.contains("%20"));
 
         let store = AppStore::initialize_in_dir(&dir).unwrap();
-        store
-            .update(|data| {
-                data.key_positions.get_mut("4key").unwrap()[0].active_image = Some(image_url);
-            })
-            .unwrap();
+        let mut positions = store.snapshot().key_positions;
+        positions.get_mut("4key").unwrap()[0].active_image = Some(image_url);
+        legacy_editor_commit(&store, &[EditorField::KeyPositions], move |data| {
+            data.key_positions = positions;
+        })
+        .unwrap();
 
         store.cleanup_orphan_assets_now().unwrap();
 
@@ -2773,12 +3794,13 @@ mod tests {
         std::fs::write(&image_path, b"image").unwrap();
 
         let store = AppStore::initialize_in_dir(&dir).unwrap();
-        store
-            .update(|data| {
-                data.key_positions.get_mut("4key").unwrap()[0].active_image =
-                    Some("file:///tmp/broken%ZZ.png".to_string());
-            })
-            .unwrap();
+        let mut positions = store.snapshot().key_positions;
+        positions.get_mut("4key").unwrap()[0].active_image =
+            Some("file:///tmp/broken%ZZ.png".to_string());
+        legacy_editor_commit(&store, &[EditorField::KeyPositions], move |data| {
+            data.key_positions = positions;
+        })
+        .unwrap();
 
         store.cleanup_orphan_assets_now().unwrap();
 
@@ -2831,13 +3853,14 @@ mod tests {
         }
 
         let store = AppStore::initialize_in_dir(&dir).unwrap();
-        store
-            .update(|data| {
-                let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
-                position.active_image = Some(r"\unresolved-image.png".to_string());
-                position.sound_path = Some("C:unresolved-sound.wav".to_string());
-            })
-            .unwrap();
+        let mut positions = store.snapshot().key_positions;
+        let position = &mut positions.get_mut("4key").unwrap()[0];
+        position.active_image = Some(r"\unresolved-image.png".to_string());
+        position.sound_path = Some("C:unresolved-sound.wav".to_string());
+        legacy_editor_commit(&store, &[EditorField::KeyPositions], move |data| {
+            data.key_positions = positions;
+        })
+        .unwrap();
 
         store.cleanup_orphan_assets_now().unwrap();
 
@@ -3166,6 +4189,123 @@ mod tests {
         second.flush_cleanup_and_shutdown().unwrap();
         drop(second);
         assert_eq!(std::fs::read(&backup_path).unwrap(), first_original);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn invalid_pre_migration_backup_path_aborts_before_store_rewrite() {
+        let dir = test_directory("pre-migration-backup-path-failure-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store_path = dir.join("store.json");
+        let original = br#"{
+  "hardwareAcceleration": true,
+  "alwaysOnTop": true,
+  "overlayLocked": false,
+  "noteEffect": false,
+  "selectedKeyType": "4key",
+  "angleMode": "d3d11",
+  "language": "ko",
+  "laboratoryEnabled": false,
+  "backgroundColor": "transparent",
+  "useCustomCss": false,
+  "overlayResizeAnchor": "top-left",
+  "overlayBounds": null,
+  "overlayLastContentTopOffset": null,
+  "soundLibrary": {
+    "C:\\legacy\\first.wav": { "enabled": true, "source": "local" }
+  }
+}"#;
+        std::fs::write(&store_path, original).unwrap();
+        std::fs::create_dir(dir.join("store.json.pre-migration.bak")).unwrap();
+
+        let result = AppStore::initialize_in_dir(&dir);
+
+        if let Ok(store) = result {
+            let _ = store.flush_and_shutdown();
+            panic!("store initialization unexpectedly rewrote data without a valid backup");
+        }
+        assert_eq!(std::fs::read(&store_path).unwrap(), original);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn malformed_existing_pre_migration_backup_aborts_before_store_rewrite() {
+        let dir = test_directory("pre-migration-backup-content-failure-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store_path = dir.join("store.json");
+        let original = br#"{
+  "hardwareAcceleration": true,
+  "alwaysOnTop": true,
+  "overlayLocked": false,
+  "noteEffect": false,
+  "selectedKeyType": "4key",
+  "angleMode": "d3d11",
+  "language": "ko",
+  "laboratoryEnabled": false,
+  "backgroundColor": "transparent",
+  "useCustomCss": false,
+  "overlayResizeAnchor": "top-left",
+  "overlayBounds": null,
+  "overlayLastContentTopOffset": null,
+  "soundLibrary": {
+    "C:\\legacy\\first.wav": { "enabled": true, "source": "local" }
+  }
+}"#;
+        std::fs::write(&store_path, original).unwrap();
+        std::fs::write(dir.join("store.json.pre-migration.bak"), b"not-json").unwrap();
+
+        let result = AppStore::initialize_in_dir(&dir);
+
+        if let Ok(store) = result {
+            let _ = store.flush_and_shutdown();
+            panic!("store initialization unexpectedly rewrote data without a valid backup");
+        }
+        assert_eq!(std::fs::read(&store_path).unwrap(), original);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_pre_migration_backup_aborts_before_store_rewrite() {
+        use std::os::unix::fs::symlink;
+
+        let dir = test_directory("pre-migration-backup-symlink-failure-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store_path = dir.join("store.json");
+        let original = br#"{
+  "hardwareAcceleration": true,
+  "alwaysOnTop": true,
+  "overlayLocked": false,
+  "noteEffect": false,
+  "selectedKeyType": "4key",
+  "angleMode": "d3d11",
+  "language": "ko",
+  "laboratoryEnabled": false,
+  "backgroundColor": "transparent",
+  "useCustomCss": false,
+  "overlayResizeAnchor": "top-left",
+  "overlayBounds": null,
+  "overlayLastContentTopOffset": null,
+  "soundLibrary": {
+    "C:\\legacy\\first.wav": { "enabled": true, "source": "local" }
+  }
+}"#;
+        std::fs::write(&store_path, original).unwrap();
+        let target = dir.join("unrelated.json");
+        std::fs::write(&target, b"{}").unwrap();
+        symlink(&target, dir.join("store.json.pre-migration.bak")).unwrap();
+
+        let result = AppStore::initialize_in_dir(&dir);
+
+        if let Ok(store) = result {
+            let _ = store.flush_and_shutdown();
+            panic!("store initialization unexpectedly followed a backup symlink");
+        }
+        assert_eq!(std::fs::read(&store_path).unwrap(), original);
+        assert_eq!(std::fs::read(&target).unwrap(), b"{}");
 
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -37,6 +37,7 @@ const MAX_HTTP_HEADER_SIZE: usize = 16 * 1024;
 const ALLOWED_WS_COMMANDS: &[&str] = &[
     "app_bootstrap",
     "settings_get",
+    "editor_get",
     "layer_groups_get",
     "note_tab_get_all",
     "note_tab_get",
@@ -367,6 +368,7 @@ impl ObsBridgeService {
         // OBS 오버레이가 수신하는 이벤트 목록
         let forwarded_events = [
             "settings:changed",
+            "editor:committed",
             "keys:state",
             "keys:changed",
             "keys:counters",
@@ -1371,9 +1373,11 @@ mod tests {
 
     #[test]
     fn websocket_allowlist_uses_exact_matching() {
-        assert_eq!(ALLOWED_WS_COMMANDS.len(), 30);
+        assert_eq!(ALLOWED_WS_COMMANDS.len(), 31);
         assert!(is_allowed_command("app_bootstrap"));
+        assert!(is_allowed_command("editor_get"));
         assert!(is_allowed_command("plugin_storage_clear_by_prefix"));
+        assert!(!is_allowed_command("editor_commit"));
         assert!(!is_allowed_command("settings_update"));
         assert!(!is_allowed_command("keys_update"));
         assert!(!is_allowed_command("keys_update_with_positions"));
