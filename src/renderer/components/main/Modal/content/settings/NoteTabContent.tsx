@@ -16,6 +16,7 @@ import {
   type NoteTabState,
   type NotePreviewData,
 } from '@hooks/Modal/useUnifiedKeySettingState';
+import { ColorSwatchSurface } from '@components/main/Modal/content/pickers/ColorSwatch';
 
 // ============================================================================
 // 타입 정의
@@ -60,25 +61,6 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         setState((prev) => ({ ...prev, showGlowPicker: false }));
       }
     }, [state.glowEnabled, state.showGlowPicker, setState]);
-
-    // 색상 미리보기 스타일
-    const renderColorPreview = () => {
-      if (state.colorMode === COLOR_MODES.gradient) {
-        return {
-          background: `linear-gradient(to bottom, ${state.noteColor}, ${state.gradientBottom})`,
-        };
-      }
-      return { backgroundColor: state.noteColor };
-    };
-
-    const renderGlowColorPreview = () => {
-      if (state.glowColorMode === COLOR_MODES.gradient) {
-        return {
-          background: `linear-gradient(to bottom, ${state.glowColor}, ${state.glowGradientBottom})`,
-        };
-      }
-      return { backgroundColor: state.glowColor };
-    };
 
     // 색상 라벨
     const colorLabel =
@@ -330,9 +312,22 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
                 setState((prev) => ({ ...prev, showPicker: !prev.showPicker }))
               }
             >
-              <div
-                className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px]"
-                style={renderColorPreview()}
+              <ColorSwatchSurface
+                className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
+                color={
+                  state.colorMode === COLOR_MODES.solid
+                    ? state.noteColor
+                    : undefined
+                }
+                gradient={
+                  state.colorMode === COLOR_MODES.gradient
+                    ? {
+                        top: state.noteColor,
+                        bottom: state.gradientBottom,
+                      }
+                    : undefined
+                }
+                opacity={state.noteOpacity / 100}
               />
               <span className="ml-[16px] text-left">{colorLabel}</span>
             </button>
@@ -386,9 +381,22 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
                 }
               }}
             >
-              <div
-                className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px]"
-                style={renderGlowColorPreview()}
+              <ColorSwatchSurface
+                className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
+                color={
+                  state.glowColorMode === COLOR_MODES.solid
+                    ? state.glowColor
+                    : undefined
+                }
+                gradient={
+                  state.glowColorMode === COLOR_MODES.gradient
+                    ? {
+                        top: state.glowColor,
+                        bottom: state.glowGradientBottom,
+                      }
+                    : undefined
+                }
+                opacity={state.glowOpacity / 100}
               />
               <span className="ml-[16px] text-left">{glowColorLabel}</span>
             </button>

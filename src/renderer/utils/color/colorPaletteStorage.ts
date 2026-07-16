@@ -13,7 +13,7 @@ const STORAGE_KEYS: Record<PaletteType, string> = {
   gradient: 'dmnote-color-palette-gradient',
 };
 
-const MAX_PALETTE_SIZE = 5;
+const MAX_PALETTE_SIZE = 7;
 
 export const loadPalette = (type: PaletteType): PaletteColor[] => {
   try {

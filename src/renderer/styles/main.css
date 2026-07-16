@@ -8,6 +8,41 @@ body {
   color: var(--ui-fg);
 }
 
+/* 플러그인 색상 스와치 */
+.dmn-color-swatch-button {
+  position: relative;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+}
+
+.dmn-color-swatch-surface {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  background: var(--ui-checker-pattern) center / var(--ui-checker-size-sm)
+    var(--ui-checker-size-sm) repeat;
+}
+
+.dmn-color-swatch-color,
+.dmn-color-swatch-ring {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.dmn-color-swatch-color {
+  background-color: var(--dmn-color-swatch-color, transparent);
+}
+
+.dmn-color-swatch-ring {
+  box-shadow: inset 0 0 0 1px var(--ui-line);
+}
+
 /* 커스텀 커서 미리보기 */
 body.dmn-custom-cursor,
 body.dmn-custom-cursor * {
@@ -370,55 +405,6 @@ body.dmn-custom-cursor * {
 
 .animate-stage-in {
   animation: stageContentIn var(--ui-duration-fast) var(--ui-ease-out) both;
-}
-
-/* ===== ColorPicker ===== */
-
-.rcp-saturation {
-  border-radius: 8px !important;
-  cursor: pointer !important;
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
-}
-
-.rcp-saturation-cursor {
-  height: 10px !important;
-  width: 10px !important;
-  transform: translate(-50%, -50%) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid white !important;
-  border-radius: 100% !important;
-}
-
-.rcp-hue {
-  border-radius: 8px !important;
-  cursor: pointer !important;
-  height: 10px !important;
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
-}
-
-.rcp-hue-cursor {
-  height: 10px !important;
-  width: 10px !important;
-  transform: translate(-50%, 0%) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid white !important;
-  border-radius: 100% !important;
-}
-
-.rcp-alpha {
-  border-radius: 8px !important;
-  cursor: pointer !important;
-  height: 10px !important;
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
-}
-
-.rcp-alpha-cursor {
-  height: 10px !important;
-  width: 10px !important;
-  transform: translate(-50%, 0%) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid white !important;
-  border-radius: 100% !important;
 }
 
 /* ===== 코드 에디터 ===== */

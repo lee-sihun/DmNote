@@ -12,6 +12,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import { usePanelNav } from '../PanelNavContext';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-counter:font';
@@ -201,16 +202,14 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
       <PropertySection>
         {/* 채우기 색상 */}
         <PropertyRow label={t('counterSetting.fill') || '채우기'}>
-          <button
+          <ColorSwatchButton
             ref={batchCounterFillButtonRef}
             type="button"
             onClick={onFillPickerToggle}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              isFillPickerOpen ? 'border-accent' : 'border-line'
-            }`}
-            style={{
-              backgroundColor: getDisplayColor(getCounterColorDisplay('fill')),
-            }}
+            open={isFillPickerOpen}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(getCounterColorDisplay('fill'))}
             title={`${t('counterSetting.fill') || '채우기'} (${
               colorState === 'active'
                 ? t('counterSetting.active') || '입력'
@@ -221,18 +220,14 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
 
         {/* 외곽선 색상 */}
         <PropertyRow label={t('counterSetting.stroke') || '외곽선'}>
-          <button
+          <ColorSwatchButton
             ref={batchCounterStrokeButtonRef}
             type="button"
             onClick={onStrokePickerToggle}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              isStrokePickerOpen ? 'border-accent' : 'border-line'
-            }`}
-            style={{
-              backgroundColor: getDisplayColor(
-                getCounterColorDisplay('stroke'),
-              ),
-            }}
+            open={isStrokePickerOpen}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(getCounterColorDisplay('stroke'))}
             title={`${t('counterSetting.stroke') || '외곽선'} (${
               colorState === 'active'
                 ? t('counterSetting.active') || '입력'

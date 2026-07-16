@@ -48,6 +48,17 @@
   /* 캔버스/스테이지 보조 격자선 — 메이저(--ui-line)보다 한 톤 흐림 */
   --ui-line-faint: rgba(255, 255, 255, 0.06);
 
+  /* 투명 색상 체커 */
+  --ui-checker-pattern: conic-gradient(
+    #666 0.25turn,
+    #999 0.25turn 0.5turn,
+    #666 0.5turn 0.75turn,
+    #999 0.75turn
+  );
+  --ui-checker-size: 8px;
+  /* 소형 스와치(11~23px)용 — 8px 타일은 2×2칸이라 깨진 텍스처로 읽힘 */
+  --ui-checker-size-sm: 4px;
+
   /* 크롬 필 — 반투명 화이트 오버레이 상태 래더 (idle → hover → active) */
   --ui-fill: rgba(255, 255, 255, 0.08);
   --ui-fill-hover: rgba(255, 255, 255, 0.11);

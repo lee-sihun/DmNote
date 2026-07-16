@@ -19,6 +19,7 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import { usePanelNav } from '../PanelNavContext';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-counter:font';
@@ -268,35 +269,27 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       <PropertySection>
         {/* 채우기 색상 */}
         <PropertyRow label={t('counterSetting.fill') || '채우기'}>
-          <button
+          <ColorSwatchButton
             ref={fillBtnRef}
             type="button"
             onClick={() => handlePickerToggle('fill')}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              pickerFor === 'fill' ? 'border-accent' : 'border-line'
-            }`}
-            style={{
-              backgroundColor: getDisplayColor(
-                activeColorFor('fill', colorState),
-              ),
-            }}
+            open={pickerFor === 'fill'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(activeColorFor('fill', colorState))}
           />
         </PropertyRow>
 
         {/* 외곽선 색상 */}
         <PropertyRow label={t('counterSetting.stroke') || '외곽선'}>
-          <button
+          <ColorSwatchButton
             ref={strokeBtnRef}
             type="button"
             onClick={() => handlePickerToggle('stroke')}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              pickerFor === 'stroke' ? 'border-accent' : 'border-line'
-            }`}
-            style={{
-              backgroundColor: getDisplayColor(
-                activeColorFor('stroke', colorState),
-              ),
-            }}
+            open={pickerFor === 'stroke'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(activeColorFor('stroke', colorState))}
           />
         </PropertyRow>
       </PropertySection>

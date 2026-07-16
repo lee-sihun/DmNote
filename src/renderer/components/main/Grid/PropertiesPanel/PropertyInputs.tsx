@@ -18,6 +18,7 @@ import {
   FORM_LABEL_CLASS,
 } from '@utils/cardRecipes';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 
 // ============================================================================
 // 속성 행
@@ -723,19 +724,17 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 
   return (
     <>
-      <button
+      <ColorSwatchButton
         ref={buttonRef}
         onClick={handleToggle}
-        className={`w-[23px] h-[23px] rounded-md border-[1px] border-line overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-          open ? 'shadow-focus-ring' : ''
-        }`}
-        style={{
-          backgroundColor: getDisplayColor(
-            showStateTabs && stateMode === 'active'
-              ? localActiveColor
-              : localColor,
-          ),
-        }}
+        open={open}
+        className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+        surfaceClassName="rounded-md"
+        color={getDisplayColor(
+          showStateTabs && stateMode === 'active'
+            ? localActiveColor
+            : localColor,
+        )}
       />
       {open && (
         <ColorPicker

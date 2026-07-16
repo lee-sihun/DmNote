@@ -16,6 +16,7 @@ import type {
   CounterTabState,
   CounterPreviewData,
 } from '@hooks/Modal/useUnifiedKeySettingState';
+import { ColorSwatchSurface } from '@components/main/Modal/content/pickers/ColorSwatch';
 
 // ============================================================================
 // 타입 정의
@@ -166,10 +167,10 @@ const CounterTabContent = forwardRef<
     } text-fg text-label`;
 
   // 컬러 프리뷰 박스
-  const renderColorSquare = (style: React.CSSProperties) => (
-    <div
-      className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px]"
-      style={style}
+  const renderColorSquare = (color: string) => (
+    <ColorSwatchSurface
+      className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
+      color={color}
     />
   );
 
@@ -358,7 +359,7 @@ const CounterTabContent = forwardRef<
               )}
               onClick={() => handleColorToggle('fillIdle')}
             >
-              {renderColorSquare({ backgroundColor: state.fillIdle })}
+              {renderColorSquare(state.fillIdle)}
               <span className="ml-[16px] text-left">
                 {t('counterSetting.idle')}
               </span>
@@ -371,7 +372,7 @@ const CounterTabContent = forwardRef<
               )}
               onClick={() => handleColorToggle('fillActive')}
             >
-              {renderColorSquare({ backgroundColor: state.fillActive })}
+              {renderColorSquare(state.fillActive)}
               <span className="ml-[16px] text-left">
                 {t('counterSetting.active')}
               </span>
@@ -393,7 +394,7 @@ const CounterTabContent = forwardRef<
               )}
               onClick={() => handleColorToggle('strokeIdle')}
             >
-              {renderColorSquare({ backgroundColor: state.strokeIdle })}
+              {renderColorSquare(state.strokeIdle)}
               <span className="ml-[16px] text-left">
                 {t('counterSetting.idle')}
               </span>
@@ -406,7 +407,7 @@ const CounterTabContent = forwardRef<
               )}
               onClick={() => handleColorToggle('strokeActive')}
             >
-              {renderColorSquare({ backgroundColor: state.strokeActive })}
+              {renderColorSquare(state.strokeActive)}
               <span className="ml-[16px] text-left">
                 {t('counterSetting.active')}
               </span>

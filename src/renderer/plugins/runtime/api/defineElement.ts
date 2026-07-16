@@ -463,7 +463,10 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                   referenceElement: target as HTMLElement,
                   onColorChange: (newColor) => {
                     // 스와치(버튼 자체) 미리보기 업데이트
-                    target.style.backgroundColor = newColor;
+                    target.style.setProperty(
+                      '--dmn-color-swatch-color',
+                      newColor,
+                    );
                   },
                   onColorChangeComplete: (newColor) => {
                     wrappedChange(newColor);
@@ -482,10 +485,15 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               // 패널 ColorInput과 동일한 스와치 단독 버튼
               componentHtml = `
               <button type="button"
-                class="w-[23px] h-[23px] rounded-md border-[1px] border-line overflow-hidden cursor-pointer transition-colors flex-shrink-0"
-                style="background-color: ${value}"
+                class="dmn-color-swatch-button w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+                style="--dmn-color-swatch-color: ${value}"
                 data-plugin-handler="${handlerId}"
-              ></button>
+              >
+                <span class="dmn-color-swatch-surface">
+                  <span class="dmn-color-swatch-color"></span>
+                  <span class="dmn-color-swatch-ring"></span>
+                </span>
+              </button>
             `;
             } else if (schema.type === 'string' || schema.type === 'number') {
               const strVal = String(value);

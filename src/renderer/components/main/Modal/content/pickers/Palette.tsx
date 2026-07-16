@@ -4,6 +4,7 @@ import {
   buildGradient,
   isGradientColor,
 } from '@utils/color/colorUtils';
+import { ColorSwatchButton } from './ColorSwatch';
 
 interface PaletteProps {
   color: string;
@@ -77,12 +78,15 @@ const Palette = ({ color, onColorChange }: PaletteProps) => {
 
 export default Palette;
 
-function Color({ color, onClick }: ColorProps) {
+const Color = ({ color, onClick }: ColorProps) => {
   return (
-    <button
-      className="w-[22px] h-[22px] rounded-md border-[1px] border-line-strong hover:scale-110 transition-transform duration-fast ease-out-expo"
-      style={{ backgroundColor: color }}
+    <ColorSwatchButton
+      className="w-[22px] h-[22px] rounded-md hover:scale-110 transition-transform duration-fast ease-out-expo"
+      surfaceClassName="rounded-md"
+      color={color}
       onClick={onClick}
+      title={color}
+      aria-label={color}
     />
   );
-}
+};

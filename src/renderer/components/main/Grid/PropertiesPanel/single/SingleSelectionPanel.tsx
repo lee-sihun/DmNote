@@ -42,6 +42,7 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -1115,16 +1116,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <PropertyRow
                 label={t('propertiesPanel.backgroundColor') || '배경색'}
               >
-                <button
+                <ColorSwatchButton
                   ref={bgColorBtnRef}
                   type="button"
                   onClick={() => handlePickerToggle('backgroundColor')}
-                  className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-                    pickerFor === 'backgroundColor'
-                      ? 'border-accent'
-                      : 'border-line'
-                  }`}
-                  style={{ backgroundColor: colorValueFor('backgroundColor') }}
+                  open={pickerFor === 'backgroundColor'}
+                  className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+                  surfaceClassName="rounded-md"
+                  color={colorValueFor('backgroundColor')}
                 />
               </PropertyRow>
 
@@ -1132,16 +1131,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <PropertyRow
                 label={t('propertiesPanel.borderColor') || '테두리 색상'}
               >
-                <button
+                <ColorSwatchButton
                   ref={borderColorBtnRef}
                   type="button"
                   onClick={() => handlePickerToggle('borderColor')}
-                  className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-                    pickerFor === 'borderColor'
-                      ? 'border-accent'
-                      : 'border-line'
-                  }`}
-                  style={{ backgroundColor: colorValueFor('borderColor') }}
+                  open={pickerFor === 'borderColor'}
+                  className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+                  surfaceClassName="rounded-md"
+                  color={colorValueFor('borderColor')}
                 />
               </PropertyRow>
 

@@ -279,6 +279,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     ? getSelectedBatchStyleData
     : getSelectedKeysData;
 
+  // opacity가 mixed면 첫 항목 값을 공통값처럼 단언하지 않고 원색으로 표시
+  const opacityOrFull = (mixed: { isMixed: boolean; value: number }) =>
+    mixed.isMixed ? 1 : mixed.value / 100;
+
   const getBatchNoteColorDisplay = () => {
     if (batchPickerFor === 'noteColor') {
       const value = batchLocalColors.noteColor;
@@ -289,16 +293,18 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         value.type === 'gradient'
       ) {
         return {
-          style: {
-            background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
-          },
+          color: undefined,
+          gradient: { top: value.top, bottom: value.bottom },
+          opacity: batchLocalOpacities.noteOpacity / 100,
           label: 'Gradient',
           isMixed: false,
         };
       }
       const color = typeof value === 'string' ? value : '#FFFFFF';
       return {
-        style: { backgroundColor: color },
+        color,
+        gradient: undefined,
+        opacity: batchLocalOpacities.noteOpacity / 100,
         label: color.replace(/^#/, ''),
         isMixed: false,
       };
@@ -312,10 +318,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     );
     if (isMixed)
       return {
-        style: { backgroundColor: '#666' },
+        color: '#666',
+        gradient: undefined,
+        opacity: 1,
         label: 'Mixed',
         isMixed: true,
       };
+    const opacity = opacityOrFull(mixedFn((pos) => pos.noteOpacity, 80));
     if (
       value &&
       typeof value === 'object' &&
@@ -323,8 +332,15 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       value.type === 'gradient'
     ) {
       return {
-        style: {
-          background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
+        color: undefined,
+        gradient: { top: value.top, bottom: value.bottom },
+        opacity: {
+          top: opacityOrFull(
+            mixedFn((pos) => pos.noteOpacityTop ?? pos.noteOpacity, 80),
+          ),
+          bottom: opacityOrFull(
+            mixedFn((pos) => pos.noteOpacityBottom ?? pos.noteOpacity, 80),
+          ),
         },
         label: 'Gradient',
         isMixed: false,
@@ -332,7 +348,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     }
     const color = typeof value === 'string' ? value : '#FFFFFF';
     return {
-      style: { backgroundColor: color },
+      color,
+      gradient: undefined,
+      opacity,
       label: color.replace(/^#/, ''),
       isMixed: false,
     };
@@ -348,16 +366,18 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         value.type === 'gradient'
       ) {
         return {
-          style: {
-            background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
-          },
+          color: undefined,
+          gradient: { top: value.top, bottom: value.bottom },
+          opacity: batchLocalOpacities.glowOpacity / 100,
           label: 'Gradient',
           isMixed: false,
         };
       }
       const color = typeof value === 'string' ? value : '#FFFFFF';
       return {
-        style: { backgroundColor: color },
+        color,
+        gradient: undefined,
+        opacity: batchLocalOpacities.glowOpacity / 100,
         label: color.replace(/^#/, ''),
         isMixed: false,
       };
@@ -371,10 +391,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     );
     if (isMixed)
       return {
-        style: { backgroundColor: '#666' },
+        color: '#666',
+        gradient: undefined,
+        opacity: 1,
         label: 'Mixed',
         isMixed: true,
       };
+    const opacity = opacityOrFull(mixedFn((pos) => pos.noteGlowOpacity, 70));
     if (
       value &&
       typeof value === 'object' &&
@@ -382,8 +405,18 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       value.type === 'gradient'
     ) {
       return {
-        style: {
-          background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
+        color: undefined,
+        gradient: { top: value.top, bottom: value.bottom },
+        opacity: {
+          top: opacityOrFull(
+            mixedFn((pos) => pos.noteGlowOpacityTop ?? pos.noteGlowOpacity, 70),
+          ),
+          bottom: opacityOrFull(
+            mixedFn(
+              (pos) => pos.noteGlowOpacityBottom ?? pos.noteGlowOpacity,
+              70,
+            ),
+          ),
         },
         label: 'Gradient',
         isMixed: false,
@@ -391,7 +424,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     }
     const color = typeof value === 'string' ? value : '#FFFFFF';
     return {
-      style: { backgroundColor: color },
+      color,
+      gradient: undefined,
+      opacity,
       label: color.replace(/^#/, ''),
       isMixed: false,
     };
@@ -402,7 +437,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     if (batchPickerFor === 'borderColor') {
       const color = batchLocalColors.borderColor;
       return {
-        style: { backgroundColor: color },
+        color,
+        gradient: undefined,
+        opacity: batchLocalColors.borderOpacity / 100,
         label: color.replace(/^#/, ''),
         isMixed: false,
       };
@@ -413,13 +450,17 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     const { isMixed, value } = mixedFn((pos) => pos.noteBorderColor, '#FFFFFF');
     if (isMixed)
       return {
-        style: { backgroundColor: '#666' },
+        color: '#666',
+        gradient: undefined,
+        opacity: 1,
         label: 'Mixed',
         isMixed: true,
       };
     const color = typeof value === 'string' ? value : '#FFFFFF';
     return {
-      style: { backgroundColor: color },
+      color,
+      gradient: undefined,
+      opacity: opacityOrFull(mixedFn((pos) => pos.noteBorderOpacity, 100)),
       label: color.replace(/^#/, ''),
       isMixed: false,
     };

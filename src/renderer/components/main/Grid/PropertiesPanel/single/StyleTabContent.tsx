@@ -16,6 +16,7 @@ import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
+import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
@@ -490,33 +491,27 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       <PropertySection>
         {/* 배경색 */}
         <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
-          <button
+          <ColorSwatchButton
             ref={bgColorBtnRef}
             type="button"
             onClick={() => handlePickerToggle('backgroundColor')}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              pickerFor === 'backgroundColor' ? 'border-accent' : 'border-line'
-            }`}
-            style={{
-              backgroundColor: getDisplayColor(
-                colorValueFor('backgroundColor'),
-              ),
-            }}
+            open={pickerFor === 'backgroundColor'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(colorValueFor('backgroundColor'))}
           />
         </PropertyRow>
 
         {/* 테두리 색상 */}
         <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
-          <button
+          <ColorSwatchButton
             ref={borderColorBtnRef}
             type="button"
             onClick={() => handlePickerToggle('borderColor')}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              pickerFor === 'borderColor' ? 'border-accent' : 'border-line'
-            }`}
-            style={{
-              backgroundColor: getDisplayColor(colorValueFor('borderColor')),
-            }}
+            open={pickerFor === 'borderColor'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(colorValueFor('borderColor'))}
           />
         </PropertyRow>
 
@@ -618,16 +613,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
         {/* 글꼴 색상 */}
         <PropertyRow label={t('propertiesPanel.fontColor') || '글꼴 색상'}>
-          <button
+          <ColorSwatchButton
             ref={fontColorBtnRef}
             type="button"
             onClick={() => handlePickerToggle('fontColor')}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              pickerFor === 'fontColor' ? 'border-accent' : 'border-line'
-            }`}
-            style={{
-              backgroundColor: getDisplayColor(colorValueFor('fontColor')),
-            }}
+            open={pickerFor === 'fontColor'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(colorValueFor('fontColor'))}
           />
         </PropertyRow>
 

@@ -10,6 +10,15 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+
+interface SwatchDisplay {
+  color?: string;
+  gradient?: { top: string; bottom: string };
+  opacity: number | { top: number; bottom: number };
+  label: string;
+  isMixed: boolean;
+}
 
 interface BatchNoteTabContentProps {
   // getMixedValue 함수
@@ -23,21 +32,9 @@ interface BatchNoteTabContentProps {
     value: KeyPosition[keyof KeyPosition],
   ) => void;
   // 노트/글로우 색상 디스플레이
-  getBatchNoteColorDisplay: () => {
-    style: React.CSSProperties;
-    label: string;
-    isMixed: boolean;
-  };
-  getBatchGlowColorDisplay: () => {
-    style: React.CSSProperties;
-    label: string;
-    isMixed: boolean;
-  };
-  getBatchBorderColorDisplay: () => {
-    style: React.CSSProperties;
-    label: string;
-    isMixed: boolean;
-  };
+  getBatchNoteColorDisplay: () => SwatchDisplay;
+  getBatchGlowColorDisplay: () => SwatchDisplay;
+  getBatchBorderColorDisplay: () => SwatchDisplay;
   // 컬러 피커 토글
   onNoteColorPickerToggle: () => void;
   onGlowColorPickerToggle: () => void;
@@ -75,6 +72,9 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
     (pos) => pos.noteWidth,
     undefined,
   );
+  const noteColorDisplay = getBatchNoteColorDisplay();
+  const glowColorDisplay = getBatchGlowColorDisplay();
+  const borderColorDisplay = getBatchBorderColorDisplay();
 
   return (
     <>
@@ -209,14 +209,16 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
       <PropertySection>
         {/* 노트 색상 */}
         <PropertyRow label={t('keySetting.noteColor') || '노트 색상'}>
-          <button
+          <ColorSwatchButton
             ref={batchNoteColorButtonRef}
             onClick={onNoteColorPickerToggle}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              isNoteColorPickerOpen ? 'border-accent' : 'border-line'
-            }`}
-            style={getBatchNoteColorDisplay().style}
-            title={getBatchNoteColorDisplay().label}
+            open={isNoteColorPickerOpen}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={noteColorDisplay.color}
+            gradient={noteColorDisplay.gradient}
+            opacity={noteColorDisplay.opacity}
+            title={noteColorDisplay.label}
             type="button"
           />
         </PropertyRow>
@@ -224,15 +226,16 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         {/* 테두리 색상 + 방향 */}
         <PropertyRow label={t('keySetting.noteBorderColor') || '테두리 색상'}>
           <div className="flex items-center gap-[4px]">
-            <button
+            <ColorSwatchButton
               ref={batchBorderColorButtonRef}
               type="button"
               onClick={onBorderColorPickerToggle}
-              className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-                isBorderColorPickerOpen ? 'border-accent' : 'border-line'
-              }`}
-              style={getBatchBorderColorDisplay().style}
-              title={getBatchBorderColorDisplay().label}
+              open={isBorderColorPickerOpen}
+              className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+              surfaceClassName="rounded-md"
+              color={borderColorDisplay.color}
+              opacity={borderColorDisplay.opacity}
+              title={borderColorDisplay.label}
             />
             <Dropdown
               iconTrigger={
@@ -396,14 +399,16 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
 
         {/* 글로우 색상 */}
         <PropertyRow label={t('keySetting.noteGlowColor') || '글로우 색상'}>
-          <button
+          <ColorSwatchButton
             ref={batchGlowColorButtonRef}
             onClick={onGlowColorPickerToggle}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              isGlowColorPickerOpen ? 'border-accent' : 'border-line'
-            }`}
-            style={getBatchGlowColorDisplay().style}
-            title={getBatchGlowColorDisplay().label}
+            open={isGlowColorPickerOpen}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={glowColorDisplay.color}
+            gradient={glowColorDisplay.gradient}
+            opacity={glowColorDisplay.opacity}
+            title={glowColorDisplay.label}
             type="button"
           />
         </PropertyRow>

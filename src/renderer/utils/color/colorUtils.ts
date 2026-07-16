@@ -127,6 +127,47 @@ const rgbToHsv = (
   };
 };
 
+const hsvToRgb = (
+  h: number,
+  s: number,
+  v: number,
+  a: number = 1,
+): { r: number; g: number; b: number; a: number } => {
+  const sn = s / 100;
+  const vn = v / 100;
+  const sector = Math.floor((h % 360) / 60);
+  const f = (h % 360) / 60 - sector;
+  const p = vn * (1 - sn);
+  const q = vn * (1 - sn * f);
+  const t = vn * (1 - sn * (1 - f));
+
+  const index = ((sector % 6) + 6) % 6;
+  const r = [vn, q, p, p, t, vn][index] * 255;
+  const g = [t, vn, vn, q, p, p][index] * 255;
+  const b = [p, p, t, vn, vn, q][index] * 255;
+
+  return { r: Math.round(r), g: Math.round(g), b: Math.round(b), a };
+};
+
+// HSV 값으로 ColorObject 생성 — 전달된 hsv를 그대로 보존해
+// 드래그 중 s=0/v=0에서 hue가 소실되지 않음
+const hsvToColorObject = (hsv: {
+  h: number;
+  s: number;
+  v: number;
+  a: number;
+}): ColorObject => {
+  const h = clamp(hsv.h, 0, 360);
+  const s = clamp(hsv.s, 0, 100);
+  const v = clamp(hsv.v, 0, 100);
+  const a = clamp(hsv.a, 0, 1);
+  const rgb = hsvToRgb(h, s, v, a);
+  const hex = `#${[rgb.r, rgb.g, rgb.b]
+    .map((channel) => channel.toString(16).padStart(2, '0'))
+    .join('')}`.toUpperCase();
+  return { hex, rgb, hsv: { h, s, v, a } };
+};
+
 const parseHexColor = (value: string): ColorObject | null => {
   const normalized = value.startsWith('#') ? value : `#${value}`;
   const hexBody = normalized.slice(1);
@@ -214,6 +255,31 @@ const hexWithAlphaPercent = (hex: string, percent: number): string => {
   return `rgba(${parsed.rgb.r}, ${parsed.rgb.g}, ${parsed.rgb.b}, ${a})`;
 };
 
+// hex 외 CSS 색 문자열(named, hsl, rgb 등)을 캔버스 fillStyle 정규화로 해석
+let cssColorCtx: CanvasRenderingContext2D | null | undefined;
+
+const parseCssColor = (value: string): ColorObject | null => {
+  if (!(window.CSS?.supports?.('color', value) ?? false)) {
+    return null;
+  }
+  if (cssColorCtx === undefined) {
+    cssColorCtx = document.createElement('canvas').getContext('2d');
+  }
+  if (!cssColorCtx) return null;
+
+  cssColorCtx.fillStyle = value;
+  const normalized = cssColorCtx.fillStyle;
+  if (normalized.startsWith('#')) {
+    return parseHexColor(normalized);
+  }
+  const rgba = parseRgbaString(normalized);
+  if (!rgba) return null;
+  const hex = `#${[rgba.r, rgba.g, rgba.b]
+    .map((channel) => channel.toString(16).padStart(2, '0'))
+    .join('')}`.toUpperCase();
+  return { hex, rgb: rgba, hsv: rgbToHsv(rgba.r, rgba.g, rgba.b, rgba.a) };
+};
+
 const toColorObject = (
   value: string | Partial<ColorObject> | null | undefined,
 ): ColorObject | null => {
@@ -222,7 +288,7 @@ const toColorObject = (
   }
 
   if (typeof value === 'string') {
-    return parseHexColor(value);
+    return parseHexColor(value) ?? parseCssColor(value);
   }
 
   if (typeof value === 'object' && value.hex) {
@@ -317,6 +383,8 @@ export {
   buildGradient,
   parseHexColor,
   rgbToHsv,
+  hsvToRgb,
+  hsvToColorObject,
   toColorObject,
   toCssRgba,
   parseAlphaPercent,

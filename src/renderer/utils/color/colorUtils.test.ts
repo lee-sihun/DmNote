@@ -4,6 +4,8 @@ import {
   normalizeColorInput,
   parseHexColor,
   rgbToHsv,
+  hsvToRgb,
+  hsvToColorObject,
   toColorObject,
   toCssRgba,
   toRgbHexColor,
@@ -110,6 +112,60 @@ describe('rgbToHsv', () => {
   it('알파값 전달', () => {
     const hsv = rgbToHsv(255, 0, 0, 0.5);
     expect(hsv.a).toBe(0.5);
+  });
+});
+
+describe('hsvToRgb', () => {
+  it('빨간색 변환', () => {
+    const rgb = hsvToRgb(0, 100, 100);
+    expect(rgb).toEqual({ r: 255, g: 0, b: 0, a: 1 });
+  });
+
+  it('h=360은 h=0과 동일', () => {
+    expect(hsvToRgb(360, 100, 100)).toEqual(hsvToRgb(0, 100, 100));
+  });
+
+  it('무채색은 s=0', () => {
+    const rgb = hsvToRgb(210, 0, 50);
+    expect(rgb.r).toBe(rgb.g);
+    expect(rgb.g).toBe(rgb.b);
+  });
+
+  it('rgbToHsv 왕복 보존', () => {
+    const cases: [number, number, number][] = [
+      [255, 0, 0],
+      [0, 128, 255],
+      [12, 200, 89],
+      [183, 150, 255],
+    ];
+    for (const [r, g, b] of cases) {
+      const hsv = rgbToHsv(r, g, b);
+      const rgb = hsvToRgb(hsv.h, hsv.s, hsv.v);
+      expect(rgb.r).toBe(r);
+      expect(rgb.g).toBe(g);
+      expect(rgb.b).toBe(b);
+    }
+  });
+
+  it('알파값 전달', () => {
+    expect(hsvToRgb(0, 100, 100, 0.5).a).toBe(0.5);
+  });
+});
+
+describe('hsvToColorObject', () => {
+  it('hex는 대문자 6자리, hsv는 그대로 보존', () => {
+    const color = hsvToColorObject({ h: 270, s: 0, v: 100, a: 1 });
+    expect(color.hex).toBe('#FFFFFF');
+    // s=0이어도 hue 소실 없음
+    expect(color.hsv.h).toBe(270);
+  });
+
+  it('범위 밖 값은 클램프', () => {
+    const color = hsvToColorObject({ h: 400, s: 120, v: -5, a: 2 });
+    expect(color.hsv.h).toBe(360);
+    expect(color.hsv.s).toBe(100);
+    expect(color.hsv.v).toBe(0);
+    expect(color.hsv.a).toBe(1);
   });
 });
 

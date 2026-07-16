@@ -19,6 +19,7 @@ import {
 } from '@utils/color/colorUtils';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';
 
@@ -280,37 +281,6 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     borderColorButtonRef,
   ];
 
-  // 노트 색상 헬퍼 함수 (내부 상태 기반으로 실시간 반영)
-  const getNoteColorDisplay = () => {
-    if (noteColorMode === COLOR_MODES.gradient) {
-      return {
-        style: {
-          background: `linear-gradient(to bottom, ${noteColorTop}, ${noteGradientBottom})`,
-        },
-        label: 'Gradient',
-      };
-    }
-    return {
-      style: { backgroundColor: noteColorTop },
-      label: noteColorTop.replace(/^#/, ''),
-    };
-  };
-
-  const getGlowColorDisplay = () => {
-    if (glowColorMode === COLOR_MODES.gradient) {
-      return {
-        style: {
-          background: `linear-gradient(to bottom, ${glowColorTop}, ${glowGradientBottom})`,
-        },
-        label: 'Gradient',
-      };
-    }
-    return {
-      style: { backgroundColor: glowColorTop },
-      label: glowColorTop.replace(/^#/, ''),
-    };
-  };
-
   // 통합 색상 변경 핸들러 (pickerFor 기반)
   const handleColorChange = (target: 'note' | 'glow', newColor: NoteColor) => {
     if (target === 'note') {
@@ -540,28 +510,44 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
       <PropertySection>
         {/* 노트 색상 */}
         <PropertyRow label={t('keySetting.noteColor') || '노트 색상'}>
-          <button
+          <ColorSwatchButton
             ref={noteColorButtonRef}
             type="button"
             onClick={() => handlePickerToggle('note')}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              pickerFor === 'note' ? 'border-accent' : 'border-line'
-            }`}
-            style={getNoteColorDisplay().style}
+            open={pickerFor === 'note'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={
+              noteColorMode === COLOR_MODES.solid ? noteColorTop : undefined
+            }
+            gradient={
+              noteColorMode === COLOR_MODES.gradient
+                ? { top: noteColorTop, bottom: noteGradientBottom }
+                : undefined
+            }
+            opacity={
+              noteColorMode === COLOR_MODES.gradient
+                ? {
+                    top: localNoteOpacityTop / 100,
+                    bottom: localNoteOpacityBottom / 100,
+                  }
+                : localNoteOpacity / 100
+            }
           />
         </PropertyRow>
 
         {/* 노트 테두리 색상 + 방향 */}
         <PropertyRow label={t('keySetting.noteBorderColor') || '테두리 색상'}>
           <div className="flex items-center gap-[4px]">
-            <button
+            <ColorSwatchButton
               ref={borderColorButtonRef}
               type="button"
               onClick={() => handlePickerToggle('border')}
-              className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-                pickerFor === 'border' ? 'border-accent' : 'border-line'
-              }`}
-              style={{ backgroundColor: borderColor }}
+              open={pickerFor === 'border'}
+              className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+              surfaceClassName="rounded-md"
+              color={borderColor}
+              opacity={localBorderOpacity / 100}
             />
             <Dropdown
               iconTrigger={
@@ -705,14 +691,29 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
         {/* 글로우 색상/크기/투명도 */}
         <PropertyRow label={t('keySetting.noteGlowColor') || '글로우 색상'}>
-          <button
+          <ColorSwatchButton
             ref={glowColorButtonRef}
             type="button"
             onClick={() => handlePickerToggle('glow')}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              pickerFor === 'glow' ? 'border-accent' : 'border-line'
-            }`}
-            style={getGlowColorDisplay().style}
+            open={pickerFor === 'glow'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={
+              glowColorMode === COLOR_MODES.solid ? glowColorTop : undefined
+            }
+            gradient={
+              glowColorMode === COLOR_MODES.gradient
+                ? { top: glowColorTop, bottom: glowGradientBottom }
+                : undefined
+            }
+            opacity={
+              glowColorMode === COLOR_MODES.gradient
+                ? {
+                    top: localGlowOpacityTop / 100,
+                    bottom: localGlowOpacityBottom / 100,
+                  }
+                : localGlowOpacity / 100
+            }
           />
         </PropertyRow>
 
