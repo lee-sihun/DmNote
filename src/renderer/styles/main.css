@@ -361,6 +361,17 @@ body.dmn-custom-cursor * {
   animation: modalScrim var(--ui-duration-fast) var(--ui-ease-out) both;
 }
 
+/* 스테이지 콘텐츠 등장 — 비동기 준비(파형 디코드 등)를 마친 콘텐츠의 한 박자 페이드 */
+@keyframes stageContentIn {
+  from {
+    opacity: 0;
+  }
+}
+
+.animate-stage-in {
+  animation: stageContentIn var(--ui-duration-fast) var(--ui-ease-out) both;
+}
+
 /* ===== ColorPicker ===== */
 
 .rcp-saturation {
@@ -537,6 +548,7 @@ body.dmn-custom-cursor * {
   .tooltip-fade-in,
   .animate-modal-scale > *,
   .animate-modal-scrim,
+  .animate-stage-in,
   .animate-pulse {
     animation: none;
   }

@@ -596,9 +596,6 @@
   "soundTrimModal": {
     "defaultTitle": "Add Sound",
     "editTitle": "Edit Sound",
-    "statusDecoding": "Decoding...",
-    "statusWaiting": "Waiting for file",
-    "statusReady": "Ready",
     "nameLabel": "Sound name",
     "namePlaceholder": "Sound name",
     "decodeError": "Unable to decode the audio file.",
@@ -609,7 +606,6 @@
     "saving": "Saving...",
     "submit": "Add",
     "submitEdit": "Save",
-    "cancel": "Cancel",
     "statusLoading": "Loading...",
     "loadOriginalError": "Unable to load the original audio.",
     "saveErrorDefault": "Failed to save the processed sound.",

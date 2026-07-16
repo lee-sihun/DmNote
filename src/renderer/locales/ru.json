@@ -596,9 +596,6 @@
   "soundTrimModal": {
     "defaultTitle": "Добавить звук",
     "editTitle": "Редактирование звука",
-    "statusDecoding": "Декодирование...",
-    "statusWaiting": "Ожидание файла",
-    "statusReady": "Готово",
     "nameLabel": "Название звука",
     "namePlaceholder": "Название звука",
     "decodeError": "Не удалось декодировать аудиофайл.",
@@ -609,7 +606,6 @@
     "saving": "Сохранение...",
     "submit": "Добавить",
     "submitEdit": "Сохранить",
-    "cancel": "Отмена",
     "statusLoading": "Загрузка...",
     "loadOriginalError": "Не удалось загрузить исходное аудио.",
     "saveErrorDefault": "Не удалось сохранить обработанный звук.",

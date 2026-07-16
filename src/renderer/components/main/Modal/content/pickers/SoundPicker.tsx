@@ -23,7 +23,7 @@ interface SoundPickerProps {
 }
 
 type TrimState =
-  | { mode: 'create'; file: File }
+  | { mode: 'create'; file: File | null }
   | { mode: 'edit'; item: SoundListItem };
 
 let soundListCache: SoundListItem[] | null = null;
@@ -342,7 +342,11 @@ const SoundPicker = ({
         isLoading={isLoading}
         loadingText={t('propertiesPanel.loading') || '로딩...'}
         errorText={loadError}
-        onAdd={() => addFileInputRef.current?.click()}
+        onAdd={() => {
+          // 시트를 먼저 띄우고 대화상자를 열어 닫힘 순간 캔버스 노출 방지
+          setTrimState({ mode: 'create', file: null });
+          addFileInputRef.current?.click();
+        }}
         addLabel={t('soundPicker.add') || '사운드 추가'}
       />
 

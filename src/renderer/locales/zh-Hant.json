@@ -596,9 +596,6 @@
   "soundTrimModal": {
     "defaultTitle": "新增音效",
     "editTitle": "編輯音效",
-    "statusDecoding": "解析中...",
-    "statusWaiting": "等待檔案",
-    "statusReady": "可使用",
     "nameLabel": "音效名稱",
     "namePlaceholder": "音效名稱",
     "decodeError": "無法解析音訊檔案。",
@@ -609,7 +606,6 @@
     "saving": "儲存中...",
     "submit": "新增",
     "submitEdit": "儲存",
-    "cancel": "取消",
     "statusLoading": "載入中...",
     "loadOriginalError": "無法載入原始音訊。",
     "saveErrorDefault": "無法儲存處理後的音效。",

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import Modal from '../../Modal';
+import FullSurfaceModalLayout from '@components/main/Modal/FullSurfaceModalLayout';
+import { isTopmostPopupLayer } from '@components/main/Modal/popupLayer';
 import IconSwap from '@components/main/common/IconSwap';
 import {
   getCursor,
@@ -111,6 +112,15 @@ function drawWaveform(
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
+  // canvas 2D는 var()를 못 읽어 토큰 계산값을 드로우마다 해석
+  const tokens = getComputedStyle(canvas);
+  const selectionFillColor = tokens
+    .getPropertyValue('--ui-selection-fill')
+    .trim();
+  const selectionColor = tokens.getPropertyValue('--ui-selection').trim();
+  const dimBarColor = tokens.getPropertyValue('--ui-fg-disabled').trim();
+  const chromeColor = tokens.getPropertyValue('--ui-fg').trim();
+
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
 
@@ -130,7 +140,7 @@ function drawWaveform(
   const visStartX = Math.max(padX, startX);
   const visEndX = Math.min(padX + drawableW, endX);
   if (visEndX > visStartX) {
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.12)';
+    ctx.fillStyle = selectionFillColor;
     ctx.fillRect(visStartX, 0, visEndX - visStartX, height);
   }
 
@@ -143,7 +153,7 @@ function drawWaveform(
     const x = padX + px;
 
     const inRange = x >= startX && x <= endX;
-    ctx.fillStyle = inRange ? '#B9A5F9' : '#4A4B55';
+    ctx.fillStyle = inRange ? selectionColor : dimBarColor;
     ctx.fillRect(x, y, 1, barHeight);
   }
 
@@ -156,7 +166,7 @@ function drawWaveform(
   const gripR = 3;
 
   const drawHandle = (cx: number) => {
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = chromeColor;
     roundRect(
       ctx,
       cx - handleLineW / 2,
@@ -187,7 +197,7 @@ function drawWaveform(
   if (playbackRatio !== null) {
     const playX = audioToX(playbackRatio);
     if (playX >= padX && playX <= padX + drawableW) {
-      ctx.fillStyle = '#FFFFFF';
+      ctx.fillStyle = chromeColor;
       ctx.globalAlpha = 0.9;
       ctx.fillRect(playX - 0.5, 0, 1, height);
       ctx.globalAlpha = 1;
@@ -500,6 +510,34 @@ const SoundTrimModal = ({
     animFrameRef.current = requestAnimationFrame(animate);
   };
 
+  const handlePlayRef = useRef<() => void>(() => {});
+  handlePlayRef.current = handlePlay;
+
+  // 스페이스 = 재생/일시정지 — 포커스된 버튼의 스페이스 활성화(취소 오동작)를 가로챔
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat || e.defaultPrevented) return;
+      // 시트 위에 다른 팝업 레이어가 떠 있으면 스페이스 소유권 양보
+      const backdrop = waveformRef.current?.closest<HTMLElement>(
+        '[data-dmn-modal-backdrop="true"]',
+      );
+      if (!isTopmostPopupLayer(backdrop ?? null)) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      e.preventDefault();
+      handlePlayRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   const resetStateImpl = useRef<() => void>(() => {});
   resetStateImpl.current = () => {
     pausedAtRatioRef.current = null;
@@ -529,6 +567,8 @@ const SoundTrimModal = ({
   };
 
   const closeModal = () => {
+    // 저장 중 닫기 금지 — 진행 중 저장의 완료 콜백이 닫힌 시트로 새는 것을 차단
+    if (isSaving) return;
     resetState();
     onClose();
   };
@@ -996,212 +1036,170 @@ const SoundTrimModal = ({
     }
   };
 
-  const headerLabel = (() => {
-    if (!audioBuffer) {
-      if (isDecoding) {
-        return isEditMode
-          ? t('soundTrimModal.statusLoading')
-          : t('soundTrimModal.statusDecoding');
-      }
-      return t('soundTrimModal.statusWaiting');
-    }
-    return t('soundTrimModal.statusReady');
-  })();
+  const sheetTitle = isEditMode
+    ? t('soundTrimModal.editTitle')
+    : t('soundTrimModal.defaultTitle');
 
-  const headerTitle = isEditMode
-    ? editingDisplayName || t('soundTrimModal.editTitle')
-    : originalFileName || t('soundTrimModal.defaultTitle');
+  // 제목은 모드 고정 — 파일 정체성은 헤더 보조 캡션이 담당
+  const headerFileName = isEditMode
+    ? editingDisplayName || ''
+    : originalFileName;
 
   if (!isOpen) return null;
 
   return (
-    <Modal onClick={closeModal} ariaLabel={headerTitle}>
-      <div
-        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 overflow-hidden"
-        onClick={(event) => event.stopPropagation()}
-      >
-        {/* 헤더 바 */}
-        <div className="h-[37px] bg-fill-faint px-[12px] flex items-center justify-between">
-          <div className="min-w-0 flex items-center gap-[8px]">
-            <span className="px-[6px] h-[18px] rounded-md bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-fg-muted">
-              Sound
-            </span>
-            <span className="truncate text-body leading-[16px] text-fg">
-              {headerTitle}
-            </span>
-          </div>
-          <span className="text-caption leading-[14px] text-fg-muted">
-            {headerLabel}
+    <FullSurfaceModalLayout
+      onClose={closeModal}
+      title={sheetTitle}
+      headerInfo={
+        headerFileName ? (
+          <span className="min-w-0 text-caption text-fg-faint truncate">
+            {headerFileName}
           </span>
+        ) : undefined
+      }
+      submitLabel={
+        isSaving
+          ? t('soundTrimModal.saving')
+          : isEditMode
+          ? t('soundTrimModal.submitEdit')
+          : t('soundTrimModal.submit')
+      }
+      submitDisabled={!canSubmit}
+      onSubmit={() => {
+        void handleSave();
+      }}
+      cancelLabel={t('common.cancel')}
+    >
+      {/* 본문 — 상단: 파형 히어로 스테이지, 하단: 트랜스포트 데크 */}
+      <div className="flex-1 min-h-0 flex flex-col gap-[12px]">
+        {/* 파형 카드 — 카드 내부를 통째로 채우는 풀블리드 캔버스 */}
+        <div className="flex-1 min-w-0 min-h-0 bg-fill-faint rounded-surface p-[10px] flex flex-col">
+          <div
+            ref={waveformRef}
+            className="relative flex-1 min-h-0 min-w-0 rounded-md overflow-hidden bg-inset"
+            onPointerDown={handleWaveformPointerDown}
+          >
+            {audioBuffer ? (
+              /* 디코드 완료 시 한 박자 페이드 — 스켈레톤→파형 팝인 정리 */
+              <div className="absolute inset-0 animate-stage-in">
+                <canvas ref={canvasRef} className="w-full h-full block" />
+                {/* 하단 안내 — 스크림 없이 흐린 캡션만 */}
+                <div className="absolute inset-x-0 bottom-[10px] text-center pointer-events-none">
+                  <span className="text-caption text-fg-faint">
+                    {t('soundTrimModal.dragHint')}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-caption text-fg-muted">
+                {isDecoding
+                  ? isEditMode
+                    ? t('soundTrimModal.statusLoading')
+                    : t('soundTrimModal.decodingMessage')
+                  : t('soundTrimModal.emptyMessage')}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* 콘텐츠 영역 */}
-        <div className="p-[12px] flex flex-col gap-[10px]">
-          {/* 이름 입력 */}
-          <div>
-            <label className="block text-caption leading-[14px] text-fg-muted mb-[4px]">
+        {/* 트랜스포트 데크 — 재생·길이·이름 한 줄, 이름 입력이 남는 폭 흡수 */}
+        <div className="shrink-0 bg-fill-faint rounded-surface px-[10px] py-[4px] flex flex-nowrap items-center gap-x-[10px] overflow-hidden">
+          <div className="flex items-center gap-[8px] min-h-[32px]">
+            <button
+              type="button"
+              className={`w-[24px] h-[24px] rounded-full flex items-center justify-center transition-colors duration-fast ${
+                audioBuffer
+                  ? 'bg-fill hover:bg-fill-hover active:bg-fill-active text-fg cursor-pointer'
+                  : 'bg-fill-faint text-fg-disabled cursor-default'
+              }`}
+              onClick={handlePlay}
+              disabled={!audioBuffer}
+            >
+              <IconSwap
+                active={isPlaying}
+                activeIcon={
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <rect
+                      x="2"
+                      y="1.5"
+                      width="3"
+                      height="9"
+                      rx="0.75"
+                      fill="currentColor"
+                    />
+                    <rect
+                      x="7"
+                      y="1.5"
+                      width="3"
+                      height="9"
+                      rx="0.75"
+                      fill="currentColor"
+                    />
+                  </svg>
+                }
+                inactiveIcon={
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M3.5 1.8C3.5 1.49 3.84 1.3 4.1 1.47L10.1 5.67C10.34 5.83 10.34 6.17 10.1 6.33L4.1 10.53C3.84 10.7 3.5 10.51 3.5 10.2V1.8Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                }
+              />
+            </button>
+            <span
+              className={`text-body tabular-nums ${
+                audioBuffer ? 'text-fg' : 'text-fg-faint'
+              }`}
+            >
+              {audioBuffer ? formatSecLabel(trimDurationMs) : '--'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-[8px] min-h-[32px] flex-1 min-w-0">
+            <p className="text-fg-muted text-label shrink-0">
               {t('soundTrimModal.nameLabel')}
-            </label>
+            </p>
             <input
               type="text"
               value={soundName}
               onChange={(e) => setSoundName(e.target.value)}
               placeholder={t('soundTrimModal.namePlaceholder')}
-              className="w-full h-[30px] px-[10px] rounded-md bg-inset text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:shadow-focus-ring transition-shadow duration-fast"
+              className="flex-1 min-w-0 h-[23px] px-[8px] bg-inset rounded-md text-body text-fg placeholder-fg-faint outline-none focus:shadow-focus-ring transition-shadow duration-fast"
               disabled={isSaving}
             />
           </div>
 
-          {/* 파형 섹션 */}
-          <div className="rounded-[8px] bg-inset overflow-hidden">
-            <div className="flex items-center h-[100px]">
-              {/* 재생 버튼 */}
-              <div className="w-[52px] h-full flex flex-col items-center justify-center gap-[4px]">
-                <button
-                  type="button"
-                  className={`w-[30px] h-[30px] rounded-full flex items-center justify-center transition-colors ${
-                    audioBuffer
-                      ? 'bg-surface hover:bg-surface-hover cursor-pointer'
-                      : 'bg-surface cursor-default opacity-40'
-                  }`}
-                  onClick={handlePlay}
-                  disabled={!audioBuffer}
-                >
-                  <IconSwap
-                    active={isPlaying}
-                    activeIcon={
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                      >
-                        <rect
-                          x="2"
-                          y="1.5"
-                          width="3"
-                          height="9"
-                          rx="0.75"
-                          fill="currentColor"
-                        />
-                        <rect
-                          x="7"
-                          y="1.5"
-                          width="3"
-                          height="9"
-                          rx="0.75"
-                          fill="currentColor"
-                        />
-                      </svg>
-                    }
-                    inactiveIcon={
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                      >
-                        <path
-                          d="M3.5 1.8C3.5 1.49 3.84 1.3 4.1 1.47L10.1 5.67C10.34 5.83 10.34 6.17 10.1 6.33L4.1 10.53C3.84 10.7 3.5 10.51 3.5 10.2V1.8Z"
-                          fill="currentColor"
-                        />
-                      </svg>
-                    }
-                  />
-                </button>
-                <span className="text-caption leading-[12px] text-fg-muted font-medium tabular-nums">
-                  {audioBuffer ? formatSecLabel(trimDurationMs) : '--'}
-                </span>
-              </div>
-
-              {/* 파형 캔버스 */}
-              <div
-                ref={waveformRef}
-                className="flex-1 h-full"
-                onPointerDown={handleWaveformPointerDown}
-              >
-                {audioBuffer ? (
-                  <canvas ref={canvasRef} className="w-full h-full block" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-caption text-fg-faint">
-                    {isDecoding
-                      ? isEditMode
-                        ? t('soundTrimModal.statusLoading')
-                        : t('soundTrimModal.decodingMessage')
-                      : t('soundTrimModal.emptyMessage')}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {errorText ? (
-            <p className="text-caption leading-[14px] text-danger-fg">
-              {errorText}
-            </p>
-          ) : null}
-        </div>
-
-        {/* 힌트 바 */}
-        <div className="h-[28px] bg-fill-faint px-[12px] flex items-center justify-between gap-[12px]">
           {!isEditMode ? (
             <button
               type="button"
-              className="text-caption leading-[14px] text-accent hover:text-accent-hover transition-colors"
+              className="shrink-0 h-[24px] px-[10px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-md text-label text-fg-muted hover:text-fg transition-colors duration-fast"
               onClick={selectFile}
               disabled={isDecoding || isSaving}
             >
               {t('soundTrimModal.loadFile')}
             </button>
-          ) : (
-            <span />
-          )}
-          <p className="shrink-0 text-caption leading-[14px] text-fg-muted">
-            {t('soundTrimModal.dragHint')}
+          ) : null}
+        </div>
+
+        {errorText ? (
+          <p className="shrink-0 text-caption leading-[14px] text-danger-fg">
+            {errorText}
           </p>
-        </div>
-
-        {!isEditMode ? (
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="audio/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
         ) : null}
-
-        {/* 푸터 */}
-        <div className="bg-fill-faint px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
-          <button
-            type="button"
-            className={`w-[120px] h-[30px] rounded-surface text-label transition-colors duration-fast ${
-              canSubmit
-                ? 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
-                : 'bg-fill-faint text-fg-disabled cursor-not-allowed'
-            }`}
-            onClick={() => {
-              void handleSave();
-            }}
-            disabled={!canSubmit}
-          >
-            {isSaving
-              ? t('soundTrimModal.saving')
-              : isEditMode
-              ? t('soundTrimModal.submitEdit')
-              : t('soundTrimModal.submit')}
-          </button>
-          <button
-            type="button"
-            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
-            onClick={closeModal}
-            disabled={isSaving}
-          >
-            {t('soundTrimModal.cancel')}
-          </button>
-        </div>
       </div>
-    </Modal>
+
+      {!isEditMode ? (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      ) : null}
+    </FullSurfaceModalLayout>
   );
 };
 

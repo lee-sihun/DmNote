@@ -1326,7 +1326,7 @@ const CounterAnimationEditorModal = ({
         </div>
 
         {/* 파라미터 데크 — 하단 풀폭 항상 한 줄, 이름 입력이 남는 폭 흡수 */}
-        <div className="shrink-0 bg-fill-faint rounded-surface px-[10px] py-[4px] flex flex-nowrap items-center gap-x-[12px] overflow-hidden">
+        <div className="shrink-0 bg-fill-faint rounded-surface px-[10px] py-[4px] flex flex-nowrap items-center gap-x-[10px] overflow-hidden">
           {/* 이름 필드 — 짧은 라벨 + 예시형 플레이스홀더, 입력이 남는 폭을 정확히 채워
                   옆 필드와 갭이 동일하게 유지됨 (라벨 길이가 긴 로케일도 flex로 자동 흡수) */}
           <div className="flex items-center gap-[8px] min-h-[32px] flex-1 min-w-0">
