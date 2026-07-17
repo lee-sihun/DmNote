@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { PluginElement } from './PluginElement';
@@ -77,6 +77,69 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
   onMultiDragEnd,
 }) => {
   const elements = usePluginDisplayElementStore((state) => state.elements);
+  // 상위(App)가 렌더마다 새 offset 객체를 만들어도 값이 같으면 참조 유지 —
+  // PluginElement의 React.memo가 형제 요소 리렌더를 실제로 막도록 보장
+  const stablePositionOffset = useMemo(
+    () => positionOffset,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [positionOffset.x, positionOffset.y],
+  );
+
+  // 상위(Grid)가 렌더마다 새 콜백을 만들어도 참조가 유지되도록 최신-참조 래퍼로 안정화
+  // 정의 여부는 보존해 콜백 유무 분기(멀티드래그 지원 여부 등)를 바꾸지 않음
+  const callbacksRef = useRef({
+    onSelectionContextMenu,
+    onMultiDrag,
+    onMultiDragStart,
+    onMultiDragEnd,
+  });
+  // passive effect면 commit~effect 사이에 이전 콜백이 호출될 수 있어 layout 단계에서 갱신
+  useLayoutEffect(() => {
+    callbacksRef.current = {
+      onSelectionContextMenu,
+      onMultiDrag,
+      onMultiDragStart,
+      onMultiDragEnd,
+    };
+  });
+  const stableOnSelectionContextMenu = useMemo(
+    () =>
+      onSelectionContextMenu
+        ? (payload: {
+            elementId: string;
+            clientX: number;
+            clientY: number;
+            referenceElement: HTMLDivElement | null;
+          }) => callbacksRef.current.onSelectionContextMenu?.(payload) ?? false
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onSelectionContextMenu != null],
+  );
+  const stableOnMultiDrag = useMemo(
+    () =>
+      onMultiDrag
+        ? (deltaX: number, deltaY: number) =>
+            callbacksRef.current.onMultiDrag?.(deltaX, deltaY)
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onMultiDrag != null],
+  );
+  const stableOnMultiDragStart = useMemo(
+    () =>
+      onMultiDragStart
+        ? () => callbacksRef.current.onMultiDragStart?.()
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onMultiDragStart != null],
+  );
+  const stableOnMultiDragEnd = useMemo(
+    () =>
+      onMultiDragEnd
+        ? () => callbacksRef.current.onMultiDragEnd?.()
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onMultiDragEnd != null],
+  );
   const setElements = usePluginDisplayElementStore(
     (state) => state.setElements,
   );
@@ -197,7 +260,7 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
           element={element}
           windowType={windowType}
           activeTool={activeTool}
-          positionOffset={positionOffset}
+          positionOffset={stablePositionOffset}
           zoom={zoom}
           panX={panX}
           panY={panY}
@@ -208,10 +271,10 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
             (sel) => sel.type === 'plugin' && sel.id === element.fullId,
           )}
           selectedElements={selectedElements}
-          onSelectionContextMenu={onSelectionContextMenu}
-          onMultiDrag={onMultiDrag}
-          onMultiDragStart={onMultiDragStart}
-          onMultiDragEnd={onMultiDragEnd}
+          onSelectionContextMenu={stableOnSelectionContextMenu}
+          onMultiDrag={stableOnMultiDrag}
+          onMultiDragStart={stableOnMultiDragStart}
+          onMultiDragEnd={stableOnMultiDragEnd}
         />
       ))}
     </>

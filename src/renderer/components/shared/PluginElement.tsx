@@ -105,7 +105,7 @@ interface PluginElementProps {
   onMultiDragEnd?: () => void;
 }
 
-export const PluginElement: React.FC<PluginElementProps> = ({
+const PluginElementImpl: React.FC<PluginElementProps> = ({
   element,
   windowType,
   activeTool,
@@ -1488,3 +1488,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     </>
   );
 };
+
+// 요소 하나의 갱신이 나머지 전체 리렌더로 번지지 않도록 차단
+// (스토어 update 경로는 미변경 요소의 참조를 유지하므로 shallow 비교로 스킵됨)
+export const PluginElement = React.memo(PluginElementImpl);

@@ -197,7 +197,24 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   },
 
   setSelectedElements: (elements) => {
-    set({ selectedElements: elements, selectedGroupIds: [] });
+    set((state) => {
+      // 논리적으로 같은 선택이면 참조를 유지해 구독자 리렌더 방지
+      const same =
+        state.selectedElements.length === elements.length &&
+        state.selectedElements.every((el, i) => {
+          const next = elements[i];
+          return (
+            el.type === next.type &&
+            el.id === next.id &&
+            el.index === next.index
+          );
+        });
+      if (same && state.selectedGroupIds.length === 0) return {};
+      return {
+        selectedElements: same ? state.selectedElements : elements,
+        selectedGroupIds: [],
+      };
+    });
   },
 
   setFullSelection: (elements, groupIds) => {
