@@ -95,6 +95,7 @@ const OverlayGraphItem = ({ position, index = 0 }: OverlayGraphItemProps) => {
   const maxValueRef = useRef<number>(1);
   const valueSumRef = useRef<number>(0);
   const valueCountRef = useRef<number>(0);
+  const wasIdleRef = useRef<boolean>(false);
 
   const [graphState, setGraphState] = useState<GraphState>(() => ({
     history: createInitialHistory(graphSpeed),
@@ -116,6 +117,7 @@ const OverlayGraphItem = ({ position, index = 0 }: OverlayGraphItemProps) => {
       avg: 0,
       maxval: 1,
     });
+    wasIdleRef.current = false;
   }, [statType]);
 
   useEffect(() => {
@@ -145,6 +147,12 @@ const OverlayGraphItem = ({ position, index = 0 }: OverlayGraphItemProps) => {
       );
       while (history.length > targetSize) history.shift();
       while (history.length < targetSize) history.unshift(0);
+
+      // 유휴(현재 값 0 + 히스토리 전부 0)면 이전 커밋과 동일 상태 — 재커밋 생략
+      const isIdle =
+        currentValue === 0 && !history.some((value) => value !== 0);
+      if (isIdle && wasIdleRef.current) return;
+      wasIdleRef.current = isIdle;
 
       setGraphState({
         history: [...history],

@@ -38,6 +38,9 @@ class KeyStatsService {
   private currentMode = '';
   private keyCounters: KeyCounters = {};
 
+  // 마지막 통지 스냅샷 — 유휴 틱의 동일 값 재통지 방지
+  private lastNotified: KeyStatsPayload | null = null;
+
   // 현재 눌린 키 추적 (홀드 방지)
   private pressedKeys: Set<string> = new Set();
 
@@ -218,6 +221,19 @@ class KeyStatsService {
 
     const stats = this.getCurrentStats();
 
+    // 값이 전부 그대로면 통지 생략 (신규 구독자는 subscribe에서 즉시 1회 수신)
+    const last = this.lastNotified;
+    if (
+      last &&
+      last.kps === stats.kps &&
+      last.kpsAvg === stats.kpsAvg &&
+      last.kpsMax === stats.kpsMax &&
+      last.total === stats.total
+    ) {
+      return;
+    }
+    this.lastNotified = stats;
+
     this.listeners.forEach((listener) => {
       try {
         listener(stats);
@@ -304,6 +320,7 @@ class KeyStatsService {
     this.kpsSum = 0;
     this.kpsCount = 0;
     this.pressedKeys.clear();
+    this.lastNotified = null;
     // total은 카운터에서 계산되므로 리셋하지 않음
   }
 

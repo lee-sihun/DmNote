@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { toCssRgba } from '@utils/color/colorUtils';
 import {
   COUNTER_DEFAULT_BEZIER,
@@ -40,7 +40,7 @@ const CountDisplay = ({
   animationScale = 1.1,
   animationDurationMs = 300,
 }: CountDisplayProps) => {
-  const [scale, setScale] = useState<number>(1);
+  const spanRef = useRef<HTMLSpanElement | null>(null);
   const scaleRef = useRef<number>(1);
   const prevCount = useRef<number>(count);
   const animationRef = useRef<number | null>(null);
@@ -62,6 +62,13 @@ const CountDisplay = ({
   );
 
   useEffect(() => {
+    // 스케일은 React 상태 대신 DOM에 직접 반영 — 애니메이션 프레임당 커밋 방지
+    const applyScale = (value: number): void => {
+      scaleRef.current = value;
+      const el = spanRef.current;
+      if (el) el.style.transform = `scale(${value})`;
+    };
+
     if (!animationEnabled) {
       prevCount.current = count;
       if (animationRef.current) {
@@ -69,8 +76,7 @@ const CountDisplay = ({
         animationRef.current = null;
       }
       if (scaleRef.current !== 1) {
-        scaleRef.current = 1;
-        setScale(1);
+        applyScale(1);
       }
       return;
     }
@@ -91,16 +97,14 @@ const CountDisplay = ({
         const nextScale = 1 + (targetScale - 1) * (1 - easedProgress);
 
         if (Math.abs(scaleRef.current - nextScale) > 0.0005) {
-          scaleRef.current = nextScale;
-          setScale(nextScale);
+          applyScale(nextScale);
         }
 
         if (progress < 1) {
           animationRef.current = requestAnimationFrame(animate);
         } else {
           if (scaleRef.current !== 1) {
-            scaleRef.current = 1;
-            setScale(1);
+            applyScale(1);
           }
           animationRef.current = null;
         }
@@ -130,12 +134,13 @@ const CountDisplay = ({
 
   return (
     <span
+      ref={spanRef}
       className="counter"
       data-text={displayValue}
       data-counter-state={active ? 'active' : 'inactive'}
       style={
         {
-          transform: `scale(${scale})`,
+          transform: 'scale(1)',
           transformOrigin: 'center bottom',
           fontSize: `${Number.isFinite(fontSize) ? fontSize : 16}px`,
           fontFamily: fontFamily
