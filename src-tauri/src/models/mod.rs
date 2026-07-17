@@ -472,8 +472,9 @@ pub enum KeyCounterPlacement {
 #[serde(rename_all = "kebab-case")]
 #[derive(Default)]
 pub enum KeyCounterAlign {
-    #[default]
     Top,
+    // align 필드 부재 시에도 새 기본 배치와 일치하도록 serde 기본값 겸용
+    #[default]
     Bottom,
     Left,
     Right,
@@ -498,9 +499,9 @@ pub struct KeyCounterColor {
 impl Default for KeyCounterColor {
     fn default() -> Self {
         Self {
-            // 렌더러 기본값과 일치 (src/types/keys.ts)
-            idle: "rgba(121, 121, 121, 0.9)".to_string(),
-            active: "#FFFFFF".to_string(),
+            // 렌더러 기본 키 텍스트 색과 일치 (utils/core/elementDefaults.ts)
+            idle: "rgba(237, 238, 242, 0.78)".to_string(),
+            active: "rgba(20, 20, 24, 0.9)".to_string(),
         }
     }
 }
@@ -786,7 +787,7 @@ impl Default for KeyCounterSettings {
         Self {
             enabled: true,
             placement: KeyCounterPlacement::Inside,
-            align: KeyCounterAlign::Top,
+            align: KeyCounterAlign::Bottom,
             align_mode: KeyCounterAlignMode::Center,
             fill: KeyCounterColor::default(),
             stroke: default_stroke_color(),
@@ -811,29 +812,63 @@ impl KeyCounterSettings {
     /// This keeps existing user customizations intact, while fixing the old default
     /// active fill/stroke values (black text / outlined) that diverged from the renderer.
     pub fn migrate_legacy_defaults(&mut self) -> bool {
+        // 당시 직렬화되던 스냅샷 값 고정 — 현재 기본값 함수와 결합 금지
         let looks_like_legacy_default = self.fill.idle == "#FFFFFF"
             && self.fill.active == "#000000"
             && self.stroke.idle == "#000000"
             && self.stroke.active == "#FFFFFF"
-            && self.gap == default_gap()
-            && self.font_size == default_counter_font_size()
+            && matches!(self.placement, KeyCounterPlacement::Inside)
+            && matches!(self.align, KeyCounterAlign::Top)
+            && matches!(self.align_mode, KeyCounterAlignMode::Center)
+            && self.gap == 6
+            && self.font_size == 16
             && self.font_weight == 400
             && self.font_family.is_none()
             && !self.font_italic
             && !self.font_underline
             && !self.font_strikethrough;
 
-        if !looks_like_legacy_default {
+        if looks_like_legacy_default {
+            self.fill = KeyCounterColor::default();
+            self.stroke = default_stroke_color();
+            self.align = KeyCounterAlign::Bottom;
+            self.gap = default_gap();
+            self.font_size = default_counter_font_size();
+            self.font_weight = default_counter_font_weight();
+            self.animation = KeyCounterAnimationSettings::default();
             self.normalize();
-            return false;
+            return true;
         }
 
-        self.fill = KeyCounterColor::default();
-        self.stroke = default_stroke_color();
-        self.font_weight = default_counter_font_weight();
-        self.animation = KeyCounterAnimationSettings::default();
+        // 직전 기본값 스냅샷(회색 카운터·16px·700·상단 배치) → 글래스 기본 디자인으로 승격
+        // 전 필드 일치일 때만 — 하나라도 다르면 사용자 커스텀으로 보고 유지
+        let looks_like_previous_default = self.fill.idle == "rgba(121, 121, 121, 0.9)"
+            && self.fill.active == "#FFFFFF"
+            && self.stroke.idle == "transparent"
+            && self.stroke.active == "transparent"
+            && matches!(self.placement, KeyCounterPlacement::Inside)
+            && matches!(self.align, KeyCounterAlign::Top)
+            && matches!(self.align_mode, KeyCounterAlignMode::Center)
+            && self.gap == 6
+            && self.font_size == 16
+            && self.font_weight == 700
+            && self.font_family.is_none()
+            && !self.font_italic
+            && !self.font_underline
+            && !self.font_strikethrough;
+
+        if looks_like_previous_default {
+            self.fill = KeyCounterColor::default();
+            self.align = KeyCounterAlign::Bottom;
+            self.gap = default_gap();
+            self.font_size = default_counter_font_size();
+            self.font_weight = default_counter_font_weight();
+            self.normalize();
+            return true;
+        }
+
         self.normalize();
-        true
+        false
     }
 }
 
@@ -854,13 +889,13 @@ fn default_counter_animation_duration_ms() -> u32 {
 }
 
 fn default_gap() -> u32 {
-    6
+    4
 }
 fn default_counter_font_size() -> u32 {
-    16
+    11
 }
 fn default_counter_font_weight() -> u32 {
-    700
+    500
 }
 
 fn default_counter_enabled() -> bool {
@@ -876,7 +911,7 @@ fn default_key_note_color() -> NoteColor {
     NoteColor::Solid("#FFFFFF".to_string())
 }
 fn default_key_note_opacity() -> u32 {
-    80
+    90
 }
 fn default_note_glow_enabled() -> bool {
     false
@@ -960,8 +995,8 @@ impl Default for NoteSettings {
         Self {
             border_radius: None,
             frame_limit: default_note_frame_limit(),
-            speed: 180,
-            track_height: 150,
+            speed: 400,
+            track_height: 300,
             reverse: false,
             fade_position: FadePosition::Auto,
             fade_top_px: 50,
@@ -2071,6 +2106,6 @@ mod tests {
         assert_eq!(position.count, 42);
         assert_eq!(position.height, 60.0);
         assert_eq!(position.note_color, NoteColor::Solid("#FFFFFF".to_string()));
-        assert_eq!(position.note_opacity, 80);
+        assert_eq!(position.note_opacity, 90);
     }
 }

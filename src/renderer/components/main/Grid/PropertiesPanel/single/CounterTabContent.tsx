@@ -20,6 +20,7 @@ import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import { usePanelNav } from '../PanelNavContext';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-counter:font';
@@ -315,7 +316,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         {/* 폰트 크기 */}
         <PropertyRow label={t('counterSetting.fontSize') || '폰트 크기'}>
           <NumberInput
-            value={counterSettings.fontSize ?? 16}
+            value={counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}
             onChange={(value) => handleCounterUpdate({ fontSize: value })}
             suffix="px"
             min={8}

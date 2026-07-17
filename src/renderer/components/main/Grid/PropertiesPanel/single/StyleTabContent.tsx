@@ -17,6 +17,16 @@ import FontPicker from '../../../Modal/content/pickers/FontPicker';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
 import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_ACTIVE_BORDER,
+  DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_FONT_WEIGHT,
+} from '@utils/core/elementDefaults';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
@@ -88,12 +98,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onLocalHeightChange,
   onSizeBlur,
 }) => {
-  const DEFAULT_KEY_BACKGROUND_COLOR = 'rgba(46, 46, 47, 0.9)';
-  const DEFAULT_KEY_BORDER_COLOR = 'rgba(113, 113, 113, 0.9)';
-  const DEFAULT_KEY_FONT_COLOR = 'rgba(121, 121, 121, 0.9)';
-  const DEFAULT_KEY_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
-  const DEFAULT_KEY_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
-  const DEFAULT_KEY_ACTIVE_FONT_COLOR = '#FFFFFF';
+  const DEFAULT_KEY_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
+  const DEFAULT_KEY_BORDER_COLOR = DEFAULT_ELEMENT_BORDER;
+  const DEFAULT_KEY_FONT_COLOR = DEFAULT_ELEMENT_FONT;
+  const DEFAULT_KEY_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
+  const DEFAULT_KEY_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_BORDER;
+  const DEFAULT_KEY_ACTIVE_FONT_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
 
   // 개별 편집 모드인지 확인 (로컬 상태 핸들러가 없으면 개별 편집 모드)
   const isIndividualMode = !onLocalDxChange;
@@ -518,7 +528,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         {/* 테두리 두께 */}
         <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
           <NumberInput
-            value={keyPosition.borderWidth ?? 3}
+            value={
+              keyPosition.borderWidth ??
+              (keyPosition.borderColor || keyPosition.activeBorderColor ? 3 : 0)
+            }
             onChange={(value) =>
               handleStyleChangeComplete('borderWidth', value)
             }
@@ -533,7 +546,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         {/* 모서리 반경 */}
         <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
           <NumberInput
-            value={keyPosition.borderRadius ?? 10}
+            value={keyPosition.borderRadius ?? DEFAULT_ELEMENT_RADIUS}
             onChange={(value) =>
               handleStyleChangeComplete('borderRadius', value)
             }
@@ -627,7 +640,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         {/* 글꼴 스타일 */}
         <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
           <FontStyleToggle
-            isBold={(keyPosition.fontWeight ?? 700) >= 700}
+            isBold={
+              (keyPosition.fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT) >= 700
+            }
             isItalic={keyPosition.fontItalic ?? false}
             isUnderline={keyPosition.fontUnderline ?? false}
             isStrikethrough={keyPosition.fontStrikethrough ?? false}

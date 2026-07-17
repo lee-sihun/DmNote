@@ -4,6 +4,14 @@ import { useSignals } from '@preact/signals-react/runtime';
 import { getAxisSignal } from '@stores/signals/axisSignals';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_SHADOW,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW,
+} from '@utils/core/elementDefaults';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -121,11 +129,12 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
 
   const isTransparent = isActive ? activeTransparent : idleTransparent;
   const stateBackground = isActive
-    ? activeBackgroundColor || backgroundColor || 'rgba(121, 121, 121, 0.9)'
-    : backgroundColor || 'rgba(46, 46, 47, 0.9)';
+    ? activeBackgroundColor || backgroundColor || DEFAULT_ELEMENT_ACTIVE_BG
+    : backgroundColor || DEFAULT_ELEMENT_BG;
+  // 보더 색은 회전 인식 막대 색을 겸함 — 폴백은 텍스트 색 계열
   const stateBorderColor = isActive
-    ? activeBorderColor || borderColor || 'rgba(255, 255, 255, 0.9)'
-    : borderColor || 'rgba(113, 113, 113, 0.9)';
+    ? activeBorderColor || borderColor || DEFAULT_ELEMENT_ACTIVE_FONT
+    : borderColor || DEFAULT_ELEMENT_FONT;
   // 모서리 반경 미지정 시 원형 유지 (px 지정 시 키와 동일한 px 단위)
   const resolvedRadius = borderRadius != null ? `${borderRadius}px` : '50%';
 
@@ -154,6 +163,13 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
             borderWidth && borderWidth > 0
               ? `${borderWidth}px solid ${stateBorderColor}`
               : undefined,
+          // 기본 표면은 키와 같은 인셋 링 섀도 — 이미지·투명·명시 보더(구형 저장 데이터 포함)는 제외
+          boxShadow:
+            isTransparent || imageSrc || (borderWidth && borderWidth > 0)
+              ? undefined
+              : isActive
+              ? DEFAULT_ELEMENT_ACTIVE_SHADOW
+              : DEFAULT_ELEMENT_SHADOW,
           boxSizing: 'border-box',
           transform: `rotate(${angle}deg)`,
           transition: 'transform 0.1s linear',

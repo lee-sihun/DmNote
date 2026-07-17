@@ -4,6 +4,7 @@ import {
   computeOutsideStyle,
 } from '@hooks/overlay/useCounterSettings';
 import { toCssRgba } from '@utils/color/colorUtils';
+import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 
 interface CounterPosition {
   dx?: number;
@@ -70,7 +71,9 @@ const KeyCounterPreview = ({
         data-counter-state="inactive"
         style={
           {
-            fontSize: `${counterSettings.fontSize ?? 16}px`,
+            fontSize: `${
+              counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE
+            }px`,
             fontFamily: counterSettings.fontFamily
               ? `"${counterSettings.fontFamily}", "Pretendard Variable", sans-serif`
               : undefined,

@@ -13,6 +13,14 @@ import type {
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import { axisEventBus } from '@utils/core/axisEventBus';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_HAIRLINE,
+  DEFAULT_ELEMENT_RADIUS,
+} from '@utils/core/elementDefaults';
 import type {
   PluginSettingSchema,
   PluginMessages,
@@ -535,8 +543,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               >
                 <ColorInput
                   value={
-                    singleGraphPosition.backgroundColor ||
-                    'rgba(17, 17, 20, 0.9)'
+                    singleGraphPosition.backgroundColor || DEFAULT_ELEMENT_BG
                   }
                   onChange={() => {}}
                   onChangeComplete={(value) =>
@@ -555,8 +562,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               >
                 <ColorInput
                   value={
-                    singleGraphPosition.borderColor ||
-                    'rgba(255, 255, 255, 0.1)'
+                    singleGraphPosition.borderColor || DEFAULT_ELEMENT_HAIRLINE
                   }
                   onChange={() => {}}
                   onChangeComplete={(value) =>
@@ -574,7 +580,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 label={t('propertiesPanel.borderWidth') || 'Border Width'}
               >
                 <NumberInput
-                  value={Math.round(singleGraphPosition.borderWidth ?? 3)}
+                  value={Math.round(singleGraphPosition.borderWidth ?? 1)}
                   onChange={(value) =>
                     handleGraphUpdate({
                       index: singleGraphIndex,
@@ -591,7 +597,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 label={t('propertiesPanel.borderRadius') || 'Border Radius'}
               >
                 <NumberInput
-                  value={Math.round(singleGraphPosition.borderRadius ?? 8)}
+                  value={Math.round(
+                    singleGraphPosition.borderRadius ?? DEFAULT_ELEMENT_RADIUS,
+                  )}
                   onChange={(value) =>
                     handleGraphUpdate({
                       index: singleGraphIndex,
@@ -825,10 +833,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     : t('propertiesPanel.knobAxisUnset') || '미지정';
 
   // 대기/입력 색상 (키 패널과 동일한 기본값/전환 로직)
-  const DEFAULT_KNOB_BACKGROUND_COLOR = 'rgba(46, 46, 47, 0.9)';
-  const DEFAULT_KNOB_BORDER_COLOR = 'rgba(113, 113, 113, 0.9)';
-  const DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
-  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
+  const DEFAULT_KNOB_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
+  const DEFAULT_KNOB_BORDER_COLOR = DEFAULT_ELEMENT_FONT;
+  const DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
+  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
 
   type KnobColorTarget = 'backgroundColor' | 'borderColor';
   type KnobColorProperty =
@@ -1147,7 +1155,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 label={t('propertiesPanel.borderWidth') || '테두리 두께'}
               >
                 <NumberInput
-                  value={singleKnobPosition.borderWidth ?? 3}
+                  value={singleKnobPosition.borderWidth ?? 0}
                   onChange={(value) =>
                     handleKnobUpdate({
                       index: singleKnobIndex,

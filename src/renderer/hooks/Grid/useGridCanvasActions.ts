@@ -24,6 +24,14 @@ import type {
   CounterAnimationBezier,
 } from '@src/types/key/keys';
 import { createDefaultCounterSettings } from '@src/types/key/keys';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_HAIRLINE,
+  DEFAULT_ELEMENT_RADIUS,
+} from '@utils/core/elementDefaults';
 
 // 공통: zIndex 목록 수집
 function collectAllZIndexes(mode: string) {
@@ -526,7 +534,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       idleTransparent: false,
       count: 0,
       noteColor: '#FFFFFF',
-      noteOpacity: 80,
+      noteOpacity: 90,
       noteAlignment: 'center',
       noteEffectEnabled: true,
       noteGlowEnabled: false,
@@ -567,7 +575,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       idleTransparent: false,
       count: 0,
       noteColor: '#FFFFFF',
-      noteOpacity: 80,
+      noteOpacity: 90,
       noteAlignment: 'center',
       noteEffectEnabled: true,
       noteGlowEnabled: false,
@@ -577,12 +585,12 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       noteAutoYCorrection: true,
       className: '',
       counter: createDefaultCounterSettings(),
-      backgroundColor: 'rgba(46, 46, 47, 0.9)',
-      borderColor: 'rgba(113, 113, 113, 0.9)',
-      borderWidth: 3,
-      borderRadius: 10,
-      fontColor: '#FFFFFF',
-      activeFontColor: '#FFFFFF',
+      backgroundColor: DEFAULT_ELEMENT_BG,
+      borderColor: DEFAULT_ELEMENT_HAIRLINE,
+      borderWidth: 1,
+      borderRadius: DEFAULT_ELEMENT_RADIUS,
+      fontColor: DEFAULT_ELEMENT_FONT,
+      activeFontColor: DEFAULT_ELEMENT_FONT,
       fontSize: 12,
       useInlineStyles: false,
       displayText: '',
@@ -730,7 +738,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       idleTransparent: false,
       count: 0,
       noteColor: '#FFFFFF',
-      noteOpacity: 80,
+      noteOpacity: 90,
       noteAlignment: 'center',
       noteEffectEnabled: false,
       noteGlowEnabled: false,
@@ -740,11 +748,11 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       noteAutoYCorrection: true,
       className: '',
       counter: createDefaultCounterSettings(),
-      backgroundColor: 'rgba(46, 46, 47, 0.9)',
-      activeBackgroundColor: 'rgba(121, 121, 121, 0.9)',
-      borderColor: 'rgba(113, 113, 113, 0.9)',
-      activeBorderColor: 'rgba(255, 255, 255, 0.9)',
-      borderWidth: 3,
+      backgroundColor: DEFAULT_ELEMENT_BG,
+      activeBackgroundColor: DEFAULT_ELEMENT_ACTIVE_BG,
+      borderColor: DEFAULT_ELEMENT_FONT,
+      activeBorderColor: DEFAULT_ELEMENT_ACTIVE_FONT,
+      borderWidth: 0,
     });
     const nextPositions = { ...current, [selectedKeyType]: list };
     persistKnobPositions(nextPositions, 'Failed to add knob item');

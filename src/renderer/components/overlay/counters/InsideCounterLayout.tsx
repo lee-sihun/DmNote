@@ -30,7 +30,7 @@ const InsideCounterLayout = ({
     : counterSettings.stroke.idle;
   const contentGap = Number.isFinite(counterSettings.gap)
     ? counterSettings.gap
-    : 6;
+    : 4;
 
   const counterElement = (
     <CountDisplay

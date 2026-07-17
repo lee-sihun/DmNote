@@ -10,6 +10,16 @@ import {
   FontStyleToggle,
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_ACTIVE_BORDER,
+  DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_FONT_WEIGHT,
+} from '@utils/core/elementDefaults';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
 import { usePanelNav } from '../PanelNavContext';
@@ -537,26 +547,22 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             colorState === 'active'
               ? getMixedValue(
                   (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
-                  'rgba(121, 121, 121, 0.9)',
+                  DEFAULT_ELEMENT_ACTIVE_BG,
                 ).isMixed
-              : getMixedValue(
-                  (pos) => pos.backgroundColor,
-                  'rgba(46, 46, 47, 0.9)',
-                ).isMixed
+              : getMixedValue((pos) => pos.backgroundColor, DEFAULT_ELEMENT_BG)
+                  .isMixed
           ) ? (
             <span className="text-fg-faint text-body italic">Mixed</span>
           ) : null}
           <ColorInput
             value={
-              getMixedValue(
-                (pos) => pos.backgroundColor,
-                'rgba(46, 46, 47, 0.9)',
-              ).value
+              getMixedValue((pos) => pos.backgroundColor, DEFAULT_ELEMENT_BG)
+                .value
             }
             activeValue={
               getMixedValue(
                 (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
-                'rgba(121, 121, 121, 0.9)',
+                DEFAULT_ELEMENT_ACTIVE_BG,
               ).value
             }
             showStateTabs
@@ -584,26 +590,22 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             colorState === 'active'
               ? getMixedValue(
                   (pos) => pos.activeBorderColor ?? pos.borderColor,
-                  'rgba(255, 255, 255, 0.9)',
+                  DEFAULT_ELEMENT_ACTIVE_BORDER,
                 ).isMixed
-              : getMixedValue(
-                  (pos) => pos.borderColor,
-                  'rgba(113, 113, 113, 0.9)',
-                ).isMixed
+              : getMixedValue((pos) => pos.borderColor, DEFAULT_ELEMENT_BORDER)
+                  .isMixed
           ) ? (
             <span className="text-fg-faint text-body italic">Mixed</span>
           ) : null}
           <ColorInput
             value={
-              getMixedValue(
-                (pos) => pos.borderColor,
-                'rgba(113, 113, 113, 0.9)',
-              ).value
+              getMixedValue((pos) => pos.borderColor, DEFAULT_ELEMENT_BORDER)
+                .value
             }
             activeValue={
               getMixedValue(
                 (pos) => pos.activeBorderColor ?? pos.borderColor,
-                'rgba(255, 255, 255, 0.9)',
+                DEFAULT_ELEMENT_ACTIVE_BORDER,
               ).value
             }
             showStateTabs
@@ -625,11 +627,23 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
         {/* 테두리 두께 */}
         <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
-          {getMixedValue((pos) => pos.borderWidth, 3).isMixed ? (
+          {getMixedValue(
+            (pos) =>
+              pos.borderWidth ??
+              (pos.borderColor || pos.activeBorderColor ? 3 : 0),
+            0,
+          ).isMixed ? (
             <span className="text-fg-faint text-body italic">Mixed</span>
           ) : null}
           <NumberInput
-            value={getMixedValue((pos) => pos.borderWidth, 3).value}
+            value={
+              getMixedValue(
+                (pos) =>
+                  pos.borderWidth ??
+                  (pos.borderColor || pos.activeBorderColor ? 3 : 0),
+                0,
+              ).value
+            }
             onChange={(value) =>
               handleBatchStyleChangeComplete('borderWidth', value)
             }
@@ -643,11 +657,15 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
         {/* 모서리 반경 */}
         <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
-          {getMixedValue((pos) => pos.borderRadius, 10).isMixed ? (
+          {getMixedValue((pos) => pos.borderRadius, DEFAULT_ELEMENT_RADIUS)
+            .isMixed ? (
             <span className="text-fg-faint text-body italic">Mixed</span>
           ) : null}
           <NumberInput
-            value={getMixedValue((pos) => pos.borderRadius, 10).value}
+            value={
+              getMixedValue((pos) => pos.borderRadius, DEFAULT_ELEMENT_RADIUS)
+                .value
+            }
             onChange={(value) =>
               handleBatchStyleChangeComplete('borderRadius', value)
             }
@@ -752,26 +770,24 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   colorState === 'active'
                     ? getMixedValue(
                         (pos) => pos.activeFontColor ?? pos.fontColor,
-                        '#FFFFFF',
+                        DEFAULT_ELEMENT_ACTIVE_FONT,
                       ).isMixed
                     : getMixedValue(
                         (pos) => pos.fontColor,
-                        'rgba(121, 121, 121, 0.9)',
+                        DEFAULT_ELEMENT_FONT,
                       ).isMixed
                 ) ? (
                   <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
                 <ColorInput
                   value={
-                    getMixedValue(
-                      (pos) => pos.fontColor,
-                      'rgba(121, 121, 121, 0.9)',
-                    ).value
+                    getMixedValue((pos) => pos.fontColor, DEFAULT_ELEMENT_FONT)
+                      .value
                   }
                   activeValue={
                     getMixedValue(
                       (pos) => pos.activeFontColor ?? pos.fontColor,
-                      '#FFFFFF',
+                      DEFAULT_ELEMENT_ACTIVE_FONT,
                     ).value
                   }
                   showStateTabs
@@ -799,8 +815,11 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               >
                 <FontStyleToggle
                   isBold={
-                    getMixedValue((pos) => (pos.fontWeight ?? 700) >= 700, true)
-                      .value
+                    getMixedValue(
+                      (pos) =>
+                        (pos.fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT) >= 700,
+                      true,
+                    ).value
                   }
                   isItalic={getMixedValue((pos) => pos.fontItalic, false).value}
                   isUnderline={

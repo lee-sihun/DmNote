@@ -66,6 +66,13 @@ import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_HAIRLINE,
+  DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_SHADOW,
+} from '@utils/core/elementDefaults';
+import {
   groupSelectedElements,
   ungroupSelectedElements,
 } from '@utils/grid/groupActions';
@@ -1354,9 +1361,9 @@ const Grid = ({
             width: `${width}px`,
             height: `${height}px`,
             transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
-            background: 'rgba(17, 17, 20, 0.9)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
+            background: DEFAULT_ELEMENT_BG,
+            border: `1px solid ${DEFAULT_ELEMENT_HAIRLINE}`,
+            borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
             opacity: 0.5,
             zIndex: 1000,
           }}
@@ -1378,10 +1385,7 @@ const Grid = ({
       resolveImageSource(inactiveImage) ||
       resolveImageSource(activeImage) ||
       '';
-    const backgroundColor = previewImage
-      ? 'transparent'
-      : 'rgba(46, 46, 47, 0.9)';
-    const borderStyle = '3px solid rgba(113, 113, 113, 0.9)';
+    const backgroundColor = previewImage ? 'transparent' : DEFAULT_ELEMENT_BG;
     const displayName =
       getKeyInfoByGlobalKey(keyName)?.displayName || keyName || '';
 
@@ -1399,8 +1403,8 @@ const Grid = ({
           height: `${height}px`,
           transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
           backgroundColor,
-          borderRadius: '10px',
-          border: borderStyle,
+          borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
+          boxShadow: previewImage ? undefined : DEFAULT_ELEMENT_SHADOW,
           overflow: 'hidden',
           opacity: 0.5,
           zIndex: 1000,
@@ -1424,7 +1428,7 @@ const Grid = ({
           <div
             className="flex items-center justify-center h-full font-bold leading-none text-safe-inline"
             style={{
-              color: 'var(--key-text-color, rgba(121, 121, 121, 0.9))',
+              color: `var(--key-text-color, ${DEFAULT_ELEMENT_FONT})`,
               willChange: 'auto',
               contain: 'layout style paint',
             }}

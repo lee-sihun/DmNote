@@ -64,6 +64,8 @@ const StatItem = React.memo(
         className={`absolute ${position.className || ''}`}
         style={keyStyle}
         data-state={active ? 'active' : 'inactive'}
+        data-key-element="true"
+        data-key-image={hasCurrentImage ? 'true' : undefined}
       >
         {hasCurrentImage ? (
           <img

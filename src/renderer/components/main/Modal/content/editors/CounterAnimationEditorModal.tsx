@@ -16,6 +16,18 @@ import {
   clampCounterBezier,
   findBezierPresetId,
 } from '@utils/cubicBezier';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_ACTIVE_BORDER,
+  DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_FONT_WEIGHT,
+  DEFAULT_COUNTER_FONT_SIZE,
+  DEFAULT_COUNTER_FONT_WEIGHT,
+} from '@utils/core/elementDefaults';
 import { useKeyStore } from '@stores/data/useKeyStore';
 
 type EditorMode = 'create' | 'edit';
@@ -1092,14 +1104,16 @@ const CounterAnimationEditorModal = ({
                   const placement = counterSettings?.placement ?? 'inside';
                   const align = counterSettings?.align ?? 'top';
                   const alignMode = counterSettings?.alignMode ?? 'center';
-                  const gap = counterSettings?.gap ?? 6;
+                  const gap = counterSettings?.gap ?? 4;
                   const isInside = placement === 'inside';
                   const isHorizontal = align === 'left' || align === 'right';
                   const isBetween = alignMode === 'between';
 
                   const keyW = keyVisual?.width ?? 60;
                   const keyH = keyVisual?.height ?? 60;
-                  const counterExtra = (counterSettings?.fontSize ?? 16) + gap;
+                  const counterExtra =
+                    (counterSettings?.fontSize ?? DEFAULT_COUNTER_FONT_SIZE) +
+                    gap;
 
                   let totalW = keyW;
                   let totalH = keyH;
@@ -1129,7 +1143,8 @@ const CounterAnimationEditorModal = ({
                         fontFamily: keyVisual?.fontFamily
                           ? `"${keyVisual.fontFamily}", "Pretendard Variable", sans-serif`
                           : undefined,
-                        fontWeight: keyVisual?.fontWeight ?? 700,
+                        fontWeight:
+                          keyVisual?.fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
                         fontStyle: keyVisual?.fontItalic ? 'italic' : 'normal',
                         textDecoration:
                           keyLabelDecorations.length > 0
@@ -1146,9 +1161,9 @@ const CounterAnimationEditorModal = ({
                       count={previewCount}
                       fillColor={
                         previewActive
-                          ? counterSettings?.fill.active ?? '#FFFFFF'
-                          : counterSettings?.fill.idle ??
-                            'rgba(121, 121, 121, 0.9)'
+                          ? counterSettings?.fill.active ??
+                            DEFAULT_ELEMENT_ACTIVE_FONT
+                          : counterSettings?.fill.idle ?? DEFAULT_ELEMENT_FONT
                       }
                       strokeColor={
                         previewActive
@@ -1157,9 +1172,14 @@ const CounterAnimationEditorModal = ({
                       }
                       globalKey="preview"
                       active={previewActive}
-                      fontSize={counterSettings?.fontSize ?? 16}
+                      fontSize={
+                        counterSettings?.fontSize ?? DEFAULT_COUNTER_FONT_SIZE
+                      }
                       fontFamily={counterSettings?.fontFamily ?? null}
-                      fontWeight={counterSettings?.fontWeight ?? 700}
+                      fontWeight={
+                        counterSettings?.fontWeight ??
+                        DEFAULT_COUNTER_FONT_WEIGHT
+                      }
                       fontItalic={counterSettings?.fontItalic ?? false}
                       fontUnderline={counterSettings?.fontUnderline ?? false}
                       fontStrikethrough={
@@ -1187,16 +1207,24 @@ const CounterAnimationEditorModal = ({
                     ? keyVisual?.activeFontColor ?? keyVisual?.fontColor
                     : keyVisual?.fontColor;
                   const defaultBgColor = keyActive
-                    ? 'rgba(121, 121, 121, 0.9)'
-                    : 'rgba(46, 46, 47, 0.9)';
+                    ? DEFAULT_ELEMENT_ACTIVE_BG
+                    : DEFAULT_ELEMENT_BG;
                   const defaultBorderColor = keyActive
-                    ? 'rgba(255, 255, 255, 0.9)'
-                    : 'rgba(113, 113, 113, 0.9)';
+                    ? DEFAULT_ELEMENT_ACTIVE_BORDER
+                    : DEFAULT_ELEMENT_BORDER;
                   const defaultTextColor = keyActive
-                    ? '#FFFFFF'
-                    : 'rgba(121, 121, 121, 0.9)';
-                  const bw = keyVisual?.borderWidth ?? 3;
-                  const br = keyVisual?.borderRadius ?? 10;
+                    ? DEFAULT_ELEMENT_ACTIVE_FONT
+                    : DEFAULT_ELEMENT_FONT;
+                  // 명시 보더가 있을 때만 렌더 — 기본은 보더 없음(인셋 링 섀도가 담당)
+                  // 상태별 판정: 현재 상태의 색이 있을 때만 보더
+                  const hasExplicitBorder =
+                    keyVisual?.borderWidth != null
+                      ? keyVisual.borderWidth > 0
+                      : stateBorderColor != null;
+                  const explicitBorder = `${
+                    keyVisual?.borderWidth ?? 3
+                  }px solid ${stateBorderColor || defaultBorderColor}`;
+                  const br = keyVisual?.borderRadius ?? DEFAULT_ELEMENT_RADIUS;
 
                   const keyBoxStyle: React.CSSProperties = {
                     width: `${keyW}px`,
@@ -1211,11 +1239,11 @@ const CounterAnimationEditorModal = ({
                       ? `${br}px`
                       : `var(--key-radius, ${br}px)`,
                     border: useInline
-                      ? `${bw}px solid ${
-                          stateBorderColor || defaultBorderColor
-                        }`
-                      : `var(--key-border, ${bw}px solid ${
-                          stateBorderColor || defaultBorderColor
+                      ? hasExplicitBorder
+                        ? explicitBorder
+                        : 'none'
+                      : `var(--key-border, ${
+                          hasExplicitBorder ? explicitBorder : 'none'
                         })`,
                     color:
                       useInline && stateFontColor
@@ -1275,7 +1303,7 @@ const CounterAnimationEditorModal = ({
                       }
                     >
                       <div
-                        className={`flex items-center justify-center shadow-2xl ${
+                        className={`flex items-center justify-center ${
                           keyVisual?.className || ''
                         }`}
                         style={keyBoxStyle}

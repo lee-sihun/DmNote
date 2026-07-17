@@ -35,7 +35,7 @@ export function createDefaultKeyPosition(dx = 0, dy = 0): KeyPosition {
     idleTransparent: false,
     count: 0,
     noteColor: '#FFFFFF',
-    noteOpacity: 80,
+    noteOpacity: 90,
     noteAlignment: 'center',
     noteEffectEnabled: true,
     noteGlowEnabled: false,

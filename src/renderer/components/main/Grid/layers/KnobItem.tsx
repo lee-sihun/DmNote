@@ -5,6 +5,11 @@ import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { resolveImageSource } from '@utils/core/imageSource';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_SHADOW,
+} from '@utils/core/elementDefaults';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -255,13 +260,16 @@ const KnobItem = ({
           borderRadius: borderRadius != null ? `${borderRadius}px` : '50%',
           overflow: 'hidden',
           position: 'relative',
-          background: backgroundColor || 'rgba(46, 46, 47, 0.9)',
+          background: backgroundColor || DEFAULT_ELEMENT_BG,
           border:
             borderWidth && borderWidth > 0
-              ? `${borderWidth}px solid ${
-                  borderColor || 'rgba(113, 113, 113, 0.9)'
-                }`
-              : `1px solid ${borderColor || 'rgba(113, 113, 113, 0.9)'}`,
+              ? `${borderWidth}px solid ${borderColor || DEFAULT_ELEMENT_FONT}`
+              : undefined,
+          // 오버레이와 동일한 기본 인셋 링 섀도 — 이미지·명시 보더 노브는 제외
+          boxShadow:
+            imageSrc || (borderWidth && borderWidth > 0)
+              ? undefined
+              : DEFAULT_ELEMENT_SHADOW,
           boxSizing: 'border-box',
         }}
       >
@@ -287,7 +295,7 @@ const KnobItem = ({
               width: '8%',
               height: '76%',
               transform: 'translateX(-50%)',
-              background: borderColor || 'rgba(113, 113, 113, 0.9)',
+              background: borderColor || DEFAULT_ELEMENT_FONT,
               borderRadius: '4px',
             }}
           />

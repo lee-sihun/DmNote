@@ -575,6 +575,6 @@ mod tests {
         assert_eq!(position.count, 42);
         assert_eq!(position.height, 60.0);
         assert_eq!(position.note_color, NoteColor::Solid("#FFFFFF".to_string()));
-        assert_eq!(position.note_opacity, 80);
+        assert_eq!(position.note_opacity, 90);
     }
 }

@@ -1,5 +1,10 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { forwardRef, useEffect, useRef, useState } from 'react';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_HAIRLINE,
+  DEFAULT_ELEMENT_RADIUS,
+} from '@utils/core/elementDefaults';
 
 const BAR_ANIMATION_DURATION_MS = 150;
 const LINE_ANIMATION_DURATION_MS = 150;
@@ -170,10 +175,10 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       graphType = 'line',
       graphColor = '#86EFAC',
       showAvgLine = true,
-      backgroundColor = 'rgba(17, 17, 20, 0.9)',
-      borderColor = 'rgba(255, 255, 255, 0.1)',
-      borderWidth = 3,
-      borderRadius = 8,
+      backgroundColor = DEFAULT_ELEMENT_BG,
+      borderColor = DEFAULT_ELEMENT_HAIRLINE,
+      borderWidth = 1,
+      borderRadius = DEFAULT_ELEMENT_RADIUS,
       imageSrc = null,
       imageFit = 'cover',
       useInlineStyles = false,
@@ -376,17 +381,17 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
 
     const resolvedBorderWidth = Number.isFinite(Number(borderWidth))
       ? Math.max(0, Number(borderWidth))
-      : 3;
+      : 1;
     const resolvedBorderRadius = Number.isFinite(Number(borderRadius))
       ? Math.max(0, Number(borderRadius))
-      : 8;
+      : DEFAULT_ELEMENT_RADIUS;
     const useInline = useInlineStyles === true;
-    const resolvedBackgroundColor = backgroundColor || 'rgba(17, 17, 20, 0.9)';
+    const resolvedBackgroundColor = backgroundColor || DEFAULT_ELEMENT_BG;
     const fallbackBorder =
       resolvedBorderWidth <= 0
         ? 'none'
         : `${resolvedBorderWidth}px solid ${
-            borderColor || 'rgba(255, 255, 255, 0.1)'
+            borderColor || DEFAULT_ELEMENT_HAIRLINE
           }`;
     const resolvedBorder = useInline
       ? fallbackBorder

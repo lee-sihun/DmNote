@@ -21,8 +21,14 @@ import {
   computeKeyElementStyles,
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_FONT_WEIGHT,
+} from '@utils/core/elementDefaults';
 import InsideCounterLayout from '@components/overlay/counters/InsideCounterLayout';
-import CountDisplay from '@components/overlay/counters/CountDisplay';
 
 // DraggableKey에서 counter가 KeyCounterSettings 타입인 확장 position
 interface KeyPosition extends KeyElementPosition {
@@ -265,6 +271,14 @@ const DraggableKey = React.memo(
     const shouldPromoteTransformLayer =
       isDraggingOrResizing || isViewportTransforming;
 
+    // 명시 보더가 있을 때만 렌더 — 기본은 보더 없음(인셋 링 섀도가 담당)
+    // 에디터는 항상 대기 상태 — 오버레이의 상태별 판정과 동일하게 idle 색만 본다
+    const hasExplicitBorder =
+      borderWidth != null ? borderWidth > 0 : borderColor != null;
+    const explicitBorder = `${borderWidth ?? 3}px solid ${
+      borderColor || DEFAULT_ELEMENT_BORDER
+    }`;
+
     const keyStyle = {
       width: `${width}px`,
       height: `${height}px`,
@@ -275,22 +289,21 @@ const DraggableKey = React.memo(
           : `var(--key-bg, ${
               inactiveImageSrc
                 ? 'transparent'
-                : backgroundColor || 'rgba(46, 46, 47, 0.9)'
+                : backgroundColor || DEFAULT_ELEMENT_BG
             })`,
       borderRadius:
         useInline && borderRadius != null
           ? `${borderRadius}px`
           : `var(--key-radius, ${
-              borderRadius != null ? `${borderRadius}px` : '10px'
+              borderRadius != null
+                ? `${borderRadius}px`
+                : `${DEFAULT_ELEMENT_RADIUS}px`
             })`,
-      border:
-        useInline && (borderColor || borderWidth != null)
-          ? `${borderWidth ?? 3}px solid ${
-              borderColor || 'rgba(113, 113, 113, 0.9)'
-            }`
-          : `var(--key-border, ${borderWidth ?? 3}px solid ${
-              borderColor || 'rgba(113, 113, 113, 0.9)'
-            })`,
+      border: useInline
+        ? hasExplicitBorder
+          ? explicitBorder
+          : 'none'
+        : `var(--key-border, ${hasExplicitBorder ? explicitBorder : 'none'})`,
       overflow: 'hidden' as const,
       willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
       contain: 'layout style paint',
@@ -319,12 +332,12 @@ const DraggableKey = React.memo(
       color:
         useInline && fontColor
           ? fontColor
-          : `var(--key-text-color, ${fontColor || 'rgba(121, 121, 121, 0.9)'})`,
+          : `var(--key-text-color, ${fontColor || DEFAULT_ELEMENT_FONT})`,
       fontSize: fontSize ? `${fontSize}px` : undefined,
       fontFamily: fontFamily
         ? `"${fontFamily}", "Pretendard Variable", sans-serif`
         : undefined,
-      fontWeight: fontWeight ?? 700,
+      fontWeight: fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
       fontStyle: fontItalic ? 'italic' : 'normal',
       textDecoration:
         textDecorations.length > 0 ? textDecorations.join(' ') : 'none',
@@ -332,12 +345,7 @@ const DraggableKey = React.memo(
 
     if (position?.hidden) return null;
 
-    const counterFillColor = counterSettings.fill.idle;
-    const counterStrokeColor = counterSettings.stroke.idle;
-    const contentGap = Number.isFinite(counterSettings.gap)
-      ? counterSettings.gap
-      : 6;
-
+    // 오버레이와 동일 컴포넌트로 렌더 — 에디터/오버레이 텍스트 배치 싱크 보장
     const renderInsideCounterPreview = () => {
       if (!showInsideCounter) {
         return null;
@@ -346,68 +354,14 @@ const DraggableKey = React.memo(
       const displayValue =
         (counterValueSignal?.value ?? counterPreviewValue ?? 0) | 0;
 
-      const counterElement = (
-        <CountDisplay
-          key="counter"
-          count={displayValue}
-          fillColor={counterFillColor}
-          strokeColor={counterStrokeColor}
-          active={false}
-          fontSize={counterSettings.fontSize}
-          fontFamily={counterSettings.fontFamily}
-          fontWeight={counterSettings.fontWeight}
-          fontItalic={counterSettings.fontItalic}
-          fontUnderline={counterSettings.fontUnderline}
-          fontStrikethrough={counterSettings.fontStrikethrough}
-          animationEnabled={counterSettings.animation.enabled}
-          animationBezier={counterSettings.animation.bezier}
-          animationScale={counterSettings.animation.scale}
-          animationDurationMs={counterSettings.animation.durationMs}
-        />
-      );
-
-      const nameElement = (
-        <span
-          key="label"
-          className="font-bold text-[14px] pointer-events-none select-none leading-none text-safe-inline"
-          style={textStyle}
-        >
-          {labelText}
-        </span>
-      );
-
-      const isHorizontal =
-        counterSettings.align === 'left' || counterSettings.align === 'right';
-
-      const elements = isHorizontal
-        ? counterSettings.align === 'left'
-          ? [counterElement, nameElement]
-          : [nameElement, counterElement]
-        : counterSettings.align === 'top'
-        ? [counterElement, nameElement]
-        : [nameElement, counterElement];
-
-      const alignMode = counterSettings.alignMode || 'center';
-      const isBetween = alignMode === 'between';
-      const containerClass = `flex ${
-        isHorizontal ? '' : 'flex-col'
-      } w-full h-full items-center pointer-events-none select-none`;
-
       return (
-        <div
-          className={containerClass}
-          style={{
-            justifyContent: isBetween ? 'space-between' : 'center',
-            padding: isBetween
-              ? isHorizontal
-                ? `0 ${contentGap}px`
-                : `${contentGap}px 0`
-              : '0px',
-            gap: isBetween ? '0px' : `${contentGap}px`,
-          }}
-        >
-          {elements}
-        </div>
+        <InsideCounterLayout
+          count={displayValue}
+          labelText={labelText}
+          textStyle={textStyle}
+          active={false}
+          counterSettings={counterSettings}
+        />
       );
     };
 
@@ -429,6 +383,7 @@ const DraggableKey = React.memo(
         data-state="inactive"
         data-editing={isDraggingOrResizing ? 'true' : undefined}
         data-key-element="true"
+        data-key-image={inactiveImageSrc ? 'true' : undefined}
         onClick={handleClick}
         onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}
         onPointerDown={
@@ -509,6 +464,8 @@ export const Key = React.memo(function Key({
       className={`absolute ${position.className || ''}`}
       style={keyStyle}
       data-state={active ? 'active' : 'inactive'}
+      data-key-element="true"
+      data-key-image={hasCurrentImage ? 'true' : undefined}
     >
       {hasCurrentImage ? (
         <img

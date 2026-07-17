@@ -70,6 +70,7 @@ input[type='number']::-webkit-outer-spin-button {
   box-sizing: border-box;
   padding-inline: var(--dmn-counter-safe-inline, 1px);
   white-space: nowrap;
+  letter-spacing: 0.06em;
   color: var(--counter-color, var(--counter-color-default, #ffffff));
 }
 
@@ -92,6 +93,35 @@ input[type='number']::-webkit-outer-spin-button {
 .text-safe-inline {
   box-sizing: border-box;
   padding-inline: var(--dmn-text-safe-inline, 2px);
+}
+
+/*
+ * 기본 키 디자인 — 보더 대신 인셋 링 + 상단 하이라이트가 표면 분리 담당
+ * 커스텀 CSS([data-state] 셀렉터, head 뒤쪽 주입)가 덮어쓸 수 있도록
+ * :where로 특이도를 동률 이하로 유지. 색·섀도 값은
+ * utils/core/elementDefaults.ts와 동기 유지
+ */
+:where([data-key-element]) {
+  transition: background-color 100ms ease-out, color 100ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+/* 누름은 즉시 — 트랜지션은 도착 상태의 규칙이 결정하므로 active에서 끄면
+   눌림은 0ms, 복귀만 위 페이드를 탄다 (고KPS 연타에서 히트가 뭉개지지 않게) */
+:where([data-key-element])[data-state='active'] {
+  transition: none;
+}
+
+/* 이미지 키는 표면이 투명이라 섀도 제외 */
+:where([data-key-element]:not([data-key-image]))[data-state='inactive'] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 4px 10px rgba(0, 0, 0, 0.28);
+}
+
+:where([data-key-element]:not([data-key-image]))[data-state='active'] {
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.32),
+    inset 0 1px 2px rgba(255, 255, 255, 0.5),
+    inset 0 -1px 3px rgba(0, 0, 0, 0.12);
 }
 
 /*

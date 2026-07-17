@@ -244,7 +244,7 @@ const GridKeySettingModal = ({
         width: currentKeyPosition.width,
         height: currentKeyPosition.height,
         noteColor: currentKeyPosition.noteColor || '#FFFFFF',
-        noteOpacity: currentKeyPosition.noteOpacity || 80,
+        noteOpacity: currentKeyPosition.noteOpacity ?? 90,
         noteEffectEnabled: currentKeyPosition.noteEffectEnabled,
         noteGlowEnabled: currentKeyPosition.noteGlowEnabled ?? true,
         noteGlowSize: currentKeyPosition.noteGlowSize ?? 20,

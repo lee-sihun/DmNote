@@ -12,12 +12,17 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import {
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_ACTIVE_BORDER,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+} from '@utils/core/elementDefaults';
 
 import type { EditorPatchV1 } from '@src/types/editor';
 
-const DEFAULT_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
-const DEFAULT_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
-const DEFAULT_ACTIVE_FONT_COLOR = '#FFFFFF';
+const DEFAULT_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
+const DEFAULT_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_BORDER;
+const DEFAULT_ACTIVE_FONT_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
 const SPACING_GROUP_TOLERANCE = 2;
 const SPACING_DECIMAL_SCALE = 1;
 const POSITION_CHANGE_EPSILON = 0.05;

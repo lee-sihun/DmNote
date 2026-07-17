@@ -7,7 +7,7 @@ export const NOTE_SETTINGS_CONSTRAINTS = {
   borderRadius: {
     min: 1,
     max: 100,
-    default: 2,
+    default: 4,
   },
   frameLimit: {
     min: 0,
@@ -17,12 +17,12 @@ export const NOTE_SETTINGS_CONSTRAINTS = {
   speed: {
     min: 70,
     max: 9999,
-    default: 180,
+    default: 400,
   },
   trackHeight: {
     min: 20,
     max: 2000,
-    default: 150,
+    default: 300,
   },
   shortNoteThresholdMs: {
     min: 0,

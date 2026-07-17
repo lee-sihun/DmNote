@@ -4,6 +4,16 @@
  */
 
 import { resolveImageSource } from '@utils/core/imageSource';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_ACTIVE_BORDER,
+  DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_FONT_WEIGHT,
+} from '@utils/core/elementDefaults';
 
 export interface KeyElementPosition {
   hidden?: boolean;
@@ -123,13 +133,23 @@ export function computeKeyElementStyles({
   const defaultBgColor = hasCurrentImage
     ? 'transparent'
     : active
-    ? 'rgba(121, 121, 121, 0.9)'
-    : 'rgba(46, 46, 47, 0.9)';
+    ? DEFAULT_ELEMENT_ACTIVE_BG
+    : DEFAULT_ELEMENT_BG;
   const defaultBorderColor = active
-    ? 'rgba(255, 255, 255, 0.9)'
-    : 'rgba(113, 113, 113, 0.9)';
+    ? DEFAULT_ELEMENT_ACTIVE_BORDER
+    : DEFAULT_ELEMENT_BORDER;
   const defaultTextColor =
-    active && !activeImageSrc ? '#FFFFFF' : 'rgba(121, 121, 121, 0.9)';
+    active && !activeImageSrc
+      ? DEFAULT_ELEMENT_ACTIVE_FONT
+      : DEFAULT_ELEMENT_FONT;
+
+  // 명시 보더가 있을 때만 렌더 — 기본은 보더 없음(인셋 링 섀도가 담당)
+  // 상태별 판정: active 색만 지정하면 대기 상태는 무보더 유지
+  const hasExplicitBorder =
+    borderWidth != null ? borderWidth > 0 : stateBorderColor != null;
+  const explicitBorder = `${borderWidth ?? 3}px solid ${
+    stateBorderColor || defaultBorderColor
+  }`;
 
   const keyStyle: React.CSSProperties = {
     width: `${width}px`,
@@ -143,16 +163,15 @@ export function computeKeyElementStyles({
       useInline && borderRadius != null
         ? `${borderRadius}px`
         : `var(--key-radius, ${
-            borderRadius != null ? `${borderRadius}px` : '10px'
+            borderRadius != null
+              ? `${borderRadius}px`
+              : `${DEFAULT_ELEMENT_RADIUS}px`
           })`,
-    border:
-      useInline && (stateBorderColor || borderWidth != null)
-        ? `${borderWidth ?? 3}px solid ${
-            stateBorderColor || defaultBorderColor
-          }`
-        : `var(--key-border, ${borderWidth ?? 3}px solid ${
-            stateBorderColor || defaultBorderColor
-          })`,
+    border: useInline
+      ? hasExplicitBorder
+        ? explicitBorder
+        : 'none'
+      : `var(--key-border, ${hasExplicitBorder ? explicitBorder : 'none'})`,
     color:
       useInline && stateFontColor
         ? stateFontColor
@@ -194,7 +213,7 @@ export function computeKeyElementStyles({
     fontFamily: fontFamily
       ? `"${fontFamily}", "Pretendard Variable", sans-serif`
       : undefined,
-    fontWeight: fontWeight ?? 700,
+    fontWeight: fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
     fontStyle: fontItalic ? ('italic' as const) : ('normal' as const),
     textDecoration:
       textDecorations.length > 0 ? textDecorations.join(' ') : 'none',
