@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getAxisSignal } from '@stores/signals/axisSignals';
 import { resolveImageSource } from '@utils/core/imageSource';
+import { warmupImageSource } from '@utils/core/imageWarmup';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -95,13 +96,20 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
     };
   }, [axisId]);
 
+  const inactiveImageSrc = resolveImageSource(inactiveImage);
+  const activeImageSrc = resolveImageSource(activeImage);
+
+  // 첫 회전 입력에서 active 이미지 cold decode가 겹치지 않도록 선행 디코드 (Key/StatItem과 동일 패턴)
+  useEffect(() => {
+    warmupImageSource(inactiveImageSrc);
+    warmupImageSource(activeImageSrc);
+  }, [inactiveImageSrc, activeImageSrc]);
+
   if (!position || position.hidden) return null;
 
   // accum은 회전수 단위(물리 1회전 ≈ 1.0) — sensitivity는 순수 배율
   const angle = accum * 360 * sensitivity * (reverse ? -1 : 1);
 
-  const inactiveImageSrc = resolveImageSource(inactiveImage);
-  const activeImageSrc = resolveImageSource(activeImage);
   const imageSrc =
     (isActive && activeImageSrc ? activeImageSrc : inactiveImageSrc) || null;
   const isUsingActiveImage = isActive && !!activeImageSrc;
