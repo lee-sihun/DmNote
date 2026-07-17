@@ -106,6 +106,14 @@ type ResolvedTrackLayout = TrackLayoutInput & {
 const clampPercentToUnit = (value: number) =>
   Math.min(Math.max(value / 100, 0), 1);
 
+// 트랙의 실효 글로우 크기 — 캔버스 crop bounds 계산에서도 동일 규칙 사용
+export const resolvedGlowSize = (
+  layout: Pick<TrackLayoutInput, 'noteGlowEnabled' | 'noteGlowSize'>,
+): number => {
+  if (!(layout.noteGlowEnabled ?? false)) return 0;
+  return Math.min(Math.max(layout.noteGlowSize ?? 20, 0), 50);
+};
+
 const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
   const baseOpacityPercent =
     layout.noteOpacity != null && Number.isFinite(layout.noteOpacity)
@@ -122,8 +130,7 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
       : baseOpacityPercent;
 
   const glowEnabled = layout.noteGlowEnabled ?? false;
-  const rawGlowSize = layout.noteGlowSize ?? 20;
-  const glowSize = glowEnabled ? Math.min(Math.max(rawGlowSize, 0), 50) : 0;
+  const glowSize = resolvedGlowSize(layout);
 
   const baseGlowOpacityPercent =
     layout.noteGlowOpacity != null && Number.isFinite(layout.noteGlowOpacity)

@@ -42,10 +42,15 @@ interface NoteState {
 interface NoteSettings {
   speed?: number;
   trackHeight?: number;
+  frameLimit?: number;
   delayedNoteEnabled?: boolean;
   shortNoteThresholdMs?: number;
   shortNoteMinLengthPx?: number;
 }
+
+// 셰이더는 travel ≥ trackHeight 시점에 노트를 컬하지만, 프레임 제한 시 uTime(stableTime)이
+// wall clock보다 최대 limiter interval만큼 늦으므로 그만큼만 여유를 두고 정리
+const NOTE_CLEANUP_SLACK_MS = 50;
 
 interface UseNoteSystemOptions {
   noteEffect: boolean;
@@ -116,6 +121,9 @@ export function useNoteSystem({
   const activeNotes = useRef<Map<string, NoteState[]>>(new Map());
   const flowSpeedRef = useRef<number>(DEFAULT_NOTE_SETTINGS.speed);
   const trackHeightRef = useRef<number>(DEFAULT_NOTE_SETTINGS.trackHeight);
+  const frameLimitRef = useRef<number>(0);
+  // 수명 계산에 쓰이는 스칼라만 추적 — 설정 객체 identity 변경만으로 재스케줄 방지
+  const prevCleanupScalarsRef = useRef<string>('');
   // 딜레이 기반 단노트 분리용 설정
   const delayEnabledRef = useRef<boolean>(false);
   const delayMsRef = useRef<number>(0);
@@ -141,12 +149,23 @@ export function useNoteSystem({
     return () => subscribers.current.delete(callback);
   };
 
+  // 프레임 제한이 낮을수록 uTime 지연이 커지므로 슬랙을 limiter interval까지 확장
+  const cleanupSlackPx = (flowSpeed: number): number => {
+    const frameLimit = frameLimitRef.current;
+    const slackMs = Math.max(
+      NOTE_CLEANUP_SLACK_MS,
+      frameLimit > 0 ? 1000 / frameLimit : 0,
+    );
+    return (flowSpeed * slackMs) / 1000;
+  };
+
   // In-place 클린업 함수
   const runCleanup = (): void => {
     const currentTime = performance.now();
     const flowSpeed = flowSpeedRef.current;
     const trackHeight =
       trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
+    const keepDistancePx = trackHeight + cleanupSlackPx(flowSpeed);
     const currentNotes = notesRef.current;
     const removedNoteIds: string[] = [];
     const removedNotes: Note[] = [];
@@ -171,7 +190,7 @@ export function useNoteSystem({
           // 완료된 노트가 화면 밖으로 나갔는지 확인
           const timeSinceCompletion = currentTime - (note.endTime as number);
           const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
-          shouldKeep = yPosition < trackHeight + 200;
+          shouldKeep = yPosition < keepDistancePx;
 
           if (!shouldKeep) {
             const removedId = note.id;
@@ -237,7 +256,7 @@ export function useNoteSystem({
       for (const note of keyNotes) {
         if (!note.isActive && note.endTime != null) {
           // 이 노트가 화면 밖으로 나갈 시간 계산
-          const travelTimeMs = ((trackHeight + 200) * 1000) / flowSpeed;
+          const travelTimeMs = (keepDistancePx * 1000) / flowSpeed;
           const cleanupTime = note.endTime + travelTimeMs;
           if (cleanupTime < earliestCleanupTime) {
             earliestCleanupTime = cleanupTime;
@@ -263,7 +282,8 @@ export function useNoteSystem({
       trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
 
     // 이 노트가 화면 밖으로 완전히 사라질 시간 계산
-    const travelTimeMs = ((trackHeight + 200) * 1000) / flowSpeed;
+    const travelTimeMs =
+      ((trackHeight + cleanupSlackPx(flowSpeed)) * 1000) / flowSpeed;
     const newCleanupTime = finalizedNote.endTime + travelTimeMs;
 
     // 현재 예약된 것보다 더 빨리 실행해야 하는 경우에만 재스케줄
@@ -290,7 +310,20 @@ export function useNoteSystem({
     // 단노트 최소 픽셀 길이
     shortNoteMinLengthPxRef.current =
       Number(settings?.shortNoteMinLengthPx) || 0;
-  }, [noteSettings]);
+    frameLimitRef.current = Number(settings?.frameLimit) || 0;
+    // speed/trackHeight/frameLimit 실제 변경 시에만 기존 타이머를 새 수명 기준으로 재계산
+    const cleanupScalars = `${flowSpeedRef.current}/${trackHeightRef.current}/${frameLimitRef.current}`;
+    if (
+      prevCleanupScalarsRef.current !== cleanupScalars &&
+      cleanupTimerRef.current !== null
+    ) {
+      clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+      nextCleanupTimeRef.current = Infinity;
+      runCleanup();
+    }
+    prevCleanupScalarsRef.current = cleanupScalars;
+  }, [noteSettings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     noteEffectEnabled.current = !!noteEffect;

@@ -4,7 +4,11 @@ import type { OGLRenderingContext } from 'ogl';
 import { animationScheduler } from '@utils/animation/animationScheduler';
 import { resolvedFadeValues } from '@src/types/settings/noteSettings';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
-import { MAX_NOTES } from '@stores/signals/noteBuffer';
+import {
+  MAX_NOTES,
+  resolvedGlowSize,
+  type TrackLayoutInput,
+} from '@stores/signals/noteBuffer';
 import { isMac } from '@utils/core/platform';
 
 const vertexShader = `
@@ -99,7 +103,10 @@ const vertexShader = `
     noteTopY = max(noteTopY, trackTopY);
     noteBottomY = min(noteBottomY, trackBottomY);
 
-    if (noteBottomY <= trackTopY || noteBottomY < 0.0) {
+    // noteBottomY < noteTopY: 트랙을 벗어난 역방향 완료 노트 —
+    // 음수 길이 쿼드 래스터라이즈와 clamp(r, 0, 음수) undefined 방지
+    // strict less로 길이 0(스폰 프레임 글로우 퍼프)은 보존
+    if (noteBottomY <= trackTopY || noteBottomY < 0.0 || noteBottomY < noteTopY) {
       gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
       vColorTop = vec4(0.0);
       vColorBottom = vec4(0.0);
@@ -141,8 +148,8 @@ const vertexShader = `
 const fragmentShader = `
   precision highp float;
 
-  uniform float uScreenHeight;
-  uniform float uDpr;
+  uniform float uCanvasBottomDomY;
+  uniform float uDomPerPx;
   uniform float uFadeTopPx;
   uniform float uFadeBottomPx;
 
@@ -161,10 +168,10 @@ const fragmentShader = `
   varying float vTrackBottomY;
 
   void main() {
-    // gl_FragCoord는 고해상도 디스플레이(DPR > 1, 예: macOS Retina)에서 물리 픽셀 단위.
-    // DOM 기반 트랙 좌표와 일치하도록 CSS 픽셀로 변환.
-    // max(uDpr, 1.0)은 uDpr이 0.0 또는 잘못된 값일 때 방어.
-    float currentDOMY = uScreenHeight - (gl_FragCoord.y / max(uDpr, 1.0));
+    // gl_FragCoord는 crop된 캔버스 기준 물리 픽셀 단위
+    // uDomPerPx = cssHeight / drawingBufferHeight — 비정수 DPR의 backing 반올림 반영
+    // max()는 uniform 미설정/0 방어
+    float currentDOMY = uCanvasBottomDomY - gl_FragCoord.y * max(uDomPerPx, 0.0001);
     float trackHeight = max(vTrackBottomY - vTrackTopY, 0.0001);
     float gradientRatio = clamp((currentDOMY - vTrackTopY) / trackHeight, 0.0, 1.0);
     float trackRelativeY = gradientRatio;
@@ -349,6 +356,71 @@ const FRAME_PACING_EPSILON_MS = 0.3;
 const MAX_DRIFT_FRAMES = 8;
 const MACOS_DPR_CAP = 1;
 
+const resolveDpr = (): number => {
+  const rawDpr = window.devicePixelRatio || 1;
+  return isMac() ? Math.min(rawDpr, MACOS_DPR_CAP) : rawDpr;
+};
+
+// 캔버스 crop: 노트가 실제로 그려질 수 있는 트랙 union 영역 (DOM 좌표)
+interface CropRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+// crop 적용 상태 — windowH/dpr이 바뀌면 rect가 같아도 재적용 필요
+interface AppliedCrop {
+  rect: CropRect;
+  windowH: number;
+  dpr: number;
+}
+
+const CROP_AA_PAD = 2;
+
+const computeTrackBounds = (
+  tracks: TrackLayoutInput[],
+  trackHeight: number,
+): CropRect | null => {
+  if (tracks.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const track of tracks) {
+    const pad = resolvedGlowSize(track) + CROP_AA_PAD;
+    minX = Math.min(minX, track.position.dx - pad);
+    maxX = Math.max(maxX, track.position.dx + track.width + pad);
+    // 셰이더는 uTrackHeight 기준으로 노트를 클램프하므로 per-track height 대신 설정값 사용
+    minY = Math.min(minY, track.position.dy - trackHeight - pad);
+    maxY = Math.max(maxY, track.position.dy + pad);
+  }
+  // 뷰포트 교집합 + floor/ceil 반올림 (1px 클리핑·떨림 방지)
+  const x = Math.max(0, Math.floor(minX));
+  const y = Math.max(0, Math.floor(minY));
+  const right = Math.min(window.innerWidth, Math.ceil(maxX));
+  const bottom = Math.min(window.innerHeight, Math.ceil(maxY));
+  if (right <= x || bottom <= y) return null;
+  return { x, y, w: right - x, h: bottom - y };
+};
+
+const unionCropRect = (a: CropRect, b: CropRect): CropRect => {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return {
+    x,
+    y,
+    w: Math.max(a.x + a.w, b.x + b.w) - x,
+    h: Math.max(a.y + a.h, b.y + b.h) - y,
+  };
+};
+
+const cropRectEquals = (a: CropRect | null, b: CropRect | null): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+};
+
 interface FrameClock {
   nextFrameTime: number;
   stableTime: number;
@@ -383,7 +455,7 @@ interface NoteBuffer {
 }
 
 interface WebGLTracksOGLProps {
-  tracks: unknown;
+  tracks: TrackLayoutInput[];
   notesRef: unknown;
   subscribe: (callback: (event: NoteEvent) => void) => () => void;
   noteSettings: NoteSettings;
@@ -392,7 +464,7 @@ interface WebGLTracksOGLProps {
 }
 
 export function WebGLTracksOGL({
-  tracks: _tracks,
+  tracks,
   notesRef: _notesRef,
   subscribe,
   noteSettings,
@@ -416,6 +488,8 @@ export function WebGLTracksOGL({
     normalizeFrameLimit(noteSettings?.frameLimit),
   );
   const frameClockRef = useRef<FrameClock>({ nextFrameTime: 0, stableTime: 0 });
+  const cropAppliedRef = useRef<AppliedCrop | null>(null);
+  const refreshCropRef = useRef<() => void>(() => {});
   const subscribeRef = useRef(subscribe);
   useEffect(() => {
     subscribeRef.current = subscribe;
@@ -424,11 +498,6 @@ export function WebGLTracksOGL({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !noteBuffer) return;
-    const macOS = isMac();
-    const resolveDpr = (): number => {
-      const rawDpr = window.devicePixelRatio || 1;
-      return macOS ? Math.min(rawDpr, MACOS_DPR_CAP) : rawDpr;
-    };
     const initialDpr = resolveDpr();
 
     const renderer = new Renderer({
@@ -437,8 +506,9 @@ export function WebGLTracksOGL({
       antialias: false,
       dpr: initialDpr,
       premultipliedAlpha: true,
+      // 2D 노트는 depthTest/depthWrite 모두 안 씀 — depth attachment와 매 프레임 depth clear 제거
+      depth: false,
     });
-    renderer.setSize(window.innerWidth, window.innerHeight);
     rendererRef.current = renderer;
 
     const { gl } = renderer;
@@ -455,15 +525,7 @@ export function WebGLTracksOGL({
       near: 1,
       far: 1000,
     });
-    // OGL Camera.orthographic()는 `this.left || -1` 기본값 사용, `left/bottom = 0`일 때
-    // updateProjectionMatrix() 호출 시 `-1`로 잘못 설정될 수 있음.
-    // WebGL 좌표가 DOM 픽셀과 1:1 대응하도록 명시적 직교 투영 강제.
-    camera.orthographic({
-      left: 0,
-      right: window.innerWidth,
-      top: window.innerHeight,
-      bottom: 0,
-    });
+    // 실제 직교 경계는 crop 이펙트의 applyCrop이 네 경계값을 모두 명시해 설정
     camera.position.z = 5;
     cameraRef.current = camera;
 
@@ -547,7 +609,8 @@ export function WebGLTracksOGL({
         uTime: { value: 0 },
         uFlowSpeed: { value: noteSettings.speed || 180 },
         uScreenHeight: { value: window.innerHeight },
-        uDpr: { value: initialDpr },
+        uCanvasBottomDomY: { value: window.innerHeight },
+        uDomPerPx: { value: 1 },
         uTrackHeight: { value: noteSettings.trackHeight || 150 },
         uReverse: { value: noteSettings.reverse ? 1.0 : 0.0 },
         uFadeTopPx: { value: resolvedFadeValues(noteSettings).topPx },
@@ -561,6 +624,9 @@ export function WebGLTracksOGL({
     gl.blendEquation(gl.FUNC_ADD);
 
     const mesh = new Mesh(gl, { geometry, program });
+    // 노트 위치는 셰이더가 전적으로 결정 — 원점 쿼드 바운즈 기반 CPU 컬링은
+    // crop 카메라(원점 미포함)에서 메시 전체를 오컬링하므로 비활성화
+    mesh.frustumCulled = false;
     mesh.setParent(scene);
 
     const animate = (currentTime: number): void => {
@@ -711,10 +777,12 @@ export function WebGLTracksOGL({
             requestAnimationFrame(() => {
               if (!rendererRef.current) return;
               const { gl: context } = rendererRef.current;
-              context.clear(
-                context.COLOR_BUFFER_BIT | context.DEPTH_BUFFER_BIT,
-              );
+              context.clear(context.COLOR_BUFFER_BIT);
             });
+          }
+          if (noteBuffer.activeCount === 0) {
+            // 버퍼가 비면 유예했던 crop 축소를 반영
+            refreshCropRef.current();
           }
           break;
         default:
@@ -724,29 +792,12 @@ export function WebGLTracksOGL({
 
     const unsubscribe = subscribeRef.current(handleNoteEvent);
 
+    // 뷰포트/DPR 변경 시 crop 재계산 — applyCrop이 renderer/camera/uniform을 함께 갱신
     const handleResize = (): void => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      const dpr = resolveDpr();
-      // 서로 다른 DPR 모니터 간 이동 시 renderer/program 동기화 유지.
-      renderer.dpr = dpr;
-      renderer.setSize(width, height);
-      if (cameraRef.current) {
-        cameraRef.current.orthographic({
-          left: 0,
-          right: width,
-          top: height,
-          bottom: 0,
-        });
-      }
-      if (programRef.current) {
-        programRef.current.uniforms.uScreenHeight.value = height;
-        programRef.current.uniforms.uDpr.value = dpr;
-      }
+      refreshCropRef.current();
     };
 
     window.addEventListener('resize', handleResize);
-    handleResize();
 
     if (noteBuffer.activeCount > 0 && !isAnimating.current) {
       resetFrameClock(frameClockRef.current);
@@ -763,6 +814,7 @@ export function WebGLTracksOGL({
         animationScheduler.remove(animate);
       }
       resetFrameClock(frameClock);
+      cropAppliedRef.current = null;
       geometryRef.current?.remove();
       rendererRef.current?.gl
         ?.getExtension('WEBGL_lose_context')
@@ -788,6 +840,69 @@ export function WebGLTracksOGL({
     uniforms.uFadeBottomPx.value = fade.bottomPx;
   }, [noteSettings]);
 
+  // 트랙 union bounds로 캔버스 crop — backing 크기가 컴포지팅 비용을 결정하므로
+  // 창 전체 대신 노트가 그려질 수 있는 영역만 백버퍼로 유지
+  useEffect(() => {
+    const applyCrop = (rect: CropRect | null): void => {
+      const renderer = rendererRef.current;
+      const camera = cameraRef.current;
+      const program = programRef.current;
+      const canvas = canvasRef.current;
+      if (!renderer || !camera || !program || !canvas) return;
+      if (!rect) {
+        canvas.style.display = 'none';
+        cropAppliedRef.current = null;
+        return;
+      }
+      const dpr = resolveDpr();
+      const windowH = window.innerHeight;
+      canvas.style.display = '';
+      renderer.dpr = dpr;
+      renderer.setSize(rect.w, rect.h);
+      canvas.style.left = `${rect.x}px`;
+      canvas.style.top = `${rect.y}px`;
+      // OGL Camera.orthographic은 `this.left || -1` 폴백이 있어 경계값 0이 -1로
+      // 오염될 수 있음 — 네 경계값을 항상 명시적으로 전달
+      camera.orthographic({
+        left: rect.x,
+        right: rect.x + rect.w,
+        top: windowH - rect.y,
+        bottom: windowH - (rect.y + rect.h),
+      });
+      program.uniforms.uScreenHeight.value = windowH;
+      program.uniforms.uCanvasBottomDomY.value = rect.y + rect.h;
+      // 비정수 DPR에서 backing 반올림까지 반영한 정확 CSS px/물리 px 비율
+      program.uniforms.uDomPerPx.value =
+        rect.h / Math.max(renderer.gl.drawingBufferHeight, 1);
+      cropAppliedRef.current = { rect, windowH, dpr };
+    };
+
+    const refreshCrop = (): void => {
+      const trackHeight = noteSettings?.trackHeight || 150;
+      const desired = computeTrackBounds(tracks, trackHeight);
+      const applied = cropAppliedRef.current;
+      // 노트가 살아있는 동안엔 확장만 — 축소는 버퍼가 빌 때 반영 (기존 노트 클리핑 방지)
+      let next = desired;
+      if (noteBuffer && noteBuffer.activeCount > 0 && applied) {
+        next = desired ? unionCropRect(applied.rect, desired) : applied.rect;
+      }
+      const sameEnv =
+        applied != null &&
+        applied.windowH === window.innerHeight &&
+        applied.dpr === resolveDpr();
+      if (
+        cropRectEquals(next, applied?.rect ?? null) &&
+        (next == null || sameEnv)
+      ) {
+        return;
+      }
+      applyCrop(next);
+    };
+
+    refreshCropRef.current = refreshCrop;
+    refreshCrop();
+  }, [tracks, noteSettings, noteBuffer]);
+
   return (
     <canvas
       ref={canvasRef}
@@ -795,8 +910,6 @@ export function WebGLTracksOGL({
         position: 'absolute',
         top: 0,
         left: 0,
-        width: '100%',
-        height: '100%',
         pointerEvents: 'none',
       }}
     />
