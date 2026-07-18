@@ -9,6 +9,7 @@ import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useGradientPreviewSpec } from '@stores/grid/useGradientEditStore';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
@@ -111,10 +112,27 @@ const KnobItem = ({
     imageFit,
   } = position ?? ({} as Partial<KnobPosition>);
 
+  // 편집 세션 일시 페인트 — 저장·히스토리를 거치지 않는 드래그 프리뷰
+  const previewBgSpec = useGradientPreviewSpec(
+    'knob',
+    index,
+    'background',
+    isSelected,
+  );
+  const previewBorderSpec = useGradientPreviewSpec(
+    'knob',
+    index,
+    'border',
+    isSelected,
+  );
+  const effectiveBgGradient = previewBgSpec ?? backgroundGradient;
+  const effectiveBorderGradient = previewBorderSpec ?? borderGradient;
+
   // 키·그래프와 동일 규칙 — 두께 미지정이면 기본 두께 링, 0은 명시적 비활성
   const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
   const showBorderRing =
-    Boolean(borderGradient) && (borderWidth != null ? borderWidth > 0 : true);
+    Boolean(effectiveBorderGradient) &&
+    (borderWidth != null ? borderWidth > 0 : true);
 
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
@@ -275,12 +293,12 @@ const KnobItem = ({
           borderRadius: borderRadius != null ? `${borderRadius}px` : '50%',
           overflow: 'hidden',
           position: 'relative',
-          background: backgroundGradient
-            ? gradientToCss(backgroundGradient)
+          background: effectiveBgGradient
+            ? gradientToCss(effectiveBgGradient)
             : backgroundColor || DEFAULT_ELEMENT_BG,
           // 그라데이션 보더는 보더 대신 동일 두께 padding + 링 자식
           border:
-            !borderGradient && borderWidth && borderWidth > 0
+            !effectiveBorderGradient && borderWidth && borderWidth > 0
               ? `${borderWidth}px solid ${borderColor || DEFAULT_ELEMENT_FONT}`
               : undefined,
           padding: showBorderRing ? `${gradientRingWidth}px` : undefined,
@@ -292,10 +310,13 @@ const KnobItem = ({
           boxSizing: 'border-box',
         }}
       >
-        {showBorderRing && borderGradient && (
+        {showBorderRing && effectiveBorderGradient && (
           <span
             aria-hidden="true"
-            style={gradientRingStyle(borderGradient, gradientRingWidth)}
+            style={gradientRingStyle(
+              effectiveBorderGradient,
+              gradientRingWidth,
+            )}
           />
         )}
         {imageSrc ? (

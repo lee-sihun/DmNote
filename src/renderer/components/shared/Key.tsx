@@ -22,6 +22,7 @@ import {
   useBgFormatTransitionGate,
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
+import { useGradientPreviewSpec } from '@stores/grid/useGradientEditStore';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_FONT,
@@ -165,6 +166,30 @@ const DraggableKey = React.memo(
     const nodeRef = useRef<HTMLElement | null>(null);
     const effectiveElementId = elementId || `key-${index}`;
 
+    // 편집 세션 일시 페인트 — 드래그 프리뷰가 저장·히스토리를 거치지 않고
+    // 이 요소의 해당 표면만 세션 spec으로 그린다 (비대상은 항상 null)
+    const anchorKind = effectiveElementId.startsWith('stat-')
+      ? ('stat' as const)
+      : ('key' as const);
+    const previewBgSpec = useGradientPreviewSpec(
+      anchorKind,
+      index,
+      'background',
+      isSelected,
+    );
+    const previewBorderSpec = useGradientPreviewSpec(
+      anchorKind,
+      index,
+      'border',
+      isSelected,
+    );
+    const previewFillSpec = useGradientPreviewSpec(
+      anchorKind,
+      index,
+      'counterFill',
+      isSelected,
+    );
+
     const isSelectionMode = isSelected;
 
     const draggable = useDraggable({
@@ -277,9 +302,10 @@ const DraggableKey = React.memo(
     // 에디터는 대기 상태 고정 — 대기 쌍의 그라데이션만 반영
     const bgGradient = inactiveImageSrc
       ? null
-      : position.backgroundGradient ?? null;
+      : previewBgSpec ?? position.backgroundGradient ?? null;
     useBgFormatTransitionGate(nodeRef, Boolean(bgGradient));
-    const borderGradientSpec = position.borderGradient ?? null;
+    const borderGradientSpec =
+      previewBorderSpec ?? position.borderGradient ?? null;
 
     // 보더 판정 — 명시값 우선, 아무 값도 없으면 기본 1px 헤어라인(패널 표시값·
     // 오버레이·배치 고스트와 일치). 두께 0은 명시적 무보더, 이미지 키는 제외.
@@ -393,7 +419,11 @@ const DraggableKey = React.memo(
           labelText={labelText}
           textStyle={textStyle}
           active={false}
-          counterSettings={counterSettings}
+          counterSettings={
+            previewFillSpec
+              ? { ...counterSettings, fillIdleGradient: previewFillSpec }
+              : counterSettings
+          }
         />
       );
     };

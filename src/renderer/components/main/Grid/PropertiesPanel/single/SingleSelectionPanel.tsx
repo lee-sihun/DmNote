@@ -595,6 +595,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     })
                   }
                   colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
+                  gradientSurface="border"
                   panelElement={panelElement}
                 />
               </PropertyRow>
@@ -1022,6 +1023,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     canvasAnchor: pickerFor
       ? { kind: 'knob', index: singleKnobIndex }
       : undefined,
+    canvasSurface: pickerFor === 'borderColor' ? 'border' : 'background',
     onPreview: (value) => {
       if (value.mode === 'solid' && pickerFor) {
         handleColorChange(pickerFor, value.color);

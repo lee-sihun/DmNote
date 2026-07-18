@@ -5,6 +5,7 @@ import {
 } from '@hooks/overlay/useCounterSettings';
 import { toCssRgba } from '@utils/color/colorUtils';
 import { gradientToCss } from '@src/types/color';
+import { useGradientPreviewSpec } from '@stores/grid/useGradientEditStore';
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 
 interface CounterPosition {
@@ -18,6 +19,7 @@ interface CounterPosition {
 
 interface KeyCounterPreviewProps {
   position: CounterPosition;
+  index: number;
   previewValue?: number;
 }
 
@@ -28,6 +30,7 @@ interface KeyCounterPreviewLayerProps {
 
 const KeyCounterPreview = ({
   position,
+  index,
   previewValue = 0,
 }: KeyCounterPreviewProps) => {
   const dx = Number.isFinite(position?.dx) ? position.dx! : 0;
@@ -36,6 +39,8 @@ const KeyCounterPreview = ({
   const height = Number.isFinite(position?.height) ? position.height! : 60;
 
   const counterSettings = useCounterSettings(position?.counter);
+  // 편집 세션 일시 페인트 — counter fill 드래그 프리뷰
+  const previewFillSpec = useGradientPreviewSpec('key', index, 'counterFill');
 
   // 개별 키의 카운터가 비활성화되었거나 outside가 아니면 렌더링하지 않음
   if (!counterSettings.enabled || counterSettings.placement !== 'outside') {
@@ -53,6 +58,8 @@ const KeyCounterPreview = ({
 
   const fillColor = counterSettings.fill.idle;
   const strokeColor = counterSettings.stroke.idle;
+  const fillIdleGradient =
+    previewFillSpec ?? counterSettings.fillIdleGradient ?? null;
 
   const fill = toCssRgba(fillColor, '#FFFFFF');
   const stroke = toCssRgba(strokeColor, 'transparent');
@@ -86,11 +93,9 @@ const KeyCounterPreview = ({
             '--counter-stroke-color-default': stroke.css,
             '--counter-stroke-width-default': strokeWidth,
             // fill 그라데이션 — 글자 모양으로 클립 (CountDisplay와 동일)
-            ...(counterSettings.fillIdleGradient
+            ...(fillIdleGradient
               ? {
-                  backgroundImage: gradientToCss(
-                    counterSettings.fillIdleGradient,
-                  ),
+                  backgroundImage: gradientToCss(fillIdleGradient),
                   WebkitBackgroundClip: 'text',
                   backgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
@@ -125,6 +130,7 @@ const KeyCounterPreviewLayer = ({
           <KeyCounterPreview
             key={`counter-preview-${index}`}
             position={position}
+            index={index}
             previewValue={previewValue}
           />
         );

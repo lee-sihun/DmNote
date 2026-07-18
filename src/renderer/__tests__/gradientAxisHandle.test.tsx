@@ -67,6 +67,8 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     act(() => {
       useGradientEditStore.getState().setSession({
         anchor: { kind: 'key', index: 0 },
+        sessionKey: 'key:4key:0:backgroundColor:idle',
+        surface: 'background',
         spec: SPEC,
         selectedIndex: 0,
         selectStop,
@@ -246,5 +248,162 @@ describe('GradientAxisOverlay 드래그 로직', () => {
       expect.objectContaining({ angle: 91 }),
       true,
     );
+  });
+
+  it('축을 클릭하면 슬라이더가 포커스를 받는다', () => {
+    act(() => {
+      strip().dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 7,
+          clientX: 260,
+          clientY: 150,
+        }),
+      );
+    });
+    expect(document.activeElement).toBe(strip());
+    act(() => {
+      window.dispatchEvent(
+        pointerEvent('pointerup', { pointerId: 7, clientX: 260, clientY: 150 }),
+      );
+    });
+  });
+
+  it('드래그 도중 세션이 다른 상태로 교체되면 새 세션에 커밋하지 않는다', () => {
+    act(() => {
+      strip().dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 5,
+          clientX: 260,
+          clientY: 150,
+        }),
+      );
+    });
+
+    // 같은 요소의 입력(active) 상태 세션으로 교체 — 대기/입력 탭 전환 시나리오
+    const activeApply = vi.fn<(spec: GradientSpec, commit: boolean) => void>();
+    act(() => {
+      useGradientEditStore.getState().setSession({
+        anchor: { kind: 'key', index: 0 },
+        sessionKey: 'key:4key:0:backgroundColor:active',
+        surface: 'background',
+        spec: SPEC,
+        selectedIndex: 0,
+        selectStop,
+        apply: activeApply,
+      });
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 5,
+          clientX: 260,
+          clientY: 90,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointerup', { pointerId: 5, clientX: 260, clientY: 90 }),
+      );
+    });
+    // 새 세션에는 프리뷰도 커밋도 가지 않는다
+    expect(activeApply).not.toHaveBeenCalled();
+  });
+
+  it('포인터 이벤트 사이에 세션이 A→B→새 A로 왕복해도 커밋하지 않는다', () => {
+    act(() => {
+      strip().dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 6,
+          clientX: 260,
+          clientY: 150,
+        }),
+      );
+    });
+
+    // 포인터 이벤트 없이 B(입력 상태) 경유 후 같은 key의 새 A 세션으로 복귀
+    const newIdleApply = vi.fn<(spec: GradientSpec, commit: boolean) => void>();
+    act(() => {
+      useGradientEditStore.getState().setSession({
+        anchor: { kind: 'key', index: 0 },
+        sessionKey: 'key:4key:0:backgroundColor:active',
+        surface: 'background',
+        spec: SPEC,
+        selectedIndex: 0,
+        selectStop,
+        apply: vi.fn(),
+      });
+      useGradientEditStore.getState().setSession({
+        anchor: { kind: 'key', index: 0 },
+        sessionKey: 'key:4key:0:backgroundColor:idle',
+        surface: 'background',
+        spec: SPEC,
+        selectedIndex: 0,
+        selectStop,
+        apply: newIdleApply,
+      });
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 6,
+          clientX: 260,
+          clientY: 90,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointerup', { pointerId: 6, clientX: 260, clientY: 90 }),
+      );
+    });
+    // 세대 불일치로 드래그가 중단돼야 한다 — 원 세션·새 세션 모두 무커밋
+    expect(newIdleApply).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('A→B→새 A 왕복 후 pointercancel도 새 세션에 stale 롤백을 보내지 않는다', () => {
+    act(() => {
+      strip().dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 8,
+          clientX: 260,
+          clientY: 150,
+        }),
+      );
+    });
+
+    const newIdleApply = vi.fn<(spec: GradientSpec, commit: boolean) => void>();
+    act(() => {
+      useGradientEditStore.getState().setSession({
+        anchor: { kind: 'key', index: 0 },
+        sessionKey: 'key:4key:0:backgroundColor:active',
+        surface: 'background',
+        spec: SPEC,
+        selectedIndex: 0,
+        selectStop,
+        apply: vi.fn(),
+      });
+      useGradientEditStore.getState().setSession({
+        anchor: { kind: 'key', index: 0 },
+        sessionKey: 'key:4key:0:backgroundColor:idle',
+        surface: 'background',
+        spec: SPEC,
+        selectedIndex: 0,
+        selectStop,
+        apply: newIdleApply,
+      });
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        pointerEvent('pointercancel', {
+          pointerId: 8,
+          clientX: 260,
+          clientY: 150,
+        }),
+      );
+    });
+    // 취소 경로도 세대 검사 — 교체된 세션에 startSpec 복원 preview 미전달
+    expect(newIdleApply).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
   });
 });

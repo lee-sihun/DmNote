@@ -217,6 +217,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       pickerFor === 'fill'
         ? { kind: isStat ? 'stat' : 'key', index: keyIndex }
         : undefined,
+    canvasSurface: 'counterFill',
     onPreview: (value) => {
       if (value.mode === 'solid') handleColorChange(value.color);
     },

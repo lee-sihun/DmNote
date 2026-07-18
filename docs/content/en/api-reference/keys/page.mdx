@@ -152,6 +152,34 @@ const positions = await dmn.keys.getPositions();
 console.log(positions['4key']);
 ```
 
+Style-related fields on each `KeyPosition` include solid colors and optional
+gradient siblings:
+
+```typescript
+interface KeyPosition {
+  // ...position, image, note, and counter fields...
+  backgroundColor?: string;
+  activeBackgroundColor?: string;
+  borderColor?: string;
+  activeBorderColor?: string;
+  borderWidth?: number; // px, defaults to 1 when unset — 0 disables the border
+  backgroundGradient?: GradientSpec | null;
+  activeBackgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
+  activeBorderGradient?: GradientSpec | null;
+}
+
+interface GradientSpec {
+  angle: number; // 0 (inclusive) to 360 (exclusive) — 360 normalizes to 0; CSS semantics (0 = up, clockwise)
+  stops: { color: string; pos: number }[]; // 2–8 stops, pos 0–1 ascending
+}
+```
+
+When a gradient field is present it takes priority over the matching solid
+field, and the solid field is kept in sync with the first stop color on save.
+To return to a solid color, set the gradient field to `null` and update the
+solid field.
+
 ### `dmn.keys.updatePositions(positions: KeyPositions): Promise<KeyPositions>`
 
 Replaces the key positions and returns the committed value.

@@ -1,5 +1,36 @@
 // jsdom에 없는 API stub
 
+// Node 26의 실험 localStorage 글로벌(--localstorage-file 미지정 시 undefined)이
+// jsdom 것을 가리므로, 동작하는 구현이 없으면 메모리 shim으로 대체한다
+const hasWorkingLocalStorage = (() => {
+  try {
+    return typeof globalThis.localStorage?.getItem === 'function';
+  } catch {
+    return false;
+  }
+})();
+if (!hasWorkingLocalStorage) {
+  const store = new Map<string, string>();
+  const shim: Storage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      store.set(key, String(value));
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    clear: () => store.clear(),
+    key: (index) => [...store.keys()][index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: shim,
+    configurable: true,
+  });
+}
+
 if (!window.PointerEvent) {
   class PointerEventPolyfill extends MouseEvent {
     readonly pointerId: number;

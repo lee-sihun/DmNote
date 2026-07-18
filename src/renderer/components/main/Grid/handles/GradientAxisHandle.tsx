@@ -61,7 +61,7 @@ type DragState =
       type: 'rotate';
       pointerId: number;
       end: AxisEnd;
-      ownerKey: string;
+      ownerGeneration: number;
       startSpec: GradientSpec;
       moved: boolean;
       /** 이동 없이 떼면 그 자리에 스톱 추가 — 축 히트 스트립 한정 */
@@ -74,7 +74,7 @@ type DragState =
       pointerId: number;
       index: number;
       moved: boolean;
-      ownerKey: string;
+      ownerGeneration: number;
       startSpec: GradientSpec;
       lastPos: number;
       downX: number;
@@ -104,9 +104,6 @@ const buildMagnetAngles = (width: number, height: number): number[] => {
     normalizeAngle(360 - corner),
   ];
 };
-
-const anchorKeyOf = (anchor: { kind: string; index?: number }): string =>
-  `${anchor.kind}:${anchor.index ?? ''}`;
 
 const stopAll = (e: React.SyntheticEvent) => {
   e.preventDefault();
@@ -329,12 +326,16 @@ const GradientAxisOverlay = ({
     live.apply(next, true);
   };
 
-  // 드래그 소유 세션 검증 — 세션이 사라지거나 다른 대상으로 바뀌면 중단
+  // 드래그 소유 세션 검증 — 세션이 사라지거나 한 번이라도 교체되면 중단.
+  // 세대 비교라 포인터 이벤트 사이의 A→B→새 A 왕복도 잡는다
   const ownedDrag = (e: PointerEvent): DragState | null => {
     const drag = dragRef.current;
     if (!drag || e.pointerId !== drag.pointerId) return null;
     const live = sessionRef.current;
-    if (!live || drag.ownerKey !== anchorKeyOf(live.anchor)) {
+    if (
+      !live ||
+      drag.ownerGeneration !== useGradientEditStore.getState().generation
+    ) {
       detachRef.current?.();
       setDragAngle(null);
       setDragStop(null);
@@ -423,7 +424,12 @@ const GradientAxisOverlay = ({
     setDragAngle(null);
     setDragStop(null);
     const live = sessionRef.current;
-    if (live && drag.ownerKey === anchorKeyOf(live.anchor)) {
+    // 세대가 드래그 시작 시점 그대로일 때만 복원 — 포인터 이벤트 없이
+    // A→B→새 A로 교체된 세션에 stale 롤백이 새지 않게
+    if (
+      live &&
+      drag.ownerGeneration === useGradientEditStore.getState().generation
+    ) {
       live.apply(drag.startSpec, false);
     }
   };
@@ -477,7 +483,7 @@ const GradientAxisOverlay = ({
       type: 'rotate',
       pointerId: e.pointerId,
       end,
-      ownerKey: anchorKeyOf(session.anchor),
+      ownerGeneration: useGradientEditStore.getState().generation,
       startSpec: session.spec,
       moved: false,
       addOnClick,
@@ -489,6 +495,11 @@ const GradientAxisOverlay = ({
 
   // 축 히트 스트립 — 잡은 지점이 축의 어느 절반인지로 회전 기준 방향 결정
   const beginStripPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    // preventDefault가 기본 포커스 이동을 막으므로 명시 부여 — 화살표 각도 조절이
+    // 그리드 키 이동으로 새지 않게 슬라이더가 포커스를 가져간다
+    if (e.button === 0) {
+      e.currentTarget.focus({ preventScroll: true });
+    }
     const origin = clientOrigin();
     const geo = geoRef.current;
     const along =
@@ -512,7 +523,7 @@ const GradientAxisOverlay = ({
         pointerId: e.pointerId,
         index,
         moved: false,
-        ownerKey: anchorKeyOf(session.anchor),
+        ownerGeneration: useGradientEditStore.getState().generation,
         startSpec: session.spec,
         lastPos: session.spec.stops[index]?.pos ?? 0.5,
         downX: e.clientX,

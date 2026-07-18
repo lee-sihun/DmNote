@@ -4,6 +4,7 @@
  */
 
 import {
+  canonicalGradientOrNull,
   toCanonicalGradient,
   type GradientSpec,
   type GradientStop,
@@ -46,13 +47,42 @@ const STORAGE_KEYS: Record<PaletteType, string> = {
 
 const MAX_PALETTE_SIZE = 7;
 
+// 로드 경계 파서 — localStorage는 외부 입력이므로 항목 단위로 검증하고,
+// spec 항목은 canonical로 고쳐서 반환 (손상 항목은 개별 제거)
+const parsePaletteEntry = (
+  type: PaletteType,
+  entry: unknown,
+): PaletteColor | null => {
+  if (type === 'solid') {
+    return typeof entry === 'string' && entry.length > 0 ? entry : null;
+  }
+  if (!entry || typeof entry !== 'object') return null;
+  const record = entry as Record<string, unknown>;
+  if (
+    record.type === 'gradient' &&
+    typeof record.top === 'string' &&
+    typeof record.bottom === 'string'
+  ) {
+    return { type: 'gradient', top: record.top, bottom: record.bottom };
+  }
+  if (record.type === 'gradient-spec') {
+    const canonical = canonicalGradientOrNull(record);
+    return canonical ? { type: 'gradient-spec', ...canonical } : null;
+  }
+  return null;
+};
+
 export const loadPalette = (type: PaletteType): PaletteColor[] => {
   try {
     const key = STORAGE_KEYS[type];
     const stored = localStorage.getItem(key);
     if (!stored) return [];
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => parsePaletteEntry(type, entry))
+      .filter((entry): entry is PaletteColor => entry !== null)
+      .slice(0, MAX_PALETTE_SIZE);
   } catch {
     return [];
   }

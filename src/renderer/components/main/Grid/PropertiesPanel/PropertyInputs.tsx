@@ -630,6 +630,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   activeGradientValue,
   onModeCommit,
   canvasAnchor,
+  gradientSurface = 'background',
 }) => {
   // 외부 제어 모드인지 확인
   const isControlled =
@@ -748,6 +749,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     fallbackColor: '#ffffff',
     contextKey: `${_stableId}:${stateMode}`,
     canvasAnchor: open ? canvasAnchor : undefined,
+    canvasSurface: gradientSurface,
     onPreview: (modeValue) => {
       if (modeValue.mode === 'solid') handleColorChange(modeValue.color);
     },

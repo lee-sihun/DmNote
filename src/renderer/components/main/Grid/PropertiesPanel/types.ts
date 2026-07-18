@@ -1,6 +1,9 @@
 import type { KeyPosition } from '@src/types/key/keys';
 import type { ColorModeValue, GradientSpec } from '@src/types/color';
-import type { GradientCanvasAnchor } from '@stores/grid/useGradientEditStore';
+import type {
+  GradientCanvasAnchor,
+  GradientPreviewSurface,
+} from '@stores/grid/useGradientEditStore';
 
 // ============================================================================
 // 탭 상수
@@ -94,6 +97,8 @@ export interface ColorInputProps {
   onModeCommit?: (state: 'idle' | 'active', value: ColorModeValue) => void;
   /** 온캔버스 각도 핸들 앵커 */
   canvasAnchor?: GradientCanvasAnchor;
+  /** 편집 표면 — 캔버스 일시 페인트 대상 필드 (기본 background) */
+  gradientSurface?: GradientPreviewSurface;
 }
 
 export interface ToggleSwitchProps {

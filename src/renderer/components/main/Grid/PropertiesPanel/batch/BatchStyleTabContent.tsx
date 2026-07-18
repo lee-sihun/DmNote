@@ -626,6 +626,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           ) : null}
           <ColorInput
             colorId="batch-border"
+            gradientSurface="border"
             value={
               getMixedValue((pos) => pos.borderColor, DEFAULT_ELEMENT_BORDER)
                 .value

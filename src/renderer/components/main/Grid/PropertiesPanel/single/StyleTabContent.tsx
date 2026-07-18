@@ -384,6 +384,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       canvasAnchor?.kind ?? 'key'
     }:${selectedKeyType}:${keyIndex}:${pickerFor ?? 'none'}:${colorState}`,
     canvasAnchor: gradientTarget ? canvasAnchor : undefined,
+    canvasSurface: gradientTarget === 'borderColor' ? 'border' : 'background',
     onPreview: handleGradientPreview,
     onCommit: handleGradientCommit,
   });

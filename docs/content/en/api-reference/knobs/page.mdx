@@ -54,7 +54,9 @@ Commonly used inherited styling fields:
 
 - `backgroundColor` / `activeBackgroundColor` — idle / turning fill color
 - `borderColor` / `activeBorderColor` — idle / turning border color
-- `borderWidth` — border thickness in px (default 3)
+- `borderWidth` — border thickness in px (defaults to 1, 0 disables the border)
+- `backgroundGradient` / `activeBackgroundGradient` — background gradient (GradientSpec, takes priority over the solid color)
+- `borderGradient` / `activeBorderGradient` — border gradient (GradientSpec)
 - `borderRadius` — corner radius in px; when unset the knob is a circle
 - `inactiveImage` / `activeImage` — idle / turning custom image
 - `idleTransparent` / `activeTransparent` — transparent background toggles

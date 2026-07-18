@@ -14,6 +14,7 @@ import {
 import {
   useGradientEditStore,
   type GradientCanvasAnchor,
+  type GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
 
 interface UseGradientColorStateOptions {
@@ -24,6 +25,8 @@ interface UseGradientColorStateOptions {
   contextKey?: string;
   /** 온캔버스 각도 핸들 앵커 — 지정 시 그라데이션 편집 중 그리드에 축 표시 */
   canvasAnchor?: GradientCanvasAnchor;
+  /** 편집 표면 — 캔버스 일시 페인트가 덮을 필드 (기본 background) */
+  canvasSurface?: GradientPreviewSurface;
   /** 미리보기(드래그 중) — 상위 프리뷰 경로로 전달 */
   onPreview?: (value: ColorModeValue) => void;
   /** 확정 커밋 — atomic patch 산출은 호출부가 gradientPairPatch/counterFillPair로 */
@@ -61,6 +64,7 @@ export function useGradientColorState({
   fallbackColor,
   contextKey,
   canvasAnchor,
+  canvasSurface = 'background',
   onPreview,
   onCommit,
 }: UseGradientColorStateOptions) {
@@ -162,6 +166,9 @@ export function useGradientColorState({
     }
     const session = {
       anchor: canvasAnchor,
+      // contextKey가 요소·필드·상태를 모두 담는 편집 식별자 — 없으면 앵커로 폴백
+      sessionKey: contextKey ?? anchorKey ?? '',
+      surface: canvasSurface,
       spec: workingSpec,
       selectedIndex: selectedStop,
       selectStop: setSelectedStop,
