@@ -15,6 +15,7 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 | ------------------ | ------------------------ | ---------- | ------------------------ |
 | `--key-radius`     | 키 모서리의 둥근 정도    | `<length>` | `8px`, `50%`             |
 | `--key-bg`         | 키의 배경색              | `<color>`  | `#ff2b80`                |
+| `--key-bg-image`   | 키의 배경 이미지(그라데이션) | `<image>` | `linear-gradient(90deg, #f0f, #0ff)` |
 | `--key-border`     | 키의 테두리 스타일       | `<border>` | `2px solid #fff`, `none` |
 | `--key-text-color` | 키 텍스트 색상           | `<color>`  | `#ffffff`                |
 | `--key-offset-x`   | 활성 상태에서 X축 이동량 | `<length>` | `0px`, `2px`             |
@@ -23,7 +24,9 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 <Callout type="info">
   `--key-bg`는 `background-color`로 적용됩니다. 그라데이션을 사용하려면
   `background` 또는 `background-image`를 직접 지정하고, 필요하면 `--key-bg:
-  transparent;`로 설정하세요.
+  transparent;`로 설정하세요. 앱에서 키 색상을 그라데이션으로 설정한 경우에는
+  `background-image: var(--key-bg-image, ...)`로 렌더되므로 `--key-bg-image`로
+  덮어쓸 수 있습니다 (단색 키에는 인라인 `background-image`가 붙지 않습니다).
 </Callout>
 
 ### 사용 예시

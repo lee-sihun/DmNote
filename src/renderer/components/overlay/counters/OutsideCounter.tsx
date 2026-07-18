@@ -52,6 +52,9 @@ const OutsideCounter = ({
   const fillColor = active
     ? counterSettings.fill.active
     : counterSettings.fill.idle;
+  const fillGradient = active
+    ? counterSettings.fillActiveGradient
+    : counterSettings.fillIdleGradient;
   const strokeColor = active
     ? counterSettings.stroke.active
     : counterSettings.stroke.idle;
@@ -61,6 +64,7 @@ const OutsideCounter = ({
       <CountDisplay
         count={count}
         fillColor={fillColor}
+        fillGradient={fillGradient}
         strokeColor={strokeColor}
         globalKey={globalKey}
         active={active}

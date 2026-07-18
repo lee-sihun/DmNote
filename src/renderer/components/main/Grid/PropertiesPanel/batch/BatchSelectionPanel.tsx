@@ -10,6 +10,7 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { ColorModeValue } from '@src/types/color';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
@@ -132,6 +133,11 @@ interface BatchKeyLikePanelProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchGradientCommit?: (
+    target: 'backgroundColor' | 'borderColor',
+    state: 'idle' | 'active',
+    value: ColorModeValue,
+  ) => void;
   handleKeyOnlyStyleChangeComplete: (
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
@@ -221,6 +227,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchGradientCommit,
   handleKeyOnlyStyleChangeComplete,
   handleBatchCounterUpdate,
   handleGraphBatchSharedSetting,
@@ -769,6 +776,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 handleBatchResize={handleBatchResize}
                 handleBatchStyleChange={handleBatchStyleChange}
                 handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+                handleBatchGradientCommit={handleBatchGradientCommit}
                 getKeyOnlyMixedValue={getMixedValueKeysOnly}
                 handleKeyOnlyStyleChangeComplete={
                   handleKeyOnlyStyleChangeComplete
@@ -1011,6 +1019,11 @@ interface BatchGraphOnlyPanelProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchGradientCommit?: (
+    target: 'backgroundColor' | 'borderColor',
+    state: 'idle' | 'active',
+    value: ColorModeValue,
+  ) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
@@ -1046,6 +1059,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchGradientCommit,
   handleGraphBatchSharedSetting,
   getMixedValueGraphs,
   getMixedValueGraphsAsKey,
@@ -1277,6 +1291,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               handleBatchResize={handleBatchResize}
               handleBatchStyleChange={handleBatchStyleChange}
               handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+              handleBatchGradientCommit={handleBatchGradientCommit}
               showBatchImagePicker={showBatchImagePicker}
               onToggleBatchImagePicker={() =>
                 setShowBatchImagePicker(!showBatchImagePicker)
@@ -1372,6 +1387,11 @@ interface BatchKnobOnlyPanelProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchGradientCommit?: (
+    target: 'backgroundColor' | 'borderColor',
+    state: 'idle' | 'active',
+    value: ColorModeValue,
+  ) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
@@ -1407,6 +1427,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchGradientCommit,
   handleKnobBatchSharedSetting,
   getMixedValueKnobs,
   getMixedValueKnobsAsKey,
@@ -1557,6 +1578,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               handleBatchResize={handleBatchResize}
               handleBatchStyleChange={handleBatchStyleChange}
               handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+              handleBatchGradientCommit={handleBatchGradientCommit}
               showBatchImagePicker={showBatchImagePicker}
               onToggleBatchImagePicker={() =>
                 setShowBatchImagePicker(!showBatchImagePicker)

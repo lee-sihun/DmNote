@@ -19,15 +19,18 @@ import { resolveImageSource } from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import {
   computeKeyElementStyles,
+  useBgFormatTransitionGate,
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_FONT_WEIGHT,
 } from '@utils/core/elementDefaults';
+import { gradientToCss, gradientRingStyle } from '@src/types/color';
 import InsideCounterLayout from '@components/overlay/counters/InsideCounterLayout';
 
 // DraggableKey에서 counter가 KeyCounterSettings 타입인 확장 position
@@ -271,26 +274,47 @@ const DraggableKey = React.memo(
     const shouldPromoteTransformLayer =
       isDraggingOrResizing || isViewportTransforming;
 
+    // 에디터는 대기 상태 고정 — 대기 쌍의 그라데이션만 반영
+    const bgGradient = inactiveImageSrc
+      ? null
+      : position.backgroundGradient ?? null;
+    useBgFormatTransitionGate(nodeRef, Boolean(bgGradient));
+    const borderGradientSpec = position.borderGradient ?? null;
+
     // 명시 보더가 있을 때만 렌더 — 기본은 보더 없음(인셋 링 섀도가 담당)
     // 에디터는 항상 대기 상태 — 오버레이의 상태별 판정과 동일하게 idle 색만 본다
     const hasExplicitBorder =
       borderWidth != null ? borderWidth > 0 : borderColor != null;
-    const explicitBorder = `${borderWidth ?? 3}px solid ${
-      borderColor || DEFAULT_ELEMENT_BORDER
-    }`;
+    const explicitBorder = `${
+      borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH
+    }px solid ${borderColor || DEFAULT_ELEMENT_BORDER}`;
+    // 그라데이션 보더는 명시 보더와 같은 두께 규칙 — width 0은 명시적 비활성
+    const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
+    const showBorderRing =
+      borderGradientSpec != null &&
+      (borderWidth != null ? borderWidth > 0 : true);
 
     const keyStyle = {
       width: `${width}px`,
       height: `${height}px`,
       transform: `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`,
-      backgroundColor:
-        useInline && backgroundColor
-          ? backgroundColor
-          : `var(--key-bg, ${
-              inactiveImageSrc
-                ? 'transparent'
-                : backgroundColor || DEFAULT_ELEMENT_BG
-            })`,
+      // 그라데이션 키의 base는 무조건 transparent — 테마 --key-bg 이중 합성 방지
+      backgroundColor: bgGradient
+        ? 'transparent'
+        : useInline && backgroundColor
+        ? backgroundColor
+        : `var(--key-bg, ${
+            inactiveImageSrc
+              ? 'transparent'
+              : backgroundColor || DEFAULT_ELEMENT_BG
+          })`,
+      ...(bgGradient
+        ? {
+            backgroundImage: useInline
+              ? gradientToCss(bgGradient)
+              : `var(--key-bg-image, ${gradientToCss(bgGradient)})`,
+          }
+        : {}),
       borderRadius:
         useInline && borderRadius != null
           ? `${borderRadius}px`
@@ -299,11 +323,17 @@ const DraggableKey = React.memo(
                 ? `${borderRadius}px`
                 : `${DEFAULT_ELEMENT_RADIUS}px`
             })`,
-      border: useInline
+      // 그라데이션 보더는 보더 대신 동일 두께 padding — overflow:hidden이
+      // 패딩 박스에서 클리핑되므로 링 자식이 가장자리에 정확히 그려짐.
+      // 테마 --key-border를 소비하지 않음 (실보더 + 링 padding 이중 소비 방지)
+      border: showBorderRing
+        ? 'none'
+        : useInline
         ? hasExplicitBorder
           ? explicitBorder
           : 'none'
         : `var(--key-border, ${hasExplicitBorder ? explicitBorder : 'none'})`,
+      ...(showBorderRing ? { padding: `${gradientRingWidth}px` } : {}),
       overflow: 'hidden' as const,
       willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
       contain: 'layout style paint',
@@ -392,6 +422,12 @@ const DraggableKey = React.memo(
         onContextMenu={handleContextMenu}
         onDragStart={(e) => e.preventDefault()}
       >
+        {showBorderRing && borderGradientSpec && (
+          <span
+            aria-hidden="true"
+            style={gradientRingStyle(borderGradientSpec, gradientRingWidth)}
+          />
+        )}
         {inactiveImageSrc ? (
           <img
             src={inactiveImageSrc}
@@ -429,6 +465,7 @@ export const Key = React.memo(function Key({
 
   const {
     keyStyle,
+    borderRingStyle,
     imageStyle,
     textStyle,
     inactiveImageSrc,
@@ -443,6 +480,9 @@ export const Key = React.memo(function Key({
     warmupImageSource(inactiveImageSrc);
     warmupImageSource(activeImageSrc);
   }, [inactiveImageSrc, activeImageSrc]);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  useBgFormatTransitionGate(rootRef, keyStyle.backgroundImage != null);
 
   if (isTransparent) return null;
 
@@ -461,12 +501,14 @@ export const Key = React.memo(function Key({
 
   return (
     <div
+      ref={rootRef}
       className={`absolute ${position.className || ''}`}
       style={keyStyle}
       data-state={active ? 'active' : 'inactive'}
       data-key-element="true"
       data-key-image={hasCurrentImage ? 'true' : undefined}
     >
+      {borderRingStyle && <span aria-hidden="true" style={borderRingStyle} />}
       {hasCurrentImage ? (
         <img
           src={currentImageSrc || ''}

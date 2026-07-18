@@ -320,9 +320,12 @@ export function useUnifiedKeySettingState({
     createInitialNoteState(keyData),
   );
 
-  // 카운터 탭 상태
-  const _resolvedCounterSettings = normalizeCounterSettings(
-    initialCounterSettings ?? createDefaultCounterSettings(),
+  // 카운터 탭 상태 — 비교·병합 기준은 마운트 시점 원본으로 고정
+  // (프리뷰가 부모 position을 갱신해 initialCounterSettings가 오염되므로)
+  const [resolvedCounterSettings] = useState(() =>
+    normalizeCounterSettings(
+      initialCounterSettings ?? createDefaultCounterSettings(),
+    ),
   );
 
   const [counterState, setCounterState] = useState<CounterTabState>(() =>
@@ -445,8 +448,9 @@ export function useUnifiedKeySettingState({
       noteGlowOpacity: noteState.glowOpacity,
       noteGlowColor: glowColorValue,
       noteAutoYCorrection: noteState.autoYCorrection,
-      // 카운터 데이터
+      // 카운터 데이터 — 이 다이얼로그가 편집하지 않는 필드(폰트·애니메이션·gradient)는 원본 유지
       counter: normalizeCounterSettings({
+        ...resolvedCounterSettings,
         enabled: counterState.counterEnabled,
         placement: counterState.placement,
         align: counterState.align,
@@ -460,6 +464,15 @@ export function useUnifiedKeySettingState({
           idle: counterState.strokeIdle,
           active: counterState.strokeActive,
         },
+        // fill 피커가 단색 전용이므로 색을 바꿨다면 단색 선택으로 보고 gradient 해제
+        fillIdleGradient:
+          counterState.fillIdle === resolvedCounterSettings.fill.idle
+            ? resolvedCounterSettings.fillIdleGradient ?? null
+            : null,
+        fillActiveGradient:
+          counterState.fillActive === resolvedCounterSettings.fill.active
+            ? resolvedCounterSettings.fillActiveGradient ?? null
+            : null,
       }),
     });
   };

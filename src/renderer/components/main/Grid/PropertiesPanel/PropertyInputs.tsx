@@ -19,6 +19,8 @@ import {
 } from '@utils/cardRecipes';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import { gradientToCss } from '@src/types/color';
 
 // ============================================================================
 // 속성 행
@@ -624,6 +626,10 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   panelElement,
   isOpen: externalIsOpen,
   onToggle: externalOnToggle,
+  gradientValue,
+  activeGradientValue,
+  onModeCommit,
+  canvasAnchor,
 }) => {
   // 외부 제어 모드인지 확인
   const isControlled =
@@ -722,6 +728,40 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     return '#ffffff';
   };
 
+  // ── gradient 배선 — onModeCommit이 주어진 경우에만 활성화 ──
+  const supportsGradient = onModeCommit !== undefined;
+  const storedGradient =
+    stateMode === 'active'
+      ? activeGradientValue ?? null
+      : gradientValue ?? null;
+
+  const gradientState = useGradientColorState({
+    pair: supportsGradient
+      ? {
+          color:
+            showStateTabs && stateMode === 'active'
+              ? localActiveColor
+              : localColor,
+          gradient: storedGradient,
+        }
+      : {},
+    fallbackColor: '#ffffff',
+    contextKey: `${_stableId}:${stateMode}`,
+    canvasAnchor: open ? canvasAnchor : undefined,
+    onPreview: (modeValue) => {
+      if (modeValue.mode === 'solid') handleColorChange(modeValue.color);
+    },
+    onCommit: (modeValue) => {
+      const base =
+        modeValue.mode === 'solid'
+          ? modeValue.color
+          : modeValue.spec.stops[0]?.color ?? '#ffffff';
+      if (showStateTabs && stateMode === 'active') setLocalActiveColor(base);
+      else setLocalColor(base);
+      onModeCommit?.(stateMode, modeValue);
+    },
+  });
+
   return (
     <>
       <ColorSwatchButton
@@ -735,6 +775,11 @@ export const ColorInput: React.FC<ColorInputProps> = ({
             ? localActiveColor
             : localColor,
         )}
+        image={
+          supportsGradient && storedGradient
+            ? gradientToCss(storedGradient)
+            : undefined
+        }
       />
       {open && (
         <ColorPicker
@@ -742,17 +787,37 @@ export const ColorInput: React.FC<ColorInputProps> = ({
           referenceRef={buttonRef}
           panelElement={panelElement}
           color={
-            showStateTabs && stateMode === 'active'
+            supportsGradient
+              ? gradientState.pickerColor
+              : showStateTabs && stateMode === 'active'
               ? localActiveColor
               : localColor
           }
-          onColorChange={handleColorChange}
-          onColorChangeComplete={handleColorChangeComplete}
+          onColorChange={
+            supportsGradient
+              ? (c: string) => gradientState.handlePickerColorChange(c, false)
+              : handleColorChange
+          }
+          onColorChangeComplete={
+            supportsGradient
+              ? (c: string) => gradientState.handlePickerColorChange(c, true)
+              : handleColorChangeComplete
+          }
           onClose={handleClose}
           interactiveRefs={interactiveRefs}
           solidOnly={solidOnly}
           stateMode={showStateTabs ? stateMode : undefined}
           onStateModeChange={showStateTabs ? handleStateModeChange : undefined}
+          headerSlot={supportsGradient ? gradientState.headerSlot : undefined}
+          footerSlot={supportsGradient ? gradientState.footerSlot : undefined}
+          gradientSpec={
+            supportsGradient ? gradientState.paletteGradientSpec : undefined
+          }
+          onGradientSpecSelect={
+            supportsGradient
+              ? gradientState.handleGradientSpecSelect
+              : undefined
+          }
         />
       )}
     </>

@@ -18,8 +18,8 @@ use crate::{
     defaults::{default_keys, default_positions},
     models::{
         AppStoreData, CounterAnimationPreset, CustomCss, CustomFont, CustomJs, CustomTab, FontType,
-        GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings, JsPlugin,
-        KeyCounters, KeyMappings, KeyPosition, KeyPositions, KnobPosition, KnobPositions,
+        GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
+        JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions, KnobPosition, KnobPositions,
         LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds, ShortcutsState, SoundLibraryEntry,
         StatPosition, StatPositions, StatType, TabCss, TabNoteSettings,
     },
@@ -97,12 +97,18 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         value.get("keyPositions"),
                     );
                     needs_persist |= layout_repaired;
+                    let (gradient_changed, gradient_pair_repaired) =
+                        canonicalize_gradient_pairs(&mut data);
+                    needs_persist |= gradient_changed;
                     needs_persist |= key_position_lengths_mismatch(&data.keys, &data.key_positions);
                     needs_persist |= !has_valid_selected_key_type(&data);
                     (
                         normalize_state(data),
                         needs_persist,
-                        layout_repaired || semantic_repaired || editor_revision_repaired,
+                        layout_repaired
+                            || semantic_repaired
+                            || editor_revision_repaired
+                            || gradient_pair_repaired,
                     )
                 }
                 Err(err) => {
@@ -836,6 +842,37 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     data
 }
 
+pub(crate) fn canonicalize_gradient_pairs(data: &mut AppStoreData) -> (bool, bool) {
+    let mut changed = false;
+    let mut pair_repaired = false;
+
+    for position in data.key_positions.values_mut().flatten() {
+        let (position_changed, position_pair_repaired) = position.canonicalize_gradient_pairs();
+        changed |= position_changed;
+        pair_repaired |= position_pair_repaired;
+    }
+    for stat in data.stat_positions.values_mut().flatten() {
+        let (position_changed, position_pair_repaired) =
+            stat.position.canonicalize_gradient_pairs();
+        changed |= position_changed;
+        pair_repaired |= position_pair_repaired;
+    }
+    for graph in data.graph_positions.values_mut().flatten() {
+        let (position_changed, position_pair_repaired) =
+            graph.position.canonicalize_gradient_pairs();
+        changed |= position_changed;
+        pair_repaired |= position_pair_repaired;
+    }
+    for knob in data.knob_positions.values_mut().flatten() {
+        let (position_changed, position_pair_repaired) =
+            knob.position.canonicalize_gradient_pairs();
+        changed |= position_changed;
+        pair_repaired |= position_pair_repaired;
+    }
+
+    (changed, pair_repaired)
+}
+
 fn repair_editor_revision(data: &mut AppStoreData) -> bool {
     if data.editor_revision <= super::editor::MAX_SAFE_EDITOR_REVISION {
         return false;
@@ -1056,6 +1093,7 @@ fn repair_legacy_state(value: Value) -> AppStoreData {
         source_keys.as_ref(),
         source_key_positions.as_ref(),
     );
+    canonicalize_gradient_pairs(&mut data);
     normalize_state(data)
 }
 
@@ -1383,15 +1421,23 @@ where
                 continue;
             }
 
-            if !has_valid_identity(entry) {
+            let entry_name = format!("{field}.{mode}[{index}]");
+            let mut candidate = entry.clone();
+            recover_invalid_counter_gradient_children(&entry_name, &mut candidate);
+            if serde_json::from_value::<T>(candidate.clone()).is_ok() {
+                recovered_entries.push(candidate);
+                continue;
+            }
+
+            if !has_valid_identity(&candidate) {
                 log::warn!(
                     "[Store] Removing invalid {field} entry '{mode}[{index}]' with a damaged identity during recovery"
                 );
                 continue;
             }
 
-            let entry_name = format!("{field}.{mode}[{index}]");
-            let Some(partial) = recover_object_fields::<KeyPosition>(&entry_name, entry) else {
+            let Some(partial) = recover_object_fields::<KeyPosition>(&entry_name, &candidate)
+            else {
                 log::warn!(
                     "[Store] Removing invalid {field} entry '{mode}[{index}]' during recovery"
                 );
@@ -1460,7 +1506,14 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
                 Ok(_) => recovered_entries.push(entry.clone()),
                 Err(err) => {
                     let entry_name = format!("{field}.{mode}[{index}]");
-                    let recovered = recover_object_fields::<KeyPosition>(&entry_name, entry)
+                    let mut candidate = entry.clone();
+                    recover_invalid_counter_gradient_children(&entry_name, &mut candidate);
+                    let recovered = if serde_json::from_value::<KeyPosition>(candidate.clone())
+                        .is_ok()
+                    {
+                        candidate
+                    } else {
+                        recover_object_fields::<KeyPosition>(&entry_name, &candidate)
                         .filter(|candidate| {
                             serde_json::from_value::<KeyPosition>(candidate.clone()).is_ok()
                         })
@@ -1469,7 +1522,8 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
                                 "[Store] Replacing invalid {field} entry '{mode}[{index}]' with default during recovery: {err}"
                             );
                             default_position.clone()
-                        });
+                        })
+                    };
                     recovered_entries.push(recovered);
                 }
             }
@@ -1477,6 +1531,27 @@ fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
         recovered_modes.insert(mode.clone(), Value::Array(recovered_entries));
     }
     Some(Value::Object(recovered_modes))
+}
+
+fn recover_invalid_counter_gradient_children(entry_name: &str, value: &mut Value) -> bool {
+    let Some(counter) = value.get_mut("counter").and_then(Value::as_object_mut) else {
+        return false;
+    };
+
+    let mut changed = false;
+    for field in ["fillIdleGradient", "fillActiveGradient"] {
+        let invalid = counter.get(field).is_some_and(|gradient| {
+            serde_json::from_value::<Option<GradientSpec>>(gradient.clone()).is_err()
+        });
+        if invalid {
+            log::warn!(
+                "[Store] Resetting invalid {entry_name}.counter.{field} to None during recovery"
+            );
+            counter.remove(field);
+            changed = true;
+        }
+    }
+    changed
 }
 
 fn recover_position_entries<T>(field: &str, value: &Value) -> Option<Value>
@@ -1749,6 +1824,7 @@ mod tests {
         defaults::{default_keys, default_positions},
         models::{
             AppStoreData, CustomFont, CustomTab, FontType, GraphPosition, GraphStatType, GraphType,
+            KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement,
             KeyPosition, KnobPosition, LayerGroupDef, OverlayBounds, SoundLibraryEntry,
             StatPosition, StatType, TabCss, TabNoteSettings,
         },
@@ -1824,6 +1900,158 @@ mod tests {
             .unwrap_or_else(|error| panic!("Tauri {version} fixture must load: {error:#}"));
         let _ = std::fs::remove_file(path);
         loaded.data
+    }
+
+    #[test]
+    fn legacy_store_without_gradient_fields_preserves_position_bytes() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-no-gradient-byte-round-trip-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        let original_position = serde_json::to_vec_pretty(&data.key_positions["4key"][0]).unwrap();
+        let original = serde_json::to_vec_pretty(&data).unwrap();
+        assert!(!String::from_utf8_lossy(&original).contains("Gradient"));
+        std::fs::write(&path, &original).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let reserialized_position =
+            serde_json::to_vec_pretty(&loaded.data.key_positions["4key"][0]).unwrap();
+
+        assert!(!loaded.needs_persist);
+        assert!(!loaded.repaired);
+        assert_eq!(reserialized_position, original_position);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn noncanonical_gradient_store_repersist_and_reload_is_idempotent() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-gradient-canonical-reload-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        let mut raw = serde_json::to_value(data).unwrap();
+        let position = &mut raw["keyPositions"]["4key"][0];
+        position["backgroundColor"] = serde_json::json!("#BADBAD");
+        position["backgroundGradient"] = serde_json::json!({
+            "type": "linear",
+            "angle": 450,
+            "stops": [
+                { "color": "rgba(90, 162, 247, 1)", "pos": 1.4 },
+                { "color": "rgba(139, 92, 246, 1)", "pos": -0.2 }
+            ]
+        });
+        position["counter"]["fill"]["idle"] = serde_json::json!("#FFFFFF");
+        position["counter"]["fillIdleGradient"] = serde_json::json!({
+            "stops": [
+                { "color": "#FFFFFF", "pos": 0 },
+                { "color": "#000000", "pos": 1 }
+            ]
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let position = &loaded.data.key_positions["4key"][0];
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        assert_eq!(
+            position.background_color.as_deref(),
+            Some("rgba(139, 92, 246, 1)")
+        );
+        assert_eq!(position.background_gradient.as_ref().unwrap().angle, 90.0);
+        assert_eq!(
+            position.background_gradient.as_ref().unwrap().stops[0].pos,
+            0.0
+        );
+        assert_eq!(position.counter.fill.idle, "rgba(255,255,255,1)");
+
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(reloaded.data, loaded.data);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn invalid_counter_gradient_children_recover_without_losing_counter_siblings() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-counter-gradient-child-recovery-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut key_position = default_positions()["4key"][0].clone();
+        key_position.counter.enabled = false;
+        key_position.counter.placement = KeyCounterPlacement::Outside;
+        key_position.counter.align = KeyCounterAlign::Left;
+        key_position.counter.align_mode = KeyCounterAlignMode::Between;
+        key_position.counter.fill = KeyCounterColor {
+            idle: "#112233".to_string(),
+            active: "#445566".to_string(),
+        };
+        key_position.counter.stroke = KeyCounterColor {
+            idle: "#778899".to_string(),
+            active: "#AABBCC".to_string(),
+        };
+        key_position.counter.gap = 17;
+        key_position.counter.font_size = 33;
+        key_position.counter.font_weight = 600;
+        key_position.counter.font_family = Some("Recovery Font".to_string());
+        key_position.counter.font_italic = true;
+        key_position.counter.font_underline = true;
+        key_position.counter.font_strikethrough = true;
+        key_position.counter.animation.enabled = true;
+        key_position.counter.animation.preset_id = Some("custom-recovery".to_string());
+        key_position.counter.animation.bezier = [0.1, 0.2, 0.7, 0.8];
+        key_position.counter.animation.scale = 1.25;
+        key_position.counter.animation.duration_ms = 777;
+        let expected_key_counter = key_position.counter.clone();
+
+        let mut stat_position = StatPosition {
+            stat_type: StatType::Kps,
+            position: key_position.clone(),
+        };
+        stat_position.position.counter.fill.idle = "#ABCDEF".to_string();
+        let expected_stat_counter = stat_position.position.counter.clone();
+
+        let mut data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        data.key_positions.get_mut("4key").unwrap()[0] = key_position;
+        data.stat_positions
+            .insert("4key".to_string(), vec![stat_position]);
+        let mut raw = serde_json::to_value(data).unwrap();
+        raw["keyPositions"]["4key"][0]["counter"]["fillIdleGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#FFFFFF", "pos": 0 }]
+        });
+        raw["statPositions"]["4key"][0]["counter"]["fillActiveGradient"] = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#000000", "pos": 1 }]
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let key_counter = &loaded.data.key_positions["4key"][0].counter;
+        let stat_counter = &loaded.data.stat_positions["4key"][0].position.counter;
+
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        assert_eq!(key_counter, &expected_key_counter);
+        assert_eq!(stat_counter, &expected_stat_counter);
+        assert!(key_counter.fill_idle_gradient.is_none());
+        assert!(stat_counter.fill_active_gradient.is_none());
+        let _ = std::fs::remove_file(path);
     }
 
     #[derive(Debug, Serialize, Deserialize)]

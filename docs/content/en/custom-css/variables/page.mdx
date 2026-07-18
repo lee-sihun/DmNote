@@ -15,6 +15,7 @@ CSS variables applied to key elements. Use with `[data-state="inactive"]` or `[d
 | ------------------ | ------------------------ | ---------- | ------------------------ |
 | `--key-radius`     | Corner roundness         | `<length>` | `8px`, `50%`             |
 | `--key-bg`         | Background color         | `<color>`  | `#ff2b80`                |
+| `--key-bg-image`   | Background image (gradient) | `<image>` | `linear-gradient(90deg, #f0f, #0ff)` |
 | `--key-border`     | Border style             | `<border>` | `2px solid #fff`, `none` |
 | `--key-text-color` | Text color               | `<color>`  | `#ffffff`                |
 | `--key-offset-x`   | X offset in active state | `<length>` | `0px`, `2px`             |
@@ -23,7 +24,9 @@ CSS variables applied to key elements. Use with `[data-state="inactive"]` or `[d
 <Callout type="info">
   `--key-bg` is applied as `background-color`. To use gradients, specify
   `background` or `background-image` directly and set `--key-bg: transparent;`
-  if needed.
+  if needed. When a key color is set to a gradient in the app, it renders as
+  `background-image: var(--key-bg-image, ...)`, so you can override it with
+  `--key-bg-image` (solid keys never get an inline `background-image`).
 </Callout>
 
 ### Usage Example

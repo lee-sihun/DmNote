@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { toCssRgba } from '@utils/color/colorUtils';
+import { gradientToCss, type GradientSpec } from '@src/types/color';
 import {
   COUNTER_DEFAULT_BEZIER,
   createCubicBezierEasing,
@@ -8,6 +9,7 @@ import {
 interface CountDisplayProps {
   count: number;
   fillColor?: string;
+  fillGradient?: GradientSpec | null;
   strokeColor?: string;
   globalKey?: string;
   active?: boolean;
@@ -26,6 +28,7 @@ interface CountDisplayProps {
 const CountDisplay = ({
   count,
   fillColor,
+  fillGradient,
   strokeColor,
   globalKey: _globalKey,
   active,
@@ -156,6 +159,15 @@ const CountDisplay = ({
           '--counter-color-default': fill.css,
           '--counter-stroke-color-default': stroke.css,
           '--counter-stroke-width-default': strokeWidth,
+          // fill 그라데이션 — 글자 모양으로 클립, 대표 단색은 칠하지 않음
+          ...(fillGradient
+            ? {
+                backgroundImage: gradientToCss(fillGradient),
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }
+            : {}),
         } as React.CSSProperties
       }
     >

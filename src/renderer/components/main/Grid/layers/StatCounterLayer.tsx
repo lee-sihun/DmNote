@@ -4,6 +4,7 @@ import {
   computeOutsideStyle,
 } from '@hooks/overlay/useCounterSettings';
 import { toCssRgba } from '@utils/color/colorUtils';
+import { gradientToCss } from '@src/types/color';
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 
 interface CounterPosition {
@@ -81,6 +82,17 @@ const StatCounter = ({ position, previewValue = 0 }: StatCounterProps) => {
             '--counter-color-default': fill.css,
             '--counter-stroke-color-default': stroke.css,
             '--counter-stroke-width-default': strokeWidth,
+            // fill 그라데이션 — 글자 모양으로 클립 (CountDisplay와 동일)
+            ...(counterSettings.fillIdleGradient
+              ? {
+                  backgroundImage: gradientToCss(
+                    counterSettings.fillIdleGradient,
+                  ),
+                  WebkitBackgroundClip: 'text',
+                  backgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }
+              : {}),
           } as React.CSSProperties
         }
       >

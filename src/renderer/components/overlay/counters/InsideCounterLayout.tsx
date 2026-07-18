@@ -25,6 +25,9 @@ const InsideCounterLayout = ({
   const fillColor = active
     ? counterSettings.fill.active
     : counterSettings.fill.idle;
+  const fillGradient = active
+    ? counterSettings.fillActiveGradient
+    : counterSettings.fillIdleGradient;
   const strokeColor = active
     ? counterSettings.stroke.active
     : counterSettings.stroke.idle;
@@ -37,6 +40,7 @@ const InsideCounterLayout = ({
       key="counter"
       count={count}
       fillColor={fillColor}
+      fillGradient={fillGradient}
       strokeColor={strokeColor}
       active={active}
       fontSize={counterSettings.fontSize}

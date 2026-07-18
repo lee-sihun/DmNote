@@ -454,6 +454,11 @@ impl AppStore {
         let mut candidate = current.clone();
         candidate.apply_patch(&request.changes);
 
+        let mut scratch = current_store.clone();
+        candidate.apply_to_store(&mut scratch);
+        crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        candidate = EditorDocumentV1::from_store(&scratch);
+
         validate_paired_update(
             &current,
             &candidate,
@@ -461,8 +466,6 @@ impl AppStore {
             request.changes.includes(EditorField::KeyPositions),
         )?;
 
-        let mut scratch = current_store.clone();
-        candidate.apply_to_store(&mut scratch);
         scratch.editor_revision = current_store.editor_revision;
         validate_document_transition(&current, &candidate, &current_store, &scratch)?;
 
@@ -575,6 +578,7 @@ impl AppStore {
         let current = EditorDocumentV1::from_store(&current_store);
         let mut scratch = current_store.clone();
         let value = updater(&mut scratch)?;
+        crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
 
         // editorRevision은 이 트랜잭션만 관리
         scratch.editor_revision = current_store.editor_revision;
@@ -2204,6 +2208,9 @@ fn sweep_unreferenced_asset_files(
 }
 
 #[cfg(test)]
+mod gradient_real_data_simulation;
+
+#[cfg(test)]
 mod tests {
     use super::{
         collect_local_font_paths, collect_local_image_path_keys, collect_local_image_paths,
@@ -2377,6 +2384,135 @@ mod tests {
             .data;
         assert_eq!(reloaded.editor_revision, 1);
         assert_eq!(reloaded.keys["4key"][0], "StrictKey");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_commit_gradient_repair_keeps_disk_document_and_event_identical() {
+        let dir = test_directory("editor-gradient-canonicalization-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut positions = store.editor_get().document.key_positions;
+        let position = &mut positions.get_mut("4key").unwrap()[0];
+        position.background_color = Some("#BADBAD".to_string());
+        position.background_gradient = Some(
+            serde_json::from_value(json!({
+                "type": "linear",
+                "stops": [
+                    { "color": "rgba(90, 162, 247, 1)", "pos": 1.2 },
+                    { "color": "rgba(139, 92, 246, 1)", "pos": -0.1 }
+                ]
+            }))
+            .unwrap(),
+        );
+        position.counter.fill.idle = "#FFFFFF".to_string();
+        position.counter.fill_idle_gradient = Some(
+            serde_json::from_value(json!({
+                "angle": 450,
+                "stops": [
+                    { "color": "#FFFFFF80", "pos": 0 },
+                    { "color": "rgba(0, 0, 0, 0)", "pos": 1 }
+                ]
+            }))
+            .unwrap(),
+        );
+        let request = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                key_positions: Some(positions),
+                ..EditorPatchV1::default()
+            },
+        );
+
+        let change = store.commit_editor_document(request).unwrap();
+        let committed_position = &change.document.key_positions["4key"][0];
+        assert_eq!(
+            change.result.changed_fields,
+            vec![EditorField::KeyPositions]
+        );
+        assert_eq!(
+            committed_position
+                .background_gradient
+                .as_ref()
+                .unwrap()
+                .angle,
+            90.0
+        );
+        assert_eq!(
+            committed_position
+                .background_gradient
+                .as_ref()
+                .unwrap()
+                .stops[0]
+                .pos,
+            0.0
+        );
+        assert_eq!(
+            committed_position.background_color.as_deref(),
+            Some("rgba(139, 92, 246, 1)")
+        );
+        assert_eq!(
+            committed_position.counter.fill.idle,
+            "rgba(255,255,255,0.502)"
+        );
+
+        let event_positions = change
+            .event
+            .as_ref()
+            .unwrap()
+            .patch
+            .key_positions
+            .as_ref()
+            .unwrap();
+        assert_eq!(event_positions, &change.document.key_positions);
+        assert_eq!(
+            EditorDocumentV1::from_store(&store.snapshot()),
+            change.document
+        );
+
+        let committed_document = change.document;
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let reloaded =
+            crate::state::migration::load_store_from_path(&dir.join("store.json")).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert_eq!(
+            EditorDocumentV1::from_store(&reloaded.data),
+            committed_document
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn invalid_gradient_preset_parse_failure_leaves_store_unchanged() {
+        let dir = test_directory("invalid-gradient-preset-atomicity-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.snapshot();
+        let persist_count = store.writer.persist_count();
+
+        let parsed = serde_json::from_value::<crate::commands::preset::PresetFile>(json!({
+            "keys": { "4key": ["Q"] },
+            "keyPositions": {
+                "4key": [{
+                    "dx": 0,
+                    "dy": 0,
+                    "width": 60,
+                    "count": 0,
+                    "backgroundGradient": {
+                        "angle": 90,
+                        "stops": [{ "color": "#FFFFFF", "pos": 0 }]
+                    }
+                }]
+            }
+        }));
+
+        assert!(parsed.is_err());
+        assert_eq!(store.snapshot(), before);
+        assert_eq!(store.writer.persist_count(), persist_count);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
         let _ = std::fs::remove_dir_all(dir);
     }
 

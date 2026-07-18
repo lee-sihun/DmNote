@@ -243,7 +243,8 @@ mod tests {
     // file URL 경로 테스트가 유닉스 전용이라 Windows에선 미사용 경고 방지
     #[cfg(not(target_os = "windows"))]
     use super::local_source_path_from_image_ref;
-    use crate::models::NoteColor;
+    use crate::models::{KeyCounterColor, NoteColor};
+    use serde::Deserialize;
     use serde_json::json;
 
     #[test]
@@ -271,6 +272,83 @@ mod tests {
 
         assert!(preset.layer_groups.is_none());
         assert!(preset.tab_css_overrides.is_none());
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PreFeaturePresetPosition {
+        background_color: Option<String>,
+        counter: PreFeaturePresetCounter,
+    }
+
+    #[derive(Deserialize)]
+    struct PreFeaturePresetCounter {
+        fill: KeyCounterColor,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PreFeaturePreset {
+        key_positions: Option<std::collections::HashMap<String, Vec<PreFeaturePresetPosition>>>,
+    }
+
+    #[test]
+    fn gradient_preset_round_trip_and_pre_feature_shadow_preserve_representative_colors() {
+        let source = json!({
+            "keys": { "4key": ["Q"] },
+            "keyPositions": {
+                "4key": [{
+                    "dx": 0,
+                    "dy": 0,
+                    "width": 60,
+                    "count": 0,
+                    "backgroundColor": "rgba(16, 32, 48, 1)",
+                    "backgroundGradient": {
+                        "angle": 90,
+                        "stops": [
+                            { "color": "rgba(16, 32, 48, 1)", "pos": 0 },
+                            { "color": "rgba(64, 80, 96, 0.5)", "pos": 1 }
+                        ]
+                    },
+                    "counter": {
+                        "fill": {
+                            "idle": "rgba(255,255,255,1)",
+                            "active": "rgba(20,20,24,0.9)"
+                        },
+                        "fillIdleGradient": {
+                            "angle": 180,
+                            "stops": [
+                                { "color": "#FFFFFF", "pos": 0 },
+                                { "color": "#000000", "pos": 1 }
+                            ]
+                        }
+                    }
+                }]
+            }
+        });
+        let preset: PresetFile = serde_json::from_value(source).unwrap();
+        let serialized = serde_json::to_value(&preset).unwrap();
+        let restored: PresetFile = serde_json::from_value(serialized.clone()).unwrap();
+        let reserialized = serde_json::to_value(restored).unwrap();
+
+        assert_eq!(reserialized, serialized);
+        assert_eq!(
+            serialized["keyPositions"]["4key"][0]["backgroundGradient"]["angle"].as_f64(),
+            Some(90.0)
+        );
+        assert_eq!(
+            serialized["keyPositions"]["4key"][0]["counter"]["fillIdleGradient"]["angle"].as_f64(),
+            Some(180.0)
+        );
+
+        let shadow: PreFeaturePreset = serde_json::from_value(serialized).unwrap();
+        let shadow_positions = shadow.key_positions.unwrap();
+        let shadow_position = &shadow_positions["4key"][0];
+        assert_eq!(
+            shadow_position.background_color.as_deref(),
+            Some("rgba(16, 32, 48, 1)")
+        );
+        assert_eq!(shadow_position.counter.fill.idle, "rgba(255,255,255,1)");
     }
 
     #[test]

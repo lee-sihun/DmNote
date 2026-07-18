@@ -1,3 +1,4 @@
+import type { GradientSpec } from '@src/types/color';
 import React, { useEffect, useRef, useState } from 'react';
 import type {
   KeyCounterAnimationSettings,
@@ -47,6 +48,10 @@ interface CounterAnimationPickerProps {
     activeBackgroundColor?: string;
     activeBorderColor?: string;
     activeFontColor?: string;
+    backgroundGradient?: GradientSpec | null;
+    activeBackgroundGradient?: GradientSpec | null;
+    borderGradient?: GradientSpec | null;
+    activeBorderGradient?: GradientSpec | null;
     useInlineStyles?: boolean;
     isStat?: boolean;
   };

@@ -1,4 +1,6 @@
 import type { KeyPosition } from '@src/types/key/keys';
+import type { ColorModeValue, GradientSpec } from '@src/types/color';
+import type { GradientCanvasAnchor } from '@stores/grid/useGradientEditStore';
 
 // ============================================================================
 // 탭 상수
@@ -85,6 +87,13 @@ export interface ColorInputProps {
   // 외부에서 열림 상태를 제어할 때 사용
   isOpen?: boolean;
   onToggle?: () => void;
+  /** gradient 편집 지원 — 저장된 상태별 스펙. onModeCommit이 있으면 활성화 */
+  gradientValue?: GradientSpec | null;
+  activeGradientValue?: GradientSpec | null;
+  /** gradient 지원 커밋 경로 — 단색/그라데이션 확정을 한 콜백으로 수신 */
+  onModeCommit?: (state: 'idle' | 'active', value: ColorModeValue) => void;
+  /** 온캔버스 각도 핸들 앵커 */
+  canvasAnchor?: GradientCanvasAnchor;
 }
 
 export interface ToggleSwitchProps {
@@ -167,6 +176,8 @@ export interface SingleKeyContentProps {
 // ============================================================================
 
 export interface StyleTabContentProps {
+  /** 온캔버스 각도 핸들 앵커 (단일 키/통계) */
+  canvasAnchor?: GradientCanvasAnchor;
   keyIndex: number;
   keyPosition: KeyPosition;
   keyCode: string | null;

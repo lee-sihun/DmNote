@@ -12,6 +12,13 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import {
+  gradientPairPatch,
+  gradientToCss,
+  type ColorModeValue,
+  type GradientSpec,
+} from '@src/types/color';
+import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { axisEventBus } from '@utils/core/axisEventBus';
 import {
   DEFAULT_ELEMENT_BG,
@@ -552,6 +559,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                       backgroundColor: value,
                     })
                   }
+                  gradientValue={singleGraphPosition.backgroundGradient ?? null}
+                  canvasAnchor={{ kind: 'graph', index: singleGraphIndex }}
+                  onModeCommit={(_state, modeValue) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      ...gradientPairPatch('backgroundColor', modeValue),
+                    })
+                  }
                   colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
                   panelElement={panelElement}
                 />
@@ -569,6 +584,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     handleGraphUpdate({
                       index: singleGraphIndex,
                       borderColor: value,
+                    })
+                  }
+                  gradientValue={singleGraphPosition.borderGradient ?? null}
+                  canvasAnchor={{ kind: 'graph', index: singleGraphIndex }}
+                  onModeCommit={(_state, modeValue) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      ...gradientPairPatch('borderColor', modeValue),
                     })
                   }
                   colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
@@ -920,29 +943,92 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
   };
 
-  const handleColorChangeComplete = (
-    target: KnobColorTarget,
-    color: string,
-  ) => {
-    const prop = resolveColorProperty(target);
-    setLocalColors((prev) => ({ ...prev, [prop]: color }));
+  // ── 그라데이션 배선 (키 패널과 동일 패턴) — 단색 커밋도 이 경로로 통합 ──
 
-    const updates: Partial<KnobItemPosition> = {
-      [prop]: color,
-    } as Partial<KnobItemPosition>;
+  const storedGradientOf = (prop: KnobColorProperty): GradientSpec | null => {
+    switch (prop) {
+      case 'backgroundColor':
+        return singleKnobPosition.backgroundGradient ?? null;
+      case 'activeBackgroundColor':
+        return singleKnobPosition.activeBackgroundGradient ?? null;
+      case 'borderColor':
+        return singleKnobPosition.borderGradient ?? null;
+      case 'activeBorderColor':
+        return singleKnobPosition.activeBorderGradient ?? null;
+      default:
+        return null;
+    }
+  };
 
-    // idle 변경 시 active 값이 비어 있으면 현재 표시되던 active 값을 함께 저장
-    // (active가 idle로 덮이는 현상 방지 — 키 패널과 동일)
+  const gradientSpecFor = (target: KnobColorTarget): GradientSpec | null => {
+    const idleGradient = storedGradientOf(target);
+    if (colorState !== 'active') return idleGradient;
+    const activeProp = activeColorPropertyFor(target);
+    const activeGradient = storedGradientOf(activeProp);
+    const activeHasValue =
+      isNonEmptyString(singleKnobPosition[activeProp]) ||
+      activeGradient != null;
+    return activeHasValue ? activeGradient : idleGradient;
+  };
+
+  const handleGradientCommit = (value: ColorModeValue) => {
+    if (!pickerFor) return;
+    const prop = resolveColorProperty(pickerFor);
+    const patch = gradientPairPatch(
+      prop as Parameters<typeof gradientPairPatch>[0],
+      value,
+    ) as Partial<KnobItemPosition>;
+
+    const baseColor = patch[prop];
+    if (typeof baseColor === 'string') {
+      setLocalColors((prev) => ({ ...prev, [prop]: baseColor }));
+    }
+
+    const updates: Partial<KnobItemPosition> = { ...patch };
+
+    // idle 편집 시 active 쌍이 비어 있으면 현재 표시되던 active 모습을 쌍으로 보존
     if (colorState !== 'active') {
-      const activeProp = activeColorPropertyFor(target);
-      const currentActive = singleKnobPosition[activeProp];
-      if (!isNonEmptyString(currentActive)) {
+      const activeProp = activeColorPropertyFor(pickerFor);
+      const activeEmpty =
+        !isNonEmptyString(singleKnobPosition[activeProp]) &&
+        storedGradientOf(activeProp) == null;
+      if (activeEmpty) {
         updates[activeProp] = localColors[activeProp];
+        const prevIdleGradient = storedGradientOf(pickerFor);
+        if (prevIdleGradient) {
+          const activeSibling =
+            pickerFor === 'backgroundColor'
+              ? 'activeBackgroundGradient'
+              : 'activeBorderGradient';
+          updates[activeSibling] = prevIdleGradient;
+        }
       }
     }
 
     handleKnobUpdate({ index: singleKnobIndex, ...updates });
   };
+
+  const knobGradientState = useGradientColorState({
+    pair: pickerFor
+      ? {
+          color: colorValueFor(pickerFor),
+          gradient: gradientSpecFor(pickerFor),
+        }
+      : {},
+    fallbackColor: '#ffffff',
+    contextKey: `knob:${selectedKeyType}:${singleKnobIndex}:${
+      pickerFor ?? 'none'
+    }:${colorState}`,
+    canvasAnchor: pickerFor
+      ? { kind: 'knob', index: singleKnobIndex }
+      : undefined,
+    onPreview: (value) => {
+      if (value.mode === 'solid' && pickerFor) {
+        handleColorChange(pickerFor, value.color);
+      }
+    },
+    onCommit: handleGradientCommit,
+  });
 
   const handlePickerToggle = (target: KnobColorTarget) => {
     setPickerFor((prev) => (prev === target ? null : target));
@@ -1132,6 +1218,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
                   surfaceClassName="rounded-md"
                   color={colorValueFor('backgroundColor')}
+                  image={(() => {
+                    const spec = gradientSpecFor('backgroundColor');
+                    return spec ? gradientToCss(spec) : undefined;
+                  })()}
                 />
               </PropertyRow>
 
@@ -1147,6 +1237,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
                   surfaceClassName="rounded-md"
                   color={colorValueFor('borderColor')}
+                  image={(() => {
+                    const spec = gradientSpecFor('borderColor');
+                    return spec ? gradientToCss(spec) : undefined;
+                  })()}
                 />
               </PropertyRow>
 
@@ -1289,16 +1383,22 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             pickerFor === 'backgroundColor' ? bgColorBtnRef : borderColorBtnRef
           }
           panelElement={panelElement}
-          color={colorValueFor(pickerFor)}
-          onColorChange={(c: string) => handleColorChange(pickerFor, c)}
+          color={knobGradientState.pickerColor}
+          onColorChange={(c: string) =>
+            knobGradientState.handlePickerColorChange(c, false)
+          }
           onColorChangeComplete={(c: string) =>
-            handleColorChangeComplete(pickerFor, c)
+            knobGradientState.handlePickerColorChange(c, true)
           }
           onClose={() => setPickerFor(null)}
           solidOnly={true}
           stateMode={colorState}
           onStateModeChange={setColorState}
           interactiveRefs={[bgColorBtnRef, borderColorBtnRef]}
+          headerSlot={knobGradientState.headerSlot}
+          footerSlot={knobGradientState.footerSlot}
+          gradientSpec={knobGradientState.paletteGradientSpec}
+          onGradientSpecSelect={knobGradientState.handleGradientSpecSelect}
         />
       )}
     </div>
@@ -1556,6 +1656,10 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onPositionChange={handleKeyLikePositionChange}
               onKeyUpdate={handleKeyLikeUpdate}
               onKeyPreview={handleKeyLikePreview}
+              canvasAnchor={{
+                kind: isSingleStat ? 'stat' : 'key',
+                index: keyLikeIndex,
+              }}
               onKeyMappingChange={isSingleStat ? undefined : onKeyMappingChange}
               isListening={isListening}
               onKeyListen={isSingleStat ? undefined : handleKeyListen}

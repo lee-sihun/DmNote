@@ -26,6 +26,8 @@ import GridBackground from './GridBackground';
 import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
 import MarqueeSelectionOverlay from '../overlays/MarqueeSelectionOverlay';
 import ResizeHandles from '../handles/ResizeHandles';
+import GradientAxisOverlay from '../handles/GradientAxisHandle';
+import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import GroupResizeHandles from '../handles/GroupResizeHandles';
 import { isElementResizable } from '../handles/groupResizeUtils';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
@@ -67,6 +69,8 @@ import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
@@ -279,6 +283,10 @@ const Grid = ({
   });
 
   // 선택 상태 관리
+  // 온캔버스 그라데이션 편집 중 여부 — 리사이즈 핸들을 잠시 숨김
+  const hasGradientEditSession = useGradientEditStore(
+    (state) => state.session !== null,
+  );
   const selectedElements = useGridSelectionStore(
     (state) => state.selectedElements,
   );
@@ -1404,6 +1412,7 @@ const Grid = ({
           transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
           backgroundColor,
           borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
+          border: `${DEFAULT_ELEMENT_BORDER_WIDTH}px solid ${DEFAULT_ELEMENT_BORDER}`,
           boxShadow: previewImage ? undefined : DEFAULT_ELEMENT_SHADOW,
           overflow: 'hidden',
           opacity: 0.5,
@@ -1630,6 +1639,8 @@ const Grid = ({
       <MarqueeSelectionOverlay zoom={zoom} panX={panX} panY={panY} />
       {/* 선택된 요소 표시 - 그룹 리사이즈 중에는 개별 테두리 숨김 (흔들림 방지) */}
       {selectedElements.map((el, _idx) => {
+        // 온캔버스 그라데이션 편집 중에는 선택 테두리 숨김 (축·스톱만 표시)
+        if (hasGradientEditSession) return null;
         // 그룹 리사이즈 중에는 개별 요소 테두리 숨김 (스냅으로 인한 흔들림 방지)
         if (selectedElements.length > 1 && previewElementBounds) {
           return null;
@@ -1808,6 +1819,8 @@ const Grid = ({
 
           if (!bounds || !elementId) return null;
 
+          if (hasGradientEditSession) return null;
+
           return (
             <ResizeHandles
               bounds={bounds}
@@ -1824,7 +1837,7 @@ const Grid = ({
           );
         })()}
       {/* 다중 선택 시 그룹 리사이즈 핸들 표시 */}
-      {selectedElements.length > 1 && (
+      {selectedElements.length > 1 && !hasGradientEditSession && (
         <GroupResizeHandles
           selectedElements={selectedElements}
           positions={positions}
@@ -1843,6 +1856,18 @@ const Grid = ({
           getOtherElements={getOtherElements}
         />
       )}
+      {/* 온캔버스 그라데이션 각도 핸들 — 피커가 그라데이션 형식일 때만 표시 */}
+      <GradientAxisOverlay
+        positions={positions}
+        statPositions={statPositions}
+        graphPositions={graphPositions}
+        knobPositions={knobPositions}
+        selectedElements={selectedElements}
+        selectedKeyType={selectedKeyType}
+        zoom={zoom}
+        panX={panX}
+        panY={panY}
+      />
       {/* 우클릭 리스트 팝업 */}
       <div className="relative">
         <ListPopup

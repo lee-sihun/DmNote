@@ -96,9 +96,9 @@ input[type='number']::-webkit-outer-spin-button {
 }
 
 /*
- * 기본 키 디자인 — 보더 대신 인셋 링 + 상단 하이라이트가 표면 분리 담당
+ * 기본 키 디자인 — 표면 분리는 1px 헤어라인 보더(테두리 색상 UI로 수정 가능)가 담당
  * 커스텀 CSS([data-state] 셀렉터, head 뒤쪽 주입)가 덮어쓸 수 있도록
- * :where로 특이도를 동률 이하로 유지. 색·섀도 값은
+ * :where로 특이도를 동률 이하로 유지. 섀도 값은
  * utils/core/elementDefaults.ts와 동기 유지
  */
 :where([data-key-element]) {
@@ -112,10 +112,17 @@ input[type='number']::-webkit-outer-spin-button {
   transition: none;
 }
 
+/* 색 형식(단색↔그라데이션) 전환 커밋 프레임 — 이미지 레이어는 즉시 바뀌는데
+   base 색만 보간되며 생기는 이중 합성 깜빡임 차단. background만 제외하고
+   색·섀도 복귀 페이드는 유지, inactive 한정이라 눌림 0ms 규칙은 불변.
+   attribute는 페인트 후 걷히며 원래 트랜지션 복원 */
+:where([data-key-element])[data-state='inactive'][data-bg-format-flip] {
+  transition: color 100ms ease-out, box-shadow 120ms ease-out;
+}
+
 /* 이미지 키는 표면이 투명이라 섀도 제외 */
 :where([data-key-element]:not([data-key-image]))[data-state='inactive'] {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 4px 10px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
 }
 
 :where([data-key-element]:not([data-key-image]))[data-state='active'] {

@@ -247,6 +247,12 @@ fn write_preset_file(path: &Path, json: &str) -> CmdResult<()> {
     Ok(())
 }
 
+#[cfg(test)]
+pub(crate) fn write_preset_file_for_simulation(path: &Path, preset: &PresetFile) -> CmdResult<()> {
+    let json = serde_json::to_string_pretty(preset)?;
+    write_preset_file(path, &json)
+}
+
 fn collect_used_font_families(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,

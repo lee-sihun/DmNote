@@ -258,6 +258,11 @@ const FloatingPopup = ({
           target instanceof Element &&
           !!target.closest('[data-dmn-popup-submenu="true"]');
         if (isInsideSubMenu) return;
+        // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
+        const isInsideGradientOverlay =
+          target instanceof Element &&
+          !!target.closest('[data-dmn-gradient-overlay="true"]');
+        if (isInsideGradientOverlay) return;
         onClose();
       };
 
@@ -400,6 +405,15 @@ const FloatingPopup = ({
         target instanceof Element &&
         !!target.closest('[data-dmn-popup-submenu="true"]');
       if (isInsideSubMenu) {
+        pointerCapturedInside = false;
+        return;
+      }
+
+      // 온캔버스 그라데이션 핸들 조작도 팝업 편집의 연장 — 닫힘 예외
+      const isInsideGradientOverlay =
+        target instanceof Element &&
+        !!target.closest('[data-dmn-gradient-overlay="true"]');
+      if (isInsideGradientOverlay) {
         pointerCapturedInside = false;
         return;
       }

@@ -303,6 +303,7 @@
   "colorPicker": {
     "solid": "Solid",
     "gradient": "Gradient",
+    "gradientAngle": "Angle",
     "idle": "Idle",
     "active": "Active"
   },

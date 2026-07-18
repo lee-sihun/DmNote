@@ -1,3 +1,4 @@
+import type { GradientSpec } from '@src/types/color';
 import React, { useState } from 'react';
 import { isMac } from '@utils/core/platform';
 import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
@@ -20,6 +21,8 @@ interface GraphPosition {
   graphAnimationEnabled?: boolean;
   backgroundColor?: string;
   borderColor?: string;
+  backgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
   inactiveImage?: string;
@@ -253,6 +256,8 @@ const GraphItem = ({
       animationEnabled={graphAnimationEnabled ?? true}
       backgroundColor={backgroundColor}
       borderColor={borderColor}
+      backgroundGradient={position.backgroundGradient}
+      borderGradient={position.borderGradient}
       borderWidth={borderWidth}
       borderRadius={borderRadius}
       imageSrc={previewImageSrc}

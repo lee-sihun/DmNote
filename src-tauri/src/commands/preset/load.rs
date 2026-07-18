@@ -55,6 +55,11 @@ fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
     serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))
 }
 
+#[cfg(test)]
+pub(crate) fn read_preset_file_for_simulation(path: &Path) -> CmdResult<PresetFile> {
+    read_preset_file(path)
+}
+
 struct ResolvedFullPresetSettings {
     background_color: String,
     note_settings: NoteSettings,

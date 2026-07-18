@@ -8,6 +8,7 @@ import {
   assertEditorDocument,
   assertEditorGetResult,
   assertEditorPatch,
+  canonicalizeEditorGradients,
   isEditorCommitError,
 } from '@src/types/editor';
 
@@ -302,7 +303,10 @@ export class EditorSaveCoordinator {
   ): Promise<EditorDocumentV1> {
     this.assertWritable();
     await this.start();
-    const currentDocument = document ?? this.readDocument();
+    // gradient canonical 정규화를 assert 앞에 — 이후 diff·invoke가 같은 값 사용
+    const currentDocument = canonicalizeEditorGradients(
+      document ?? this.readDocument(),
+    );
     assertEditorDocument(currentDocument);
     const snapshot = clone(currentDocument);
 
@@ -358,17 +362,22 @@ export class EditorSaveCoordinator {
   async commitPatch(changes: EditorPatchV1): Promise<EditorDocumentV1> {
     this.assertWritable();
     await this.start();
-    assertEditorPatch(changes);
+    // gradient canonical 정규화를 assert 앞에 — optimistic·diff·invoke가 같은 값 사용
+    const canonicalChanges = canonicalizeEditorGradients(changes);
+    assertEditorPatch(canonicalChanges);
 
     const projected = this.getLatestCommitBase();
-    const target = applyEditorPatch(projected, changes);
+    const target = applyEditorPatch(projected, canonicalChanges);
     const newIntentFields = getChangedEditorFields(projected, target);
     const requestFields = EDITOR_FIELDS.filter(
-      (field) => changes[field] !== undefined,
+      (field) => canonicalChanges[field] !== undefined,
     );
     const currentDocument = this.readDocument();
     assertEditorDocument(currentDocument);
-    const optimisticDocument = applyEditorPatch(currentDocument, changes);
+    const optimisticDocument = applyEditorPatch(
+      currentDocument,
+      canonicalChanges,
+    );
     if (
       getChangedEditorFields(currentDocument, optimisticDocument).length > 0
     ) {

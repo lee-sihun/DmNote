@@ -303,6 +303,7 @@
   "colorPicker": {
     "solid": "단색",
     "gradient": "그레디언트",
+    "gradientAngle": "각도",
     "idle": "대기",
     "active": "입력"
   },

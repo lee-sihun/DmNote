@@ -1,0 +1,232 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  toCanonicalGradient,
+  toCompactRgba,
+  type ColorModeValue,
+  type ColorPair,
+  type GradientSpec,
+} from '@src/types/color';
+import {
+  FormatSelectBar,
+  GradientStopEditor,
+  type ColorFormat,
+} from '@components/main/Modal/content/pickers/GradientFormatControls';
+import {
+  useGradientEditStore,
+  type GradientCanvasAnchor,
+} from '@stores/grid/useGradientEditStore';
+
+interface UseGradientColorStateOptions {
+  /** 현재 저장된 쌍 (base 색 + gradient 형제) */
+  pair: ColorPair;
+  fallbackColor: string;
+  /** 편집 대상 식별자 — 바뀌면 초안·선택이 자동 무효화 */
+  contextKey?: string;
+  /** 온캔버스 각도 핸들 앵커 — 지정 시 그라데이션 편집 중 그리드에 축 표시 */
+  canvasAnchor?: GradientCanvasAnchor;
+  /** 미리보기(드래그 중) — 상위 프리뷰 경로로 전달 */
+  onPreview?: (value: ColorModeValue) => void;
+  /** 확정 커밋 — atomic patch 산출은 호출부가 gradientPairPatch/counterFillPair로 */
+  onCommit: (value: ColorModeValue) => void;
+}
+
+/**
+ * 피커의 형식·스톱 상태 관리 훅.
+ * 형식과 스펙은 저장값에서 렌더 시점에 파생한다 — effect로 상태에 복사하지
+ * 않으므로 첫 렌더부터 최종 레이아웃이 나오고(피커 위치 점프 방지), 커밋은
+ * 저장값 갱신으로 즉시 반영된다. 미커밋 드래그 프리뷰만 draft로 유지
+ */
+
+// 형식 전환으로 그라데이션을 떠날 때 마지막 spec 기억 — 같은 대상으로
+// 돌아오면 그대로 복원. 세션 한정 메모리, 저장값에는 남기지 않음
+const lastGradientSpecs = new Map<string, GradientSpec>();
+
+// 같은 색의 알파 0 버전 — 파싱 불가한 색(named 등)은 원문 유지
+const zeroAlpha = (color: string): string => {
+  const c = color.trim();
+  // #RGBA 4자리는 toCompactRgba 미지원 — RGB만 확장해 처리 (알파는 어차피 0)
+  const short = c.match(/^#([0-9a-fA-F]{4})$/);
+  const normalized = short
+    ? `#${short[1]
+        .slice(0, 3)
+        .split('')
+        .map((ch) => ch + ch)
+        .join('')}`
+    : c;
+  const m = toCompactRgba(normalized).match(/^rgba\((\d+),(\d+),(\d+),/);
+  return m ? `rgba(${m[1]},${m[2]},${m[3]},0)` : color;
+};
+export function useGradientColorState({
+  pair,
+  fallbackColor,
+  contextKey,
+  canvasAnchor,
+  onPreview,
+  onCommit,
+}: UseGradientColorStateOptions) {
+  const storedSpec = pair.gradient ?? null;
+
+  // 진행 중(미커밋) 드래그 초안 — 다른 대상으로 바뀌면 자동 무효
+  const [draft, setDraft] = useState<{
+    key: string | undefined;
+    spec: GradientSpec;
+  } | null>(null);
+
+  const workingSpec =
+    (draft && draft.key === contextKey ? draft.spec : null) ?? storedSpec;
+  const format: ColorFormat = workingSpec ? 'gradient' : 'solid';
+
+  // 선택 스톱 — 대상별로 유지, 대상이 바뀌면 0
+  const [selection, setSelection] = useState<{
+    key: string | undefined;
+    index: number;
+  }>({ key: contextKey, index: 0 });
+
+  // 대상 전환 시 이전 초안·선택을 실제로 폐기 (재진입 시 되살아나지 않게)
+  useEffect(() => {
+    setDraft((prev) => (prev && prev.key !== contextKey ? null : prev));
+    setSelection((prev) =>
+      prev.key !== contextKey ? { key: contextKey, index: 0 } : prev,
+    );
+  }, [contextKey]);
+  const selectedStop = selection.key === contextKey ? selection.index : 0;
+  const setSelectedStop = useCallback(
+    (index: number) => setSelection({ key: contextKey, index }),
+    [contextKey],
+  );
+
+  const baseColor = pair.color || fallbackColor;
+
+  const seedSpecFromSolid = useCallback(
+    (color: string): GradientSpec =>
+      toCanonicalGradient({
+        // 기본 방향 위→아래, 끝 스톱은 같은 색 알파 0 — 색→투명 페이드 시드
+        angle: 180,
+        stops: [
+          { color, pos: 0 },
+          { color: zeroAlpha(color), pos: 1 },
+        ],
+      }),
+    [],
+  );
+
+  const handleFormatChange = (next: ColorFormat) => {
+    if (next === format) return;
+    setDraft(null);
+    if (next === 'gradient') {
+      // 저장값 → 기억된 spec → 단색 시드 순 — 왕복 시 편집 상태를 그대로 복원
+      // (기억 spec은 무변형: 단색 편집이 그라데이션 기억을 조용히 바꾸지 않는다)
+      const remembered = contextKey
+        ? lastGradientSpecs.get(contextKey)
+        : undefined;
+      const spec = storedSpec ?? remembered ?? seedSpecFromSolid(baseColor);
+      setSelectedStop(0);
+      onCommit({ mode: 'gradient', spec });
+    } else {
+      if (contextKey && workingSpec) {
+        lastGradientSpecs.set(contextKey, workingSpec);
+      }
+      // 단색 전환 — 대표색(첫 스톱)을 base로 승계, gradient 제거를 한 patch로
+      const solid = workingSpec?.stops[0]?.color ?? baseColor;
+      onCommit({ mode: 'solid', color: solid });
+    }
+  };
+
+  const applySpec = (spec: GradientSpec, commit: boolean) => {
+    if (commit) {
+      // 커밋은 저장값 갱신으로 같은 렌더 패스에 반영 — 초안은 제거
+      setDraft(null);
+      onCommit({ mode: 'gradient', spec });
+    } else {
+      // 취소 복원 등으로 저장값과 같아진 preview는 draft를 남기지 않는다
+      if (storedSpec && JSON.stringify(spec) === JSON.stringify(storedSpec)) {
+        setDraft(null);
+      } else {
+        setDraft({ key: contextKey, spec });
+      }
+      onPreview?.({ mode: 'gradient', spec });
+    }
+  };
+
+  // 온캔버스 편집 세션 발행 — 그라데이션 형식으로 편집 중일 때만
+  const applySpecRef = useRef(applySpec);
+  applySpecRef.current = applySpec;
+  const anchorKey = canvasAnchor
+    ? `${canvasAnchor.kind}:${
+        'index' in canvasAnchor ? canvasAnchor.index : ''
+      }`
+    : null;
+  useEffect(() => {
+    if (!canvasAnchor || !workingSpec) {
+      return undefined;
+    }
+    const session = {
+      anchor: canvasAnchor,
+      spec: workingSpec,
+      selectedIndex: selectedStop,
+      selectStop: setSelectedStop,
+      apply: (spec: GradientSpec, commit: boolean) =>
+        applySpecRef.current(spec, commit),
+    };
+    useGradientEditStore.getState().setSession(session);
+    return () => {
+      // 여전히 내 세션일 때만 해제 (다른 피커가 이미 교체했으면 유지)
+      if (useGradientEditStore.getState().session === session) {
+        useGradientEditStore.getState().setSession(null);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchorKey, workingSpec, selectedStop, setSelectedStop]);
+
+  // 피커 색 엔진 바인딩 — 현재 편집 대상 색
+  const pickerColor =
+    format === 'gradient'
+      ? workingSpec?.stops[selectedStop]?.color ?? baseColor
+      : baseColor;
+
+  const handlePickerColorChange = (color: string, commit: boolean) => {
+    if (format === 'solid') {
+      if (commit) onCommit({ mode: 'solid', color });
+      else onPreview?.({ mode: 'solid', color });
+      return;
+    }
+    const spec = workingSpec ?? seedSpecFromSolid(baseColor);
+    const stops = spec.stops.map((s, i) =>
+      i === selectedStop ? { ...s, color } : s,
+    );
+    applySpec({ ...spec, stops }, commit);
+  };
+
+  // 헤더 = 그라데이션일 때 스톱 바, 푸터 = 형식 셀렉트 바 (팔레트 아래)
+  const headerSlot =
+    format === 'gradient' && workingSpec ? (
+      <GradientStopEditor
+        spec={workingSpec}
+        selectedIndex={selectedStop}
+        onSelectStop={setSelectedStop}
+        onSpecChange={(spec) => applySpec(spec, false)}
+        onSpecChangeComplete={(spec) => applySpec(spec, true)}
+      />
+    ) : null;
+
+  const footerSlot = (
+    <FormatSelectBar format={format} onFormatChange={handleFormatChange} />
+  );
+
+  // 팔레트 연동 — 편집 중 spec은 닫힐 때 저장, 항목 클릭은 spec 전체 적용
+  const paletteGradientSpec = format === 'gradient' ? workingSpec : null;
+  const handleGradientSpecSelect = (spec: GradientSpec) => {
+    setSelectedStop(0);
+    applySpec(spec, true);
+  };
+
+  return {
+    format,
+    headerSlot,
+    footerSlot,
+    pickerColor,
+    handlePickerColorChange,
+    paletteGradientSpec,
+    handleGradientSpecSelect,
+  };
+}

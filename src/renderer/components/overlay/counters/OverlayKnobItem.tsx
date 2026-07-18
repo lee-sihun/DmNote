@@ -12,6 +12,12 @@ import {
   DEFAULT_ELEMENT_SHADOW,
   DEFAULT_ELEMENT_ACTIVE_SHADOW,
 } from '@utils/core/elementDefaults';
+import {
+  gradientToCss,
+  gradientRingStyle,
+  resolveStatePair,
+  type GradientSpec,
+} from '@src/types/color';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -35,6 +41,10 @@ interface KnobPosition {
   activeBackgroundColor?: string;
   borderColor?: string;
   activeBorderColor?: string;
+  backgroundGradient?: GradientSpec | null;
+  activeBackgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
+  activeBorderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
 }
@@ -73,6 +83,10 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
     activeBackgroundColor,
     borderColor,
     activeBorderColor,
+    backgroundGradient,
+    activeBackgroundGradient,
+    borderGradient,
+    activeBorderGradient,
     borderWidth,
     borderRadius,
   } = position ?? {};
@@ -135,6 +149,21 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
   const stateBorderColor = isActive
     ? activeBorderColor || borderColor || DEFAULT_ELEMENT_ACTIVE_FONT
     : borderColor || DEFAULT_ELEMENT_FONT;
+  // 그라데이션 쌍 해석 — 상태 간 색/그라데이션이 섞이지 않도록 쌍 단위 폴백
+  const bgPair = resolveStatePair(
+    isActive,
+    { color: backgroundColor, gradient: backgroundGradient },
+    { color: activeBackgroundColor, gradient: activeBackgroundGradient },
+  );
+  const borderPair = resolveStatePair(
+    isActive,
+    { color: borderColor, gradient: borderGradient },
+    { color: activeBorderColor, gradient: activeBorderGradient },
+  );
+  const bgSpec = bgPair.gradient ?? null;
+  const borderSpec = borderPair.gradient ?? null;
+  const showBorderRing =
+    Boolean(borderSpec) && !!borderWidth && borderWidth > 0;
   // 모서리 반경 미지정 시 원형 유지 (px 지정 시 키와 동일한 px 단위)
   const resolvedRadius = borderRadius != null ? `${borderRadius}px` : '50%';
 
@@ -158,11 +187,17 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
           borderRadius: resolvedRadius,
           overflow: 'hidden',
           position: 'relative',
-          background: isTransparent ? 'transparent' : stateBackground,
+          background: isTransparent
+            ? 'transparent'
+            : bgSpec
+            ? gradientToCss(bgSpec)
+            : stateBackground,
+          // 그라데이션 보더는 보더 대신 동일 두께 padding + 링 자식
           border:
-            borderWidth && borderWidth > 0
+            !showBorderRing && borderWidth && borderWidth > 0
               ? `${borderWidth}px solid ${stateBorderColor}`
               : undefined,
+          padding: showBorderRing ? `${borderWidth}px` : undefined,
           // 기본 표면은 키와 같은 인셋 링 섀도 — 이미지·투명·명시 보더(구형 저장 데이터 포함)는 제외
           boxShadow:
             isTransparent || imageSrc || (borderWidth && borderWidth > 0)
@@ -177,6 +212,12 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
           backfaceVisibility: 'hidden',
         }}
       >
+        {showBorderRing && borderSpec && borderWidth && (
+          <span
+            aria-hidden="true"
+            style={gradientRingStyle(borderSpec, borderWidth)}
+          />
+        )}
         {imageSrc ? (
           <img
             src={imageSrc}

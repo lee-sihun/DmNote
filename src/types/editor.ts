@@ -14,6 +14,7 @@ import {
 import type { LayerGroups } from '@src/types/layerGroups';
 import type { SettingsPatchInput } from '@src/types/settings/settings';
 import type { TabNoteOverrides } from '@src/types/settings/noteSettings';
+import { canonicalizePositionGradients } from '@src/types/color';
 
 export const EDITOR_SCHEMA_VERSION = 1 as const;
 
@@ -379,6 +380,58 @@ const assertLayerGroupReferences = (
     );
   });
 };
+
+const POSITION_COLLECTION_FIELDS = [
+  'keyPositions',
+  'statPositions',
+  'graphPositions',
+  'knobPositions',
+] as const;
+
+const canonicalizePositionCollection = (
+  collection: Record<string, unknown[]>,
+): Record<string, unknown[]> => {
+  let changed = false;
+  const next: Record<string, unknown[]> = {};
+  for (const [mode, items] of Object.entries(collection)) {
+    if (!Array.isArray(items)) {
+      next[mode] = items;
+      continue;
+    }
+    next[mode] = items.map((item) => {
+      if (!isRecord(item)) return item;
+      const canonical = canonicalizePositionGradients(item);
+      if (canonical !== item) changed = true;
+      return canonical;
+    });
+  }
+  return changed ? next : collection;
+};
+
+/**
+ * patch/document의 gradient 형제 필드를 canonical로 정규화 — Rust 경계와 동일
+ * 규칙. 반환값을 optimistic 적용·diff·invoke에 공통 사용한다 (계약 v2.3).
+ * 변경이 없으면 동일 참조 반환
+ */
+export function canonicalizeEditorGradients<
+  T extends EditorPatchV1 | EditorDocumentV1,
+>(value: T): T {
+  if (!isRecord(value)) return value;
+  let changed = false;
+  const next = { ...(value as Record<string, unknown>) };
+  for (const field of POSITION_COLLECTION_FIELDS) {
+    const collection = (value as Record<string, unknown>)[field];
+    if (!isRecord(collection)) continue;
+    const canonical = canonicalizePositionCollection(
+      collection as Record<string, unknown[]>,
+    );
+    if (canonical !== collection) {
+      changed = true;
+      next[field] = canonical;
+    }
+  }
+  return changed ? (next as T) : value;
+}
 
 export function assertEditorDocument(
   value: unknown,

@@ -4,7 +4,7 @@ pub mod obs;
 pub use editor::*;
 
 use serde::de::Error as DeError;
-use serde::ser::SerializeMap;
+use serde::ser::{Error as SerError, SerializeMap};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::path::Path;
@@ -16,6 +16,117 @@ pub type KeyCounters = HashMap<String, HashMap<String, u32>>;
 pub type StatPositions = HashMap<String, Vec<StatPosition>>;
 pub type GraphPositions = HashMap<String, Vec<GraphPosition>>;
 pub type KnobPositions = HashMap<String, Vec<KnobPosition>>;
+
+const DEFAULT_GRADIENT_ANGLE: f64 = 90.0;
+const MAX_GRADIENT_STOPS: usize = 8;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GradientStop {
+    pub color: String,
+    pub pos: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct GradientSpec {
+    pub angle: f64,
+    pub stops: Vec<GradientStop>,
+    normalized_on_read: bool,
+}
+
+impl PartialEq for GradientSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.angle == other.angle && self.stops == other.stops
+    }
+}
+
+impl GradientSpec {
+    fn normalize(&mut self) -> bool {
+        let previous_angle = self.angle;
+        let previous_stops = self.stops.clone();
+
+        self.angle = self.angle.rem_euclid(360.0);
+        if self.angle == 0.0 {
+            self.angle = 0.0;
+        }
+        for stop in &mut self.stops {
+            stop.pos = stop.pos.clamp(0.0, 1.0);
+            if stop.pos == 0.0 {
+                stop.pos = 0.0;
+            }
+        }
+        self.stops
+            .sort_by(|left, right| left.pos.total_cmp(&right.pos));
+        self.stops.truncate(MAX_GRADIENT_STOPS);
+
+        self.angle != previous_angle || self.stops != previous_stops
+    }
+
+    fn canonicalize(&mut self) -> bool {
+        let normalized_on_read = std::mem::take(&mut self.normalized_on_read);
+        self.normalize() | normalized_on_read
+    }
+}
+
+impl Serialize for GradientSpec {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if self.stops.len() < 2 {
+            return Err(S::Error::custom("gradient must contain at least two stops"));
+        }
+        if !self.angle.is_finite() || self.stops.iter().any(|stop| !stop.pos.is_finite()) {
+            return Err(S::Error::custom("gradient values must be finite"));
+        }
+
+        let mut canonical = self.clone();
+        canonical.normalize();
+        let mut map = serializer.serialize_map(Some(2))?;
+        map.serialize_entry("angle", &canonical.angle)?;
+        map.serialize_entry("stops", &canonical.stops)?;
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for GradientSpec {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let serde_json::Value::Object(mut input) = value else {
+            return Err(D::Error::custom("gradient must be an object"));
+        };
+        let angle_value = input.remove("angle");
+        let angle = match angle_value.as_ref() {
+            Some(value) => serde_json::from_value::<f64>(value.clone())
+                .map_err(|error| D::Error::custom(format!("invalid gradient angle: {error}")))?,
+            None => DEFAULT_GRADIENT_ANGLE,
+        };
+        let stops = input
+            .remove("stops")
+            .ok_or_else(|| D::Error::custom("gradient stops are required"))
+            .and_then(|value| {
+                serde_json::from_value::<Vec<GradientStop>>(value)
+                    .map_err(|error| D::Error::custom(format!("invalid gradient stops: {error}")))
+            })?;
+        if stops.len() < 2 {
+            return Err(D::Error::custom("gradient must contain at least two stops"));
+        }
+        if !angle.is_finite() || stops.iter().any(|stop| !stop.pos.is_finite()) {
+            return Err(D::Error::custom("gradient values must be finite"));
+        }
+
+        let mut gradient = Self {
+            angle,
+            stops,
+            normalized_on_read: angle_value.is_none() || !input.is_empty(),
+        };
+        gradient.normalized_on_read |= gradient.normalize();
+        Ok(gradient)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NoteColor {
@@ -270,12 +381,20 @@ pub struct KeyPosition {
     // 스타일 관련 속성들
     #[serde(default)]
     pub background_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub active_background_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_background_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub border_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub border_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub active_border_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_border_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub border_width: Option<f64>,
     #[serde(default)]
@@ -365,9 +484,13 @@ impl Default for KeyPosition {
             z_index: None,
             counter: KeyCounterSettings::default(),
             background_color: None,
+            background_gradient: None,
             active_background_color: None,
+            active_background_gradient: None,
             border_color: None,
+            border_gradient: None,
             active_border_color: None,
+            active_border_gradient: None,
             border_width: None,
             border_radius: None,
             font_size: None,
@@ -753,6 +876,10 @@ pub struct KeyCounterSettings {
     pub align_mode: KeyCounterAlignMode,
     #[serde(default)]
     pub fill: KeyCounterColor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_idle_gradient: Option<GradientSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_active_gradient: Option<GradientSpec>,
     #[serde(default = "default_stroke_color")]
     pub stroke: KeyCounterColor,
     #[serde(default = "default_gap")]
@@ -790,6 +917,8 @@ impl Default for KeyCounterSettings {
             align: KeyCounterAlign::Bottom,
             align_mode: KeyCounterAlignMode::Center,
             fill: KeyCounterColor::default(),
+            fill_idle_gradient: None,
+            fill_active_gradient: None,
             stroke: default_stroke_color(),
             gap: default_gap(),
             font_size: default_counter_font_size(),
@@ -812,6 +941,11 @@ impl KeyCounterSettings {
     /// This keeps existing user customizations intact, while fixing the old default
     /// active fill/stroke values (black text / outlined) that diverged from the renderer.
     pub fn migrate_legacy_defaults(&mut self) -> bool {
+        if self.fill_idle_gradient.is_some() || self.fill_active_gradient.is_some() {
+            self.normalize();
+            return false;
+        }
+
         // 당시 직렬화되던 스냅샷 값 고정 — 현재 기본값 함수와 결합 금지
         let looks_like_legacy_default = self.fill.idle == "#FFFFFF"
             && self.fill.active == "#000000"
@@ -869,6 +1003,175 @@ impl KeyCounterSettings {
 
         self.normalize();
         false
+    }
+
+    pub(crate) fn canonicalize_gradient_pairs(&mut self) -> (bool, bool) {
+        let mut changed = false;
+        let mut pair_repaired = false;
+
+        let (idle_changed, idle_pair_repaired) =
+            canonicalize_counter_gradient_pair(&mut self.fill.idle, &mut self.fill_idle_gradient);
+        changed |= idle_changed;
+        pair_repaired |= idle_pair_repaired;
+
+        let (active_changed, active_pair_repaired) = canonicalize_counter_gradient_pair(
+            &mut self.fill.active,
+            &mut self.fill_active_gradient,
+        );
+        changed |= active_changed;
+        pair_repaired |= active_pair_repaired;
+
+        (changed, pair_repaired)
+    }
+}
+
+impl KeyPosition {
+    pub(crate) fn canonicalize_gradient_pairs(&mut self) -> (bool, bool) {
+        let mut changed = false;
+        let mut pair_repaired = false;
+
+        for (base, gradient) in [
+            (&mut self.background_color, &mut self.background_gradient),
+            (
+                &mut self.active_background_color,
+                &mut self.active_background_gradient,
+            ),
+            (&mut self.border_color, &mut self.border_gradient),
+            (
+                &mut self.active_border_color,
+                &mut self.active_border_gradient,
+            ),
+        ] {
+            let (pair_changed, base_repaired) = canonicalize_optional_gradient_pair(base, gradient);
+            changed |= pair_changed;
+            pair_repaired |= base_repaired;
+        }
+
+        let (counter_changed, counter_pair_repaired) = self.counter.canonicalize_gradient_pairs();
+        changed |= counter_changed;
+        pair_repaired |= counter_pair_repaired;
+
+        (changed, pair_repaired)
+    }
+}
+
+fn canonicalize_optional_gradient_pair(
+    base: &mut Option<String>,
+    gradient: &mut Option<GradientSpec>,
+) -> (bool, bool) {
+    let Some(gradient) = gradient else {
+        return (false, false);
+    };
+
+    let mut changed = gradient.canonicalize();
+    let representative = gradient
+        .stops
+        .first()
+        .expect("a deserialized gradient always has at least two stops")
+        .color
+        .clone();
+    let pair_repaired = base.as_deref() != Some(representative.as_str());
+    if pair_repaired {
+        *base = Some(representative);
+        changed = true;
+    }
+    (changed, pair_repaired)
+}
+
+fn canonicalize_counter_gradient_pair(
+    base: &mut String,
+    gradient: &mut Option<GradientSpec>,
+) -> (bool, bool) {
+    let Some(gradient) = gradient else {
+        return (false, false);
+    };
+
+    let mut changed = gradient.canonicalize();
+    let representative = compact_canonical_rgba(
+        &gradient
+            .stops
+            .first()
+            .expect("a deserialized gradient always has at least two stops")
+            .color,
+    );
+    let pair_repaired = *base != representative;
+    if pair_repaired {
+        *base = representative;
+        changed = true;
+    }
+    (changed, pair_repaired)
+}
+
+fn compact_canonical_rgba(color: &str) -> String {
+    let trimmed = color.trim();
+    if let Some(hex) = trimmed.strip_prefix('#') {
+        if matches!(hex.len(), 3 | 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            let expanded;
+            let hex = if hex.len() == 3 {
+                expanded = hex
+                    .chars()
+                    .flat_map(|character| [character, character])
+                    .collect::<String>();
+                expanded.as_str()
+            } else {
+                hex
+            };
+            let red = u8::from_str_radix(&hex[0..2], 16).expect("validated hex channel");
+            let green = u8::from_str_radix(&hex[2..4], 16).expect("validated hex channel");
+            let blue = u8::from_str_radix(&hex[4..6], 16).expect("validated hex channel");
+            let alpha = if hex.len() == 8 {
+                f64::from(u8::from_str_radix(&hex[6..8], 16).expect("validated alpha channel"))
+                    / 255.0
+            } else {
+                1.0
+            };
+            return format!("rgba({red},{green},{blue},{})", format_compact_alpha(alpha));
+        }
+    }
+
+    let functional = trimmed
+        .strip_prefix("rgba(")
+        .or_else(|| trimmed.strip_prefix("rgb("));
+    if let Some(body) = functional {
+        if let Some(body) = body.strip_suffix(')') {
+            let channels = body.split(',').map(str::trim).collect::<Vec<_>>();
+            if matches!(channels.len(), 3 | 4)
+                && channels.iter().all(|channel| {
+                    !channel.is_empty()
+                        && channel
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+                })
+            {
+                let parsed = channels
+                    .iter()
+                    .map(|channel| channel.parse::<f64>())
+                    .collect::<Result<Vec<_>, _>>();
+                if let Ok(parsed) = parsed {
+                    let alpha = parsed.get(3).copied().unwrap_or(1.0);
+                    return format!(
+                        "rgba({},{},{},{})",
+                        parsed[0].round() as i64,
+                        parsed[1].round() as i64,
+                        parsed[2].round() as i64,
+                        format_compact_alpha(alpha)
+                    );
+                }
+            }
+        }
+    }
+
+    trimmed.to_string()
+}
+
+fn format_compact_alpha(alpha: f64) -> String {
+    let rounded = (alpha.clamp(0.0, 1.0) * 10_000.0).round() / 10_000.0;
+    let formatted = format!("{rounded:.4}");
+    let compact = formatted.trim_end_matches('0').trim_end_matches('.');
+    if compact.is_empty() {
+        "0".to_string()
+    } else {
+        compact.to_string()
     }
 }
 
@@ -1988,7 +2291,12 @@ pub struct SettingsPatch {
 
 #[cfg(test)]
 mod tests {
-    use super::{FadePosition, KeyPosition, NoteColor, NoteSettings, StatType};
+    use super::{
+        compact_canonical_rgba, FadePosition, GradientSpec, KeyCounterAlign, KeyCounterAlignMode,
+        KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyPosition, NoteColor,
+        NoteSettings, StatType,
+    };
+    use serde::Deserialize;
 
     #[test]
     fn stat_type_wire_values_round_trip() {
@@ -2107,5 +2415,260 @@ mod tests {
         assert_eq!(position.height, 60.0);
         assert_eq!(position.note_color, NoteColor::Solid("#FFFFFF".to_string()));
         assert_eq!(position.note_opacity, 90);
+    }
+
+    #[test]
+    fn gradient_spec_tolerates_legacy_shape_and_serializes_canonically() {
+        let gradient: GradientSpec = serde_json::from_value(serde_json::json!({
+            "type": "linear",
+            "stops": [
+                { "color": "c9", "pos": 1.4 },
+                { "color": "c8", "pos": 0.8 },
+                { "color": "c7", "pos": 0.7 },
+                { "color": "c6", "pos": 0.6 },
+                { "color": "c5", "pos": 0.5 },
+                { "color": "c4", "pos": 0.4 },
+                { "color": "c3", "pos": 0.3 },
+                { "color": "c2", "pos": 0.2 },
+                { "color": "c1", "pos": 0.1 },
+                { "color": "c0", "pos": -0.2 }
+            ]
+        }))
+        .unwrap();
+
+        assert_eq!(gradient.angle, 90.0);
+        assert_eq!(gradient.stops.len(), 8);
+        assert_eq!(gradient.stops.first().unwrap().color, "c0");
+        assert_eq!(gradient.stops.first().unwrap().pos, 0.0);
+        assert_eq!(gradient.stops.last().unwrap().color, "c7");
+
+        let canonical = serde_json::to_value(&gradient).unwrap();
+        assert_eq!(canonical["angle"], 90.0);
+        assert_eq!(canonical["stops"].as_array().unwrap().len(), 8);
+        assert!(canonical.get("type").is_none());
+
+        let restored: GradientSpec = serde_json::from_value(canonical.clone()).unwrap();
+        assert_eq!(serde_json::to_value(restored).unwrap(), canonical);
+    }
+
+    #[test]
+    fn gradient_spec_rejects_fewer_than_two_stops() {
+        let error = serde_json::from_value::<GradientSpec>(serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#FFFFFF", "pos": 0 }]
+        }))
+        .unwrap_err();
+
+        assert!(error.to_string().contains("at least two stops"));
+    }
+
+    #[test]
+    fn gradient_spec_rejects_null_angle_but_preserves_stop_alpha_strings() {
+        let error = serde_json::from_value::<GradientSpec>(serde_json::json!({
+            "angle": null,
+            "stops": [
+                { "color": "rgba(1,2,3,0)", "pos": 0 },
+                { "color": "rgba(1,2,3,1)", "pos": 1 }
+            ]
+        }))
+        .unwrap_err();
+        assert!(error.to_string().contains("invalid gradient angle"));
+
+        let gradient: GradientSpec = serde_json::from_value(serde_json::json!({
+            "stops": [
+                { "color": "rgba(1,2,3,0)", "pos": 0 },
+                { "color": "rgba(1,2,3,0.5)", "pos": 0.5 },
+                { "color": "rgba(1,2,3,1)", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(
+            gradient
+                .stops
+                .iter()
+                .map(|stop| stop.color.as_str())
+                .collect::<Vec<_>>(),
+            ["rgba(1,2,3,0)", "rgba(1,2,3,0.5)", "rgba(1,2,3,1)"]
+        );
+    }
+
+    #[test]
+    fn counter_gradient_escape_differs_from_every_legacy_snapshot_literal() {
+        let legacy_literals = [
+            "#FFFFFF",
+            "#000000",
+            "rgba(121, 121, 121, 0.9)",
+            "transparent",
+        ];
+        let visual_pairs = [
+            ("#FFFFFF", "rgba(255,255,255,1)"),
+            ("#000000", "rgba(0,0,0,1)"),
+            ("rgba(121, 121, 121, 0.9)", "rgba(121,121,121,0.9)"),
+        ];
+
+        for (input, expected) in visual_pairs {
+            let escaped = compact_canonical_rgba(input);
+            assert_eq!(escaped, expected);
+            assert!(legacy_literals.iter().all(|literal| escaped != *literal));
+        }
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PreFeatureKeyPosition {
+        background_color: Option<String>,
+        counter: PreFeatureCounterSettings,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PreFeatureCounterSettings {
+        fill: KeyCounterColor,
+        stroke: KeyCounterColor,
+        placement: KeyCounterPlacement,
+        align: KeyCounterAlign,
+        align_mode: KeyCounterAlignMode,
+        gap: u32,
+        font_size: u32,
+        font_weight: u32,
+        font_family: Option<String>,
+        font_italic: bool,
+        font_underline: bool,
+        font_strikethrough: bool,
+    }
+
+    impl PreFeatureCounterSettings {
+        fn matches_legacy_migration_snapshot(&self) -> bool {
+            let shared = matches!(self.placement, KeyCounterPlacement::Inside)
+                && matches!(self.align, KeyCounterAlign::Top)
+                && matches!(self.align_mode, KeyCounterAlignMode::Center)
+                && self.gap == 6
+                && self.font_size == 16
+                && self.font_family.is_none()
+                && !self.font_italic
+                && !self.font_underline
+                && !self.font_strikethrough;
+            let oldest = self.fill.idle == "#FFFFFF"
+                && self.fill.active == "#000000"
+                && self.stroke.idle == "#000000"
+                && self.stroke.active == "#FFFFFF"
+                && self.font_weight == 400;
+            let previous = self.fill.idle == "rgba(121, 121, 121, 0.9)"
+                && self.fill.active == "#FFFFFF"
+                && self.stroke.idle == "transparent"
+                && self.stroke.active == "transparent"
+                && self.font_weight == 700;
+            shared && (oldest || previous)
+        }
+    }
+
+    #[test]
+    fn pre_feature_shadow_downgrade_ignores_gradients_without_triggering_migration() {
+        for (legacy_fill, first_stop, expected_escape) in [
+            ("#FFFFFF", "#FFFFFF", "rgba(255,255,255,1)"),
+            (
+                "rgba(121, 121, 121, 0.9)",
+                "rgba(121, 121, 121, 0.9)",
+                "rgba(121,121,121,0.9)",
+            ),
+        ] {
+            let mut position: KeyPosition = serde_json::from_value(serde_json::json!({
+                "dx": 0,
+                "dy": 0,
+                "width": 60,
+                "count": 0,
+                "backgroundColor": "#102030",
+                "backgroundGradient": {
+                    "angle": 90,
+                    "stops": [
+                        { "color": "#102030", "pos": 0 },
+                        { "color": "#405060", "pos": 1 }
+                    ]
+                },
+                "counter": {
+                    "enabled": true,
+                    "placement": "inside",
+                    "align": "top",
+                    "alignMode": "center",
+                    "fill": {
+                        "idle": legacy_fill,
+                        "active": if legacy_fill == "#FFFFFF" { "#000000" } else { "#FFFFFF" }
+                    },
+                    "fillIdleGradient": {
+                        "angle": 90,
+                        "stops": [
+                            { "color": first_stop, "pos": 0 },
+                            { "color": "#654321", "pos": 1 }
+                        ]
+                    },
+                    "stroke": if legacy_fill == "#FFFFFF" {
+                        serde_json::json!({ "idle": "#000000", "active": "#FFFFFF" })
+                    } else {
+                        serde_json::json!({ "idle": "transparent", "active": "transparent" })
+                    },
+                    "gap": 6,
+                    "fontSize": 16,
+                    "fontWeight": if legacy_fill == "#FFFFFF" { 400 } else { 700 },
+                    "fontFamily": null,
+                    "fontItalic": false,
+                    "fontUnderline": false,
+                    "fontStrikethrough": false
+                }
+            }))
+            .unwrap();
+
+            let (_, pair_repaired) = position.canonicalize_gradient_pairs();
+            assert!(pair_repaired);
+            assert_eq!(position.counter.fill.idle, expected_escape);
+            assert!(!position.counter.migrate_legacy_defaults());
+
+            let serialized = serde_json::to_value(&position).unwrap();
+            let shadow: PreFeatureKeyPosition = serde_json::from_value(serialized).unwrap();
+            assert_eq!(shadow.background_color.as_deref(), Some("#102030"));
+            assert_eq!(shadow.counter.fill.idle, expected_escape);
+            assert!(!shadow.counter.matches_legacy_migration_snapshot());
+        }
+    }
+
+    #[test]
+    fn counter_migration_without_gradients_preserves_both_legacy_upgrade_branches() {
+        for snapshot in [
+            serde_json::json!({
+                "placement": "inside",
+                "align": "top",
+                "alignMode": "center",
+                "fill": { "idle": "#FFFFFF", "active": "#000000" },
+                "stroke": { "idle": "#000000", "active": "#FFFFFF" },
+                "gap": 6,
+                "fontSize": 16,
+                "fontWeight": 400,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false
+            }),
+            serde_json::json!({
+                "placement": "inside",
+                "align": "top",
+                "alignMode": "center",
+                "fill": {
+                    "idle": "rgba(121, 121, 121, 0.9)",
+                    "active": "#FFFFFF"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 6,
+                "fontSize": 16,
+                "fontWeight": 700,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false
+            }),
+        ] {
+            let mut counter: KeyCounterSettings = serde_json::from_value(snapshot).unwrap();
+
+            assert!(counter.migrate_legacy_defaults());
+            assert_eq!(counter, KeyCounterSettings::default());
+        }
     }
 }

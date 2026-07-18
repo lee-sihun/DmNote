@@ -5,6 +5,11 @@ import {
   DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
 } from '@utils/core/elementDefaults';
+import {
+  gradientToCss,
+  gradientRingStyle,
+  type GradientSpec,
+} from '@src/types/color';
 
 const BAR_ANIMATION_DURATION_MS = 150;
 const LINE_ANIMATION_DURATION_MS = 150;
@@ -21,6 +26,8 @@ interface GraphPanelProps {
   showAvgLine?: boolean;
   backgroundColor?: string;
   borderColor?: string;
+  backgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
   imageSrc?: string | null;
@@ -177,6 +184,8 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       showAvgLine = true,
       backgroundColor = DEFAULT_ELEMENT_BG,
       borderColor = DEFAULT_ELEMENT_HAIRLINE,
+      backgroundGradient = null,
+      borderGradient = null,
       borderWidth = 1,
       borderRadius = DEFAULT_ELEMENT_RADIUS,
       imageSrc = null,
@@ -386,14 +395,22 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       ? Math.max(0, Number(borderRadius))
       : DEFAULT_ELEMENT_RADIUS;
     const useInline = useInlineStyles === true;
-    const resolvedBackgroundColor = backgroundColor || DEFAULT_ELEMENT_BG;
+    const resolvedBackgroundColor = backgroundGradient
+      ? gradientToCss(backgroundGradient)
+      : backgroundColor || DEFAULT_ELEMENT_BG;
+    // 그라데이션 보더는 보더 대신 동일 두께 padding — overflow:hidden이
+    // 패딩 박스에서 클리핑되므로 링 자식이 가장자리에 정확히 그려짐
+    const showBorderRing = Boolean(borderGradient) && resolvedBorderWidth > 0;
     const fallbackBorder =
       resolvedBorderWidth <= 0
         ? 'none'
         : `${resolvedBorderWidth}px solid ${
             borderColor || DEFAULT_ELEMENT_HAIRLINE
           }`;
-    const resolvedBorder = useInline
+    // 그라데이션 보더는 --graph-border를 소비하지 않음 (실보더+링 이중 소비 방지)
+    const resolvedBorder = showBorderRing
+      ? 'none'
+      : useInline
       ? fallbackBorder
       : `var(--graph-border, ${fallbackBorder})`;
     const resolvedBg = useInline
@@ -422,6 +439,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
           background: resolvedBg,
           color: '#FFFFFF',
           border: resolvedBorder,
+          padding: showBorderRing ? `${resolvedBorderWidth}px` : undefined,
           borderRadius: resolvedRadius,
           boxSizing: 'border-box',
           display: 'flex',
@@ -455,9 +473,17 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
             draggable={false}
             style={{
               position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
+              // absolute는 패딩 박스 기준 — 보더 대신 padding을 쓰는 그라데이션
+              // 보더에서도 단색 보더와 같은 인셋을 유지 (img는 replaced
+              // element라 inset만으로는 늘어나지 않으므로 크기를 명시)
+              left: showBorderRing ? `${resolvedBorderWidth}px` : 0,
+              top: showBorderRing ? `${resolvedBorderWidth}px` : 0,
+              width: showBorderRing
+                ? `calc(100% - ${resolvedBorderWidth * 2}px)`
+                : '100%',
+              height: showBorderRing
+                ? `calc(100% - ${resolvedBorderWidth * 2}px)`
+                : '100%',
               objectFit: (imageFit ||
                 'cover') as React.CSSProperties['objectFit'],
               pointerEvents: 'none',
@@ -466,6 +492,15 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
             }}
           />
         ) : null}
+        {showBorderRing && borderGradient && (
+          <span
+            aria-hidden="true"
+            style={{
+              ...gradientRingStyle(borderGradient, resolvedBorderWidth),
+              zIndex: 1,
+            }}
+          />
+        )}
         {resolvedGraphType === 'bar' ? (
           <div
             style={{

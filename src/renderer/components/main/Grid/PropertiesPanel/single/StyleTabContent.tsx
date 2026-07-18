@@ -11,12 +11,20 @@ import {
   FontStyleToggle,
 } from '../PropertyInputs';
 import { usePanelNav } from '../PanelNavContext';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
 import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
+import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import {
+  gradientPairPatch,
+  gradientToCss,
+  type ColorModeValue,
+  type GradientSpec,
+} from '@src/types/color';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_ACTIVE_BG,
@@ -24,6 +32,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_BORDER,
   DEFAULT_ELEMENT_ACTIVE_BORDER,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_FONT_WEIGHT,
 } from '@utils/core/elementDefaults';
@@ -86,6 +95,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
+  canvasAnchor,
   t,
   // 로컬 상태
   localDx,
@@ -111,6 +121,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 통합 피커 상태
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const [colorState, setColorState] = useState<ColorState>('idle');
+  const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
 
   // 컬러 버튼 refs
   const bgColorBtnRef = useRef<HTMLButtonElement>(null);
@@ -280,6 +291,102 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
     onKeyUpdate({ index: keyIndex, ...updates });
   };
+
+  // ── 그라데이션 배선 (배경·테두리 전용, 글꼴 색상은 단색 유지) ──
+
+  type GradientColorTarget = 'backgroundColor' | 'borderColor';
+
+  const gradientTarget: GradientColorTarget | null =
+    pickerFor === 'backgroundColor' || pickerFor === 'borderColor'
+      ? pickerFor
+      : null;
+
+  // 상태별 저장된 gradient 형제 값 (쌍 단위 폴백 — resolveStatePair와 동일 규칙)
+  const storedGradientOf = (prop: StyleColorProperty): GradientSpec | null => {
+    switch (prop) {
+      case 'backgroundColor':
+        return keyPosition.backgroundGradient ?? null;
+      case 'activeBackgroundColor':
+        return keyPosition.activeBackgroundGradient ?? null;
+      case 'borderColor':
+        return keyPosition.borderGradient ?? null;
+      case 'activeBorderColor':
+        return keyPosition.activeBorderGradient ?? null;
+      default:
+        return null;
+    }
+  };
+
+  const gradientSpecFor = (
+    target: GradientColorTarget,
+  ): GradientSpec | null => {
+    const idleGradient = storedGradientOf(target);
+    if (colorState !== 'active') return idleGradient;
+    const activeProp = activeColorPropertyFor(target);
+    const activeGradient = storedGradientOf(activeProp);
+    const activeHasValue =
+      isNonEmptyString(keyPosition[activeProp]) || activeGradient != null;
+    return activeHasValue ? activeGradient : idleGradient;
+  };
+
+  const handleGradientPreview = (value: ColorModeValue) => {
+    if (!gradientTarget) return;
+    if (value.mode === 'solid') handleColorChange(gradientTarget, value.color);
+  };
+
+  const handleGradientCommit = (value: ColorModeValue) => {
+    if (!gradientTarget) return;
+    const prop = resolveColorProperty(gradientTarget);
+    const patch = gradientPairPatch(
+      prop as Parameters<typeof gradientPairPatch>[0],
+      value,
+    ) as Partial<KeyPosition>;
+
+    const baseColor = patch[prop];
+    if (typeof baseColor === 'string') {
+      setLocalColors((prev) => ({ ...prev, [prop]: baseColor }));
+    }
+
+    const updates: Partial<KeyPosition> = { ...patch };
+
+    // idle 편집 시 active 쌍이 비어 있으면 현재 표시되던 active 모습을 쌍으로 보존
+    if (colorState !== 'active') {
+      const activeProp = activeColorPropertyFor(gradientTarget);
+      const activeEmpty =
+        !isNonEmptyString(keyPosition[activeProp]) &&
+        storedGradientOf(activeProp) == null;
+      if (activeEmpty) {
+        updates[activeProp] = localColors[activeProp];
+        const prevIdleGradient = storedGradientOf(gradientTarget);
+        if (prevIdleGradient) {
+          const activeSibling =
+            gradientTarget === 'backgroundColor'
+              ? 'activeBackgroundGradient'
+              : 'activeBorderGradient';
+          updates[activeSibling] = prevIdleGradient;
+        }
+      }
+    }
+
+    onKeyUpdate({ index: keyIndex, ...updates });
+  };
+
+  const gradientState = useGradientColorState({
+    pair: gradientTarget
+      ? {
+          color: colorValueFor(gradientTarget),
+          gradient: gradientSpecFor(gradientTarget),
+        }
+      : {},
+    fallbackColor: '#ffffff',
+    // 요소 종류·키 모드 포함 — 형식 왕복 기억이 다른 대상과 교차하지 않게
+    contextKey: `${
+      canvasAnchor?.kind ?? 'key'
+    }:${selectedKeyType}:${keyIndex}:${pickerFor ?? 'none'}:${colorState}`,
+    canvasAnchor: gradientTarget ? canvasAnchor : undefined,
+    onPreview: handleGradientPreview,
+    onCommit: handleGradientCommit,
+  });
 
   // 위치 변경 핸들러
   const handlePositionXChange = (value: number) => {
@@ -509,6 +616,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
             surfaceClassName="rounded-md"
             color={getDisplayColor(colorValueFor('backgroundColor'))}
+            image={(() => {
+              const spec = gradientSpecFor('backgroundColor');
+              return spec ? gradientToCss(spec) : undefined;
+            })()}
           />
         </PropertyRow>
 
@@ -522,16 +633,17 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
             surfaceClassName="rounded-md"
             color={getDisplayColor(colorValueFor('borderColor'))}
+            image={(() => {
+              const spec = gradientSpecFor('borderColor');
+              return spec ? gradientToCss(spec) : undefined;
+            })()}
           />
         </PropertyRow>
 
         {/* 테두리 두께 */}
         <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
           <NumberInput
-            value={
-              keyPosition.borderWidth ??
-              (keyPosition.borderColor || keyPosition.activeBorderColor ? 3 : 0)
-            }
+            value={keyPosition.borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH}
             onChange={(value) =>
               handleStyleChangeComplete('borderWidth', value)
             }
@@ -784,18 +896,34 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               : fontColorBtnRef
           }
           panelElement={panelElement}
-          color={colorValueFor(pickerFor as StyleColorTarget)}
+          color={
+            gradientTarget
+              ? gradientState.pickerColor
+              : colorValueFor(pickerFor as StyleColorTarget)
+          }
           onColorChange={(c: string) =>
-            handleColorChange(pickerFor as StyleColorTarget, c)
+            gradientTarget
+              ? gradientState.handlePickerColorChange(c, false)
+              : handleColorChange(pickerFor as StyleColorTarget, c)
           }
           onColorChangeComplete={(c: string) =>
-            handleColorChangeComplete(pickerFor as StyleColorTarget, c)
+            gradientTarget
+              ? gradientState.handlePickerColorChange(c, true)
+              : handleColorChangeComplete(pickerFor as StyleColorTarget, c)
           }
           onClose={() => setPickerFor(null)}
           solidOnly={true}
           stateMode={colorState}
           onStateModeChange={setColorState}
           interactiveRefs={colorPickerInteractiveRefs}
+          headerSlot={gradientTarget ? gradientState.headerSlot : undefined}
+          footerSlot={gradientTarget ? gradientState.footerSlot : undefined}
+          gradientSpec={
+            gradientTarget ? gradientState.paletteGradientSpec : undefined
+          }
+          onGradientSpecSelect={
+            gradientTarget ? gradientState.handleGradientSpecSelect : undefined
+          }
         />
       )}
 

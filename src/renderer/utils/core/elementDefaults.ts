@@ -10,12 +10,14 @@ export const DEFAULT_ELEMENT_ACTIVE_BG = 'rgba(255, 255, 255, 0.88)';
 export const DEFAULT_ELEMENT_FONT = 'rgba(237, 238, 242, 0.78)';
 export const DEFAULT_ELEMENT_ACTIVE_FONT = 'rgba(20, 20, 24, 0.9)';
 
-// 기본 상태는 보더 없음 — 사용자가 보더를 켤 때의 색 폴백
-export const DEFAULT_ELEMENT_BORDER = 'rgba(113, 113, 113, 0.9)';
-export const DEFAULT_ELEMENT_ACTIVE_BORDER = 'rgba(255, 255, 255, 0.9)';
+// 기본 보더 — 1px 헤어라인이 표면 분리 담당, 테두리 색상/두께 UI로 그대로 수정 가능
+// 무보더 글래스 프리셋 느낌을 위해 존재감 최소 수준, 활성은 흰 배경 위라 자연히 사라짐
+export const DEFAULT_ELEMENT_BORDER = 'rgba(255, 255, 255, 0.04)';
+export const DEFAULT_ELEMENT_ACTIVE_BORDER = 'rgba(255, 255, 255, 0.04)';
+export const DEFAULT_ELEMENT_BORDER_WIDTH = 1;
 
-// 그래프 등 실보더 요소가 인셋 링을 흉내낼 때 쓰는 헤어라인 색
-export const DEFAULT_ELEMENT_HAIRLINE = 'rgba(255, 255, 255, 0.07)';
+// 그래프 등 다른 요소가 같은 헤어라인을 쓸 때의 별칭
+export const DEFAULT_ELEMENT_HAIRLINE = DEFAULT_ELEMENT_BORDER;
 
 export const DEFAULT_ELEMENT_RADIUS = 4;
 export const DEFAULT_ELEMENT_FONT_WEIGHT = 700;
@@ -25,8 +27,7 @@ export const DEFAULT_ELEMENT_FONT_WEIGHT = 700;
 export const DEFAULT_COUNTER_FONT_SIZE = 11;
 export const DEFAULT_COUNTER_FONT_WEIGHT = 500;
 
-// 비활성: 인셋 링 + 상단 하이라이트 + 소프트 드롭 / 활성: 눌림 인셋
-export const DEFAULT_ELEMENT_SHADOW =
-  'inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 4px 10px rgba(0, 0, 0, 0.28)';
+// 키 표면 섀도 — 보더가 분리를 담당하므로 비활성은 소프트 드롭만 / 활성은 눌림 인셋
+export const DEFAULT_ELEMENT_SHADOW = '0 4px 10px rgba(0, 0, 0, 0.28)';
 export const DEFAULT_ELEMENT_ACTIVE_SHADOW =
   '0 3px 8px rgba(0, 0, 0, 0.32), inset 0 1px 2px rgba(255, 255, 255, 0.5), inset 0 -1px 3px rgba(0, 0, 0, 0.12)';

@@ -29,6 +29,12 @@ import {
   DEFAULT_COUNTER_FONT_WEIGHT,
 } from '@utils/core/elementDefaults';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import {
+  gradientToCss,
+  gradientRingStyle,
+  resolveStatePair,
+  type GradientSpec,
+} from '@src/types/color';
 
 type EditorMode = 'create' | 'edit';
 
@@ -52,6 +58,10 @@ interface KeyVisualProps {
   activeBackgroundColor?: string;
   activeBorderColor?: string;
   activeFontColor?: string;
+  backgroundGradient?: GradientSpec | null;
+  activeBackgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
+  activeBorderGradient?: GradientSpec | null;
   useInlineStyles?: boolean;
   isStat?: boolean;
 }
@@ -1165,6 +1175,11 @@ const CounterAnimationEditorModal = ({
                             DEFAULT_ELEMENT_ACTIVE_FONT
                           : counterSettings?.fill.idle ?? DEFAULT_ELEMENT_FONT
                       }
+                      fillGradient={
+                        previewActive
+                          ? counterSettings?.fillActiveGradient ?? null
+                          : counterSettings?.fillIdleGradient ?? null
+                      }
                       strokeColor={
                         previewActive
                           ? counterSettings?.stroke.active ?? 'transparent'
@@ -1224,27 +1239,79 @@ const CounterAnimationEditorModal = ({
                   const explicitBorder = `${
                     keyVisual?.borderWidth ?? 3
                   }px solid ${stateBorderColor || defaultBorderColor}`;
+                  // 그라데이션 보더는 명시 보더와 같은 두께 규칙
+                  const gradientRingWidth = keyVisual?.borderWidth ?? 3;
                   const br = keyVisual?.borderRadius ?? DEFAULT_ELEMENT_RADIUS;
+
+                  // 그라데이션 쌍 해석 — 오버레이 Key와 동일 규칙
+                  const previewBgPair = resolveStatePair(
+                    keyActive,
+                    {
+                      color: keyVisual?.backgroundColor,
+                      gradient: keyVisual?.backgroundGradient,
+                    },
+                    {
+                      color: keyVisual?.activeBackgroundColor,
+                      gradient: keyVisual?.activeBackgroundGradient,
+                    },
+                  );
+                  const previewBorderPair = resolveStatePair(
+                    keyActive,
+                    {
+                      color: keyVisual?.borderColor,
+                      gradient: keyVisual?.borderGradient,
+                    },
+                    {
+                      color: keyVisual?.activeBorderColor,
+                      gradient: keyVisual?.activeBorderGradient,
+                    },
+                  );
+                  const previewBgGradient = previewBgPair.gradient ?? null;
+                  const previewBorderGradient =
+                    previewBorderPair.gradient ?? null;
+                  const showPreviewRing =
+                    previewBorderGradient != null &&
+                    (keyVisual?.borderWidth != null
+                      ? keyVisual.borderWidth > 0
+                      : true);
 
                   const keyBoxStyle: React.CSSProperties = {
                     width: `${keyW}px`,
                     height: `${keyH}px`,
-                    backgroundColor:
-                      useInline && stateBackgroundColor
-                        ? stateBackgroundColor
-                        : `var(--key-bg, ${
-                            stateBackgroundColor || defaultBgColor
-                          })`,
+                    // 그라데이션이면 base는 transparent — 이중 합성 방지
+                    backgroundColor: previewBgGradient
+                      ? 'transparent'
+                      : useInline && stateBackgroundColor
+                      ? stateBackgroundColor
+                      : `var(--key-bg, ${
+                          stateBackgroundColor || defaultBgColor
+                        })`,
+                    ...(previewBgGradient
+                      ? {
+                          backgroundImage: useInline
+                            ? gradientToCss(previewBgGradient)
+                            : `var(--key-bg-image, ${gradientToCss(
+                                previewBgGradient,
+                              )})`,
+                        }
+                      : {}),
                     borderRadius: useInline
                       ? `${br}px`
                       : `var(--key-radius, ${br}px)`,
-                    border: useInline
+                    // 그라데이션 보더는 보더 대신 동일 두께 padding + 링 자식
+                    // (--key-border 미소비 — 실보더+링 이중 소비 방지)
+                    border: showPreviewRing
+                      ? 'none'
+                      : useInline
                       ? hasExplicitBorder
                         ? explicitBorder
                         : 'none'
                       : `var(--key-border, ${
                           hasExplicitBorder ? explicitBorder : 'none'
                         })`,
+                    ...(showPreviewRing
+                      ? { padding: `${gradientRingWidth}px` }
+                      : {}),
                     color:
                       useInline && stateFontColor
                         ? stateFontColor
@@ -1303,13 +1370,22 @@ const CounterAnimationEditorModal = ({
                       }
                     >
                       <div
-                        className={`flex items-center justify-center ${
+                        className={`relative flex items-center justify-center ${
                           keyVisual?.className || ''
                         }`}
                         style={keyBoxStyle}
                         data-state={keyActive ? 'active' : 'inactive'}
                         data-key-element="true"
                       >
+                        {showPreviewRing && previewBorderGradient && (
+                          <span
+                            aria-hidden="true"
+                            style={gradientRingStyle(
+                              previewBorderGradient,
+                              gradientRingWidth,
+                            )}
+                          />
+                        )}
                         {isInside ? (
                           <div
                             className={`flex ${

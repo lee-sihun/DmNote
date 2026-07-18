@@ -1,3 +1,4 @@
+import type { GradientSpec } from '@src/types/color';
 import React, { useEffect, useRef, useState } from 'react';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
@@ -17,6 +18,8 @@ interface GraphPosition {
   graphAnimationEnabled?: boolean;
   backgroundColor?: string;
   borderColor?: string;
+  backgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
   inactiveImage?: string;
@@ -67,6 +70,8 @@ const OverlayGraphItem = ({ position, index = 0 }: OverlayGraphItemProps) => {
     graphAnimationEnabled = true,
     backgroundColor,
     borderColor,
+    backgroundGradient,
+    borderGradient,
     borderWidth,
     borderRadius,
     inactiveImage,
@@ -180,6 +185,8 @@ const OverlayGraphItem = ({ position, index = 0 }: OverlayGraphItemProps) => {
       animationEnabled={graphAnimationEnabled ?? true}
       backgroundColor={backgroundColor}
       borderColor={borderColor}
+      backgroundGradient={backgroundGradient}
+      borderGradient={borderGradient}
       borderWidth={borderWidth}
       borderRadius={borderRadius}
       imageSrc={imageSrc}

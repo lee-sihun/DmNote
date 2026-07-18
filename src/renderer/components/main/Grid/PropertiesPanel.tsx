@@ -1961,6 +1961,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchNoteColorChangeComplete,
     handleBatchGlowColorChange,
     handleBatchGlowColorChangeComplete,
+    handleBatchGradientCommit,
   } = useBatchHandlers({
     selectedKeyLikeElements: selectedBatchStyleElements as {
       type: 'key' | 'stat' | 'graph' | 'knob';
@@ -2685,6 +2686,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchResize={handleBatchResize}
           handleBatchStyleChange={handleBatchStyleChange}
           handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleBatchGradientCommit={handleBatchGradientCommit}
           handleKeyOnlyStyleChangeComplete={handleKeyOnlyStyleChangeComplete}
           handleBatchCounterUpdate={handleBatchCounterUpdate}
           handleBatchNoteColorChange={handleBatchNoteColorChange}
@@ -2782,6 +2784,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchResize={handleBatchResize}
           handleBatchStyleChange={handleBatchStyleChange}
           handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleBatchGradientCommit={handleBatchGradientCommit}
           handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
           getMixedValueKnobs={getMixedValueKnobs}
           getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
@@ -2827,6 +2830,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchResize={handleBatchResize}
           handleBatchStyleChange={handleBatchStyleChange}
           handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleBatchGradientCommit={handleBatchGradientCommit}
           handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
           getMixedValueGraphs={getMixedValueGraphs}
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}

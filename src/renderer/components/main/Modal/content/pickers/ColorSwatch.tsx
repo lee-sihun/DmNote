@@ -19,6 +19,8 @@ interface ColorSwatchSurfaceProps
   extends Omit<React.HTMLAttributes<HTMLDivElement>, 'color'> {
   color?: string | null;
   gradient?: ColorSwatchGradient | null;
+  /** CSS 이미지 값 (linear-gradient 등) — 있으면 color/gradient보다 우선 */
+  image?: string | null;
   opacity?: ColorSwatchOpacity;
 }
 
@@ -26,6 +28,7 @@ interface ColorSwatchButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'color'> {
   color?: string | null;
   gradient?: ColorSwatchGradient | null;
+  image?: string | null;
   opacity?: ColorSwatchOpacity;
   open?: boolean;
   selected?: boolean;
@@ -42,6 +45,7 @@ const colorWithOpacity = (color: string, opacity: number): string => {
 export const ColorSwatchSurface = ({
   color = 'transparent',
   gradient,
+  image,
   opacity,
   className = '',
   style,
@@ -49,7 +53,13 @@ export const ColorSwatchSurface = ({
 }: ColorSwatchSurfaceProps) => {
   const gradientOpacity =
     gradient && typeof opacity === 'object' ? opacity : null;
-  const colorLayerStyle: React.CSSProperties = gradient
+  const colorLayerStyle: React.CSSProperties = image
+    ? {
+        background: image,
+        opacity:
+          typeof opacity === 'number' ? clampOpacity(opacity) : undefined,
+      }
+    : gradient
     ? {
         background: `linear-gradient(to bottom, ${
           gradientOpacity
@@ -100,6 +110,7 @@ export const ColorSwatchButton = forwardRef<
     {
       color,
       gradient,
+      image,
       opacity,
       open = false,
       selected = false,
@@ -122,6 +133,7 @@ export const ColorSwatchButton = forwardRef<
         <ColorSwatchSurface
           color={color}
           gradient={gradient}
+          image={image}
           opacity={opacity}
           className={`relative w-full h-full ${surfaceClassName}`}
         />

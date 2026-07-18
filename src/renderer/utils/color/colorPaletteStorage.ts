@@ -3,10 +3,41 @@
  * 최근 사용한 색상을 localStorage에 저장/관리하는 유틸리티
  */
 
+import {
+  toCanonicalGradient,
+  type GradientSpec,
+  type GradientStop,
+} from '@src/types/color';
+
 type PaletteType = 'solid' | 'gradient';
 type GradientColor = { type: 'gradient'; top: string; bottom: string };
+/** 각도·스톱 위치까지 담는 신형 그라데이션 항목 — 구형(top/bottom)과 같은 팔레트에 공존 */
+export type GradientSpecColor = {
+  type: 'gradient-spec';
+  angle: number;
+  stops: GradientStop[];
+};
 type SolidColor = string;
-type PaletteColor = SolidColor | GradientColor;
+type PaletteColor = SolidColor | GradientColor | GradientSpecColor;
+
+export const isGradientSpecColor = (
+  value: unknown,
+): value is GradientSpecColor =>
+  !!value &&
+  typeof value === 'object' &&
+  (value as GradientSpecColor).type === 'gradient-spec' &&
+  Array.isArray((value as GradientSpecColor).stops);
+
+export const gradientSpecPaletteEntry = (
+  spec: GradientSpec,
+): GradientSpecColor => {
+  const canonical = toCanonicalGradient(spec);
+  return {
+    type: 'gradient-spec',
+    angle: canonical.angle,
+    stops: canonical.stops,
+  };
+};
 
 const STORAGE_KEYS: Record<PaletteType, string> = {
   solid: 'dmnote-color-palette-solid',
@@ -39,6 +70,13 @@ export const addToPalette = (type: PaletteType, color: PaletteColor): void => {
       return (
         normalizeForComparison(a as string) ===
         normalizeForComparison(b as string)
+      );
+    }
+    // gradient-spec 비교 — canonical 직렬화 일치
+    if (isGradientSpecColor(a) && isGradientSpecColor(b)) {
+      return (
+        JSON.stringify(toCanonicalGradient(a)) ===
+        JSON.stringify(toCanonicalGradient(b))
       );
     }
     // gradient 비교

@@ -19,10 +19,22 @@ import {
   type GradientColor,
   type ColorObject,
 } from '@utils/color/colorUtils';
-import { loadPalette, addToPalette } from '@utils/color/colorPaletteStorage';
+import {
+  loadPalette,
+  addToPalette,
+  isGradientSpecColor,
+  gradientSpecPaletteEntry,
+  type GradientSpecColor,
+} from '@utils/color/colorPaletteStorage';
+import {
+  gradientToCss,
+  toCanonicalGradient,
+  type GradientSpec,
+} from '@src/types/color';
 import { ColorSwatchButton, ColorSwatchSurface } from './ColorSwatch';
 
 type ColorValue = string | GradientColor;
+type PaletteValue = ColorValue | GradientSpecColor;
 
 // normalizeColorInput 기본색과 동일
 const DEFAULT_PICKER_COLOR: ColorObject =
@@ -45,6 +57,14 @@ interface ColorPickerWrapperProps {
   onColorChangeComplete?: (color: ColorValue) => void;
   onClose?: () => void;
   solidOnly?: boolean;
+  /** 상태 스위치 아래에 삽입되는 커스텀 헤더 (그라데이션 스톱 에디터) */
+  headerSlot?: React.ReactNode;
+  /** 팔레트 아래 삽입되는 커스텀 푸터 (형식 셀렉트 바) */
+  footerSlot?: React.ReactNode;
+  /** 그라데이션 형식 편집 중인 spec — 지정 시 닫힐 때 팔레트에 저장 (undefined = 미지원) */
+  gradientSpec?: GradientSpec | null;
+  /** 그라데이션 팔레트 항목 클릭 시 spec 전체 적용 */
+  onGradientSpecSelect?: (spec: GradientSpec) => void;
   stateMode?: string;
   onStateModeChange?:
     | React.Dispatch<React.SetStateAction<string>>
@@ -94,6 +114,10 @@ const ColorPickerWrapper = ({
   onColorChangeComplete,
   onClose,
   solidOnly = false,
+  headerSlot = undefined,
+  footerSlot = undefined,
+  gradientSpec = undefined,
+  onGradientSpecSelect = undefined,
   stateMode = undefined,
   onStateModeChange = undefined,
   opacityPercent = undefined,
@@ -184,10 +208,19 @@ const ColorPickerWrapper = ({
       addToPalette('gradient', gradient);
       setGradientPalette(loadPalette('gradient'));
     }
+    // 신형 그라데이션 spec — 각도·스톱 위치까지 통째로 저장
+    if (gradientSpec) {
+      addToPalette('gradient', gradientSpecPaletteEntry(gradientSpec));
+      setGradientPalette(loadPalette('gradient'));
+    }
   };
 
-  // 팔레트 클릭 핸들러
-  const handlePaletteClick = (paletteColor: ColorValue, type: string) => {
+  // 팔레트 클릭 핸들러 — spec 항목은 지원 피커에서만 도달 (미지원은 표시 필터)
+  const handlePaletteClick = (paletteColor: PaletteValue, type: string) => {
+    if (isGradientSpecColor(paletteColor)) {
+      onGradientSpecSelect?.(toCanonicalGradient(paletteColor));
+      return;
+    }
     if (type === 'solid') {
       const parsed = parseHexColor(normalizeColorInput(paletteColor));
       if (parsed) {
@@ -234,6 +267,19 @@ const ColorPickerWrapper = ({
         (paletteColor as GradientColor).type === 'gradient'
       ) {
         const gradientColor = paletteColor as GradientColor;
+        // 신형 형식 피커에서는 구형(top/bottom) 항목도 spec으로 변환 적용
+        if (onGradientSpecSelect) {
+          onGradientSpecSelect(
+            toCanonicalGradient({
+              angle: 180,
+              stops: [
+                { color: gradientColor.top, pos: 0 },
+                { color: gradientColor.bottom, pos: 1 },
+              ],
+            }),
+          );
+          return;
+        }
         suppressGradientBroadcastRef.current = true;
         setGradientTop(gradientColor.top.replace('#', '').toUpperCase());
         setGradientBottom(gradientColor.bottom.replace('#', '').toUpperCase());
@@ -628,14 +674,16 @@ const ColorPickerWrapper = ({
     setOpacityPercentBottomInput(String(Math.round(resolvedOpacityBottom!)));
   }, [opacityPercentFocusTarget, resolvedOpacityBottom, showOpacityControl]);
 
-  // panelElement가 있을 때 고정 위치 계산 (패널 기준)
+  // panelElement가 있을 때 고정 위치 계산 (패널 기준, 세로 중앙 정렬)
+  const computePositionRef = useRef<(() => void) | null>(null);
   useLayoutEffect(() => {
-    if (!open) {
+    if (!open || !panelElement) {
       setFixedPosition(null);
+      computePositionRef.current = null;
       return;
     }
 
-    if (panelElement) {
+    const compute = () => {
       const panelRect = panelElement.getBoundingClientRect();
 
       // 실측 우선 — 폴백은 정상 경로에선 도달하지 않는 방어값
@@ -654,32 +702,43 @@ const ColorPickerWrapper = ({
         fixedX = padding;
       }
 
-      // Y축: 패널 하단에서 picker 하단을 기준으로 정렬
-      // 솔리드 피커의 하단 위치를 기준으로 함
-      const panelBottomPadding = 20; // 패널 하단에서 약간 올려서 배치
-      const solidPickerBottom = panelRect.bottom - panelBottomPadding;
+      // Y축: 사이드 패널 세로 중앙 정렬 (화면 경계는 클램프)
+      let fixedY = panelRect.top + (panelRect.height - actualPickerHeight) / 2;
+      const maxY = window.innerHeight - actualPickerHeight - padding;
+      if (fixedY > maxY) fixedY = maxY;
+      if (fixedY < padding) fixedY = padding;
 
-      // 그라디언트 모드일 때도 하단은 솔리드와 동일하게 유지
-      // 따라서 Y 위치는 (하단 기준 - 실제 높이)
-      let fixedY = solidPickerBottom - actualPickerHeight;
+      setFixedPosition((prev) =>
+        prev && prev.x === fixedX && prev.y === fixedY
+          ? prev
+          : { x: fixedX, y: fixedY },
+      );
+    };
 
-      // Y축 상단 경계 체크
-      if (fixedY < padding) {
-        fixedY = padding;
-      }
+    computePositionRef.current = compute;
+    compute();
 
-      setFixedPosition({ x: fixedX, y: fixedY });
-    } else {
-      setFixedPosition(null);
+    // 비-React 요인(폰트 로드 등) 크기 변화 대응 안전망
+    const pickerEl = pickerContainerRef.current;
+    if (pickerEl && typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => compute());
+      observer.observe(pickerEl);
+      return () => {
+        observer.disconnect();
+        computePositionRef.current = null;
+      };
     }
-  }, [
-    open,
-    panelElement,
-    solidOnly,
-    mode,
-    showStateSwitch,
-    showOpacityControl,
-  ]); // mode/상태탭/추가컨트롤 변경 시에도 재계산 (높이가 변경됨)
+    return () => {
+      computePositionRef.current = null;
+    };
+  }, [open, panelElement]);
+
+  // 콘텐츠 변화(단색↔그레디언트 등)와 같은 커밋에서 페인트 전에 재중앙정렬 —
+  // ResizeObserver에만 맡기면 새 높이가 먼저 그려지고 위치가 다음 프레임에
+  // 따라와 팝업이 위아래로 덜컥거린다
+  useLayoutEffect(() => {
+    computePositionRef.current?.();
+  });
 
   // fixedPosition이 있으면 offsetY를 무시 (이미 정확한 좌표가 계산됨)
   const effectiveOffsetY = fixedPosition ? 0 : offsetY;
@@ -806,6 +865,7 @@ const ColorPickerWrapper = ({
         {showStateSwitch && (
           <StateSwitch state={stateMode} onChange={onStateModeChange} />
         )}
+        {headerSlot}
         {!solidOnly && <ModeSwitch mode={mode} onChange={handleModeSwitch} />}
 
         <SaturationArea
@@ -958,13 +1018,20 @@ const ColorPickerWrapper = ({
           />
         )}
 
-        {/* 팔레트 섹션 */}
+        {/* 팔레트 섹션 — spec 지원 피커는 solidOnly여도 그라데이션 행 표시.
+            미지원(구형) 피커에서는 알파를 보존할 수 없는 spec 항목을 표시에서
+            제외 (저장 데이터는 유지, 패딩 전에 필터) */}
         <ColorPaletteSection
           solidPalette={solidPalette}
-          gradientPalette={gradientPalette}
+          gradientPalette={
+            onGradientSpecSelect
+              ? gradientPalette
+              : gradientPalette.filter((c) => !isGradientSpecColor(c))
+          }
           onPaletteClick={handlePaletteClick}
-          showGradient={!solidOnly}
+          showGradient={!solidOnly || gradientSpec !== undefined}
         />
+        {footerSlot}
       </div>
     </FloatingPopup>
   );
@@ -977,9 +1044,9 @@ export default ColorPickerWrapper;
 // ============================================================================
 
 interface ColorPaletteSectionProps {
-  solidPalette: (string | GradientColor)[];
-  gradientPalette: (string | GradientColor)[];
-  onPaletteClick: (color: ColorValue, type: string) => void;
+  solidPalette: PaletteValue[];
+  gradientPalette: PaletteValue[];
+  onPaletteClick: (color: PaletteValue, type: string) => void;
   showGradient: boolean;
 }
 
@@ -992,14 +1059,12 @@ function ColorPaletteSection({
   const PALETTE_SIZE = 7;
 
   // 빈 슬롯 채우기
-  const filledSolid: (string | GradientColor | null)[] = [...solidPalette];
+  const filledSolid: (PaletteValue | null)[] = [...solidPalette];
   while (filledSolid.length < PALETTE_SIZE) {
     filledSolid.push(null);
   }
 
-  const filledGradient: (string | GradientColor | null)[] = [
-    ...gradientPalette,
-  ];
+  const filledGradient: (PaletteValue | null)[] = [...gradientPalette];
   while (filledGradient.length < PALETTE_SIZE) {
     filledGradient.push(null);
   }
@@ -1036,13 +1101,16 @@ function ColorPaletteSection({
 }
 
 interface PaletteSlotProps {
-  color: string | GradientColor | null;
+  color: PaletteValue | null;
   type: string;
   onClick?: () => void;
 }
 
 function PaletteSlot({ color, type, onClick }: PaletteSlotProps) {
   const isEmpty = !color;
+  const specImage = isGradientSpecColor(color)
+    ? gradientToCss(toCanonicalGradient(color))
+    : undefined;
   const gradient =
     type === 'gradient' &&
     color &&
@@ -1062,6 +1130,13 @@ function PaletteSlot({ color, type, onClick }: PaletteSlotProps) {
   // 툴팁 텍스트 생성
   const getTitle = (): string => {
     if (isEmpty) return '';
+    if (isGradientSpecColor(color)) {
+      const canonical = toCanonicalGradient(color);
+      const stops = canonical.stops
+        .map((s) => s.color.replace('#', '').toUpperCase())
+        .join('\n');
+      return `${stops}\n${canonical.angle}°`;
+    }
     if (
       type === 'gradient' &&
       color &&
@@ -1109,6 +1184,7 @@ function PaletteSlot({ color, type, onClick }: PaletteSlotProps) {
       surfaceClassName="rounded"
       color={solidColor}
       gradient={gradient}
+      image={specImage}
       onClick={isEmpty ? undefined : onClick}
       disabled={isEmpty}
       title={getTitle()}

@@ -37,7 +37,8 @@ const useLatest = <T,>(value: T) => {
 
 // 트랙 드래그 세션 — 캡처 기반, 시작 시 1회 실측.
 // 커서 렌더는 % 포지셔닝이라 측정에 의존하지 않음
-const usePointerSession = (
+// eslint-disable-next-line react-refresh/only-export-components
+export const usePointerSession = (
   emit: (ratioX: number, ratioY: number, final: boolean) => void,
 ) => {
   const emitRef = useLatest(emit);

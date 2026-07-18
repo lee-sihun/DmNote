@@ -1,4 +1,9 @@
 import React from 'react';
+import {
+  gradientToCss,
+  gradientRingStyle,
+  type GradientSpec,
+} from '@src/types/color';
 import { isMac } from '@utils/core/platform';
 import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
@@ -20,6 +25,8 @@ interface KnobPosition {
   className?: string;
   backgroundColor?: string;
   borderColor?: string;
+  backgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
   inactiveImage?: string;
@@ -93,6 +100,8 @@ const KnobItem = ({
     className,
     backgroundColor,
     borderColor,
+    backgroundGradient,
+    borderGradient,
     borderWidth,
     borderRadius,
     inactiveImage,
@@ -260,10 +269,17 @@ const KnobItem = ({
           borderRadius: borderRadius != null ? `${borderRadius}px` : '50%',
           overflow: 'hidden',
           position: 'relative',
-          background: backgroundColor || DEFAULT_ELEMENT_BG,
+          background: backgroundGradient
+            ? gradientToCss(backgroundGradient)
+            : backgroundColor || DEFAULT_ELEMENT_BG,
+          // 그라데이션 보더는 보더 대신 동일 두께 padding + 링 자식
           border:
-            borderWidth && borderWidth > 0
+            !borderGradient && borderWidth && borderWidth > 0
               ? `${borderWidth}px solid ${borderColor || DEFAULT_ELEMENT_FONT}`
+              : undefined,
+          padding:
+            borderGradient && borderWidth && borderWidth > 0
+              ? `${borderWidth}px`
               : undefined,
           // 오버레이와 동일한 기본 인셋 링 섀도 — 이미지·명시 보더 노브는 제외
           boxShadow:
@@ -273,6 +289,12 @@ const KnobItem = ({
           boxSizing: 'border-box',
         }}
       >
+        {borderGradient && borderWidth && borderWidth > 0 && (
+          <span
+            aria-hidden="true"
+            style={gradientRingStyle(borderGradient, borderWidth)}
+          />
+        )}
         {imageSrc ? (
           <img
             src={imageSrc}

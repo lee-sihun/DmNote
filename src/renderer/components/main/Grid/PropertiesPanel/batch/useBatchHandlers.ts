@@ -4,6 +4,7 @@ import type {
   KeyCounterSettings,
 } from '@src/types/key/keys';
 import { normalizeCounterSettings } from '@src/types/key/keys';
+import { gradientPairPatch, type ColorModeValue } from '@src/types/color';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
@@ -968,6 +969,93 @@ export function useBatchHandlers({
     ] as KeyLikeBatchUpdate[]);
   };
 
+  // 그라데이션 커밋 — 배경/테두리 쌍(base+sibling)을 선택 요소 전체에 atomic 적용
+  const handleBatchGradientCommit = (
+    target: 'backgroundColor' | 'borderColor',
+    state: 'idle' | 'active',
+    value: ColorModeValue,
+  ) => {
+    const isBg = target === 'backgroundColor';
+    const baseField =
+      state === 'active'
+        ? isBg
+          ? 'activeBackgroundColor'
+          : 'activeBorderColor'
+        : target;
+    const pairPatch = gradientPairPatch(
+      baseField,
+      value,
+    ) as Partial<KeyPosition>;
+
+    const buildUpdate = (
+      index: number,
+      pos: KeyPosition | undefined,
+    ): { index: number } & Partial<KeyPosition> => {
+      const update: { index: number } & Partial<KeyPosition> = {
+        index,
+        ...pairPatch,
+      };
+      // idle 편집 시 active 쌍이 비어 있으면 현재 표시되던 active 모습을 쌍으로 보존
+      if (state === 'idle' && pos) {
+        const activeBase = isBg
+          ? pos.activeBackgroundColor
+          : pos.activeBorderColor;
+        const activeGradient = isBg
+          ? pos.activeBackgroundGradient
+          : pos.activeBorderGradient;
+        if (activeBase == null && activeGradient == null) {
+          const fallback = isBg
+            ? pos.backgroundColor ?? DEFAULT_ACTIVE_BACKGROUND_COLOR
+            : pos.borderColor ?? DEFAULT_ACTIVE_BORDER_COLOR;
+          if (isBg) {
+            update.activeBackgroundColor = fallback;
+            if (pos.backgroundGradient) {
+              update.activeBackgroundGradient = pos.backgroundGradient;
+            }
+          } else {
+            update.activeBorderColor = fallback;
+            if (pos.borderGradient) {
+              update.activeBorderGradient = pos.borderGradient;
+            }
+          }
+        }
+      }
+      return update;
+    };
+
+    const currentKeys = keyPositions[selectedKeyType] || [];
+    const currentStats = statPositions[selectedKeyType] || [];
+    const currentGraphs = graphPositions?.[selectedKeyType] || [];
+    const currentKnobs = knobPositions?.[selectedKeyType] || [];
+
+    dispatchKeyLikeUpdates([
+      ...selectedKeys
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({
+          type: 'key' as const,
+          ...buildUpdate(el.index!, currentKeys[el.index!]),
+        })),
+      ...selectedStats
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({
+          type: 'stat' as const,
+          ...buildUpdate(el.index!, currentStats[el.index!]),
+        })),
+      ...selectedGraphs
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({
+          type: 'graph' as const,
+          ...buildUpdate(el.index!, currentGraphs[el.index!]),
+        })),
+      ...selectedKnobs
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({
+          type: 'knob' as const,
+          ...buildUpdate(el.index!, currentKnobs[el.index!]),
+        })),
+    ] as KeyLikeBatchUpdate[]);
+  };
+
   // 정렬 핸들러
   const handleBatchAlign = (
     direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
@@ -1416,6 +1504,7 @@ export function useBatchHandlers({
   return {
     handleBatchStyleChange,
     handleBatchStyleChangeComplete,
+    handleBatchGradientCommit,
     handleKeyOnlyStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,

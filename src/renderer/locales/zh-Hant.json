@@ -303,6 +303,7 @@
   "colorPicker": {
     "solid": "純色",
     "gradient": "漸變",
+    "gradientAngle": "角度",
     "idle": "閒置",
     "active": "激活"
   },

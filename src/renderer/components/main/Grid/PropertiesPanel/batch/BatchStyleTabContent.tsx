@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
+import type { ColorModeValue } from '@src/types/color';
 import {
   PropertyRow,
   NumberInput,
@@ -17,6 +18,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_BORDER,
   DEFAULT_ELEMENT_ACTIVE_BORDER,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_FONT_WEIGHT,
 } from '@utils/core/elementDefaults';
@@ -73,6 +75,11 @@ interface BatchStyleTabContentProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchGradientCommit?: (
+    target: 'backgroundColor' | 'borderColor',
+    state: 'idle' | 'active',
+    value: ColorModeValue,
+  ) => void;
   // 키 전용 (사운드 등)
   getKeyOnlyMixedValue?: <T>(
     getter: (pos: KeyPosition) => T | undefined,
@@ -108,6 +115,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchGradientCommit,
   getKeyOnlyMixedValue,
   handleKeyOnlyStyleChangeComplete,
   showBatchImagePicker,
@@ -555,6 +563,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <span className="text-fg-faint text-body italic">Mixed</span>
           ) : null}
           <ColorInput
+            colorId="batch-background"
             value={
               getMixedValue((pos) => pos.backgroundColor, DEFAULT_ELEMENT_BG)
                 .value
@@ -581,6 +590,24 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               handleBatchStyleChangeComplete('activeBackgroundColor', color)
             }
             panelElement={panelElement}
+            canvasAnchor={{ kind: 'batch' }}
+            gradientValue={
+              getMixedValue((pos) => pos.backgroundGradient ?? null, null).value
+            }
+            activeGradientValue={
+              getMixedValue((pos) => pos.activeBackgroundGradient ?? null, null)
+                .value
+            }
+            onModeCommit={
+              handleBatchGradientCommit
+                ? (state, modeValue) =>
+                    handleBatchGradientCommit(
+                      'backgroundColor',
+                      state,
+                      modeValue,
+                    )
+                : undefined
+            }
           />
         </PropertyRow>
 
@@ -598,6 +625,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <span className="text-fg-faint text-body italic">Mixed</span>
           ) : null}
           <ColorInput
+            colorId="batch-border"
             value={
               getMixedValue((pos) => pos.borderColor, DEFAULT_ELEMENT_BORDER)
                 .value
@@ -622,26 +650,36 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               handleBatchStyleChangeComplete('activeBorderColor', color)
             }
             panelElement={panelElement}
+            canvasAnchor={{ kind: 'batch' }}
+            gradientValue={
+              getMixedValue((pos) => pos.borderGradient ?? null, null).value
+            }
+            activeGradientValue={
+              getMixedValue((pos) => pos.activeBorderGradient ?? null, null)
+                .value
+            }
+            onModeCommit={
+              handleBatchGradientCommit
+                ? (state, modeValue) =>
+                    handleBatchGradientCommit('borderColor', state, modeValue)
+                : undefined
+            }
           />
         </PropertyRow>
 
         {/* 테두리 두께 */}
         <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
           {getMixedValue(
-            (pos) =>
-              pos.borderWidth ??
-              (pos.borderColor || pos.activeBorderColor ? 3 : 0),
-            0,
+            (pos) => pos.borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH,
+            DEFAULT_ELEMENT_BORDER_WIDTH,
           ).isMixed ? (
             <span className="text-fg-faint text-body italic">Mixed</span>
           ) : null}
           <NumberInput
             value={
               getMixedValue(
-                (pos) =>
-                  pos.borderWidth ??
-                  (pos.borderColor || pos.activeBorderColor ? 3 : 0),
-                0,
+                (pos) => pos.borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH,
+                DEFAULT_ELEMENT_BORDER_WIDTH,
               ).value
             }
             onChange={(value) =>
