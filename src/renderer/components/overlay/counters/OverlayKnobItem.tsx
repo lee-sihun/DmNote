@@ -11,6 +11,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_SHADOW,
   DEFAULT_ELEMENT_ACTIVE_SHADOW,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
 } from '@utils/core/elementDefaults';
 import {
   gradientToCss,
@@ -162,8 +163,10 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
   );
   const bgSpec = bgPair.gradient ?? null;
   const borderSpec = borderPair.gradient ?? null;
+  // 키·그래프와 동일 규칙 — 두께 미지정이면 기본 두께 링, 0은 명시적 비활성
+  const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
   const showBorderRing =
-    Boolean(borderSpec) && !!borderWidth && borderWidth > 0;
+    Boolean(borderSpec) && (borderWidth != null ? borderWidth > 0 : true);
   // 모서리 반경 미지정 시 원형 유지 (px 지정 시 키와 동일한 px 단위)
   const resolvedRadius = borderRadius != null ? `${borderRadius}px` : '50%';
 
@@ -197,7 +200,7 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
             !showBorderRing && borderWidth && borderWidth > 0
               ? `${borderWidth}px solid ${stateBorderColor}`
               : undefined,
-          padding: showBorderRing ? `${borderWidth}px` : undefined,
+          padding: showBorderRing ? `${gradientRingWidth}px` : undefined,
           // 기본 표면은 키와 같은 인셋 링 섀도 — 이미지·투명·명시 보더(구형 저장 데이터 포함)는 제외
           boxShadow:
             isTransparent || imageSrc || (borderWidth && borderWidth > 0)
@@ -212,10 +215,10 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
           backfaceVisibility: 'hidden',
         }}
       >
-        {showBorderRing && borderSpec && borderWidth && (
+        {showBorderRing && borderSpec && (
           <span
             aria-hidden="true"
-            style={gradientRingStyle(borderSpec, borderWidth)}
+            style={gradientRingStyle(borderSpec, gradientRingWidth)}
           />
         )}
         {imageSrc ? (

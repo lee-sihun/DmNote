@@ -203,18 +203,29 @@ export function computeKeyElementStyles({
   const bgGradient = hasCurrentImage ? null : bgPair.gradient ?? null;
   const borderGradientSpec = borderPair.gradient ?? null;
 
-  // 명시 보더가 있을 때만 렌더 — 기본은 보더 없음(인셋 링 섀도가 담당)
-  // 상태별 판정: active 색만 지정하면 대기 상태는 무보더 유지
+  // 보더 판정 — 명시값 우선, 아무 값도 없으면 기본 1px 헤어라인이 표면 분리
+  // 담당(패널 표시값과 일치). 두께 0은 명시적 무보더, 이미지 키는 헤어라인 제외
   const hasExplicitBorder =
     borderWidth != null ? borderWidth > 0 : stateBorderColor != null;
+  const showDefaultHairline =
+    !hasExplicitBorder && borderWidth == null && !hasCurrentImage;
   const explicitBorder = `${
     borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH
   }px solid ${stateBorderColor || defaultBorderColor}`;
+  const resolvedBorder =
+    hasExplicitBorder || showDefaultHairline ? explicitBorder : 'none';
   // 그라데이션 보더는 명시 보더와 같은 두께 규칙 — width 0은 명시적 비활성
   const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
-  const showBorderRing =
-    borderGradientSpec != null &&
-    (borderWidth != null ? borderWidth > 0 : true);
+  const ringEnabled = borderWidth != null ? borderWidth > 0 : true;
+  const showBorderRing = borderGradientSpec != null && ringEnabled;
+  // 한쪽 상태만 링이어도 반대 상태에 같은 패딩을 예약 — 눌림 시 콘텐츠 박스
+  // 이동 방지. 실보더·헤어라인 상태는 보더가 이미 같은 인셋을 만들므로 제외
+  const pairHasRing =
+    ringEnabled &&
+    (position.borderGradient != null || position.activeBorderGradient != null);
+  const reserveRingPadding =
+    showBorderRing ||
+    (pairHasRing && !hasExplicitBorder && !showDefaultHairline);
 
   const keyStyle: React.CSSProperties = {
     width: `${width}px`,
@@ -250,11 +261,9 @@ export function computeKeyElementStyles({
     border: showBorderRing
       ? 'none'
       : useInline
-      ? hasExplicitBorder
-        ? explicitBorder
-        : 'none'
-      : `var(--key-border, ${hasExplicitBorder ? explicitBorder : 'none'})`,
-    ...(showBorderRing ? { padding: `${gradientRingWidth}px` } : {}),
+      ? resolvedBorder
+      : `var(--key-border, ${resolvedBorder})`,
+    ...(reserveRingPadding ? { padding: `${gradientRingWidth}px` } : {}),
     color:
       useInline && stateFontColor
         ? stateFontColor

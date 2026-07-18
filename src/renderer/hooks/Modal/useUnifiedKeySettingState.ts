@@ -7,6 +7,7 @@ import {
   normalizeCounterSettings,
 } from '@src/types/key/keys';
 import type { NoteColor, KeyCounterSettings } from '@src/types/key/keys';
+import { toCompactRgba } from '@src/types/color';
 
 // ============================================================================
 // 타입 정의
@@ -464,13 +465,16 @@ export function useUnifiedKeySettingState({
           idle: counterState.strokeIdle,
           active: counterState.strokeActive,
         },
-        // fill 피커가 단색 전용이므로 색을 바꿨다면 단색 선택으로 보고 gradient 해제
+        // fill 피커가 단색 전용이므로 색을 바꿨다면 단색 선택으로 보고 gradient 해제.
+        // 비교는 canonical 표기 기준 — 같은 색의 hex↔rgba 재출력으로 오판하지 않게
         fillIdleGradient:
-          counterState.fillIdle === resolvedCounterSettings.fill.idle
+          toCompactRgba(counterState.fillIdle) ===
+          toCompactRgba(resolvedCounterSettings.fill.idle)
             ? resolvedCounterSettings.fillIdleGradient ?? null
             : null,
         fillActiveGradient:
-          counterState.fillActive === resolvedCounterSettings.fill.active
+          toCompactRgba(counterState.fillActive) ===
+          toCompactRgba(resolvedCounterSettings.fill.active)
             ? resolvedCounterSettings.fillActiveGradient ?? null
             : null,
       }),

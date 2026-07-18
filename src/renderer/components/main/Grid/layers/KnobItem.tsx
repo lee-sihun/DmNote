@@ -12,6 +12,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_SHADOW,
 } from '@utils/core/elementDefaults';
@@ -109,6 +110,11 @@ const KnobItem = ({
     idleImageFit,
     imageFit,
   } = position ?? ({} as Partial<KnobPosition>);
+
+  // 키·그래프와 동일 규칙 — 두께 미지정이면 기본 두께 링, 0은 명시적 비활성
+  const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
+  const showBorderRing =
+    Boolean(borderGradient) && (borderWidth != null ? borderWidth > 0 : true);
 
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
@@ -277,10 +283,7 @@ const KnobItem = ({
             !borderGradient && borderWidth && borderWidth > 0
               ? `${borderWidth}px solid ${borderColor || DEFAULT_ELEMENT_FONT}`
               : undefined,
-          padding:
-            borderGradient && borderWidth && borderWidth > 0
-              ? `${borderWidth}px`
-              : undefined,
+          padding: showBorderRing ? `${gradientRingWidth}px` : undefined,
           // 오버레이와 동일한 기본 인셋 링 섀도 — 이미지·명시 보더 노브는 제외
           boxShadow:
             imageSrc || (borderWidth && borderWidth > 0)
@@ -289,10 +292,10 @@ const KnobItem = ({
           boxSizing: 'border-box',
         }}
       >
-        {borderGradient && borderWidth && borderWidth > 0 && (
+        {showBorderRing && borderGradient && (
           <span
             aria-hidden="true"
-            style={gradientRingStyle(borderGradient, borderWidth)}
+            style={gradientRingStyle(borderGradient, gradientRingWidth)}
           />
         )}
         {imageSrc ? (

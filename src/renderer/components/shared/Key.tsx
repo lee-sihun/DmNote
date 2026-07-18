@@ -281,13 +281,18 @@ const DraggableKey = React.memo(
     useBgFormatTransitionGate(nodeRef, Boolean(bgGradient));
     const borderGradientSpec = position.borderGradient ?? null;
 
-    // 명시 보더가 있을 때만 렌더 — 기본은 보더 없음(인셋 링 섀도가 담당)
+    // 보더 판정 — 명시값 우선, 아무 값도 없으면 기본 1px 헤어라인(패널 표시값·
+    // 오버레이·배치 고스트와 일치). 두께 0은 명시적 무보더, 이미지 키는 제외.
     // 에디터는 항상 대기 상태 — 오버레이의 상태별 판정과 동일하게 idle 색만 본다
     const hasExplicitBorder =
       borderWidth != null ? borderWidth > 0 : borderColor != null;
+    const showDefaultHairline =
+      !hasExplicitBorder && borderWidth == null && !inactiveImageSrc;
     const explicitBorder = `${
       borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH
     }px solid ${borderColor || DEFAULT_ELEMENT_BORDER}`;
+    const resolvedBorder =
+      hasExplicitBorder || showDefaultHairline ? explicitBorder : 'none';
     // 그라데이션 보더는 명시 보더와 같은 두께 규칙 — width 0은 명시적 비활성
     const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
     const showBorderRing =
@@ -329,10 +334,8 @@ const DraggableKey = React.memo(
       border: showBorderRing
         ? 'none'
         : useInline
-        ? hasExplicitBorder
-          ? explicitBorder
-          : 'none'
-        : `var(--key-border, ${hasExplicitBorder ? explicitBorder : 'none'})`,
+        ? resolvedBorder
+        : `var(--key-border, ${resolvedBorder})`,
       ...(showBorderRing ? { padding: `${gradientRingWidth}px` } : {}),
       overflow: 'hidden' as const,
       willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
