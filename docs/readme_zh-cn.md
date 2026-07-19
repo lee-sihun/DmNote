@@ -6,10 +6,10 @@
   <h1>DM Note</h1>
   
   <p>
-    <strong>支持广泛自定义的按键显示程序</strong>
+    <strong>Make it yours</strong>
   </p>
   <p>
-    <strong>提供用户自定义按键映射与样式、可轻松切换的预设，以及现代化、直观的界面</strong>
+    <strong>打造专属于你的按键显示程序</strong>
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
@@ -21,7 +21,7 @@ https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
 
 ## 🌟 概述
 
-**DM Note** 是一款专为 DJMAX RESPECT V 优化的按键显示程序，也可以自由用于其他游戏。通过简单设置，您可以在直播或游戏视频创作时可视化显示按键输入。目前仅官方支持 Windows 10/11 和 macOS 环境。如果您使用的是 Linux，我们推荐尝试 [社区分支版本](https://github.com/northernorca/DmNote)。
+**DM Note** 是一款专为 DJMAX RESPECT V 设计的按键显示程序，也可以自由用于任何其他游戏。通过简单设置，您可以在直播或游戏视频创作时可视化显示按键输入。目前仅官方支持 Windows 10/11 和 macOS 环境。如果您使用的是 Linux，我们推荐尝试 [社区分支版本](https://github.com/northernorca/DmNote)。
 
 [前往下载 DM NOTE v1.6.1](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
 

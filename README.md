@@ -4,14 +4,14 @@
   <img src="src-tauri/icons/icon.ico" alt="dmnote Logo" width="120" height="120">
 
   <h1>DM Note</h1>
-  
+
   <p>
-    <strong>다양한 커스터마이징을 지원하는 키뷰어 프로그램</strong>
+    <strong>Make it yours</strong>
   </p>
   <p>
-    <strong>사용자 정의 키 매핑과 스타일링, 손쉽게 전환 가능한 프리셋, 모던하고 직관적인 인터페이스를 제공합니다.</strong>
+    <strong>나만의 스타일로 완성하는 키뷰어</strong>
   </p>
-  
+
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
   [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
