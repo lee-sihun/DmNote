@@ -8,8 +8,6 @@ export type ListItem = {
   id: string;
   label: string;
   disabled?: boolean;
-  /** 구분선 항목 */
-  type?: 'item' | 'separator';
   /** 토글 항목의 체크 상태 */
   checked?: boolean;
   /** 서브메뉴 항목 */
@@ -32,6 +30,24 @@ interface ListPopupProps {
   /** 최대 표시 항목 수 (초과 시 스크롤) */
   maxVisibleItems?: number;
 }
+
+// 아이템 26 + 갭 4 리듬 공용 스크롤 계산 — 메인 메뉴·서브메뉴가 함께 사용
+const ITEM_HEIGHT = 26;
+const ITEM_GAP = 4;
+const SCROLL_EDGE_PADDING = 6;
+
+const getListScrollMetrics = (
+  itemCount: number,
+  maxVisibleItems?: number,
+): { needsScroll: boolean; maxHeight: number | undefined } => {
+  if (maxVisibleItems == null || itemCount <= maxVisibleItems) {
+    return { needsScroll: false, maxHeight: undefined };
+  }
+  return {
+    needsScroll: true,
+    maxHeight: maxVisibleItems * (ITEM_HEIGHT + ITEM_GAP) + SCROLL_EDGE_PADDING,
+  };
+};
 
 const DOCUMENT_FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -201,15 +217,10 @@ const SubMenu = ({
     firstItem?.focus();
   }, [focusFirst, pos]);
 
-  const itemHeight = 26;
-  const itemGap = 4;
-  const separatorCount = items.filter((i) => i.type === 'separator').length;
-  const normalItemCount = items.length - separatorCount;
-  const effectiveMax = maxVisibleItems ?? normalItemCount;
-  const needsScroll = normalItemCount > effectiveMax;
-  const maxHeight = needsScroll
-    ? effectiveMax * (itemHeight + itemGap) + separatorCount * (1 + itemGap) + 6
-    : undefined;
+  const { needsScroll, maxHeight } = getListScrollMetrics(
+    items.length,
+    maxVisibleItems,
+  );
   const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
 
   const { scrollContainerRef: subLenisRef } = useLenis({
@@ -344,15 +355,6 @@ const MenuItemRow = ({
       if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     };
   }, []);
-
-  // 구분선 (부모 p-[4px] 패딩을 무시하고 전체 폭 사용)
-  if (item.type === 'separator') {
-    return (
-      <div role="separator" className="-mx-[4px]">
-        <div className="h-[1px] bg-line" />
-      </div>
-    );
-  }
 
   const hasCheck = typeof item.checked === 'boolean';
 
@@ -513,18 +515,10 @@ const ListPopup = ({
     'z-40 bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
-  // 스크롤 필요 여부 계산 (아이템 26 + 갭 4 리듬)
-  const itemHeight = 26;
-  const itemGap = 4;
-  const separatorCount = items.filter((i) => i.type === 'separator').length;
-  const normalItemCount = items.length - separatorCount;
-  const needsScroll =
-    maxVisibleItems != null && normalItemCount > maxVisibleItems;
-  const maxHeight = needsScroll
-    ? maxVisibleItems * (itemHeight + itemGap) +
-      separatorCount * (1 + itemGap) +
-      6
-    : undefined;
+  const { needsScroll, maxHeight } = getListScrollMetrics(
+    items.length,
+    maxVisibleItems,
+  );
   const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
 
   const siblingActiveRef = useRef<{

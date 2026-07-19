@@ -31,6 +31,8 @@ interface FloatingPopupBaseProps {
   animate?: boolean;
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   focusOriginRef?: React.MutableRefObject<HTMLElement | null>;
+  /** surface: 열릴 때 첫 포커서블 대신 팝업 표면에 포커스 (입력 필드 자동 포커스 방지) */
+  initialFocus?: 'first' | 'surface';
 }
 
 interface FloatingDialogPopupProps extends FloatingPopupBaseProps {
@@ -71,6 +73,7 @@ interface FloatingPopupSurfaceProps {
   onMenuTab?: (event: KeyboardEvent) => void;
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   focusOriginRef?: React.MutableRefObject<HTMLElement | null>;
+  initialFocus?: 'first' | 'surface';
   children?: React.ReactNode;
 }
 
@@ -83,6 +86,7 @@ const FloatingPopupSurface = ({
   onMenuTab,
   onKeyDown,
   focusOriginRef,
+  initialFocus = 'first',
   children,
 }: FloatingPopupSurfaceProps) => {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -107,13 +111,15 @@ const FloatingPopupSurface = ({
     }
     if (surface.contains(document.activeElement)) return;
     const initialTarget =
-      role === 'menu'
+      initialFocus === 'surface'
+        ? surface
+        : role === 'menu'
         ? surface.querySelector<HTMLElement>(
             '[role^="menuitem"]:not(:disabled)',
           ) ?? surface
         : getFocusableElements(surface)[0] ?? surface;
     initialTarget.focus();
-  }, [focusOriginRef, role]);
+  }, [focusOriginRef, initialFocus, role]);
 
   useLayoutEffect(() => {
     const prevFocused = prevFocusedRef.current;
@@ -202,6 +208,7 @@ const FloatingPopup = ({
   onKeyDown,
   onMenuTab,
   focusOriginRef,
+  initialFocus,
 }: FloatingPopupProps) => {
   const { x, y, refs, strategy, update } = useFloating({
     placement: placement as Placement,
@@ -474,6 +481,7 @@ const FloatingPopup = ({
       onMenuTab={onMenuTab}
       onKeyDown={onKeyDown}
       focusOriginRef={focusOriginRef}
+      initialFocus={initialFocus}
     >
       {children}
     </FloatingPopupSurface>

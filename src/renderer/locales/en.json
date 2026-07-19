@@ -272,11 +272,14 @@
   },
   "tabs": {
     "title": "Custom tabs",
-    "empty": "No additional tabs",
     "createTitle": "Create Tab",
     "create": "Create",
     "delete": "Delete",
     "deleteConfirm": "Delete the '{{name}}' tab?",
+    "search": {
+      "placeholder": "Search custom tabs",
+      "empty": "No results"
+    },
     "name": {
       "placeholder": "e.g. My Custom",
       "required": "Please enter a name",

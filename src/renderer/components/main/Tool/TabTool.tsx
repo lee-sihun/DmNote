@@ -57,9 +57,10 @@ const TabTool = () => {
         ariaLabel={t('tabs.title')}
         referenceRef={gridButtonRef}
         placement="bottom"
+        initialFocus="surface"
         onClose={() => setIsPopupOpen(false)}
       >
-        <TabList onClose={() => setIsPopupOpen(false)} />
+        <TabList />
       </FloatingPopup>
     </div>
   );

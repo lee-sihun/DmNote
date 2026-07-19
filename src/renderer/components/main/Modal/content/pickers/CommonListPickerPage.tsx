@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import Dropdown from '@components/main/common/Dropdown';
+import SearchField from '@components/main/common/SearchField';
+import AddIconButton from '@components/main/common/AddIconButton';
 
 type FilterOption = {
   value: string;
@@ -93,43 +95,17 @@ export default function CommonListPickerPage<T>({
       </div>
       {/* 검색 — 리스트와 인접한 프라이머리 컨트롤 */}
       <div className="px-[12px] pb-[12px] shrink-0">
-        <div className="relative">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            className="absolute left-[10px] top-1/2 -translate-y-1/2 text-fg-faint pointer-events-none"
-          >
-            <circle
-              cx="5"
-              cy="5"
-              r="3.5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-            <path
-              d="M8 8L10.5 10.5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => onSearchQueryChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Escape') return;
-              event.preventDefault();
-              event.stopPropagation();
-              onBack();
-            }}
-            placeholder={searchPlaceholder}
-            aria-label={searchPlaceholder}
-            className="w-full h-[30px] pl-[30px] pr-[10px] bg-inset rounded-surface text-fg text-body placeholder-fg-faint focus:shadow-focus-ring outline-none transition-shadow duration-fast"
-          />
-        </div>
+        <SearchField
+          value={searchQuery}
+          onChange={onSearchQueryChange}
+          placeholder={searchPlaceholder}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            event.stopPropagation();
+            onBack();
+          }}
+        />
       </div>
       {/* 리스트 컨테이너 — 배경보다 한 단계 밝은 필 테이블. 빈 공간도 테이블의 빈 영역으로 읽힘 */}
       <div className="mx-[12px] bg-inset rounded-surface p-[4px] flex-1 min-h-0 flex flex-col">
@@ -151,7 +127,7 @@ export default function CommonListPickerPage<T>({
               </p>
             ) : null}
             {errorText ? (
-              <p className="py-[14px] text-danger text-body text-center">
+              <p className="py-[14px] text-danger-fg text-body text-center">
                 {errorText}
               </p>
             ) : null}
@@ -172,23 +148,12 @@ export default function CommonListPickerPage<T>({
               />
             </div>
           ) : null}
-          <button
-            ref={addButtonRef}
-            type="button"
+          <AddIconButton
+            buttonRef={addButtonRef}
             onClick={onAdd}
-            title={addLabel}
-            aria-label={addLabel}
-            className="ml-auto w-[30px] h-[30px] rounded-surface shrink-0 flex items-center justify-center bg-fill hover:bg-fill-hover active:bg-fill-active text-fg-muted hover:text-fg transition-colors duration-fast"
-          >
-            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-              <path
-                d="M4 1V7M1 4H7"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
+            label={addLabel}
+            className="ml-auto"
+          />
         </div>
       </div>
     </div>

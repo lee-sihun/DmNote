@@ -80,7 +80,7 @@ const TabNameModal = ({
             className="w-full min-w-0 h-[30px] px-[12px] rounded-surface bg-inset text-fg text-body focus:shadow-focus-ring"
             placeholder={t('tabs.name.placeholder')}
           />
-          {error && <div className="text-danger text-body">{error}</div>}
+          {error && <div className="text-danger-fg text-body">{error}</div>}
         </div>
         <div className="flex gap-[8px]">
           <button

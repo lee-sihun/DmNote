@@ -272,11 +272,14 @@
   },
   "tabs": {
     "title": "自定义标签页",
-    "empty": "无额外标签页",
     "createTitle": "创建标签页",
     "create": "创建",
     "delete": "删除",
     "deleteConfirm": "删除 '{{name}}' 标签页?",
+    "search": {
+      "placeholder": "搜索自定义标签页",
+      "empty": "无结果"
+    },
     "name": {
       "placeholder": "例如: 我的自定义",
       "required": "请输入名称",

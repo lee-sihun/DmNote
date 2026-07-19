@@ -120,6 +120,51 @@ describe('FloatingPopup focus contract', () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it('focuses the surface first when initialFocus is surface', async () => {
+    const opener = document.createElement('button');
+    document.body.prepend(opener);
+    opener.focus();
+
+    const renderSurfacePopup = async (open: boolean) => {
+      await act(async () => {
+        root.render(
+          <FloatingPopup
+            open={open}
+            ariaLabel="Surface focus popup"
+            fixedX={0}
+            fixedY={0}
+            animate={false}
+            initialFocus="surface"
+            onClose={() => undefined}
+          >
+            {open ? <input aria-label="Search" /> : null}
+          </FloatingPopup>,
+        );
+      });
+    };
+
+    await renderSurfacePopup(true);
+    const dialog = document.querySelector<HTMLElement>(
+      '[role="dialog"][aria-modal="false"]',
+    );
+    // 입력 필드가 아니라 표면이 최초 포커스를 가짐
+    expect(document.activeElement).toBe(dialog);
+
+    // 첫 Tab은 첫 포커서블 자식으로 이동
+    const forward = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(forward);
+    expect(forward.defaultPrevented).toBe(true);
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Search');
+
+    // 닫으면 opener로 복원
+    await renderSurfacePopup(false);
+    expect(document.activeElement).toBe(opener);
+  });
+
   it('exposes an accessible dialog name', async () => {
     await renderPopup(true, <button type="button">Action</button>);
 

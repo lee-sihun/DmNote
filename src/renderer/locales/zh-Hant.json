@@ -272,11 +272,14 @@
   },
   "tabs": {
     "title": "自訂標籤頁",
-    "empty": "無額外標籤頁",
     "createTitle": "建立標籤頁",
     "create": "建立",
     "delete": "刪除",
     "deleteConfirm": "刪除 '{{name}}' 標籤頁?",
+    "search": {
+      "placeholder": "搜尋自訂標籤頁",
+      "empty": "無結果"
+    },
     "name": {
       "placeholder": "例如: 我的自定義",
       "required": "請輸入名稱",

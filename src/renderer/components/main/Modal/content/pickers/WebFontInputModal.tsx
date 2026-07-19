@@ -432,11 +432,7 @@ const WebFontInputModal = ({
                   >
                     {extractedFontFamily}
                   </p>
-                  <div
-                    className="h-[1px] bg-line my-[14px]"
-                    aria-hidden="true"
-                  />
-                  <div className="flex flex-col gap-[6px] text-[14px] leading-[21px] text-fg-muted">
+                  <div className="mt-[24px] flex flex-col gap-[6px] text-[14px] leading-[21px] text-fg-muted">
                     {weightStops.map((weight) => (
                       <div
                         key={weight}

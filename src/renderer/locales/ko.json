@@ -272,11 +272,14 @@
   },
   "tabs": {
     "title": "커스텀 탭",
-    "empty": "추가 탭이 없습니다",
     "createTitle": "탭 생성",
     "create": "생성하기",
     "delete": "삭제",
     "deleteConfirm": "{{name}} 탭을 제거 하시겠습니까?",
+    "search": {
+      "placeholder": "커스텀 탭 검색",
+      "empty": "결과 없음"
+    },
     "name": {
       "placeholder": "예: 내 커스텀",
       "required": "이름을 입력하세요",
