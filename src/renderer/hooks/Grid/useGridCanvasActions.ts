@@ -9,6 +9,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { reconcileSelectionAfterIndexedElementDeletion } from '@stores/grid/useGridSelectionStore';
 import type { KeyPosition } from '@src/types/key/keys';
 import type {
   StatItemPosition,
@@ -246,6 +247,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
     };
     persistStatPositions(nextPositions, 'Failed to delete stat item');
+    reconcileSelectionAfterIndexedElementDeletion('stat', indexToDelete);
   };
 
   const moveStatToFront = (index: number) => {
@@ -401,6 +403,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
     };
     persistGraphPositions(nextPositions, 'Failed to delete graph item');
+    reconcileSelectionAfterIndexedElementDeletion('graph', indexToDelete);
   };
 
   const moveGraphToFront = (index: number) => {
@@ -617,6 +620,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
     };
     persistKnobPositions(nextPositions, 'Failed to delete knob item');
+    reconcileSelectionAfterIndexedElementDeletion('knob', indexToDelete);
   };
 
   const moveKnobToFront = (index: number) => {

@@ -4,6 +4,7 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import { stableStringify } from '@utils/core/stableStringify';
 
 export type SelectableElementType =
   | 'key'
@@ -11,6 +12,19 @@ export type SelectableElementType =
   | 'graph'
   | 'knob'
   | 'plugin';
+
+export type IndexedSelectableElementType = Exclude<
+  SelectableElementType,
+  'plugin'
+>;
+
+export interface IndexedElementArrays {
+  keyMappings: readonly unknown[];
+  keyPositions: readonly unknown[];
+  stat: readonly unknown[];
+  graph: readonly unknown[];
+  knob: readonly unknown[];
+}
 
 export interface SelectedElement {
   type: SelectableElementType;
@@ -274,6 +288,89 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
     // 이 함수는 외부에서 호출될 콜백을 위한 placeholder
   },
 }));
+
+export function reconcileSelectionAfterIndexedElementDeletion(
+  elementType: IndexedSelectableElementType,
+  indexToDelete: number,
+) {
+  const selection = useGridSelectionStore.getState();
+  let changed = false;
+  const selectedElements = selection.selectedElements.flatMap((element) => {
+    if (element.type !== elementType || typeof element.index !== 'number') {
+      return [element];
+    }
+    if (element.index === indexToDelete) {
+      changed = true;
+      return [];
+    }
+    if (element.index < indexToDelete) return [element];
+
+    changed = true;
+    const index = element.index - 1;
+    return [{ ...element, id: `${elementType}-${index}`, index }];
+  });
+
+  if (changed) selection.setSelectedElements(selectedElements);
+}
+
+export function invalidateSelectionForChangedIndexedElementArrays(
+  current: IndexedElementArrays,
+  next: IndexedElementArrays,
+) {
+  const firstDifferentIndex = (
+    currentItems: readonly unknown[],
+    nextItems: readonly unknown[],
+  ) => {
+    const sharedLength = Math.min(currentItems.length, nextItems.length);
+    for (let index = 0; index < sharedLength; index += 1) {
+      if (
+        stableStringify(currentItems[index]) !==
+        stableStringify(nextItems[index])
+      ) {
+        return index;
+      }
+    }
+    return sharedLength;
+  };
+
+  const boundaries = new Map<IndexedSelectableElementType, number>();
+  if (current.keyMappings.length !== next.keyMappings.length) {
+    boundaries.set(
+      'key',
+      firstDifferentIndex(current.keyMappings, next.keyMappings),
+    );
+  }
+  if (current.keyPositions.length !== next.keyPositions.length) {
+    const positionBoundary = firstDifferentIndex(
+      current.keyPositions,
+      next.keyPositions,
+    );
+    boundaries.set(
+      'key',
+      Math.min(boundaries.get('key') ?? positionBoundary, positionBoundary),
+    );
+  }
+  for (const elementType of ['stat', 'graph', 'knob'] as const) {
+    if (current[elementType].length !== next[elementType].length) {
+      boundaries.set(
+        elementType,
+        firstDifferentIndex(current[elementType], next[elementType]),
+      );
+    }
+  }
+  if (boundaries.size === 0) return;
+
+  const selection = useGridSelectionStore.getState();
+  const selectedElements = selection.selectedElements.filter((element) => {
+    if (element.type === 'plugin') return true;
+    const boundary = boundaries.get(element.type);
+    if (boundary === undefined) return true;
+    return typeof element.index === 'number' && element.index < boundary;
+  });
+  if (selectedElements.length !== selection.selectedElements.length) {
+    selection.setSelectedElements(selectedElements);
+  }
+}
 
 /**
  * 마퀴 영역 계산 헬퍼

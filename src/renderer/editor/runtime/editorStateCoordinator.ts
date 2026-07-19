@@ -5,6 +5,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { invalidateSelectionForChangedIndexedElementArrays } from '@stores/grid/useGridSelectionStore';
 import { stableStringify } from '@utils/core/stableStringify';
 
 import { createEditorCoordinator } from './editorCoordinator';
@@ -30,6 +31,23 @@ export const captureEditorDocument = (): EditorDocumentV1 => {
 export const applyEditorDocument = (document: EditorDocumentV1): void => {
   unstable_batchedUpdates(() => {
     const keyState = useKeyStore.getState();
+    const mode = keyState.selectedKeyType;
+    invalidateSelectionForChangedIndexedElementArrays(
+      {
+        keyMappings: keyState.keyMappings[mode] ?? [],
+        keyPositions: keyState.positions[mode] ?? [],
+        stat: useStatItemStore.getState().positions[mode] ?? [],
+        graph: useGraphItemStore.getState().positions[mode] ?? [],
+        knob: useKnobItemStore.getState().positions[mode] ?? [],
+      },
+      {
+        keyMappings: document.keys[mode] ?? [],
+        keyPositions: document.keyPositions[mode] ?? [],
+        stat: document.statPositions[mode] ?? [],
+        graph: document.graphPositions[mode] ?? [],
+        knob: document.knobPositions[mode] ?? [],
+      },
+    );
     const keyChanges: Partial<
       Pick<typeof keyState, 'keyMappings' | 'positions'>
     > = {};

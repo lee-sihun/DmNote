@@ -53,6 +53,8 @@ export interface HistoryState {
   customTabs: CustomTab[];
   selectedKeyType: string;
   settingsSnapshot?: HistorySettingsSnapshot;
+  // 이 스냅샷으로 넘어가는 전환이 요소 정체성을 교체하는 경우 선택 폐기
+  invalidatesGridSelection?: boolean;
 }
 
 export interface PushHistoryInput {
@@ -67,6 +69,7 @@ export interface PushHistoryInput {
   customTabs?: CustomTab[];
   selectedKeyType?: string;
   settingsSnapshot?: HistorySettingsSnapshot;
+  invalidatesGridSelection?: boolean;
 }
 
 interface CurrentStateInput {
@@ -131,6 +134,10 @@ function buildHistoryState(
           JSON.stringify(input.settingsSnapshot),
         ) as HistorySettingsSnapshot)
       : undefined;
+  const invalidatesGridSelection =
+    'invalidatesGridSelection' in input && input.invalidatesGridSelection
+      ? true
+      : undefined;
 
   // knobPositions: 명시적 제공 시 사용, 없으면 현재 store에서 자동 캡처
   const knobPositions =
@@ -159,6 +166,7 @@ function buildHistoryState(
     customTabs: JSON.parse(JSON.stringify(tabs)),
     selectedKeyType,
     settingsSnapshot,
+    invalidatesGridSelection,
   };
 }
 
@@ -194,6 +202,8 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     const newPast = state.past.slice(0, -1);
 
     const currentState = buildHistoryState(current, false);
+    currentState.invalidatesGridSelection =
+      previous.invalidatesGridSelection || undefined;
 
     set({
       past: newPast,
@@ -211,6 +221,8 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     const newFuture = state.future.slice(0, -1);
 
     const currentState = buildHistoryState(current, false);
+    currentState.invalidatesGridSelection =
+      next.invalidatesGridSelection || undefined;
 
     set({
       past: [...state.past, currentState],

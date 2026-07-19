@@ -5,6 +5,11 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
+import {
+  invalidateSelectionForChangedIndexedElementArrays,
+  reconcileSelectionAfterIndexedElementDeletion,
+  useGridSelectionStore,
+} from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { setUndoRedoInProgress } from '@api/pluginDisplayElements';
 import { removeDisplayElementsInternal } from '@plugins/runtime/displayElement/displayElementApi';
@@ -235,6 +240,7 @@ export function useKeyManager() {
     setKeyMappings(result.mappings);
     setPositions(result.positions);
     persistMappingsAndPositions(result.mappings, result.positions);
+    reconcileSelectionAfterIndexedElementDeletion('key', indexToDelete);
     setSelectedKey(null);
   };
 
@@ -791,6 +797,7 @@ export function useKeyManager() {
         staleElements.map((element) => element.fullId),
       );
       setSelectedKey(null);
+      useGridSelectionStore.getState().clearSelection();
     } catch (error) {
       console.error('Failed to reset current mode', error);
     }
@@ -847,6 +854,27 @@ export function useKeyManager() {
         }
 
         try {
+          const mode = currentKeyState.selectedKeyType;
+          if (targetState.invalidatesGridSelection) {
+            useGridSelectionStore.getState().clearSelection();
+          } else {
+            invalidateSelectionForChangedIndexedElementArrays(
+              {
+                keyMappings: currentKeyState.keyMappings[mode] ?? [],
+                keyPositions: currentKeyState.positions[mode] ?? [],
+                stat: currentStatPositions[mode] ?? [],
+                graph: currentGraphPositions[mode] ?? [],
+                knob: currentKnobPositions[mode] ?? [],
+              },
+              {
+                keyMappings: targetState.keyMappings[mode] ?? [],
+                keyPositions: targetState.positions[mode] ?? [],
+                stat: targetState.statPositions[mode] ?? [],
+                graph: targetState.graphPositions[mode] ?? [],
+                knob: targetState.knobPositions[mode] ?? [],
+              },
+            );
+          }
           applyRestoredStateToStores(targetState);
           applyRestoredPluginElements(
             targetState.pluginElements as

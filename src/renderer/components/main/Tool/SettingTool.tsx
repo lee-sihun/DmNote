@@ -20,6 +20,7 @@ import { getCounterCacheSnapshot } from '@stores/signals/keyCounterCache';
 import { obsApi } from '@api/modules/obsApi';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useFontStore } from '@stores/useFontStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 interface SettingToolProps {
   isSettingsOpen?: boolean;
@@ -172,6 +173,7 @@ SettingToolProps) => {
       const before = await captureHistorySnapshot();
       const result = await window.api.presets.load();
       if (result?.success) {
+        useGridSelectionStore.getState().clearSelection();
         pushHistoryState({
           keyMappings: before.keyMappings,
           positions: before.positions,
@@ -183,6 +185,7 @@ SettingToolProps) => {
           customTabs: before.customTabs,
           selectedKeyType: before.selectedKeyType,
           settingsSnapshot: before.settingsSnapshot,
+          invalidatesGridSelection: true,
         });
       }
       showAlert?.(
@@ -224,7 +227,10 @@ SettingToolProps) => {
       code.includes('invalid-tab-preset') ||
       code.includes('invalid-preset')
     ) {
-      return t('preset.loadTabInvalidPreset');
+      // 백엔드가 담아준 원인 필드 경로 노출 (예: keyPositions["4key"][1].…)
+      const detail = code.split('invalid-preset:')[1]?.trim();
+      const base = t('preset.loadTabInvalidPreset');
+      return detail ? `${base} (${detail})` : base;
     }
     return t('preset.loadTabFail');
   };
@@ -234,6 +240,7 @@ SettingToolProps) => {
       const before = await captureHistorySnapshot();
       const result = await window.api.presets.loadTab();
       if (result?.success) {
+        useGridSelectionStore.getState().clearSelection();
         pushHistoryState({
           keyMappings: before.keyMappings,
           positions: before.positions,
@@ -245,6 +252,7 @@ SettingToolProps) => {
           customTabs: before.customTabs,
           selectedKeyType: before.selectedKeyType,
           settingsSnapshot: before.settingsSnapshot,
+          invalidatesGridSelection: true,
         });
       }
       showAlert?.(

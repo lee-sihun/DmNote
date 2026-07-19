@@ -229,6 +229,40 @@ describe('useHistoryStore', () => {
     ).toBeUndefined();
   });
 
+  it('선택 무효화 표식을 undo와 redo 양방향 스냅샷에 전달', () => {
+    useHistoryStore.getState().pushState({
+      keyMappings: createMappings('A'),
+      positions: createPositions(1),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+      invalidatesGridSelection: true,
+    });
+
+    const undoTarget = useHistoryStore.getState().undo({
+      keyMappings: createMappings('B'),
+      positions: createPositions(2),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+    });
+
+    expect(undoTarget?.invalidatesGridSelection).toBe(true);
+    expect(
+      useHistoryStore.getState().future.at(-1)?.invalidatesGridSelection,
+    ).toBe(true);
+
+    const redoTarget = useHistoryStore.getState().redo({
+      keyMappings: createMappings('A'),
+      positions: createPositions(1),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+    });
+
+    expect(redoTarget?.invalidatesGridSelection).toBe(true);
+    expect(
+      useHistoryStore.getState().past.at(-1)?.invalidatesGridSelection,
+    ).toBe(true);
+  });
+
   it('명시적 keyCounters가 있으면 캐시 대신 그 값을 저장', () => {
     applyCounterCacheSnapshot({ '4key': { A: 1 } });
 
