@@ -11,35 +11,39 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 
 키 요소에 적용되는 CSS 변수입니다. `[data-state="inactive"]` 또는 `[data-state="active"]` 선택자와 함께 사용합니다.
 
-| 변수               | 설명                     | 타입       | 예시                     |
-| ------------------ | ------------------------ | ---------- | ------------------------ |
-| `--key-radius`     | 키 모서리의 둥근 정도    | `<length>` | `8px`, `50%`             |
-| `--key-bg`         | 키의 배경색              | `<color>`  | `#ff2b80`                |
-| `--key-bg-image`   | 키의 배경 이미지(그라데이션) | `<image>` | `linear-gradient(90deg, #f0f, #0ff)` |
-| `--key-border`     | 키의 테두리 스타일       | `<border>` | `2px solid #fff`, `none` |
-| `--key-text-color` | 키 텍스트 색상           | `<color>`  | `#ffffff`                |
-| `--key-offset-x`   | 활성 상태에서 X축 이동량 | `<length>` | `0px`, `2px`             |
-| `--key-offset-y`   | 활성 상태에서 Y축 이동량 | `<length>` | `4px`                    |
+| 변수                  | 설명                                | 타입       | 예시                                 |
+| --------------------- | ----------------------------------- | ---------- | ------------------------------------ |
+| `--key-radius`        | 키 모서리의 둥근 정도               | `<length>` | `8px`, `50%`                         |
+| `--key-bg`            | 키 배경색과 저장된 배경 이미지 해제 | `<color>`  | `#ff2b80`                            |
+| `--key-bg-image`      | 키의 배경 이미지                    | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--key-border`        | 키 테두리와 저장된 보더 링 해제     | `<border>` | `2px solid #fff`, `none`             |
+| `--key-border-image`  | 저장된 보더 링의 이미지 교체        | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--key-padding`       | 키 내부 여백                        | `<length>` | `0px`, `3px`                         |
+| `--key-text-color`    | 키 텍스트 색상                      | `<color>`  | `#ffffff`                            |
+| `--key-shadow`        | 대기 및 공통 폴백 그림자            | `<shadow>` | `0 4px 10px rgba(0,0,0,.28)`, `none` |
+| `--key-active-shadow` | 입력 상태 그림자                    | `<shadow>` | `0 3px 8px rgba(0,0,0,.32)`, `none`  |
+| `--key-offset-x`      | 활성 상태에서 X축 이동량            | `<length>` | `0px`, `2px`                         |
+| `--key-offset-y`      | 활성 상태에서 Y축 이동량            | `<length>` | `4px`                                |
 
 <Callout type="info">
-  `--key-bg`는 `background-color`로 적용됩니다. 그라데이션을 사용하려면
-  `background` 또는 `background-image`를 직접 지정하고, 필요하면 `--key-bg:
-  transparent;`로 설정하세요. 앱에서 키 색상을 그라데이션으로 설정한 경우에는
-  `background-image: var(--key-bg-image, ...)`로 렌더되므로 `--key-bg-image`로
-  덮어쓸 수 있습니다 (단색 키에는 인라인 `background-image`가 붙지 않습니다).
+  **인라인 스타일 우선**이 꺼져 있으면 속성 패널의 색·그라데이션·보더·글꼴·
+  그림자는 낮은 우선순위의 기본값으로만 적용됩니다. `--key-bg`를 지정하면 저장된
+  배경 그라데이션이 자동으로 사라지고, `--key-border`를 지정하면 저장된
+  그라데이션 보더 링과 링 여백이 함께 사라집니다. 사용자 그라데이션은
+  `--key-bg-image`나 표준 `background` 속성으로 지정할 수 있습니다.
 </Callout>
 
 ### 사용 예시
 
 ```css
-[data-state="inactive"] {
+[data-state='inactive'] {
   --key-radius: 8px;
   --key-bg: #2a2a2a;
   --key-border: 2px solid #444;
   --key-text-color: #888;
 }
 
-[data-state="active"] {
+[data-state='active'] {
   --key-radius: 8px;
   --key-bg: #ff2b80;
   --key-border: 2px solid #ff2b80;
@@ -53,22 +57,36 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 
 카운터 요소에 적용되는 CSS 변수입니다. `.counter[data-counter-state="..."]` 선택자와 함께 사용합니다.
 
-| 변수                     | 설명               | 타입       | 예시                     |
-| ------------------------ | ------------------ | ---------- | ------------------------ |
-| `--counter-color`        | 카운터 텍스트 색상 | `<color>`  | `#ffffff`                |
-| `--counter-stroke-color` | 텍스트 외곽선 색상 | `<color>`  | `#000000`, `transparent` |
-| `--counter-stroke-width` | 텍스트 외곽선 두께 | `<length>` | `1px`, `2px`             |
+| 변수                        | 설명                           | 타입       | 예시                                 |
+| --------------------------- | ------------------------------ | ---------- | ------------------------------------ |
+| `--counter-color`           | 텍스트 색상과 저장된 fill 해제 | `<color>`  | `#ffffff`                            |
+| `--counter-fill-image`      | 텍스트 fill 이미지             | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--counter-fill-clip`       | fill 클립 영역                 | `<box>`    | `text`, `border-box`                 |
+| `--counter-text-fill-color` | WebKit 텍스트 채움색           | `<color>`  | `transparent`, `currentcolor`        |
+| `--counter-stroke-color`    | 텍스트 외곽선 색상             | `<color>`  | `#000000`, `transparent`             |
+| `--counter-stroke-width`    | 텍스트 외곽선 두께             | `<length>` | `1px`, `2px`                         |
+
+`--counter-color`만 지정해도 앱에 저장된 카운터 fill 그라데이션은 자동으로
+해제됩니다. CSS로 새 fill 그라데이션을 만들 때는 다음 세 변수를 함께 사용합니다.
+
+```css
+.counter {
+  --counter-fill-image: linear-gradient(90deg, #f0f, #0ff);
+  --counter-fill-clip: text;
+  --counter-text-fill-color: transparent;
+}
+```
 
 ### 사용 예시
 
 ```css
-.counter[data-counter-state="inactive"] {
+.counter[data-counter-state='inactive'] {
   --counter-color: #666;
   --counter-stroke-color: transparent;
   --counter-stroke-width: 0px;
 }
 
-.counter[data-counter-state="active"] {
+.counter[data-counter-state='active'] {
   --counter-color: #ff2b80;
   --counter-stroke-color: #fff;
   --counter-stroke-width: 1px;
@@ -80,12 +98,14 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 그래프 요소에 적용되는 CSS 변수입니다.
 그래프의 **인라인 스타일 우선**을 끄면 아래 변수를 통해 외형을 제어할 수 있습니다.
 
-| 변수             | 설명          | 타입       | 예시                     |
-| ---------------- | ------------- | ---------- | ------------------------ |
-| `--graph-bg`     | 그래프 배경   | `<color>`  | `rgba(17, 17, 20, 0.85)` |
-| `--graph-border` | 그래프 테두리 | `<border>` | `1px solid #7dd3fc`      |
-| `--graph-radius` | 그래프 라운딩 | `<length>` | `10px`                   |
-| `--graph-color`  | 라인/바 색상  | `<color>`  | `#86efac`                |
+| 변수                   | 설명                                | 타입       | 예시                                 |
+| ---------------------- | ----------------------------------- | ---------- | ------------------------------------ |
+| `--graph-bg`           | 그래프 배경                         | `<color>`  | `rgba(17, 17, 20, 0.85)`             |
+| `--graph-border`       | 그래프 테두리와 저장된 보더 링 해제 | `<border>` | `1px solid #7dd3fc`, `none`          |
+| `--graph-border-image` | 저장된 보더 링의 이미지 교체        | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--graph-padding`      | 그래프 내부 여백                    | `<length>` | `0px`, `3px`                         |
+| `--graph-radius`       | 그래프 라운딩                       | `<length>` | `10px`                               |
+| `--graph-color`        | 라인/바 색상                        | `<color>`  | `#86efac`                            |
 
 ### 사용 예시
 
@@ -95,6 +115,31 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
   --graph-border: 1px solid rgba(125, 211, 252, 0.55);
   --graph-radius: 12px;
   --graph-color: #7dd3fc;
+}
+```
+
+## 노브 스타일 변수
+
+노브의 **인라인 스타일 우선**을 끄면 아래 변수를 사용할 수 있습니다. 노브에
+지정한 클래스는 위치 래퍼에 있으므로 일반 속성을 직접 지정할 때는
+`.노브클래스 [data-knob-element]` 선택자를 사용하세요.
+
+| 변수                   | 설명                              | 타입       | 예시                                 |
+| ---------------------- | --------------------------------- | ---------- | ------------------------------------ |
+| `--knob-bg`            | 노브 배경                         | `<color>`  | `#222`                               |
+| `--knob-border`        | 노브 테두리와 저장된 보더 링 해제 | `<border>` | `2px solid #fff`, `none`             |
+| `--knob-border-image`  | 저장된 보더 링의 이미지 교체      | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--knob-padding`       | 노브 내부 여백                    | `<length>` | `0px`, `3px`                         |
+| `--knob-radius`        | 노브 모서리                       | `<length>` | `50%`, `8px`                         |
+| `--knob-shadow`        | 노브 그림자                       | `<shadow>` | `0 4px 10px rgba(0,0,0,.3)`          |
+| `--knob-active-shadow` | 회전 중 그림자                    | `<shadow>` | `0 3px 8px rgba(0,0,0,.32)`          |
+| `--knob-indicator`     | 중앙 회전 표시 색상               | `<color>`  | `#fff`                               |
+
+```css
+.volume-knob {
+  --knob-bg: #17171b;
+  --knob-border: none;
+  --knob-indicator: #ff2b80;
 }
 ```
 
@@ -120,21 +165,33 @@ DM Note에서 스타일링에 사용할 수 있는 모든 CSS 변수를 정리�
 
 ### 그래프 선택자
 
-| 선택자                  | 설명                                  |
-| ----------------------- | ------------------------------------- |
-| `.그래프클래스명`       | 특정 그래프 컨테이너 스타일링         |
-| `.그래프클래스명 svg`   | 라인 그래프 SVG(선/채움) 스타일링     |
-| `.그래프클래스명 > div` | 그래프 내부 플롯 영역(라인/바 공통)   |
+| 선택자                        | 설명                                    |
+| ----------------------------- | --------------------------------------- |
+| `.그래프클래스명`             | 특정 그래프 컨테이너 스타일링           |
+| `.그래프클래스명 svg`         | 라인 그래프 SVG(선/채움) 스타일링       |
+| `.그래프클래스명 > div`       | 그래프 내부 플롯 영역(라인/바 공통)     |
 | `.그래프클래스명 > div > div` | 바 그래프 막대 개별 스타일링 (bar 모드) |
+
+### 노브 선택자
+
+| 선택자                            | 설명                     |
+| --------------------------------- | ------------------------ |
+| `[data-knob-element]`             | 모든 노브 표면           |
+| `[data-knob-state="inactive"]`    | 입력 대기 중인 노브 표면 |
+| `[data-knob-state="active"]`      | 입력 중인 노브 표면      |
+| `.노브클래스 [data-knob-element]` | 특정 클래스의 노브 표면  |
+| `[data-knob-indicator]`           | 노브 중앙 회전 표시      |
 
 ## 표준 CSS 속성
 
-CSS 변수 외에도 다음 표준 CSS 속성들을 자유롭게 사용할 수 있습니다:
+**인라인 스타일 우선**이 꺼진 요소에는 다음과 같은 표준 외형 속성을 직접 사용할
+수 있습니다. 위치는 앱이 관리하므로 키·그래프·노브 이동에는
+`--key-offset-x`/`--key-offset-y`를 사용하세요.
 
 ### 자주 사용되는 속성
 
 ```css
-[data-state="active"] {
+[data-state='active'] {
   /* 그림자 효과 */
   box-shadow: 0px 0px 8px #ff2b80;
 
@@ -147,10 +204,7 @@ CSS 변수 외에도 다음 표준 CSS 속성들을 자유롭게 사용할 수 �
   /* 폰트 스타일 */
   font-size: 24px;
   font-weight: 700;
-  font-family: "Roboto", sans-serif;
-
-  /* 변형 */
-  transform: scale(1.05);
+  font-family: 'Roboto', sans-serif;
 
   /* 필터 */
   filter: brightness(1.2);
@@ -161,18 +215,21 @@ CSS 변수 외에도 다음 표준 CSS 속성들을 자유롭게 사용할 수 �
 
 ### !important 사용
 
-일부 스타일이 적용되지 않는 경우 `!important`를 사용할 수 있습니다:
+요소의 **인라인 스타일 우선**을 켠 경우에만 일반 선언보다 인라인 값이 우선합니다.
+이 모드까지 강제로 덮어쓸 때는 실제 렌더 CSS 속성 자체에 `!important`를 사용해야
+합니다. 폴백 커스텀 속성에 붙여도 인라인 속성 선언보다 우선할 수 없습니다:
 
 ```css
-[data-state="active"] {
-  --key-bg: #ff2b80 !important;
+[data-state='active'] {
+  background: #ff2b80 !important;
   box-shadow: 0px 0px 8px #ff2b80 !important;
 }
 ```
 
 ### 브라우저 호환성
 
-DM Note는 Chromium 기반 WebView2에서 동작하므로 최신 CSS 기능을 대부분 지원합니다:
+DM Note는 Windows의 WebView2와 macOS의 WKWebView에서 동작합니다. 운영체제별
+WebView가 지원하는 최신 CSS 기능을 사용할 수 있습니다:
 
 - CSS Variables (Custom Properties) ✅
 - CSS Grid / Flexbox ✅
@@ -182,8 +239,8 @@ DM Note는 Chromium 기반 WebView2에서 동작하므로 최신 CSS 기능을 �
 - mix-blend-mode ✅
 
 <Callout type="warning">
-  단, 오버레이의 배경이 투명(`transparent`) 상태일 때는 `backdrop-filter`가 동작하지
-  않습니다.
+  단, 오버레이의 배경이 투명(`transparent`) 상태일 때는 `backdrop-filter`가
+  동작하지 않습니다.
 </Callout>
 
 ### 상속과 우선순위
@@ -194,17 +251,17 @@ DM Note는 Chromium 기반 WebView2에서 동작하므로 최신 CSS 기능을 �
 
 ```css
 /* 우선순위: 1 (가장 낮음) */
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: red;
 }
 
 /* 우선순위: 2 */
-.blue[data-state="active"] {
+.blue[data-state='active'] {
   --key-bg: blue;
 }
 
 /* 우선순위: 3 (가장 높음) */
-.blue.special[data-state="active"] {
+.blue.special[data-state='active'] {
   --key-bg: purple;
 }
 ```
