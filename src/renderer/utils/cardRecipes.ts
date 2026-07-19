@@ -21,8 +21,10 @@ export const FORM_LABEL_CLASS = 'text-fg-muted text-label';
 
 // comfortable 밀도 — 목적지 페이지(Settings) 전용. 도킹 패널·다이얼로그·플러그인 표면은
 // 위의 compact 유지. 밀도는 표면 루트에서 한 번만 결정, 제3 밀도 추가 금지 (tasks/todo.md 2026-07-12)
+// 행이 컨트롤 상하 11px 슬랙을 py로 소유, 컨트롤 높이(스위치 18, 드롭다운 23)와 무관하게
+// 카드 상하 인셋이 py 5 + 11 = 16으로 px-16과 일치
 export const SECTION_CARD_CLASS_COMFORTABLE =
-  'bg-fill-faint rounded-surface px-[16px] py-[4px] flex flex-col';
+  'bg-fill-faint rounded-surface px-[16px] py-[5px] flex flex-col';
 
 export const FORM_ROW_CLASS_COMFORTABLE =
-  'flex justify-between items-center w-full min-h-[40px]';
+  'flex justify-between items-center w-full min-h-[40px] py-[11px]';

@@ -1161,7 +1161,7 @@ const Settings = ({
                 />
               </SettingRow>
               {/* 버전 및 설정 초기화 */}
-              <div className="flex justify-between items-center py-[12px] px-[12px] bg-inset rounded-md mt-[8px] mb-[12px]">
+              <div className="flex justify-between items-center py-[12px] px-[12px] bg-inset rounded-md mt-[11px] mb-[11px]">
                 <p className="text-body text-fg-muted tabular-nums">
                   Ver {__APP_VERSION__}
                 </p>
