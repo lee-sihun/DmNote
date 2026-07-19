@@ -5,7 +5,7 @@ import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { useGradientPreviewSpec } from '@stores/grid/useGradientEditStore';
+import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import GraphPanel from '@components/shared/GraphPanel';
 import { resolveImageSource } from '@utils/core/imageSource';
 
@@ -129,18 +129,11 @@ const GraphItem = ({
   const isSelectionMode = isSelected;
 
   // 편집 세션 일시 페인트 — 저장·히스토리를 거치지 않는 드래그 프리뷰
-  const previewBgSpec = useGradientPreviewSpec(
-    'graph',
-    index,
-    'background',
-    isSelected,
-  );
-  const previewBorderSpec = useGradientPreviewSpec(
-    'graph',
-    index,
-    'border',
-    isSelected,
-  );
+  const previewSession = useGradientPreviewSession('graph', index, isSelected);
+  const previewBgSpec =
+    previewSession?.surface === 'background' ? previewSession.spec : null;
+  const previewBorderSpec =
+    previewSession?.surface === 'border' ? previewSession.spec : null;
   const [uid] = useState(
     () => `graph-preview-${Math.random().toString(36).slice(2, 11)}`,
   );

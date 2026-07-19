@@ -241,8 +241,35 @@ export interface ColorPair {
   gradient?: GradientSpec | null;
 }
 
+const hasStoredPairValue = (pair: ColorPair): boolean =>
+  (typeof pair.color === 'string' && pair.color.trim().length > 0) ||
+  pair.gradient != null;
+
 /**
- * 상태별 색 쌍 해석 — active 쌍에 어떤 값이라도 있으면 active 쌍 전체를,
+ * idle 편집 전 active 모습 보존값 — 저장된 사용자 값만 대상으로 판정
+ * active 쌍이 비어 있고 idle 쌍에 저장값이 있을 때만 복사값 반환
+ */
+export function getActivePairPreservation(
+  idlePair: ColorPair,
+  activePair: ColorPair,
+): ColorPair | null {
+  if (hasStoredPairValue(activePair)) return null;
+
+  const color =
+    typeof idlePair.color === 'string' && idlePair.color.trim().length > 0
+      ? idlePair.color
+      : undefined;
+  const gradient = idlePair.gradient ?? undefined;
+  if (color === undefined && gradient === undefined) return null;
+
+  return {
+    ...(color !== undefined ? { color } : {}),
+    ...(gradient !== undefined ? { gradient } : {}),
+  };
+}
+
+/**
+ * 상태별 색 쌍 해석 — active 쌍에 유효한 저장값이 있으면 active 쌍 전체를,
  * 없으면 idle 쌍 전체를 사용 (색/그라데이션이 상태 간에 섞여 새지 않도록 쌍 단위 폴백)
  */
 export function resolveStatePair(
@@ -250,7 +277,7 @@ export function resolveStatePair(
   idlePair: ColorPair,
   activePair: ColorPair,
 ): ColorPair {
-  if (active && (activePair.color != null || activePair.gradient != null)) {
+  if (active && hasStoredPairValue(activePair)) {
     return activePair;
   }
   return idlePair;
@@ -269,14 +296,16 @@ export function gradientRingStyle(
     inset: 0,
     borderRadius: 'inherit',
     padding: `${widthPx}px`,
-    background: gradientToCss(spec),
+    // 실제 background 선언은 저특이도 전역 규칙이 담당 — 일반 커스텀 CSS가
+    // 링을 숨기거나 교체할 수 있고, 인라인 우선 모드만 호출부에서 승격
+    '--dmn-border-gradient-image-default': gradientToCss(spec),
     WebkitMask:
       'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
     WebkitMaskComposite: 'xor',
     mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
     maskComposite: 'exclude',
     pointerEvents: 'none',
-  };
+  } as React.CSSProperties;
 }
 
 /**

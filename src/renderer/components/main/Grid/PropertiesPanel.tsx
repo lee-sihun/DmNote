@@ -723,6 +723,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [batchCounterColorState, setBatchCounterColorState] = useState<
     'idle' | 'active'
   >('idle');
+  const effectiveBatchCounterColorState =
+    selectedKeyElements.length > 0 ? batchCounterColorState : 'idle';
+
+  useEffect(() => {
+    if (selectedKeyElements.length === 0) {
+      setBatchCounterColorState('idle');
+      setBatchPickerFor((current) =>
+        current === 'fill' || current === 'stroke' ? null : current,
+      );
+    }
+  }, [selectedKeyElements.length]);
 
   const [batchLocalColors, setBatchLocalColors] = useState<{
     noteColor: NoteColor;
@@ -1948,7 +1959,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const {
     handleBatchStyleChange,
     handleBatchStyleChangeComplete,
+    handleBatchShadowChangeComplete,
+    handleBatchShadowEnabledChange,
     handleKeyOnlyStyleChangeComplete,
+    handleActiveCapableStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
     handleBatchSpacing,
@@ -2000,6 +2014,36 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return position ? { index, position } : null;
       })
       .filter((v): v is { index: number; position: KeyPosition } => v !== null);
+  };
+
+  // 눌림 가능(키·노브) 집계 — active 상태 표시가 통계만 제외하고 노브는 포함
+  const getSelectedActiveCapablePositions = (): KeyPosition[] => {
+    const keyData = getSelectedKeyOnlyPositions().map(
+      ({ position }) => position,
+    );
+    const knobData = selectedKnobElements
+      .map((el) => knobItemPositions?.[selectedKeyType]?.[el.index ?? -1])
+      .filter((v): v is KnobItemPosition => v != null);
+    return [...keyData, ...knobData];
+  };
+
+  const getMixedValueActiveCapable = <T,>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const data = getSelectedActiveCapablePositions();
+    if (data.length === 0) return { isMixed: false, value: defaultValue };
+
+    const firstValue = getter(data[0]) ?? defaultValue;
+    const isMixed = data.some((position) => {
+      const val = getter(position) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
+
+    return { isMixed, value: firstValue };
   };
 
   const getMixedValueKeysOnly = <T,>(
@@ -2352,8 +2396,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         target === 'noteColor' ||
         target === 'glowColor' ||
         target === 'borderColor';
+      const isCounterPicker = target === 'fill' || target === 'stroke';
       const firstPos =
-        isNoteTabPicker && keyOnly.length > 0
+        (isNoteTabPicker || isCounterPicker) && keyOnly.length > 0
           ? keyOnly[0].position
           : keysData[0]?.position;
       if (firstPos) {
@@ -2417,11 +2462,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           batchLocalColors.borderOpacity,
         );
       case 'fill':
-        return batchCounterColorState === 'active'
+        return effectiveBatchCounterColorState === 'active'
           ? batchLocalColors.fillActive
           : batchLocalColors.fillIdle;
       case 'stroke':
-        return batchCounterColorState === 'active'
+        return effectiveBatchCounterColorState === 'active'
           ? batchLocalColors.strokeActive
           : batchLocalColors.strokeIdle;
       default:
@@ -2464,7 +2509,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     } else if (batchPickerFor === 'fill') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const key =
-        batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+        effectiveBatchCounterColorState === 'active'
+          ? 'fillActive'
+          : 'fillIdle';
       setBatchLocalColors((prev) => ({
         ...prev,
         [key]: solidColor,
@@ -2472,7 +2519,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     } else if (batchPickerFor === 'stroke') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const key =
-        batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
+        effectiveBatchCounterColorState === 'active'
+          ? 'strokeActive'
+          : 'strokeIdle';
       setBatchLocalColors((prev) => ({
         ...prev,
         [key]: solidColor,
@@ -2536,7 +2585,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     } else if (batchPickerFor === 'fill') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const key =
-        batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+        effectiveBatchCounterColorState === 'active'
+          ? 'fillActive'
+          : 'fillIdle';
       setBatchLocalColors((prev) => ({
         ...prev,
         [key]: solidColor,
@@ -2544,7 +2595,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     } else if (batchPickerFor === 'stroke') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const key =
-        batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
+        effectiveBatchCounterColorState === 'active'
+          ? 'strokeActive'
+          : 'strokeIdle';
       setBatchLocalColors((prev) => ({
         ...prev,
         [key]: solidColor,
@@ -2552,8 +2605,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     const keysData = getSelectedKeysData();
-    const firstCounter = keysData[0]?.position
-      ? normalizeCounterSettings(keysData[0].position.counter)
+    const keyOnlyPositions = getSelectedKeyOnlyPositions();
+    const firstCounterPosition =
+      effectiveBatchCounterColorState === 'active'
+        ? keyOnlyPositions[0]?.position
+        : keysData[0]?.position;
+    const firstCounter = firstCounterPosition
+      ? normalizeCounterSettings(firstCounterPosition.counter)
       : createDefaultCounterSettings();
 
     if (batchPickerFor === 'noteColor') {
@@ -2582,25 +2640,37 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     } else if (batchPickerFor === 'fill') {
       const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      if (batchCounterColorState === 'active') {
-        handleBatchCounterUpdate({
-          fill: { ...firstCounter.fill, active: fillColor },
-        });
+      if (effectiveBatchCounterColorState === 'active') {
+        handleBatchCounterUpdate(
+          {
+            fill: { ...firstCounter.fill, active: fillColor },
+          },
+          { activeStateOnly: true, colorState: 'active' },
+        );
       } else {
-        handleBatchCounterUpdate({
-          fill: { ...firstCounter.fill, idle: fillColor },
-        });
+        handleBatchCounterUpdate(
+          {
+            fill: { ...firstCounter.fill, idle: fillColor },
+          },
+          { colorState: 'idle' },
+        );
       }
     } else if (batchPickerFor === 'stroke') {
       const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      if (batchCounterColorState === 'active') {
-        handleBatchCounterUpdate({
-          stroke: { ...firstCounter.stroke, active: strokeColor },
-        });
+      if (effectiveBatchCounterColorState === 'active') {
+        handleBatchCounterUpdate(
+          {
+            stroke: { ...firstCounter.stroke, active: strokeColor },
+          },
+          { activeStateOnly: true, colorState: 'active' },
+        );
       } else {
-        handleBatchCounterUpdate({
-          stroke: { ...firstCounter.stroke, idle: strokeColor },
-        });
+        handleBatchCounterUpdate(
+          {
+            stroke: { ...firstCounter.stroke, idle: strokeColor },
+          },
+          { colorState: 'idle' },
+        );
       }
     }
   };
@@ -2665,6 +2735,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           selectedKeyElements={selectedKeyElements}
           selectedStatElements={selectedStatElements}
           selectedGraphElements={selectedGraphElements}
+          selectedKnobElements={selectedKnobElements}
           selectedKeyLikeElements={selectedKeyLikeElements}
           selectedGroupInfo={selectedGroupInfo}
           isRenaming={isRenaming}
@@ -2686,6 +2757,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchResize={handleBatchResize}
           handleBatchStyleChange={handleBatchStyleChange}
           handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
+          handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
           handleBatchGradientCommit={handleBatchGradientCommit}
           handleKeyOnlyStyleChangeComplete={handleKeyOnlyStyleChangeComplete}
           handleBatchCounterUpdate={handleBatchCounterUpdate}
@@ -2703,6 +2776,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           getMixedValueGraphs={getMixedValueGraphs}
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
           getMixedValueKeysOnly={getMixedValueKeysOnly}
+          getMixedValueActiveCapable={getMixedValueActiveCapable}
+          handleActiveCapableStyleChangeComplete={
+            handleActiveCapableStyleChangeComplete
+          }
           getSelectedKeysData={getSelectedKeysData}
           getSelectedGraphsData={getSelectedGraphsData}
           getSelectedBatchStyleData={getSelectedBatchStyleData}
@@ -2733,7 +2810,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           setShowBatchImagePicker={setShowBatchImagePicker}
           batchPickerFor={batchPickerFor}
           setBatchPickerFor={setBatchPickerFor}
-          batchCounterColorState={batchCounterColorState}
+          batchCounterColorState={effectiveBatchCounterColorState}
           setBatchCounterColorState={setBatchCounterColorState}
           batchLocalColors={batchLocalColors}
           setBatchLocalColors={setBatchLocalColors}
@@ -2784,6 +2861,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchResize={handleBatchResize}
           handleBatchStyleChange={handleBatchStyleChange}
           handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
+          handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
           handleBatchGradientCommit={handleBatchGradientCommit}
           handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
           getMixedValueKnobs={getMixedValueKnobs}

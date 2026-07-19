@@ -14,13 +14,19 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 - `data-state="inactive"`: 키를 누르지 않은 상태
 - `data-state="active"`: 키를 누르고 있는 상태
 
+<Callout type="info">
+  **인라인 스타일 우선**을 끄면 속성 패널의 단색·그라데이션·보더·글꼴은 CSS보다
+  낮은 기본값으로만 적용됩니다. 이 상태에서 `--key-bg`와 `--key-border`를
+  지정하면 앱에 저장된 배경 그라데이션과 보더 그라데이션도 각각 사라집니다.
+</Callout>
+
 ## 전역 키 스타일
 
 모든 키에 공통으로 적용되는 스타일을 설정합니다:
 
 ```css
-[data-state="inactive"],
-[data-state="active"] {
+[data-state='inactive'],
+[data-state='active'] {
   /* 모서리 둥글기 */
   --key-radius: 8px;
 
@@ -38,7 +44,7 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 키를 누르지 않았을 때의 스타일입니다:
 
 ```css
-[data-state="inactive"] {
+[data-state='inactive'] {
   /* 배경색 */
   --key-bg: #2a2a2a;
 
@@ -58,7 +64,7 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 키를 누르고 있을 때의 스타일입니다:
 
 ```css
-[data-state="active"] {
+[data-state='active'] {
   /* 배경색 */
   --key-bg: #ff2b80;
 
@@ -81,7 +87,7 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 키를 눌렀을 때 위치가 이동하는 눌림 효과를 구현할 수 있습니다:
 
 ```css
-[data-state="active"] {
+[data-state='active'] {
   /* X축 오프셋 */
   --key-offset-x: 0px;
 
@@ -113,7 +119,7 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 
 ```css
 /* .blue 클래스를 가진 키의 활성 상태 */
-.blue[data-state="active"] {
+.blue[data-state='active'] {
   --key-bg: transparent;
   --key-border: 3px solid #2ebef3;
   --key-text-color: #2ebef3;
@@ -122,7 +128,7 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 }
 
 /* .special 클래스를 가진 키의 활성 상태 */
-.special[data-state="active"] {
+.special[data-state='active'] {
   --key-bg: transparent;
   background: linear-gradient(45deg, #ff2b80, #2ebef3);
   --key-border: none;
@@ -133,22 +139,22 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 <Callout type="warning">
   클래스명 입력 시 선택자 기호(`.`)를 제외하고 이름만 입력하세요.
 
-  - ✅ 올바름: `blue`
-  - ❌ 잘못됨: `.blue`
-</Callout>
+- ✅ 올바름: `blue`
+- ❌ 잘못됨: `.blue`
+  </Callout>
 
 ## 스타일 예제
 
 ### 네온 사인 스타일
 
 ```css
-[data-state="inactive"] {
+[data-state='inactive'] {
   --key-bg: transparent;
   --key-border: 3px solid #333;
   --key-text-color: #333;
 }
 
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: transparent;
   --key-border: 3px solid #ff2b80;
   --key-text-color: #ff2b80;
@@ -160,19 +166,19 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 ### 미니멀 플랫 스타일
 
 ```css
-[data-state="inactive"],
-[data-state="active"] {
+[data-state='inactive'],
+[data-state='active'] {
   --key-radius: 4px;
   transition: 0.05s ease-out;
 }
 
-[data-state="inactive"] {
+[data-state='inactive'] {
   --key-bg: #f0f0f0;
   --key-border: none;
   --key-text-color: #333;
 }
 
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: #333;
   --key-border: none;
   --key-text-color: #fff;
@@ -182,7 +188,7 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 ### 파스텔 3D 스타일
 
 ```css
-[data-state="inactive"] {
+[data-state='inactive'] {
   --key-radius: 20px;
   --key-bg: #ffd4e5;
   --key-border: 2px solid #e8b4c8;
@@ -190,7 +196,7 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
   box-shadow: 0px 4px 0px #d9a0b8;
 }
 
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: #ffc4dd;
   --key-border: 2px solid #e8b4c8;
   --key-text-color: #8b5a6b;
@@ -204,7 +210,7 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
 ### 그라데이션 배경
 
 ```css
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: transparent;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
@@ -223,18 +229,18 @@ description: CSS로 키의 모양과 상태 효과를 커스터마이징하는 �
   }
 }
 
-[data-state="active"] {
+[data-state='active'] {
   animation: pulse 0.5s ease-in-out infinite;
 }
 ```
 
 ### !important 사용
 
-일부 속성이 적용되지 않는 경우 `!important`를 사용해 보세요:
+**인라인 스타일 우선**을 켠 요소까지 CSS로 강제 덮어쓸 때만 `!important`를
+사용하세요:
 
 ```css
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: #ff2b80 !important;
 }
 ```
-

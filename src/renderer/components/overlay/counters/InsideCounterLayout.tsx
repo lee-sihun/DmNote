@@ -13,6 +13,7 @@ interface InsideCounterLayoutProps {
   textStyle: React.CSSProperties;
   active: boolean;
   counterSettings: KeyCounterSettings;
+  useInlineStyles?: boolean;
 }
 
 const InsideCounterLayout = ({
@@ -21,6 +22,7 @@ const InsideCounterLayout = ({
   textStyle,
   active,
   counterSettings,
+  useInlineStyles = false,
 }: InsideCounterLayoutProps) => {
   const fillColor = active
     ? counterSettings.fill.active
@@ -53,6 +55,7 @@ const InsideCounterLayout = ({
       animationBezier={counterSettings.animation.bezier}
       animationScale={counterSettings.animation.scale}
       animationDurationMs={counterSettings.animation.durationMs}
+      useInlineStyles={useInlineStyles}
     />
   );
 

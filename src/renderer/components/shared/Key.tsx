@@ -1,5 +1,5 @@
 'use no memo';
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { getKeySignal } from '@stores/signals/keySignals';
 import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
 import { useSignals } from '@preact/signals-react/runtime';
@@ -15,23 +15,12 @@ import {
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { resolveImageSource } from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import {
   computeKeyElementStyles,
-  useBgFormatTransitionGate,
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
-import { useGradientPreviewSpec } from '@stores/grid/useGradientEditStore';
-import {
-  DEFAULT_ELEMENT_BG,
-  DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_BORDER,
-  DEFAULT_ELEMENT_BORDER_WIDTH,
-  DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_FONT_WEIGHT,
-} from '@utils/core/elementDefaults';
-import { gradientToCss, gradientRingStyle } from '@src/types/color';
+import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import InsideCounterLayout from '@components/overlay/counters/InsideCounterLayout';
 
 // DraggableKey에서 counter가 KeyCounterSettings 타입인 확장 position
@@ -115,34 +104,7 @@ const DraggableKey = React.memo(
 
     const macOS = isMac();
     const { displayName } = getKeyInfoByGlobalKey(keyName);
-    const {
-      dx,
-      dy,
-      width,
-      height = 60,
-      activeImage: _activeImage,
-      inactiveImage,
-      className,
-      backgroundColor,
-      borderColor,
-      borderWidth,
-      borderRadius,
-      fontSize,
-      fontColor,
-      fontFamily,
-      idleImageFit,
-      imageFit,
-      useInlineStyles,
-      displayText,
-      fontWeight,
-      fontItalic,
-      fontUnderline,
-      fontStrikethrough,
-      counter,
-    } = position;
-
-    const labelText = displayText || displayName;
-    const inactiveImageSrc = resolveImageSource(inactiveImage);
+    const { dx, dy, width, height = 60, className, counter } = position;
 
     const counterSettings = normalizeCounterSettings(
       counter ?? createDefaultCounterSettings(),
@@ -163,32 +125,21 @@ const DraggableKey = React.memo(
       (state) => state.isDraggingOrResizing,
     );
 
-    const nodeRef = useRef<HTMLElement | null>(null);
     const effectiveElementId = elementId || `key-${index}`;
 
     // 편집 세션 일시 페인트 — 드래그 프리뷰가 저장·히스토리를 거치지 않고
-    // 이 요소의 해당 표면만 세션 spec으로 그린다 (비대상은 항상 null)
+    // 해당 표면의 spec과 대기/입력 상태 전체를 함께 그린다
     const anchorKind = effectiveElementId.startsWith('stat-')
       ? ('stat' as const)
       : ('key' as const);
-    const previewBgSpec = useGradientPreviewSpec(
+    const previewSession = useGradientPreviewSession(
       anchorKind,
       index,
-      'background',
       isSelected,
     );
-    const previewBorderSpec = useGradientPreviewSpec(
-      anchorKind,
-      index,
-      'border',
-      isSelected,
-    );
-    const previewFillSpec = useGradientPreviewSpec(
-      anchorKind,
-      index,
-      'counterFill',
-      isSelected,
-    );
+    const previewActive = previewSession?.stateMode === 'active';
+    const previewFillSpec =
+      previewSession?.surface === 'counterFill' ? previewSession.spec : null;
 
     const isSelectionMode = isSelected;
 
@@ -295,111 +246,43 @@ const DraggableKey = React.memo(
     const renderDx = draggable.dx;
     const renderDy = draggable.dy;
 
-    const useInline = useInlineStyles === true;
     const shouldPromoteTransformLayer =
       isDraggingOrResizing || isViewportTransforming;
 
-    // 에디터는 대기 상태 고정 — 대기 쌍의 그라데이션만 반영
-    const bgGradient = inactiveImageSrc
-      ? null
-      : previewBgSpec ?? position.backgroundGradient ?? null;
-    useBgFormatTransitionGate(nodeRef, Boolean(bgGradient));
-    const borderGradientSpec =
-      previewBorderSpec ?? position.borderGradient ?? null;
-
-    // 보더 판정 — 명시값 우선, 아무 값도 없으면 기본 1px 헤어라인(패널 표시값·
-    // 오버레이·배치 고스트와 일치). 두께 0은 명시적 무보더, 이미지 키는 제외.
-    // 에디터는 항상 대기 상태 — 오버레이의 상태별 판정과 동일하게 idle 색만 본다
-    const hasExplicitBorder =
-      borderWidth != null ? borderWidth > 0 : borderColor != null;
-    const showDefaultHairline =
-      !hasExplicitBorder && borderWidth == null && !inactiveImageSrc;
-    const explicitBorder = `${
-      borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH
-    }px solid ${borderColor || DEFAULT_ELEMENT_BORDER}`;
-    const resolvedBorder =
-      hasExplicitBorder || showDefaultHairline ? explicitBorder : 'none';
-    // 그라데이션 보더는 명시 보더와 같은 두께 규칙 — width 0은 명시적 비활성
-    const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
-    const showBorderRing =
-      borderGradientSpec != null &&
-      (borderWidth != null ? borderWidth > 0 : true);
-
-    const keyStyle = {
-      width: `${width}px`,
-      height: `${height}px`,
-      transform: `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`,
-      // 그라데이션 키의 base는 무조건 transparent — 테마 --key-bg 이중 합성 방지
-      backgroundColor: bgGradient
-        ? 'transparent'
-        : useInline && backgroundColor
-        ? backgroundColor
-        : `var(--key-bg, ${
-            inactiveImageSrc
-              ? 'transparent'
-              : backgroundColor || DEFAULT_ELEMENT_BG
-          })`,
-      ...(bgGradient
-        ? {
-            backgroundImage: useInline
-              ? gradientToCss(bgGradient)
-              : `var(--key-bg-image, ${gradientToCss(bgGradient)})`,
-          }
+    const previewPosition: KeyPosition = {
+      ...position,
+      dx: renderDx,
+      dy: renderDy,
+      ...(previewSession?.surface === 'background'
+        ? previewActive
+          ? { activeBackgroundGradient: previewSession.spec }
+          : { backgroundGradient: previewSession.spec }
         : {}),
-      borderRadius:
-        useInline && borderRadius != null
-          ? `${borderRadius}px`
-          : `var(--key-radius, ${
-              borderRadius != null
-                ? `${borderRadius}px`
-                : `${DEFAULT_ELEMENT_RADIUS}px`
-            })`,
-      // 그라데이션 보더는 보더 대신 동일 두께 padding — overflow:hidden이
-      // 패딩 박스에서 클리핑되므로 링 자식이 가장자리에 정확히 그려짐.
-      // 테마 --key-border를 소비하지 않음 (실보더 + 링 padding 이중 소비 방지)
-      border: showBorderRing
-        ? 'none'
-        : useInline
-        ? resolvedBorder
-        : `var(--key-border, ${resolvedBorder})`,
-      ...(showBorderRing ? { padding: `${gradientRingWidth}px` } : {}),
-      overflow: 'hidden' as const,
+      ...(previewSession?.surface === 'border'
+        ? previewActive
+          ? { activeBorderGradient: previewSession.spec }
+          : { borderGradient: previewSession.spec }
+        : {}),
+    };
+    const {
+      keyStyle: computedKeyStyle,
+      borderRingStyle,
+      imageStyle,
+      textStyle,
+      currentImageSrc,
+      hasCurrentImage,
+      labelText,
+    } = computeKeyElementStyles({
+      position: previewPosition,
+      active: previewActive,
+      label: displayName,
+    });
+    const keyStyle: React.CSSProperties = {
+      ...computedKeyStyle,
+      transform: `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`,
       willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
-      contain: 'layout style paint',
-      imageRendering: 'auto' as const,
-      isolation: 'isolate' as const,
-      boxSizing: 'border-box' as const,
       zIndex: position.zIndex ?? zIndex,
-    };
-
-    const effectiveImageFit = idleImageFit || imageFit || 'cover';
-    const imageStyle = {
-      width: '100%',
-      height: '100%',
-      objectFit: effectiveImageFit as React.CSSProperties['objectFit'],
-      display: 'block' as const,
-      pointerEvents: 'none' as const,
-      userSelect: 'none' as const,
-    };
-
-    const textDecorations: string[] = [];
-    if (fontUnderline) textDecorations.push('underline');
-    if (fontStrikethrough) textDecorations.push('line-through');
-
-    const textStyle = {
-      willChange: 'auto',
-      color:
-        useInline && fontColor
-          ? fontColor
-          : `var(--key-text-color, ${fontColor || DEFAULT_ELEMENT_FONT})`,
-      fontSize: fontSize ? `${fontSize}px` : undefined,
-      fontFamily: fontFamily
-        ? `"${fontFamily}", "Pretendard Variable", sans-serif`
-        : undefined,
-      fontWeight: fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
-      fontStyle: fontItalic ? 'italic' : 'normal',
-      textDecoration:
-        textDecorations.length > 0 ? textDecorations.join(' ') : 'none',
+      cursor: undefined,
     };
 
     if (position?.hidden) return null;
@@ -418,12 +301,15 @@ const DraggableKey = React.memo(
           count={displayValue}
           labelText={labelText}
           textStyle={textStyle}
-          active={false}
+          active={previewActive}
           counterSettings={
             previewFillSpec
-              ? { ...counterSettings, fillIdleGradient: previewFillSpec }
+              ? previewActive
+                ? { ...counterSettings, fillActiveGradient: previewFillSpec }
+                : { ...counterSettings, fillIdleGradient: previewFillSpec }
               : counterSettings
           }
+          useInlineStyles={position.useInlineStyles === true}
         />
       );
     };
@@ -432,7 +318,6 @@ const DraggableKey = React.memo(
       if (!isSelectionMode) {
         draggable.ref(node);
       }
-      nodeRef.current = node;
       if (typeof setReferenceRef === 'function') setReferenceRef(node);
     };
 
@@ -443,10 +328,10 @@ const DraggableKey = React.memo(
           draggable && draggable.wasMoved ? '' : ''
         } ${className || ''}`}
         style={keyStyle}
-        data-state="inactive"
+        data-state={previewActive ? 'active' : 'inactive'}
         data-editing={isDraggingOrResizing ? 'true' : undefined}
         data-key-element="true"
-        data-key-image={inactiveImageSrc ? 'true' : undefined}
+        data-key-image={hasCurrentImage ? 'true' : undefined}
         onClick={handleClick}
         onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}
         onPointerDown={
@@ -455,15 +340,16 @@ const DraggableKey = React.memo(
         onContextMenu={handleContextMenu}
         onDragStart={(e) => e.preventDefault()}
       >
-        {showBorderRing && borderGradientSpec && (
+        {borderRingStyle && (
           <span
             aria-hidden="true"
-            style={gradientRingStyle(borderGradientSpec, gradientRingWidth)}
+            data-gradient-border-ring="true"
+            style={borderRingStyle}
           />
         )}
-        {inactiveImageSrc ? (
+        {hasCurrentImage ? (
           <img
-            src={inactiveImageSrc}
+            src={currentImageSrc || ''}
             alt=""
             style={imageStyle}
             draggable={false}
@@ -507,15 +393,16 @@ export const Key = React.memo(function Key({
     hasCurrentImage,
     isTransparent,
     labelText,
-  } = computeKeyElementStyles({ position, active, label: keyName });
+  } = computeKeyElementStyles({
+    position,
+    active,
+    label: keyName,
+  });
 
   useEffect(() => {
     warmupImageSource(inactiveImageSrc);
     warmupImageSource(activeImageSrc);
   }, [inactiveImageSrc, activeImageSrc]);
-
-  const rootRef = useRef<HTMLDivElement>(null);
-  useBgFormatTransitionGate(rootRef, keyStyle.backgroundImage != null);
 
   if (isTransparent) return null;
 
@@ -534,14 +421,19 @@ export const Key = React.memo(function Key({
 
   return (
     <div
-      ref={rootRef}
       className={`absolute ${position.className || ''}`}
       style={keyStyle}
       data-state={active ? 'active' : 'inactive'}
       data-key-element="true"
       data-key-image={hasCurrentImage ? 'true' : undefined}
     >
-      {borderRingStyle && <span aria-hidden="true" style={borderRingStyle} />}
+      {borderRingStyle && (
+        <span
+          aria-hidden="true"
+          data-gradient-border-ring="true"
+          style={borderRingStyle}
+        />
+      )}
       {hasCurrentImage ? (
         <img
           src={currentImageSrc || ''}
@@ -556,6 +448,7 @@ export const Key = React.memo(function Key({
           textStyle={textStyle}
           active={active}
           counterSettings={counterSettings}
+          useInlineStyles={position.useInlineStyles === true}
         />
       ) : (
         <div

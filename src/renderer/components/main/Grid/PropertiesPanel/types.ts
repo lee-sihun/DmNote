@@ -201,6 +201,8 @@ export interface StyleTabContentProps {
   // 표시 텍스트 입력 숨김 (통계 요소는 statType이 displayText 역할)
   hideDisplayText?: boolean;
   showSoundControls?: boolean;
+  // 눌림 상태가 없는 요소(통계)는 상태별 편집 표면에서 대기만 편집
+  shadowActiveState?: boolean;
   showImagePicker?: boolean;
   onToggleImagePicker?: () => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;

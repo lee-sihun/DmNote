@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import FloatingPopup from '../../FloatingPopup';
 import Checkbox from '@components/main/common/Checkbox';
@@ -6,6 +6,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import TabSwitch from '@components/main/common/TabSwitch';
 import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
+import { usePanelAnchoredPopupPosition } from '@hooks/ui/usePanelAnchoredPopupPosition';
 
 interface ImagePickerProps {
   open: boolean;
@@ -27,6 +28,8 @@ interface ImagePickerProps {
   onActiveImageReset?: () => void;
   onClose: () => void;
   interactiveRefs?: React.RefObject<HTMLElement>[];
+  /** 눌림 상태가 없는 요소는 대기 이미지만 편집 */
+  showActiveState?: boolean;
 }
 
 const STATE_MODES = {
@@ -54,10 +57,18 @@ const ImagePicker = ({
   onActiveImageReset,
   onClose,
   interactiveRefs = [],
+  showActiveState = true,
 }: ImagePickerProps) => {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<string>(STATE_MODES.idle);
+  const [mode, setMode] = useState<
+    (typeof STATE_MODES)[keyof typeof STATE_MODES]
+  >(STATE_MODES.idle);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(false);
+  const effectiveMode = showActiveState ? mode : STATE_MODES.idle;
+
+  useEffect(() => {
+    if (!showActiveState) setMode(STATE_MODES.idle);
+  }, [showActiveState]);
 
   const handleImageClick = async (stateMode: string): Promise<void> => {
     if (isLoadingImage) return;
@@ -80,24 +91,25 @@ const ImagePicker = ({
   };
 
   const handleReset = (): void => {
-    if (mode === STATE_MODES.idle) {
+    if (effectiveMode === STATE_MODES.idle) {
       onIdleImageReset?.();
     } else {
       onActiveImageReset?.();
     }
   };
 
-  const currentImage = mode === STATE_MODES.idle ? idleImage : activeImage;
+  const currentImage =
+    effectiveMode === STATE_MODES.idle ? idleImage : activeImage;
   const currentImageSrc = resolveImageSource(currentImage);
   const currentTransparent =
-    mode === STATE_MODES.idle ? idleTransparent : activeTransparent;
+    effectiveMode === STATE_MODES.idle ? idleTransparent : activeTransparent;
   const currentImageFit =
-    mode === STATE_MODES.idle ? idleImageFit : activeImageFit;
+    effectiveMode === STATE_MODES.idle ? idleImageFit : activeImageFit;
   const showImageFit =
     typeof onIdleImageFitChange === 'function' ||
     typeof onActiveImageFitChange === 'function';
   const handleTransparentToggle = (): void => {
-    if (mode === STATE_MODES.idle) {
+    if (effectiveMode === STATE_MODES.idle) {
       onIdleTransparentChange?.(!idleTransparent);
     } else {
       onActiveTransparentChange?.(!activeTransparent);
@@ -105,66 +117,22 @@ const ImagePicker = ({
   };
 
   const handleImageFitChange = (value: string): void => {
-    if (mode === STATE_MODES.idle) {
+    if (effectiveMode === STATE_MODES.idle) {
       onIdleImageFitChange?.(value);
     } else {
       onActiveImageFitChange?.(value);
     }
   };
 
-  // 고정 위치 상태
-  const [fixedPosition, setFixedPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
   const pickerContainerRef = useRef<HTMLDivElement>(null);
-
-  // panelElement가 있을 때 고정 위치 계산 (패널 기준, ColorPicker와 동일한 위치)
-  useLayoutEffect(() => {
-    if (!open) {
-      setFixedPosition(null);
-      return;
-    }
-
-    if (panelElement) {
-      const panelRect = panelElement.getBoundingClientRect();
-
-      // picker 요소의 실제 크기를 측정하거나 기본값 사용
-      const pickerEl = pickerContainerRef.current;
-      const pickerWidth = pickerEl ? pickerEl.offsetWidth : 164;
-      const pickerHeight = pickerEl ? pickerEl.offsetHeight : 220;
-
-      // ColorPicker의 솔리드 모드 높이를 기준으로 하단 정렬
-      const _colorPickerSolidHeight = 264;
-
-      const gap = 5; // 패널과 피커 사이의 간격
-      const padding = 5; // 화면 가장자리 패딩
-
-      // X축: 패널 왼쪽에서 gap만큼 떨어진 위치
-      let fixedX = panelRect.left - pickerWidth - gap;
-
-      // 왼쪽 화면 경계를 벗어나면 최소 padding 위치로 조정
-      if (fixedX < padding) {
-        fixedX = padding;
-      }
-
-      // Y축: ColorPicker의 솔리드 모드 하단과 동일한 위치에 ImagePicker 하단 정렬
-      const panelBottomPadding = 20;
-      const solidPickerBottom = panelRect.bottom - panelBottomPadding;
-
-      // ImagePicker 하단을 ColorPicker 솔리드 모드 하단과 동일하게
-      let fixedY = solidPickerBottom - pickerHeight;
-
-      // Y축 상단 경계 체크
-      if (fixedY < padding) {
-        fixedY = padding;
-      }
-
-      setFixedPosition({ x: fixedX, y: fixedY });
-    } else {
-      setFixedPosition(null);
-    }
-  }, [open, panelElement]);
+  const fixedPosition = usePanelAnchoredPopupPosition({
+    open,
+    panelElement,
+    referenceRef,
+    popupRef: pickerContainerRef,
+    fallbackWidth: 172,
+    fallbackHeight: 220,
+  });
 
   // fixedPosition이 있으면 offsetY를 무시 (이미 정확한 좌표가 계산됨)
   const effectiveOffsetY = fixedPosition ? 0 : -93;
@@ -194,14 +162,18 @@ const ImagePicker = ({
         }}
       >
         {/* 모드 전환 */}
-        <TabSwitch
-          tabs={[
-            { id: STATE_MODES.idle, label: t('imagePicker.idle') },
-            { id: STATE_MODES.active, label: t('imagePicker.active') },
-          ]}
-          activeTab={mode}
-          onTabChange={setMode}
-        />
+        {showActiveState ? (
+          <TabSwitch
+            tabs={[
+              { id: STATE_MODES.idle, label: t('imagePicker.idle') },
+              { id: STATE_MODES.active, label: t('imagePicker.active') },
+            ]}
+            activeTab={effectiveMode}
+            onTabChange={(nextMode) =>
+              setMode(nextMode as typeof effectiveMode)
+            }
+          />
+        ) : null}
 
         {/* 이미지 미리보기 영역 */}
         <div className="relative w-full h-[76px] rounded-[8px] overflow-hidden cursor-pointer group">
@@ -232,7 +204,7 @@ const ImagePicker = ({
           {/* 호버 오버레이 */}
           <div
             className="absolute inset-0 bg-black opacity-0 group-hover:opacity-40 transition-opacity"
-            onClick={() => handleImageClick(mode)}
+            onClick={() => handleImageClick(effectiveMode)}
             style={{
               pointerEvents: isLoadingImage ? 'none' : 'auto',
               cursor: isLoadingImage ? 'progress' : 'pointer',

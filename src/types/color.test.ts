@@ -3,6 +3,7 @@ import {
   canonicalGradientOrNull,
   canonicalizePositionGradients,
   counterFillPair,
+  getActivePairPreservation,
   gradientPairPatch,
   gradientToCss,
   resolveStatePair,
@@ -200,6 +201,39 @@ describe('gradientPairPatch / counterFillPair', () => {
   });
 });
 
+describe('getActivePairPreservation', () => {
+  it('저장된 idle 값이 없으면 표시 기본값을 active로 만들지 않는다', () => {
+    expect(getActivePairPreservation({}, {})).toBeNull();
+    expect(
+      getActivePairPreservation({ color: '   ', gradient: null }, {}),
+    ).toBeNull();
+  });
+
+  it('active가 비어 있으면 저장된 idle 단색을 동결한다', () => {
+    expect(
+      getActivePairPreservation({ color: '#123456' }, { color: '' }),
+    ).toEqual({ color: '#123456' });
+  });
+
+  it('active가 비어 있으면 저장된 idle 그라데이션 쌍을 동결한다', () => {
+    const gradient = toCanonicalGradient({
+      stops: [c('#123456', 0), c('#abcdef', 1)],
+    });
+    expect(
+      getActivePairPreservation(
+        { color: '#123456', gradient },
+        { gradient: null },
+      ),
+    ).toEqual({ color: '#123456', gradient });
+  });
+
+  it('저장된 active 값이 있으면 기존 값을 건드리지 않는다', () => {
+    expect(
+      getActivePairPreservation({ color: '#123456' }, { color: '#abcdef' }),
+    ).toBeNull();
+  });
+});
+
 describe('toCompactRgba', () => {
   it('hex/rgb/rgba를 무공백 소문자 rgba로', () => {
     expect(toCompactRgba('#FFFFFF')).toBe('rgba(255,255,255,1)');
@@ -226,6 +260,7 @@ describe('resolveStatePair / gradientToCss', () => {
       color: '#222',
     });
     expect(resolveStatePair(true, idle, {})).toBe(idle);
+    expect(resolveStatePair(true, idle, { color: '  ' })).toBe(idle);
     expect(resolveStatePair(false, idle, { color: '#222' })).toBe(idle);
   });
 

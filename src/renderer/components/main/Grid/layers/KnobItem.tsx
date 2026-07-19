@@ -2,6 +2,7 @@ import React from 'react';
 import {
   gradientToCss,
   gradientRingStyle,
+  resolveStatePair,
   type GradientSpec,
 } from '@src/types/color';
 import { isMac } from '@utils/core/platform';
@@ -9,14 +10,22 @@ import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { useGradientPreviewSpec } from '@stores/grid/useGradientEditStore';
+import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_FONT,
-  DEFAULT_ELEMENT_SHADOW,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import {
+  elementShadowToCss,
+  resolveElementShadow,
+  type ElementShadowSpec,
+} from '@src/types/key/shadows';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -26,15 +35,25 @@ interface KnobPosition {
   height?: number;
   className?: string;
   backgroundColor?: string;
+  activeBackgroundColor?: string;
   borderColor?: string;
+  activeBorderColor?: string;
   backgroundGradient?: GradientSpec | null;
+  activeBackgroundGradient?: GradientSpec | null;
   borderGradient?: GradientSpec | null;
+  activeBorderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
+  shadow?: ElementShadowSpec;
+  activeShadow?: ElementShadowSpec;
   inactiveImage?: string;
   activeImage?: string;
   idleImageFit?: string;
+  activeImageFit?: string;
   imageFit?: string;
+  idleTransparent?: boolean;
+  activeTransparent?: boolean;
+  useInlineStyles?: boolean;
   zIndex?: number;
 }
 
@@ -101,39 +120,66 @@ const KnobItem = ({
     height = 60,
     className,
     backgroundColor,
+    activeBackgroundColor,
     borderColor,
+    activeBorderColor,
     backgroundGradient,
+    activeBackgroundGradient,
     borderGradient,
+    activeBorderGradient,
     borderWidth,
     borderRadius,
+    shadow,
+    activeShadow,
     inactiveImage,
     activeImage,
     idleImageFit,
+    activeImageFit,
     imageFit,
+    idleTransparent,
+    activeTransparent,
+    useInlineStyles,
   } = position ?? ({} as Partial<KnobPosition>);
+  const useInline = useInlineStyles === true;
 
-  // 편집 세션 일시 페인트 — 저장·히스토리를 거치지 않는 드래그 프리뷰
-  const previewBgSpec = useGradientPreviewSpec(
-    'knob',
-    index,
-    'background',
-    isSelected,
+  // 편집 세션 일시 페인트 — 대상 spec과 대기/입력 상태를 한 묶음으로 렌더
+  const previewSession = useGradientPreviewSession('knob', index, isSelected);
+  const previewActive = previewSession?.stateMode === 'active';
+  const bgPair = resolveStatePair(
+    previewActive,
+    { color: backgroundColor, gradient: backgroundGradient },
+    { color: activeBackgroundColor, gradient: activeBackgroundGradient },
   );
-  const previewBorderSpec = useGradientPreviewSpec(
-    'knob',
-    index,
-    'border',
-    isSelected,
+  const borderPair = resolveStatePair(
+    previewActive,
+    { color: borderColor, gradient: borderGradient },
+    { color: activeBorderColor, gradient: activeBorderGradient },
   );
-  const effectiveBgGradient = previewBgSpec ?? backgroundGradient;
-  const effectiveBorderGradient = previewBorderSpec ?? borderGradient;
+  const effectiveBgGradient =
+    previewSession?.surface === 'background'
+      ? previewSession.spec
+      : bgPair.gradient;
+  const effectiveBorderGradient =
+    previewSession?.surface === 'border'
+      ? previewSession.spec
+      : borderPair.gradient;
+  const stateBackgroundColor =
+    bgPair.color ||
+    (previewActive ? DEFAULT_ELEMENT_ACTIVE_BG : DEFAULT_ELEMENT_BG);
+  const stateBorderColor =
+    borderPair.color ||
+    (previewActive ? DEFAULT_ELEMENT_ACTIVE_FONT : DEFAULT_ELEMENT_FONT);
 
   // 키·그래프와 동일 규칙 — 두께 미지정이면 기본 두께 링, 0은 명시적 비활성
   const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
   const showBorderRing =
     Boolean(effectiveBorderGradient) &&
     (borderWidth != null ? borderWidth > 0 : true);
-
+  const resolvedRadius = borderRadius != null ? `${borderRadius}px` : '50%';
+  const resolvedBorder =
+    !effectiveBorderGradient && borderWidth && borderWidth > 0
+      ? `${borderWidth}px solid ${stateBorderColor}`
+      : 'none';
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
     (state: { gridSettings?: { gridSnapSize?: number } }) =>
@@ -146,13 +192,33 @@ const KnobItem = ({
   const isSelectionMode = isSelected;
   const effectiveElementId = elementId || `knob-${index}`;
 
+  const inactiveImageSrc = resolveImageSource(inactiveImage);
+  const activeImageSrc = resolveImageSource(activeImage);
   const imageSrc =
-    resolveImageSource(inactiveImage) ||
-    resolveImageSource(activeImage) ||
-    null;
-  const resolvedFit = (idleImageFit ||
-    imageFit ||
-    'cover') as React.CSSProperties['objectFit'];
+    (previewActive && activeImageSrc
+      ? activeImageSrc
+      : inactiveImageSrc || activeImageSrc) || null;
+  // 투명 노브의 기본 그림자 억제 — 오버레이(OverlayKnobItem)와 동일 규칙
+  const isTransparent = previewActive
+    ? activeTransparent === true
+    : idleTransparent === true;
+  const resolvedShadow = elementShadowToCss(
+    resolveElementShadow({
+      active: previewActive,
+      shadow,
+      activeShadow,
+      defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+      defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+      suppressDefault: Boolean(
+        isTransparent || imageSrc || (borderWidth && borderWidth > 0),
+      ),
+    }),
+  );
+  const resolvedFit = (
+    previewActive && activeImageSrc
+      ? activeImageFit || imageFit || 'cover'
+      : idleImageFit || imageFit || 'cover'
+  ) as React.CSSProperties['objectFit'];
 
   const draggable = useDraggable({
     gridSize: gridSnapSize,
@@ -274,7 +340,7 @@ const KnobItem = ({
         zIndex: position.zIndex ?? zIndex,
         willChange:
           isDraggingOrResizing || isViewportTransforming ? 'transform' : 'auto',
-        contain: 'layout style paint',
+        contain: 'layout style',
       }}
       data-editing={isDraggingOrResizing ? 'true' : undefined}
       onClick={handleClick}
@@ -286,37 +352,53 @@ const KnobItem = ({
       onDragStart={(e: React.DragEvent) => e.preventDefault()}
     >
       <div
-        style={{
-          width: '100%',
-          height: '100%',
-          // 모서리 반경 미지정 시 원형 유지 (px 지정 시 키와 동일한 px 단위)
-          borderRadius: borderRadius != null ? `${borderRadius}px` : '50%',
-          overflow: 'hidden',
-          position: 'relative',
-          background: effectiveBgGradient
-            ? gradientToCss(effectiveBgGradient)
-            : backgroundColor || DEFAULT_ELEMENT_BG,
-          // 그라데이션 보더는 보더 대신 동일 두께 padding + 링 자식
-          border:
-            !effectiveBorderGradient && borderWidth && borderWidth > 0
-              ? `${borderWidth}px solid ${borderColor || DEFAULT_ELEMENT_FONT}`
-              : undefined,
-          padding: showBorderRing ? `${gradientRingWidth}px` : undefined,
-          // 오버레이와 동일한 기본 인셋 링 섀도 — 이미지·명시 보더 노브는 제외
-          boxShadow:
-            imageSrc || (borderWidth && borderWidth > 0)
-              ? undefined
-              : DEFAULT_ELEMENT_SHADOW,
-          boxSizing: 'border-box',
-        }}
+        style={
+          {
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            position: 'relative',
+            ...(useInline
+              ? {
+                  borderRadius: resolvedRadius,
+                  background: effectiveBgGradient
+                    ? gradientToCss(effectiveBgGradient)
+                    : stateBackgroundColor,
+                  backgroundClip: 'padding-box',
+                  border: resolvedBorder,
+                  padding: showBorderRing
+                    ? `${gradientRingWidth}px`
+                    : undefined,
+                  boxShadow: resolvedShadow,
+                }
+              : {
+                  '--dmn-knob-bg-default': effectiveBgGradient
+                    ? gradientToCss(effectiveBgGradient)
+                    : stateBackgroundColor,
+                  '--dmn-knob-border-default': resolvedBorder,
+                  '--dmn-knob-radius-default': resolvedRadius,
+                  '--dmn-knob-padding-default': showBorderRing
+                    ? `${gradientRingWidth}px`
+                    : '0px',
+                  '--dmn-knob-shadow-default': resolvedShadow,
+                  '--dmn-knob-indicator-default': stateBorderColor,
+                }),
+            boxSizing: 'border-box',
+          } as React.CSSProperties
+        }
+        data-knob-element="true"
+        data-knob-state={previewActive ? 'active' : 'inactive'}
       >
         {showBorderRing && effectiveBorderGradient && (
           <span
             aria-hidden="true"
-            style={gradientRingStyle(
-              effectiveBorderGradient,
-              gradientRingWidth,
-            )}
+            data-gradient-border-ring="true"
+            style={{
+              ...gradientRingStyle(effectiveBorderGradient, gradientRingWidth),
+              ...(useInline
+                ? { background: gradientToCss(effectiveBorderGradient) }
+                : {}),
+            }}
           />
         )}
         {imageSrc ? (
@@ -341,9 +423,10 @@ const KnobItem = ({
               width: '8%',
               height: '76%',
               transform: 'translateX(-50%)',
-              background: borderColor || DEFAULT_ELEMENT_FONT,
+              background: useInline ? stateBorderColor : undefined,
               borderRadius: '4px',
             }}
+            data-knob-indicator="true"
           />
         )}
       </div>

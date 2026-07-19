@@ -74,8 +74,13 @@ import {
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_SHADOW,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import {
+  elementShadowToCss,
+  resolveElementShadow,
+} from '@src/types/key/shadows';
 import {
   groupSelectedElements,
   ungroupSelectedElements,
@@ -1386,6 +1391,8 @@ const Grid = ({
         inactiveImage,
         activeImage,
         className,
+        shadow,
+        activeShadow,
       },
       keyName,
     } = duplicateState;
@@ -1394,6 +1401,16 @@ const Grid = ({
       resolveImageSource(activeImage) ||
       '';
     const backgroundColor = previewImage ? 'transparent' : DEFAULT_ELEMENT_BG;
+    const previewShadow = elementShadowToCss(
+      resolveElementShadow({
+        active: false,
+        shadow,
+        activeShadow,
+        defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+        defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+        suppressDefault: Boolean(previewImage),
+      }),
+    );
     const displayName =
       getKeyInfoByGlobalKey(keyName)?.displayName || keyName || '';
 
@@ -1413,7 +1430,7 @@ const Grid = ({
           backgroundColor,
           borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
           border: `${DEFAULT_ELEMENT_BORDER_WIDTH}px solid ${DEFAULT_ELEMENT_BORDER}`,
-          boxShadow: previewImage ? undefined : DEFAULT_ELEMENT_SHADOW,
+          boxShadow: previewShadow,
           overflow: 'hidden',
           opacity: 0.5,
           zIndex: 1000,
@@ -1584,9 +1601,13 @@ const Grid = ({
           <KeyCounterPreviewLayer
             positions={positions[selectedKeyType]}
             previewValue={0}
+            selectedElements={selectedElements}
           />
         )}
-        <StatCounterLayer positions={statPositions?.[selectedKeyType] || []} />
+        <StatCounterLayer
+          positions={statPositions?.[selectedKeyType] || []}
+          selectedElements={selectedElements}
+        />
         {renderDuplicateGhost()}
         <PluginElementsRenderer
           windowType="main"

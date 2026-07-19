@@ -78,17 +78,31 @@ interface KeyPosition {
   activeBackgroundGradient?: GradientSpec | null;
   borderGradient?: GradientSpec | null;
   activeBorderGradient?: GradientSpec | null;
+  shadow?: ElementShadowSpec;
+  activeShadow?: ElementShadowSpec;
 }
 
 interface GradientSpec {
   angle: number; // 0 이상 360 미만 — 360은 0으로 정규화 (CSS 기준, 0 = 위·시계 방향)
   stops: { color: string; pos: number }[]; // 2–8개, pos는 0–1 오름차순
 }
+
+interface ElementShadowSpec {
+  enabled: boolean;
+  color: string; // 알파값으로 농도 조절
+  offsetX: number; // px, -100~100
+  offsetY: number; // px, -100~100
+  blur: number; // px, 0~100
+}
 ```
 
 그라데이션 필드가 있으면 렌더에서 대응 단색 필드보다 우선하며, 저장 시
 대응 단색 필드는 첫 스톱 색으로 자동 동기화됩니다. 단색으로 되돌리려면
 그라데이션 필드를 `null`로 두고 단색 필드를 갱신하세요.
+
+`shadow`와 `activeShadow`는 대기·입력 그림자를 각각 제어합니다. 필드를
+생략하면 기존 기본 그림자가 유지되며, 그림자를 명시적으로 끄려면
+`enabled: false`인 spec을 저장하세요.
 
 ```javascript
 const positions = await dmn.keys.getPositions();

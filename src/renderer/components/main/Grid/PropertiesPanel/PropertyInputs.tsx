@@ -651,6 +651,13 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       ? internalStateMode
       : 'idle';
 
+  useEffect(() => {
+    if (!showStateTabs) {
+      setInternalStateMode('idle');
+      if (!isControlled) setInternalOpen(false);
+    }
+  }, [showStateTabs, isControlled]);
+
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   // 로컬 색상 상태 (드래그 중 UI 업데이트용)
@@ -750,6 +757,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     contextKey: `${_stableId}:${stateMode}`,
     canvasAnchor: open ? canvasAnchor : undefined,
     canvasSurface: gradientSurface,
+    canvasState: stateMode,
     onPreview: (modeValue) => {
       if (modeValue.mode === 'solid') handleColorChange(modeValue.color);
     },

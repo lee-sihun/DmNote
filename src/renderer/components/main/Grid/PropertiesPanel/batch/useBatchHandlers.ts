@@ -4,26 +4,30 @@ import type {
   KeyCounterSettings,
 } from '@src/types/key/keys';
 import { normalizeCounterSettings } from '@src/types/key/keys';
-import { gradientPairPatch, type ColorModeValue } from '@src/types/color';
+import {
+  getActivePairPreservation,
+  gradientPairPatch,
+  type ColorModeValue,
+} from '@src/types/color';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import {
+  resolveElementShadow,
+  type ElementShadowSpec,
+} from '@src/types/key/shadows';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import {
-  DEFAULT_ELEMENT_ACTIVE_BG,
-  DEFAULT_ELEMENT_ACTIVE_BORDER,
-  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
 
 import type { EditorPatchV1 } from '@src/types/editor';
 
-const DEFAULT_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
-const DEFAULT_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_BORDER;
-const DEFAULT_ACTIVE_FONT_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
 const SPACING_GROUP_TOLERANCE = 2;
 const SPACING_DECIMAL_SCALE = 1;
 const POSITION_CHANGE_EPSILON = 0.05;
@@ -35,6 +39,93 @@ const PRIMARY_AXIS_STACK_EPSILON = 0.1;
 
 type KeyLikeType = 'key' | 'stat' | 'graph' | 'knob';
 type AxisDirection = 'horizontal' | 'vertical';
+type IdleColorProperty = 'backgroundColor' | 'borderColor' | 'fontColor';
+type ActiveColorProperty =
+  | 'activeBackgroundColor'
+  | 'activeBorderColor'
+  | 'activeFontColor';
+
+const ACTIVE_COLOR_PROPERTY: Record<IdleColorProperty, ActiveColorProperty> = {
+  backgroundColor: 'activeBackgroundColor',
+  borderColor: 'activeBorderColor',
+  fontColor: 'activeFontColor',
+};
+
+const GRADIENT_PROPERTY = {
+  backgroundColor: {
+    idle: 'backgroundGradient',
+    active: 'activeBackgroundGradient',
+  },
+  borderColor: {
+    idle: 'borderGradient',
+    active: 'activeBorderGradient',
+  },
+} as const;
+
+const isIdleColorProperty = (
+  property: keyof KeyPosition,
+): property is IdleColorProperty => property in ACTIVE_COLOR_PROPERTY;
+
+const ACTIVE_STATE_PROPERTIES = new Set<keyof KeyPosition>([
+  'activeBackgroundColor',
+  'activeBorderColor',
+  'activeFontColor',
+  'activeBackgroundGradient',
+  'activeBorderGradient',
+  'activeImage',
+  'activeTransparent',
+  'activeImageFit',
+  'activeShadow',
+]);
+
+const isActiveStateProperty = (property: keyof KeyPosition): boolean =>
+  ACTIVE_STATE_PROPERTIES.has(property);
+
+const buildBatchStyleUpdate = (
+  index: number,
+  position: KeyPosition | undefined,
+  property: keyof KeyPosition,
+  value: KeyPosition[keyof KeyPosition],
+  includeFontColor = true,
+  preserveActiveState = true,
+): { index: number } & Partial<KeyPosition> => {
+  const update = { index, [property]: value } as {
+    index: number;
+  } & Partial<KeyPosition>;
+  if (
+    !position ||
+    !preserveActiveState ||
+    !isIdleColorProperty(property) ||
+    (!includeFontColor && property === 'fontColor')
+  ) {
+    return update;
+  }
+
+  const activeProperty = ACTIVE_COLOR_PROPERTY[property];
+  const gradientProperty =
+    property === 'fontColor' ? undefined : GRADIENT_PROPERTY[property];
+  const preservation = getActivePairPreservation(
+    {
+      color: position[property],
+      gradient: gradientProperty ? position[gradientProperty.idle] : undefined,
+    },
+    {
+      color: position[activeProperty],
+      gradient: gradientProperty
+        ? position[gradientProperty.active]
+        : undefined,
+    },
+  );
+  if (preservation?.color !== undefined) {
+    Object.assign(update, { [activeProperty]: preservation.color });
+  }
+  if (gradientProperty && preservation?.gradient !== undefined) {
+    Object.assign(update, {
+      [gradientProperty.active]: preservation.gradient,
+    });
+  }
+  return update;
+};
 
 interface LayoutElement {
   type: KeyLikeType;
@@ -793,18 +884,22 @@ export function useBatchHandlers({
     >;
     dispatchKeyUpdates(keyUpdates, 'preview');
 
-    const statUpdates = selectedStats
-      .filter((el) => el.index !== undefined)
-      .map((el) => ({ index: el.index!, [property]: value })) as Array<
-      { index: number } & Partial<StatItemPosition>
-    >;
+    const statUpdates = isActiveStateProperty(property)
+      ? []
+      : (selectedStats
+          .filter((el) => el.index !== undefined)
+          .map((el) => ({ index: el.index!, [property]: value })) as Array<
+          { index: number } & Partial<StatItemPosition>
+        >);
     dispatchStatUpdates(statUpdates, 'preview');
 
-    const graphUpdates = selectedGraphs
-      .filter((el) => el.index !== undefined)
-      .map((el) => ({ index: el.index!, [property]: value })) as Array<
-      { index: number } & Partial<GraphItemPosition>
-    >;
+    const graphUpdates = isActiveStateProperty(property)
+      ? []
+      : (selectedGraphs
+          .filter((el) => el.index !== undefined)
+          .map((el) => ({ index: el.index!, [property]: value })) as Array<
+          { index: number } & Partial<GraphItemPosition>
+        >);
     dispatchGraphUpdates(graphUpdates, 'preview');
 
     const knobUpdates = selectedKnobs
@@ -827,130 +922,47 @@ export function useBatchHandlers({
       .filter((el) => el.index !== undefined)
       .map((el) => {
         const index = el.index!;
-        const pos = currentKeys[index];
-        if (pos) {
-          if (
-            property === 'backgroundColor' &&
-            pos.activeBackgroundColor == null
-          ) {
-            return {
-              index,
-              backgroundColor: value,
-              activeBackgroundColor:
-                pos.activeBackgroundColor ??
-                pos.backgroundColor ??
-                DEFAULT_ACTIVE_BACKGROUND_COLOR,
-            };
-          }
-          if (property === 'borderColor' && pos.activeBorderColor == null) {
-            return {
-              index,
-              borderColor: value,
-              activeBorderColor:
-                pos.activeBorderColor ??
-                pos.borderColor ??
-                DEFAULT_ACTIVE_BORDER_COLOR,
-            };
-          }
-          if (property === 'fontColor' && pos.activeFontColor == null) {
-            return {
-              index,
-              fontColor: value,
-              activeFontColor:
-                pos.activeFontColor ??
-                pos.fontColor ??
-                DEFAULT_ACTIVE_FONT_COLOR,
-            };
-          }
-        }
-        return { index, [property]: value } as {
-          index: number;
-        } & Partial<KeyPosition>;
+        return buildBatchStyleUpdate(
+          index,
+          currentKeys[index],
+          property,
+          value,
+        );
       });
-    const statUpdates = selectedStats
-      .filter((el) => el.index !== undefined)
-      .map((el) => {
-        const index = el.index!;
-        const pos = currentStats[index];
-        if (pos) {
-          if (
-            property === 'backgroundColor' &&
-            pos.activeBackgroundColor == null
-          ) {
-            return {
+    const statUpdates = isActiveStateProperty(property)
+      ? []
+      : selectedStats
+          .filter((el) => el.index !== undefined)
+          .map((el) => {
+            const index = el.index!;
+            return buildBatchStyleUpdate(
               index,
-              backgroundColor: value,
-              activeBackgroundColor:
-                pos.activeBackgroundColor ??
-                pos.backgroundColor ??
-                DEFAULT_ACTIVE_BACKGROUND_COLOR,
-            } as { index: number } & Partial<StatItemPosition>;
-          }
-          if (property === 'borderColor' && pos.activeBorderColor == null) {
-            return {
-              index,
-              borderColor: value,
-              activeBorderColor:
-                pos.activeBorderColor ??
-                pos.borderColor ??
-                DEFAULT_ACTIVE_BORDER_COLOR,
-            } as { index: number } & Partial<StatItemPosition>;
-          }
-          if (property === 'fontColor' && pos.activeFontColor == null) {
-            return {
-              index,
-              fontColor: value,
-              activeFontColor:
-                pos.activeFontColor ??
-                pos.fontColor ??
-                DEFAULT_ACTIVE_FONT_COLOR,
-            } as { index: number } & Partial<StatItemPosition>;
-          }
-        }
-        return { index, [property]: value } as {
-          index: number;
-        } & Partial<StatItemPosition>;
-      });
-    const graphUpdates = selectedGraphs
-      .filter((el) => el.index !== undefined)
-      .map((el) => ({ index: el.index!, [property]: value })) as Array<
-      { index: number } & Partial<GraphItemPosition>
-    >;
+              currentStats[index],
+              property,
+              value,
+              true,
+              false,
+            ) as { index: number } & Partial<StatItemPosition>;
+          });
+    const graphUpdates = isActiveStateProperty(property)
+      ? []
+      : (selectedGraphs
+          .filter((el) => el.index !== undefined)
+          .map((el) => ({ index: el.index!, [property]: value })) as Array<
+          { index: number } & Partial<GraphItemPosition>
+        >);
     const currentKnobs = knobPositions?.[selectedKeyType] || [];
     const knobUpdates = selectedKnobs
       .filter((el) => el.index !== undefined)
       .map((el) => {
         const index = el.index!;
-        const pos = currentKnobs[index];
-        // idle 변경 시 active가 비어 있으면 현재 표시값을 함께 저장 (키/통계와 동일)
-        if (pos) {
-          if (
-            property === 'backgroundColor' &&
-            pos.activeBackgroundColor == null
-          ) {
-            return {
-              index,
-              backgroundColor: value,
-              activeBackgroundColor:
-                pos.activeBackgroundColor ??
-                pos.backgroundColor ??
-                DEFAULT_ACTIVE_BACKGROUND_COLOR,
-            } as { index: number } & Partial<KnobItemPosition>;
-          }
-          if (property === 'borderColor' && pos.activeBorderColor == null) {
-            return {
-              index,
-              borderColor: value,
-              activeBorderColor:
-                pos.activeBorderColor ??
-                pos.borderColor ??
-                DEFAULT_ACTIVE_BORDER_COLOR,
-            } as { index: number } & Partial<KnobItemPosition>;
-          }
-        }
-        return { index, [property]: value } as {
-          index: number;
-        } & Partial<KnobItemPosition>;
+        return buildBatchStyleUpdate(
+          index,
+          currentKnobs[index],
+          property,
+          value,
+          false,
+        ) as { index: number } & Partial<KnobItemPosition>;
       });
     dispatchKeyLikeUpdates([
       ...keyUpdates.map((update) => ({ type: 'key' as const, ...update })),
@@ -967,6 +979,120 @@ export function useBatchHandlers({
         ...update,
       })),
     ] as KeyLikeBatchUpdate[]);
+  };
+
+  // 요소별 저장값+기본값을 합친 실제 그림자 (이미지·노브 투명 등 기본 억제 규칙 포함)
+  const resolveShadowFor = (
+    position: KeyPosition,
+    active: boolean,
+    kind: 'key' | 'knob',
+  ): ElementShadowSpec => {
+    const hasImage = Boolean(
+      active
+        ? position.activeImage?.trim() || position.inactiveImage?.trim()
+        : position.inactiveImage?.trim(),
+    );
+    const suppressDefault =
+      hasImage ||
+      (kind === 'knob' &&
+        ((active
+          ? position.activeTransparent === true
+          : position.idleTransparent === true) ||
+          (position.borderWidth ?? 0) > 0));
+    return resolveElementShadow({
+      active,
+      shadow: position.shadow,
+      activeShadow: position.activeShadow,
+      defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+      defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+      suppressDefault,
+    });
+  };
+
+  const dispatchShadowUpdates = (
+    buildUpdate: (
+      index: number,
+      position: KeyPosition | undefined,
+      kind: 'key' | 'knob',
+      elementType: 'key' | 'stat' | 'knob',
+    ) => { index: number } & Partial<KeyPosition>,
+  ) => {
+    const currentKeys = keyPositions[selectedKeyType] || [];
+    const currentStats = statPositions[selectedKeyType] || [];
+    const currentKnobs = knobPositions?.[selectedKeyType] || [];
+
+    dispatchKeyLikeUpdates([
+      ...selectedKeys
+        .filter((element) => element.index !== undefined)
+        .map((element) => ({
+          type: 'key' as const,
+          ...buildUpdate(
+            element.index!,
+            currentKeys[element.index!],
+            'key',
+            'key',
+          ),
+        })),
+      ...selectedStats
+        .filter((element) => element.index !== undefined)
+        .map((element) => ({
+          type: 'stat' as const,
+          ...buildUpdate(
+            element.index!,
+            currentStats[element.index!],
+            'key',
+            'stat',
+          ),
+        })),
+      ...selectedKnobs
+        .filter((element) => element.index !== undefined)
+        .map((element) => ({
+          type: 'knob' as const,
+          ...buildUpdate(
+            element.index!,
+            currentKnobs[element.index!],
+            'knob',
+            'knob',
+          ),
+        })),
+    ] as KeyLikeBatchUpdate[]);
+  };
+
+  const handleBatchShadowChangeComplete = (
+    state: 'idle' | 'active',
+    patch: Partial<ElementShadowSpec>,
+  ) => {
+    const active = state === 'active';
+    const field = active ? 'activeShadow' : 'shadow';
+    dispatchShadowUpdates((index, position, kind, elementType) => {
+      if (!position) return { index };
+      // 통계는 눌림 상태가 없음 — 입력 그림자를 기록하지 않음
+      if (active && elementType === 'stat') return { index };
+      return {
+        index,
+        [field]: { ...resolveShadowFor(position, active, kind), ...patch },
+      };
+    });
+  };
+
+  // 마스터 토글 — 대기·입력 그림자를 요소별 현재 값 기준으로 한 번에 켜고 끔
+  const handleBatchShadowEnabledChange = (enabled: boolean) => {
+    dispatchShadowUpdates((index, position, kind, elementType) => {
+      if (!position) return { index };
+      return {
+        index,
+        shadow: { ...resolveShadowFor(position, false, kind), enabled },
+        // 통계는 눌림 상태가 없음 — activeShadow 실체화 금지
+        ...(elementType === 'stat'
+          ? {}
+          : {
+              activeShadow: {
+                ...resolveShadowFor(position, true, kind),
+                enabled,
+              },
+            }),
+      };
+    });
   };
 
   // 그라데이션 커밋 — 배경/테두리 쌍(base+sibling)을 선택 요소 전체에 atomic 적용
@@ -990,33 +1116,38 @@ export function useBatchHandlers({
     const buildUpdate = (
       index: number,
       pos: KeyPosition | undefined,
+      preserveActiveState = true,
     ): { index: number } & Partial<KeyPosition> => {
       const update: { index: number } & Partial<KeyPosition> = {
         index,
         ...pairPatch,
       };
-      // idle 편집 시 active 쌍이 비어 있으면 현재 표시되던 active 모습을 쌍으로 보존
-      if (state === 'idle' && pos) {
-        const activeBase = isBg
-          ? pos.activeBackgroundColor
-          : pos.activeBorderColor;
-        const activeGradient = isBg
-          ? pos.activeBackgroundGradient
-          : pos.activeBorderGradient;
-        if (activeBase == null && activeGradient == null) {
-          const fallback = isBg
-            ? pos.backgroundColor ?? DEFAULT_ACTIVE_BACKGROUND_COLOR
-            : pos.borderColor ?? DEFAULT_ACTIVE_BORDER_COLOR;
+      // idle 편집 전 사용자 저장값 기준 active 쌍 보존
+      if (state === 'idle' && pos && preserveActiveState) {
+        const preservation = getActivePairPreservation(
+          {
+            color: isBg ? pos.backgroundColor : pos.borderColor,
+            gradient: isBg ? pos.backgroundGradient : pos.borderGradient,
+          },
+          {
+            color: isBg ? pos.activeBackgroundColor : pos.activeBorderColor,
+            gradient: isBg
+              ? pos.activeBackgroundGradient
+              : pos.activeBorderGradient,
+          },
+        );
+        if (preservation?.color !== undefined) {
           if (isBg) {
-            update.activeBackgroundColor = fallback;
-            if (pos.backgroundGradient) {
-              update.activeBackgroundGradient = pos.backgroundGradient;
-            }
+            update.activeBackgroundColor = preservation.color;
           } else {
-            update.activeBorderColor = fallback;
-            if (pos.borderGradient) {
-              update.activeBorderGradient = pos.borderGradient;
-            }
+            update.activeBorderColor = preservation.color;
+          }
+        }
+        if (preservation?.gradient !== undefined) {
+          if (isBg) {
+            update.activeBackgroundGradient = preservation.gradient;
+          } else {
+            update.activeBorderGradient = preservation.gradient;
           }
         }
       }
@@ -1036,13 +1167,14 @@ export function useBatchHandlers({
           ...buildUpdate(el.index!, currentKeys[el.index!]),
         })),
       ...selectedStats
-        .filter((el) => el.index !== undefined)
+        .filter((el) => state !== 'active' && el.index !== undefined)
         .map((el) => ({
           type: 'stat' as const,
-          ...buildUpdate(el.index!, currentStats[el.index!]),
+          ...buildUpdate(el.index!, currentStats[el.index!], false),
         })),
       ...selectedGraphs
-        .filter((el) => el.index !== undefined)
+        // 그래프는 active 상태가 없음 — 입력 그라데이션 기록 제외
+        .filter((el) => state !== 'active' && el.index !== undefined)
         .map((el) => ({
           type: 'graph' as const,
           ...buildUpdate(el.index!, currentGraphs[el.index!]),
@@ -1339,27 +1471,52 @@ export function useBatchHandlers({
   };
 
   // 카운터 업데이트 핸들러
-  const handleBatchCounterUpdate = (updates: Partial<KeyCounterSettings>) => {
+  const handleBatchCounterUpdate = (
+    updates: Partial<KeyCounterSettings>,
+    options?: {
+      activeStateOnly?: boolean;
+      colorState?: 'idle' | 'active';
+    },
+  ) => {
+    const mergeCounterSettings = (
+      currentSettings: KeyCounterSettings,
+    ): KeyCounterSettings => {
+      const newSettings = { ...currentSettings, ...updates };
+      if (options?.colorState && updates.fill) {
+        newSettings.fill = {
+          ...currentSettings.fill,
+          [options.colorState]: updates.fill[options.colorState],
+        };
+      }
+      if (options?.colorState && updates.stroke) {
+        newSettings.stroke = {
+          ...currentSettings.stroke,
+          [options.colorState]: updates.stroke[options.colorState],
+        };
+      }
+      return newSettings;
+    };
+
     const keyUpdates = selectedKeys
       .filter((el) => el.index !== undefined)
       .map((el) => {
         const pos = keyPositions[selectedKeyType]?.[el.index!];
         if (!pos) return null;
         const currentSettings = normalizeCounterSettings(pos.counter);
-        const newSettings = { ...currentSettings, ...updates };
+        const newSettings = mergeCounterSettings(currentSettings);
         return { index: el.index!, counter: newSettings };
       })
       .filter(
         (update): update is { index: number; counter: KeyCounterSettings } =>
           update !== null,
       );
-    const statUpdates = selectedStats
+    const statUpdates = (options?.activeStateOnly ? [] : selectedStats)
       .filter((el) => el.index !== undefined)
       .map((el) => {
         const pos = statPositions[selectedKeyType]?.[el.index!];
         if (!pos) return null;
         const currentSettings = normalizeCounterSettings(pos.counter);
-        const newSettings = { ...currentSettings, ...updates };
+        const newSettings = mergeCounterSettings(currentSettings);
         return { index: el.index!, counter: newSettings } as {
           index: number;
         } & Partial<StatItemPosition>;
@@ -1501,11 +1658,37 @@ export function useBatchHandlers({
     dispatchKeyUpdates(keyUpdates, 'commit');
   };
 
+  // 눌림 가능(키·노브) 전용 — active 상태 쓰기가 통계만 제외하고 노브는 포함
+  const handleActiveCapableStyleChangeComplete = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    dispatchKeyLikeUpdates([
+      ...selectedKeys
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({
+          type: 'key' as const,
+          index: el.index!,
+          [property]: value,
+        })),
+      ...selectedKnobs
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({
+          type: 'knob' as const,
+          index: el.index!,
+          [property]: value,
+        })),
+    ] as KeyLikeBatchUpdate[]);
+  };
+
   return {
     handleBatchStyleChange,
     handleBatchStyleChangeComplete,
+    handleBatchShadowChangeComplete,
+    handleBatchShadowEnabledChange,
     handleBatchGradientCommit,
     handleKeyOnlyStyleChangeComplete,
+    handleActiveCapableStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
     handleBatchSpacing,

@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useRef, useState, useLayoutEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import {
   SaturationArea,
@@ -32,6 +32,7 @@ import {
   type GradientSpec,
 } from '@src/types/color';
 import { ColorSwatchButton, ColorSwatchSurface } from './ColorSwatch';
+import { usePanelAnchoredPopupPosition } from '@hooks/ui/usePanelAnchoredPopupPosition';
 
 type ColorValue = string | GradientColor;
 type PaletteValue = ColorValue | GradientSpecColor;
@@ -610,11 +611,6 @@ const ColorPickerWrapper = ({
     }
   };
 
-  // 고정 위치 상태
-  const [fixedPosition, setFixedPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
   const pickerContainerRef = useRef<HTMLDivElement | null>(null);
   const showStateSwitch =
     stateMode != null && typeof onStateModeChange === 'function';
@@ -674,70 +670,13 @@ const ColorPickerWrapper = ({
     setOpacityPercentBottomInput(String(Math.round(resolvedOpacityBottom!)));
   }, [opacityPercentFocusTarget, resolvedOpacityBottom, showOpacityControl]);
 
-  // panelElement가 있을 때 고정 위치 계산 (패널 기준, 세로 중앙 정렬)
-  const computePositionRef = useRef<(() => void) | null>(null);
-  useLayoutEffect(() => {
-    if (!open || !panelElement) {
-      setFixedPosition(null);
-      computePositionRef.current = null;
-      return;
-    }
-
-    const compute = () => {
-      const panelRect = panelElement.getBoundingClientRect();
-
-      // 실측 우선 — 폴백은 정상 경로에선 도달하지 않는 방어값
-      const pickerEl = pickerContainerRef.current;
-      const pickerWidth = pickerEl ? pickerEl.offsetWidth : 168;
-      const actualPickerHeight = pickerEl ? pickerEl.offsetHeight : 300;
-
-      const gap = 5; // 패널과 피커 사이의 간격
-      const padding = 5; // 화면 가장자리 패딩
-
-      // X축: 패널 왼쪽에서 gap만큼 떨어진 위치
-      let fixedX = panelRect.left - pickerWidth - gap;
-
-      // 왼쪽 화면 경계를 벗어나면 최소 padding 위치로 조정
-      if (fixedX < padding) {
-        fixedX = padding;
-      }
-
-      // Y축: 사이드 패널 세로 중앙 정렬 (화면 경계는 클램프)
-      let fixedY = panelRect.top + (panelRect.height - actualPickerHeight) / 2;
-      const maxY = window.innerHeight - actualPickerHeight - padding;
-      if (fixedY > maxY) fixedY = maxY;
-      if (fixedY < padding) fixedY = padding;
-
-      setFixedPosition((prev) =>
-        prev && prev.x === fixedX && prev.y === fixedY
-          ? prev
-          : { x: fixedX, y: fixedY },
-      );
-    };
-
-    computePositionRef.current = compute;
-    compute();
-
-    // 비-React 요인(폰트 로드 등) 크기 변화 대응 안전망
-    const pickerEl = pickerContainerRef.current;
-    if (pickerEl && typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => compute());
-      observer.observe(pickerEl);
-      return () => {
-        observer.disconnect();
-        computePositionRef.current = null;
-      };
-    }
-    return () => {
-      computePositionRef.current = null;
-    };
-  }, [open, panelElement]);
-
-  // 콘텐츠 변화(단색↔그레디언트 등)와 같은 커밋에서 페인트 전에 재중앙정렬 —
-  // ResizeObserver에만 맡기면 새 높이가 먼저 그려지고 위치가 다음 프레임에
-  // 따라와 팝업이 위아래로 덜컥거린다
-  useLayoutEffect(() => {
-    computePositionRef.current?.();
+  const fixedPosition = usePanelAnchoredPopupPosition({
+    open,
+    panelElement,
+    referenceRef,
+    popupRef: pickerContainerRef,
+    fallbackWidth: 168,
+    fallbackHeight: 300,
   });
 
   // fixedPosition이 있으면 offsetY를 무시 (이미 정확한 좌표가 계산됨)

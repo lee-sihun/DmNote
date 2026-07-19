@@ -13,6 +13,7 @@ import type {
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import {
+  getActivePairPreservation,
   gradientPairPatch,
   gradientToCss,
   type ColorModeValue,
@@ -27,7 +28,10 @@ import {
   DEFAULT_ELEMENT_ACTIVE_FONT,
   DEFAULT_ELEMENT_HAIRLINE,
   DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveElementShadow } from '@src/types/key/shadows';
 import type {
   PluginSettingSchema,
   PluginMessages,
@@ -58,6 +62,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import ShadowControls from '../ShadowControls';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -697,6 +702,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
           open={showGraphImagePicker}
           referenceRef={graphImageButtonRef}
           panelElement={panelElement}
+          showActiveState={false}
           idleImage={singleGraphPosition.inactiveImage || ''}
           activeImage={singleGraphPosition.activeImage || ''}
           idleTransparent={false}
@@ -987,22 +993,28 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
     const updates: Partial<KnobItemPosition> = { ...patch };
 
-    // idle 편집 시 active 쌍이 비어 있으면 현재 표시되던 active 모습을 쌍으로 보존
+    // idle 편집 전 사용자 저장값 기준 active 쌍 보존
     if (colorState !== 'active') {
       const activeProp = activeColorPropertyFor(pickerFor);
-      const activeEmpty =
-        !isNonEmptyString(singleKnobPosition[activeProp]) &&
-        storedGradientOf(activeProp) == null;
-      if (activeEmpty) {
-        updates[activeProp] = localColors[activeProp];
-        const prevIdleGradient = storedGradientOf(pickerFor);
-        if (prevIdleGradient) {
-          const activeSibling =
-            pickerFor === 'backgroundColor'
-              ? 'activeBackgroundGradient'
-              : 'activeBorderGradient';
-          updates[activeSibling] = prevIdleGradient;
-        }
+      const preservation = getActivePairPreservation(
+        {
+          color: singleKnobPosition[pickerFor],
+          gradient: storedGradientOf(pickerFor),
+        },
+        {
+          color: singleKnobPosition[activeProp],
+          gradient: storedGradientOf(activeProp),
+        },
+      );
+      if (preservation?.color !== undefined) {
+        updates[activeProp] = preservation.color;
+      }
+      if (preservation?.gradient !== undefined) {
+        const activeSibling =
+          pickerFor === 'backgroundColor'
+            ? 'activeBackgroundGradient'
+            : 'activeBorderGradient';
+        updates[activeSibling] = preservation.gradient;
       }
     }
 
@@ -1024,6 +1036,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       ? { kind: 'knob', index: singleKnobIndex }
       : undefined,
     canvasSurface: pickerFor === 'borderColor' ? 'border' : 'background',
+    canvasState: colorState,
     onPreview: (value) => {
       if (value.mode === 'solid' && pickerFor) {
         handleColorChange(pickerFor, value.color);
@@ -1045,6 +1058,34 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         singleKnobPosition.height || 60,
       ) / 2,
     );
+  const knobHasIdleImage = Boolean(singleKnobPosition.inactiveImage?.trim());
+  const knobHasActiveImage = Boolean(
+    singleKnobPosition.activeImage?.trim() ||
+      singleKnobPosition.inactiveImage?.trim(),
+  );
+  const suppressKnobDefaultShadow = (singleKnobPosition.borderWidth ?? 0) > 0;
+  const knobIdleShadow = resolveElementShadow({
+    active: false,
+    shadow: singleKnobPosition.shadow,
+    activeShadow: singleKnobPosition.activeShadow,
+    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+    suppressDefault:
+      knobHasIdleImage ||
+      singleKnobPosition.idleTransparent === true ||
+      suppressKnobDefaultShadow,
+  });
+  const knobActiveShadow = resolveElementShadow({
+    active: true,
+    shadow: singleKnobPosition.shadow,
+    activeShadow: singleKnobPosition.activeShadow,
+    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+    suppressDefault:
+      knobHasActiveImage ||
+      singleKnobPosition.activeTransparent === true ||
+      suppressKnobDefaultShadow,
+  });
 
   return (
     <div ref={setRef} className={PANEL_ROOT_CLASS}>
@@ -1298,22 +1339,64 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               </PropertyRow>
 
               {useCustomCSS && (
-                <PropertyRow label={t('propertiesPanel.className') || '클래스'}>
-                  <TextInput
-                    value={classNameDraft}
-                    onChange={setClassNameDraft}
-                    onBlur={() =>
-                      handleKnobUpdate({
-                        index: singleKnobIndex,
-                        className: classNameDraft || '',
-                      })
-                    }
-                    placeholder="className"
-                    width="90px"
-                  />
-                </PropertyRow>
+                <>
+                  <div className="flex justify-between items-center w-full min-h-[32px]">
+                    <p className="text-fg-muted text-label">
+                      {t('propertiesPanel.useInlineStyles') ||
+                        '인라인 스타일 우선'}
+                    </p>
+                    <Checkbox
+                      checked={singleKnobPosition.useInlineStyles ?? false}
+                      onChange={() =>
+                        handleKnobUpdate({
+                          index: singleKnobIndex,
+                          useInlineStyles: !(
+                            singleKnobPosition.useInlineStyles ?? false
+                          ),
+                        })
+                      }
+                    />
+                  </div>
+
+                  <PropertyRow
+                    label={t('propertiesPanel.className') || '클래스'}
+                  >
+                    <TextInput
+                      value={classNameDraft}
+                      onChange={setClassNameDraft}
+                      onBlur={() =>
+                        handleKnobUpdate({
+                          index: singleKnobIndex,
+                          className: classNameDraft || '',
+                        })
+                      }
+                      placeholder="className"
+                      width="90px"
+                    />
+                  </PropertyRow>
+                </>
               )}
             </PropertySection>
+
+            <ShadowControls
+              idleShadow={knobIdleShadow}
+              activeShadow={knobActiveShadow}
+              onChange={(state, shadow) =>
+                handleKnobUpdate({
+                  index: singleKnobIndex,
+                  [state === 'active' ? 'activeShadow' : 'shadow']: shadow,
+                })
+              }
+              onEnabledChange={(enabled) =>
+                handleKnobUpdate({
+                  index: singleKnobIndex,
+                  shadow: { ...knobIdleShadow, enabled },
+                  activeShadow: { ...knobActiveShadow, enabled },
+                })
+              }
+              panelElement={panelElement}
+              t={t}
+            />
           </div>
         </div>
       </div>
@@ -1672,6 +1755,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
                   : undefined
               }
               showSoundControls={!isSingleStat}
+              shadowActiveState={!isSingleStat}
               showImagePicker={showImagePicker}
               onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
               imageButtonRef={imageButtonRef}

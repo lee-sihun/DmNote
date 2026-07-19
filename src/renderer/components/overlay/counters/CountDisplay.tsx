@@ -5,6 +5,7 @@ import {
   COUNTER_DEFAULT_BEZIER,
   createCubicBezierEasing,
 } from '@utils/cubicBezier';
+import { getCounterTypographyStyle } from '@utils/core/counterStyles';
 
 interface CountDisplayProps {
   count: number;
@@ -23,6 +24,7 @@ interface CountDisplayProps {
   animationBezier?: [number, number, number, number];
   animationScale?: number;
   animationDurationMs?: number;
+  useInlineStyles?: boolean;
 }
 
 const CountDisplay = ({
@@ -42,6 +44,7 @@ const CountDisplay = ({
   animationBezier = COUNTER_DEFAULT_BEZIER,
   animationScale = 1.1,
   animationDurationMs = 300,
+  useInlineStyles = false,
 }: CountDisplayProps) => {
   const spanRef = useRef<HTMLSpanElement | null>(null);
   const scaleRef = useRef<number>(1);
@@ -129,12 +132,6 @@ const CountDisplay = ({
   const stroke = toCssRgba(strokeColor, 'transparent');
   const strokeWidth = stroke.alpha > 0 ? '1px' : '0px';
 
-  const textDecorations: string[] = [];
-  if (fontUnderline) textDecorations.push('underline');
-  if (fontStrikethrough) textDecorations.push('line-through');
-  const textDecoration =
-    textDecorations.length > 0 ? textDecorations.join(' ') : 'none';
-
   return (
     <span
       ref={spanRef}
@@ -145,29 +142,31 @@ const CountDisplay = ({
         {
           transform: 'scale(1)',
           transformOrigin: 'center bottom',
-          fontSize: `${Number.isFinite(fontSize) ? fontSize : 16}px`,
-          fontFamily: fontFamily
-            ? `"${fontFamily}", "Pretendard Variable", sans-serif`
-            : undefined,
-          fontWeight: Number.isFinite(fontWeight) ? fontWeight : 400,
-          fontStyle: fontItalic ? 'italic' : 'normal',
-          textDecoration,
-          textAlign: 'center',
+          ...getCounterTypographyStyle({
+            fontSize,
+            fontFamily,
+            fontWeight,
+            fontItalic,
+            fontUnderline,
+            fontStrikethrough,
+            useInlineStyles,
+          }),
           pointerEvents: 'none',
           userSelect: 'none',
-          lineHeight: 'normal',
           '--counter-color-default': fill.css,
           '--counter-stroke-color-default': stroke.css,
           '--counter-stroke-width-default': strokeWidth,
-          // fill 그라데이션 — 글자 모양으로 클립, 대표 단색은 칠하지 않음
-          ...(fillGradient
-            ? {
-                backgroundImage: gradientToCss(fillGradient),
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }
-            : {}),
+          // 실제 속성은 global.css의 .counter fallback 규칙이 적용 —
+          // 사용자 --counter-color/일반 CSS가 앱 그라데이션보다 우선
+          '--dmn-counter-fill-image-default': fillGradient
+            ? gradientToCss(fillGradient)
+            : 'none',
+          '--dmn-counter-fill-clip-default': fillGradient
+            ? 'text'
+            : 'border-box',
+          '--dmn-counter-text-fill-default': fillGradient
+            ? 'transparent'
+            : 'currentcolor',
         } as React.CSSProperties
       }
     >

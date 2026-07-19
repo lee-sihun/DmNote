@@ -1,12 +1,11 @@
 'use no memo';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
 import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
 import {
   computeKeyElementStyles,
-  useBgFormatTransitionGate,
   type KeyElementPosition,
 } from '@hooks/overlay/useKeyElementStyles';
 import { warmupImageSource } from '@utils/core/imageWarmup';
@@ -49,9 +48,6 @@ const StatItem = React.memo(
       warmupImageSource(activeImageSrc);
     }, [inactiveImageSrc, activeImageSrc]);
 
-    const rootRef = useRef<HTMLDivElement>(null);
-    useBgFormatTransitionGate(rootRef, keyStyle.backgroundImage != null);
-
     const counterSettings = useCounterSettings(position.counter);
     const showInsideCounter =
       counterEnabled &&
@@ -66,14 +62,19 @@ const StatItem = React.memo(
 
     return (
       <div
-        ref={rootRef}
         className={`absolute ${position.className || ''}`}
         style={keyStyle}
         data-state={active ? 'active' : 'inactive'}
         data-key-element="true"
         data-key-image={hasCurrentImage ? 'true' : undefined}
       >
-        {borderRingStyle && <span aria-hidden="true" style={borderRingStyle} />}
+        {borderRingStyle && (
+          <span
+            aria-hidden="true"
+            data-gradient-border-ring="true"
+            style={borderRingStyle}
+          />
+        )}
         {hasCurrentImage ? (
           <img
             src={currentImageSrc!}
@@ -88,6 +89,7 @@ const StatItem = React.memo(
             textStyle={textStyle}
             active={active}
             counterSettings={counterSettings}
+            useInlineStyles={position.useInlineStyles === true}
           />
         ) : (
           <div

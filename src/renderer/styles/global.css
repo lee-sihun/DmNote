@@ -62,7 +62,7 @@ input[type='number']::-webkit-outer-spin-button {
   margin: 0;
 }
 
-.counter {
+:where(.counter) {
   position: relative;
   display: inline-block;
   pointer-events: none;
@@ -71,10 +71,35 @@ input[type='number']::-webkit-outer-spin-button {
   padding-inline: var(--dmn-counter-safe-inline, 1px);
   white-space: nowrap;
   letter-spacing: 0.06em;
+  font-size: var(--dmn-counter-font-size-default, 16px);
+  font-family: var(--dmn-counter-font-family-default, inherit);
+  font-weight: var(--dmn-counter-font-weight-default, 400);
+  font-style: var(--dmn-counter-font-style-default, normal);
+  text-decoration: var(--dmn-counter-text-decoration-default, none);
+  text-align: var(--dmn-counter-text-align-default, center);
+  line-height: var(--dmn-counter-line-height-default, normal);
   color: var(--counter-color, var(--counter-color-default, #ffffff));
+  /* 앱 그라데이션은 fallback으로만 적용. 기존 --counter-color를 지정하면
+     image/clip 값이 문법상 무효가 되어 단색 사용자 색으로 자동 복귀 */
+  background-image: var(
+    --counter-fill-image,
+    var(--counter-color, var(--dmn-counter-fill-image-default, none))
+  );
+  -webkit-background-clip: var(
+    --counter-fill-clip,
+    var(--counter-color, var(--dmn-counter-fill-clip-default, border-box))
+  );
+  background-clip: var(
+    --counter-fill-clip,
+    var(--counter-color, var(--dmn-counter-fill-clip-default, border-box))
+  );
+  -webkit-text-fill-color: var(
+    --counter-text-fill-color,
+    var(--counter-color, var(--dmn-counter-text-fill-default, currentcolor))
+  );
 }
 
-.counter::before {
+:where(.counter)::before {
   content: attr(data-text);
   position: absolute;
   inset: 0;
@@ -102,33 +127,112 @@ input[type='number']::-webkit-outer-spin-button {
  * utils/core/elementDefaults.ts와 동기 유지
  */
 :where([data-key-element]) {
-  transition: background-color 100ms ease-out, color 100ms ease-out,
-    box-shadow 120ms ease-out;
+  /* 속성 패널 값은 fallback 전용 — 커스텀 CSS의 일반 속성·공개 변수가 우선 */
+  background-color: var(--key-bg, var(--dmn-key-bg-default));
+  background-image: var(
+    --key-bg-image,
+    var(--key-bg, var(--dmn-key-bg-image-default, none))
+  );
+  border: var(--key-border, var(--dmn-key-border-default));
+  border-radius: var(--key-radius, var(--dmn-key-radius-default));
+  color: var(--key-text-color, var(--dmn-key-text-color-default));
+  font-size: var(--dmn-key-font-size-default, inherit);
+  font-family: var(--dmn-key-font-family-default, inherit);
+  font-weight: var(--dmn-key-font-weight-default, inherit);
+  font-style: var(--dmn-key-font-style-default, normal);
+  text-decoration: var(--dmn-key-text-decoration-default, none);
+  padding: var(
+    --key-padding,
+    var(--key-border, var(--dmn-key-padding-default, 0px))
+  );
 }
 
-/* 누름은 즉시 — 트랜지션은 도착 상태의 규칙이 결정하므로 active에서 끄면
-   눌림은 0ms, 복귀만 위 페이드를 탄다 (고KPS 연타에서 히트가 뭉개지지 않게) */
-:where([data-key-element])[data-state='active'] {
-  transition: none;
+:where([data-graph-element]) {
+  background: var(--graph-bg, var(--dmn-graph-bg-default));
+  border: var(--graph-border, var(--dmn-graph-border-default));
+  border-radius: var(--graph-radius, var(--dmn-graph-radius-default));
+  color: var(--dmn-graph-text-color-default, #fff);
+  font-family: var(--dmn-graph-font-family-default, inherit);
+  padding: var(
+    --graph-padding,
+    var(--graph-border, var(--dmn-graph-padding-default, 0px))
+  );
 }
 
-/* 색 형식(단색↔그라데이션) 전환 커밋 프레임 — 이미지 레이어는 즉시 바뀌는데
-   base 색만 보간되며 생기는 이중 합성 깜빡임 차단. background만 제외하고
-   색·섀도 복귀 페이드는 유지, inactive 한정이라 눌림 0ms 규칙은 불변.
-   attribute는 페인트 후 걷히며 원래 트랜지션 복원 */
-:where([data-key-element])[data-state='inactive'][data-bg-format-flip] {
-  transition: color 100ms ease-out, box-shadow 120ms ease-out;
+:where([data-knob-element]) {
+  background: var(--knob-bg, var(--dmn-knob-bg-default));
+  border: var(--knob-border, var(--dmn-knob-border-default));
+  border-radius: var(--knob-radius, var(--dmn-knob-radius-default));
+  padding: var(
+    --knob-padding,
+    var(--knob-border, var(--dmn-knob-padding-default, 0px))
+  );
 }
 
-/* 이미지 키는 표면이 투명이라 섀도 제외 */
-:where([data-key-element]:not([data-key-image]))[data-state='inactive'] {
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
+:where([data-knob-element][data-knob-state='inactive']) {
+  box-shadow: var(--knob-shadow, var(--dmn-knob-shadow-default, none));
 }
 
-:where([data-key-element]:not([data-key-image]))[data-state='active'] {
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.32),
-    inset 0 1px 2px rgba(255, 255, 255, 0.5),
-    inset 0 -1px 3px rgba(0, 0, 0, 0.12);
+:where([data-knob-element][data-knob-state='active']) {
+  box-shadow: var(
+    --knob-active-shadow,
+    var(--knob-shadow, var(--dmn-knob-shadow-default, none))
+  );
+}
+
+:where([data-knob-indicator]) {
+  background: var(
+    --knob-indicator,
+    var(--dmn-knob-indicator-default, currentcolor)
+  );
+}
+
+/* 투명 보더 아래로 사용자 배경이 비치지 않게 하되 커스텀 CSS가 항상 우선 */
+:where([data-key-element], [data-graph-element], [data-knob-element]) {
+  background-clip: padding-box;
+}
+
+/* 그라데이션 보더도 앱 기본값은 fallback. 기존 border 변수를 지정하면
+   border 문법이 background에는 무효가 되어 앱 링이 자동으로 사라진다 */
+:where([data-key-element] > [data-gradient-border-ring]) {
+  background: var(
+    --key-border-image,
+    var(--key-border, var(--dmn-border-gradient-image-default, none))
+  );
+}
+
+:where([data-graph-element] > [data-gradient-border-ring]) {
+  background: var(
+    --graph-border-image,
+    var(--graph-border, var(--dmn-border-gradient-image-default, none))
+  );
+}
+
+:where([data-graph-element] > [data-graph-image]) {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: inherit;
+}
+
+:where([data-knob-element] > [data-gradient-border-ring]) {
+  background: var(
+    --knob-border-image,
+    var(--knob-border, var(--dmn-border-gradient-image-default, none))
+  );
+}
+
+:where([data-key-element][data-state='inactive']) {
+  box-shadow: var(--key-shadow, var(--dmn-key-shadow-default, none));
+}
+
+:where([data-key-element][data-state='active']) {
+  /* 눌림 깊이는 외부 섀도로만 표현 — inset은 투명 보더도 밝은 링처럼 보이게 함 */
+  box-shadow: var(
+    --key-active-shadow,
+    var(--key-shadow, var(--dmn-key-shadow-default, none))
+  );
 }
 
 /*

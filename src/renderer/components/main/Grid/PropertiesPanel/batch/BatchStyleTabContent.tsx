@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
-import type { ColorModeValue } from '@src/types/color';
+import { resolveStatePair, type ColorModeValue } from '@src/types/color';
 import {
   PropertyRow,
   NumberInput,
@@ -11,6 +12,8 @@ import {
   FontStyleToggle,
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
   DEFAULT_ELEMENT_BG,
   DEFAULT_ELEMENT_ACTIVE_BG,
@@ -21,10 +24,17 @@ import {
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_FONT_WEIGHT,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
 import { usePanelNav } from '../PanelNavContext';
+import ShadowControls from '../ShadowControls';
+import {
+  resolveElementShadow,
+  type ElementShadowSpec,
+} from '@src/types/key/shadows';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
@@ -46,6 +56,10 @@ interface BatchStyleTabContentProps {
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
+  showShadowControls?: boolean;
+  // 선택에 키·노브가 없으면(통계뿐) 그림자 대기만 편집
+  shadowActiveState?: boolean;
+  shadowKind?: 'key' | 'knob';
   afterSizeContent?: React.ReactNode;
   // getMixedValue 함수
   getMixedValue: <T>(
@@ -75,6 +89,11 @@ interface BatchStyleTabContentProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchShadowChangeComplete?: (
+    state: 'idle' | 'active',
+    patch: Partial<ElementShadowSpec>,
+  ) => void;
+  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
   handleBatchGradientCommit?: (
     target: 'backgroundColor' | 'borderColor',
     state: 'idle' | 'active',
@@ -86,6 +105,15 @@ interface BatchStyleTabContentProps {
     defaultValue: T,
   ) => { isMixed: boolean; value: T };
   handleKeyOnlyStyleChangeComplete?: (
+    property: keyof KeyPosition,
+    value: unknown,
+  ) => void;
+  // 눌림 가능(키·노브) — active 상태 집계·쓰기가 통계만 제외
+  getActiveCapableMixedValue?: <T>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ) => { isMixed: boolean; value: T };
+  handleActiveCapableStyleChangeComplete?: (
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
@@ -104,6 +132,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   hideDisplayText = false,
   hideFontControls = false,
   showSoundControls = false,
+  showShadowControls = true,
+  shadowActiveState = true,
+  shadowKind = 'key',
   afterSizeContent,
   getMixedValue,
   getSelectedKeysData,
@@ -115,9 +146,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchShadowChangeComplete,
+  handleBatchShadowEnabledChange,
   handleBatchGradientCommit,
   getKeyOnlyMixedValue,
   handleKeyOnlyStyleChangeComplete,
+  getActiveCapableMixedValue,
+  handleActiveCapableStyleChangeComplete,
   showBatchImagePicker,
   onToggleBatchImagePicker,
   batchImageButtonRef,
@@ -126,9 +161,153 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   t,
 }) => {
   const [colorState, setColorState] = useState<'idle' | 'active'>('idle');
+  const effectiveColorState = shadowActiveState ? colorState : 'idle';
+  const activeMixedValue =
+    getActiveCapableMixedValue ?? getKeyOnlyMixedValue ?? getMixedValue;
+  const handleActiveStyleChangeComplete =
+    handleActiveCapableStyleChangeComplete ??
+    handleKeyOnlyStyleChangeComplete ??
+    handleBatchStyleChangeComplete;
+  const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
+  const selectedElements = useGridSelectionStore(
+    (state) => state.selectedElements,
+  );
+  // 선택 구성 시그니처 — 형식 왕복 기억·드래그 소유권이 다른 배치 선택과
+  // 교차하지 않게 keyType + 정렬된 대상 목록을 키에 포함
+  const batchSelectionKey = useMemo(
+    () =>
+      `${selectedKeyType}:${selectedElements
+        .map((el) => el.id)
+        .sort()
+        .join(',')}`,
+    [selectedKeyType, selectedElements],
+  );
   // 인-패널 내비게이션 (폰트/사운드 서브 페이지)
   const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
     usePanelNav();
+
+  useEffect(() => {
+    if (!shadowActiveState) setColorState('idle');
+  }, [shadowActiveState]);
+
+  const colorPairFor = (
+    position: KeyPosition,
+    target: 'backgroundColor' | 'borderColor',
+    active: boolean,
+  ) => {
+    if (target === 'backgroundColor') {
+      return resolveStatePair(
+        active,
+        {
+          color: position.backgroundColor,
+          gradient: position.backgroundGradient,
+        },
+        {
+          color: position.activeBackgroundColor,
+          gradient: position.activeBackgroundGradient,
+        },
+      );
+    }
+    return resolveStatePair(
+      active,
+      { color: position.borderColor, gradient: position.borderGradient },
+      {
+        color: position.activeBorderColor,
+        gradient: position.activeBorderGradient,
+      },
+    );
+  };
+
+  const fontColorFor = (position: KeyPosition, active: boolean) => {
+    const idle = position.fontColor?.trim() ? position.fontColor : undefined;
+    const activeColor = position.activeFontColor?.trim()
+      ? position.activeFontColor
+      : undefined;
+    return active ? activeColor ?? idle : idle;
+  };
+
+  const resolvedShadowFor = (position: KeyPosition, active: boolean) => {
+    const hasImage = Boolean(
+      active
+        ? position.activeImage?.trim() || position.inactiveImage?.trim()
+        : position.inactiveImage?.trim(),
+    );
+    const suppressDefault =
+      hasImage ||
+      (shadowKind === 'knob' &&
+        ((active
+          ? position.activeTransparent === true
+          : position.idleTransparent === true) ||
+          (position.borderWidth ?? 0) > 0));
+    return resolveElementShadow({
+      active,
+      shadow: position.shadow,
+      activeShadow: position.activeShadow,
+      defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+      defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+      suppressDefault,
+    });
+  };
+
+  const getBatchShadow = (active: boolean) => {
+    const fallback = active
+      ? DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC
+      : DEFAULT_ELEMENT_SHADOW_SPEC;
+    const mixedValue = active ? activeMixedValue : getMixedValue;
+    const enabled = mixedValue(
+      (position) => resolvedShadowFor(position, active).enabled,
+      fallback.enabled,
+    );
+    const color = mixedValue(
+      (position) => resolvedShadowFor(position, active).color,
+      fallback.color,
+    );
+    const offsetX = mixedValue(
+      (position) => resolvedShadowFor(position, active).offsetX,
+      fallback.offsetX,
+    );
+    const offsetY = mixedValue(
+      (position) => resolvedShadowFor(position, active).offsetY,
+      fallback.offsetY,
+    );
+    const blur = mixedValue(
+      (position) => resolvedShadowFor(position, active).blur,
+      fallback.blur,
+    );
+
+    return {
+      value: {
+        enabled: enabled.value,
+        color: color.value,
+        offsetX: offsetX.value,
+        offsetY: offsetY.value,
+        blur: blur.value,
+      },
+      // 대표값은 첫 요소 기준 — 토글 표시용 "하나라도 켜짐"은 별도 계산
+      enabledAny: enabled.value || enabled.isMixed,
+      isMixed:
+        enabled.isMixed ||
+        color.isMixed ||
+        offsetX.isMixed ||
+        offsetY.isMixed ||
+        blur.isMixed,
+    };
+  };
+
+  const batchIdleShadow = getBatchShadow(false);
+  const batchActiveShadow = getBatchShadow(true);
+
+  const handleShadowChange = (
+    state: 'idle' | 'active',
+    _shadow: ElementShadowSpec,
+    patch: Partial<ElementShadowSpec>,
+  ) => {
+    handleBatchShadowChangeComplete?.(state, patch);
+  };
+
+  const handleShadowEnabledChange = (enabled: boolean) => {
+    handleBatchShadowEnabledChange?.(enabled);
+  };
 
   // 간격 입력 세션 동안 첫 변경만 히스토리를 남기고 이후는 skipHistory로 묶는다.
   const lastSpacingRef = useRef<number | null>(null);
@@ -552,30 +731,34 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         {/* 배경색 */}
         <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
           {(
-            colorState === 'active'
-              ? getMixedValue(
-                  (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
+            effectiveColorState === 'active'
+              ? activeMixedValue(
+                  (pos) => colorPairFor(pos, 'backgroundColor', true).color,
                   DEFAULT_ELEMENT_ACTIVE_BG,
                 ).isMixed
-              : getMixedValue((pos) => pos.backgroundColor, DEFAULT_ELEMENT_BG)
-                  .isMixed
+              : getMixedValue(
+                  (pos) => colorPairFor(pos, 'backgroundColor', false).color,
+                  DEFAULT_ELEMENT_BG,
+                ).isMixed
           ) ? (
             <span className="text-fg-faint text-body italic">Mixed</span>
           ) : null}
           <ColorInput
-            colorId="batch-background"
+            colorId={`batch-background:${batchSelectionKey}`}
             value={
-              getMixedValue((pos) => pos.backgroundColor, DEFAULT_ELEMENT_BG)
-                .value
+              getMixedValue(
+                (pos) => colorPairFor(pos, 'backgroundColor', false).color,
+                DEFAULT_ELEMENT_BG,
+              ).value
             }
             activeValue={
-              getMixedValue(
-                (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
+              activeMixedValue(
+                (pos) => colorPairFor(pos, 'backgroundColor', true).color,
                 DEFAULT_ELEMENT_ACTIVE_BG,
               ).value
             }
-            showStateTabs
-            stateMode={colorState}
+            showStateTabs={shadowActiveState}
+            stateMode={effectiveColorState}
             onStateModeChange={setColorState}
             onChange={(color) =>
               handleBatchStyleChange('backgroundColor', color)
@@ -583,20 +766,24 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             onChangeComplete={(color) =>
               handleBatchStyleChangeComplete('backgroundColor', color)
             }
-            onActiveChange={(color) =>
-              handleBatchStyleChange('activeBackgroundColor', color)
-            }
             onActiveChangeComplete={(color) =>
-              handleBatchStyleChangeComplete('activeBackgroundColor', color)
+              handleActiveStyleChangeComplete('activeBackgroundColor', color)
             }
             panelElement={panelElement}
             canvasAnchor={{ kind: 'batch' }}
             gradientValue={
-              getMixedValue((pos) => pos.backgroundGradient ?? null, null).value
+              getMixedValue(
+                (pos) =>
+                  colorPairFor(pos, 'backgroundColor', false).gradient ?? null,
+                null,
+              ).value
             }
             activeGradientValue={
-              getMixedValue((pos) => pos.activeBackgroundGradient ?? null, null)
-                .value
+              activeMixedValue(
+                (pos) =>
+                  colorPairFor(pos, 'backgroundColor', true).gradient ?? null,
+                null,
+              ).value
             }
             onModeCommit={
               handleBatchGradientCommit
@@ -614,50 +801,58 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         {/* 테두리 색상 */}
         <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
           {(
-            colorState === 'active'
-              ? getMixedValue(
-                  (pos) => pos.activeBorderColor ?? pos.borderColor,
+            effectiveColorState === 'active'
+              ? activeMixedValue(
+                  (pos) => colorPairFor(pos, 'borderColor', true).color,
                   DEFAULT_ELEMENT_ACTIVE_BORDER,
                 ).isMixed
-              : getMixedValue((pos) => pos.borderColor, DEFAULT_ELEMENT_BORDER)
-                  .isMixed
+              : getMixedValue(
+                  (pos) => colorPairFor(pos, 'borderColor', false).color,
+                  DEFAULT_ELEMENT_BORDER,
+                ).isMixed
           ) ? (
             <span className="text-fg-faint text-body italic">Mixed</span>
           ) : null}
           <ColorInput
-            colorId="batch-border"
+            colorId={`batch-border:${batchSelectionKey}`}
             gradientSurface="border"
             value={
-              getMixedValue((pos) => pos.borderColor, DEFAULT_ELEMENT_BORDER)
-                .value
+              getMixedValue(
+                (pos) => colorPairFor(pos, 'borderColor', false).color,
+                DEFAULT_ELEMENT_BORDER,
+              ).value
             }
             activeValue={
-              getMixedValue(
-                (pos) => pos.activeBorderColor ?? pos.borderColor,
+              activeMixedValue(
+                (pos) => colorPairFor(pos, 'borderColor', true).color,
                 DEFAULT_ELEMENT_ACTIVE_BORDER,
               ).value
             }
-            showStateTabs
-            stateMode={colorState}
+            showStateTabs={shadowActiveState}
+            stateMode={effectiveColorState}
             onStateModeChange={setColorState}
             onChange={(color) => handleBatchStyleChange('borderColor', color)}
             onChangeComplete={(color) =>
               handleBatchStyleChangeComplete('borderColor', color)
             }
-            onActiveChange={(color) =>
-              handleBatchStyleChange('activeBorderColor', color)
-            }
             onActiveChangeComplete={(color) =>
-              handleBatchStyleChangeComplete('activeBorderColor', color)
+              handleActiveStyleChangeComplete('activeBorderColor', color)
             }
             panelElement={panelElement}
             canvasAnchor={{ kind: 'batch' }}
             gradientValue={
-              getMixedValue((pos) => pos.borderGradient ?? null, null).value
+              getMixedValue(
+                (pos) =>
+                  colorPairFor(pos, 'borderColor', false).gradient ?? null,
+                null,
+              ).value
             }
             activeGradientValue={
-              getMixedValue((pos) => pos.activeBorderGradient ?? null, null)
-                .value
+              activeMixedValue(
+                (pos) =>
+                  colorPairFor(pos, 'borderColor', true).gradient ?? null,
+                null,
+              ).value
             }
             onModeCommit={
               handleBatchGradientCommit
@@ -733,6 +928,24 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         </PropertyRow>
       </PropertySection>
 
+      {showShadowControls ? (
+        <ShadowControls
+          idleShadow={batchIdleShadow.value}
+          activeShadow={batchActiveShadow.value}
+          idleMixed={batchIdleShadow.isMixed}
+          activeMixed={batchActiveShadow.isMixed}
+          anyEnabled={
+            batchIdleShadow.enabledAny ||
+            (shadowActiveState && batchActiveShadow.enabledAny)
+          }
+          showActiveState={shadowActiveState}
+          onChange={handleShadowChange}
+          onEnabledChange={handleShadowEnabledChange}
+          panelElement={panelElement}
+          t={t}
+        />
+      ) : null}
+
       {(!hideDisplayText || !hideFontControls) && (
         <PropertySection>
           {/* 표시 텍스트 */}
@@ -806,13 +1019,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 label={t('propertiesPanel.fontColor') || '글꼴 색상'}
               >
                 {(
-                  colorState === 'active'
-                    ? getMixedValue(
-                        (pos) => pos.activeFontColor ?? pos.fontColor,
+                  effectiveColorState === 'active'
+                    ? activeMixedValue(
+                        (pos) => fontColorFor(pos, true),
                         DEFAULT_ELEMENT_ACTIVE_FONT,
                       ).isMixed
                     : getMixedValue(
-                        (pos) => pos.fontColor,
+                        (pos) => fontColorFor(pos, false),
                         DEFAULT_ELEMENT_FONT,
                       ).isMixed
                 ) ? (
@@ -820,17 +1033,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 ) : null}
                 <ColorInput
                   value={
-                    getMixedValue((pos) => pos.fontColor, DEFAULT_ELEMENT_FONT)
-                      .value
+                    getMixedValue(
+                      (pos) => fontColorFor(pos, false),
+                      DEFAULT_ELEMENT_FONT,
+                    ).value
                   }
                   activeValue={
-                    getMixedValue(
-                      (pos) => pos.activeFontColor ?? pos.fontColor,
+                    activeMixedValue(
+                      (pos) => fontColorFor(pos, true),
                       DEFAULT_ELEMENT_ACTIVE_FONT,
                     ).value
                   }
-                  showStateTabs
-                  stateMode={colorState}
+                  showStateTabs={shadowActiveState}
+                  stateMode={effectiveColorState}
                   onStateModeChange={setColorState}
                   onChange={(color) =>
                     handleBatchStyleChange('fontColor', color)
@@ -838,11 +1053,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   onChangeComplete={(color) =>
                     handleBatchStyleChangeComplete('fontColor', color)
                   }
-                  onActiveChange={(color) =>
-                    handleBatchStyleChange('activeFontColor', color)
-                  }
                   onActiveChangeComplete={(color) =>
-                    handleBatchStyleChangeComplete('activeFontColor', color)
+                    handleActiveStyleChangeComplete('activeFontColor', color)
                   }
                   panelElement={panelElement}
                 />

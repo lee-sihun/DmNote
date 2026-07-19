@@ -293,6 +293,22 @@ pub enum NoteAlignment {
     Right,
 }
 
+// 그림자 범위 계약 — 프론트 zod(ELEMENT_SHADOW_CONSTRAINTS)와 동기 유지
+pub const SHADOW_OFFSET_MIN: f64 = -100.0;
+pub const SHADOW_OFFSET_MAX: f64 = 100.0;
+pub const SHADOW_BLUR_MIN: f64 = 0.0;
+pub const SHADOW_BLUR_MAX: f64 = 100.0;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementShadowSpec {
+    pub enabled: bool,
+    pub color: String,
+    pub offset_x: f64,
+    pub offset_y: f64,
+    pub blur: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyPosition {
@@ -399,6 +415,10 @@ pub struct KeyPosition {
     pub border_width: Option<f64>,
     #[serde(default)]
     pub border_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shadow: Option<ElementShadowSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_shadow: Option<ElementShadowSpec>,
     #[serde(default)]
     pub font_size: Option<f64>,
     #[serde(default)]
@@ -493,6 +513,8 @@ impl Default for KeyPosition {
             active_border_gradient: None,
             border_width: None,
             border_radius: None,
+            shadow: None,
+            active_shadow: None,
             font_size: None,
             font_color: None,
             active_font_color: None,
@@ -2415,6 +2437,38 @@ mod tests {
         assert_eq!(position.height, 60.0);
         assert_eq!(position.note_color, NoteColor::Solid("#FFFFFF".to_string()));
         assert_eq!(position.note_opacity, 90);
+        assert_eq!(position.shadow, None);
+        assert_eq!(position.active_shadow, None);
+    }
+
+    #[test]
+    fn key_position_visual_effects_round_trip_without_rewriting_missing_defaults() {
+        let fixture = serde_json::json!({
+            "dx": 0,
+            "dy": 0,
+            "width": 60,
+            "count": 0,
+            "shadow": {
+                "enabled": true,
+                "color": "rgba(10, 20, 30, 0.45)",
+                "offsetX": -2.0,
+                "offsetY": 7.0,
+                "blur": 18.0
+            },
+            "activeShadow": {
+                "enabled": false,
+                "color": "rgba(0, 0, 0, 0.32)",
+                "offsetX": 0.0,
+                "offsetY": 3.0,
+                "blur": 8.0
+            }
+        });
+
+        let position: KeyPosition = serde_json::from_value(fixture.clone()).unwrap();
+        let serialized = serde_json::to_value(position).unwrap();
+
+        assert_eq!(serialized.get("shadow"), fixture.get("shadow"));
+        assert_eq!(serialized.get("activeShadow"), fixture.get("activeShadow"));
     }
 
     #[test]

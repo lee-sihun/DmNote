@@ -18,9 +18,10 @@ use crate::{
     errors::{CmdResult, CommandError},
     models::{
         AppStoreData, CommittedEditorChange, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch,
-        EditorCommitOrigin, EditorField, FontSettings, FontType, GraphPositions, KeyMappings,
-        KeyPosition, KeyPositions, KnobPositions, LayerGroups, NoteSettings, NoteSettingsPatch,
-        SettingsPatchInput, StatPositions, TabCssOverrides, TabNoteSettings,
+        EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec, GraphPositions,
+        KeyMappings, KeyPosition, KeyPositions, KnobPositions, LayerGroups, NoteSettings,
+        NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCssOverrides, TabNoteSettings,
+        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::AppState,
@@ -52,7 +53,127 @@ fn apply_editor_runtime_best_effort(
 
 fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
     let content = fs::read_to_string(path)?;
-    serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))
+    let value: serde_json::Value =
+        serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))?;
+    if let Some(detail) = invalid_position_style_detail(&value) {
+        return Err(CommandError::msg(format!("invalid-preset: {detail}")));
+    }
+    serde_json::from_value(value).map_err(|_| CommandError::msg("invalid-preset"))
+}
+
+fn invalid_position_style_detail(preset: &serde_json::Value) -> Option<String> {
+    const COLLECTIONS: [&str; 4] = [
+        "keyPositions",
+        "statPositions",
+        "graphPositions",
+        "knobPositions",
+    ];
+    const ELEMENT_FIELDS: [&str; 4] = [
+        "backgroundGradient",
+        "activeBackgroundGradient",
+        "borderGradient",
+        "activeBorderGradient",
+    ];
+    const COUNTER_FIELDS: [&str; 2] = ["fillIdleGradient", "fillActiveGradient"];
+    const SHADOW_FIELDS: [&str; 2] = ["shadow", "activeShadow"];
+
+    for collection_name in COLLECTIONS {
+        let Some(modes) = preset
+            .get(collection_name)
+            .and_then(serde_json::Value::as_object)
+        else {
+            continue;
+        };
+        for (mode, entries) in modes {
+            let Some(entries) = entries.as_array() else {
+                continue;
+            };
+            for (index, entry) in entries.iter().enumerate() {
+                let Some(entry) = entry.as_object() else {
+                    continue;
+                };
+                for field in ELEMENT_FIELDS {
+                    if let Some(error) = invalid_gradient_error(entry.get(field)) {
+                        return Some(format!(
+                            "{collection_name}[{mode:?}][{index}].{field}: {error}"
+                        ));
+                    }
+                }
+                for field in SHADOW_FIELDS {
+                    // null은 Option 역직렬화와 동일하게 "값 없음" 취급
+                    let Some(value) = entry.get(field).filter(|value| !value.is_null()) else {
+                        continue;
+                    };
+                    if let Some((suffix, error)) = invalid_shadow_error(value) {
+                        return Some(format!(
+                            "{collection_name}[{mode:?}][{index}].{field}{suffix}: {error}"
+                        ));
+                    }
+                }
+                let Some(counter) = entry.get("counter").and_then(serde_json::Value::as_object)
+                else {
+                    continue;
+                };
+                for field in COUNTER_FIELDS {
+                    if let Some(error) = invalid_gradient_error(counter.get(field)) {
+                        return Some(format!(
+                            "{collection_name}[{mode:?}][{index}].counter.{field}: {error}"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn invalid_gradient_error(value: Option<&serde_json::Value>) -> Option<serde_json::Error> {
+    value.and_then(|value| serde_json::from_value::<Option<GradientSpec>>(value.clone()).err())
+}
+
+fn invalid_shadow_error(value: &serde_json::Value) -> Option<(&'static str, &'static str)> {
+    let Some(shadow) = value.as_object() else {
+        return Some(("", "must be an object"));
+    };
+    if !shadow
+        .get("enabled")
+        .is_some_and(serde_json::Value::is_boolean)
+    {
+        return Some((".enabled", "must be a boolean"));
+    }
+    if shadow
+        .get("color")
+        .and_then(serde_json::Value::as_str)
+        .is_none_or(str::is_empty)
+    {
+        return Some((".color", "must be a non-empty string"));
+    }
+    for field in ["offsetX", "offsetY"] {
+        if !shadow
+            .get(field)
+            .and_then(serde_json::Value::as_f64)
+            .is_some_and(|value| {
+                value.is_finite() && (SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(&value)
+            })
+        {
+            let suffix = if field == "offsetX" {
+                ".offsetX"
+            } else {
+                ".offsetY"
+            };
+            return Some((suffix, "must be a finite number between -100 and 100"));
+        }
+    }
+    if !shadow
+        .get("blur")
+        .and_then(serde_json::Value::as_f64)
+        .is_some_and(|value| {
+            value.is_finite() && (SHADOW_BLUR_MIN..=SHADOW_BLUR_MAX).contains(&value)
+        })
+    {
+        return Some((".blur", "must be a finite number between 0 and 100"));
+    }
+    None
 }
 
 #[cfg(test)]
@@ -1341,6 +1462,281 @@ mod tests {
         assert!(read_preset_file(&source_path).is_err());
         assert_eq!(std::fs::read(&source_path).unwrap(), invalid_source);
 
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn damaged_gradient_preset_reports_element_and_field_with_existing_error_code() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-gradient-error-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let source_path = temp_dir.join("source.json");
+        let damaged_gradient = serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#FFFFFF", "pos": 0 }]
+        });
+
+        for (collection, field, counter_field) in [
+            ("keyPositions", "backgroundGradient", false),
+            ("statPositions", "activeBackgroundGradient", false),
+            ("graphPositions", "borderGradient", false),
+            ("knobPositions", "activeBorderGradient", false),
+            ("keyPositions", "fillIdleGradient", true),
+            ("statPositions", "fillActiveGradient", true),
+        ] {
+            let mut gradient_fields = serde_json::Map::new();
+            gradient_fields.insert(field.to_string(), damaged_gradient.clone());
+            let damaged_entry = if counter_field {
+                let mut entry = serde_json::Map::new();
+                entry.insert(
+                    "counter".to_string(),
+                    serde_json::Value::Object(gradient_fields),
+                );
+                serde_json::Value::Object(entry)
+            } else {
+                serde_json::Value::Object(gradient_fields)
+            };
+            let mut modes = serde_json::Map::new();
+            modes.insert(
+                "custom mode".to_string(),
+                serde_json::json!([{}, damaged_entry]),
+            );
+            let mut preset = serde_json::Map::new();
+            preset.insert(collection.to_string(), serde_json::Value::Object(modes));
+            std::fs::write(
+                &source_path,
+                serde_json::to_vec(&serde_json::Value::Object(preset)).unwrap(),
+            )
+            .unwrap();
+
+            let error = read_preset_file(&source_path)
+                .err()
+                .expect("damaged gradient preset must be rejected")
+                .to_string();
+            let field_path = if counter_field {
+                format!("counter.{field}")
+            } else {
+                field.to_string()
+            };
+            let expected_prefix =
+                format!("invalid-preset: {collection}[\"custom mode\"][1].{field_path}: ");
+            assert!(
+                error.starts_with(&expected_prefix),
+                "unexpected gradient error: {error}"
+            );
+            assert!(error.contains("gradient must contain at least two stops"));
+        }
+
+        std::fs::write(&source_path, b"{ invalid preset").unwrap();
+        assert_eq!(
+            read_preset_file(&source_path)
+                .err()
+                .expect("invalid JSON preset must be rejected")
+                .to_string(),
+            "invalid-preset"
+        );
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn invalid_shadow_preset_reports_exact_element_paths() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-shadow-error-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let source_path = temp_dir.join("source.json");
+        for (collection, entry, expected_path, expected_reason) in [
+            (
+                "keyPositions",
+                serde_json::json!({
+                    "shadow": {
+                        "enabled": true,
+                        "color": "#123456",
+                        "offsetX": 0,
+                        "offsetY": 0,
+                        "blur": 100.1
+                    }
+                }),
+                "shadow.blur",
+                "must be a finite number between 0 and 100",
+            ),
+            (
+                "statPositions",
+                serde_json::json!({
+                    "activeShadow": {
+                        "enabled": true,
+                        "color": "#123456",
+                        "offsetX": -100.1,
+                        "offsetY": 0,
+                        "blur": 12
+                    }
+                }),
+                "activeShadow.offsetX",
+                "must be a finite number between -100 and 100",
+            ),
+            (
+                "graphPositions",
+                serde_json::json!({
+                    "shadow": {
+                        "enabled": true,
+                        "color": "#123456",
+                        "offsetX": 0,
+                        "offsetY": 100.1,
+                        "blur": 12
+                    }
+                }),
+                "shadow.offsetY",
+                "must be a finite number between -100 and 100",
+            ),
+            (
+                "knobPositions",
+                serde_json::json!({ "activeShadow": [] }),
+                "activeShadow",
+                "must be an object",
+            ),
+            (
+                "keyPositions",
+                serde_json::json!({
+                    "shadow": {
+                        "enabled": true,
+                        "color": "",
+                        "offsetX": 0,
+                        "offsetY": 0,
+                        "blur": 12
+                    }
+                }),
+                "shadow.color",
+                "must be a non-empty string",
+            ),
+        ] {
+            let preset = serde_json::json!({
+                (collection): {
+                    "custom mode": [{}, entry]
+                }
+            });
+            std::fs::write(&source_path, serde_json::to_vec(&preset).unwrap()).unwrap();
+
+            let error = read_preset_file(&source_path)
+                .err()
+                .expect("invalid shadow preset must be rejected")
+                .to_string();
+            assert_eq!(
+                error,
+                format!(
+                    "invalid-preset: {collection}[\"custom mode\"][1].{expected_path}: {expected_reason}"
+                )
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn null_shadow_fields_are_treated_as_absent() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-shadow-null-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let source_path = temp_dir.join("source.json");
+
+        // 외부 생성·수동 편집 프리셋의 명시적 null은 Option 역직렬화처럼 값 없음
+        let preset = serde_json::json!({
+            "keyPositions": {
+                "4key": [{
+                    "dx": 0,
+                    "dy": 0,
+                    "width": 60,
+                    "count": 0,
+                    "shadow": null,
+                    "activeShadow": null
+                }]
+            }
+        });
+        std::fs::write(&source_path, serde_json::to_vec(&preset).unwrap()).unwrap();
+
+        let parsed = read_preset_file(&source_path).expect("null fields must parse as absent");
+        let position = &parsed.key_positions.as_ref().unwrap()["4key"][0];
+        assert!(position.shadow.is_none());
+        assert!(position.active_shadow.is_none());
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn legacy_and_bounded_shadow_presets_still_parse() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-shadow-compatibility-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let source_path = temp_dir.join("source.json");
+
+        let legacy = serde_json::json!({
+            "keyPositions": {
+                "4key": [{ "dx": 0, "dy": 0, "width": 60, "count": 0 }]
+            }
+        });
+        std::fs::write(&source_path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let parsed_legacy = read_preset_file(&source_path).unwrap();
+        let legacy_position = &parsed_legacy.key_positions.unwrap()["4key"][0];
+        assert!(legacy_position.shadow.is_none());
+        assert!(legacy_position.active_shadow.is_none());
+
+        let position = serde_json::json!({
+            "dx": 0,
+            "dy": 0,
+            "width": 60,
+            "count": 0,
+            "shadow": {
+                "enabled": true,
+                "color": "#123456",
+                "offsetX": -100,
+                "offsetY": 100,
+                "blur": 100
+            },
+            "activeShadow": {
+                "enabled": false,
+                "color": "rgba(0, 0, 0, 0)",
+                "offsetX": 100,
+                "offsetY": -100,
+                "blur": 0
+            }
+        });
+        let mut stat = position.clone();
+        stat.as_object_mut()
+            .unwrap()
+            .insert("statType".to_string(), serde_json::json!("kps"));
+        let mut graph = position.clone();
+        graph
+            .as_object_mut()
+            .unwrap()
+            .extend(serde_json::Map::from_iter([
+                ("statType".to_string(), serde_json::json!("kps")),
+                ("graphType".to_string(), serde_json::json!("line")),
+                ("graphSpeed".to_string(), serde_json::json!(100)),
+                ("graphColor".to_string(), serde_json::json!("#123456")),
+            ]));
+        let bounded = serde_json::json!({
+            "keyPositions": { "4key": [position.clone()] },
+            "statPositions": { "4key": [stat] },
+            "graphPositions": { "4key": [graph] },
+            "knobPositions": { "4key": [position] }
+        });
+        std::fs::write(&source_path, serde_json::to_vec(&bounded).unwrap()).unwrap();
+        let parsed = read_preset_file(&source_path).unwrap();
+        assert_eq!(
+            parsed.key_positions.as_ref().unwrap()["4key"][0]
+                .shadow
+                .as_ref()
+                .unwrap()
+                .blur,
+            100.0
+        );
         let _ = std::fs::remove_dir_all(temp_dir);
     }
 

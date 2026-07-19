@@ -56,9 +56,13 @@ type KnobItemPositions = Record<string, KnobItemPosition[]>;
 - `borderWidth` — 테두리 두께(px, 기본 1 — 0이면 테두리 없음)
 - `backgroundGradient` / `activeBackgroundGradient` — 배경 그라데이션(GradientSpec, 지정 시 단색보다 우선)
 - `borderGradient` / `activeBorderGradient` — 테두리 그라데이션(GradientSpec)
+- `shadow` / `activeShadow` — 대기 / 회전 중 그림자(ElementShadowSpec, color 알파값으로 농도 조절)
 - `borderRadius` — 모서리 반경(px), 미지정 시 원형
 - `inactiveImage` / `activeImage` — 대기 / 회전 중 커스텀 이미지
 - `idleTransparent` / `activeTransparent` — 배경 투명 토글
+
+`ElementShadowSpec`은 `enabled`, `color`, `offsetX`, `offsetY`, `blur`로
+구성됩니다. 오프셋은 -100~100px, 흐림은 0~100px 범위입니다.
 
 물리 노브가 회전하는 동안 요소는 키의 눌림처럼 입력(active)
 색상/이미지로 전환되며, `누적 회전수 × 360° × sensitivity`만큼 회전합니다.

@@ -2517,6 +2517,76 @@ mod tests {
     }
 
     #[test]
+    fn invalid_shadow_preset_read_failure_leaves_store_unchanged() {
+        let dir = test_directory("invalid-shadow-preset-atomicity-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.snapshot();
+        let persist_count = store.writer.persist_count();
+        let source_path = dir.join("invalid-preset.json");
+
+        for (source, expected_error) in [
+            (
+                r##"{
+                    "keyPositions": {
+                        "4key": [{
+                            "dx": 0,
+                            "dy": 0,
+                            "width": 60,
+                            "count": 0,
+                            "shadow": {
+                                "enabled": true,
+                                "color": "#123456",
+                                "offsetX": 0,
+                                "offsetY": 0,
+                                "blur": 100.1
+                            }
+                        }]
+                    }
+                }"##,
+                "invalid-preset: keyPositions[\"4key\"][0].shadow.blur: must be a finite number between 0 and 100",
+            ),
+            (
+                r##"{
+                    "statPositions": {
+                        "4key": [{
+                            "statType": "kps",
+                            "dx": 0,
+                            "dy": 0,
+                            "width": 60,
+                            "count": 0,
+                            "activeShadow": {
+                                "enabled": true,
+                                "color": "#123456",
+                                "offsetX": -100.1,
+                                "offsetY": 0,
+                                "blur": 12
+                            }
+                        }]
+                    }
+                }"##,
+                "invalid-preset: statPositions[\"4key\"][0].activeShadow.offsetX: must be a finite number between -100 and 100",
+            ),
+        ] {
+            std::fs::write(&source_path, source).unwrap();
+            let error = crate::commands::preset::load::read_preset_file_for_simulation(
+                &source_path,
+            )
+            .err()
+            .expect("invalid visual effect preset must be rejected")
+            .to_string();
+
+            assert_eq!(error, expected_error);
+            assert_eq!(store.snapshot(), before);
+            assert_eq!(store.writer.persist_count(), persist_count);
+        }
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn strict_editor_noop_is_acknowledged_without_persist_or_event() {
         let dir = test_directory("strict-editor-noop-test");
         std::fs::create_dir_all(&dir).unwrap();

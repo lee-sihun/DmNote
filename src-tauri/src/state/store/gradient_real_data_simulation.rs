@@ -33,13 +33,12 @@ struct RealFixture {
 }
 
 impl RealFixture {
-    fn from_env(simulation: u8) -> Option<Self> {
-        let Some(source_path) = std::env::var_os("DMNOTE_SIM_STORE_PATH").map(PathBuf::from) else {
-            println!(
-                "SIMULATION {simulation} SKIP: DMNOTE_SIM_STORE_PATH environment variable is unset"
-            );
-            return None;
-        };
+    fn from_env(simulation: u8) -> Self {
+        let source_path = std::env::var_os("DMNOTE_SIM_STORE_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                panic!("DMNOTE_SIM_STORE_PATH must be set to run ignored simulation {simulation}")
+            });
         let bytes = fs::read(&source_path).unwrap_or_else(|error| {
             panic!("failed to read DMNOTE_SIM_STORE_PATH for simulation {simulation}: {error}")
         });
@@ -48,11 +47,11 @@ impl RealFixture {
             "DMNOTE_SIM_STORE_PATH must point to a non-empty store"
         );
         let digest = Sha256::digest(&bytes).to_vec();
-        Some(Self {
+        Self {
             source_path,
             bytes,
             digest,
-        })
+        }
     }
 
     fn verify_unchanged(&self) {
@@ -374,11 +373,11 @@ fn set_damage_control_values(position: &mut Map<String, Value>) {
     stroke.insert("active".to_string(), json!("#808080"));
 }
 
+// 실행: DMNOTE_SIM_STORE_PATH=/path/to/store.json cargo test -- --ignored
 #[test]
+#[ignore]
 fn simulation_1_real_legacy_store_load_is_gradient_neutral() {
-    let Some(fixture) = RealFixture::from_env(1) else {
-        return;
-    };
+    let fixture = RealFixture::from_env(1);
     let directory = SimulationDir::new("legacy-load");
     let path = write_store_copy(&directory, "store.json", &fixture.bytes);
 
@@ -400,11 +399,11 @@ fn simulation_1_real_legacy_store_load_is_gradient_neutral() {
     );
 }
 
+// 실행: DMNOTE_SIM_STORE_PATH=/path/to/store.json cargo test -- --ignored
 #[test]
+#[ignore]
 fn simulation_2_real_solid_store_round_trip_is_lossless() {
-    let Some(fixture) = RealFixture::from_env(2) else {
-        return;
-    };
+    let fixture = RealFixture::from_env(2);
     let directory = SimulationDir::new("solid-round-trip");
     let path = write_store_copy(&directory, "store.json", &fixture.bytes);
     let source: Value =
@@ -449,11 +448,11 @@ fn simulation_2_real_solid_store_round_trip_is_lossless() {
     assert!(positions_byte_equal);
 }
 
+// 실행: DMNOTE_SIM_STORE_PATH=/path/to/store.json cargo test -- --ignored
 #[test]
+#[ignore]
 fn simulation_3_gradient_store_and_preset_chain_stays_canonical() {
-    let Some(fixture) = RealFixture::from_env(3) else {
-        return;
-    };
+    let fixture = RealFixture::from_env(3);
     let directory = SimulationDir::new("gradient-chain");
     let mut raw: Value =
         serde_json::from_slice(&fixture.bytes).expect("real store JSON must be readable");
@@ -556,11 +555,11 @@ fn simulation_3_gradient_store_and_preset_chain_stays_canonical() {
     );
 }
 
+// 실행: DMNOTE_SIM_STORE_PATH=/path/to/store.json cargo test -- --ignored
 #[test]
+#[ignore]
 fn simulation_4_damaged_gradient_fields_are_isolated() {
-    let Some(fixture) = RealFixture::from_env(4) else {
-        return;
-    };
+    let fixture = RealFixture::from_env(4);
     let directory = SimulationDir::new("damaged-fields");
     let source_path = write_store_copy(&directory, "source.json", &fixture.bytes);
     let source = load_store_from_path(&source_path).expect("real store baseline must load");
@@ -696,9 +695,6 @@ fn simulation_4_damaged_gradient_fields_are_isolated() {
 
 #[test]
 fn simulation_5_inline_legacy_preset_imports_without_gradients() {
-    let Some(fixture) = RealFixture::from_env(5) else {
-        return;
-    };
     const LEGACY_PRESET: &str = r##"{
         "keys": {
             "4key": ["KeyQ"],
@@ -752,7 +748,6 @@ fn simulation_5_inline_legacy_preset_imports_without_gradients() {
     assert!(position.counter.fill_active_gradient.is_none());
     let imported_value = serde_json::to_value(&imported).unwrap();
     assert!(!contains_gradient_fields(&imported_value));
-    fixture.verify_unchanged();
 
     println!(
         "SIMULATION 5 PASS: legacyPresetParsed=true imported=true baseAndCounterColorsPreserved=true gradientsAbsent=true"

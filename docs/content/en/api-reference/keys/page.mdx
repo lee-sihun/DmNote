@@ -167,11 +167,21 @@ interface KeyPosition {
   activeBackgroundGradient?: GradientSpec | null;
   borderGradient?: GradientSpec | null;
   activeBorderGradient?: GradientSpec | null;
+  shadow?: ElementShadowSpec;
+  activeShadow?: ElementShadowSpec;
 }
 
 interface GradientSpec {
   angle: number; // 0 (inclusive) to 360 (exclusive) — 360 normalizes to 0; CSS semantics (0 = up, clockwise)
   stops: { color: string; pos: number }[]; // 2–8 stops, pos 0–1 ascending
+}
+
+interface ElementShadowSpec {
+  enabled: boolean;
+  color: string; // alpha controls opacity
+  offsetX: number; // px, -100 to 100
+  offsetY: number; // px, -100 to 100
+  blur: number; // px, 0 to 100
 }
 ```
 
@@ -179,6 +189,10 @@ When a gradient field is present it takes priority over the matching solid
 field, and the solid field is kept in sync with the first stop color on save.
 To return to a solid color, set the gradient field to `null` and update the
 solid field.
+
+`shadow` and `activeShadow` control the idle and pressed shadows independently.
+When omitted, the built-in shadow remains unchanged. Store a spec with
+`enabled: false` to explicitly disable a shadow.
 
 ### `dmn.keys.updatePositions(positions: KeyPositions): Promise<KeyPositions>`
 

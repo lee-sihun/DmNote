@@ -18,8 +18,10 @@ import FontPicker from '../../../Modal/content/pickers/FontPicker';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
 import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
+import ShadowControls from '../ShadowControls';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import {
+  getActivePairPreservation,
   gradientPairPatch,
   gradientToCss,
   type ColorModeValue,
@@ -35,7 +37,10 @@ import {
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_FONT_WEIGHT,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
+import { resolveElementShadow } from '@src/types/key/shadows';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
@@ -51,6 +56,7 @@ type PickerTarget =
 
 type ColorState = 'idle' | 'active';
 type StyleColorTarget = 'backgroundColor' | 'borderColor' | 'fontColor';
+type GradientColorTarget = 'backgroundColor' | 'borderColor';
 type ActiveStyleColorProperty =
   | 'activeBackgroundColor'
   | 'activeBorderColor'
@@ -90,6 +96,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   mappingLabel,
   hideDisplayText = false,
   showSoundControls = true,
+  shadowActiveState = true,
   showImagePicker = false,
   onToggleImagePicker,
   imageButtonRef,
@@ -117,11 +124,39 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 개별 편집 모드인지 확인 (로컬 상태 핸들러가 없으면 개별 편집 모드)
   const isIndividualMode = !onLocalDxChange;
+  const hasIdleImage = Boolean(keyPosition.inactiveImage?.trim());
+  const hasActiveImage = Boolean(
+    keyPosition.activeImage?.trim() || keyPosition.inactiveImage?.trim(),
+  );
+  const idleShadow = resolveElementShadow({
+    active: false,
+    shadow: keyPosition.shadow,
+    activeShadow: keyPosition.activeShadow,
+    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+    suppressDefault: hasIdleImage,
+  });
+  const activeShadow = resolveElementShadow({
+    active: true,
+    shadow: keyPosition.shadow,
+    activeShadow: keyPosition.activeShadow,
+    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+    suppressDefault: hasActiveImage,
+  });
 
   // 통합 피커 상태
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const [colorState, setColorState] = useState<ColorState>('idle');
+  const effectiveColorState = shadowActiveState ? colorState : 'idle';
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
+
+  useEffect(() => {
+    if (!shadowActiveState) {
+      setColorState('idle');
+      setPickerFor(null);
+    }
+  }, [shadowActiveState]);
 
   // 컬러 버튼 refs
   const bgColorBtnRef = useRef<HTMLButtonElement>(null);
@@ -227,7 +262,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const resolveColorProperty = (
     target: StyleColorTarget,
   ): StyleColorProperty => {
-    if (colorState !== 'active') return target;
+    if (effectiveColorState !== 'active') return target;
     switch (target) {
       case 'backgroundColor':
         return 'activeBackgroundColor';
@@ -250,6 +285,22 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         return 'activeBorderColor';
       case 'fontColor':
         return 'activeFontColor';
+    }
+  };
+
+  // 상태별 저장된 gradient 형제 값
+  const storedGradientOf = (prop: StyleColorProperty): GradientSpec | null => {
+    switch (prop) {
+      case 'backgroundColor':
+        return keyPosition.backgroundGradient ?? null;
+      case 'activeBackgroundColor':
+        return keyPosition.activeBackgroundGradient ?? null;
+      case 'borderColor':
+        return keyPosition.borderGradient ?? null;
+      case 'activeBorderColor':
+        return keyPosition.activeBorderGradient ?? null;
+      default:
+        return null;
     }
   };
 
@@ -279,13 +330,28 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       [prop]: color,
     } as Partial<KeyPosition>;
 
-    // "idle" 상태에서만 변경했을 때 active 값이 비어 있으면,
-    // 현재 표시되던 active 값을 함께 저장해(active가 idle로 덮이는 현상 방지)
-    if (colorState !== 'active') {
+    // idle 편집 전 사용자 저장값 기준 active 모습 보존
+    if (shadowActiveState && effectiveColorState !== 'active') {
       const activeProp = activeColorPropertyFor(target);
-      const currentActive = keyPosition[activeProp];
-      if (!isNonEmptyString(currentActive)) {
-        updates[activeProp] = localColors[activeProp];
+      const preservation = getActivePairPreservation(
+        {
+          color: keyPosition[target],
+          gradient: storedGradientOf(target),
+        },
+        {
+          color: keyPosition[activeProp],
+          gradient: storedGradientOf(activeProp),
+        },
+      );
+      if (preservation?.color !== undefined) {
+        updates[activeProp] = preservation.color;
+      }
+      if (target !== 'fontColor' && preservation?.gradient !== undefined) {
+        const activeSibling =
+          target === 'backgroundColor'
+            ? 'activeBackgroundGradient'
+            : 'activeBorderGradient';
+        updates[activeSibling] = preservation.gradient;
       }
     }
 
@@ -294,34 +360,16 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // ── 그라데이션 배선 (배경·테두리 전용, 글꼴 색상은 단색 유지) ──
 
-  type GradientColorTarget = 'backgroundColor' | 'borderColor';
-
   const gradientTarget: GradientColorTarget | null =
     pickerFor === 'backgroundColor' || pickerFor === 'borderColor'
       ? pickerFor
       : null;
 
-  // 상태별 저장된 gradient 형제 값 (쌍 단위 폴백 — resolveStatePair와 동일 규칙)
-  const storedGradientOf = (prop: StyleColorProperty): GradientSpec | null => {
-    switch (prop) {
-      case 'backgroundColor':
-        return keyPosition.backgroundGradient ?? null;
-      case 'activeBackgroundColor':
-        return keyPosition.activeBackgroundGradient ?? null;
-      case 'borderColor':
-        return keyPosition.borderGradient ?? null;
-      case 'activeBorderColor':
-        return keyPosition.activeBorderGradient ?? null;
-      default:
-        return null;
-    }
-  };
-
   const gradientSpecFor = (
     target: GradientColorTarget,
   ): GradientSpec | null => {
     const idleGradient = storedGradientOf(target);
-    if (colorState !== 'active') return idleGradient;
+    if (effectiveColorState !== 'active') return idleGradient;
     const activeProp = activeColorPropertyFor(target);
     const activeGradient = storedGradientOf(activeProp);
     const activeHasValue =
@@ -349,22 +397,28 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
     const updates: Partial<KeyPosition> = { ...patch };
 
-    // idle 편집 시 active 쌍이 비어 있으면 현재 표시되던 active 모습을 쌍으로 보존
-    if (colorState !== 'active') {
+    // idle 편집 전 사용자 저장값 기준 active 쌍 보존
+    if (shadowActiveState && effectiveColorState !== 'active') {
       const activeProp = activeColorPropertyFor(gradientTarget);
-      const activeEmpty =
-        !isNonEmptyString(keyPosition[activeProp]) &&
-        storedGradientOf(activeProp) == null;
-      if (activeEmpty) {
-        updates[activeProp] = localColors[activeProp];
-        const prevIdleGradient = storedGradientOf(gradientTarget);
-        if (prevIdleGradient) {
-          const activeSibling =
-            gradientTarget === 'backgroundColor'
-              ? 'activeBackgroundGradient'
-              : 'activeBorderGradient';
-          updates[activeSibling] = prevIdleGradient;
-        }
+      const preservation = getActivePairPreservation(
+        {
+          color: keyPosition[gradientTarget],
+          gradient: storedGradientOf(gradientTarget),
+        },
+        {
+          color: keyPosition[activeProp],
+          gradient: storedGradientOf(activeProp),
+        },
+      );
+      if (preservation?.color !== undefined) {
+        updates[activeProp] = preservation.color;
+      }
+      if (preservation?.gradient !== undefined) {
+        const activeSibling =
+          gradientTarget === 'backgroundColor'
+            ? 'activeBackgroundGradient'
+            : 'activeBorderGradient';
+        updates[activeSibling] = preservation.gradient;
       }
     }
 
@@ -382,9 +436,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     // 요소 종류·키 모드 포함 — 형식 왕복 기억이 다른 대상과 교차하지 않게
     contextKey: `${
       canvasAnchor?.kind ?? 'key'
-    }:${selectedKeyType}:${keyIndex}:${pickerFor ?? 'none'}:${colorState}`,
+    }:${selectedKeyType}:${keyIndex}:${
+      pickerFor ?? 'none'
+    }:${effectiveColorState}`,
     canvasAnchor: gradientTarget ? canvasAnchor : undefined,
     canvasSurface: gradientTarget === 'borderColor' ? 'border' : 'background',
+    canvasState: effectiveColorState,
     onPreview: handleGradientPreview,
     onCommit: handleGradientCommit,
   });
@@ -690,6 +747,30 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         )}
       </PropertySection>
 
+      <ShadowControls
+        idleShadow={idleShadow}
+        activeShadow={activeShadow}
+        showActiveState={shadowActiveState}
+        onChange={(state, shadow) =>
+          onKeyUpdate({
+            index: keyIndex,
+            [state === 'active' ? 'activeShadow' : 'shadow']: shadow,
+          })
+        }
+        onEnabledChange={(enabled) =>
+          onKeyUpdate({
+            index: keyIndex,
+            shadow: { ...idleShadow, enabled },
+            // 눌림 상태가 없는 요소는 activeShadow를 기록하지 않음
+            ...(shadowActiveState
+              ? { activeShadow: { ...activeShadow, enabled } }
+              : {}),
+          })
+        }
+        panelElement={panelElement}
+        t={t}
+      />
+
       {/* 텍스트·폰트 */}
       <PropertySection>
         {/* 표시 텍스트 */}
@@ -882,6 +963,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           onIdleImageReset={handleIdleImageReset}
           onActiveImageReset={handleActiveImageReset}
           onClose={() => onToggleImagePicker()}
+          showActiveState={shadowActiveState}
         />
       )}
 
@@ -914,8 +996,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           }
           onClose={() => setPickerFor(null)}
           solidOnly={true}
-          stateMode={colorState}
-          onStateModeChange={setColorState}
+          stateMode={shadowActiveState ? effectiveColorState : undefined}
+          onStateModeChange={shadowActiveState ? setColorState : undefined}
           interactiveRefs={colorPickerInteractiveRefs}
           headerSlot={gradientTarget ? gradientState.headerSlot : undefined}
           footerSlot={gradientTarget ? gradientState.footerSlot : undefined}

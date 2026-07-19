@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { elementShadowSpecSchema } from './shadows';
 import { NOTE_SETTINGS_CONSTRAINTS } from '../settings/noteSettingsConstraints';
 import { getDefaultCounterSettings } from '@src/renderer/defaults';
 import { gradientSpecSchema, type GradientSpec } from '../color';
@@ -323,6 +324,8 @@ export const keyPositionSchema = z.object({
   activeBorderGradient: gradientSpecSchema.optional(),
   borderWidth: z.number().optional(),
   borderRadius: z.number().optional(),
+  shadow: elementShadowSpecSchema.optional(),
+  activeShadow: elementShadowSpecSchema.optional(),
   fontSize: z.number().optional(),
   fontColor: z.string().optional(),
   activeFontColor: z.string().optional(),

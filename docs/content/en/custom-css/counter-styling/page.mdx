@@ -25,7 +25,7 @@ Set styles that apply to all counters:
   font-weight: 700;
 
   /* Font family */
-  font-family: "Roboto Mono", monospace;
+  font-family: 'Roboto Mono', monospace;
 }
 ```
 
@@ -33,18 +33,27 @@ Set styles that apply to all counters:
 
 Counters support the following CSS variables:
 
-| Variable                 | Description            | Default       |
-| ------------------------ | ---------------------- | ------------- |
-| `--counter-color`        | Text color             | `#FFFFFF`     |
-| `--counter-stroke-color` | Text outline color     | `transparent` |
-| `--counter-stroke-width` | Text outline thickness | `0px`         |
+| Variable                    | Description                     | Default        |
+| --------------------------- | ------------------------------- | -------------- |
+| `--counter-color`           | Text color and saved-fill reset | `#FFFFFF`      |
+| `--counter-fill-image`      | Text fill image                 | `none`         |
+| `--counter-fill-clip`       | Fill clipping area              | `border-box`   |
+| `--counter-text-fill-color` | WebKit text fill color          | `currentcolor` |
+| `--counter-stroke-color`    | Text outline color              | `transparent`  |
+| `--counter-stroke-width`    | Text outline thickness          | `0px`          |
+
+<Callout type="info">
+  With **Inline Styles Priority** disabled on the key or stat item, regular CSS
+  also takes priority over counter typography. Setting `--counter-color`
+  automatically removes a fill gradient saved in the properties panel.
+</Callout>
 
 ## Inactive State Style
 
 Counter style when the key is not pressed:
 
 ```css
-.counter[data-counter-state="inactive"] {
+.counter[data-counter-state='inactive'] {
   /* Text color */
   --counter-color: #474244;
 
@@ -58,7 +67,7 @@ Counter style when the key is not pressed:
 Counter style when the key is being pressed:
 
 ```css
-.counter[data-counter-state="active"] {
+.counter[data-counter-state='active'] {
   /* Text color */
   --counter-color: #ff2b80;
 
@@ -78,12 +87,12 @@ Combine class selectors to style counters of specific keys differently.
 
 ```css
 /* Counter for keys with .blue class - inactive state */
-.blue .counter[data-counter-state="inactive"] {
+.blue .counter[data-counter-state='inactive'] {
   --counter-color: #1a4a5c;
 }
 
 /* Counter for keys with .blue class - active state */
-.blue .counter[data-counter-state="active"] {
+.blue .counter[data-counter-state='active'] {
   --counter-color: #2ebef3;
   --counter-stroke-color: transparent;
   text-shadow: 0px 0px 3px #2ebef3;
@@ -105,16 +114,13 @@ Combine class selectors to style counters of specific keys differently.
   font-weight: 700;
 }
 
-.counter[data-counter-state="inactive"] {
+.counter[data-counter-state='inactive'] {
   --counter-color: #333;
 }
 
-.counter[data-counter-state="active"] {
+.counter[data-counter-state='active'] {
   --counter-color: #00ff88;
-  text-shadow:
-    0px 0px 2px #00ff88,
-    0px 0px 4px #00ff88,
-    0px 0px 8px #00ff88;
+  text-shadow: 0px 0px 2px #00ff88, 0px 0px 4px #00ff88, 0px 0px 8px #00ff88;
 }
 ```
 
@@ -126,13 +132,13 @@ Combine class selectors to style counters of specific keys differently.
   font-weight: 900;
 }
 
-.counter[data-counter-state="inactive"] {
+.counter[data-counter-state='inactive'] {
   --counter-color: #fff;
   --counter-stroke-color: #333;
   --counter-stroke-width: 2px;
 }
 
-.counter[data-counter-state="active"] {
+.counter[data-counter-state='active'] {
   --counter-color: #fff;
   --counter-stroke-color: #ff2b80;
   --counter-stroke-width: 2px;
@@ -145,14 +151,14 @@ Combine class selectors to style counters of specific keys differently.
 .counter {
   font-size: 14px;
   font-weight: 400;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-.counter[data-counter-state="inactive"] {
+.counter[data-counter-state='inactive'] {
   --counter-color: #999;
 }
 
-.counter[data-counter-state="active"] {
+.counter[data-counter-state='active'] {
   --counter-color: #333;
 }
 ```
@@ -160,7 +166,7 @@ Combine class selectors to style counters of specific keys differently.
 ### Rainbow Gradient Style
 
 ```css
-.counter[data-counter-state="active"] {
+.counter[data-counter-state='active'] {
   background: linear-gradient(
     45deg,
     #ff2b80,
@@ -195,7 +201,7 @@ Example of keeping key and counter colors consistent:
 
 ```css
 /* Base key - pink theme */
-[data-state="active"] {
+[data-state='active'] {
   --key-border: 3px solid #ff2b80;
   --key-text-color: #ff2b80;
   text-shadow: 0px 0px 3px #ff2b80;

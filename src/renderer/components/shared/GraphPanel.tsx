@@ -407,18 +407,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
         : `${resolvedBorderWidth}px solid ${
             borderColor || DEFAULT_ELEMENT_HAIRLINE
           }`;
-    // 그라데이션 보더는 --graph-border를 소비하지 않음 (실보더+링 이중 소비 방지)
-    const resolvedBorder = showBorderRing
-      ? 'none'
-      : useInline
-      ? fallbackBorder
-      : `var(--graph-border, ${fallbackBorder})`;
-    const resolvedBg = useInline
-      ? resolvedBackgroundColor
-      : `var(--graph-bg, ${resolvedBackgroundColor})`;
-    const resolvedRadius = useInline
-      ? `${resolvedBorderRadius}px`
-      : `var(--graph-radius, ${resolvedBorderRadius}px)`;
+    const resolvedBorder = showBorderRing ? 'none' : fallbackBorder;
     const resolvedGraphColor = graphColor || '#86EFAC';
     const graphStrokeColor = useInline
       ? resolvedGraphColor
@@ -432,32 +421,52 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
         className={`absolute select-none ${
           interactive ? 'dmn-grabbable' : ''
         } ${className || ''}`}
-        style={{
-          width: `${width}px`,
-          height: `${height}px`,
-          transform,
-          background: resolvedBg,
-          color: '#FFFFFF',
-          border: resolvedBorder,
-          padding: showBorderRing ? `${resolvedBorderWidth}px` : undefined,
-          borderRadius: resolvedRadius,
-          boxSizing: 'border-box',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          cursor: interactive ? undefined : 'default',
-          fontFamily:
-            "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
-          willChange:
-            dataEditing || isViewportTransforming ? 'transform' : 'auto',
-          backfaceVisibility: 'hidden',
-          transformStyle: 'preserve-3d',
-          contain: 'layout style paint',
-          imageRendering: 'auto',
-          isolation: 'isolate',
-          zIndex,
-        }}
+        style={
+          {
+            width: `${width}px`,
+            height: `${height}px`,
+            transform,
+            ...(useInline
+              ? {
+                  background: resolvedBackgroundColor,
+                  backgroundClip: 'padding-box',
+                  color: '#FFFFFF',
+                  border: resolvedBorder,
+                  padding: showBorderRing
+                    ? `${resolvedBorderWidth}px`
+                    : undefined,
+                  borderRadius: `${resolvedBorderRadius}px`,
+                  fontFamily:
+                    "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
+                }
+              : {
+                  '--dmn-graph-bg-default': resolvedBackgroundColor,
+                  '--dmn-graph-border-default': resolvedBorder,
+                  '--dmn-graph-radius-default': `${resolvedBorderRadius}px`,
+                  '--dmn-graph-padding-default': showBorderRing
+                    ? `${resolvedBorderWidth}px`
+                    : '0px',
+                  '--dmn-graph-text-color-default': '#FFFFFF',
+                  '--dmn-graph-font-family-default':
+                    "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
+                }),
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            cursor: interactive ? undefined : 'default',
+            willChange:
+              dataEditing || isViewportTransforming ? 'transform' : 'auto',
+            backfaceVisibility: 'hidden',
+            transformStyle: 'preserve-3d',
+            contain: 'layout style paint',
+            imageRendering: 'auto',
+            isolation: 'isolate',
+            zIndex,
+          } as React.CSSProperties
+        }
         data-state="inactive"
+        data-graph-element="true"
         data-editing={dataEditing ? 'true' : undefined}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
@@ -471,19 +480,9 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
             src={imageSrc}
             alt=""
             draggable={false}
+            data-graph-image="true"
             style={{
               position: 'absolute',
-              // absolute는 패딩 박스 기준 — 보더 대신 padding을 쓰는 그라데이션
-              // 보더에서도 단색 보더와 같은 인셋을 유지 (img는 replaced
-              // element라 inset만으로는 늘어나지 않으므로 크기를 명시)
-              left: showBorderRing ? `${resolvedBorderWidth}px` : 0,
-              top: showBorderRing ? `${resolvedBorderWidth}px` : 0,
-              width: showBorderRing
-                ? `calc(100% - ${resolvedBorderWidth * 2}px)`
-                : '100%',
-              height: showBorderRing
-                ? `calc(100% - ${resolvedBorderWidth * 2}px)`
-                : '100%',
               objectFit: (imageFit ||
                 'cover') as React.CSSProperties['objectFit'],
               pointerEvents: 'none',
@@ -495,8 +494,12 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
         {showBorderRing && borderGradient && (
           <span
             aria-hidden="true"
+            data-gradient-border-ring="true"
             style={{
               ...gradientRingStyle(borderGradient, resolvedBorderWidth),
+              ...(useInline
+                ? { background: gradientToCss(borderGradient) }
+                : {}),
               zIndex: 1,
             }}
           />

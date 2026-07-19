@@ -10,7 +10,8 @@ use crate::{
     errors::EditorCommitError,
     models::{
         AppStoreData, CustomTab, EditorCommitRequest, EditorDocumentV1, EditorField,
-        EditorHistoryRestoreRequest, KeyCounters, KeyMappings, KeyPosition, EDITOR_SCHEMA_VERSION,
+        EditorHistoryRestoreRequest, ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition,
+        EDITOR_SCHEMA_VERSION,
     },
 };
 
@@ -29,6 +30,10 @@ const MAX_GROUP_ID_BYTES: usize = 256;
 const MAX_GROUP_NAME_BYTES: usize = 1_024;
 const MAX_ABS_COORDINATE: f64 = 32_768.0;
 const MAX_DIMENSION: f64 = 32_768.0;
+use crate::models::{
+    SHADOW_BLUR_MAX as MAX_SHADOW_BLUR, SHADOW_BLUR_MIN as MIN_SHADOW_BLUR,
+    SHADOW_OFFSET_MAX as MAX_SHADOW_OFFSET, SHADOW_OFFSET_MIN as MIN_SHADOW_OFFSET,
+};
 const REQUEST_WARNING_BYTES: usize = 1_024 * 1_024;
 const MAX_REQUEST_BYTES: usize = 8 * 1_024 * 1_024;
 
@@ -477,9 +482,108 @@ fn collect_violations(
         }
     }
 
+    collect_position_style_violations(document, &mut violations);
     let group_ids = collect_group_violations(document, &mut violations);
     collect_group_reference_violations(document, &group_ids, &mut violations);
     violations
+}
+
+fn collect_position_style_violations(
+    document: &EditorDocumentV1,
+    violations: &mut BTreeSet<ValidationViolation>,
+) {
+    for (field, mode, index, position) in document
+        .key_positions
+        .iter()
+        .flat_map(|(mode, positions)| {
+            positions
+                .iter()
+                .enumerate()
+                .map(move |(index, position)| ("keyPositions", mode, index, position))
+        })
+        .chain(
+            document
+                .stat_positions
+                .iter()
+                .flat_map(|(mode, positions)| {
+                    positions.iter().enumerate().map(move |(index, position)| {
+                        ("statPositions", mode, index, &position.position)
+                    })
+                }),
+        )
+        .chain(
+            document
+                .graph_positions
+                .iter()
+                .flat_map(|(mode, positions)| {
+                    positions.iter().enumerate().map(move |(index, position)| {
+                        ("graphPositions", mode, index, &position.position)
+                    })
+                }),
+        )
+        .chain(
+            document
+                .knob_positions
+                .iter()
+                .flat_map(|(mode, positions)| {
+                    positions.iter().enumerate().map(move |(index, position)| {
+                        ("knobPositions", mode, index, &position.position)
+                    })
+                }),
+        )
+    {
+        for (name, shadow) in [
+            ("shadow", position.shadow.as_ref()),
+            ("activeShadow", position.active_shadow.as_ref()),
+        ] {
+            if let Some(shadow) = shadow {
+                collect_shadow_violations(field, mode, index, name, shadow, violations);
+            }
+        }
+    }
+}
+
+fn collect_shadow_violations(
+    field: &str,
+    mode: &str,
+    index: usize,
+    name: &str,
+    shadow: &ElementShadowSpec,
+    violations: &mut BTreeSet<ValidationViolation>,
+) {
+    if shadow.color.is_empty() {
+        violations.insert(ValidationViolation::new(
+            format!("element-shadow:{field}:{mode}:{index}:{name}:color-empty"),
+            "INVALID_ELEMENT_SHADOW",
+            format!("{field} {mode}[{index}].{name}.color must be a non-empty string"),
+        ));
+    }
+    for (property, value) in [("offsetX", shadow.offset_x), ("offsetY", shadow.offset_y)] {
+        if !value.is_finite() || !(MIN_SHADOW_OFFSET..=MAX_SHADOW_OFFSET).contains(&value) {
+            violations.insert(ValidationViolation::new(
+                format!(
+                    "element-shadow:{field}:{mode}:{index}:{name}:{property}:{}",
+                    value.to_bits()
+                ),
+                "INVALID_ELEMENT_SHADOW",
+                format!(
+                    "{field} {mode}[{index}].{name}.{property} must be a finite number between {MIN_SHADOW_OFFSET} and {MAX_SHADOW_OFFSET}"
+                ),
+            ));
+        }
+    }
+    if !shadow.blur.is_finite() || !(MIN_SHADOW_BLUR..=MAX_SHADOW_BLUR).contains(&shadow.blur) {
+        violations.insert(ValidationViolation::new(
+            format!(
+                "element-shadow:{field}:{mode}:{index}:{name}:blur:{}",
+                shadow.blur.to_bits()
+            ),
+            "INVALID_ELEMENT_SHADOW",
+            format!(
+                "{field} {mode}[{index}].{name}.blur must be a finite number between {MIN_SHADOW_BLUR} and {MAX_SHADOW_BLUR}"
+            ),
+        ));
+    }
 }
 
 fn collect_collection_violations<T>(
@@ -938,8 +1042,9 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::models::{
-        CustomTab, EditorCommitRequest, EditorDocumentV1, EditorPatchV1, KeyPosition,
-        LayerGroupDef, StatPosition, StatType,
+        CustomTab, EditorCommitRequest, EditorDocumentV1, EditorPatchV1, ElementShadowSpec,
+        GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
+        StatPosition, StatType,
     };
 
     use super::*;
@@ -972,6 +1077,61 @@ mod tests {
             });
         }
         store
+    }
+
+    fn store_with_each_position_collection() -> AppStoreData {
+        let mut store = default_editor_store();
+        store.stat_positions.insert(
+            "4key".to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: KeyPosition::default(),
+            }],
+        );
+        store.graph_positions.insert(
+            "4key".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 100,
+                graph_color: "#123456".to_string(),
+                show_avg_line: true,
+                position: KeyPosition::default(),
+            }],
+        );
+        store.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: String::new(),
+                sensitivity: 1.0,
+                reverse: false,
+                position: KeyPosition::default(),
+            }],
+        );
+        store
+    }
+
+    fn position_mut<'a>(
+        document: &'a mut EditorDocumentV1,
+        collection: &str,
+    ) -> &'a mut KeyPosition {
+        match collection {
+            "keyPositions" => &mut document.key_positions.get_mut("4key").unwrap()[0],
+            "statPositions" => &mut document.stat_positions.get_mut("4key").unwrap()[0].position,
+            "graphPositions" => &mut document.graph_positions.get_mut("4key").unwrap()[0].position,
+            "knobPositions" => &mut document.knob_positions.get_mut("4key").unwrap()[0].position,
+            _ => unreachable!(),
+        }
+    }
+
+    fn valid_shadow() -> ElementShadowSpec {
+        ElementShadowSpec {
+            enabled: true,
+            color: "#123456".to_string(),
+            offset_x: 0.0,
+            offset_y: 0.0,
+            blur: 12.0,
+        }
     }
 
     #[test]
@@ -1156,6 +1316,104 @@ mod tests {
         increased.apply_to_store(&mut increased_store);
         assert!(
             validate_document_transition(&current, &increased, &store, &increased_store).is_err()
+        );
+    }
+
+    #[test]
+    fn editor_rejects_new_shadow_violations_in_every_position_collection() {
+        let store = store_with_each_position_collection();
+        let current = EditorDocumentV1::from_store(&store);
+
+        for (collection, active, property, expected_path) in [
+            (
+                "keyPositions",
+                false,
+                "blur",
+                "keyPositions 4key[0].shadow.blur",
+            ),
+            (
+                "statPositions",
+                true,
+                "offsetX",
+                "statPositions 4key[0].activeShadow.offsetX",
+            ),
+            (
+                "graphPositions",
+                false,
+                "offsetY",
+                "graphPositions 4key[0].shadow.offsetY",
+            ),
+            (
+                "knobPositions",
+                true,
+                "color",
+                "knobPositions 4key[0].activeShadow.color",
+            ),
+        ] {
+            let mut candidate = current.clone();
+            let mut shadow = valid_shadow();
+            match property {
+                "blur" => shadow.blur = MAX_SHADOW_BLUR + 0.1,
+                "offsetX" => shadow.offset_x = MIN_SHADOW_OFFSET - 0.1,
+                "offsetY" => shadow.offset_y = MAX_SHADOW_OFFSET + 0.1,
+                "color" => shadow.color.clear(),
+                _ => unreachable!(),
+            }
+            let position = position_mut(&mut candidate, collection);
+            if active {
+                position.active_shadow = Some(shadow);
+            } else {
+                position.shadow = Some(shadow);
+            }
+            let mut candidate_store = store.clone();
+            candidate.apply_to_store(&mut candidate_store);
+
+            let error =
+                validate_document_transition(&current, &candidate, &store, &candidate_store)
+                    .unwrap_err();
+            assert_eq!(
+                error
+                    .details
+                    .as_ref()
+                    .and_then(|details| details.validation_code.as_deref()),
+                Some("INVALID_ELEMENT_SHADOW")
+            );
+            assert!(error.message.contains(expected_path));
+        }
+    }
+
+    #[test]
+    fn existing_shadow_violations_are_grandfathered_only_when_unchanged() {
+        let mut store = default_editor_store();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        let mut shadow = valid_shadow();
+        shadow.blur = MAX_SHADOW_BLUR + 1.0;
+        position.shadow = Some(shadow);
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut unrelated = current.clone();
+        unrelated.key_positions.get_mut("4key").unwrap()[0].font_size = Some(18.0);
+        let mut unrelated_store = store.clone();
+        unrelated.apply_to_store(&mut unrelated_store);
+        validate_document_transition(&current, &unrelated, &store, &unrelated_store).unwrap();
+
+        let mut changed_shadow = current.clone();
+        changed_shadow.key_positions.get_mut("4key").unwrap()[0]
+            .shadow
+            .as_mut()
+            .unwrap()
+            .blur += 1.0;
+        let mut changed_shadow_store = store.clone();
+        changed_shadow.apply_to_store(&mut changed_shadow_store);
+        let shadow_error =
+            validate_document_transition(&current, &changed_shadow, &store, &changed_shadow_store)
+                .unwrap_err();
+        assert_eq!(
+            shadow_error
+                .details
+                .as_ref()
+                .and_then(|details| details.validation_code.as_deref()),
+            Some("INVALID_ELEMENT_SHADOW")
         );
     }
 

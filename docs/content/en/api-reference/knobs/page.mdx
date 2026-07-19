@@ -57,9 +57,13 @@ Commonly used inherited styling fields:
 - `borderWidth` — border thickness in px (defaults to 1, 0 disables the border)
 - `backgroundGradient` / `activeBackgroundGradient` — background gradient (GradientSpec, takes priority over the solid color)
 - `borderGradient` / `activeBorderGradient` — border gradient (GradientSpec)
+- `shadow` / `activeShadow` — idle / turning shadow (ElementShadowSpec; color alpha controls opacity)
 - `borderRadius` — corner radius in px; when unset the knob is a circle
 - `inactiveImage` / `activeImage` — idle / turning custom image
 - `idleTransparent` / `activeTransparent` — transparent background toggles
+
+`ElementShadowSpec` contains `enabled`, `color`, `offsetX`, `offsetY`, and
+`blur`. Offsets accept -100–100 px and blur accepts 0–100 px.
 
 While the physical knob is turning, the element switches to its
 active colors/image (like a pressed key) and rotates by

@@ -3,7 +3,6 @@
  * 오버레이에서 키/통계 요소의 스타일을 일관되게 계산
  */
 
-import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   gradientToCss,
@@ -21,40 +20,14 @@ import {
   DEFAULT_ELEMENT_BORDER_WIDTH,
   DEFAULT_ELEMENT_RADIUS,
   DEFAULT_ELEMENT_FONT_WEIGHT,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
-
-/**
- * 색 형식(그라데이션 유무) 전환 커밋은 background 트랜지션을 한 프레임 차단 —
- * 이미지 레이어는 즉시 교체되는데 base 색만 100ms 보간되며 생기는
- * 이중 합성 깜빡임 방지. 다음 프레임에 attribute를 걷어 원래 트랜지션 복원
- */
-export function useBgFormatTransitionGate(
-  ref: RefObject<HTMLElement | null>,
-  hasGradient: boolean,
-) {
-  const prevRef = useRef(hasGradient);
-  useLayoutEffect(() => {
-    const flipped = prevRef.current !== hasGradient;
-    prevRef.current = hasGradient;
-    const el = ref.current;
-    if (!flipped || !el) return undefined;
-    el.setAttribute('data-bg-format-flip', 'true');
-    // 강제 recalc — rAF 콜백이 첫 style recalc보다 앞서 걷어내도 게이트가 반영되게
-    void el.offsetWidth;
-    // 이중 rAF — 첫 페인트를 지나고 나서 제거 (다른 effect의 스타일 변경 대비)
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => {
-        el.removeAttribute('data-bg-format-flip');
-      });
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      if (raf2) cancelAnimationFrame(raf2);
-      el.removeAttribute('data-bg-format-flip');
-    };
-  }, [ref, hasGradient]);
-}
+import {
+  elementShadowToCss,
+  resolveElementShadow,
+  type ElementShadowSpec,
+} from '@src/types/key/shadows';
 
 export interface KeyElementPosition {
   hidden?: boolean;
@@ -77,6 +50,8 @@ export interface KeyElementPosition {
   activeBorderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
+  shadow?: ElementShadowSpec;
+  activeShadow?: ElementShadowSpec;
   fontSize?: number;
   fontColor?: string;
   activeFontColor?: string;
@@ -135,6 +110,8 @@ export function computeKeyElementStyles({
     activeBorderColor,
     borderWidth,
     borderRadius,
+    shadow,
+    activeShadow,
     fontSize,
     fontColor,
     activeFontColor,
@@ -154,20 +131,28 @@ export function computeKeyElementStyles({
   const useInline = useInlineStyles === true;
 
   // 상태별 색상 — 배경·보더는 쌍 단위 폴백 (색/그라데이션이 상태 간 섞여 새지 않게)
-  const bgPair = resolveStatePair(
-    active,
+  const idleBgPair = resolveStatePair(
+    false,
     { color: backgroundColor, gradient: position.backgroundGradient },
     {
       color: activeBackgroundColor,
       gradient: position.activeBackgroundGradient,
     },
   );
+  const activeBgPair = resolveStatePair(
+    true,
+    { color: backgroundColor, gradient: position.backgroundGradient },
+    {
+      color: activeBackgroundColor,
+      gradient: position.activeBackgroundGradient,
+    },
+  );
+  const stateBgPair = active ? activeBgPair : idleBgPair;
   const borderPair = resolveStatePair(
     active,
     { color: borderColor, gradient: position.borderGradient },
     { color: activeBorderColor, gradient: position.activeBorderGradient },
   );
-  const stateBackgroundColor = bgPair.color;
   const stateBorderColor = borderPair.color;
   const stateFontColor = active ? activeFontColor ?? fontColor : fontColor;
 
@@ -185,8 +170,11 @@ export function computeKeyElementStyles({
     ? activeImageFit || imageFit || 'cover'
     : idleImageFit || imageFit || 'cover';
 
-  // 기본 색상
-  const defaultBgColor = hasCurrentImage
+  // 기본 색상 — 이미지 키는 기본 배경 억제 (이미지가 표면 전부)
+  const rootHasImage = hasCurrentImage;
+  const rootBgPair = stateBgPair;
+  const rootBackgroundColor = rootBgPair.color;
+  const defaultBgColor = rootHasImage
     ? 'transparent'
     : active
     ? DEFAULT_ELEMENT_ACTIVE_BG
@@ -200,7 +188,7 @@ export function computeKeyElementStyles({
       : DEFAULT_ELEMENT_FONT;
 
   // 그라데이션 모드 — 대표 단색은 칠하지 않음 (반투명 스톱 이중 합성 방지)
-  const bgGradient = hasCurrentImage ? null : bgPair.gradient ?? null;
+  const bgGradient = rootHasImage ? null : rootBgPair.gradient ?? null;
   const borderGradientSpec = borderPair.gradient ?? null;
 
   // 보더 판정 — 명시값 우선, 아무 값도 없으면 기본 1px 헤어라인이 표면 분리
@@ -227,50 +215,79 @@ export function computeKeyElementStyles({
     showBorderRing ||
     (pairHasRing && !hasExplicitBorder && !showDefaultHairline);
 
+  const textDecorations: string[] = [];
+  if (fontUnderline) textDecorations.push('underline');
+  if (fontStrikethrough) textDecorations.push('line-through');
+  const resolvedTextDecoration =
+    textDecorations.length > 0 ? textDecorations.join(' ') : 'none';
+  const resolvedFontFamily = fontFamily
+    ? `"${fontFamily}", "Pretendard Variable", sans-serif`
+    : 'inherit';
+  const resolvedShadow = elementShadowToCss(
+    resolveElementShadow({
+      active,
+      shadow,
+      activeShadow,
+      defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+      defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+      suppressDefault: hasCurrentImage,
+    }),
+  );
+
   const keyStyle: React.CSSProperties = {
     width: `${width}px`,
     height: `${height}px`,
     transform: `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`,
-    // 그라데이션 키의 base는 무조건 transparent — 테마 --key-bg가 밑에 깔려
-    // 반투명 스톱과 이중 합성되는 것 방지 (테마 오버라이드는 --key-bg-image로)
-    backgroundColor: bgGradient
-      ? 'transparent'
-      : useInline && stateBackgroundColor
-      ? stateBackgroundColor
-      : `var(--key-bg, ${stateBackgroundColor || defaultBgColor})`,
-    // 단색 키에는 인라인 backgroundImage를 두지 않는다 — 테마의 직접
-    // background-image 지정(문서화된 계약)을 덮지 않기 위함
-    ...(bgGradient
+    ...(useInline
       ? {
-          backgroundImage: useInline
-            ? gradientToCss(bgGradient)
-            : `var(--key-bg-image, ${gradientToCss(bgGradient)})`,
-        }
-      : {}),
-    borderRadius:
-      useInline && borderRadius != null
-        ? `${borderRadius}px`
-        : `var(--key-radius, ${
+          // 인라인 우선 모드만 속성 패널 값을 실제 inline declaration으로 승격
+          backgroundColor: bgGradient
+            ? 'transparent'
+            : rootBackgroundColor || defaultBgColor,
+          ...(bgGradient ? { backgroundImage: gradientToCss(bgGradient) } : {}),
+          backgroundClip: 'padding-box' as const,
+          borderRadius:
             borderRadius != null
               ? `${borderRadius}px`
-              : `${DEFAULT_ELEMENT_RADIUS}px`
-          })`,
-    // 그라데이션 보더는 보더 대신 동일 두께 padding — overflow:hidden이
-    // 패딩 박스에서 클리핑되므로 링 자식이 가장자리에 정확히 그려짐.
-    // 테마 --key-border를 소비하지 않음 (실보더 + 링 padding 이중 소비 방지)
-    border: showBorderRing
-      ? 'none'
-      : useInline
-      ? resolvedBorder
-      : `var(--key-border, ${resolvedBorder})`,
-    ...(reserveRingPadding ? { padding: `${gradientRingWidth}px` } : {}),
-    color:
-      useInline && stateFontColor
-        ? stateFontColor
-        : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
-    fontSize: fontSize ? `${fontSize}px` : undefined,
+              : `${DEFAULT_ELEMENT_RADIUS}px`,
+          border: showBorderRing ? 'none' : resolvedBorder,
+          ...(reserveRingPadding ? { padding: `${gradientRingWidth}px` } : {}),
+          color: stateFontColor || defaultTextColor,
+          fontSize: fontSize ? `${fontSize}px` : undefined,
+          fontFamily: fontFamily ? resolvedFontFamily : undefined,
+          fontWeight: fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
+          fontStyle: fontItalic ? ('italic' as const) : ('normal' as const),
+          textDecoration: resolvedTextDecoration,
+          boxShadow: resolvedShadow,
+        }
+      : ({
+          // 일반 모드는 전역 :where 규칙이 소비하는 fallback 변수만 제공
+          '--dmn-key-bg-default': bgGradient
+            ? 'transparent'
+            : rootBackgroundColor || defaultBgColor,
+          '--dmn-key-bg-image-default': bgGradient
+            ? gradientToCss(bgGradient)
+            : 'none',
+          '--dmn-key-border-default': showBorderRing ? 'none' : resolvedBorder,
+          '--dmn-key-radius-default':
+            borderRadius != null
+              ? `${borderRadius}px`
+              : `${DEFAULT_ELEMENT_RADIUS}px`,
+          '--dmn-key-padding-default': reserveRingPadding
+            ? `${gradientRingWidth}px`
+            : '0px',
+          '--dmn-key-text-color-default': stateFontColor || defaultTextColor,
+          '--dmn-key-font-size-default': fontSize ? `${fontSize}px` : 'inherit',
+          '--dmn-key-font-family-default': resolvedFontFamily,
+          '--dmn-key-font-weight-default': String(
+            fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
+          ),
+          '--dmn-key-font-style-default': fontItalic ? 'italic' : 'normal',
+          '--dmn-key-text-decoration-default': resolvedTextDecoration,
+          '--dmn-key-shadow-default': resolvedShadow,
+        } as React.CSSProperties)),
     overflow: 'hidden' as const,
-    willChange: active ? 'transform, background-color' : 'transform',
+    willChange: 'transform',
     backfaceVisibility: 'hidden' as const,
     transformStyle: 'preserve-3d' as const,
     contain: 'layout style paint',
@@ -282,38 +299,46 @@ export function computeKeyElementStyles({
   };
 
   const fallbackImageDimmed = active && !activeImageSrc && !!inactiveImageSrc;
-  const imageStyle: React.CSSProperties = {
+  const createImageStyle = (
+    objectFit: string,
+    dimmed: boolean,
+  ): React.CSSProperties => ({
     width: '100%',
     height: '100%',
-    objectFit: effectiveImageFit as React.CSSProperties['objectFit'],
+    objectFit: objectFit as React.CSSProperties['objectFit'],
     display: 'block',
     pointerEvents: 'none' as const,
     userSelect: 'none' as const,
     position: 'relative' as const,
     zIndex: 0,
-    filter: fallbackImageDimmed ? 'brightness(0.62)' : 'none',
-  };
-
-  // 텍스트 데코레이션
-  const textDecorations: string[] = [];
-  if (fontUnderline) textDecorations.push('underline');
-  if (fontStrikethrough) textDecorations.push('line-through');
+    filter: dimmed ? 'brightness(0.62)' : 'none',
+  });
+  const imageStyle = createImageStyle(effectiveImageFit, fallbackImageDimmed);
 
   const textStyle: React.CSSProperties = {
     willChange: 'auto',
-    fontSize: fontSize ? `${fontSize}px` : undefined,
-    fontFamily: fontFamily
-      ? `"${fontFamily}", "Pretendard Variable", sans-serif`
-      : undefined,
-    fontWeight: fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
-    fontStyle: fontItalic ? ('italic' as const) : ('normal' as const),
-    textDecoration:
-      textDecorations.length > 0 ? textDecorations.join(' ') : 'none',
+    color: 'inherit',
+    fontSize: useInline ? (fontSize ? `${fontSize}px` : undefined) : 'inherit',
+    fontFamily: useInline
+      ? fontFamily
+        ? resolvedFontFamily
+        : undefined
+      : 'inherit',
+    fontWeight: useInline
+      ? fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT
+      : 'inherit',
+    fontStyle: useInline ? (fontItalic ? 'italic' : 'normal') : 'inherit',
+    textDecoration: useInline ? resolvedTextDecoration : 'inherit',
   };
 
   const borderRingStyle =
     showBorderRing && borderGradientSpec
-      ? gradientRingStyle(borderGradientSpec, gradientRingWidth)
+      ? {
+          ...gradientRingStyle(borderGradientSpec, gradientRingWidth),
+          ...(useInline
+            ? { background: gradientToCss(borderGradientSpec) }
+            : {}),
+        }
       : null;
 
   return {
