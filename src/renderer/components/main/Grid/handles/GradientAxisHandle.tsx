@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
+import {
+  supportsActiveVisualState,
+  useGradientEditStore,
+} from '@stores/grid/useGradientEditStore';
 import {
   toCanonicalGradient,
   GRADIENT_STOPS_MAX,
@@ -163,6 +166,12 @@ const GradientAxisOverlay = ({
       let maxY = -Infinity;
       for (const el of selectedElements) {
         if (el.index === undefined) continue;
+        if (
+          session.stateMode === 'active' &&
+          !supportsActiveVisualState(el.type)
+        ) {
+          continue;
+        }
         const pos =
           el.type === 'key'
             ? positions[selectedKeyType]?.[el.index]

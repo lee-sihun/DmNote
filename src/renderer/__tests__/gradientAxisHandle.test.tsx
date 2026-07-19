@@ -69,6 +69,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         anchor: { kind: 'key', index: 0 },
         sessionKey: 'key:4key:0:backgroundColor:idle',
         surface: 'background',
+        stateMode: 'idle',
         spec: SPEC,
         selectedIndex: 0,
         selectStop,
@@ -286,6 +287,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         anchor: { kind: 'key', index: 0 },
         sessionKey: 'key:4key:0:backgroundColor:active',
         surface: 'background',
+        stateMode: 'active',
         spec: SPEC,
         selectedIndex: 0,
         selectStop,
@@ -327,6 +329,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         anchor: { kind: 'key', index: 0 },
         sessionKey: 'key:4key:0:backgroundColor:active',
         surface: 'background',
+        stateMode: 'active',
         spec: SPEC,
         selectedIndex: 0,
         selectStop,
@@ -336,6 +339,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         anchor: { kind: 'key', index: 0 },
         sessionKey: 'key:4key:0:backgroundColor:idle',
         surface: 'background',
+        stateMode: 'idle',
         spec: SPEC,
         selectedIndex: 0,
         selectStop,
@@ -360,6 +364,126 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
+  it('포인터 이벤트 사이에 세션이 A→null→새 A로 재개방돼도 커밋하지 않는다', () => {
+    act(() => {
+      strip().dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 9,
+          clientX: 260,
+          clientY: 150,
+        }),
+      );
+    });
+
+    const newIdleApply = vi.fn<(spec: GradientSpec, commit: boolean) => void>();
+    act(() => {
+      useGradientEditStore.getState().setSession(null);
+      useGradientEditStore.getState().setSession({
+        anchor: { kind: 'key', index: 0 },
+        sessionKey: 'key:4key:0:backgroundColor:idle',
+        surface: 'background',
+        stateMode: 'idle',
+        spec: SPEC,
+        selectedIndex: 0,
+        selectStop,
+        apply: newIdleApply,
+      });
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 9,
+          clientX: 260,
+          clientY: 90,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointerup', { pointerId: 9, clientX: 260, clientY: 90 }),
+      );
+    });
+
+    expect(newIdleApply).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('batch idle 세션은 선택 전체 bounds 중심을 쓴다', () => {
+    act(() => {
+      useGradientEditStore.getState().setSession({
+        anchor: { kind: 'batch' },
+        sessionKey: 'batch:4key:backgroundColor:idle',
+        surface: 'background',
+        stateMode: 'idle',
+        spec: SPEC,
+        selectedIndex: 0,
+        selectStop,
+        apply,
+      });
+      root.render(
+        <GradientAxisOverlay
+          positions={positions}
+          statPositions={
+            { '4key': [{ dx: 400, dy: 400, width: 60, height: 60 }] } as never
+          }
+          graphPositions={{} as never}
+          knobPositions={{} as never}
+          selectedElements={
+            [
+              { type: 'key', id: 'key-0', index: 0 },
+              { type: 'stat', id: 'stat-0', index: 0 },
+            ] as never
+          }
+          selectedKeyType="4key"
+          zoom={1}
+          panX={0}
+          panY={0}
+        />,
+      );
+    });
+    // key(100,100,200x100) + stat(400,400,60x60) → 전체 (100..460) 중심
+    expect(strip().style.left).toBe('280px');
+    expect(strip().style.top).toBe('280px');
+  });
+
+  it('batch active 세션은 키·노브 bounds 중심만 쓴다', () => {
+    // active 편집 대상이 아닌 통계·그래프는 축 중심·자석 각도에서 제외
+    act(() => {
+      useGradientEditStore.getState().setSession({
+        anchor: { kind: 'batch' },
+        sessionKey: 'batch:4key:backgroundColor:active',
+        surface: 'background',
+        stateMode: 'active',
+        spec: SPEC,
+        selectedIndex: 0,
+        selectStop,
+        apply,
+      });
+      root.render(
+        <GradientAxisOverlay
+          positions={positions}
+          statPositions={
+            { '4key': [{ dx: 400, dy: 400, width: 60, height: 60 }] } as never
+          }
+          graphPositions={{} as never}
+          knobPositions={{} as never}
+          selectedElements={
+            [
+              { type: 'key', id: 'key-0', index: 0 },
+              { type: 'stat', id: 'stat-0', index: 0 },
+            ] as never
+          }
+          selectedKeyType="4key"
+          zoom={1}
+          panX={0}
+          panY={0}
+        />,
+      );
+    });
+    // 편집 대상은 키뿐 → 키(100,100,200x100) 중심
+    expect(strip().style.left).toBe('200px');
+    expect(strip().style.top).toBe('150px');
+  });
+
   it('A→B→새 A 왕복 후 pointercancel도 새 세션에 stale 롤백을 보내지 않는다', () => {
     act(() => {
       strip().dispatchEvent(
@@ -377,6 +501,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         anchor: { kind: 'key', index: 0 },
         sessionKey: 'key:4key:0:backgroundColor:active',
         surface: 'background',
+        stateMode: 'active',
         spec: SPEC,
         selectedIndex: 0,
         selectStop,
@@ -386,6 +511,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
         anchor: { kind: 'key', index: 0 },
         sessionKey: 'key:4key:0:backgroundColor:idle',
         surface: 'background',
+        stateMode: 'idle',
         spec: SPEC,
         selectedIndex: 0,
         selectStop,

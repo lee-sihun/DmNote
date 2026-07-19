@@ -14,8 +14,10 @@ import {
 import {
   useGradientEditStore,
   type GradientCanvasAnchor,
+  type GradientPreviewState,
   type GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 interface UseGradientColorStateOptions {
   /** 현재 저장된 쌍 (base 색 + gradient 형제) */
@@ -27,6 +29,8 @@ interface UseGradientColorStateOptions {
   canvasAnchor?: GradientCanvasAnchor;
   /** 편집 표면 — 캔버스 일시 페인트가 덮을 필드 (기본 background) */
   canvasSurface?: GradientPreviewSurface;
+  /** 캔버스 미리보기 상태 — 활성 편집이면 다른 표면도 활성 값으로 렌더 */
+  canvasState?: GradientPreviewState;
   /** 미리보기(드래그 중) — 상위 프리뷰 경로로 전달 */
   onPreview?: (value: ColorModeValue) => void;
   /** 확정 커밋 — atomic patch 산출은 호출부가 gradientPairPatch/counterFillPair로 */
@@ -39,10 +43,6 @@ interface UseGradientColorStateOptions {
  * 않으므로 첫 렌더부터 최종 레이아웃이 나오고(피커 위치 점프 방지), 커밋은
  * 저장값 갱신으로 즉시 반영된다. 미커밋 드래그 프리뷰만 draft로 유지
  */
-
-// 형식 전환으로 그라데이션을 떠날 때 마지막 spec 기억 — 같은 대상으로
-// 돌아오면 그대로 복원. 세션 한정 메모리, 저장값에는 남기지 않음
-const lastGradientSpecs = new Map<string, GradientSpec>();
 
 // 같은 색의 알파 0 버전 — 파싱 불가한 색(named 등)은 원문 유지
 const zeroAlpha = (color: string): string => {
@@ -65,10 +65,21 @@ export function useGradientColorState({
   contextKey,
   canvasAnchor,
   canvasSurface = 'background',
+  canvasState = 'idle',
   onPreview,
   onCommit,
 }: UseGradientColorStateOptions) {
   const storedSpec = pair.gradient ?? null;
+  const selectedElements = useGridSelectionStore(
+    (state) => state.selectedElements,
+  );
+  const lastGradientSpecsRef = useRef(new Map<string, GradientSpec>());
+
+  // 형식 왕복 기억은 연속 선택 안에서만 유효. 삭제·재선택으로 같은 인덱스를
+  // 다른 요소가 차지하면 이전 요소의 spec을 재사용하지 않는다
+  useEffect(() => {
+    lastGradientSpecsRef.current.clear();
+  }, [selectedElements]);
 
   // 진행 중(미커밋) 드래그 초안 — 다른 대상으로 바뀌면 자동 무효
   const [draft, setDraft] = useState<{
@@ -86,16 +97,27 @@ export function useGradientColorState({
     index: number;
   }>({ key: contextKey, index: 0 });
 
-  // 대상 전환 시 이전 초안·선택을 실제로 폐기 (재진입 시 되살아나지 않게)
+  const maxStopIndex = Math.max(0, (workingSpec?.stops.length ?? 1) - 1);
+
+  // 대상 전환·외부 spec 축소 시 이전 초안과 범위 밖 선택을 폐기
   useEffect(() => {
     setDraft((prev) => (prev && prev.key !== contextKey ? null : prev));
-    setSelection((prev) =>
-      prev.key !== contextKey ? { key: contextKey, index: 0 } : prev,
-    );
-  }, [contextKey]);
-  const selectedStop = selection.key === contextKey ? selection.index : 0;
+    setSelection((prev) => {
+      if (prev.key !== contextKey) return { key: contextKey, index: 0 };
+      const index = Math.min(Math.max(prev.index, 0), maxStopIndex);
+      return index === prev.index ? prev : { ...prev, index };
+    });
+  }, [contextKey, maxStopIndex]);
+  const selectedStop =
+    selection.key === contextKey
+      ? Math.min(Math.max(selection.index, 0), maxStopIndex)
+      : 0;
   const setSelectedStop = useCallback(
-    (index: number) => setSelection({ key: contextKey, index }),
+    (index: number) =>
+      setSelection({
+        key: contextKey,
+        index,
+      }),
     [contextKey],
   );
 
@@ -121,14 +143,14 @@ export function useGradientColorState({
       // 저장값 → 기억된 spec → 단색 시드 순 — 왕복 시 편집 상태를 그대로 복원
       // (기억 spec은 무변형: 단색 편집이 그라데이션 기억을 조용히 바꾸지 않는다)
       const remembered = contextKey
-        ? lastGradientSpecs.get(contextKey)
+        ? lastGradientSpecsRef.current.get(contextKey)
         : undefined;
       const spec = storedSpec ?? remembered ?? seedSpecFromSolid(baseColor);
       setSelectedStop(0);
       onCommit({ mode: 'gradient', spec });
     } else {
       if (contextKey && workingSpec) {
-        lastGradientSpecs.set(contextKey, workingSpec);
+        lastGradientSpecsRef.current.set(contextKey, workingSpec);
       }
       // 단색 전환 — 대표색(첫 스톱)을 base로 승계, gradient 제거를 한 patch로
       const solid = workingSpec?.stops[0]?.color ?? baseColor;
@@ -152,38 +174,71 @@ export function useGradientColorState({
     }
   };
 
-  // 온캔버스 편집 세션 발행 — 그라데이션 형식으로 편집 중일 때만
+  // 온캔버스 편집 세션 발행 — 그라데이션 형식으로 편집 중일 때만.
+  // 수립/해제는 대상·표면 수명 단위로만 하고, 프리뷰 프레임의 spec·선택
+  // 변화는 patch로 흘려 스토어 알림을 프레임당 1회로 유지한다
   const applySpecRef = useRef(applySpec);
+  // eslint-disable-next-line react-hooks/refs
   applySpecRef.current = applySpec;
+  const canvasAnchorRef = useRef(canvasAnchor);
+  // eslint-disable-next-line react-hooks/refs
+  canvasAnchorRef.current = canvasAnchor;
+  const workingSpecRef = useRef(workingSpec);
+  // eslint-disable-next-line react-hooks/refs
+  workingSpecRef.current = workingSpec;
+  const selectedStopRef = useRef(selectedStop);
+  // eslint-disable-next-line react-hooks/refs
+  selectedStopRef.current = selectedStop;
+
   const anchorKey = canvasAnchor
     ? `${canvasAnchor.kind}:${
         'index' in canvasAnchor ? canvasAnchor.index : ''
       }`
     : null;
+  // contextKey가 요소·필드·상태를 모두 담는 편집 식별자 — 없으면 앵커로 폴백
+  const sessionKeyValue = contextKey ?? anchorKey ?? '';
+  const hasSession = Boolean(canvasAnchor && workingSpec);
+
   useEffect(() => {
-    if (!canvasAnchor || !workingSpec) {
+    const anchor = canvasAnchorRef.current;
+    const spec = workingSpecRef.current;
+    if (!hasSession || !anchor || !spec) {
       return undefined;
     }
-    const session = {
-      anchor: canvasAnchor,
-      // contextKey가 요소·필드·상태를 모두 담는 편집 식별자 — 없으면 앵커로 폴백
-      sessionKey: contextKey ?? anchorKey ?? '',
+    useGradientEditStore.getState().setSession({
+      anchor,
+      sessionKey: sessionKeyValue,
       surface: canvasSurface,
-      spec: workingSpec,
-      selectedIndex: selectedStop,
+      stateMode: canvasState,
+      spec,
+      selectedIndex: selectedStopRef.current,
       selectStop: setSelectedStop,
       apply: (spec: GradientSpec, commit: boolean) =>
         applySpecRef.current(spec, commit),
-    };
-    useGradientEditStore.getState().setSession(session);
+    });
     return () => {
       // 여전히 내 세션일 때만 해제 (다른 피커가 이미 교체했으면 유지)
-      if (useGradientEditStore.getState().session === session) {
-        useGradientEditStore.getState().setSession(null);
+      const store = useGradientEditStore.getState();
+      if (store.session?.sessionKey === sessionKeyValue) {
+        store.setSession(null);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchorKey, workingSpec, selectedStop, setSelectedStop]);
+  }, [
+    hasSession,
+    anchorKey,
+    sessionKeyValue,
+    canvasSurface,
+    canvasState,
+    setSelectedStop,
+  ]);
+
+  useEffect(() => {
+    if (!hasSession || !workingSpec) return;
+    useGradientEditStore.getState().patchSession(sessionKeyValue, {
+      spec: workingSpec,
+      selectedIndex: selectedStop,
+    });
+  }, [hasSession, sessionKeyValue, workingSpec, selectedStop]);
 
   // 피커 색 엔진 바인딩 — 현재 편집 대상 색
   const pickerColor =
