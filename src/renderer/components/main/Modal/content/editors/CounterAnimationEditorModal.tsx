@@ -17,61 +17,25 @@ import {
   findBezierPresetId,
 } from '@utils/cubicBezier';
 import {
-  DEFAULT_ELEMENT_BG,
-  DEFAULT_ELEMENT_ACTIVE_BG,
   DEFAULT_ELEMENT_FONT,
   DEFAULT_ELEMENT_ACTIVE_FONT,
-  DEFAULT_ELEMENT_BORDER,
-  DEFAULT_ELEMENT_ACTIVE_BORDER,
-  DEFAULT_ELEMENT_RADIUS,
-  DEFAULT_ELEMENT_FONT_WEIGHT,
   DEFAULT_COUNTER_FONT_SIZE,
   DEFAULT_COUNTER_FONT_WEIGHT,
 } from '@utils/core/elementDefaults';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import {
-  gradientToCss,
-  gradientRingStyle,
-  resolveStatePair,
-  type GradientSpec,
-} from '@src/types/color';
+  computeCounterAnimationPreviewKeyStyles,
+  type CounterAnimationKeyVisual,
+} from '@utils/core/counterAnimationPreview';
 
 type EditorMode = 'create' | 'edit';
-
-interface KeyVisualProps {
-  width?: number;
-  height?: number;
-  backgroundColor?: string;
-  borderColor?: string;
-  borderWidth?: number;
-  borderRadius?: number;
-  fontColor?: string;
-  fontSize?: number;
-  fontWeight?: number;
-  fontFamily?: string;
-  fontItalic?: boolean;
-  fontUnderline?: boolean;
-  fontStrikethrough?: boolean;
-  displayText?: string;
-  displayName?: string;
-  className?: string;
-  activeBackgroundColor?: string;
-  activeBorderColor?: string;
-  activeFontColor?: string;
-  backgroundGradient?: GradientSpec | null;
-  activeBackgroundGradient?: GradientSpec | null;
-  borderGradient?: GradientSpec | null;
-  activeBorderGradient?: GradientSpec | null;
-  useInlineStyles?: boolean;
-  isStat?: boolean;
-}
 
 interface CounterAnimationEditorModalProps {
   isOpen: boolean;
   mode: EditorMode;
   initialPreset?: CounterAnimationPreset | null;
   counterSettings?: KeyCounterSettings;
-  keyVisual?: KeyVisualProps;
+  keyVisual?: CounterAnimationKeyVisual;
   onClose: () => void;
   onSaved: (payload: {
     preset: CounterAnimationPreset;
@@ -1138,31 +1102,30 @@ const CounterAnimationEditorModal = ({
                     PREVIEW_MAX_H / totalH,
                     1,
                   );
-
-                  const keyLabelDecorations: string[] = [];
-                  if (keyVisual?.fontUnderline)
-                    keyLabelDecorations.push('underline');
-                  if (keyVisual?.fontStrikethrough)
-                    keyLabelDecorations.push('line-through');
+                  const keyActive = previewActive && !keyVisual?.isStat;
+                  const {
+                    keyStyle: computedKeyStyle,
+                    borderRingStyle,
+                    imageStyle,
+                    textStyle,
+                    currentImageSrc,
+                    hasCurrentImage,
+                    isTransparent,
+                    labelText,
+                    useInline,
+                  } = computeCounterAnimationPreviewKeyStyles({
+                    keyVisual,
+                    active: keyActive,
+                    width: keyW,
+                    height: keyH,
+                  });
 
                   const labelEl = (
                     <span
-                      className="pointer-events-none select-none leading-none"
-                      style={{
-                        fontSize: `${keyVisual?.fontSize ?? 14}px`,
-                        fontFamily: keyVisual?.fontFamily
-                          ? `"${keyVisual.fontFamily}", "Pretendard Variable", sans-serif`
-                          : undefined,
-                        fontWeight:
-                          keyVisual?.fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT,
-                        fontStyle: keyVisual?.fontItalic ? 'italic' : 'normal',
-                        textDecoration:
-                          keyLabelDecorations.length > 0
-                            ? keyLabelDecorations.join(' ')
-                            : 'none',
-                      }}
+                      className="pointer-events-none select-none leading-none text-safe-inline"
+                      style={textStyle}
                     >
-                      {keyVisual?.displayText || keyVisual?.displayName || 'A'}
+                      {labelText}
                     </span>
                   );
 
@@ -1170,23 +1133,23 @@ const CounterAnimationEditorModal = ({
                     <CountDisplay
                       count={previewCount}
                       fillColor={
-                        previewActive
+                        keyActive
                           ? counterSettings?.fill.active ??
                             DEFAULT_ELEMENT_ACTIVE_FONT
                           : counterSettings?.fill.idle ?? DEFAULT_ELEMENT_FONT
                       }
                       fillGradient={
-                        previewActive
+                        keyActive
                           ? counterSettings?.fillActiveGradient ?? null
                           : counterSettings?.fillIdleGradient ?? null
                       }
                       strokeColor={
-                        previewActive
+                        keyActive
                           ? counterSettings?.stroke.active ?? 'transparent'
                           : counterSettings?.stroke.idle ?? 'transparent'
                       }
                       globalKey="preview"
-                      active={previewActive}
+                      active={keyActive}
                       fontSize={
                         counterSettings?.fontSize ?? DEFAULT_COUNTER_FONT_SIZE
                       }
@@ -1203,123 +1166,17 @@ const CounterAnimationEditorModal = ({
                       animationEnabled={true}
                       animationBezier={localBezier}
                       animationScale={parsedScale}
+                      useInlineStyles={useInline}
                       animationDurationMs={parsedDuration}
                     />
                   );
 
-                  // Key.jsx 스타일 로직 재현 (CSS 변수 호환용)
-                  // 통계항목은 키 비주얼에 active 상태 변화를 주지 않음
-                  const useInline = keyVisual?.useInlineStyles === true;
-                  const keyActive = previewActive && !keyVisual?.isStat;
-                  const stateBackgroundColor = keyActive
-                    ? keyVisual?.activeBackgroundColor ??
-                      keyVisual?.backgroundColor
-                    : keyVisual?.backgroundColor;
-                  const stateBorderColor = keyActive
-                    ? keyVisual?.activeBorderColor ?? keyVisual?.borderColor
-                    : keyVisual?.borderColor;
-                  const stateFontColor = keyActive
-                    ? keyVisual?.activeFontColor ?? keyVisual?.fontColor
-                    : keyVisual?.fontColor;
-                  const defaultBgColor = keyActive
-                    ? DEFAULT_ELEMENT_ACTIVE_BG
-                    : DEFAULT_ELEMENT_BG;
-                  const defaultBorderColor = keyActive
-                    ? DEFAULT_ELEMENT_ACTIVE_BORDER
-                    : DEFAULT_ELEMENT_BORDER;
-                  const defaultTextColor = keyActive
-                    ? DEFAULT_ELEMENT_ACTIVE_FONT
-                    : DEFAULT_ELEMENT_FONT;
-                  // 명시 보더가 있을 때만 렌더 — 기본은 보더 없음(인셋 링 섀도가 담당)
-                  // 상태별 판정: 현재 상태의 색이 있을 때만 보더
-                  const hasExplicitBorder =
-                    keyVisual?.borderWidth != null
-                      ? keyVisual.borderWidth > 0
-                      : stateBorderColor != null;
-                  const explicitBorder = `${
-                    keyVisual?.borderWidth ?? 3
-                  }px solid ${stateBorderColor || defaultBorderColor}`;
-                  // 그라데이션 보더는 명시 보더와 같은 두께 규칙
-                  const gradientRingWidth = keyVisual?.borderWidth ?? 3;
-                  const br = keyVisual?.borderRadius ?? DEFAULT_ELEMENT_RADIUS;
-
-                  // 그라데이션 쌍 해석 — 오버레이 Key와 동일 규칙
-                  const previewBgPair = resolveStatePair(
-                    keyActive,
-                    {
-                      color: keyVisual?.backgroundColor,
-                      gradient: keyVisual?.backgroundGradient,
-                    },
-                    {
-                      color: keyVisual?.activeBackgroundColor,
-                      gradient: keyVisual?.activeBackgroundGradient,
-                    },
-                  );
-                  const previewBorderPair = resolveStatePair(
-                    keyActive,
-                    {
-                      color: keyVisual?.borderColor,
-                      gradient: keyVisual?.borderGradient,
-                    },
-                    {
-                      color: keyVisual?.activeBorderColor,
-                      gradient: keyVisual?.activeBorderGradient,
-                    },
-                  );
-                  const previewBgGradient = previewBgPair.gradient ?? null;
-                  const previewBorderGradient =
-                    previewBorderPair.gradient ?? null;
-                  const showPreviewRing =
-                    previewBorderGradient != null &&
-                    (keyVisual?.borderWidth != null
-                      ? keyVisual.borderWidth > 0
-                      : true);
-
                   const keyBoxStyle: React.CSSProperties = {
-                    width: `${keyW}px`,
-                    height: `${keyH}px`,
-                    // 그라데이션이면 base는 transparent — 이중 합성 방지
-                    backgroundColor: previewBgGradient
-                      ? 'transparent'
-                      : useInline && stateBackgroundColor
-                      ? stateBackgroundColor
-                      : `var(--key-bg, ${
-                          stateBackgroundColor || defaultBgColor
-                        })`,
-                    ...(previewBgGradient
-                      ? {
-                          backgroundImage: useInline
-                            ? gradientToCss(previewBgGradient)
-                            : `var(--key-bg-image, ${gradientToCss(
-                                previewBgGradient,
-                              )})`,
-                        }
-                      : {}),
-                    borderRadius: useInline
-                      ? `${br}px`
-                      : `var(--key-radius, ${br}px)`,
-                    // 그라데이션 보더는 보더 대신 동일 두께 padding + 링 자식
-                    // (--key-border 미소비 — 실보더+링 이중 소비 방지)
-                    border: showPreviewRing
-                      ? 'none'
-                      : useInline
-                      ? hasExplicitBorder
-                        ? explicitBorder
-                        : 'none'
-                      : `var(--key-border, ${
-                          hasExplicitBorder ? explicitBorder : 'none'
-                        })`,
-                    ...(showPreviewRing
-                      ? { padding: `${gradientRingWidth}px` }
-                      : {}),
-                    color:
-                      useInline && stateFontColor
-                        ? stateFontColor
-                        : `var(--key-text-color, ${
-                            stateFontColor || defaultTextColor
-                          })`,
-                    boxSizing: 'border-box',
-                    overflow: 'hidden',
+                    ...computedKeyStyle,
+                    transform: 'none',
+                    display: isTransparent ? 'none' : undefined,
+                    zIndex: undefined,
+                    cursor: undefined,
                   };
 
                   const outsideStyle: React.CSSProperties | undefined =
@@ -1376,17 +1233,23 @@ const CounterAnimationEditorModal = ({
                         style={keyBoxStyle}
                         data-state={keyActive ? 'active' : 'inactive'}
                         data-key-element="true"
+                        data-key-image={hasCurrentImage ? 'true' : undefined}
                       >
-                        {showPreviewRing && previewBorderGradient && (
+                        {borderRingStyle && (
                           <span
                             aria-hidden="true"
-                            style={gradientRingStyle(
-                              previewBorderGradient,
-                              gradientRingWidth,
-                            )}
+                            data-gradient-border-ring="true"
+                            style={borderRingStyle}
                           />
                         )}
-                        {isInside ? (
+                        {hasCurrentImage ? (
+                          <img
+                            src={currentImageSrc || ''}
+                            alt=""
+                            style={imageStyle}
+                            draggable={false}
+                          />
+                        ) : isInside ? (
                           <div
                             className={`flex ${
                               isHorizontal ? '' : 'flex-col'
@@ -1413,7 +1276,12 @@ const CounterAnimationEditorModal = ({
                         )}
                       </div>
                       {!isInside && outsideStyle && (
-                        <div style={outsideStyle}>{counterEl}</div>
+                        <div
+                          className={keyVisual?.className || undefined}
+                          style={outsideStyle}
+                        >
+                          {counterEl}
+                        </div>
                       )}
                     </div>
                   );

@@ -11,6 +11,7 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
+import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
 import { usePanelNav } from '../PanelNavContext';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
@@ -19,35 +20,11 @@ import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 const FONT_PAGE_KEY = 'batch-counter:font';
 const ANIMATION_PAGE_KEY = 'batch-counter:animation';
 
-interface BatchKeyVisual {
-  width?: number;
-  height?: number;
-  backgroundColor?: string;
-  borderColor?: string;
-  borderWidth?: number;
-  borderRadius?: number;
-  fontColor?: string;
-  fontSize?: number;
-  fontWeight?: number;
-  fontFamily?: string;
-  fontItalic?: boolean;
-  fontUnderline?: boolean;
-  fontStrikethrough?: boolean;
-  displayText?: string;
-  displayName?: string;
-  className?: string;
-  activeBackgroundColor?: string;
-  activeBorderColor?: string;
-  activeFontColor?: string;
-  useInlineStyles?: boolean;
-  isStat?: boolean;
-}
-
 interface BatchCounterTabContentProps {
   // 카운터 설정 (첫 번째 선택 키 기준)
   batchCounterSettings: KeyCounterSettings;
   // 첫 번째 선택 키의 시각 정보 (프리뷰용)
-  keyVisual?: BatchKeyVisual;
+  keyVisual?: CounterAnimationKeyVisual;
   // 핸들러
   handleBatchCounterUpdate: (updates: Partial<KeyCounterSettings>) => void;
   // 컬러 디스플레이 (현재 상태 기준)

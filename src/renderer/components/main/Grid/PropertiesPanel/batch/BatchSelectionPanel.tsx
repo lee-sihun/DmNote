@@ -10,6 +10,7 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { ElementShadowSpec } from '@src/types/key/shadows';
 import type { ColorModeValue } from '@src/types/color';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
@@ -100,6 +101,7 @@ interface BatchKeyLikePanelProps {
   selectedKeyElements: SelectedElement[];
   selectedStatElements: SelectedElement[];
   selectedGraphElements: SelectedElement[];
+  selectedKnobElements: SelectedElement[];
   selectedKeyLikeElements: SelectedElement[];
   selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
   isRenaming: boolean;
@@ -133,6 +135,11 @@ interface BatchKeyLikePanelProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchShadowChangeComplete: (
+    state: 'idle' | 'active',
+    patch: Partial<ElementShadowSpec>,
+  ) => void;
+  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
   handleBatchGradientCommit?: (
     target: 'backgroundColor' | 'borderColor',
     state: 'idle' | 'active',
@@ -142,7 +149,13 @@ interface BatchKeyLikePanelProps {
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => void;
-  handleBatchCounterUpdate: (updates: Partial<KeyCounterSettings>) => void;
+  handleBatchCounterUpdate: (
+    updates: Partial<KeyCounterSettings>,
+    options?: {
+      activeStateOnly?: boolean;
+      colorState?: 'idle' | 'active';
+    },
+  ) => void;
   handleBatchNoteColorChange: (value: NoteColor) => void;
   handleBatchNoteColorChangeComplete: (value: NoteColor) => void;
   handleBatchGlowColorChange: (value: NoteColor) => void;
@@ -154,6 +167,11 @@ interface BatchKeyLikePanelProps {
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
   getMixedValueKeysOnly: MixedValueGetter<KeyPosition>;
+  getMixedValueActiveCapable: MixedValueGetter<KeyPosition>;
+  handleActiveCapableStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => void;
   getSelectedKeysData: () => KeyData[];
   getSelectedGraphsData: () => KeyData[];
   getSelectedBatchStyleData: () => KeyData[];
@@ -205,6 +223,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   selectedBatchStyleElements,
   selectedKeyElements,
   selectedStatElements: _selectedStatElements,
+  selectedKnobElements,
   selectedGraphElements,
   selectedKeyLikeElements,
   selectedGroupInfo,
@@ -227,6 +246,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchShadowChangeComplete,
+  handleBatchShadowEnabledChange,
   handleBatchGradientCommit,
   handleKeyOnlyStyleChangeComplete,
   handleBatchCounterUpdate,
@@ -235,10 +256,12 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   getMixedValueBatch,
   getMixedValueGraphs,
   getMixedValueKeysOnly,
+  getMixedValueActiveCapable,
+  handleActiveCapableStyleChangeComplete,
   getSelectedKeysData,
   getSelectedGraphsData,
   getSelectedBatchStyleData,
-  getSelectedKeyOnlyPositions: _getSelectedKeyOnlyPositions,
+  getSelectedKeyOnlyPositions,
   handleBatchKeyOnlyStyleChangeComplete,
   handleBatchNoteColorChangeKeysOnly: _handleBatchNoteColorChangeKeysOnly,
   handleBatchNoteColorChangeCompleteKeysOnly:
@@ -474,32 +497,17 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   };
 
   const keysData = getSelectedKeysData();
-  const batchCounterSettings = keysData[0]?.position
-    ? normalizeCounterSettings(keysData[0].position.counter)
+  const keyOnlyPositions = getSelectedKeyOnlyPositions();
+  const firstCounterPosition =
+    keyOnlyPositions[0]?.position ?? keysData[0]?.position;
+  const batchCounterSettings = firstCounterPosition
+    ? normalizeCounterSettings(firstCounterPosition.counter)
     : createDefaultCounterSettings();
   const firstPos = keysData[0]?.position;
   const batchKeyVisual = firstPos
     ? {
-        width: firstPos.width,
-        height: firstPos.height,
-        backgroundColor: firstPos.backgroundColor,
-        borderColor: firstPos.borderColor,
-        borderWidth: firstPos.borderWidth,
-        borderRadius: firstPos.borderRadius,
-        fontColor: firstPos.fontColor,
-        fontSize: firstPos.fontSize,
-        fontWeight: firstPos.fontWeight,
-        fontFamily: firstPos.fontFamily,
-        fontItalic: firstPos.fontItalic,
-        fontUnderline: firstPos.fontUnderline,
-        fontStrikethrough: firstPos.fontStrikethrough,
-        displayText: firstPos.displayText,
+        ...firstPos,
         displayName: keysData[0]?.keyInfo?.displayName,
-        className: firstPos.className,
-        activeBackgroundColor: firstPos.activeBackgroundColor,
-        activeBorderColor: firstPos.activeBorderColor,
-        activeFontColor: firstPos.activeFontColor,
-        useInlineStyles: firstPos.useInlineStyles,
         isStat: selectedKeyLikeElements[0]?.type === 'stat',
       }
     : undefined;
@@ -652,6 +660,11 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               <BatchStyleTabContent
                 selectedCount={selectedBatchStyleElements.length}
                 showSoundControls={selectedKeyElements.length > 0}
+                showShadowControls={!hasGraphSelection}
+                shadowActiveState={
+                  selectedKeyElements.length > 0 ||
+                  selectedKnobElements.length > 0
+                }
                 getMixedValue={styleMixedValueGetter}
                 getSelectedKeysData={styleSelectedDataGetter}
                 afterSizeContent={
@@ -776,8 +789,16 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 handleBatchResize={handleBatchResize}
                 handleBatchStyleChange={handleBatchStyleChange}
                 handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+                handleBatchShadowChangeComplete={
+                  handleBatchShadowChangeComplete
+                }
+                handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
                 handleBatchGradientCommit={handleBatchGradientCommit}
                 getKeyOnlyMixedValue={getMixedValueKeysOnly}
+                getActiveCapableMixedValue={getMixedValueActiveCapable}
+                handleActiveCapableStyleChangeComplete={
+                  handleActiveCapableStyleChangeComplete
+                }
                 handleKeyOnlyStyleChangeComplete={
                   handleKeyOnlyStyleChangeComplete
                 }
@@ -872,12 +893,14 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               batchPickerFor !== 'noteColor' && batchPickerFor !== 'glowColor'
             }
             stateMode={
-              batchPickerFor === 'fill' || batchPickerFor === 'stroke'
+              (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
+              selectedKeyElements.length > 0
                 ? batchCounterColorState
                 : undefined
             }
             onStateModeChange={
-              batchPickerFor === 'fill' || batchPickerFor === 'stroke'
+              (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
+              selectedKeyElements.length > 0
                 ? setBatchCounterColorState
                 : undefined
             }
@@ -947,35 +970,42 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 : styleMixedValueGetter((pos) => pos.inactiveImage, '').value
             }
             activeImage={
-              styleMixedValueGetter((pos) => pos.activeImage, '').isMixed
+              getMixedValueActiveCapable((pos) => pos.activeImage, '').isMixed
                 ? ''
-                : styleMixedValueGetter((pos) => pos.activeImage, '').value
+                : getMixedValueActiveCapable((pos) => pos.activeImage, '').value
             }
             idleTransparent={
               styleMixedValueGetter((pos) => pos.idleTransparent, false).value
             }
             activeTransparent={
-              styleMixedValueGetter((pos) => pos.activeTransparent, false).value
+              getMixedValueActiveCapable((pos) => pos.activeTransparent, false)
+                .value
             }
             onIdleImageChange={(imageUrl: string) => {
               handleBatchStyleChangeComplete('inactiveImage', imageUrl);
             }}
             onActiveImageChange={(imageUrl: string) => {
-              handleBatchStyleChangeComplete('activeImage', imageUrl);
+              handleActiveCapableStyleChangeComplete('activeImage', imageUrl);
             }}
             onIdleTransparentChange={(value: boolean) => {
               handleBatchStyleChangeComplete('idleTransparent', value);
             }}
             onActiveTransparentChange={(value: boolean) => {
-              handleBatchStyleChangeComplete('activeTransparent', value);
+              handleActiveCapableStyleChangeComplete(
+                'activeTransparent',
+                value,
+              );
             }}
             onIdleImageReset={() => {
               handleBatchStyleChangeComplete('inactiveImage', '');
             }}
             onActiveImageReset={() => {
-              handleBatchStyleChangeComplete('activeImage', '');
+              handleActiveCapableStyleChangeComplete('activeImage', '');
             }}
             onClose={() => setShowBatchImagePicker(false)}
+            showActiveState={
+              selectedKeyElements.length > 0 || selectedKnobElements.length > 0
+            }
           />
         )}
       </>
@@ -1176,6 +1206,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               hideDisplayText
               hideFontControls
               showSoundControls={false}
+              showShadowControls={false}
+              shadowActiveState={false}
               afterSizeContent={
                 <>
                   <PropertyRow
@@ -1310,6 +1342,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           open={showBatchImagePicker}
           referenceRef={batchImageButtonRef}
           panelElement={panelElement}
+          showActiveState={false}
           idleImage={
             getMixedValueGraphs((pos) => pos.inactiveImage, '').isMixed
               ? ''
@@ -1387,6 +1420,11 @@ interface BatchKnobOnlyPanelProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchShadowChangeComplete: (
+    state: 'idle' | 'active',
+    patch: Partial<ElementShadowSpec>,
+  ) => void;
+  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
   handleBatchGradientCommit?: (
     target: 'backgroundColor' | 'borderColor',
     state: 'idle' | 'active',
@@ -1427,6 +1465,8 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchShadowChangeComplete,
+  handleBatchShadowEnabledChange,
   handleBatchGradientCommit,
   handleKnobBatchSharedSetting,
   getMixedValueKnobs,
@@ -1519,6 +1559,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               hideDisplayText
               hideFontControls
               showSoundControls={false}
+              shadowKind="knob"
               afterSizeContent={
                 <>
                   <PropertyRow
@@ -1578,6 +1619,8 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               handleBatchResize={handleBatchResize}
               handleBatchStyleChange={handleBatchStyleChange}
               handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+              handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
+              handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
               handleBatchGradientCommit={handleBatchGradientCommit}
               showBatchImagePicker={showBatchImagePicker}
               onToggleBatchImagePicker={() =>

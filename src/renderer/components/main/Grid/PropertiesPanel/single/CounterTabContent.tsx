@@ -51,7 +51,16 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const pickerOpen = pickerFor !== null;
   const [colorState, setColorState] = useState<ColorState>('idle');
+  const showActiveState = !isStat;
+  const effectiveColorState = showActiveState ? colorState : 'idle';
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
+
+  useEffect(() => {
+    if (!showActiveState) {
+      setColorState('idle');
+      setPickerFor(null);
+    }
+  }, [showActiveState]);
 
   // 인-패널 내비게이션 (폰트/애니메이션 서브 페이지)
   const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
@@ -127,10 +136,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     if (!pickerFor) return;
     const key =
       pickerFor === 'fill'
-        ? colorState === 'active'
+        ? effectiveColorState === 'active'
           ? 'fillActive'
           : 'fillIdle'
-        : colorState === 'active'
+        : effectiveColorState === 'active'
         ? 'strokeActive'
         : 'strokeIdle';
 
@@ -143,17 +152,17 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
     const key =
       pickerFor === 'fill'
-        ? colorState === 'active'
+        ? effectiveColorState === 'active'
           ? 'fillActive'
           : 'fillIdle'
-        : colorState === 'active'
+        : effectiveColorState === 'active'
         ? 'strokeActive'
         : 'strokeIdle';
 
     setLocalColors((prev) => ({ ...prev, [key]: color }));
 
     if (pickerFor === 'fill') {
-      if (colorState === 'active') {
+      if (effectiveColorState === 'active') {
         handleCounterUpdate({
           fill: { ...counterSettings.fill, active: color },
         });
@@ -165,7 +174,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       return;
     }
 
-    if (colorState === 'active') {
+    if (effectiveColorState === 'active') {
       handleCounterUpdate({
         stroke: { ...counterSettings.stroke, active: color },
       });
@@ -179,15 +188,15 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   // ── fill 그라데이션 배선 (stroke는 단색 유지) ──
 
   const storedFillGradient =
-    colorState === 'active'
+    effectiveColorState === 'active'
       ? counterSettings.fillActiveGradient ?? null
       : counterSettings.fillIdleGradient ?? null;
 
   const handleFillCommit = (value: ColorModeValue) => {
     const pair = counterFillPair(value);
-    const key = colorState === 'active' ? 'fillActive' : 'fillIdle';
+    const key = effectiveColorState === 'active' ? 'fillActive' : 'fillIdle';
     setLocalColors((prev) => ({ ...prev, [key]: pair.color }));
-    if (colorState === 'active') {
+    if (effectiveColorState === 'active') {
       handleCounterUpdate({
         fill: { ...counterSettings.fill, active: pair.color },
         fillActiveGradient: pair.gradient,
@@ -204,7 +213,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     pair:
       pickerFor === 'fill'
         ? {
-            color: activeColorFor('fill', colorState),
+            color: activeColorFor('fill', effectiveColorState),
             gradient: storedFillGradient,
           }
         : {},
@@ -212,12 +221,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     // 요소 종류·키 모드 포함 — 형식 왕복 기억이 다른 대상과 교차하지 않게
     contextKey: `${
       isStat ? 'stat' : 'key'
-    }:${selectedKeyType}:${keyIndex}:fill:${colorState}`,
+    }:${selectedKeyType}:${keyIndex}:fill:${effectiveColorState}`,
     canvasAnchor:
       pickerFor === 'fill'
         ? { kind: isStat ? 'stat' : 'key', index: keyIndex }
         : undefined,
     canvasSurface: 'counterFill',
+    canvasState: effectiveColorState,
     onPreview: (value) => {
       if (value.mode === 'solid') handleColorChange(value.color);
     },
@@ -333,7 +343,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             open={pickerFor === 'fill'}
             className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
             surfaceClassName="rounded-md"
-            color={getDisplayColor(activeColorFor('fill', colorState))}
+            color={getDisplayColor(activeColorFor('fill', effectiveColorState))}
             image={
               storedFillGradient ? gradientToCss(storedFillGradient) : undefined
             }
@@ -349,7 +359,9 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             open={pickerFor === 'stroke'}
             className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
             surfaceClassName="rounded-md"
-            color={getDisplayColor(activeColorFor('stroke', colorState))}
+            color={getDisplayColor(
+              activeColorFor('stroke', effectiveColorState),
+            )}
           />
         </PropertyRow>
       </PropertySection>
@@ -451,7 +463,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           color={
             pickerFor === 'fill'
               ? fillGradientState.pickerColor
-              : activeColorFor(pickerFor as 'fill' | 'stroke', colorState)
+              : activeColorFor(
+                  pickerFor as 'fill' | 'stroke',
+                  effectiveColorState,
+                )
           }
           onColorChange={(c: string) =>
             pickerFor === 'fill'
@@ -466,9 +481,11 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           onClose={() => setPickerFor(null)}
           solidOnly={true}
           interactiveRefs={colorPickerInteractiveRefs}
-          stateMode={colorState}
-          onStateModeChange={(mode: string) =>
-            setColorState(mode as ColorState)
+          stateMode={showActiveState ? effectiveColorState : undefined}
+          onStateModeChange={
+            showActiveState
+              ? (mode: string) => setColorState(mode as ColorState)
+              : undefined
           }
           headerSlot={
             pickerFor === 'fill' ? fillGradientState.headerSlot : undefined
@@ -514,30 +531,8 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             animation={counterSettings.animation}
             counterSettings={counterSettings}
             keyVisual={{
-              width: keyPosition.width,
-              height: keyPosition.height,
-              backgroundColor: keyPosition.backgroundColor,
-              borderColor: keyPosition.borderColor,
-              borderWidth: keyPosition.borderWidth,
-              borderRadius: keyPosition.borderRadius,
-              fontColor: keyPosition.fontColor,
-              fontSize: keyPosition.fontSize,
-              fontWeight: keyPosition.fontWeight,
-              fontFamily: keyPosition.fontFamily,
-              fontItalic: keyPosition.fontItalic,
-              fontUnderline: keyPosition.fontUnderline,
-              fontStrikethrough: keyPosition.fontStrikethrough,
-              displayText: keyPosition.displayText,
+              ...keyPosition,
               displayName: keyDisplayName,
-              className: keyPosition.className,
-              activeBackgroundColor: keyPosition.activeBackgroundColor,
-              activeBorderColor: keyPosition.activeBorderColor,
-              activeFontColor: keyPosition.activeFontColor,
-              backgroundGradient: keyPosition.backgroundGradient,
-              activeBackgroundGradient: keyPosition.activeBackgroundGradient,
-              borderGradient: keyPosition.borderGradient,
-              activeBorderGradient: keyPosition.activeBorderGradient,
-              useInlineStyles: keyPosition.useInlineStyles,
               isStat,
             }}
             onAnimationChange={handleAnimationUpdate}

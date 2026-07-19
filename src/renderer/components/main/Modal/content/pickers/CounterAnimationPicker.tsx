@@ -1,4 +1,3 @@
-import type { GradientSpec } from '@src/types/color';
 import React, { useEffect, useRef, useState } from 'react';
 import type {
   KeyCounterAnimationSettings,
@@ -23,38 +22,13 @@ import {
   pickerMoreButtonHiddenClass,
 } from './pickerRowClass';
 import CounterAnimationEditorModal from '../editors/CounterAnimationEditorModal';
+import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
 
 interface CounterAnimationPickerProps {
   open: boolean;
   animation: KeyCounterAnimationSettings;
   counterSettings?: KeyCounterSettings;
-  keyVisual?: {
-    width?: number;
-    height?: number;
-    backgroundColor?: string;
-    borderColor?: string;
-    borderWidth?: number;
-    borderRadius?: number;
-    fontColor?: string;
-    fontSize?: number;
-    fontWeight?: number;
-    fontFamily?: string;
-    fontItalic?: boolean;
-    fontUnderline?: boolean;
-    fontStrikethrough?: boolean;
-    displayText?: string;
-    displayName?: string;
-    className?: string;
-    activeBackgroundColor?: string;
-    activeBorderColor?: string;
-    activeFontColor?: string;
-    backgroundGradient?: GradientSpec | null;
-    activeBackgroundGradient?: GradientSpec | null;
-    borderGradient?: GradientSpec | null;
-    activeBorderGradient?: GradientSpec | null;
-    useInlineStyles?: boolean;
-    isStat?: boolean;
-  };
+  keyVisual?: CounterAnimationKeyVisual;
   onAnimationChange: (next: KeyCounterAnimationSettings) => void;
   t: (key: string) => string;
   pageTitle: string;
