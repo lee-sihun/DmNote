@@ -14,14 +14,15 @@ use crate::{
         css::TabCssResponse,
         state::{emit_best_effort, publish_editor_change},
     },
+    custom_css::validate_css_path,
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
         AppStoreData, CommittedEditorChange, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch,
         EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec, GraphPositions,
         KeyMappings, KeyPosition, KeyPositions, KnobPositions, LayerGroups, NoteSettings,
-        NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCssOverrides, TabNoteSettings,
-        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCss, TabCssOverrides,
+        TabNoteSettings, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::AppState,
@@ -252,7 +253,9 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
     let requested_selected_key_type = preset.selected_key_type;
     let preset_layer_groups = resolve_full_preset_layer_groups(preset.layer_groups, &keys);
-    let preset_tab_css_overrides = preset.tab_css_overrides;
+    let preset_tab_css_overrides = preset
+        .tab_css_overrides
+        .map(|overrides| normalize_imported_tab_css_overrides(overrides, "preset_load"));
 
     let mut desired_settings = resolved_settings.note_settings;
     desired_settings.migrate_fade_position();
@@ -273,7 +276,8 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     };
 
     let css_use = resolved_settings.use_custom_css;
-    let custom_css = resolved_settings.custom_css;
+    let mut custom_css = resolved_settings.custom_css;
+    normalize_imported_custom_css(&mut custom_css, "preset_load");
     let js_use = resolved_settings.use_custom_js;
     let custom_js = resolved_settings.custom_js;
     let has_font_settings = preset.font_settings.is_some();
@@ -328,6 +332,8 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         }),
         ..SettingsPatchInput::default()
     };
+    let css_operation_guard = state.lock_css_operation();
+    let previous_css_state = state.store.snapshot();
     let transaction = state.store.commit_legacy_editor_transaction(
         EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
         &[
@@ -368,6 +374,15 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
             ))
         },
     )?;
+    let current_css_state = state.store.snapshot();
+    state.resync_global_css_watcher(&previous_css_state, &current_css_state);
+    sync_tab_css_runtime(
+        state.inner(),
+        &app,
+        &transaction.value.1,
+        &transaction.value.4,
+    );
+    drop(css_operation_guard);
     publish_editor_change(state.inner(), &app, &transaction.change, false);
     if !transaction
         .change
@@ -378,8 +393,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         apply_editor_runtime_best_effort(state.inner(), &app, &transaction.change);
     }
 
-    let (diff, previous_tab_css_overrides, custom_tabs, tab_note_overrides, tab_css_overrides) =
-        transaction.value;
+    let (diff, _, custom_tabs, tab_note_overrides, _) = transaction.value;
     let selected_key_type = transaction.change.selected_key_type.clone();
     let keys = transaction.change.document.keys;
     let positions = transaction.change.document.key_positions;
@@ -392,13 +406,6 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         log::error!("[Preset] failed to publish settings change: {error:#}");
     }
     emit_best_effort(&app, "layerGroups:changed", &layer_groups);
-    sync_tab_css_runtime(
-        state.inner(),
-        &app,
-        &previous_tab_css_overrides,
-        &tab_css_overrides,
-    );
-
     // 프리셋 데이터를 단일 이벤트로 원자적 전달
     emit_best_effort(
         &app,
@@ -533,8 +540,12 @@ pub fn preset_load_tab(
     let imported_override = imported_tab_note_overrides.get(&source_tab_id).cloned();
     let imported_groups =
         layer_groups.map(|groups| groups.get(&source_tab_id).cloned().unwrap_or_default());
-    let imported_tab_css =
-        tab_css_overrides.map(|overrides| overrides.get(&source_tab_id).cloned());
+    let imported_tab_css = tab_css_overrides.map(|overrides| {
+        overrides.get(&source_tab_id).cloned().map(|mut css| {
+            normalize_imported_tab_css(&mut css, "preset_load_tab");
+            css
+        })
+    });
 
     // 프리셋에 담긴 폰트를 현재 폰트 목록에 병합 (탭 로드는 전역 설정을 덮지 않음)
     let prepared_font_settings = if let Some(imported_fonts) = font_settings {
@@ -545,6 +556,7 @@ pub fn preset_load_tab(
         None
     };
 
+    let css_operation_guard = state.lock_css_operation();
     let transaction = state.store.commit_legacy_editor_transaction(
         EditorCommitOrigin::LegacyAdapter("preset_load_tab".to_string()),
         &[
@@ -612,6 +624,13 @@ pub fn preset_load_tab(
             ))
         },
     )?;
+    sync_tab_css_runtime(
+        state.inner(),
+        &app,
+        &transaction.value.1,
+        &transaction.value.3,
+    );
+    drop(css_operation_guard);
     publish_editor_change(state.inner(), &app, &transaction.change, false);
     if !transaction
         .change
@@ -621,12 +640,7 @@ pub fn preset_load_tab(
     {
         apply_editor_runtime_best_effort(state.inner(), &app, &transaction.change);
     }
-    let (
-        settings_diff,
-        previous_tab_css_overrides,
-        full_tab_note_overrides,
-        full_tab_css_overrides,
-    ) = transaction.value;
+    let (settings_diff, _, full_tab_note_overrides, _) = transaction.value;
     let full_keys = transaction.change.document.keys;
     let full_positions = transaction.change.document.key_positions;
     let full_stat_positions = transaction.change.document.stat_positions;
@@ -641,12 +655,6 @@ pub fn preset_load_tab(
     }
 
     emit_best_effort(&app, "layerGroups:changed", &full_layer_groups);
-    sync_tab_css_runtime(
-        state.inner(),
-        &app,
-        &previous_tab_css_overrides,
-        &full_tab_css_overrides,
-    );
     emit_best_effort(&app, "keys:changed", &full_keys);
     emit_best_effort(&app, "positions:changed", &full_positions);
     emit_best_effort(&app, "statPositions:changed", &full_stat_positions);
@@ -697,6 +705,52 @@ fn sync_tab_css_runtime(
             },
         );
     }
+}
+
+fn normalize_imported_custom_css(css: &mut CustomCss, operation: &str) {
+    let Some(path) = css.path.clone() else {
+        return;
+    };
+    match validate_css_path(Path::new(&path)) {
+        Ok(loaded) => css.path = Some(loaded.canonical_path),
+        Err(error) => {
+            log::warn!(
+                "[{operation}] Dropped invalid global CSS path code={} path={} detail={}",
+                error.code.as_str(),
+                path,
+                error.detail
+            );
+            css.path = None;
+        }
+    }
+}
+
+fn normalize_imported_tab_css(css: &mut TabCss, operation: &str) {
+    let Some(path) = css.path.clone() else {
+        return;
+    };
+    match validate_css_path(Path::new(&path)) {
+        Ok(loaded) => css.path = Some(loaded.canonical_path),
+        Err(error) => {
+            log::warn!(
+                "[{operation}] Dropped invalid tab CSS path code={} path={} detail={}",
+                error.code.as_str(),
+                path,
+                error.detail
+            );
+            css.path = None;
+        }
+    }
+}
+
+fn normalize_imported_tab_css_overrides(
+    mut overrides: TabCssOverrides,
+    operation: &str,
+) -> TabCssOverrides {
+    for css in overrides.values_mut() {
+        normalize_imported_tab_css(css, operation);
+    }
+    overrides
 }
 
 fn choose_tab_preset_source_tab(
@@ -1409,8 +1463,42 @@ mod tests {
     use super::*;
     use crate::{
         defaults::{default_keys, default_positions},
-        models::{CustomFont, JsPlugin, KnobPosition},
+        models::{CustomCssHistoryEntry, CustomFont, JsPlugin, KnobPosition},
     };
+
+    #[test]
+    fn full_preset_settings_patch_preserves_custom_css_history() {
+        let history = vec![CustomCssHistoryEntry {
+            path: "/tmp/preserved.css".to_string(),
+            loaded_at: 123,
+            last_used_at: 123,
+        }];
+        let mut store = AppStoreData {
+            custom_css_history: history.clone(),
+            ..AppStoreData::default()
+        };
+        let mut preset = PresetFile {
+            use_custom_css: Some(true),
+            custom_css: Some(CustomCss {
+                path: Some("/tmp/preset.css".to_string()),
+                content: "body {}".to_string(),
+            }),
+            ..PresetFile::default()
+        };
+        let resolved = resolve_full_preset_settings(&mut preset, &store);
+        let patch = SettingsPatchInput {
+            use_custom_css: Some(resolved.use_custom_css),
+            custom_css: Some(CustomCssPatch {
+                path: Some(resolved.custom_css.path),
+                content: Some(resolved.custom_css.content),
+            }),
+            ..SettingsPatchInput::default()
+        };
+
+        apply_patch_to_store(&mut store, &patch);
+
+        assert_eq!(store.custom_css_history, history);
+    }
 
     #[test]
     fn preset_source_bytes_remain_unchanged_on_success_and_parse_failure() {

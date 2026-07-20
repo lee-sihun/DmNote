@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod commands;
 pub mod cursor;
+pub mod custom_css;
 pub mod defaults;
 pub mod errors;
 pub mod ipc;

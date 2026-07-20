@@ -3,6 +3,7 @@
 mod audio;
 mod commands;
 mod cursor;
+mod custom_css;
 mod defaults;
 mod errors;
 mod ipc;
@@ -178,12 +179,17 @@ fn main() {
             commands::editor::css::css_reset,
             commands::editor::css::css_set_content,
             commands::editor::css::css_load,
+            commands::editor::css::css_history_get,
+            commands::editor::css::css_history_activate,
+            commands::editor::css::css_history_remove,
             commands::editor::css::css_tab_get_all,
             commands::editor::css::css_tab_get,
             commands::editor::css::css_tab_load,
             commands::editor::css::css_tab_clear,
             commands::editor::css::css_tab_set,
             commands::editor::css::css_tab_toggle,
+            commands::editor::css::css_tab_activate_history,
+            commands::editor::css::css_tab_export,
             commands::editor::js::js_get,
             commands::editor::js::js_get_use,
             commands::editor::js::js_toggle,

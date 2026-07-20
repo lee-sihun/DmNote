@@ -151,6 +151,17 @@ const Modal = ({
     e.stopPropagation();
   };
 
+  // 포털이어도 React 합성 이벤트는 React 트리로 버블링 - 그리드 등 뒤 표면의
+  // 우클릭 메뉴가 모달 위 우클릭에 반응하지 않게 차단
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    // 텍스트 입력의 네이티브 편집 메뉴는 보존
+    const target = e.target as HTMLElement;
+    if (!target.closest('input, textarea, [contenteditable="true"]')) {
+      e.preventDefault();
+    }
+  };
+
   // 스크림 딤은 모달의 조상이 아니라 형제 언더레이가 소유해야 함 —
   // 조상이 backdrop-filter나 반투명을 가지면 backdrop root가 생겨 모달 카드
   // 글래스의 블러가 WebKit에서 배경을 샘플링하지 못함. 형제 레이어는 정상 합성됨
@@ -171,6 +182,7 @@ const Modal = ({
       onPointerDown={handleBackdropPointerDown}
       onClick={handleBackdropClick}
       onWheel={handleWheel}
+      onContextMenu={handleContextMenu}
     >
       {/* 스크림 언더레이 — 클릭은 래퍼로 통과.
           전면 시트는 스크림 생략 — 시트가 영역을 다 덮어 어둡히기가 무의미하고,

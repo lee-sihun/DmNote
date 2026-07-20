@@ -413,6 +413,8 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
         overlay_locked: Some(false),
         ..SettingsPatchInput::default()
     };
+    let css_operation_guard = state.lock_css_operation();
+    let previous_css_state = state.store.snapshot();
     let transaction = state.store.commit_legacy_editor_transaction(
         EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
         &[
@@ -430,6 +432,12 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
             Ok((settings_diff, cleared_tab_css_ids))
         },
     )?;
+    let current_css_state = state.store.snapshot();
+    state.resync_global_css_watcher(&previous_css_state, &current_css_state);
+    for tab_id in &transaction.value.1 {
+        state.unwatch_tab_css(tab_id);
+    }
+    drop(css_operation_guard);
     publish_editor_change(state.inner(), &app, &transaction.change, false);
     if !transaction
         .change
@@ -451,9 +459,6 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
     let custom_tabs: Vec<CustomTab> = Vec::new();
     let tab_note_overrides = crate::models::TabNoteOverrides::new();
 
-    for tab_id in &cleared_tab_css_ids {
-        state.unwatch_tab_css(tab_id);
-    }
     if let Err(error) = state.emit_settings_changed(&settings_diff, &app) {
         log::error!("[Keys] failed to publish reset settings: {error:#}");
     }

@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result};
@@ -15,13 +16,15 @@ use uuid::Uuid;
 use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
 
 use crate::{
+    custom_css::{migrate_custom_css_history_at_load, normalize_custom_css_history},
     defaults::{default_keys, default_positions},
     models::{
-        AppStoreData, CounterAnimationPreset, CustomCss, CustomFont, CustomJs, CustomTab, FontType,
-        GradientSpec, GraphPosition, GraphPositions, GraphStatType, GraphType, GridSettings,
-        JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions, KnobPosition, KnobPositions,
-        LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds, ShortcutsState, SoundLibraryEntry,
-        StatPosition, StatPositions, StatType, TabCss, TabNoteSettings,
+        AppStoreData, CounterAnimationPreset, CustomCss, CustomCssHistoryEntry, CustomFont,
+        CustomJs, CustomTab, FontType, GradientSpec, GraphPosition, GraphPositions, GraphStatType,
+        GraphType, GridSettings, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
+        KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds,
+        ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType, TabCss,
+        TabNoteSettings,
     },
 };
 
@@ -80,6 +83,12 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                                     .map(|c| !c.trim().is_empty())
                                     .unwrap_or(false)
                         });
+                    let active_css_path = data.custom_css.path.clone();
+                    needs_persist |= migrate_custom_css_history_at_load(
+                        &mut data.custom_css_history,
+                        active_css_path.as_deref(),
+                        current_unix_millis(),
+                    );
                     // rgba로 깨진 noteBorderColor가 있으면 정규화 후 디스크에도 영속 (이슈 #73)
                     if has_convertible_note_border_color(&data) {
                         needs_persist = true;
@@ -132,6 +141,12 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
     // 정리가 발생하면 마이그레이션과 같은 경로로 디스크에도 영속
     let mut state = state;
     let mut needs_persist = needs_persist;
+    let active_css_path = state.custom_css.path.clone();
+    needs_persist |= migrate_custom_css_history_at_load(
+        &mut state.custom_css_history,
+        active_css_path.as_deref(),
+        current_unix_millis(),
+    );
     if clear_dangling_group_ids(&mut state) {
         needs_persist = true;
     }
@@ -146,6 +161,13 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
         needs_persist,
         repaired,
     })
+}
+
+fn current_unix_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
 }
 
 fn migrate_sound_library_enabled(value: &mut Value) -> bool {
@@ -761,6 +783,7 @@ fn has_convertible_note_border_color(data: &AppStoreData) -> bool {
 
 /// store 데이터 정규화 및 레거시 마이그레이션 적용
 pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
+    normalize_custom_css_history(&mut data.custom_css_history);
     repair_editor_revision(&mut data);
 
     if data.keys.is_empty() {
@@ -1179,6 +1202,7 @@ fn recover_collection_field(field: &str, value: &Value) -> Option<Value> {
         "layerGroups" => recover_position_entries::<LayerGroupDef>(field, value),
         "keyCounters" => recover_key_counter_entries(value),
         "customCss" => recover_object_fields::<CustomCss>(field, value),
+        "customCssHistory" => recover_array_entries::<CustomCssHistoryEntry>(field, value),
         "fontSettings" => recover_font_settings(value),
         "counterAnimationPresets" => recover_array_entries::<CounterAnimationPreset>(field, value),
         "tabCssOverrides" => recover_map_object_entries::<TabCss>(field, value),
@@ -1823,10 +1847,10 @@ mod tests {
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
-            AppStoreData, CustomFont, CustomTab, FontType, GraphPosition, GraphStatType, GraphType,
-            KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement,
-            KeyPosition, KnobPosition, LayerGroupDef, OverlayBounds, SoundLibraryEntry,
-            StatPosition, StatType, TabCss, TabNoteSettings,
+            AppStoreData, CustomCssHistoryEntry, CustomFont, CustomTab, FontType, GraphPosition,
+            GraphStatType, GraphType, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor,
+            KeyCounterPlacement, KeyPosition, KnobPosition, LayerGroupDef, OverlayBounds,
+            SoundLibraryEntry, StatPosition, StatType, TabCss, TabNoteSettings,
         },
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -2954,6 +2978,140 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![101.0, 202.0, 303.0, 404.0, 505.0]
         );
+    }
+
+    #[test]
+    fn custom_css_history_normalizes_at_the_store_load_boundary() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-css-history-normalize-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let duplicate = absolute_fixture_path("history-duplicate.css");
+        let mut history = vec![
+            CustomCssHistoryEntry {
+                path: "relative.css".to_string(),
+                loaded_at: 999,
+                last_used_at: 999,
+            },
+            CustomCssHistoryEntry {
+                path: duplicate.clone(),
+                loaded_at: 1,
+                last_used_at: 1,
+            },
+            CustomCssHistoryEntry {
+                path: duplicate.clone(),
+                loaded_at: 100,
+                last_used_at: 100,
+            },
+        ];
+        for index in 0..12 {
+            history.push(CustomCssHistoryEntry {
+                path: absolute_fixture_path(&format!("history-{index}.css")),
+                loaded_at: index,
+                last_used_at: index,
+            });
+        }
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture["customCssHistory"] = serde_json::to_value(history).unwrap();
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(loaded.needs_persist);
+        assert_eq!(loaded.data.custom_css_history.len(), 10);
+        assert!(loaded
+            .data
+            .custom_css_history
+            .windows(2)
+            .all(|pair| pair[0].last_used_at >= pair[1].last_used_at));
+        assert_eq!(
+            loaded
+                .data
+                .custom_css_history
+                .iter()
+                .filter(|entry| entry.path == duplicate)
+                .count(),
+            1
+        );
+        assert!(loaded
+            .data
+            .custom_css_history
+            .iter()
+            .all(|entry| std::path::Path::new(&entry.path).is_absolute()));
+    }
+
+    #[test]
+    fn custom_css_history_recovers_valid_entries_individually() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-css-history-recovery-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let first = CustomCssHistoryEntry {
+            path: absolute_fixture_path("history-first.css"),
+            loaded_at: 10,
+            last_used_at: 10,
+        };
+        let second = CustomCssHistoryEntry {
+            path: absolute_fixture_path("history-second.css"),
+            loaded_at: 20,
+            last_used_at: 20,
+        };
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture["customCssHistory"] = json!([
+            serde_json::to_value(&first).unwrap(),
+            { "path": 42, "lastUsedAt": "invalid" },
+            serde_json::to_value(&second).unwrap()
+        ]);
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(loaded.repaired);
+        assert!(loaded.needs_persist);
+        assert_eq!(loaded.data.custom_css_history, vec![second, first]);
+    }
+
+    #[test]
+    fn custom_css_history_migrates_loaded_at_and_seeds_active_path() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-css-history-seed-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let existing_path = absolute_fixture_path("history-existing.css");
+        let active_path = absolute_fixture_path("history-active.css");
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture["customCss"] = json!({
+            "path": active_path,
+            "content": "body {}"
+        });
+        fixture["customCssHistory"] = json!([{
+            "path": existing_path,
+            "lastUsedAt": 42
+        }]);
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(loaded.needs_persist);
+        assert_eq!(loaded.data.custom_css_history.len(), 2);
+        let existing = loaded
+            .data
+            .custom_css_history
+            .iter()
+            .find(|entry| entry.path == existing_path)
+            .unwrap();
+        assert_eq!(existing.loaded_at, 42);
+        let seeded = loaded
+            .data
+            .custom_css_history
+            .iter()
+            .find(|entry| entry.path == active_path)
+            .unwrap();
+        assert!(seeded.loaded_at >= 42);
+        assert_eq!(seeded.loaded_at, seeded.last_used_at);
     }
 
     #[test]

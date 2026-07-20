@@ -275,6 +275,8 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!matchesShortcut(e, shortcuts?.switchKeyMode)) return;
+      // 캔버스 전용 단축키, 설정 화면에서는 기본 Tab 탐색 유지
+      if (isSettingsOpen) return;
       const active = document.activeElement as HTMLElement | null;
       if (active) {
         const tag = (active.tagName || '').toLowerCase();
@@ -304,6 +306,7 @@ export default function App() {
     selectedKeyType,
     setSelectedKeyType,
     isBootstrapped,
+    isSettingsOpen,
     shortcuts?.switchKeyMode,
   ]);
 

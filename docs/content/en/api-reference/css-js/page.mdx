@@ -9,101 +9,245 @@ Manage custom CSS and JavaScript plugins.
 
 ## dmn.css
 
-### `dmn.css.get(): Promise<string>`
+Global custom CSS state is `{ path: string | null, content: string }`.
 
-Returns current custom CSS code.
+### `dmn.css.get(): Promise<CustomCss>`
+
+Returns the current custom CSS (source file path and content).
 
 ```javascript
-const css = await dmn.css.get();
-console.log(css);
+const { path, content } = await dmn.css.get();
 ```
 
-### `dmn.css.set(css: string): Promise<void>`
+### `dmn.css.getUse(): Promise<boolean>`
 
-Sets custom CSS code.
+Returns whether custom CSS is enabled.
 
-```javascript
-await dmn.css.set(`
-  .key {
-    background: linear-gradient(45deg, #ff6b6b, #feca57);
-    border-radius: 8px;
-  }
-`);
+### `dmn.css.toggle(enabled: boolean): Promise<{ enabled: boolean }>`
+
+Enables or disables custom CSS.
+
+### `dmn.css.load(): Promise<CssLoadResult>`
+
+Opens a file dialog and imports the selected CSS file. The file must be a
+regular `.css` file, UTF-8 encoded, and at most 1 MiB. Successfully imported
+files are added to the history (up to 10 entries).
+
+```typescript
+type CssLoadResult = {
+  success: boolean;
+  error?: string; // error code on failure (see table below)
+  content?: string;
+  path?: string;
+};
 ```
 
-### `dmn.css.onChanged(callback): Unsubscribe`
+If the user cancels the dialog, `success` is `false` and `error` is omitted.
 
-Subscribes to CSS changes.
+### `dmn.css.setContent(content: string): Promise<CssSetContentResult>`
+
+Replaces the CSS content directly (the source path is unchanged). Content is
+limited to 1 MiB.
+
+### `dmn.css.reset(): Promise<void>`
+
+Disables custom CSS and clears the content. The history is preserved.
+
+### `dmn.css.onUse(callback): Unsubscribe`
+
+Subscribes to enable/disable changes. The callback receives
+`{ enabled: boolean }`.
+
+### `dmn.css.onContent(callback): Unsubscribe`
+
+Subscribes to content changes (imports, hot reload, direct edits). The
+callback receives `CustomCss`.
 
 ```javascript
-const unsub = dmn.css.onChanged((css) => {
-  console.log("CSS updated:", css);
+const unsub = dmn.css.onContent(({ path, content }) => {
+  console.log("CSS updated:", path);
 });
 ```
 
----
+## dmn.css history
+
+The app keeps up to 10 previously imported CSS files. Only paths in this
+history can be re-activated; arbitrary paths are rejected with
+`PATH_NOT_AUTHORIZED`.
+
+### `dmn.css.historyGet(): Promise<CustomCssHistoryItem[]>`
+
+```typescript
+type CustomCssHistoryItem = {
+  path: string;
+  lastUsedAt: number; // unix millis
+  status: "available" | "missing" | "invalid" | "tooLarge";
+};
+```
+
+`status` is advisory: it reflects a quick file check at query time, and the
+authoritative validation happens on activation.
+
+### `dmn.css.historyActivate(path: string): Promise<CssActivateResult>`
+
+Switches the global custom CSS to a history entry without a file dialog.
+
+```typescript
+type CssActivateResult = {
+  success: boolean;
+  code?: CssHistoryErrorCode; // on failure
+  content?: string;
+  path?: string;
+};
+```
+
+### `dmn.css.historyRemove(path: string): Promise<CustomCssHistoryItem[]>`
+
+Removes an entry from the history (the file itself is not touched) and
+returns the updated list.
+
+### Error codes
+
+| Code | Meaning |
+| --- | --- |
+| `PATH_NOT_AUTHORIZED` | The path is not in the history |
+| `NOT_FOUND` | File does not exist |
+| `NOT_REGULAR_FILE` | Not a regular file |
+| `INVALID_EXTENSION` | Not a `.css` file |
+| `TOO_LARGE` | Over 1 MiB |
+| `INVALID_UTF8` | Not valid UTF-8 |
+| `IO_ERROR` | Other I/O failure |
+
+## dmn.css.tab
+
+Per-tab CSS overrides the global CSS for a single key tab. A tab override is
+`{ path: string | null, content: string, enabled: boolean }`. Tab CSS is
+rendered only while the global custom CSS toggle is on.
+
+### `dmn.css.tab.getAll(): Promise<TabCssOverrides>`
+
+Returns all overrides as a `Record<tabId, TabCss>`.
+
+### `dmn.css.tab.get(tabId: string): Promise<TabCssResponse>`
+
+Returns `{ tabId, css: TabCss | null }`.
+
+### `dmn.css.tab.load(tabId: string): Promise<TabCssLoadResult>`
+
+Opens a file dialog and imports a CSS file for the tab. The same constraints
+as `dmn.css.load()` apply; on failure `error` carries an error code string.
+
+### `dmn.css.tab.activateHistory(tabId: string, path: string): Promise<TabCssActivateResult>`
+
+Applies a global history entry to the tab. The path must be in the history
+(`PATH_NOT_AUTHORIZED` otherwise).
+
+```typescript
+type TabCssActivateResult = {
+  success: boolean;
+  code?: CssHistoryErrorCode;
+  tabId: string;
+  css?: TabCss;
+};
+```
+
+### `dmn.css.tab.export(tabId: string): Promise<TabCssExportResult>`
+
+Opens a save dialog and writes the tab's registered CSS content to a `.css`
+file.
+
+```typescript
+type TabCssExportResult = {
+  success: boolean;
+  code?: "NO_TAB_CSS" | "IO_ERROR";
+  error?: string; // details for IO_ERROR
+  path?: string; // saved location on success
+};
+```
+
+If the user cancels the dialog, `success` is `false` and `code` is omitted.
+
+### `dmn.css.tab.set(tabId: string, css: TabCss | null): Promise<TabCssSetResult>`
+
+Sets or removes (with `null`) the tab override directly. Hot reload watching
+is attached only for paths previously authorized through a file dialog or
+history activation.
+
+### `dmn.css.tab.toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>`
+
+Enables or disables the tab override without removing it.
+
+### `dmn.css.tab.clear(tabId: string): Promise<TabCssClearResult>`
+
+Removes the tab override, falling back to the global CSS.
+
+### `dmn.css.tab.onChanged(callback): Unsubscribe`
+
+Subscribes to tab override changes. The callback receives
+`{ tabId, css: TabCss | null }`.
 
 ## dmn.js
 
-### `dmn.js.get(): Promise<string>`
+JavaScript plugin state is `{ plugins: JsPlugin[] }` where each plugin is
+`{ id, name, path, content, enabled }`.
 
-Returns current JavaScript plugin code.
+### `dmn.js.get(): Promise<CustomJs>`
 
-```javascript
-const js = await dmn.js.get();
-console.log(js);
+Returns the current plugin list.
+
+### `dmn.js.getUse(): Promise<boolean>`
+
+Returns whether JS plugins are enabled.
+
+### `dmn.js.toggle(enabled: boolean): Promise<{ enabled: boolean }>`
+
+Enables or disables JS plugins globally.
+
+### `dmn.js.load(): Promise<JsLoadResult>`
+
+Opens a file dialog and adds the selected plugin files.
+
+```typescript
+type JsLoadResult = {
+  success: boolean;
+  added: JsPlugin[];
+  errors?: { path: string; error: string }[];
+};
 ```
 
-### `dmn.js.set(js: string): Promise<void>`
+### `dmn.js.reload(): Promise<JsReloadResult>`
 
-Sets JavaScript plugin code.
+Re-reads all plugin files from disk and returns `{ updated, errors? }`.
+
+### `dmn.js.remove(id: string): Promise<JsRemoveResult>`
+
+Removes a plugin by id.
+
+### `dmn.js.setPluginEnabled(id: string, enabled: boolean): Promise<JsPluginUpdateResult>`
+
+Enables or disables a single plugin.
+
+### `dmn.js.setContent(content: string): Promise<JsSetContentResult>`
+
+Replaces the inline JS content.
+
+### `dmn.js.reset(): Promise<void>`
+
+Disables JS plugins and clears the plugin list.
+
+### `dmn.js.onUse(callback): Unsubscribe`
+
+Subscribes to enable/disable changes (`{ enabled: boolean }`).
+
+### `dmn.js.onState(callback): Unsubscribe`
+
+Subscribes to plugin list changes. The callback receives `CustomJs`.
 
 ```javascript
-await dmn.js.set(`
-  // @id my-plugin
-  dmn.plugin.defineElement({
-    name: "My Plugin",
-    template: (state, settings, { html }) => html\`<div>Hello</div>\`,
-  });
-`);
-```
-
-### `dmn.js.onChanged(callback): Unsubscribe`
-
-Subscribes to JS changes.
-
-```javascript
-const unsub = dmn.js.onChanged((js) => {
-  console.log("JS updated:", js);
+const unsub = dmn.js.onState(({ plugins }) => {
+  console.log(
+    "plugins:",
+    plugins.map((p) => `${p.name}(${p.enabled ? "on" : "off"})`),
+  );
 });
-```
-
----
-
-## Example Usage
-
-```javascript
-// CSS editor (main window)
-if (dmn.window.type === "main") {
-  const cssEditor = document.createElement("textarea");
-  cssEditor.style.cssText =
-    "width: 100%; height: 200px; font-family: monospace;";
-
-  // Load current CSS
-  dmn.css.get().then((css) => {
-    cssEditor.value = css;
-  });
-
-  // Watch changes
-  dmn.css.onChanged((css) => {
-    cssEditor.value = css;
-  });
-
-  // Save button
-  const saveBtn = document.createElement("button");
-  saveBtn.textContent = "Save";
-  saveBtn.onclick = () => {
-    dmn.css.set(cssEditor.value);
-  };
-}
 ```

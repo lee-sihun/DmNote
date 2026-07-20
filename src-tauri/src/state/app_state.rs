@@ -2,6 +2,7 @@ use std::time::Instant;
 use std::{
     collections::HashSet,
     io::{BufRead, BufReader},
+    path::Path,
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -34,11 +35,13 @@ use crate::{
     },
     keyboard::KeyboardManager,
     models::{
-        overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, DefaultsPayload,
-        KeyCounterSettings, KeyCounters, KeyMappings, KeySoundOutputBackendPersist, OverlayBounds,
-        OverlayResizeAnchor, SettingsDiff, SettingsState,
+        overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
+        DefaultsPayload, KeyCounterSettings, KeyCounters, KeyMappings,
+        KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, SettingsDiff,
+        SettingsState,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
+    state::local_asset_path::path_identity_key,
 };
 
 const OVERLAY_LABEL: &str = "overlay";
@@ -131,6 +134,10 @@ pub struct AppState {
     /// Raw input stream subscriber count - emit only when > 0
     raw_input_subscribers: Arc<std::sync::atomic::AtomicU32>,
     key_sound: Arc<KeySoundEngine>,
+    /// 전역 CSS 상태와 워처 전환 직렬화
+    css_operation_lock: Mutex<()>,
+    /// 현재 세션에서 사용자가 승인한 CSS 경로
+    authorized_css_paths: RwLock<HashSet<String>>,
     /// CSS 파일 핫리로딩 워처
     css_watcher: RwLock<Option<CssWatcher>>,
     /// OBS WebSocket 브릿지
@@ -165,6 +172,7 @@ impl AppState {
             .unwrap_or_default();
         let key_sound = Arc::new(KeySoundEngine::with_output_backend(initial_backend));
         let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
+        let authorized_css_paths = collect_authorized_css_paths(&snapshot);
 
         Ok(Self {
             store,
@@ -180,6 +188,8 @@ impl AppState {
             key_counter_enabled,
             raw_input_subscribers: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             key_sound,
+            css_operation_lock: Mutex::new(()),
+            authorized_css_paths: RwLock::new(authorized_css_paths),
             css_watcher: RwLock::new(None),
             obs_bridge,
             obs_previous_overlay_visible: Arc::new(RwLock::new(None)),
@@ -2099,6 +2109,41 @@ impl AppState {
 
     // ========== CSS 핫리로딩 관련 메서드 ==========
 
+    pub(crate) fn lock_css_operation(&self) -> parking_lot::MutexGuard<'_, ()> {
+        self.css_operation_lock.lock()
+    }
+
+    pub(crate) fn authorize_css_path(&self, path: &str) {
+        self.authorized_css_paths
+            .write()
+            .insert(path_identity_key(Path::new(path)));
+    }
+
+    pub(crate) fn is_css_path_authorized(&self, path: &str) -> bool {
+        self.authorized_css_paths
+            .read()
+            .contains(&path_identity_key(Path::new(path)))
+    }
+
+    pub(crate) fn resync_global_css_watcher(
+        &self,
+        previous: &AppStoreData,
+        current: &AppStoreData,
+    ) {
+        let previous_path = global_css_watch_path(previous);
+        let current_path = global_css_watch_path(current);
+        if previous_path == current_path {
+            return;
+        }
+
+        self.unwatch_global_css();
+        if let Some(path) = current_path {
+            if let Err(error) = self.watch_global_css(path) {
+                log::warn!("[AppState] Failed to resync global CSS watcher: {error}");
+            }
+        }
+    }
+
     /// CSS 워처 초기화
     fn initialize_css_watcher(&self, app: &AppHandle) {
         let watcher = CssWatcher::new(self.store.clone(), app.clone());
@@ -2138,6 +2183,28 @@ impl AppState {
             watcher.unwatch_tab(tab_id);
         }
     }
+}
+
+fn global_css_watch_path(state: &AppStoreData) -> Option<&str> {
+    state
+        .use_custom_css
+        .then_some(state.custom_css.path.as_deref())
+        .flatten()
+}
+
+fn collect_authorized_css_paths(state: &AppStoreData) -> HashSet<String> {
+    state
+        .custom_css
+        .path
+        .iter()
+        .chain(
+            state
+                .tab_css_overrides
+                .values()
+                .filter_map(|css| css.path.as_ref()),
+        )
+        .map(|path| path_identity_key(Path::new(path)))
+        .collect()
 }
 
 impl Drop for AppState {
@@ -2727,8 +2794,16 @@ struct OverlayPosition {
 mod tests {
     use std::collections::HashMap;
 
-    use super::{bootstrap_active_keys, should_create_overlay_on_startup};
-    use crate::keyboard::KeyboardManager;
+    use super::{
+        bootstrap_active_keys, collect_authorized_css_paths, global_css_watch_path,
+        should_create_overlay_on_startup,
+    };
+    use crate::{
+        keyboard::KeyboardManager,
+        models::{AppStoreData, CustomCss, TabCss},
+        state::local_asset_path::path_identity_key,
+    };
+    use std::path::Path;
 
     #[test]
     fn startup_overlay_creation_covers_all_visibility_and_obs_combinations() {
@@ -2747,5 +2822,31 @@ mod tests {
 
         assert!(manager.register_key_down("4key", "KeyD"));
         assert_eq!(bootstrap_active_keys(&manager), vec!["KeyD"]);
+    }
+
+    #[test]
+    fn startup_authorizes_global_and_tab_css_paths_even_when_disabled() {
+        let mut state = AppStoreData {
+            use_custom_css: false,
+            custom_css: CustomCss {
+                path: Some("/tmp/global.css".to_string()),
+                content: String::new(),
+            },
+            ..AppStoreData::default()
+        };
+        state.tab_css_overrides.insert(
+            "4key".to_string(),
+            TabCss {
+                path: Some("/tmp/tab.css".to_string()),
+                content: String::new(),
+                enabled: false,
+            },
+        );
+
+        let authorized = collect_authorized_css_paths(&state);
+
+        assert!(authorized.contains(&path_identity_key(Path::new("/tmp/global.css"))));
+        assert!(authorized.contains(&path_identity_key(Path::new("/tmp/tab.css"))));
+        assert_eq!(global_css_watch_path(&state), None);
     }
 }

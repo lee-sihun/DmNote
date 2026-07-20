@@ -3,218 +3,249 @@ title: CSS/JS 파일
 description: 커스텀 CSS/JS 파일 관리 API
 ---
 
-# CSS/JS 파일
+# CSS / JS API
+
+커스텀 CSS와 JavaScript 플러그인을 관리합니다.
 
 ## dmn.css
 
-커스텀 CSS 파일 관리 API입니다.
+전역 커스텀 CSS 상태는 `{ path: string | null, content: string }`입니다.
 
-### get()
+### `dmn.css.get(): Promise<CustomCss>`
 
-현재 CSS 설정을 조회합니다.
+현재 커스텀 CSS(원본 파일 경로와 콘텐츠)를 반환합니다.
 
 ```javascript
-const css = await dmn.css.get();
-console.log("내용:", css.content);
-console.log("경로:", css.path);
+const { path, content } = await dmn.css.get();
 ```
 
-### getUse()
+### `dmn.css.getUse(): Promise<boolean>`
 
-CSS 사용 여부만 조회합니다. (설정의 `useCustomCSS` 값)
+커스텀 CSS 활성화 여부를 반환합니다.
 
-```javascript
-const enabled = await dmn.css.getUse();
+### `dmn.css.toggle(enabled: boolean): Promise<{ enabled: boolean }>`
+
+커스텀 CSS를 켜거나 끕니다.
+
+### `dmn.css.load(): Promise<CssLoadResult>`
+
+파일 선택 창을 열어 CSS 파일을 불러옵니다. 파일은 일반 `.css` 파일이고
+UTF-8 인코딩이며 1MiB 이하여야 합니다. 성공적으로 불러온 파일은
+히스토리(최대 10개)에 추가됩니다.
+
+```typescript
+type CssLoadResult = {
+  success: boolean;
+  error?: string; // 실패 시 오류 코드 (아래 표 참조)
+  content?: string;
+  path?: string;
+};
 ```
 
-### toggle(enabled)
+파일 선택을 취소하면 `success`는 `false`이고 `error`는 생략됩니다.
 
-CSS 사용 여부를 토글합니다.
+### `dmn.css.setContent(content: string): Promise<CssSetContentResult>`
 
-```javascript
-await dmn.css.toggle(true); // CSS 활성화
-await dmn.css.toggle(false); // CSS 비활성화
-```
+CSS 콘텐츠를 직접 교체합니다 (원본 경로는 유지). 콘텐츠는 1MiB로
+제한됩니다.
 
-### load()
+### `dmn.css.reset(): Promise<void>`
 
-외부 CSS 파일을 불러옵니다. 파일 선택 다이얼로그가 열립니다.
+커스텀 CSS를 끄고 콘텐츠를 초기화합니다. 히스토리는 보존됩니다.
 
-```javascript
-const result = await dmn.css.load();
-if (result.success) {
-  console.log("불러온 경로:", result.path);
-  console.log("내용:", result.content);
-}
-```
+### `dmn.css.onUse(callback): Unsubscribe`
 
-<Callout type="info">
-  커스텀 CSS가 활성화(`useCustomCSS = true`)된 상태에서 파일 경로가 설정돼 있으면, 파일 변경을 자동 감지하여 다시 적용합니다.
-</Callout>
+활성화 상태 변경을 구독합니다. 콜백은 `{ enabled: boolean }`을 받습니다.
 
-### setContent(content)
+### `dmn.css.onContent(callback): Unsubscribe`
 
-CSS 내용을 직접 설정합니다.
+콘텐츠 변경(불러오기, 핫리로드, 직접 수정)을 구독합니다. 콜백은
+`CustomCss`를 받습니다.
 
 ```javascript
-await dmn.css.setContent(`
-  [data-state="active"] {
-    --key-bg: #ff2b80;
-    --key-border: 2px solid #fff;
-  }
-`);
-```
-
-### reset()
-
-CSS를 기본값으로 초기화합니다.
-
-```javascript
-await dmn.css.reset();
-```
-
-### 이벤트 구독
-
-```javascript
-// CSS 활성화 상태 변경
-const unsub1 = dmn.css.onUse(({ enabled }) => {
-  console.log("CSS 활성화:", enabled);
-});
-
-// CSS 내용 변경
-const unsub2 = dmn.css.onContent((css) => {
-  console.log("CSS 변경됨:", css.content);
+const unsub = dmn.css.onContent(({ path, content }) => {
+  console.log("CSS 갱신:", path);
 });
 ```
 
-### 탭별 CSS (css.tab)
+## dmn.css 히스토리
 
-모드/탭별로 개별 CSS를 적용할 수 있습니다.
+앱은 이전에 불러온 CSS 파일을 최대 10개까지 기억합니다. 히스토리에 있는
+경로만 재활성화할 수 있으며, 임의 경로는 `PATH_NOT_AUTHORIZED`로
+거부됩니다.
 
-```javascript
-// 모든 탭 CSS 조회
-const allTabCss = await dmn.css.tab.getAll();
+### `dmn.css.historyGet(): Promise<CustomCssHistoryItem[]>`
 
-// 특정 탭 CSS 조회
-const tab4key = await dmn.css.tab.get("4key");
-
-// 탭 CSS 파일 불러오기
-const result = await dmn.css.tab.load("4key");
-
-// 탭 CSS 설정
-await dmn.css.tab.set("4key", {
-  use: true,
-  content: "[data-state='active'] { --key-bg: red; }",
-});
-
-// 탭 CSS 토글
-await dmn.css.tab.toggle("4key", true);
-
-// 탭 CSS 초기화
-await dmn.css.tab.clear("4key");
-
-// 변경 이벤트
-const unsub = dmn.css.tab.onChanged(({ tabId, css }) => {
-  console.log(`${tabId} CSS 변경:`, css);
-});
+```typescript
+type CustomCssHistoryItem = {
+  path: string;
+  lastUsedAt: number; // unix millis
+  status: "available" | "missing" | "invalid" | "tooLarge";
+};
 ```
+
+`status`는 참고용입니다. 조회 시점의 간단한 파일 검사 결과이며, 최종
+검증은 활성화 시점에 수행됩니다.
+
+### `dmn.css.historyActivate(path: string): Promise<CssActivateResult>`
+
+파일 선택 창 없이 히스토리 항목으로 전역 커스텀 CSS를 전환합니다.
+
+```typescript
+type CssActivateResult = {
+  success: boolean;
+  code?: CssHistoryErrorCode; // 실패 시
+  content?: string;
+  path?: string;
+};
+```
+
+### `dmn.css.historyRemove(path: string): Promise<CustomCssHistoryItem[]>`
+
+히스토리에서 항목을 제거하고 (파일 자체는 건드리지 않음) 갱신된 목록을
+반환합니다.
+
+### 오류 코드
+
+| 코드 | 의미 |
+| --- | --- |
+| `PATH_NOT_AUTHORIZED` | 히스토리에 없는 경로 |
+| `NOT_FOUND` | 파일이 존재하지 않음 |
+| `NOT_REGULAR_FILE` | 일반 파일이 아님 |
+| `INVALID_EXTENSION` | `.css` 파일이 아님 |
+| `TOO_LARGE` | 1MiB 초과 |
+| `INVALID_UTF8` | 유효한 UTF-8이 아님 |
+| `IO_ERROR` | 기타 I/O 실패 |
+
+## dmn.css.tab
+
+탭별 CSS는 특정 키 탭에서 전역 CSS를 덮어씁니다. 탭 오버라이드는
+`{ path: string | null, content: string, enabled: boolean }`입니다. 탭
+CSS는 전역 커스텀 CSS 토글이 켜져 있을 때만 렌더링됩니다.
+
+### `dmn.css.tab.getAll(): Promise<TabCssOverrides>`
+
+모든 오버라이드를 `Record<tabId, TabCss>`로 반환합니다.
+
+### `dmn.css.tab.get(tabId: string): Promise<TabCssResponse>`
+
+`{ tabId, css: TabCss | null }`을 반환합니다.
+
+### `dmn.css.tab.load(tabId: string): Promise<TabCssLoadResult>`
+
+파일 선택 창을 열어 해당 탭용 CSS 파일을 불러옵니다. `dmn.css.load()`와
+같은 제약이 적용되며, 실패 시 `error`에 오류 코드 문자열이 담깁니다.
+
+### `dmn.css.tab.activateHistory(tabId: string, path: string): Promise<TabCssActivateResult>`
+
+전역 히스토리 항목을 탭에 적용합니다. 경로는 히스토리에 있어야 하며,
+없으면 `PATH_NOT_AUTHORIZED`로 거부됩니다.
+
+```typescript
+type TabCssActivateResult = {
+  success: boolean;
+  code?: CssHistoryErrorCode;
+  tabId: string;
+  css?: TabCss;
+};
+```
+
+### `dmn.css.tab.export(tabId: string): Promise<TabCssExportResult>`
+
+저장 창을 열어 탭에 등록된 CSS 콘텐츠를 `.css` 파일로 저장합니다.
+
+```typescript
+type TabCssExportResult = {
+  success: boolean;
+  code?: "NO_TAB_CSS" | "IO_ERROR";
+  error?: string; // IO_ERROR 상세
+  path?: string; // 성공 시 저장 위치
+};
+```
+
+저장 창을 취소하면 `success`는 `false`이고 `code`는 생략됩니다.
+
+### `dmn.css.tab.set(tabId: string, css: TabCss | null): Promise<TabCssSetResult>`
+
+탭 오버라이드를 직접 설정하거나 (`null`로) 제거합니다. 핫리로드 워칭은
+파일 선택 창이나 히스토리 활성화로 이전에 인가된 경로에만 연결됩니다.
+
+### `dmn.css.tab.toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>`
+
+탭 오버라이드를 제거하지 않고 켜거나 끕니다.
+
+### `dmn.css.tab.clear(tabId: string): Promise<TabCssClearResult>`
+
+탭 오버라이드를 제거하고 전역 CSS로 되돌립니다.
+
+### `dmn.css.tab.onChanged(callback): Unsubscribe`
+
+탭 오버라이드 변경을 구독합니다. 콜백은 `{ tabId, css: TabCss | null }`을
+받습니다.
 
 ## dmn.js
 
-커스텀 JS(플러그인) 파일 관리 API입니다.
+JavaScript 플러그인 상태는 `{ plugins: JsPlugin[] }`이며 각 플러그인은
+`{ id, name, path, content, enabled }`입니다.
 
-### get()
+### `dmn.js.get(): Promise<CustomJs>`
 
-현재 JS 플러그인 상태를 조회합니다.
+현재 플러그인 목록을 반환합니다.
 
-```javascript
-const js = await dmn.js.get();
-console.log("플러그인 목록:", js.plugins);
+### `dmn.js.getUse(): Promise<boolean>`
+
+JS 플러그인 활성화 여부를 반환합니다.
+
+### `dmn.js.toggle(enabled: boolean): Promise<{ enabled: boolean }>`
+
+JS 플러그인 전체를 켜거나 끕니다.
+
+### `dmn.js.load(): Promise<JsLoadResult>`
+
+파일 선택 창을 열어 선택한 플러그인 파일들을 추가합니다.
+
+```typescript
+type JsLoadResult = {
+  success: boolean;
+  added: JsPlugin[];
+  errors?: { path: string; error: string }[];
+};
 ```
 
-### getUse()
+### `dmn.js.reload(): Promise<JsReloadResult>`
 
-JS 플러그인 사용 여부만 조회합니다. (설정의 `useCustomJS` 값)
+모든 플러그인 파일을 디스크에서 다시 읽고 `{ updated, errors? }`를
+반환합니다.
 
-```javascript
-const enabled = await dmn.js.getUse();
-```
+### `dmn.js.remove(id: string): Promise<JsRemoveResult>`
 
-### toggle(enabled)
+id로 플러그인을 제거합니다.
 
-JS 플러그인 사용 여부를 토글합니다.
+### `dmn.js.setPluginEnabled(id: string, enabled: boolean): Promise<JsPluginUpdateResult>`
 
-```javascript
-await dmn.js.toggle(true); // 플러그인 활성화
-await dmn.js.toggle(false); // 플러그인 비활성화
-```
+개별 플러그인을 켜거나 끕니다.
 
-### load()
+### `dmn.js.setContent(content: string): Promise<JsSetContentResult>`
 
-외부 JS 파일을 불러옵니다. 파일 선택 다이얼로그가 열립니다.
+인라인 JS 콘텐츠를 교체합니다.
 
-```javascript
-const result = await dmn.js.load();
-if (result.success) {
-  console.log("추가된 플러그인:", result.added);
-}
-```
+### `dmn.js.reset(): Promise<void>`
 
-### reload()
+JS 플러그인을 끄고 플러그인 목록을 초기화합니다.
 
-모든 플러그인을 다시 로드합니다.
+### `dmn.js.onUse(callback): Unsubscribe`
+
+활성화 상태 변경을 구독합니다 (`{ enabled: boolean }`).
+
+### `dmn.js.onState(callback): Unsubscribe`
+
+플러그인 목록 변경을 구독합니다. 콜백은 `CustomJs`를 받습니다.
 
 ```javascript
-const result = await dmn.js.reload();
-console.log("업데이트된 플러그인:", result.updated);
-```
-
-### remove(id)
-
-특정 플러그인을 제거합니다.
-
-```javascript
-await dmn.js.remove("my-plugin-id");
-```
-
-### setPluginEnabled(id, enabled)
-
-특정 플러그인의 활성화 상태를 변경합니다.
-
-```javascript
-await dmn.js.setPluginEnabled("kps", true); // 활성화
-await dmn.js.setPluginEnabled("kps", false); // 비활성화
-```
-
-### setContent(content)
-
-JS 파일 내용을 직접 설정합니다.
-
-```javascript
-await dmn.js.setContent(`// @id: inline-plugin
-
-console.log("hello from inline plugin");
-`);
-```
-
-### reset()
-
-JS 설정(경로/내용/플러그인 목록)을 기본값으로 초기화합니다.
-
-```javascript
-await dmn.js.reset();
-```
-
-### 이벤트 구독
-
-```javascript
-// JS 플러그인 활성화 상태 변경
-const unsub1 = dmn.js.onUse(({ enabled }) => {
-  console.log("JS 플러그인 활성화:", enabled);
-});
-
-// JS 플러그인 상태 변경
-const unsub2 = dmn.js.onState((js) => {
-  console.log("플러그인 목록:", js.plugins);
+const unsub = dmn.js.onState(({ plugins }) => {
+  console.log(
+    "plugins:",
+    plugins.map((p) => `${p.name}(${p.enabled ? "on" : "off"})`),
+  );
 });
 ```

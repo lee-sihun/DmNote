@@ -19,12 +19,14 @@ export const FORM_ROW_CLASS =
 // 행 라벨
 export const FORM_LABEL_CLASS = 'text-fg-muted text-label';
 
-// comfortable 밀도 — 목적지 페이지(Settings) 전용. 도킹 패널·다이얼로그·플러그인 표면은
-// 위의 compact 유지. 밀도는 표면 루트에서 한 번만 결정, 제3 밀도 추가 금지 (tasks/todo.md 2026-07-12)
-// 행이 컨트롤 상하 11px 슬랙을 py로 소유, 컨트롤 높이(스위치 18, 드롭다운 23)와 무관하게
-// 카드 상하 인셋이 py 5 + 11 = 16으로 px-16과 일치
-export const SECTION_CARD_CLASS_COMFORTABLE =
-  'bg-fill-faint rounded-surface px-[16px] py-[5px] flex flex-col';
+// 설정 표면 밀도 - 설정 페이지와 설정 페인 공용 (2026-07-20 개편)
+// compact(위)는 도킹 패널·다이얼로그·플러그인 표면 전용, 이 둘 외 제3 밀도 추가 금지
+// 행 36px: 컨트롤(스위치 18, 드롭다운 23)에 상하 숨통을 주는 중간 밀도
+export const SETTINGS_CARD_CLASS =
+  'bg-fill-faint rounded-surface px-[14px] py-[8px] flex flex-col';
 
-export const FORM_ROW_CLASS_COMFORTABLE =
-  'flex justify-between items-center w-full min-h-[40px] py-[11px]';
+export const SETTINGS_ROW_CLASS =
+  'flex justify-between items-center w-full min-h-[36px]';
+
+// 설정 표면 라벨 - 목적지 페이지라 property 편집기(muted)보다 한 단계 밝게
+export const SETTINGS_LABEL_CLASS = 'text-label text-fg';

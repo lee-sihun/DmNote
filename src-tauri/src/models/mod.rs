@@ -1441,6 +1441,15 @@ pub struct CustomCss {
     pub content: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomCssHistoryEntry {
+    pub path: String,
+    #[serde(default)]
+    pub loaded_at: i64,
+    pub last_used_at: i64,
+}
+
 /// 탭별 CSS 설정
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -1737,6 +1746,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub custom_css: CustomCss,
     #[serde(default)]
+    pub custom_css_history: Vec<CustomCssHistoryEntry>,
+    #[serde(default)]
     pub font_settings: FontSettings,
     #[serde(default)]
     pub counter_animation_presets: Vec<CounterAnimationPreset>,
@@ -1818,6 +1829,7 @@ impl Default for AppStoreData {
             background_color: "transparent".to_string(),
             use_custom_css: false,
             custom_css: CustomCss::default(),
+            custom_css_history: Vec::new(),
             font_settings: FontSettings::default(),
             counter_animation_presets: Vec::new(),
             tab_css_overrides: TabCssOverrides::new(),

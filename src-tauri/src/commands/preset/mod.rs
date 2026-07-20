@@ -274,6 +274,13 @@ mod tests {
         assert!(preset.tab_css_overrides.is_none());
     }
 
+    #[test]
+    fn preset_wire_schema_excludes_custom_css_history() {
+        let serialized = serde_json::to_value(PresetFile::default()).unwrap();
+
+        assert!(serialized.get("customCssHistory").is_none());
+    }
+
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct PreFeaturePresetPosition {

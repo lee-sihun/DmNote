@@ -70,9 +70,16 @@ Select the reference point when resizing the overlay window:
 
 Load a custom CSS file to customize key and counter styles.
 
-1. Click the **Select CSS File** button.
-2. Select your CSS file.
-3. Styles are applied immediately.
+1. Click the **Manage CSS** button to open the custom CSS panel.
+2. Turn on the **Enable** toggle at the top of the panel.
+3. Click **Import CSS File** and select your CSS file (`.css`, up to 1 MiB).
+4. Styles are applied immediately.
+
+The list in the panel keeps up to 10 previously imported CSS files.
+
+- Click the **Apply** button on an entry to switch to that file instantly, without a file dialog.
+- Use the **⋮** button (or right-click the entry) and choose **Remove from list** (the file itself is not deleted).
+- Entries that can no longer be applied show a badge: **Missing** (moved or deleted), **Unusable** (not a regular `.css` file anymore), or **Too large** (over 1 MiB).
 
 <Callout type="info">
   For detailed CSS styling information, see the [Custom CSS
@@ -83,9 +90,9 @@ Load a custom CSS file to customize key and counter styles.
 
 Load JavaScript plugins to extend program functionality.
 
-1. Turn on the **Enable JS Plugins** toggle.
-2. Click the **Manage Plugins** button.
-3. Click **Add JS Plugin** to select a file.
+1. Click the **Manage Plugins** button to open the panel.
+2. Turn on the **Enable** toggle at the top of the panel.
+3. Click **Add Plugins** to select a file.
 
 <Callout type="info">
   For detailed plugin development information, see [Getting

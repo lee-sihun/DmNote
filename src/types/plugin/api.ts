@@ -82,6 +82,28 @@ export type CssLoadResult = {
   path?: string;
 };
 
+// CSS 불러오기 히스토리
+export type CssHistoryStatus = 'available' | 'missing' | 'invalid' | 'tooLarge';
+export type CustomCssHistoryItem = {
+  path: string;
+  lastUsedAt: number;
+  status: CssHistoryStatus;
+};
+export type CssHistoryErrorCode =
+  | 'PATH_NOT_AUTHORIZED'
+  | 'NOT_FOUND'
+  | 'NOT_REGULAR_FILE'
+  | 'INVALID_EXTENSION'
+  | 'TOO_LARGE'
+  | 'INVALID_UTF8'
+  | 'IO_ERROR';
+export type CssActivateResult = {
+  success: boolean;
+  code?: CssHistoryErrorCode;
+  content?: string;
+  path?: string;
+};
+
 // 폰트 타입
 export type FontLoadResult = {
   success: boolean;
@@ -223,6 +245,18 @@ export type TabCssSetResult = {
   success: boolean;
   tabId: string;
   css?: import('@src/types/plugin/css').TabCss;
+};
+export type TabCssActivateResult = {
+  success: boolean;
+  code?: CssHistoryErrorCode;
+  tabId: string;
+  css?: import('@src/types/plugin/css').TabCss;
+};
+export type TabCssExportResult = {
+  success: boolean;
+  code?: 'NO_TAB_CSS' | 'IO_ERROR';
+  error?: string;
+  path?: string;
 };
 
 // 탭별 노트 트랙 설정 타입
@@ -884,6 +918,9 @@ export interface DMNoteAPI {
     load(): Promise<CssLoadResult>;
     setContent(content: string): Promise<CssSetContentResult>;
     reset(): Promise<void>;
+    historyGet(): Promise<CustomCssHistoryItem[]>;
+    historyActivate(path: string): Promise<CssActivateResult>;
+    historyRemove(path: string): Promise<CustomCssHistoryItem[]>;
     onUse(listener: (payload: CssTogglePayload) => void): Unsubscribe;
     onContent(listener: (payload: CustomCss) => void): Unsubscribe;
     // 탭별 CSS API
@@ -897,6 +934,11 @@ export interface DMNoteAPI {
         css: import('@src/types/plugin/css').TabCss | null,
       ): Promise<TabCssSetResult>;
       toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>;
+      activateHistory(
+        tabId: string,
+        path: string,
+      ): Promise<TabCssActivateResult>;
+      export(tabId: string): Promise<TabCssExportResult>;
       onChanged(listener: (payload: TabCssResponse) => void): Unsubscribe;
     };
   };

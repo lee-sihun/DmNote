@@ -227,6 +227,20 @@ body.dmn-custom-cursor * {
   }
 }
 
+/* 패딩이 마스크가 되는 스크롤 - 상하 패딩(8px)을 콘텐츠가 소유하고
+   뷰포트는 같은 깊이의 상수 마스크로 콘텐츠를 패딩 아래로 흘려보냄.
+   정지 상태에선 패딩만 마스크에 걸려 손실이 없고, 잘린 행은 또렷이 보임.
+   8px: 설정 카드(py-8)와 동일 - 두 표면의 수직 리듬을 수치까지 일치 */
+.dmn-scroll-mask-inset {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 8px,
+    black calc(100% - 8px),
+    transparent
+  );
+}
+
 /* ===== 등장 모션 ===== */
 
 /* 패널 페이지 전환 — side-by-side push. 두 페이지가 absolute로 겹치고

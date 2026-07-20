@@ -2,9 +2,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
 
 import type {
+  CssActivateResult,
   CssLoadResult,
   CssSetContentResult,
   CssTogglePayload,
+  CustomCssHistoryItem,
 } from '@src/types/plugin/api';
 import type { CustomCss } from '@src/types/plugin/css';
 
@@ -17,6 +19,11 @@ export const cssApi = {
   setContent: (content: string) =>
     invoke<CssSetContentResult>('css_set_content', { content }),
   reset: () => invoke<void>('css_reset'),
+  historyGet: () => invoke<CustomCssHistoryItem[]>('css_history_get'),
+  historyActivate: (path: string) =>
+    invoke<CssActivateResult>('css_history_activate', { path }),
+  historyRemove: (path: string) =>
+    invoke<CustomCssHistoryItem[]>('css_history_remove', { path }),
   onUse: (listener: (payload: CssTogglePayload) => void) =>
     subscribe<CssTogglePayload>('css:use', listener),
   onContent: (listener: (payload: CustomCss) => void) =>
@@ -47,6 +54,21 @@ export const cssApi = {
         {
           tabId,
           enabled,
+        },
+      ),
+    activateHistory: (tabId: string, path: string) =>
+      invoke<import('@src/types/plugin/api').TabCssActivateResult>(
+        'css_tab_activate_history',
+        {
+          tabId,
+          path,
+        },
+      ),
+    export: (tabId: string) =>
+      invoke<import('@src/types/plugin/api').TabCssExportResult>(
+        'css_tab_export',
+        {
+          tabId,
         },
       ),
     set: (tabId: string, css: import('@src/types/plugin/css').TabCss | null) =>

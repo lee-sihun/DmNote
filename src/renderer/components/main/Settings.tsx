@@ -4,14 +4,24 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
-import { SettingCard, SettingRow } from '@components/main/common/SettingRow';
+import {
+  SettingCard,
+  SettingRow,
+  SettingToggleRow,
+} from '@components/main/common/SettingRow';
 import FlaskIcon from '@assets/svgs/flask.svg';
 import ResetIcon from '@assets/svgs/reset.svg';
-import { PluginManagerModal } from '@components/main/Modal/content/managers/PluginManagerModal';
 import { PluginDataDeleteModal } from '@components/main/Modal/content/dialogs/PluginDataDeleteModal';
-import ShortcutSettingsModal from '@components/main/Modal/content/settings/ShortcutSettingsModal';
+import SettingsSidePanel from '@components/main/SettingsPanel/SettingsSidePanel';
+import type { SettingsPanelKey } from '@components/main/SettingsPanel/SettingsSidePanel';
+import ShortcutsPanelContent from '@components/main/SettingsPanel/ShortcutsPanelContent';
+import PluginsPanelContent from '@components/main/SettingsPanel/PluginsPanelContent';
+import CssPanelContent from '@components/main/SettingsPanel/CssPanelContent';
+import {
+  FILL_DISABLED_CLASS,
+  FILL_INTERACTIVE_CLASS,
+} from '@components/main/SettingsPanel/panelChrome';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { isMac } from '@utils/core/platform';
@@ -20,7 +30,6 @@ import type { OverlayResizeAnchor } from '@src/types/settings/settings';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { SupportedLocale } from '@contexts/I18nContextDef';
 import type {
-  CssLoadResult,
   JsLoadResult,
   JsReloadResult,
   JsRemoveResult,
@@ -126,9 +135,7 @@ const Settings = ({
     setDeveloperModeEnabled,
     useCustomCSS,
     setUseCustomCSS,
-    setCustomCSSContent,
     customCSSPath,
-    setCustomCSSPath,
     useCustomJS,
     setUseCustomJS,
     jsPlugins,
@@ -145,10 +152,12 @@ const Settings = ({
   const { checkForUpdates, isChecking } = useUpdateCheck();
 
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-  const [isPluginModalOpen, setPluginModalOpen] = useState<boolean>(false);
+  const [activeSettingsPanel, setActiveSettingsPanel] =
+    useState<SettingsPanelKey | null>(null);
+  // CSS 패널 헤더 개수 배지용 (패널 콘텐츠가 보고)
+  const [cssHistoryCount, setCssHistoryCount] = useState<number>(0);
   const [isDataDeleteModalOpen, setDataDeleteModalOpen] =
     useState<boolean>(false);
-  const [isShortcutModalOpen, setShortcutModalOpen] = useState<boolean>(false);
   const [pluginToDelete, setPluginToDelete] = useState<PluginToDelete | null>(
     null,
   );
@@ -356,26 +365,6 @@ const Settings = ({
     }
   };
 
-  const handleLoadCustomCSS = async (): Promise<void> => {
-    if (!useCustomCSS) return;
-    try {
-      const result: CssLoadResult = await window.api.css.load();
-      if (result.success) {
-        if (result.content) setCustomCSSContent(result.content);
-        if (result.path) setCustomCSSPath(result.path);
-        showAlert?.(t('settings.cssLoaded'));
-      } else {
-        const message: string = result.error
-          ? `${t('settings.cssLoadFailed')}${result.error}`
-          : t('settings.cssLoadFailed');
-        showAlert?.(message);
-      }
-    } catch (error) {
-      console.error('Failed to load custom CSS', error);
-      showAlert?.(`${t('settings.cssLoadFailed')}${error}`);
-    }
-  };
-
   const handleToggleCustomJS = async (): Promise<void> => {
     const next: boolean = !useCustomJS;
     setUseCustomJS(next);
@@ -436,14 +425,6 @@ const Settings = ({
         setIsReloadingPlugins(false);
       }
     }
-  };
-
-  const handleOpenPluginModal = (): void => {
-    setPluginModalOpen(true);
-  };
-
-  const handleClosePluginModal = (): void => {
-    setPluginModalOpen(false);
   };
 
   const handleAddPlugins = async (): Promise<void> => {
@@ -594,9 +575,13 @@ const Settings = ({
 
   const actionButtonClass = (enabled: boolean): string =>
     'inline-flex items-center h-[23px] px-[10px] rounded-md text-body transition-colors duration-fast ' +
-    (enabled
-      ? 'bg-fill text-fg hover:bg-fill-hover active:bg-fill-active'
-      : 'bg-fill-faint text-fg-disabled cursor-not-allowed');
+    (enabled ? FILL_INTERACTIVE_CLASS : FILL_DISABLED_CLASS);
+
+  // 커스텀 i18n에 복수형 처리가 없어 1개는 전용 키 사용
+  const panelCountBadge = (count: number): string =>
+    count === 1
+      ? t('settings.panelCountBadgeOne')
+      : t('settings.panelCountBadge', { count: String(count) });
 
   const handleNoteEffectChange = async (): Promise<void> => {
     const next: boolean = !noteEffect;
@@ -608,13 +593,20 @@ const Settings = ({
     }
   };
 
-  const handleSaveShortcuts = async (next: ShortcutsState): Promise<void> => {
+  const handleApplyShortcuts = async (next: ShortcutsState): Promise<void> => {
     setShortcuts(next);
     try {
       await window.api.settings.update({ shortcuts: next });
     } catch (error) {
       console.error('Failed to update shortcuts', error);
       showAlert?.(t('shortcutSetting.saveFailed'));
+      // 저장 실패가 daemon 재시작 실패일 수도 있어 로컬 롤백 대신 authoritative 상태 재조회
+      try {
+        const state = await window.api.settings.get();
+        setShortcuts(state.shortcuts);
+      } catch (syncError) {
+        console.error('Failed to resync shortcuts', syncError);
+      }
     }
   };
 
@@ -813,56 +805,39 @@ const Settings = ({
           <div className="flex flex-col gap-[12px] w-[348px]">
             {/* 키뷰어 설정 */}
             <SettingCard>
-              <SettingRow
+              <SettingToggleRow
                 label={t('settings.overlayLock')}
-                onClick={handleOverlayLockChange}
+                checked={overlayLocked}
+                onToggle={handleOverlayLockChange}
                 onMouseEnter={() => setHoveredKey('overlayLock')}
                 onMouseLeave={() => setHoveredKey(null)}
-              >
-                <Checkbox
-                  checked={overlayLocked}
-                  onChange={handleOverlayLockChange}
-                />
-              </SettingRow>
-              <SettingRow
+              />
+              <SettingToggleRow
                 label={t('settings.alwaysOnTop')}
-                onClick={handleAlwaysOnTopChange}
+                checked={alwaysOnTop}
+                onToggle={handleAlwaysOnTopChange}
                 onMouseEnter={() => setHoveredKey('alwaysOnTop')}
                 onMouseLeave={() => setHoveredKey(null)}
-              >
-                <Checkbox
-                  checked={alwaysOnTop}
-                  onChange={handleAlwaysOnTopChange}
-                />
-              </SettingRow>
-              <SettingRow
+              />
+              <SettingToggleRow
                 label={t('settings.noteEffect')}
-                onClick={handleNoteEffectChange}
+                checked={noteEffect}
+                onToggle={handleNoteEffectChange}
                 onMouseEnter={() => setHoveredKey('noteEffect')}
                 onMouseLeave={() => setHoveredKey(null)}
-              >
-                <Checkbox
-                  checked={noteEffect}
-                  onChange={handleNoteEffectChange}
-                />
-              </SettingRow>
-              <SettingRow
+              />
+              <SettingToggleRow
                 label={t('settings.keyCounter')}
-                onClick={handleKeyCounterToggle}
+                checked={keyCounterEnabled}
+                onToggle={handleKeyCounterToggle}
                 onMouseEnter={() => setHoveredKey('keyCounter')}
                 onMouseLeave={() => setHoveredKey(null)}
-              >
-                <Checkbox
-                  checked={keyCounterEnabled}
-                  onChange={handleKeyCounterToggle}
-                />
-              </SettingRow>
-              <SettingRow
+              />
+              <SettingToggleRow
                 label={t('settings.trayEnabled')}
-                onClick={handleTrayToggle}
-              >
-                <Checkbox checked={trayEnabled} onChange={handleTrayToggle} />
-              </SettingRow>
+                checked={trayEnabled}
+                onToggle={handleTrayToggle}
+              />
               <SettingRow
                 label={t('settings.resizeAnchor')}
                 onMouseEnter={() => setHoveredKey('resizeAnchor')}
@@ -893,35 +868,16 @@ const Settings = ({
                 onMouseEnter={() => setHoveredKey('customCSS')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <SettingRow
-                  label={t('settings.customCSS')}
-                  onClick={handleToggleCustomCSS}
-                >
-                  <Checkbox
-                    checked={useCustomCSS}
-                    onChange={handleToggleCustomCSS}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={
-                    <p
-                      className={
-                        'text-body truncate max-w-[150px] ' +
-                        (useCustomCSS ? 'text-fg-muted' : 'text-fg-disabled')
-                      }
-                    >
-                      {customCSSPath && customCSSPath.length > 0
-                        ? customCSSPath
-                        : t('settings.noCssFile')}
-                    </p>
-                  }
-                >
+                <SettingRow label={t('settings.customCSSLabel')}>
                   <button
-                    onClick={handleLoadCustomCSS}
-                    disabled={!useCustomCSS}
-                    className={actionButtonClass(useCustomCSS)}
+                    onClick={() =>
+                      setActiveSettingsPanel((prev) =>
+                        prev === 'css' ? null : 'css',
+                      )
+                    }
+                    className={actionButtonClass(true)}
                   >
-                    {t('settings.loadCss')}
+                    {t('settings.manageCss')}
                   </button>
                 </SettingRow>
               </div>
@@ -929,27 +885,7 @@ const Settings = ({
                 onMouseEnter={() => setHoveredKey('customJS')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <SettingRow
-                  label={t('settings.customJS')}
-                  onClick={handleToggleCustomJS}
-                >
-                  <Checkbox
-                    checked={useCustomJS}
-                    onChange={handleToggleCustomJS}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={
-                    <p
-                      className={
-                        'text-body truncate max-w-[150px] ' +
-                        (useCustomJS ? 'text-fg-muted' : 'text-fg-disabled')
-                      }
-                    >
-                      {t('settings.pluginManageLabel')}
-                    </p>
-                  }
-                >
+                <SettingRow label={t('settings.customJSLabel')}>
                   <div className="flex flex-row gap-[6px]">
                     <button
                       onClick={handleReloadPlugins}
@@ -970,7 +906,11 @@ const Settings = ({
                       <ResetIcon className="w-[13px] h-[13px] -scale-x-100" />
                     </button>
                     <button
-                      onClick={handleOpenPluginModal}
+                      onClick={() =>
+                        setActiveSettingsPanel((prev) =>
+                          prev === 'plugins' ? null : 'plugins',
+                        )
+                      }
                       className={actionButtonClass(true)}
                     >
                       {t('settings.managePlugins')}
@@ -984,15 +924,11 @@ const Settings = ({
               onMouseEnter={() => setHoveredKey('obsMode')}
               onMouseLeave={() => setHoveredKey(null)}
             >
-              <SettingRow
+              <SettingToggleRow
                 label={t('settings.obsMode')}
-                onClick={handleObsToggle}
-              >
-                <Checkbox
-                  checked={obsStatus.running}
-                  onChange={handleObsToggle}
-                />
-              </SettingRow>
+                checked={obsStatus.running}
+                onToggle={handleObsToggle}
+              />
               <SettingRow
                 label={
                   <p
@@ -1124,7 +1060,11 @@ const Settings = ({
               </SettingRow>
               <SettingRow label={t('settings.shortcuts')}>
                 <button
-                  onClick={() => setShortcutModalOpen(true)}
+                  onClick={() =>
+                    setActiveSettingsPanel((prev) =>
+                      prev === 'shortcuts' ? null : 'shortcuts',
+                    )
+                  }
                   className={actionButtonClass(true)}
                 >
                   {t('settings.configure')}
@@ -1141,27 +1081,19 @@ const Settings = ({
                 />
               </SettingRow>
               {!isMacOS && (
-                <SettingRow
+                <SettingToggleRow
                   label={t('settings.autoUpdate')}
-                  onClick={handleAutoUpdateToggle}
-                >
-                  <Checkbox
-                    checked={autoUpdateEnabled}
-                    onChange={handleAutoUpdateToggle}
-                  />
-                </SettingRow>
-              )}
-              <SettingRow
-                label={t('settings.developerMode')}
-                onClick={handleDeveloperModeToggle}
-              >
-                <Checkbox
-                  checked={developerModeEnabled}
-                  onChange={handleDeveloperModeToggle}
+                  checked={autoUpdateEnabled}
+                  onToggle={handleAutoUpdateToggle}
                 />
-              </SettingRow>
+              )}
+              <SettingToggleRow
+                label={t('settings.developerMode')}
+                checked={developerModeEnabled}
+                onToggle={handleDeveloperModeToggle}
+              />
               {/* 버전 및 설정 초기화 */}
-              <div className="flex justify-between items-center py-[12px] px-[12px] bg-inset rounded-md mt-[11px] mb-[11px]">
+              <div className="flex justify-between items-center py-[10px] px-[10px] bg-inset rounded-md mt-[8px] mb-[8px]">
                 <p className="text-body text-fg-muted tabular-nums">
                   Ver {__APP_VERSION__}
                 </p>
@@ -1187,47 +1119,94 @@ const Settings = ({
           </div>
         </div>
       </div>
-      <div className="absolute flex items-center justify-center top-[12px] right-[12px] w-[518px] h-[372px] bg-fill-faint rounded-surface pointer-events-none overflow-hidden">
-        {hoveredKey && PREVIEW_SOURCES[hoveredKey] ? (
-          <div className="relative w-full h-full">
-            <video
-              key={hoveredKey}
-              src={PREVIEW_SOURCES[hoveredKey]}
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
-              <span className="mb-[16px] text-white text-title">
-                {t(
-                  hoveredKey === 'obsMode'
-                    ? 'settings.obsGuide'
-                    : `settings.${hoveredKey}Desc`,
-                )}
-              </span>
-            </div>
+      {/* 우측 고정 콘텐츠 페인 - 기본은 튜토리얼 프리뷰, 선택 시 설정 상세가 같은 표면을 채움 */}
+      <div
+        className={
+          'absolute top-[12px] right-[12px] bottom-[12px] left-[372px] bg-fill-faint rounded-surface overflow-hidden' +
+          (activeSettingsPanel ? '' : ' pointer-events-none')
+        }
+      >
+        {!activeSettingsPanel && (
+          <div className="flex items-center justify-center w-full h-full">
+            {hoveredKey && PREVIEW_SOURCES[hoveredKey] ? (
+              <div className="relative w-full h-full">
+                <video
+                  key={hoveredKey}
+                  src={PREVIEW_SOURCES[hoveredKey]}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+                  <span className="mb-[16px] text-white text-title">
+                    {t(
+                      hoveredKey === 'obsMode'
+                        ? 'settings.obsGuide'
+                        : `settings.${hoveredKey}Desc`,
+                    )}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <FlaskIcon className="text-fill" />
+            )}
           </div>
-        ) : (
-          <FlaskIcon className="text-fill" />
+        )}
+        {activeSettingsPanel && (
+          <SettingsSidePanel
+            activePanel={activeSettingsPanel}
+            onClose={() => setActiveSettingsPanel(null)}
+            pages={[
+              {
+                key: 'shortcuts',
+                title: t('shortcutSetting.title'),
+                content: (
+                  <ShortcutsPanelContent
+                    shortcuts={shortcuts}
+                    onApply={handleApplyShortcuts}
+                    onClose={() => setActiveSettingsPanel(null)}
+                  />
+                ),
+              },
+              {
+                key: 'plugins',
+                title: t('settings.managePluginsTitle'),
+                headerBadge: panelCountBadge(jsPlugins.length),
+                content: (
+                  <PluginsPanelContent
+                    plugins={jsPlugins}
+                    useCustomJS={useCustomJS}
+                    onToggleCustomJS={handleToggleCustomJS}
+                    onAdd={handleAddPlugins}
+                    onToggle={handlePluginToggle}
+                    onRemove={handlePluginRemove}
+                    isAdding={isAddingPlugins}
+                    isPluginActionPending={pendingPluginId !== null}
+                    onClose={() => setActiveSettingsPanel(null)}
+                  />
+                ),
+              },
+              {
+                key: 'css',
+                title: t('settings.manageCssTitle'),
+                headerBadge: panelCountBadge(cssHistoryCount),
+                content: (
+                  <CssPanelContent
+                    useCustomCSS={useCustomCSS}
+                    customCSSPath={customCSSPath}
+                    onToggleCustomCSS={handleToggleCustomCSS}
+                    showAlert={(msg: string) => showAlert?.(msg)}
+                    onClose={() => setActiveSettingsPanel(null)}
+                    onHistoryCountChange={setCssHistoryCount}
+                  />
+                ),
+              },
+            ]}
+          />
         )}
       </div>
-      {isPluginModalOpen && (
-        <PluginManagerModal
-          isOpen={isPluginModalOpen}
-          onClose={handleClosePluginModal}
-          onAdd={handleAddPlugins}
-          onToggle={handlePluginToggle}
-          onRemove={handlePluginRemove}
-          plugins={jsPlugins}
-          isAdding={isAddingPlugins}
-          pendingPluginAction={
-            pendingPluginId ? { id: pendingPluginId, op: 'toggle' } : null
-          }
-          t={t}
-        />
-      )}
       {isDataDeleteModalOpen && pluginToDelete && (
         <PluginDataDeleteModal
           isOpen={isDataDeleteModalOpen}
@@ -1239,14 +1218,6 @@ const Settings = ({
           onDeletePluginOnly={() => removePluginOnly(pluginToDelete.id)}
           pluginName={pluginToDelete.name}
           t={t}
-        />
-      )}
-      {isShortcutModalOpen && (
-        <ShortcutSettingsModal
-          isOpen={isShortcutModalOpen}
-          shortcuts={shortcuts}
-          onClose={() => setShortcutModalOpen(false)}
-          onSave={handleSaveShortcuts}
         />
       )}
     </div>
