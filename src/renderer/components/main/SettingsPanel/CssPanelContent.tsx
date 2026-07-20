@@ -4,6 +4,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import {
   FILL_DISABLED_CLASS,
   FILL_INTERACTIVE_CLASS,
+  PANEL_APPLIED_LABEL_CLASS,
   PANEL_FOOTER_BUTTON_CLASS,
   PANEL_FOOTER_CLASS,
   PANEL_LIST_EMPTY_CLASS,
@@ -13,12 +14,14 @@ import {
   PANEL_PILL_CLASS,
   PANEL_ROW_NAME_CLASS,
   PANEL_SECTION_CLASS,
+  PANEL_STATUS_BADGE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
 import { SettingToggleRow } from '@components/main/common/SettingRow';
 import { SETTINGS_LABEL_CLASS, SETTINGS_ROW_CLASS } from '@utils/cardRecipes';
 import ListPopup from '@components/main/Modal/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { pathBaseName } from '@utils/core/pathDisplay';
+import { cssHistoryStatusLabel } from '@utils/cssHistoryStatus';
 import type {
   CssHistoryErrorCode,
   CssLoadResult,
@@ -158,11 +161,6 @@ const CssPanelContent = ({
     }
   };
 
-  const statusLabel = (item: CustomCssHistoryItem): string | null => {
-    if (item.status === 'available') return null;
-    return t(`settings.cssHistoryStatus.${item.status}`);
-  };
-
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="px-[12px] pb-[12px] shrink-0">
@@ -204,7 +202,8 @@ const CssPanelContent = ({
             <div className="flex flex-col py-[8px]">
               {history.map((item) => {
                 const isCurrent = item.path === customCSSPath;
-                const badge = statusLabel(item);
+                const available = item.status === 'available';
+                const badge = cssHistoryStatusLabel(t, item);
                 return (
                   <div
                     key={item.path}
@@ -214,23 +213,29 @@ const CssPanelContent = ({
                     className={PANEL_LIST_ROW_CLASS}
                     title={item.path}
                   >
-                    <span className={`${PANEL_ROW_NAME_CLASS} text-fg`}>
+                    <span
+                      className={`${PANEL_ROW_NAME_CLASS} ${
+                        available ? 'text-fg' : 'text-fg-disabled'
+                      }`}
+                    >
                       {pathBaseName(item.path)}
                     </span>
                     {badge ? (
-                      <span className="shrink-0 text-caption text-danger-fg">
-                        {badge}
-                      </span>
+                      <span className={PANEL_STATUS_BADGE_CLASS}>{badge}</span>
                     ) : null}
                     {isCurrent ? (
-                      <span className="shrink-0 px-[8px] h-[23px] flex items-center text-body text-fg-muted">
+                      <span className={PANEL_APPLIED_LABEL_CLASS}>
                         {t('settings.cssApplied')}
                       </span>
                     ) : (
                       <button
                         onClick={() => void handleActivate(item)}
-                        disabled={pendingPath !== null}
-                        className={`${PANEL_PILL_CLASS} ${FILL_INTERACTIVE_CLASS}`}
+                        disabled={!available || pendingPath !== null}
+                        className={`${PANEL_PILL_CLASS} ${
+                          available
+                            ? FILL_INTERACTIVE_CLASS
+                            : FILL_DISABLED_CLASS
+                        }`}
                       >
                         {t('settings.cssApply')}
                       </button>

@@ -28,6 +28,11 @@ export const PANEL_LIST_EMPTY_CLASS =
 export const PANEL_ROW_NAME_CLASS =
   'min-w-0 flex-1 truncate text-left transition-colors duration-fast';
 
+// 히스토리 행 트레일링 표식 - 현재 항목 라벨과 상태 배지
+export const PANEL_APPLIED_LABEL_CLASS =
+  'shrink-0 px-[8px] h-[23px] flex items-center text-body text-fg-muted';
+export const PANEL_STATUS_BADGE_CLASS = 'shrink-0 text-caption text-danger-fg';
+
 // 하단 도구 바 + 30px 버튼 (상태는 FILL_* 조합, 폭은 flex-[2]/flex-1로 지정)
 export const PANEL_FOOTER_CLASS = 'flex gap-[8px] px-[12px] pb-[12px] shrink-0';
 export const PANEL_FOOTER_BUTTON_CLASS =

@@ -105,7 +105,7 @@ const SettingsSidePanel = ({
         ) : null}
       </div>
       <div className="relative flex-1 min-h-0">
-        {/* 활성 페이지만 마운트, 전환 애니메이션 없음 - 유저 지시 */}
+        {/* 활성 페이지만 마운트 - 전환 애니메이션 없이 즉시 표시가 의도 */}
         {pages.map((page) =>
           page.key === activePanel ? (
             <div key={page.key} className="absolute inset-0 flex flex-col">

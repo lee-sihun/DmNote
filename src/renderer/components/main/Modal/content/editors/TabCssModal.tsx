@@ -1,19 +1,20 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Modal from '../../Modal';
 import Checkbox from '@components/main/common/Checkbox';
-import {
-  PropertyRow,
-  PropertySection,
-} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import {
   FILL_DISABLED_CLASS,
   FILL_INTERACTIVE_CLASS,
+  PANEL_APPLIED_LABEL_CLASS,
+  PANEL_PILL_CLASS,
+  PANEL_STATUS_BADGE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
 import { FORM_ROW_CLASS, FORM_LABEL_CLASS } from '@utils/cardRecipes';
 import { useTranslation } from '@contexts/useTranslation';
 import { useLenis } from '@hooks/useLenis';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { pathBaseName } from '@utils/core/pathDisplay';
+import { cssHistoryStatusLabel } from '@utils/cssHistoryStatus';
 import type { CustomCssHistoryItem } from '@src/types/plugin/api';
 import type { TabCss } from '@src/types/plugin/css';
 
@@ -42,6 +43,23 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
 
   // 모달 열기 시점의 원본 상태 저장 (취소 시 복원용)
   const originalStateRef = useRef<TabCss | null>(null);
+
+  // 진행 중 백엔드 변경 - 취소가 이보다 먼저 비교하면 취소한 변경이
+  // 뒤늦게 커밋되는 레이스가 생기므로 취소 시 완료를 기다림
+  const pendingMutationRef = useRef<Promise<void> | null>(null);
+
+  const invokeTracked = async <T,>(op: () => Promise<T>): Promise<T> => {
+    const promise = op();
+    pendingMutationRef.current = promise.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      return await promise;
+    } finally {
+      pendingMutationRef.current = null;
+    }
+  };
 
   // 모달이 열릴 때 현재 탭의 CSS 정보와 글로벌 히스토리 로드, 원본 상태 저장
   useEffect(() => {
@@ -101,7 +119,9 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
 
   const handleClearCss = async () => {
     try {
-      const result = await window.api.css.tab.clear(selectedKeyType);
+      const result = await invokeTracked(() =>
+        window.api.css.tab.clear(selectedKeyType),
+      );
       if (result.success) {
         setTabCss(null);
       }
@@ -113,9 +133,8 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   const handleToggleCss = async () => {
     const newEnabled = !(tabCss?.enabled ?? true);
     try {
-      const result = await window.api.css.tab.toggle(
-        selectedKeyType,
-        newEnabled,
+      const result = await invokeTracked(() =>
+        window.api.css.tab.toggle(selectedKeyType, newEnabled),
       );
       if (result.success) {
         setTabCss((prev) =>
@@ -135,9 +154,8 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     if (tabCss?.path === item.path) return;
     setPendingHistoryPath(item.path);
     try {
-      const result = await window.api.css.tab.activateHistory(
-        selectedKeyType,
-        item.path,
+      const result = await invokeTracked(() =>
+        window.api.css.tab.activateHistory(selectedKeyType, item.path),
       );
       if (result.success && result.css) {
         setTabCss(result.css);
@@ -182,17 +200,21 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     onClose();
   };
 
-  // 취소: 원본 상태로 복원하고 모달 닫기
+  // 취소: 진행 중 변경 커밋을 기다린 뒤 백엔드 상태 기준으로 원본 복원
+  // (로컬 state 비교는 응답 도착 전 취소 시 변경 없음으로 오판)
   const handleCancel = async () => {
     const original = originalStateRef.current;
 
     try {
-      // 원본 상태와 현재 상태가 다른 경우에만 복원
-      const currentState = tabCss;
+      if (pendingMutationRef.current) {
+        await pendingMutationRef.current;
+      }
+      const { css } = await window.api.css.tab.get(selectedKeyType);
+      const current = css || null;
       const statesAreDifferent =
-        original?.path !== currentState?.path ||
-        original?.content !== currentState?.content ||
-        original?.enabled !== currentState?.enabled;
+        original?.path !== current?.path ||
+        original?.content !== current?.content ||
+        original?.enabled !== current?.enabled;
 
       if (statesAreDifferent) {
         // css.tab.set을 사용하여 원본 상태로 직접 복원
@@ -211,11 +233,6 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   const cssEnabled = tabCss?.enabled ?? true;
   const canExport = Boolean(tabCss?.content) && !isExporting;
 
-  const statusLabel = (item: CustomCssHistoryItem): string | null => {
-    if (item.status === 'available') return null;
-    return t(`settings.cssHistoryStatus.${item.status}`);
-  };
-
   return (
     <Modal onClick={handleCancel} ariaLabel={t('tabCss.enableCss')}>
       <div
@@ -224,9 +241,20 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
       >
         {/* 상태 카드 - 토글, 적용 파일, 파일 액션 */}
         <PropertySection>
-          <PropertyRow label={t('tabCss.enableCss')}>
-            <Checkbox checked={cssEnabled} onChange={handleToggleCss} />
-          </PropertyRow>
+          {/* 행 전체가 button role=switch라 키보드로도 조작 가능 */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={cssEnabled}
+            onClick={handleToggleCss}
+            data-dmn-press-scope=""
+            className={`${FORM_ROW_CLASS} cursor-pointer`}
+          >
+            <span className={FORM_LABEL_CLASS}>{t('tabCss.enableCss')}</span>
+            <span aria-hidden="true" className="pointer-events-none">
+              <Checkbox checked={cssEnabled} onChange={handleToggleCss} />
+            </span>
+          </button>
           <div className={FORM_ROW_CLASS}>
             <p className={`${FORM_LABEL_CLASS} shrink-0`}>
               {t('tabCss.cssFile')}
@@ -288,7 +316,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
             >
               <div className="flex flex-col py-[6px]">
                 {history.map((item) => {
-                  const badge = statusLabel(item);
+                  const badge = cssHistoryStatusLabel(t, item);
                   const available = item.status === 'available';
                   const isCurrent = tabCss?.path === item.path;
                   const applicable = available && !isCurrent;
@@ -306,12 +334,12 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
                         {pathBaseName(item.path)}
                       </span>
                       {badge ? (
-                        <span className="shrink-0 text-caption text-danger-fg">
+                        <span className={PANEL_STATUS_BADGE_CLASS}>
                           {badge}
                         </span>
                       ) : null}
                       {isCurrent ? (
-                        <span className="shrink-0 px-[8px] h-[23px] flex items-center text-body text-fg-muted">
+                        <span className={PANEL_APPLIED_LABEL_CLASS}>
                           {t('settings.cssApplied')}
                         </span>
                       ) : (
@@ -319,7 +347,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
                           type="button"
                           onClick={() => void handleApplyHistory(item)}
                           disabled={!applicable || pendingHistoryPath !== null}
-                          className={`shrink-0 px-[8px] h-[23px] rounded-md flex items-center justify-center text-body transition-colors duration-fast ${
+                          className={`${PANEL_PILL_CLASS} ${
                             applicable
                               ? FILL_INTERACTIVE_CLASS
                               : FILL_DISABLED_CLASS

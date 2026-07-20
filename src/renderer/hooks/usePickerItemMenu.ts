@@ -40,6 +40,9 @@ export const usePickerItemMenu = <TKey>() => {
     event: React.MouseEvent<HTMLElement>,
     key: TKey,
   ) => {
+    // 이름 변경 입력 등 편집 요소에선 네이티브 편집 메뉴에 양보
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea, [contenteditable="true"]')) return;
     event.preventDefault();
     event.stopPropagation();
     pressedWhileOpenKeyRef.current = null;
