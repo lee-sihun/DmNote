@@ -167,8 +167,9 @@ type TabCssExportResult = {
 
 ### `dmn.css.tab.set(tabId: string, css: TabCss | null): Promise<TabCssSetResult>`
 
-탭 오버라이드를 직접 설정하거나 (`null`로) 제거합니다. 핫리로드 워칭은
-파일 선택 창이나 히스토리 활성화로 이전에 인가된 경로에만 연결됩니다.
+탭 오버라이드를 직접 설정하거나 (`null`로) 제거합니다. 파일 선택 창이나
+히스토리 활성화로 이전에 인가된 경로만 허용됩니다. 인가되지 않은 경로는
+제거되어 content만 저장되며, 저장 상태와 응답 모두 `path: null`이 됩니다.
 
 ### `dmn.css.tab.toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>`
 

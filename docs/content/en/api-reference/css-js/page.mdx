@@ -169,9 +169,10 @@ If the user cancels the dialog, `success` is `false` and `code` is omitted.
 
 ### `dmn.css.tab.set(tabId: string, css: TabCss | null): Promise<TabCssSetResult>`
 
-Sets or removes (with `null`) the tab override directly. Hot reload watching
-is attached only for paths previously authorized through a file dialog or
-history activation.
+Sets or removes (with `null`) the tab override directly. Only paths
+previously authorized through a file dialog or history activation are
+accepted: an unauthorized path is dropped and the override is stored as
+content-only (`path: null` in the stored state and response).
 
 ### `dmn.css.tab.toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>`
 
