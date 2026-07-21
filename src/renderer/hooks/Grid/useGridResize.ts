@@ -22,6 +22,10 @@ import {
   beginPluginInstancesEditSession,
   endPluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import {
+  beginMixedGestureTransaction,
+  cancelUncommittedMixedGestureTransaction,
+} from '@plugins/runtime/displayElement/gestureTransaction';
 
 interface ResizeHandle {
   id: string;
@@ -111,10 +115,20 @@ export function useGridResize({
     tokens.forEach((token, pluginId) => {
       endPluginInstancesEditSession(pluginId, token);
     });
+    // 완료 경로가 혼합 커밋을 타지 않은 경우의 staged 잔존 정산
+    const gestureId = resizeGestureIdRef.current;
+    if (gestureId) cancelUncommittedMixedGestureTransaction(gestureId);
     resizeGestureIdRef.current = null;
   };
 
-  useEffect(() => endPluginResizeSessions, []);
+  useEffect(
+    () => () => {
+      const gestureId = resizeGestureIdRef.current;
+      endPluginResizeSessions();
+      if (gestureId) cancelUncommittedMixedGestureTransaction(gestureId);
+    },
+    [],
+  );
 
   const handleResizeStart = (_handle?: ResizeHandle) => {
     if (resizeStartRef.current) return;
@@ -122,6 +136,14 @@ export function useGridResize({
     const gestureId = crypto.randomUUID();
     resizeGestureIdRef.current = gestureId;
     beginPluginResizeSessions(gestureId);
+    if (
+      pluginResizeTokensRef.current.size > 0 &&
+      selectedElements.some((element) => element.type !== 'plugin')
+    ) {
+      beginMixedGestureTransaction(gestureId, [
+        ...pluginResizeTokensRef.current.keys(),
+      ]);
+    }
 
     // 기존 스마트 가이드 클리어
     useSmartGuidesStore.getState().clearGuides();

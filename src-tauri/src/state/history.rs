@@ -748,6 +748,21 @@ impl HistoryService {
         )
     }
 
+    pub(crate) fn prepare_gesture_entry(
+        &self,
+        snapshots: Vec<HistorySnapshot>,
+        gesture_id: String,
+    ) -> Result<HistoryRecordPlan, String> {
+        validate_compound_snapshots(&snapshots)?;
+        self.prepare_snapshot_with_gesture_ids(
+            HistoryScope::Compound,
+            HistorySnapshot::Compound { snapshots },
+            vec![gesture_id],
+            None,
+            Vec::new(),
+        )
+    }
+
     fn prepare_snapshot(
         &self,
         scope: HistoryScope,

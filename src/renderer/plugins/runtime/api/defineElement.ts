@@ -20,7 +20,9 @@ import { pluginInstancesApi } from '@api/modules/pluginInstancesApi';
 import {
   createPluginInstancesSaveDebounce,
   enqueuePluginInstancesCommit,
+  isPluginInstancesGestureStaged,
   registerPluginInstancesEditSessionFlush,
+  registerPluginInstancesStagedRelease,
   touchPluginInstancesEditSession,
 } from '../displayElement/instancesCommitQueue';
 import { schedulePluginPanelModelSync } from '@utils/plugin/panelModelSync';
@@ -339,7 +341,9 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           );
         },
       });
+      let stagedSavePending = false;
       cancelPendingInstanceSave = () => {
+        stagedSavePending = false;
         instanceSaveDebounce.cancel();
         instanceSaveGeneration += 1;
       };
@@ -347,6 +351,15 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       registerCleanup(
         registerPluginInstancesEditSessionFlush(pluginId, () => {
           instanceSaveDebounce.flush();
+        }),
+      );
+      registerCleanup(
+        registerPluginInstancesStagedRelease(pluginId, () => {
+          if (!stagedSavePending) return;
+          stagedSavePending = false;
+          instanceSaveDebounce.schedule(
+            touchPluginInstancesEditSession(pluginId),
+          );
         }),
       );
 
@@ -362,6 +375,10 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             if (!instanceSaveBarrier.shouldSave()) return;
             // 변경 시점 기준으로 edit-session TTL 갱신 - debounce가 세션을 쪼개지 않게
             const gestureId = touchPluginInstancesEditSession(pluginId);
+            if (isPluginInstancesGestureStaged(pluginId)) {
+              stagedSavePending = true;
+              return;
+            }
             instanceSaveDebounce.schedule(gestureId);
           }
         },

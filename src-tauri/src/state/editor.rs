@@ -214,13 +214,18 @@ pub(crate) fn validate_history_restore_metadata(
 pub(crate) fn request_fingerprint(
     request: &EditorCommitRequest,
 ) -> Result<RequestFingerprint, EditorCommitError> {
-    let value = serde_json::to_value(FingerprintPayload {
+    canonical_request_fingerprint(&FingerprintPayload {
         base_revision: request.base_revision,
         gesture_id: request.gesture_id.as_deref(),
         gesture_ids: &request.gesture_ids,
         changes: &request.changes,
     })
-    .map_err(|error| {
+}
+
+pub(crate) fn canonical_request_fingerprint(
+    payload: &impl Serialize,
+) -> Result<RequestFingerprint, EditorCommitError> {
+    let value = serde_json::to_value(payload).map_err(|error| {
         EditorCommitError::validation(
             "INVALID_REQUEST_PAYLOAD",
             format!("failed to serialize editor request: {error}"),

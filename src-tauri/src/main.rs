@@ -217,6 +217,7 @@ fn main() {
             commands::editor::note_tab::note_tab_clear,
             commands::editor::state::editor_get,
             commands::editor::state::editor_commit,
+            commands::editor::gesture::commit_gesture,
             commands::editor::history::history_status,
             commands::editor::history::history_undo,
             commands::editor::history::history_redo,

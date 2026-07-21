@@ -20,6 +20,7 @@ import type {
   EditorDocumentV1,
   EditorField,
   EditorGetResult,
+  EditorGestureCommitContext,
   EditorPatchV1,
 } from '@src/types/editor';
 
@@ -236,6 +237,7 @@ export class EditorSaveCoordinator {
   private drainPromise: Promise<void> | null = null;
   private syncPromise: Promise<void> | null = null;
   private eventQueue: Promise<void> = Promise.resolve();
+  private gestureCommitTail: Promise<unknown> = Promise.resolve();
   private unsubscribeCommitted: EditorReadyUnsubscribe | null = null;
   private bufferedEvents: EditorCommittedV1[] = [];
   private ownMutations = new Set<string>();
@@ -324,6 +326,7 @@ export class EditorSaveCoordinator {
     document?: EditorDocumentV1,
   ): Promise<EditorDocumentV1> {
     this.assertWritable();
+    await this.waitForGestureCommits();
     await this.start();
     // gradient canonical 정규화를 assert 앞에 — 이후 diff·invoke가 같은 값 사용
     const currentDocument = canonicalizeEditorGradients(
@@ -390,6 +393,7 @@ export class EditorSaveCoordinator {
     meta?: { gestureId?: string },
   ): Promise<EditorDocumentV1> {
     this.assertWritable();
+    await this.waitForGestureCommits();
     await this.start();
     // gradient canonical 정규화를 assert 앞에 — optimistic·diff·invoke가 같은 값 사용
     const canonicalChanges = canonicalizeEditorGradients(changes);
@@ -420,8 +424,37 @@ export class EditorSaveCoordinator {
     );
   }
 
+  commitGesture(
+    changes: EditorPatchV1 | undefined,
+    gestureId: string,
+    commit: (
+      context: EditorGestureCommitContext,
+    ) => Promise<EditorCommitResult>,
+  ): Promise<EditorDocumentV1> {
+    this.assertWritable();
+    const previous = this.gestureCommitTail;
+    // 앞선 gesture 실패가 다음 gesture로 전파되지 않게 양쪽 경로 모두 실행
+    const runInner = () => this.commitGestureInner(changes, gestureId, commit);
+    const run = previous.then(runInner, runInner);
+    this.gestureCommitTail = run;
+    void run.then(
+      () => {
+        if (this.gestureCommitTail === run) {
+          this.gestureCommitTail = Promise.resolve();
+        }
+      },
+      () => {
+        if (this.gestureCommitTail === run) {
+          this.gestureCommitTail = Promise.resolve();
+        }
+      },
+    );
+    return run;
+  }
+
   async retryPending(): Promise<EditorDocumentV1> {
     this.assertWritable();
+    await this.waitForGestureCommits();
     await this.start();
     if (this.conflict) {
       throw this.error ?? new Error('editor conflict pending');
@@ -440,6 +473,7 @@ export class EditorSaveCoordinator {
     resolution: EditorConflictResolution,
   ): Promise<EditorDocumentV1> {
     if (resolution === 'keepLocal') this.assertWritable();
+    await this.waitForGestureCommits();
     if (this.drainPromise) {
       await this.drainPromise.catch(() => undefined);
     }
@@ -478,6 +512,7 @@ export class EditorSaveCoordinator {
   }
 
   async sync(options: EditorSyncOptions = {}): Promise<void> {
+    await this.waitForGestureCommits();
     await this.start();
     if (this.syncPromise) {
       await this.syncPromise;
@@ -497,6 +532,7 @@ export class EditorSaveCoordinator {
   }
 
   async flush(): Promise<EditorDocumentV1> {
+    await this.waitForGestureCommits();
     if (this.isReadOnly()) {
       await this.start();
       await this.eventQueue;
@@ -692,6 +728,115 @@ export class EditorSaveCoordinator {
         if (this.inFlight?.mutationId === mutationId) this.inFlight = null;
       }
     }
+  }
+
+  private async commitGestureInner(
+    changes: EditorPatchV1 | undefined,
+    gestureId: string,
+    commit: (
+      context: EditorGestureCommitContext,
+    ) => Promise<EditorCommitResult>,
+  ): Promise<EditorDocumentV1> {
+    await this.start();
+    await this.drainUntilSettled();
+    await this.eventQueue;
+    if (this.conflict) {
+      throw this.error ?? new Error('editor conflict pending');
+    }
+
+    const canonicalChanges = changes
+      ? canonicalizeEditorGradients(changes)
+      : undefined;
+    if (canonicalChanges) assertEditorPatch(canonicalChanges);
+    const baseDocument = clone(this.requireLastAck());
+    const target = canonicalChanges
+      ? applyEditorPatch(baseDocument, canonicalChanges)
+      : baseDocument;
+    const requestFields = canonicalChanges
+      ? EDITOR_FIELDS.filter((field) => canonicalChanges[field] !== undefined)
+      : [];
+    const localFields = getChangedEditorFields(baseDocument, target);
+    const mutationId = this.createMutationId();
+    const inFlight: InFlightCommit = {
+      mutationId,
+      baseRevision: this.requireRevision(),
+      baseDocument,
+      target: clone(target),
+      localFields,
+      requestFields,
+      gestureIds: [gestureId],
+    };
+    this.inFlight = inFlight;
+    this.rememberOwnMutation(inFlight);
+    this.phase = 'saving';
+    this.notify();
+
+    try {
+      const result = await commit({
+        editorBaseRevision: inFlight.baseRevision,
+        mutationId,
+        ...(requestFields.length > 0
+          ? { editorChanges: patchForFields(target, requestFields) }
+          : {}),
+      });
+      assertEditorCommitResult(result);
+      await this.applyCommitResult(inFlight, result);
+      this.error = null;
+      this.failureKind = null;
+      this.phase = 'idle';
+      this.notify();
+      return clone(this.requireLastAck());
+    } catch (error) {
+      this.ownMutations.delete(mutationId);
+      if (isEditorCommitError(error) && error.retryable) {
+        try {
+          const canonical = await this.transport.get();
+          assertEditorGetResult(canonical);
+          if (canonical.revision >= this.requireRevision()) {
+            this.revision = canonical.revision;
+            this.lastAck = clone(canonical.document);
+          }
+        } catch {
+          // 원래 transaction 오류를 유지
+        }
+      }
+      this.error = error;
+      this.failureKind =
+        isEditorCommitError(error) && error.retryable
+          ? 'transient'
+          : 'permanent';
+      this.phase = 'error';
+      this.applyRejectedGestureProjection(inFlight);
+      this.notify();
+      throw error;
+    } finally {
+      if (this.inFlight?.mutationId === mutationId) this.inFlight = null;
+    }
+  }
+
+  private applyRejectedGestureProjection(inFlight: InFlightCommit): void {
+    const local = this.readDocument();
+    const changedAfterTarget = new Set(
+      getChangedEditorFields(inFlight.target, local),
+    );
+    const changedAfterBase = new Set(
+      getChangedEditorFields(inFlight.baseDocument, local),
+    );
+    const rollbackFields = inFlight.localFields.filter(
+      (field) => !changedAfterTarget.has(field) || !changedAfterBase.has(field),
+    );
+    if (rollbackFields.length === 0) return;
+
+    // 실패한 transaction 이후의 낙관 편집은 rollback 소유 범위 밖
+    const rejected = applyEditorPatch(
+      local,
+      patchForFields(this.requireLastAck(), rollbackFields),
+    );
+    this.applyDocument(clone(rejected), 'rejected');
+  }
+
+  private async waitForGestureCommits(): Promise<void> {
+    await this.gestureCommitTail.catch(() => undefined);
   }
 
   private async applyCommitResult(

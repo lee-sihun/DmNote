@@ -20,6 +20,8 @@ interface PluginEditSession {
 
 const editSessions = new Map<string, PluginEditSession>();
 const editSessionFlushers = new Map<string, Set<() => void>>();
+const stagedGestures = new Map<string, string>();
+const stagedReleaseListeners = new Map<string, Set<() => void>>();
 
 const schedulePluginInstancesEditSessionCleanup = (
   pluginId: string,
@@ -78,6 +80,23 @@ export const registerPluginInstancesEditSessionFlush = (
   };
 };
 
+export const registerPluginInstancesStagedRelease = (
+  pluginId: string,
+  listener: () => void,
+): (() => void) => {
+  const listeners =
+    stagedReleaseListeners.get(pluginId) ?? new Set<() => void>();
+  listeners.add(listener);
+  stagedReleaseListeners.set(pluginId, listeners);
+
+  return () => {
+    const current = stagedReleaseListeners.get(pluginId);
+    if (!current) return;
+    current.delete(listener);
+    if (current.size === 0) stagedReleaseListeners.delete(pluginId);
+  };
+};
+
 export const rotatePluginInstancesEditSession = (
   pluginId: string,
   preferredGestureId?: string,
@@ -130,6 +149,50 @@ export const clearPluginInstancesEditSessions = (): void => {
     if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
   });
   editSessions.clear();
+  stagedGestures.clear();
+};
+
+export const stagePluginInstancesGesture = (
+  pluginId: string,
+  gestureId: string,
+): void => {
+  stagedGestures.set(pluginId, gestureId);
+};
+
+export const getStagedPluginInstancesGestureId = (
+  pluginId: string,
+): string | undefined => stagedGestures.get(pluginId);
+
+export const unstagePluginInstancesGesture = (
+  pluginId: string,
+  gestureId: string,
+): void => {
+  if (stagedGestures.get(pluginId) === gestureId) {
+    stagedGestures.delete(pluginId);
+    stagedReleaseListeners.get(pluginId)?.forEach((listener) => listener());
+  }
+};
+
+export const isPluginInstancesGestureStaged = (
+  pluginId: string,
+  gestureId?: string,
+): boolean => {
+  const staged = stagedGestures.get(pluginId);
+  return (
+    staged !== undefined && (gestureId === undefined || staged === gestureId)
+  );
+};
+
+export const hasConflictingPluginInstancesGesture = (
+  pluginId: string,
+  gestureId: string,
+): boolean => {
+  const stagedGestureId = stagedGestures.get(pluginId);
+  if (stagedGestureId !== undefined && stagedGestureId !== gestureId) {
+    return true;
+  }
+  const session = editSessions.get(pluginId);
+  return session !== undefined && session.id !== gestureId;
 };
 
 export const enqueuePluginInstancesCommit = <T>(
@@ -150,6 +213,19 @@ export const enqueuePluginInstancesCommit = <T>(
 };
 
 export const getPendingPluginInstancesCommitCount = (): number => queues.size;
+
+export const drainPluginInstancesCommitQueues = async (
+  pluginIds: readonly string[],
+): Promise<void> => {
+  const uniquePluginIds = [...new Set(pluginIds)];
+  while (true) {
+    const tails = uniquePluginIds
+      .map((pluginId) => queues.get(pluginId))
+      .filter((tail): tail is Promise<unknown> => tail !== undefined);
+    if (tails.length === 0) return;
+    await Promise.all(tails);
+  }
+};
 
 interface PluginInstancesSaveRequest {
   gestureId?: string;

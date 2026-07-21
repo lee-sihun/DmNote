@@ -263,6 +263,7 @@ pub struct EditorCommittedV1 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditorCommitOrigin {
     StrictEditorCommit,
+    GestureCommit,
     LegacyAdapter(String),
     HistoryUndo,
     HistoryRedo,
@@ -275,6 +276,7 @@ impl EditorCommitOrigin {
     pub fn event_name(&self) -> Option<String> {
         match self {
             Self::StrictEditorCommit => Some("editorCommit".to_string()),
+            Self::GestureCommit => Some("gestureCommit".to_string()),
             Self::LegacyAdapter(command) => Some(format!("legacy:{command}")),
             Self::HistoryUndo => Some("historyUndo".to_string()),
             Self::HistoryRedo => Some("historyRedo".to_string()),

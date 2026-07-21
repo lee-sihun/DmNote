@@ -13,6 +13,7 @@
           "app_quit",
           "app_quit_after_editor_flush",
           "app_restart",
+          "commit_gesture",
           "counter_animation_create",
           "counter_animation_delete",
           "counter_animation_list",

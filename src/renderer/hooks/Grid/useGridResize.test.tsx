@@ -20,12 +20,20 @@ const mocks = vi.hoisted(() => ({
   setDraggingOrResizing: vi.fn(),
   clearGuides: vi.fn(),
   commitPatch: vi.fn(() => Promise.resolve()),
+  beginMixedGesture: vi.fn(),
+  cancelMixedGesture: vi.fn(),
   elements: [] as Array<{ fullId: string; pluginId: string }>,
 }));
 
 vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
   beginPluginInstancesEditSession: mocks.begin,
   endPluginInstancesEditSession: mocks.end,
+}));
+
+vi.mock('@plugins/runtime/displayElement/gestureTransaction', () => ({
+  beginMixedGestureTransaction: mocks.beginMixedGesture,
+  cancelMixedGestureTransaction: mocks.cancelMixedGesture,
+  cancelUncommittedMixedGestureTransaction: mocks.cancelMixedGesture,
 }));
 
 vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
@@ -168,6 +176,8 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.setDraggingOrResizing.mockReset();
     mocks.clearGuides.mockReset();
     mocks.commitPatch.mockClear();
+    mocks.beginMixedGesture.mockClear();
+    mocks.cancelMixedGesture.mockClear();
     mocks.elements = [];
     mocks.begin.mockImplementation((pluginId: string, gestureId: string) => {
       const token = `token-${++tokenSequence}`;
@@ -254,6 +264,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
     ]);
     expect(new Set(pluginGestureIds).size).toBe(1);
     expect(onResizeEnd).toHaveBeenCalledWith(pluginGestureIds[0]);
+    expect(mocks.beginMixedGesture).not.toHaveBeenCalled();
   });
 
   it('혼합 그룹 resize는 중복 commit 없이 공유 gesture를 종료 callback에 전달한다', async () => {
@@ -277,6 +288,10 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(mocks.commitPatch).not.toHaveBeenCalled();
     expect(onResizeEnd).toHaveBeenCalledTimes(1);
     expect(onResizeEnd).toHaveBeenCalledWith(pluginGestureIds[0]);
+    expect(mocks.beginMixedGesture).toHaveBeenCalledWith(pluginGestureIds[0], [
+      'plugin-a',
+    ]);
+    expect(mocks.cancelMixedGesture).toHaveBeenCalledWith(pluginGestureIds[0]);
   });
 
   it('active resize 중 unmount하면 보관한 token을 종료한다', async () => {

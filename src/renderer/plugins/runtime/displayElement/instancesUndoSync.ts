@@ -74,11 +74,12 @@ const appliedRevisions = new Map<string, number>();
 /** canonical pull 후 등록된 정의별 재주입 - undo 재결합과 실패 복구가 공유 */
 export const applyCanonicalPluginInstances = async (
   pluginId: string,
+  force = false,
 ): Promise<void> => {
   const snapshot = await pluginInstancesApi.get(pluginId);
   noteBackendPluginRevision(snapshot.modelRevision);
   const applied = appliedRevisions.get(pluginId) ?? 0;
-  if (snapshot.modelRevision <= applied) return;
+  if (!force && snapshot.modelRevision <= applied) return;
   appliedRevisions.set(pluginId, snapshot.modelRevision);
 
   const byDef = reappliers.get(pluginId);

@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   ),
   deletePluginElements: vi.fn(),
   rotateSession: vi.fn(),
+  beginMixedGesture: vi.fn(),
+  cancelUncommittedMixedGesture: vi.fn(),
+  commitMixedGesture: vi.fn(() => Promise.resolve()),
   sendBridgeMessage: vi.fn(),
 }));
 
@@ -33,6 +36,12 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
 
 vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
   rotatePluginInstancesEditSession: mocks.rotateSession,
+}));
+
+vi.mock('@plugins/runtime/displayElement/gestureTransaction', () => ({
+  beginMixedGestureTransaction: mocks.beginMixedGesture,
+  cancelUncommittedMixedGestureTransaction: mocks.cancelUncommittedMixedGesture,
+  commitMixedGestureTransaction: mocks.commitMixedGesture,
 }));
 
 vi.mock('@utils/plugin/bridgeMessages', () => ({
@@ -90,6 +99,9 @@ describe('useGridSelection compound history gesture', () => {
     mocks.commitPatch.mockClear();
     mocks.deletePluginElements.mockClear();
     mocks.rotateSession.mockClear();
+    mocks.beginMixedGesture.mockClear();
+    mocks.cancelUncommittedMixedGesture.mockClear();
+    mocks.commitMixedGesture.mockClear();
     mocks.sendBridgeMessage.mockClear();
     randomUUID = vi.spyOn(crypto, 'randomUUID').mockReturnValue(gestureId);
 
@@ -141,7 +153,40 @@ describe('useGridSelection compound history gesture', () => {
       ['plugin-a:element'],
       gestureId,
     );
-    expect(mocks.commitPatch.mock.calls.at(-1)?.[1]).toEqual({ gestureId });
+    expect(mocks.beginMixedGesture).toHaveBeenCalledWith(gestureId, [
+      'plugin-a',
+    ]);
+    expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
+      gestureId,
+      expect.objectContaining({ schemaVersion: 1 }),
+      ['plugin-a'],
+    );
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('혼합 삭제 중 동기 예외가 나도 staged transaction을 정산한다', async () => {
+    const error = new Error('delete projection failed');
+    mocks.deletePluginElements.mockImplementationOnce(() => {
+      throw error;
+    });
+    await act(async () => {
+      useGridSelectionStore.getState().setSelectedElements([
+        { type: 'key', id: 'key-0', index: 0 },
+        { type: 'plugin', id: 'plugin-a:element' },
+      ]);
+    });
+
+    let caught: unknown;
+    await act(async () => {
+      try {
+        await api.deleteSelectedElements();
+      } catch (nextError) {
+        caught = nextError;
+      }
+    });
+
+    expect(caught).toBe(error);
+    expect(mocks.cancelUncommittedMixedGesture).toHaveBeenCalledWith(gestureId);
   });
 
   it('혼합 붙여넣기는 editor와 plugin에 같은 gestureId를 전달한다', async () => {
@@ -158,7 +203,47 @@ describe('useGridSelection compound history gesture', () => {
     await act(async () => api.pasteElements());
 
     expect(mocks.rotateSession).toHaveBeenCalledWith('plugin-a', gestureId);
-    expect(mocks.commitPatch.mock.calls.at(-1)?.[1]).toEqual({ gestureId });
+    expect(mocks.beginMixedGesture).toHaveBeenCalledWith(gestureId, [
+      'plugin-a',
+    ]);
+    expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
+      gestureId,
+      expect.objectContaining({ schemaVersion: 1 }),
+      ['plugin-a'],
+    );
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('혼합 붙여넣기 중 동기 예외가 나도 staged transaction을 정산한다', async () => {
+    act(() => {
+      useGridSelectionStore.getState().setClipboard([
+        { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        {
+          type: 'plugin',
+          element: pluginClipboardElement(),
+        },
+      ]);
+    });
+    const error = new Error('paste projection failed');
+    const pluginStore = usePluginDisplayElementStore.getState();
+    const setElements = vi
+      .spyOn(pluginStore, 'setElements')
+      .mockImplementationOnce(() => {
+        throw error;
+      });
+
+    let caught: unknown;
+    await act(async () => {
+      try {
+        await api.pasteElements();
+      } catch (nextError) {
+        caught = nextError;
+      }
+    });
+    setElements.mockRestore();
+
+    expect(caught).toBe(error);
+    expect(mocks.cancelUncommittedMixedGesture).toHaveBeenCalledWith(gestureId);
   });
 
   it('resize 종료 callback은 전달받은 gestureId로 editor를 저장한다', () => {

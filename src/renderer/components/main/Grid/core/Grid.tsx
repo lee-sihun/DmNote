@@ -99,6 +99,10 @@ import {
   endPluginInstancesEditSession,
   rotatePluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import {
+  beginMixedGestureTransaction,
+  cancelUncommittedMixedGestureTransaction,
+} from '@plugins/runtime/displayElement/gestureTransaction';
 
 type ToolbarAddRequest = {
   id: number;
@@ -362,10 +366,21 @@ const Grid = ({
           );
         }
       });
+    if (
+      tokens.size > 0 &&
+      useGridSelectionStore
+        .getState()
+        .selectedElements.some((element) => element.type !== 'plugin')
+    ) {
+      beginMixedGestureTransaction(gestureId, [...tokens.keys()]);
+    }
     return () => {
       tokens.forEach((token, pluginId) => {
         endPluginInstancesEditSession(pluginId, token);
       });
+      // 종료 경로가 혼합 커밋을 타지 않은 경우 staged 잔존으로 barrier가
+      // 영구 대기하지 않도록 미커밋 staged만 정산
+      cancelUncommittedMixedGestureTransaction(gestureId);
       if (selectedDragGestureIdRef.current === gestureId) {
         selectedDragGestureIdRef.current = null;
       }

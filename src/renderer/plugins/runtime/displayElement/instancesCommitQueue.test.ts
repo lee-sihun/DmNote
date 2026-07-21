@@ -7,10 +7,16 @@ import {
   createPluginInstancesSaveDebounce,
   endPluginInstancesEditSession,
   enqueuePluginInstancesCommit,
+  drainPluginInstancesCommitQueues,
   getPendingPluginInstancesCommitCount,
+  hasConflictingPluginInstancesGesture,
   registerPluginInstancesEditSessionFlush,
+  registerPluginInstancesStagedRelease,
   rotatePluginInstancesEditSession,
+  stagePluginInstancesGesture,
   touchPluginInstancesEditSession,
+  isPluginInstancesGestureStaged,
+  unstagePluginInstancesGesture,
 } from './instancesCommitQueue';
 
 const deferred = () => {
@@ -110,6 +116,45 @@ describe('plugin instances commit queue lifecycle', () => {
       sharedGestureId,
     );
     expect(flush).not.toHaveBeenCalled();
+  });
+
+  it('transaction staging은 해당 plugin과 gesture에만 적용된다', () => {
+    const gestureId = '00000000-0000-4000-8000-0000000000f4';
+    stagePluginInstancesGesture('plugin-a', gestureId);
+
+    expect(isPluginInstancesGestureStaged('plugin-a')).toBe(true);
+    expect(isPluginInstancesGestureStaged('plugin-a', gestureId)).toBe(true);
+    expect(isPluginInstancesGestureStaged('plugin-a', 'other')).toBe(false);
+    expect(isPluginInstancesGestureStaged('plugin-b')).toBe(false);
+
+    unstagePluginInstancesGesture('plugin-a', 'other');
+    expect(isPluginInstancesGestureStaged('plugin-a')).toBe(true);
+    unstagePluginInstancesGesture('plugin-a', gestureId);
+    expect(isPluginInstancesGestureStaged('plugin-a')).toBe(false);
+  });
+
+  it('staging 해제는 보류된 저장을 정확한 owner에서만 재개한다', () => {
+    const released = vi.fn();
+    cleanups.push(registerPluginInstancesStagedRelease('plugin-a', released));
+    stagePluginInstancesGesture('plugin-a', 'gesture-a');
+
+    unstagePluginInstancesGesture('plugin-a', 'gesture-b');
+    expect(released).not.toHaveBeenCalled();
+
+    unstagePluginInstancesGesture('plugin-a', 'gesture-a');
+    expect(released).toHaveBeenCalledOnce();
+  });
+
+  it('실패 복구는 같은 plugin의 후속 gesture 소유권을 감지한다', () => {
+    stagePluginInstancesGesture('plugin-a', 'gesture-a');
+    expect(hasConflictingPluginInstancesGesture('plugin-a', 'gesture-a')).toBe(
+      false,
+    );
+
+    beginPluginInstancesEditSession('plugin-a', 'gesture-b');
+    expect(hasConflictingPluginInstancesGesture('plugin-a', 'gesture-a')).toBe(
+      true,
+    );
   });
 
   it('명시적 end는 최종 pending 저장을 같은 gestureId로 flush한다', async () => {
@@ -246,6 +291,27 @@ describe('plugin instances commit queue lifecycle', () => {
     await expect(secondRun).resolves.toBe('second');
     await Promise.resolve();
     expect(getPendingPluginInstancesCommitCount()).toBe(0);
+  });
+
+  it('transaction drain은 지정한 plugin의 직렬화 tail을 모두 기다린다', async () => {
+    const first = deferred();
+    const second = deferred();
+    void enqueuePluginInstancesCommit('plugin-a', () => first.promise);
+    void enqueuePluginInstancesCommit('plugin-b', () => second.promise);
+
+    let drained = false;
+    const draining = drainPluginInstancesCommitQueues(['plugin-a']).then(() => {
+      drained = true;
+    });
+    await Promise.resolve();
+    expect(drained).toBe(false);
+
+    second.resolve();
+    await Promise.resolve();
+    expect(drained).toBe(false);
+    first.resolve();
+    await draining;
+    expect(drained).toBe(true);
   });
 
   it('실패한 마지막 tail도 제거한다', async () => {

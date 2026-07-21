@@ -43,6 +43,11 @@ import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoord
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { deletePluginElements } from '@plugins/rpc/pluginElementActions';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import {
+  beginMixedGestureTransaction,
+  cancelUncommittedMixedGestureTransaction,
+  commitMixedGestureTransaction,
+} from '@plugins/runtime/displayElement/gestureTransaction';
 
 interface UseGridSelectionParams {
   selectedElements: SelectedElement[];
@@ -88,20 +93,42 @@ export function useGridSelection({
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
     const currentKnobPositions = useKnobItemStore.getState().positions;
-    void editorCoordinator
-      .commitPatch(
-        {
-          schemaVersion: 1,
-          keyPositions: currentPositions,
-          statPositions: currentStatPositions,
-          graphPositions: currentGraphPositions,
-          knobPositions: currentKnobPositions,
-        },
-        gestureId ? { gestureId } : undefined,
-      )
-      .catch((error: Error) => {
-        console.error('Failed to persist selected element positions', error);
-      });
+    const editorChanges = {
+      schemaVersion: 1 as const,
+      keyPositions: currentPositions,
+      statPositions: currentStatPositions,
+      graphPositions: currentGraphPositions,
+      knobPositions: currentKnobPositions,
+    };
+    const currentSelection = useGridSelectionStore.getState().selectedElements;
+    const selectedPluginElementIds = new Set(
+      currentSelection
+        .filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
+    const pluginIds = [
+      ...new Set(
+        usePluginDisplayElementStore
+          .getState()
+          .elements.filter((element) =>
+            selectedPluginElementIds.has(element.fullId),
+          )
+          .map((element) => element.pluginId),
+      ),
+    ];
+    const isMixed =
+      currentSelection.some((element) => element.type !== 'plugin') &&
+      pluginIds.length > 0;
+    const persisted =
+      gestureId && isMixed
+        ? commitMixedGestureTransaction(gestureId, editorChanges, pluginIds)
+        : editorCoordinator.commitPatch(
+            editorChanges,
+            gestureId ? { gestureId } : undefined,
+          );
+    void persisted.catch((error: Error) => {
+      console.error('Failed to persist selected element positions', error);
+    });
 
     // 플러그인 요소도 명시적으로 동기화 (드래그 종료 시 skipSync로 인해 동기화되지 않았을 수 있음)
     const currentPluginElements =
@@ -290,125 +317,164 @@ export function useGridSelection({
       .filter((el) => el.type === 'plugin')
       .map((el) => el.id);
     const gestureId = crypto.randomUUID();
-
-    // 먼저 선택 해제 (삭제된 인덱스 참조 방지)
-    clearSelection();
-
-    // 키 배치 삭제 (atomic update로 한 번의 리렌더링만 발생)
-    if (keysToDelete.length > 0) {
-      const { keyMappings: km, canonicalPositions: pos } =
-        useKeyStore.getState();
-      const mapping = km[selectedKeyType] || [];
-      const posArray = pos[selectedKeyType] || [];
-
-      // 삭제할 인덱스를 Set으로 변환 (O(1) 조회)
-      const deleteSet = new Set(keysToDelete);
-
-      const updatedMappings = {
-        ...km,
-        [selectedKeyType]: mapping.filter((_, index) => !deleteSet.has(index)),
-      };
-
-      const updatedPositions = {
-        ...pos,
-        [selectedKeyType]: posArray.filter((_, index) => !deleteSet.has(index)),
-      };
-
-      // Atomic update: mappings, positions 동시 업데이트로 중간 상태 방지
-      useKeyStore
-        .getState()
-        .setKeyMappingsAndPositions(updatedMappings, updatedPositions);
-    }
-
-    // 플러그인 요소 배치 삭제
-    if (pluginsToDelete.length > 0) {
-      deletePluginElements(pluginsToDelete, gestureId);
-    }
-
-    // 통계 요소 배치 삭제
-    if (statsToDelete.length > 0) {
-      const current = useStatItemStore.getState().positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const deleteSet = new Set(statsToDelete);
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
-      };
-
-      useStatItemStore.getState().setPositions(updatedPositions);
-    }
-
-    // 그래프 요소 배치 삭제
-    if (graphsToDelete.length > 0) {
-      const current = useGraphItemStore.getState().positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const deleteSet = new Set(graphsToDelete);
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
-      };
-
-      useGraphItemStore.getState().setPositions(updatedPositions);
-    }
-
-    // 노브 요소 배치 삭제
-    if (knobsToDelete.length > 0) {
-      const current = useKnobItemStore.getState().positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const deleteSet = new Set(knobsToDelete);
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
-      };
-
-      useKnobItemStore.getState().setPositions(updatedPositions);
-    }
-
-    const normalized = normalizeLayerGroupsForMode({
-      mode: selectedKeyType,
-      keyPositions: useKeyStore.getState().canonicalPositions,
-      statPositions: useStatItemStore.getState().positions,
-      graphPositions: useGraphItemStore.getState().positions,
-      knobPositions: useKnobItemStore.getState().positions,
-      layerGroups: useLayerGroupStore.getState().layerGroups,
-    });
-
-    if (normalized.positionsChanged || normalized.groupsChanged) {
-      useKeyStore.getState().setPositions(normalized.keyPositions);
-      useStatItemStore.getState().setPositions(normalized.statPositions);
-      useGraphItemStore.getState().setPositions(normalized.graphPositions);
-      useKnobItemStore.getState().setPositions(normalized.knobPositions);
-      if (normalized.groupsChanged) {
-        useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-      }
-    }
-
+    const pluginIdsToDelete = [
+      ...new Set(
+        usePluginDisplayElementStore
+          .getState()
+          .elements.filter((element) =>
+            pluginsToDelete.includes(element.fullId),
+          )
+          .map((element) => element.pluginId),
+      ),
+    ];
     const hasEditorDeletion =
       keysToDelete.length > 0 ||
       statsToDelete.length > 0 ||
       graphsToDelete.length > 0 ||
       knobsToDelete.length > 0;
-    if (
-      hasEditorDeletion ||
-      normalized.positionsChanged ||
-      normalized.groupsChanged
-    ) {
-      const keyState = useKeyStore.getState();
-      try {
-        await editorCoordinator.commitPatch(
-          {
-            schemaVersion: 1,
-            ...(keysToDelete.length > 0 ? { keys: keyState.keyMappings } : {}),
-            keyPositions: keyState.canonicalPositions,
-            statPositions: useStatItemStore.getState().positions,
-            graphPositions: useGraphItemStore.getState().positions,
-            knobPositions: useKnobItemStore.getState().positions,
-            layerGroups: useLayerGroupStore.getState().layerGroups,
-          },
-          { gestureId },
-        );
-      } catch (error) {
-        console.error('Failed to persist selected element deletion', error);
+    const isMixedDeletion = hasEditorDeletion && pluginIdsToDelete.length > 0;
+    try {
+      if (isMixedDeletion) {
+        pluginIdsToDelete.forEach((pluginId) => {
+          rotatePluginInstancesEditSession(pluginId, gestureId);
+        });
+        beginMixedGestureTransaction(gestureId, pluginIdsToDelete);
+      }
+
+      // 먼저 선택 해제 (삭제된 인덱스 참조 방지)
+      clearSelection();
+
+      // 키 배치 삭제 (atomic update로 한 번의 리렌더링만 발생)
+      if (keysToDelete.length > 0) {
+        const { keyMappings: km, canonicalPositions: pos } =
+          useKeyStore.getState();
+        const mapping = km[selectedKeyType] || [];
+        const posArray = pos[selectedKeyType] || [];
+
+        // 삭제할 인덱스를 Set으로 변환 (O(1) 조회)
+        const deleteSet = new Set(keysToDelete);
+
+        const updatedMappings = {
+          ...km,
+          [selectedKeyType]: mapping.filter(
+            (_, index) => !deleteSet.has(index),
+          ),
+        };
+
+        const updatedPositions = {
+          ...pos,
+          [selectedKeyType]: posArray.filter(
+            (_, index) => !deleteSet.has(index),
+          ),
+        };
+
+        // Atomic update: mappings, positions 동시 업데이트로 중간 상태 방지
+        useKeyStore
+          .getState()
+          .setKeyMappingsAndPositions(updatedMappings, updatedPositions);
+      }
+
+      // 플러그인 요소 배치 삭제
+      if (pluginsToDelete.length > 0) {
+        deletePluginElements(pluginsToDelete, gestureId);
+      }
+
+      // 통계 요소 배치 삭제
+      if (statsToDelete.length > 0) {
+        const current = useStatItemStore.getState().positions;
+        const tabPositions = current[selectedKeyType] || [];
+        const deleteSet = new Set(statsToDelete);
+        const updatedPositions = {
+          ...current,
+          [selectedKeyType]: tabPositions.filter(
+            (_, idx) => !deleteSet.has(idx),
+          ),
+        };
+
+        useStatItemStore.getState().setPositions(updatedPositions);
+      }
+
+      // 그래프 요소 배치 삭제
+      if (graphsToDelete.length > 0) {
+        const current = useGraphItemStore.getState().positions;
+        const tabPositions = current[selectedKeyType] || [];
+        const deleteSet = new Set(graphsToDelete);
+        const updatedPositions = {
+          ...current,
+          [selectedKeyType]: tabPositions.filter(
+            (_, idx) => !deleteSet.has(idx),
+          ),
+        };
+
+        useGraphItemStore.getState().setPositions(updatedPositions);
+      }
+
+      // 노브 요소 배치 삭제
+      if (knobsToDelete.length > 0) {
+        const current = useKnobItemStore.getState().positions;
+        const tabPositions = current[selectedKeyType] || [];
+        const deleteSet = new Set(knobsToDelete);
+        const updatedPositions = {
+          ...current,
+          [selectedKeyType]: tabPositions.filter(
+            (_, idx) => !deleteSet.has(idx),
+          ),
+        };
+
+        useKnobItemStore.getState().setPositions(updatedPositions);
+      }
+
+      const normalized = normalizeLayerGroupsForMode({
+        mode: selectedKeyType,
+        keyPositions: useKeyStore.getState().canonicalPositions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        knobPositions: useKnobItemStore.getState().positions,
+        layerGroups: useLayerGroupStore.getState().layerGroups,
+      });
+
+      if (normalized.positionsChanged || normalized.groupsChanged) {
+        useKeyStore.getState().setPositions(normalized.keyPositions);
+        useStatItemStore.getState().setPositions(normalized.statPositions);
+        useGraphItemStore.getState().setPositions(normalized.graphPositions);
+        useKnobItemStore.getState().setPositions(normalized.knobPositions);
+        if (normalized.groupsChanged) {
+          useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
+        }
+      }
+
+      if (
+        hasEditorDeletion ||
+        normalized.positionsChanged ||
+        normalized.groupsChanged
+      ) {
+        const keyState = useKeyStore.getState();
+        const editorChanges = {
+          schemaVersion: 1 as const,
+          ...(keysToDelete.length > 0 ? { keys: keyState.keyMappings } : {}),
+          keyPositions: keyState.canonicalPositions,
+          statPositions: useStatItemStore.getState().positions,
+          graphPositions: useGraphItemStore.getState().positions,
+          knobPositions: useKnobItemStore.getState().positions,
+          layerGroups: useLayerGroupStore.getState().layerGroups,
+        };
+        try {
+          if (isMixedDeletion) {
+            await commitMixedGestureTransaction(
+              gestureId,
+              editorChanges,
+              pluginIdsToDelete,
+            );
+          } else {
+            await editorCoordinator.commitPatch(editorChanges, { gestureId });
+          }
+        } catch (error) {
+          console.error('Failed to persist selected element deletion', error);
+        }
+      }
+    } finally {
+      if (isMixedDeletion) {
+        cancelUncommittedMixedGestureTransaction(gestureId);
       }
     }
   };
@@ -623,227 +689,257 @@ export function useGridSelection({
       }
     }
 
-    // 새로 추가된 요소들의 선택을 위한 인덱스 추적
-    const newSelectedElements: SelectedElement[] = [];
-
-    // 붙여넣은 키 매핑 — 저장은 zIndex 확정 후 마지막에 1회만 (중간 저장은 순서 역전·패딩 위험)
-    let pastedKeyMappings: KeyMappings | null = null;
-
-    // 키 추가
-    if (keysToAdd.length > 0) {
-      const km = useKeyStore.getState().keyMappings;
-      const pos = useKeyStore.getState().canonicalPositions;
-      const mapping = [...(km[selectedKeyType] || [])];
-      const posArray = [...(pos[selectedKeyType] || [])];
-
-      const startIndex = mapping.length;
-
-      for (let i = 0; i < keysToAdd.length; i++) {
-        mapping.push(keysToAdd[i].keyCode);
-        posArray.push(keysToAdd[i].position);
-        newSelectedElements.push({
-          type: 'key',
-          id: `key-${startIndex + i}`,
-          index: startIndex + i,
-        });
-      }
-
-      const updatedMappings = { ...km, [selectedKeyType]: mapping };
-      const updatedPositions = { ...pos, [selectedKeyType]: posArray };
-
-      useKeyStore
-        .getState()
-        .setKeyMappingsAndPositions(updatedMappings, updatedPositions);
-
-      pastedKeyMappings = updatedMappings;
-    }
-
-    // 통계 요소 추가
-    if (statsToAdd.length > 0) {
-      const current = useStatItemStore.getState().positions;
-      const posArray = [...(current[selectedKeyType] || [])];
-      const startIndex = posArray.length;
-
-      for (let i = 0; i < statsToAdd.length; i++) {
-        posArray.push(statsToAdd[i].position);
-        newSelectedElements.push({
-          type: 'stat',
-          id: `stat-${startIndex + i}`,
-          index: startIndex + i,
-        });
-      }
-
-      const updatedPositions: StatItemPositions = {
-        ...current,
-        [selectedKeyType]: posArray,
-      };
-      useStatItemStore.getState().setPositions(updatedPositions);
-    }
-
-    // 그래프 요소 추가
-    if (graphsToAdd.length > 0) {
-      const current = useGraphItemStore.getState().positions;
-      const posArray = [...(current[selectedKeyType] || [])];
-      const startIndex = posArray.length;
-
-      for (let i = 0; i < graphsToAdd.length; i++) {
-        posArray.push(graphsToAdd[i].position);
-        newSelectedElements.push({
-          type: 'graph',
-          id: `graph-${startIndex + i}`,
-          index: startIndex + i,
-        });
-      }
-
-      const updatedPositions: GraphItemPositions = {
-        ...current,
-        [selectedKeyType]: posArray,
-      };
-      useGraphItemStore.getState().setPositions(updatedPositions);
-    }
-
-    // 노브 요소 추가 (zIndex 레이어 재배치 대상 외 — 별도 영속/동기화)
-    if (knobsToAdd.length > 0) {
-      const current = useKnobItemStore.getState().positions;
-      const posArray = [...(current[selectedKeyType] || [])];
-      const startIndex = posArray.length;
-
-      for (let i = 0; i < knobsToAdd.length; i++) {
-        posArray.push(knobsToAdd[i].position);
-        newSelectedElements.push({
-          type: 'knob',
-          id: `knob-${startIndex + i}`,
-          index: startIndex + i,
-        });
-      }
-
-      const updatedPositions: KnobItemPositions = {
-        ...current,
-        [selectedKeyType]: posArray,
-      };
-      useKnobItemStore.getState().setPositions(updatedPositions);
-    }
-
-    // 플러그인 요소 추가
-    if (pluginsToAdd.length > 0) {
-      new Set(pluginsToAdd.map((element) => element.pluginId)).forEach(
-        (pluginId) => {
-          rotatePluginInstancesEditSession(pluginId, gestureId);
-        },
-      );
-      const currentElements = usePluginDisplayElementStore.getState().elements;
-      const newElements = [...currentElements];
-
-      for (const elementData of pluginsToAdd) {
-        // 새로운 고유 ID 생성
-        const newFullId = `${elementData.pluginId}:${
-          elementData.id
-        }:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const newElement = {
-          ...elementData,
-          fullId: newFullId,
-        };
-        newElements.push(newElement);
-        newSelectedElements.push({
-          type: 'plugin',
-          id: newFullId,
-        });
-      }
-
-      usePluginDisplayElementStore.getState().setElements(newElements);
-    }
-
-    // === Phase 2: paste 위치 결정 + zIndex 재계산 ===
-    const freshKeyPos = useKeyStore.getState().canonicalPositions;
-    const freshStatPos = useStatItemStore.getState().positions;
-    const freshGraphPos = useGraphItemStore.getState().positions;
-    const freshKnobPos = useKnobItemStore.getState().positions;
-    const freshPluginEls = usePluginDisplayElementStore.getState().elements;
-
-    // 전체 레이어 목록 구성 (새로 push된 아이템 포함)
-    const allItems = buildLayerItemsForMode(
-      selectedKeyType,
-      freshKeyPos,
-      freshStatPos,
-      freshGraphPos,
-      freshKnobPos,
-      freshPluginEls,
-    );
-
-    // 새 아이템과 기존 아이템 분리
-    const newIds = new Set(newSelectedElements.map((el) => el.id));
-    const existing = allItems.filter((item) => !newIds.has(item.id));
-    const pasted = allItems.filter((item) => newIds.has(item.id));
-
-    // 앵커 위치 계산 (paste 전 선택 기준)
-    const anchor = findPasteAnchorIndex(
-      existing,
-      currentSelectedElements,
-      currentSelectedGroupIds,
-    );
-
-    // 새 아이템을 앵커 위치에 삽입
-    const reordered = [
-      ...existing.slice(0, anchor),
-      ...pasted,
-      ...existing.slice(anchor),
+    const pluginIdsToAdd = [
+      ...new Set(pluginsToAdd.map((element) => element.pluginId)),
     ];
+    const hasEditorPaste =
+      keysToAdd.length > 0 ||
+      statsToAdd.length > 0 ||
+      graphsToAdd.length > 0 ||
+      knobsToAdd.length > 0 ||
+      clipboardGroups.length > 0;
+    const isMixedPaste = hasEditorPaste && pluginIdsToAdd.length > 0;
+    try {
+      if (isMixedPaste) {
+        pluginIdsToAdd.forEach((pluginId) => {
+          rotatePluginInstancesEditSession(pluginId, gestureId);
+        });
+        beginMixedGestureTransaction(gestureId, pluginIdsToAdd);
+      }
 
-    // zIndex 일괄 재부여
-    const patch = applyZIndexToLayerOrder(
-      reordered,
-      selectedKeyType,
-      freshKeyPos,
-      freshStatPos,
-      freshGraphPos,
-      freshKnobPos,
-    );
+      // 새로 추가된 요소들의 선택을 위한 인덱스 추적
+      const newSelectedElements: SelectedElement[] = [];
 
-    // 스토어 업데이트 (동기 — 배칭으로 한 번에 렌더)
-    useKeyStore.getState().setPositions(patch.keyPositions);
-    useStatItemStore.getState().setPositions(patch.statPositions);
-    useGraphItemStore.getState().setPositions(patch.graphPositions);
-    useKnobItemStore.getState().setPositions(patch.knobPositions);
-    for (const { fullId, zIndex } of patch.pluginUpdates) {
-      usePluginDisplayElementStore
-        .getState()
-        .updateElement(fullId, { zIndex }, { skipSync: true });
-    }
+      // 붙여넣은 키 매핑 — 저장은 zIndex 확정 후 마지막에 1회만 (중간 저장은 순서 역전·패딩 위험)
+      let pastedKeyMappings: KeyMappings | null = null;
 
-    // 선택 업데이트도 동기 구간에서 처리 (await 전에 실행해야 깜빡임 방지)
-    if (newSelectedElements.length > 0) {
-      useGridSelectionStore.getState().setSkipPanelModeSwitch(true);
-      if (groupIdMap.size > 0) {
-        const newGroupIds = Array.from(groupIdMap.values());
-        useGridSelectionStore
+      // 키 추가
+      if (keysToAdd.length > 0) {
+        const km = useKeyStore.getState().keyMappings;
+        const pos = useKeyStore.getState().canonicalPositions;
+        const mapping = [...(km[selectedKeyType] || [])];
+        const posArray = [...(pos[selectedKeyType] || [])];
+
+        const startIndex = mapping.length;
+
+        for (let i = 0; i < keysToAdd.length; i++) {
+          mapping.push(keysToAdd[i].keyCode);
+          posArray.push(keysToAdd[i].position);
+          newSelectedElements.push({
+            type: 'key',
+            id: `key-${startIndex + i}`,
+            index: startIndex + i,
+          });
+        }
+
+        const updatedMappings = { ...km, [selectedKeyType]: mapping };
+        const updatedPositions = { ...pos, [selectedKeyType]: posArray };
+
+        useKeyStore
           .getState()
-          .setFullSelection(newSelectedElements, newGroupIds);
-      } else {
-        setSelectedElements(newSelectedElements);
+          .setKeyMappingsAndPositions(updatedMappings, updatedPositions);
+
+        pastedKeyMappings = updatedMappings;
+      }
+
+      // 통계 요소 추가
+      if (statsToAdd.length > 0) {
+        const current = useStatItemStore.getState().positions;
+        const posArray = [...(current[selectedKeyType] || [])];
+        const startIndex = posArray.length;
+
+        for (let i = 0; i < statsToAdd.length; i++) {
+          posArray.push(statsToAdd[i].position);
+          newSelectedElements.push({
+            type: 'stat',
+            id: `stat-${startIndex + i}`,
+            index: startIndex + i,
+          });
+        }
+
+        const updatedPositions: StatItemPositions = {
+          ...current,
+          [selectedKeyType]: posArray,
+        };
+        useStatItemStore.getState().setPositions(updatedPositions);
+      }
+
+      // 그래프 요소 추가
+      if (graphsToAdd.length > 0) {
+        const current = useGraphItemStore.getState().positions;
+        const posArray = [...(current[selectedKeyType] || [])];
+        const startIndex = posArray.length;
+
+        for (let i = 0; i < graphsToAdd.length; i++) {
+          posArray.push(graphsToAdd[i].position);
+          newSelectedElements.push({
+            type: 'graph',
+            id: `graph-${startIndex + i}`,
+            index: startIndex + i,
+          });
+        }
+
+        const updatedPositions: GraphItemPositions = {
+          ...current,
+          [selectedKeyType]: posArray,
+        };
+        useGraphItemStore.getState().setPositions(updatedPositions);
+      }
+
+      // 노브 요소 추가 (zIndex 레이어 재배치 대상 외 — 별도 영속/동기화)
+      if (knobsToAdd.length > 0) {
+        const current = useKnobItemStore.getState().positions;
+        const posArray = [...(current[selectedKeyType] || [])];
+        const startIndex = posArray.length;
+
+        for (let i = 0; i < knobsToAdd.length; i++) {
+          posArray.push(knobsToAdd[i].position);
+          newSelectedElements.push({
+            type: 'knob',
+            id: `knob-${startIndex + i}`,
+            index: startIndex + i,
+          });
+        }
+
+        const updatedPositions: KnobItemPositions = {
+          ...current,
+          [selectedKeyType]: posArray,
+        };
+        useKnobItemStore.getState().setPositions(updatedPositions);
+      }
+
+      // 플러그인 요소 추가
+      if (pluginsToAdd.length > 0) {
+        new Set(pluginsToAdd.map((element) => element.pluginId)).forEach(
+          (pluginId) => {
+            rotatePluginInstancesEditSession(pluginId, gestureId);
+          },
+        );
+        const currentElements =
+          usePluginDisplayElementStore.getState().elements;
+        const newElements = [...currentElements];
+
+        for (const elementData of pluginsToAdd) {
+          // 새로운 고유 ID 생성
+          const newFullId = `${elementData.pluginId}:${
+            elementData.id
+          }:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const newElement = {
+            ...elementData,
+            fullId: newFullId,
+          };
+          newElements.push(newElement);
+          newSelectedElements.push({
+            type: 'plugin',
+            id: newFullId,
+          });
+        }
+
+        usePluginDisplayElementStore.getState().setElements(newElements);
+      }
+
+      // === Phase 2: paste 위치 결정 + zIndex 재계산 ===
+      const freshKeyPos = useKeyStore.getState().canonicalPositions;
+      const freshStatPos = useStatItemStore.getState().positions;
+      const freshGraphPos = useGraphItemStore.getState().positions;
+      const freshKnobPos = useKnobItemStore.getState().positions;
+      const freshPluginEls = usePluginDisplayElementStore.getState().elements;
+
+      // 전체 레이어 목록 구성 (새로 push된 아이템 포함)
+      const allItems = buildLayerItemsForMode(
+        selectedKeyType,
+        freshKeyPos,
+        freshStatPos,
+        freshGraphPos,
+        freshKnobPos,
+        freshPluginEls,
+      );
+
+      // 새 아이템과 기존 아이템 분리
+      const newIds = new Set(newSelectedElements.map((el) => el.id));
+      const existing = allItems.filter((item) => !newIds.has(item.id));
+      const pasted = allItems.filter((item) => newIds.has(item.id));
+
+      // 앵커 위치 계산 (paste 전 선택 기준)
+      const anchor = findPasteAnchorIndex(
+        existing,
+        currentSelectedElements,
+        currentSelectedGroupIds,
+      );
+
+      // 새 아이템을 앵커 위치에 삽입
+      const reordered = [
+        ...existing.slice(0, anchor),
+        ...pasted,
+        ...existing.slice(anchor),
+      ];
+
+      // zIndex 일괄 재부여
+      const patch = applyZIndexToLayerOrder(
+        reordered,
+        selectedKeyType,
+        freshKeyPos,
+        freshStatPos,
+        freshGraphPos,
+        freshKnobPos,
+      );
+
+      // 스토어 업데이트 (동기 — 배칭으로 한 번에 렌더)
+      useKeyStore.getState().setPositions(patch.keyPositions);
+      useStatItemStore.getState().setPositions(patch.statPositions);
+      useGraphItemStore.getState().setPositions(patch.graphPositions);
+      useKnobItemStore.getState().setPositions(patch.knobPositions);
+      for (const { fullId, zIndex } of patch.pluginUpdates) {
+        usePluginDisplayElementStore
+          .getState()
+          .updateElement(fullId, { zIndex }, { skipSync: true });
+      }
+
+      // 선택 업데이트도 동기 구간에서 처리 (await 전에 실행해야 깜빡임 방지)
+      if (newSelectedElements.length > 0) {
+        useGridSelectionStore.getState().setSkipPanelModeSwitch(true);
+        if (groupIdMap.size > 0) {
+          const newGroupIds = Array.from(groupIdMap.values());
+          useGridSelectionStore
+            .getState()
+            .setFullSelection(newSelectedElements, newGroupIds);
+        } else {
+          setSelectedElements(newSelectedElements);
+        }
+      }
+
+      // 붙여넣기 전체를 한 revision으로 저장
+      const editorChanges = {
+        schemaVersion: 1 as const,
+        ...(pastedKeyMappings ? { keys: pastedKeyMappings } : {}),
+        keyPositions: patch.keyPositions,
+        statPositions: patch.statPositions,
+        graphPositions: patch.graphPositions,
+        knobPositions: patch.knobPositions,
+        layerGroups: useLayerGroupStore.getState().layerGroups,
+      };
+      try {
+        if (isMixedPaste) {
+          await commitMixedGestureTransaction(
+            gestureId,
+            editorChanges,
+            pluginIdsToAdd,
+          );
+        } else {
+          await editorCoordinator.commitPatch(editorChanges, { gestureId });
+        }
+      } catch (error) {
+        console.error('Failed to persist pasted elements', error);
+      }
+      const pluginEls = usePluginDisplayElementStore.getState().elements;
+      sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
+        elements: pluginEls,
+      });
+    } finally {
+      if (isMixedPaste) {
+        cancelUncommittedMixedGestureTransaction(gestureId);
       }
     }
-
-    // 붙여넣기 전체를 한 revision으로 저장
-    try {
-      await editorCoordinator.commitPatch(
-        {
-          schemaVersion: 1,
-          ...(pastedKeyMappings ? { keys: pastedKeyMappings } : {}),
-          keyPositions: patch.keyPositions,
-          statPositions: patch.statPositions,
-          graphPositions: patch.graphPositions,
-          knobPositions: patch.knobPositions,
-          layerGroups: useLayerGroupStore.getState().layerGroups,
-        },
-        { gestureId },
-      );
-    } catch (error) {
-      console.error('Failed to persist pasted elements', error);
-    }
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-    sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
-      elements: pluginEls,
-    });
   };
 
   return {

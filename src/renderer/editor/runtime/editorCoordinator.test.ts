@@ -349,6 +349,115 @@ describe('editor document helpers', () => {
 });
 
 describe('EditorSaveCoordinator', () => {
+  it('keeps queued mixed gestures as separate ordered transactions', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const firstResponse = deferred<EditorCommitResult>();
+    const contexts: Array<{
+      gestureId: string;
+      editorBaseRevision: number;
+      mutationId: string;
+      keys: string[] | undefined;
+    }> = [];
+
+    const first = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': ['B'] } },
+      'gesture-a',
+      async (context) => {
+        contexts.push({
+          gestureId: 'gesture-a',
+          editorBaseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          keys: context.editorChanges?.keys?.['4key'],
+        });
+        return firstResponse.promise;
+      },
+    );
+    const second = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': ['C'] } },
+      'gesture-b',
+      async (context) => {
+        contexts.push({
+          gestureId: 'gesture-b',
+          editorBaseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          keys: context.editorChanges?.keys?.['4key'],
+        });
+        return { revision: 2, changedFields: ['keys'] };
+      },
+    );
+
+    await vi.waitFor(() => expect(contexts).toHaveLength(1));
+    expect(contexts[0]).toMatchObject({
+      gestureId: 'gesture-a',
+      editorBaseRevision: 0,
+      keys: ['B'],
+    });
+    firstResponse.resolve({ revision: 1, changedFields: ['keys'] });
+    await expect(first).resolves.toMatchObject({ keys: { '4key': ['B'] } });
+    await expect(second).resolves.toMatchObject({ keys: { '4key': ['C'] } });
+
+    expect(contexts).toHaveLength(2);
+    expect(contexts[1]).toMatchObject({
+      gestureId: 'gesture-b',
+      editorBaseRevision: 1,
+      keys: ['C'],
+    });
+    expect(contexts[0].mutationId).not.toBe(contexts[1].mutationId);
+    expect(harness.coordinator.getState().lastAck).toMatchObject({
+      keys: { '4key': ['C'] },
+    });
+    harness.coordinator.stop();
+  });
+
+  it('resyncs canonical state when a gesture result is outcome-unknown', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const committing = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: target.keys },
+      'gesture-a',
+      async () => {
+        harness.transport.canonical = { revision: 1, document: target };
+        throw ioError();
+      },
+    );
+
+    await expect(committing).rejects.toEqual(ioError());
+    expect(harness.coordinator.getState().revision).toBe(1);
+    expect(harness.coordinator.getState().lastAck).toEqual(target);
+    expect(harness.getLocal()).toEqual(target);
+    harness.coordinator.stop();
+  });
+
+  it('gesture 실패가 이후 진행 중인 낙관 편집을 되돌리지 않는다', async () => {
+    const base = makeDocument('A');
+    const gestureTarget = makeDocument('B');
+    const laterOptimistic = makeDocument('C');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const response = deferred<EditorCommitResult>();
+
+    const committing = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: gestureTarget.keys },
+      'gesture-a',
+      () => response.promise,
+    );
+    await vi.waitFor(() =>
+      expect(harness.coordinator.getState().phase).toBe('saving'),
+    );
+    harness.setLocal(laterOptimistic);
+    response.reject(validationError());
+
+    await expect(committing).rejects.toEqual(validationError());
+    expect(harness.coordinator.getState().lastAck).toEqual(base);
+    expect(harness.getLocal()).toEqual(laterOptimistic);
+    harness.coordinator.stop();
+  });
+
   it('runs the start success hook after initialization recovers lazily', async () => {
     const initializationError = new Error('initial get failed');
     const onStartSucceeded = vi.fn(async () => {});

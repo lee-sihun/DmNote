@@ -54,6 +54,12 @@ export interface EditorCommitResult {
   changedFields: EditorField[];
 }
 
+export interface EditorGestureCommitContext {
+  editorBaseRevision: number;
+  mutationId: string;
+  editorChanges?: EditorPatchV1;
+}
+
 export interface EditorGetResult {
   revision: number;
   document: EditorDocumentV1;
@@ -74,6 +80,7 @@ export interface EditorCommittedV1 {
 
 export type EditorCommitErrorCode =
   | 'REVISION_CONFLICT'
+  | 'PLUGIN_REVISION_CONFLICT'
   | 'VALIDATION_FAILED'
   | 'TOO_MANY_GESTURE_IDS'
   | 'INVALID_GESTURE_ID'
@@ -100,6 +107,7 @@ export interface EditorCommitError {
 
 const EDITOR_ERROR_CODES = new Set<EditorCommitErrorCode>([
   'REVISION_CONFLICT',
+  'PLUGIN_REVISION_CONFLICT',
   'VALIDATION_FAILED',
   'TOO_MANY_GESTURE_IDS',
   'INVALID_GESTURE_ID',

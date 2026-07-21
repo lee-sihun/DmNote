@@ -26,6 +26,7 @@ let pushSeq = 0;
 let syncScheduled = false;
 let pendingElements: PluginDisplayElementInternal[] | null = null;
 let pendingDefinitions: Map<string, PluginDefinitionInternal> | null = null;
+let pendingModelRevision: number | null = null;
 
 // JSON 직렬화 보장 - 함수 값 필드 제거 (중첩 객체·배열 포함, 순환 참조는 절단)
 // seen은 현재 경로 기준 - 형제가 같은 객체를 공유하는 DAG는 그대로 직렬화
@@ -126,8 +127,10 @@ const buildDefinitionView = (
 const flushPanelModelSync = () => {
   const elements = pendingElements;
   const definitions = pendingDefinitions;
+  const modelRevision = pendingModelRevision;
   pendingElements = null;
   pendingDefinitions = null;
+  pendingModelRevision = null;
   if (!elements || !definitions) return;
 
   // 패널 창이 없으면 push 생략 - 재열림 시 request로 전체 스냅샷 복구
@@ -152,7 +155,7 @@ const flushPanelModelSync = () => {
 
   pushSeq += 1;
   const snapshot: PluginPanelModelSnapshot = {
-    modelRevision: getBackendPluginRevision(),
+    modelRevision: modelRevision ?? getBackendPluginRevision(),
     pushSeq,
     authorityGeneration: getPluginAuthorityGeneration(),
     elements: elements.map(toPluginPanelElementView),
@@ -180,9 +183,11 @@ export const flushPluginPanelModelSyncNow = (): void => {
 export const schedulePluginPanelModelSync = (
   elements: PluginDisplayElementInternal[],
   definitions: Map<string, PluginDefinitionInternal>,
+  modelRevision?: number,
 ): void => {
   pendingElements = elements;
   pendingDefinitions = definitions;
+  pendingModelRevision = modelRevision ?? null;
 
   if (syncScheduled) return;
   syncScheduled = true;

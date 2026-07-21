@@ -2,6 +2,7 @@ pub mod app_state;
 pub(crate) mod atomic_file;
 pub(crate) mod builtin_sounds;
 pub(crate) mod editor;
+pub(crate) mod gesture;
 pub(crate) mod history;
 pub(crate) mod local_asset_path;
 #[cfg(target_os = "macos")]

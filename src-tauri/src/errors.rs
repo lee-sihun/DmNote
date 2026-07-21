@@ -4,6 +4,7 @@ use serde::Serialize;
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum EditorCommitErrorCode {
     RevisionConflict,
+    PluginRevisionConflict,
     ValidationFailed,
     TooManyGestureIds,
     InvalidGestureId,
@@ -46,6 +47,17 @@ impl EditorCommitError {
                 current_revision: Some(current_revision),
                 ..EditorCommitErrorDetails::default()
             }),
+            retryable: true,
+        }
+    }
+
+    pub fn plugin_revision_conflict(current_plugin_model_revision: u64) -> Self {
+        Self {
+            error_code: EditorCommitErrorCode::PluginRevisionConflict,
+            message: format!(
+                "plugin model revision conflict at revision {current_plugin_model_revision}"
+            ),
+            details: None,
             retryable: true,
         }
     }
