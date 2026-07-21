@@ -56,7 +56,7 @@ fn app_auto_update_windows(
 ) -> CmdResult<AutoUpdateResult> {
     use std::time::Duration;
 
-    const REPO_OWNER: &str = "lee-sihun";
+    const REPO_OWNER: &str = "DmNote-App";
     const REPO_NAME: &str = "DmNote";
     const ASSET_NAME: &str = "DM.NOTE.exe";
     const SIGNATURE_ASSET_NAME: &str = "DM.NOTE.exe.sig";

@@ -56,7 +56,7 @@ const ToolBar = ({
               <FloatingTooltip content={t('tooltip.github')}>
                 <button
                   onClick={() =>
-                    handleClick('https://github.com/lee-sihun/DmNote')
+                    handleClick('https://github.com/DmNote-App/DmNote')
                   }
                   className="flex items-center justify-center w-[30px] h-[30px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
                 >
@@ -66,7 +66,7 @@ const ToolBar = ({
               <FloatingTooltip content={t('tooltip.issue')}>
                 <button
                   onClick={() =>
-                    handleClick('https://github.com/lee-sihun/DmNote/issues')
+                    handleClick('https://github.com/DmNote-App/DmNote/issues')
                   }
                   className="flex items-center justify-center gap-[8px] h-[30px] px-[12px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
                 >

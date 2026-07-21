@@ -50,21 +50,21 @@ import { DEFAULT_OBS_PORT } from '@src/types/obs';
 // 설정 미리보기 영상
 const PREVIEW_SOURCES: Record<string, string> = {
   overlayLock:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/overlay-lock.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/overlay-lock.webm',
   alwaysOnTop:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/alwaysontop.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/alwaysontop.webm',
   noteEffect:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/noteeffect.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/noteeffect.webm',
   keyCounter:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/counter.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/counter.webm',
   customCSS:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/css.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/css.webm',
   customJS:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/plugin.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/plugin.webm',
   resizeAnchor:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/resize.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/resize.webm',
   obsMode:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/obs.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/obs.webm',
 };
 
 // ASIO 버퍼 크기 선택지(프레임). 게임 설정값과 맞춰야 ASIO 공존 가능.

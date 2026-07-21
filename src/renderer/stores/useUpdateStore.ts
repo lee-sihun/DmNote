@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-const GITHUB_REPO = 'lee-sihun/DmNote';
+const GITHUB_REPO = 'DmNote-App/DmNote';
 const STORAGE_KEY = 'dmnote:skipped-version';
 const CACHE_KEY = 'dmnote:update-check-cache';
 const POST_UPDATE_NOTICE_KEY = 'dmnote:post-update-release-notice-version';
