@@ -5,6 +5,7 @@ import {
   EditorProtocolError,
   assertEditorGetResult,
   assertSafeEditorRevision,
+  isEditorCommitError,
 } from '@src/types/editor';
 
 import {
@@ -153,7 +154,12 @@ const createHarness = (
   options: Partial<
     Pick<
       EditorCoordinatorOptions,
-      'focusTarget' | 'visibilityTarget' | 'readOnly'
+      | 'focusTarget'
+      | 'visibilityTarget'
+      | 'readOnly'
+      | 'onCommittedApplied'
+      | 'onGestureIdsDiscarded'
+      | 'onStartSucceeded'
     >
   > = {},
 ) => {
@@ -176,6 +182,9 @@ const createHarness = (
     focusTarget: options.focusTarget ?? null,
     visibilityTarget: options.visibilityTarget ?? null,
     readOnly: options.readOnly,
+    onCommittedApplied: options.onCommittedApplied,
+    onGestureIdsDiscarded: options.onGestureIdsDiscarded,
+    onStartSucceeded: options.onStartSucceeded,
   });
 
   return {
@@ -268,6 +277,19 @@ describe('editor document helpers', () => {
     expect(() => assertEditorGetResult(result)).not.toThrow();
   });
 
+  it.each(['TOO_MANY_GESTURE_IDS', 'INVALID_GESTURE_ID'] as const)(
+    'recognizes %s as a non-retryable editor commit error',
+    (errorCode) => {
+      expect(
+        isEditorCommitError({
+          errorCode,
+          message: errorCode,
+          retryable: false,
+        }),
+      ).toBe(true);
+    },
+  );
+
   it('still rejects null for required position fields', () => {
     const result = {
       revision: 0,
@@ -327,6 +349,25 @@ describe('editor document helpers', () => {
 });
 
 describe('EditorSaveCoordinator', () => {
+  it('runs the start success hook after initialization recovers lazily', async () => {
+    const initializationError = new Error('initial get failed');
+    const onStartSucceeded = vi.fn(async () => {});
+    const harness = createHarness(makeDocument(), { onStartSucceeded });
+    harness.transport.getMock.mockRejectedValueOnce(initializationError);
+
+    await expect(harness.coordinator.start()).rejects.toBe(initializationError);
+    expect(onStartSucceeded).not.toHaveBeenCalled();
+
+    await expect(harness.coordinator.start()).resolves.toMatchObject({
+      revision: 0,
+    });
+    expect(onStartSucceeded).toHaveBeenCalledOnce();
+
+    await harness.coordinator.start();
+    expect(onStartSucceeded).toHaveBeenCalledTimes(2);
+    harness.coordinator.stop();
+  });
+
   it('buffers events until the initial snapshot closes the subscription race', async () => {
     const base = makeDocument();
     const next = { ...base, keys: { '4key': ['B'] } };
@@ -438,7 +479,7 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
-  it('merges same-tick patches without dropping intermediate collections', async () => {
+  it('merges same-tick patches with every gesture ID', async () => {
     const base = makeDocument();
     const keyPositions = structuredClone(base.keyPositions);
     keyPositions['4key'][0].dx = 10;
@@ -461,10 +502,22 @@ describe('EditorSaveCoordinator', () => {
     await harness.coordinator.start();
 
     const commits = [
-      harness.coordinator.commitPatch({ schemaVersion: 1, keyPositions }),
-      harness.coordinator.commitPatch({ schemaVersion: 1, statPositions }),
-      harness.coordinator.commitPatch({ schemaVersion: 1, graphPositions }),
-      harness.coordinator.commitPatch({ schemaVersion: 1, knobPositions }),
+      harness.coordinator.commitPatch(
+        { schemaVersion: 1, keyPositions },
+        { gestureId: 'gesture-key' },
+      ),
+      harness.coordinator.commitPatch(
+        { schemaVersion: 1, statPositions },
+        { gestureId: 'gesture-stat' },
+      ),
+      harness.coordinator.commitPatch(
+        { schemaVersion: 1, graphPositions },
+        { gestureId: 'gesture-graph' },
+      ),
+      harness.coordinator.commitPatch(
+        { schemaVersion: 1, knobPositions },
+        { gestureId: 'gesture-knob' },
+      ),
     ];
     await vi.waitFor(() =>
       expect(harness.transport.commitMock).toHaveBeenCalledOnce(),
@@ -480,6 +533,14 @@ describe('EditorSaveCoordinator', () => {
       graphPositions,
       knobPositions,
     });
+    expect(harness.transport.commitMock.mock.calls[0][0]).toMatchObject({
+      gestureId: 'gesture-key',
+      gestureIds: ['gesture-key'],
+    });
+    expect(harness.transport.commitMock.mock.calls[1][0]).toMatchObject({
+      gestureId: 'gesture-knob',
+      gestureIds: ['gesture-stat', 'gesture-graph', 'gesture-knob'],
+    });
 
     mergedResult.resolve({
       revision: 2,
@@ -493,6 +554,67 @@ describe('EditorSaveCoordinator', () => {
       lastAck: expected,
       dirty: false,
     });
+    harness.coordinator.stop();
+  });
+
+  it('keeps the newest 32 gesture IDs across an IO failure and retry', async () => {
+    const base = makeDocument();
+    const onGestureIdsDiscarded =
+      vi.fn<(gestureIds: readonly string[]) => void>();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    const firstResult = deferred<EditorCommitResult>();
+    harness.transport.commitMock.mockReturnValueOnce(firstResult.promise);
+    const gestureIds = Array.from(
+      { length: 34 },
+      (_, index) =>
+        `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    );
+    await harness.coordinator.start();
+
+    const commits = [
+      harness.coordinator.commitPatch(
+        { schemaVersion: 1, keys: { '4key': ['value-0'] } },
+        { gestureId: gestureIds[0] },
+      ),
+    ];
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock).toHaveBeenCalledOnce(),
+    );
+
+    for (let index = 1; index < gestureIds.length; index += 1) {
+      commits.push(
+        harness.coordinator.commitPatch(
+          { schemaVersion: 1, keys: { '4key': [`value-${index}`] } },
+          { gestureId: gestureIds[index] },
+        ),
+      );
+    }
+    await vi.waitFor(() =>
+      expect(onGestureIdsDiscarded).toHaveBeenCalledOnce(),
+    );
+
+    const transientError = ioError();
+    firstResult.reject(transientError);
+    const results = await Promise.allSettled(commits);
+    expect(results.every(({ status }) => status === 'rejected')).toBe(true);
+    expect(harness.coordinator.getState()).toMatchObject({
+      dirty: true,
+      failureKind: 'transient',
+    });
+
+    await expect(harness.coordinator.retryPending()).resolves.toMatchObject({
+      keys: { '4key': ['value-33'] },
+    });
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    const retryRequest = harness.transport.commitMock.mock.calls[1][0];
+    expect(retryRequest.gestureIds).toEqual(gestureIds.slice(-32));
+    expect(retryRequest.gestureIds).toHaveLength(32);
+    expect(retryRequest.gestureId).toBe(gestureIds.at(-1));
+    expect(retryRequest.gestureIds).toContain(retryRequest.gestureId);
+    expect(onGestureIdsDiscarded.mock.calls.flatMap(([ids]) => ids)).toEqual([
+      gestureIds[1],
+      gestureIds[0],
+    ]);
     harness.coordinator.stop();
   });
 
@@ -524,6 +646,31 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('응답 뒤에 도착한 own event도 병합 gesture ID 정리를 전달', async () => {
+    const base = makeDocument();
+    const target = { ...base, keys: { '4key': ['B'] } };
+    const onCommittedApplied = vi.fn();
+    const harness = createHarness(base, { onCommittedApplied });
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keys: target.keys,
+    });
+    const request = harness.transport.commitMock.mock.calls[0][0];
+    harness.transport.emit({
+      ...eventFor(1, request.mutationId, base, target),
+      gestureIds: ['main-session', 'panel-session'],
+    });
+
+    await vi.waitFor(() => expect(onCommittedApplied).toHaveBeenCalledOnce());
+    expect(onCommittedApplied.mock.calls[0][0].gestureIds).toEqual([
+      'main-session',
+      'panel-session',
+    ]);
+    harness.coordinator.stop();
+  });
+
   it('resynchronizes a revision gap and ignores an older event', async () => {
     const base = makeDocument();
     const remote = withGroups({ ...base, keys: { '4key': ['C'] } }, 'remote');
@@ -542,6 +689,31 @@ describe('EditorSaveCoordinator', () => {
     harness.transport.emit(eventFor(2, 'external-2', base, remote));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    harness.coordinator.stop();
+  });
+
+  it('revision gap 재동기화 실패에도 committed 프리뷰 정리를 전달', async () => {
+    const base = makeDocument();
+    const remote = withGroups({ ...base, keys: { '4key': ['C'] } }, 'remote');
+    const onCommittedApplied = vi.fn();
+    const harness = createHarness(base, { onCommittedApplied });
+    await harness.coordinator.start();
+    const resyncError = new Error('resync unavailable');
+    harness.transport.getMock.mockRejectedValueOnce(resyncError);
+
+    harness.transport.emit({
+      ...eventFor(2, 'external-gap', base, remote),
+      gestureIds: ['00000000-0000-4000-8000-000000000001'],
+    });
+
+    await vi.waitFor(() => expect(onCommittedApplied).toHaveBeenCalledOnce());
+    expect(onCommittedApplied.mock.calls[0][0].gestureIds).toEqual([
+      '00000000-0000-4000-8000-000000000001',
+    ]);
+    await vi.waitFor(() =>
+      expect(harness.coordinator.getState().error).toBe(resyncError),
+    );
+    expect(harness.coordinator.getState().revision).toBe(0);
     harness.coordinator.stop();
   });
 

@@ -75,15 +75,17 @@ console.log(revision, document.keyPositions);
 고장까지 애플리케이션이 절대 보장할 수는 없습니다.
 
 <Callout type="info">
-  앱의 Undo/Redo도 편집 컬렉션 6개, 커스텀 탭 정보, 선택 모드, 카운터,
-  프리셋 설정, 탭별 노트 설정을 백엔드 store 트랜잭션 한 번으로 함께 복원합니다.
-  이 내부 커맨드는 공개 플러그인 API로 노출하지 않습니다.
+  앱의 Undo/Redo도 편집 컬렉션 6개, 커스텀 탭 정보, 선택 모드, 카운터, 프리셋
+  설정, 탭별 노트 설정을 백엔드 store 트랜잭션 한 번으로 함께 복원합니다. 이
+  내부 커맨드는 공개 플러그인 API로 노출하지 않습니다.
 </Callout>
 
 ```typescript
 interface EditorCommitRequest {
   baseRevision: number;
   mutationId: string;
+  gestureId?: string;
+  gestureIds?: string[];
   changes: EditorPatchV1;
 }
 
@@ -110,6 +112,11 @@ console.log('커밋된 revision:', result.revision);
 최근 요청을 같은 ID로 재시도하면 중복 적용되지 않습니다. 이 메모리 내 중복
 방지는 즉시 IPC 재시도용이며 앱을 재시작하면 유지되지 않습니다. 아직 보관 중인
 ID를 다른 요청에 재사용하면 거절됩니다.
+
+`gestureId`는 히스토리 병합의 대표 게스처입니다. `gestureIds`는 요청 하나로
+합쳐진 모든 프리뷰 세션을 전달하여 committed 이벤트가 전체 집합을 echo하게
+합니다. 두 필드는 모두 선택 사항이며 UUID만 허용합니다. `gestureIds` 배열은
+항목이 최대 32개이고, 두 필드를 합친 고유 ID 집합도 최대 32개로 제한됩니다.
 
 제출한 값이 이미 현재 값과 같으면 현재 revision과 빈 `changedFields`를
 반환하고 canonical committed 이벤트는 발행하지 않습니다. 호환 wrapper는 예전
@@ -151,6 +158,8 @@ await dmn.editor.commit({
 type EditorCommitErrorCode =
   | 'REVISION_CONFLICT'
   | 'VALIDATION_FAILED'
+  | 'TOO_MANY_GESTURE_IDS'
+  | 'INVALID_GESTURE_ID'
   | 'PAIRED_UPDATE_REQUIRED'
   | 'MUTATION_ID_REUSED'
   | 'IO_ERROR';
@@ -167,13 +176,15 @@ interface EditorCommitError {
 }
 ```
 
-| 코드                     | 의미                                              | `retryable` |
-| ------------------------ | ------------------------------------------------- | ----------- |
-| `REVISION_CONFLICT`      | `baseRevision`이 오래됨. 다시 조회·조정한 뒤 커밋 | `true`      |
-| `VALIDATION_FAILED`      | 완성된 문서가 에디터 검증 규칙을 위반함           | `false`     |
-| `PAIRED_UPDATE_REQUIRED` | 키 구조 변경에 짝 컬렉션이 빠짐                   | `false`     |
-| `MUTATION_ID_REUSED`     | 같은 mutation ID를 다른 요청에 재사용함           | `false`     |
-| `IO_ERROR`               | 문서를 디스크에 저장하지 못함                     | `true`      |
+| 코드                     | 의미                                                      | `retryable` |
+| ------------------------ | --------------------------------------------------------- | ----------- |
+| `REVISION_CONFLICT`      | `baseRevision`이 오래됨. 다시 조회·조정한 뒤 커밋         | `true`      |
+| `VALIDATION_FAILED`      | 완성된 문서가 에디터 검증 규칙을 위반함                   | `false`     |
+| `TOO_MANY_GESTURE_IDS`   | `gestureIds`가 32개를 넘거나 합친 고유 ID가 32개를 초과함 | `false`     |
+| `INVALID_GESTURE_ID`     | gesture ID가 UUID가 아니거나 64바이트를 초과함            | `false`     |
+| `PAIRED_UPDATE_REQUIRED` | 키 구조 변경에 짝 컬렉션이 빠짐                           | `false`     |
+| `MUTATION_ID_REUSED`     | 같은 mutation ID를 다른 요청에 재사용함                   | `false`     |
+| `IO_ERROR`               | 문서를 디스크에 저장하지 못함                             | `true`      |
 
 오류에 해당할 때 `details.currentRevision`, `details.validationCode`,
 `details.field`가 함께 제공됩니다.
@@ -190,6 +201,8 @@ interface EditorCommittedV1 {
   schemaVersion: 1;
   revision: number;
   mutationId: string;
+  gestureId?: string | null;
+  gestureIds?: string[];
   origin?: string;
   changedFields: EditorField[];
   patch: EditorPatchV1;

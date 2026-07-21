@@ -45,6 +45,8 @@ export interface EditorCommitRequest {
   changes: EditorPatchV1;
   // 프리뷰 게스처 커밋 연동용, 성공 시 committed 이벤트로 echo
   gestureId?: string;
+  // 한 요청으로 합쳐진 프리뷰 세션 전체
+  gestureIds?: string[];
 }
 
 export interface EditorCommitResult {
@@ -66,11 +68,15 @@ export interface EditorCommittedV1 {
   patch: EditorPatchV1;
   // 커밋 요청의 gestureId echo, 수신 창의 프리뷰 오버레이 정리 신호
   gestureId?: string | null;
+  // 합쳐진 커밋에 포함된 모든 프리뷰 세션 정리 신호
+  gestureIds?: string[];
 }
 
 export type EditorCommitErrorCode =
   | 'REVISION_CONFLICT'
   | 'VALIDATION_FAILED'
+  | 'TOO_MANY_GESTURE_IDS'
+  | 'INVALID_GESTURE_ID'
   | 'PAIRED_UPDATE_REQUIRED'
   | 'MUTATION_ID_REUSED'
   | 'IO_ERROR'
@@ -95,6 +101,8 @@ export interface EditorCommitError {
 const EDITOR_ERROR_CODES = new Set<EditorCommitErrorCode>([
   'REVISION_CONFLICT',
   'VALIDATION_FAILED',
+  'TOO_MANY_GESTURE_IDS',
+  'INVALID_GESTURE_ID',
   'PAIRED_UPDATE_REQUIRED',
   'MUTATION_ID_REUSED',
   'IO_ERROR',
@@ -497,6 +505,14 @@ export function assertEditorCommittedEvent(value: EditorCommittedV1): void {
   assertSafeEditorRevision(value.revision, 'editor:committed revision');
   if (typeof value.mutationId !== 'string' || value.mutationId.length === 0) {
     throw new EditorProtocolError('editor:committed mutationId is invalid');
+  }
+  if (
+    value.gestureIds !== undefined &&
+    (!Array.isArray(value.gestureIds) ||
+      value.gestureIds.some((gestureId) => typeof gestureId !== 'string') ||
+      new Set(value.gestureIds).size !== value.gestureIds.length)
+  ) {
+    throw new EditorProtocolError('editor:committed gestureIds is invalid');
   }
   assertEditorFields(value.changedFields, 'editor:committed changedFields');
   assertEditorPatch(value.patch, 'editor:committed patch');

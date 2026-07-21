@@ -20,6 +20,8 @@ pub(crate) const MAX_CUSTOM_TABS: usize = 30;
 
 const MAX_MUTATION_ID_BYTES: usize = 64;
 const MAX_GESTURE_ID_BYTES: usize = 64;
+// 프론트 editorCoordinator.ts의 MAX_PENDING_GESTURE_IDS와 동일한 IPC 상한
+const MAX_GESTURE_IDS: usize = 32;
 const MAX_MODE_ID_BYTES: usize = 128;
 const MAX_MODES: usize = 64;
 const MAX_ITEMS_PER_MODE: usize = 512;
@@ -44,6 +46,7 @@ pub(crate) type RequestFingerprint = [u8; 32];
 struct FingerprintPayload<'a> {
     base_revision: u64,
     gesture_id: Option<&'a str>,
+    gesture_ids: &'a [String],
     changes: &'a crate::models::EditorPatchV1,
 }
 
@@ -88,15 +91,27 @@ pub(crate) fn validate_request_envelope(
         ));
     }
 
+    if request.gesture_ids.len() > MAX_GESTURE_IDS
+        || request
+            .gesture_ids
+            .iter()
+            .chain(request.gesture_id.iter())
+            .collect::<HashSet<_>>()
+            .len()
+            > MAX_GESTURE_IDS
+    {
+        return Err(EditorCommitError::too_many_gesture_ids(MAX_GESTURE_IDS));
+    }
+
     if request
         .gesture_id
-        .as_ref()
-        .is_some_and(|gesture_id| gesture_id.len() > MAX_GESTURE_ID_BYTES)
+        .iter()
+        .chain(request.gesture_ids.iter())
+        .any(|gesture_id| {
+            gesture_id.len() > MAX_GESTURE_ID_BYTES || Uuid::parse_str(gesture_id).is_err()
+        })
     {
-        return Err(EditorCommitError::validation(
-            "INVALID_GESTURE_ID",
-            "gestureId must be no longer than 64 bytes",
-        ));
+        return Err(EditorCommitError::invalid_gesture_id());
     }
 
     Ok(())
@@ -202,6 +217,7 @@ pub(crate) fn request_fingerprint(
     let value = serde_json::to_value(FingerprintPayload {
         base_revision: request.base_revision,
         gesture_id: request.gesture_id.as_deref(),
+        gesture_ids: &request.gesture_ids,
         changes: &request.changes,
     })
     .map_err(|error| {
@@ -1034,6 +1050,7 @@ mod tests {
             base_revision: 0,
             mutation_id: Uuid::new_v4().to_string(),
             gesture_id: None,
+            gesture_ids: Vec::new(),
             changes: EditorPatchV1 {
                 keys: Some(keys),
                 ..EditorPatchV1::default()
@@ -1636,6 +1653,7 @@ mod tests {
             base_revision: 0,
             mutation_id: "not-a-uuid".to_string(),
             gesture_id: None,
+            gesture_ids: Vec::new(),
             changes: EditorPatchV1::default(),
         };
         assert!(validate_request_envelope(&invalid).is_err());
@@ -1644,6 +1662,37 @@ mod tests {
         oversized_gesture.gesture_id = Some("가".repeat(22));
         assert_eq!(oversized_gesture.gesture_id.as_ref().unwrap().len(), 66);
         assert!(validate_request_envelope(&oversized_gesture).is_err());
+
+        let mut oversized_merged_gesture = request(KeyMappings::new());
+        oversized_merged_gesture.gesture_ids = vec!["가".repeat(22)];
+        assert!(validate_request_envelope(&oversized_merged_gesture).is_err());
+
+        let mut malformed_gesture = request(KeyMappings::new());
+        malformed_gesture.gesture_ids = vec!["not-a-uuid".to_string()];
+        let malformed_error = validate_request_envelope(&malformed_gesture).unwrap_err();
+        assert_eq!(
+            malformed_error.error_code,
+            crate::errors::EditorCommitErrorCode::InvalidGestureId
+        );
+        assert!(!malformed_error.retryable);
+
+        let mut too_many_gestures = request(KeyMappings::new());
+        too_many_gestures.gesture_ids = (0..=MAX_GESTURE_IDS)
+            .map(|index| Uuid::from_u128(index as u128 + 1).to_string())
+            .collect();
+        let count_error = validate_request_envelope(&too_many_gestures).unwrap_err();
+        assert_eq!(
+            count_error.error_code,
+            crate::errors::EditorCommitErrorCode::TooManyGestureIds
+        );
+        assert!(!count_error.retryable);
+
+        let mut representative_overflow = request(KeyMappings::new());
+        representative_overflow.gesture_ids = (0..MAX_GESTURE_IDS)
+            .map(|index| Uuid::from_u128(index as u128 + 1).to_string())
+            .collect();
+        representative_overflow.gesture_id = Some(Uuid::from_u128(u128::MAX).to_string());
+        assert!(validate_request_envelope(&representative_overflow).is_err());
     }
 
     #[test]

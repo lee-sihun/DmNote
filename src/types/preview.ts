@@ -21,8 +21,6 @@ export interface PreviewEnvelope {
   mode: string;
   targets: number[];
   patch: Record<string, unknown>;
-  // cancel 전용: 이 revision 반영 후에만 세션 제거 (순서 게이트)
-  minRevision?: number | null;
 }
 
 export interface PreviewPublishRequest {

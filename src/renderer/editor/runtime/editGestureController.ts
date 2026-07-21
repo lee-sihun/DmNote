@@ -16,6 +16,11 @@ import { PREVIEW_SCHEMA_VERSION, type PreviewDomain } from '@src/types/preview';
 import { previewOverlay } from './previewOverlay';
 import { editorCoordinator } from './editorStateCoordinator';
 import { drainEditorWrites, trackEditorWrite } from './editorWriteBarrier';
+import {
+  registerGestureSession,
+  releaseGestureSession,
+  type GestureSessionLifecycle,
+} from './gestureSessionLifecycle';
 
 interface PreviewEntry {
   index: number;
@@ -28,6 +33,7 @@ interface PreviewOptions {
 
 interface ActiveGesture {
   sessionId: string;
+  lifecycle: GestureSessionLifecycle;
   mode: string;
   seq: number;
   // 도메인 → target index → 게스처 동안 누적된 전체 patch
@@ -105,8 +111,10 @@ export const editGestureController = {
       this.cancel();
     }
     if (!active) {
+      const sessionId = crypto.randomUUID();
       active = {
-        sessionId: crypto.randomUUID(),
+        sessionId,
+        lifecycle: registerGestureSession(sessionId),
         mode,
         seq: 0,
         appliedPatches: new Map(),
@@ -159,10 +167,7 @@ export const editGestureController = {
     return active?.sessionId ?? null;
   },
 
-  /**
-   * 커밋 정산: persist 성공 시 세션 종료 + 수신측 정리 브로드캐스트
-   * 실패 시 세션 유지 (재시도 또는 명시 cancel은 호출자 몫)
-   */
+  /** 커밋 정산: 성공 시 로컬 세션 종료, 실패 시 재시도 상태 복원 */
   settleCommit(persistPromise: Promise<unknown>): void {
     // 게스처 유무와 무관하게 창 전환이 정산 커밋의 성패까지 기다리게 함
     trackEditorWrite(persistPromise);
@@ -173,21 +178,26 @@ export const editGestureController = {
 
     persistPromise
       .then(() => {
+        releaseGestureSession(gesture.lifecycle);
         previewOverlay.endSession(gesture.sessionId);
-        // 1차 정리는 committed 이벤트의 gestureId echo, cancel은 병합 커밋 등
-        // echo가 다른 세션으로 향한 경우를 위한 보조 정리
-        // 커밋 revision을 게이트로 실어 수신측의 선행 제거를 방지
-        const committedRevision = editorCoordinator.getState().revision;
-        previewApi
-          .cancel(gesture.sessionId, committedRevision ?? undefined)
-          .catch(() => {});
+        // 1차 정리는 committed 이벤트의 gestureIds echo - 배치 간격 커밋처럼
+        // echo가 다른 세션 ID로 향하면 원격 창의 이 세션이 잔존하므로 보조 정리
+        // (tombstone이 중복 cancel을 흡수해 정상 경로에선 no-op)
+        previewApi.cancel(gesture.sessionId).catch(() => {});
       })
       .catch((error) => {
+        if (gesture.lifecycle.discarded) {
+          releaseGestureSession(gesture.lifecycle);
+          previewOverlay.endSession(gesture.sessionId);
+          previewApi.cancel(gesture.sessionId).catch(() => {});
+          return;
+        }
         console.error('Commit failed, keeping preview session', error);
         // 새 게스처가 이미 시작됐으면 이전 세션은 오버레이만 정리
         if (active === null) {
           active = gesture;
         } else {
+          releaseGestureSession(gesture.lifecycle);
           previewOverlay.endSession(gesture.sessionId);
           previewApi.cancel(gesture.sessionId).catch(() => {});
         }
@@ -199,6 +209,7 @@ export const editGestureController = {
     const gesture = active;
     if (!gesture) return;
     active = null;
+    releaseGestureSession(gesture.lifecycle);
     gesture.pendingGroups.clear();
     previewOverlay.endSession(gesture.sessionId);
     previewApi.cancel(gesture.sessionId).catch(() => {});

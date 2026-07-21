@@ -7,7 +7,6 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import {
   composePreviewPositions,
   previewOverlay,
-  registerPreviewRevisionProbe,
 } from '@src/renderer/editor/runtime/previewOverlay';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { previewApi } from '@api/modules/previewApi';
@@ -175,54 +174,32 @@ describe('previewOverlay', () => {
     ).toBeUndefined();
   });
 
-  it('minRevision 게이트에 걸린 cancel은 revision 전진 후에만 처리', () => {
-    let currentRevision: number | null = 3;
-    registerPreviewRevisionProbe(() => currentRevision);
-
-    previewOverlay.applyRemoteEnvelope(remoteEnvelope({ seq: 1 }));
+  it('병합 커밋은 두 창의 세션을 함께 끝내고 늦은 patch를 차단', () => {
+    previewOverlay.applyLocalPatch('main-session', '4key', [0], { width: 90 });
     previewOverlay.applyRemoteEnvelope(
       remoteEnvelope({
-        seq: 2,
-        kind: 'cancel',
-        targets: [],
-        patch: {},
-        minRevision: 5,
+        sessionId: 'panel-session',
+        targets: [1],
+        patch: { width: 95 },
       }),
     );
 
-    // 아직 revision 미도달이라 프리뷰 유지
-    expect(useKeyStore.getState().positions['4key'][0].backgroundColor).toBe(
-      '#ff0000',
-    );
+    previewOverlay.endSessions(['main-session', 'panel-session']);
 
-    currentRevision = 5;
-    previewOverlay.flushDeferredCancels(5);
-    expect(
-      useKeyStore.getState().positions['4key'][0].backgroundColor,
-    ).toBeUndefined();
+    expect(useKeyStore.getState().positions['4key'][0].width).toBe(60);
+    expect(useKeyStore.getState().positions['4key'][1].width).toBe(60);
 
-    registerPreviewRevisionProbe(null);
-  });
-
-  it('revision이 이미 도달한 cancel은 즉시 처리', () => {
-    registerPreviewRevisionProbe(() => 10);
-
-    previewOverlay.applyRemoteEnvelope(remoteEnvelope({ seq: 1 }));
+    previewOverlay.applyLocalPatch('main-session', '4key', [0], { width: 100 });
     previewOverlay.applyRemoteEnvelope(
       remoteEnvelope({
+        sessionId: 'panel-session',
         seq: 2,
-        kind: 'cancel',
-        targets: [],
-        patch: {},
-        minRevision: 5,
+        targets: [1],
+        patch: { width: 105 },
       }),
     );
-
-    expect(
-      useKeyStore.getState().positions['4key'][0].backgroundColor,
-    ).toBeUndefined();
-
-    registerPreviewRevisionProbe(null);
+    expect(useKeyStore.getState().positions['4key'][0].width).toBe(60);
+    expect(useKeyStore.getState().positions['4key'][1].width).toBe(60);
   });
 
   it('프리뷰 활성 중 canonical 편집이 들어와도 오버레이가 재합성됨', () => {
@@ -325,7 +302,7 @@ describe('editGestureController', () => {
     expect(request.patch).toEqual({ backgroundColor: '#111111' });
   });
 
-  it('settleCommit 성공 시 세션 종료 + 수신측 정리 브로드캐스트', async () => {
+  it('settleCommit 성공 시 로컬 세션 종료 + 보조 cancel 브로드캐스트', async () => {
     editGestureController.preview('4key', [
       { index: 0, patch: { width: 100 } },
     ]);
@@ -335,8 +312,10 @@ describe('editGestureController', () => {
     await flushPromises();
 
     expect(editGestureController.hasActiveGesture()).toBe(false);
-    // 커밋 revision 미확정(null) 상태에서는 게이트 없이 보조 cancel 발송
-    expect(previewApi.cancel).toHaveBeenCalledWith(sessionId, undefined);
+    // 배치 간격 커밋처럼 committed echo가 다른 gestureId로 향하면
+    // 원격 창 세션이 잔존하므로 성공 경로에도 보조 cancel이 나가야 함
+    expect(previewApi.cancel).toHaveBeenCalledTimes(1);
+    expect(previewApi.cancel).toHaveBeenCalledWith(sessionId);
     expect(useKeyStore.getState().positions['4key'][0].width).toBe(60);
   });
 

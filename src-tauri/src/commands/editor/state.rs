@@ -200,7 +200,7 @@ pub fn editor_commit(
     let admission = state
         .admit_frontend_history_mutation(window.label())
         .map_err(|_| crate::errors::EditorCommitError::history_in_progress())?;
-    let gesture_id = request.gesture_id.clone();
+    let gesture_ids = request.echoed_gesture_ids();
     let requested_fields = request.changes.included_fields();
     let previous_mode = requested_fields
         .contains(&EditorField::Keys)
@@ -208,6 +208,13 @@ pub fn editor_commit(
     let change = state
         .store
         .commit_editor_document_admitted(request, &admission)?;
+    for gesture_id in &gesture_ids {
+        if let Err(error) =
+            broker.finish_committed_session(window.label(), gesture_id, change.event.is_none())
+        {
+            log::warn!("failed to finish committed preview session: {error}");
+        }
+    }
     if change.event.is_some() {
         publish_editor_change(state.inner(), &app, &change, false);
     }
@@ -219,15 +226,6 @@ pub fn editor_commit(
                 "keys:mode-changed",
                 &serde_json::json!({ "mode": &change.selected_key_type }),
             );
-        }
-    }
-    if let Some(gesture_id) = gesture_id {
-        if let Err(error) = broker.finish_committed_session(
-            window.label(),
-            &gesture_id,
-            Some(change.result.revision),
-        ) {
-            log::warn!("failed to finish committed preview session: {error}");
         }
     }
     if let Some(history_status) = change.history_status.as_ref() {

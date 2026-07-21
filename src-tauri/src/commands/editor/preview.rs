@@ -25,7 +25,6 @@ pub fn editor_preview_cancel(
     broker: State<'_, PreviewBroker>,
     window: WebviewWindow,
     session_id: String,
-    min_revision: Option<u64>,
 ) -> Result<(), String> {
-    broker.cancel(window.label(), &session_id, min_revision)
+    broker.cancel(window.label(), &session_id)
 }

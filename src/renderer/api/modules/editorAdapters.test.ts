@@ -68,10 +68,13 @@ describe('editor API compatibility adapters', () => {
 
     commitPatch.mockClear();
     commitPatch.mockResolvedValue(structuredClone(document));
-    await keysApi.updatePositions(positions, 'gesture-1');
+    await keysApi.updatePositions(
+      positions,
+      '6f9c2f6a-0b1d-4e5f-8a3c-2d7e9b4c1a50',
+    );
     expect(commitPatch).toHaveBeenCalledWith(
       { schemaVersion: 1, keyPositions: positions },
-      { gestureId: 'gesture-1' },
+      { gestureId: '6f9c2f6a-0b1d-4e5f-8a3c-2d7e9b4c1a50' },
     );
   });
 

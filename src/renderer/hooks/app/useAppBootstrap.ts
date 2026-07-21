@@ -27,7 +27,6 @@ import {
 import { stableStringify } from '@utils/core/stableStringify';
 import { useTranslation } from '@contexts/useTranslation';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
-import { previewApi } from '@api/modules/previewApi';
 import { panelWindowApi } from '@api/modules/selectionSessionApi';
 import {
   initSelectionSync,
@@ -46,7 +45,6 @@ import {
   useHistoryStatusStore,
   syncHistoryStatus,
 } from '@stores/data/useHistoryStatusStore';
-import { previewOverlay } from '@src/renderer/editor/runtime/previewOverlay';
 import { flushFocusedEditorForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import {
   acquireHistoryEditorFlushLock,
@@ -522,15 +520,6 @@ export function useAppBootstrap() {
         } catch (error) {
           console.error('편집 상태 초기화 실패', error);
         }
-
-        // 다른 창의 편집 프리뷰 수신 (재구독 시 브로커가 이전 채널 교체)
-        previewApi
-          .subscribe((envelope) => {
-            previewOverlay.applyRemoteEnvelope(envelope);
-          })
-          .catch((error) => {
-            console.error('프리뷰 채널 구독 실패', error);
-          });
 
         // 백엔드 undo authority 상태 초기 조회
         void syncHistoryStatus();

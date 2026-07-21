@@ -1,4 +1,5 @@
 import { editorApi } from '@api/modules/editorApi';
+import { previewApi } from '@api/modules/previewApi';
 import { unstable_batchedUpdates } from 'react-dom';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import {
@@ -12,12 +13,37 @@ import { invalidateSelectionForChangedIndexedElementArrays } from '@stores/grid/
 import { stableStringify } from '@utils/core/stableStringify';
 
 import { createEditorCoordinator } from './editorCoordinator';
-import { previewOverlay, registerPreviewRevisionProbe } from './previewOverlay';
+import { markGestureSessionsDiscarded } from './gestureSessionLifecycle';
+import { previewOverlay } from './previewOverlay';
 
 import type { EditorDocumentV1 } from '@src/types/editor';
 
 const hasChanged = (current: unknown, next: unknown) =>
   stableStringify(current) !== stableStringify(next);
+
+let previewSubscribed = false;
+let previewSubscriptionInFlight: Promise<void> | null = null;
+
+const ensurePreviewSubscription = (): Promise<void> => {
+  if (previewSubscribed) return Promise.resolve();
+  if (previewSubscriptionInFlight) return previewSubscriptionInFlight;
+
+  // 채널은 unsubscribe API가 없어 창 단위 coordinator 수명에 맞춰 한 번만 등록
+  previewSubscriptionInFlight = previewApi
+    .subscribe((envelope) => {
+      previewOverlay.applyRemoteEnvelope(envelope);
+    })
+    .then(() => {
+      previewSubscribed = true;
+    })
+    .catch((error) => {
+      console.error('프리뷰 채널 구독 실패', error);
+    })
+    .finally(() => {
+      previewSubscriptionInFlight = null;
+    });
+  return previewSubscriptionInFlight;
+};
 
 export const captureEditorDocument = (): EditorDocumentV1 => {
   const keyState = useKeyStore.getState();
@@ -109,12 +135,16 @@ export const editorCoordinator = createEditorCoordinator({
   },
   // canonical 반영과 같은 처리 단위에서 해당 게스처의 프리뷰 오버레이 정리
   onCommittedApplied: (event) => {
-    if (event.gestureId) previewOverlay.endSession(event.gestureId);
+    previewOverlay.endSessions(
+      event.gestureIds ?? (event.gestureId ? [event.gestureId] : []),
+    );
   },
-  // committed·resync 등 revision 전진 시 게이트가 풀린 지연 cancel 처리
-  onCanonicalRevisionAdvanced: (revision) => {
-    previewOverlay.flushDeferredCancels(revision);
+  onGestureIdsDiscarded: (gestureIds) => {
+    markGestureSessionsDiscarded(gestureIds);
+    previewOverlay.endSessions(gestureIds);
+    gestureIds.forEach((gestureId) => {
+      previewApi.cancel(gestureId).catch(() => {});
+    });
   },
+  onStartSucceeded: ensurePreviewSubscription,
 });
-
-registerPreviewRevisionProbe(() => editorCoordinator.getState().revision);

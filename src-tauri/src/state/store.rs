@@ -175,6 +175,7 @@ struct PluginInstancesMutationInput {
 struct EditorPatchCommitOptions {
     mutation_id: String,
     gesture_id: Option<String>,
+    gesture_ids: Vec<String>,
     origin: EditorCommitOrigin,
     record_history: bool,
     apply_key_side_effects: bool,
@@ -515,6 +516,7 @@ impl AppStore {
                             EditorPatchCommitOptions {
                                 mutation_id: operation_id.to_string(),
                                 gesture_id: None,
+                                gesture_ids: Vec::new(),
                                 origin,
                                 record_history: false,
                                 apply_key_side_effects: false,
@@ -764,6 +766,8 @@ impl AppStore {
             ));
         }
 
+        let gesture_id = request.history_gesture_id();
+        let gesture_ids = request.echoed_gesture_ids();
         let touched_fields = request.changes.included_fields();
         let change = self.commit_editor_patch_locked(
             &mut guard,
@@ -771,7 +775,8 @@ impl AppStore {
             &touched_fields,
             EditorPatchCommitOptions {
                 mutation_id: request.mutation_id.clone(),
-                gesture_id: request.gesture_id,
+                gesture_id,
+                gesture_ids,
                 origin: EditorCommitOrigin::StrictEditorCommit,
                 record_history: true,
                 apply_key_side_effects: true,
@@ -875,6 +880,7 @@ impl AppStore {
             revision,
             mutation_id: options.mutation_id,
             gesture_id: options.gesture_id,
+            gesture_ids: options.gesture_ids,
             origin,
             changed_fields: changed_fields.clone(),
             patch: candidate.patch_for_fields(&changed_fields),
@@ -949,6 +955,7 @@ impl AppStore {
             revision,
             mutation_id: operation_id.to_string(),
             gesture_id: None,
+            gesture_ids: Vec::new(),
             origin,
             changed_fields: changed_fields.clone(),
             patch: candidate.patch_for_fields(&changed_fields),
@@ -1020,6 +1027,7 @@ impl AppStore {
             revision,
             mutation_id: operation_id.to_string(),
             gesture_id: None,
+            gesture_ids: Vec::new(),
             origin,
             changed_fields: changed_fields.clone(),
             patch: candidate.patch_for_fields(&changed_fields),
@@ -1294,6 +1302,7 @@ impl AppStore {
                 revision,
                 mutation_id: uuid::Uuid::new_v4().to_string(),
                 gesture_id: None,
+                gesture_ids: Vec::new(),
                 origin,
                 changed_fields: changed_fields.clone(),
                 patch: candidate.patch_for_fields(&changed_fields),
@@ -2214,6 +2223,8 @@ fn editor_error_outcome(code: EditorCommitErrorCode) -> &'static str {
     match code {
         EditorCommitErrorCode::RevisionConflict => "revision_conflict",
         EditorCommitErrorCode::ValidationFailed => "validation_failed",
+        EditorCommitErrorCode::TooManyGestureIds => "too_many_gesture_ids",
+        EditorCommitErrorCode::InvalidGestureId => "invalid_gesture_id",
         EditorCommitErrorCode::PairedUpdateRequired => "paired_update_required",
         EditorCommitErrorCode::MutationIdReused => "mutation_id_reused",
         EditorCommitErrorCode::HistoryInProgress => "history_in_progress",
@@ -3493,6 +3504,7 @@ mod tests {
             base_revision,
             mutation_id: mutation_id.into(),
             gesture_id: None,
+            gesture_ids: Vec::new(),
             changes,
         }
     }
@@ -4240,6 +4252,7 @@ mod tests {
         let old_key = before.keys["4key"][0].clone();
         let mut keys = before.keys.clone();
         keys.get_mut("4key").unwrap()[0] = "StrictKey".to_string();
+        let first_gesture_id = uuid::Uuid::new_v4().to_string();
         let gesture_id = uuid::Uuid::new_v4().to_string();
         let mut request = editor_request(
             0,
@@ -4250,6 +4263,11 @@ mod tests {
             },
         );
         request.gesture_id = Some(gesture_id.clone());
+        request.gesture_ids = vec![
+            first_gesture_id.clone(),
+            first_gesture_id.clone(),
+            gesture_id.clone(),
+        ];
 
         let change = store.commit_editor_document(request).unwrap();
 
@@ -4259,6 +4277,10 @@ mod tests {
         assert_eq!(
             change.event.as_ref().unwrap().gesture_id.as_deref(),
             Some(gesture_id.as_str())
+        );
+        assert_eq!(
+            change.event.as_ref().unwrap().gesture_ids,
+            vec![first_gesture_id, gesture_id]
         );
         assert_eq!(store.writer.persist_count(), persist_count + 1);
         let snapshot = store.snapshot();

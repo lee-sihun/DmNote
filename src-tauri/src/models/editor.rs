@@ -188,7 +188,28 @@ pub struct EditorCommitRequest {
     pub mutation_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gesture_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gesture_ids: Vec<String>,
     pub changes: EditorPatchV1,
+}
+
+impl EditorCommitRequest {
+    pub fn echoed_gesture_ids(&self) -> Vec<String> {
+        let mut gesture_ids =
+            Vec::with_capacity(self.gesture_ids.len() + usize::from(self.gesture_id.is_some()));
+        for gesture_id in self.gesture_ids.iter().chain(self.gesture_id.iter()) {
+            if !gesture_ids.contains(gesture_id) {
+                gesture_ids.push(gesture_id.clone());
+            }
+        }
+        gesture_ids
+    }
+
+    pub fn history_gesture_id(&self) -> Option<String> {
+        self.gesture_id
+            .clone()
+            .or_else(|| self.gesture_ids.last().cloned())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -232,6 +253,8 @@ pub struct EditorCommittedV1 {
     pub mutation_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gesture_id: Option<String>,
+    #[serde(default)]
+    pub gesture_ids: Vec<String>,
     pub origin: String,
     pub changed_fields: Vec<EditorField>,
     pub patch: EditorPatchV1,

@@ -34,18 +34,6 @@ export const getPreviewOverlayVersion = () => overlayVersion;
 const TOMBSTONE_LIMIT = 64;
 const tombstones = new Set<string>();
 
-// minRevision 게이트에 걸린 cancel, 해당 revision 반영 후 처리
-const deferredCancels = new Map<string, number>();
-
-// coordinator revision 조회 (editorStateCoordinator가 등록, 순환 import 회피)
-let revisionProbe: (() => number | null) | null = null;
-
-export const registerPreviewRevisionProbe = (
-  probe: (() => number | null) | null,
-) => {
-  revisionProbe = probe;
-};
-
 const addTombstone = (sessionId: string) => {
   tombstones.add(sessionId);
   if (tombstones.size > TOMBSTONE_LIMIT) {
@@ -140,15 +128,6 @@ export const previewOverlay = {
     if (tombstones.has(envelope.sessionId)) return;
 
     if (envelope.kind === 'cancel') {
-      // 커밋 후속 cancel은 해당 revision이 canonical에 반영된 뒤에만 제거
-      const minRevision = envelope.minRevision;
-      if (minRevision != null) {
-        const current = revisionProbe?.() ?? null;
-        if (current === null || current < minRevision) {
-          deferredCancels.set(envelope.sessionId, minRevision);
-          return;
-        }
-      }
       this.endSession(envelope.sessionId);
       return;
     }
@@ -180,31 +159,26 @@ export const previewOverlay = {
    * 오버레이만 제거하며 canonical은 건드리지 않음
    */
   endSession(sessionId: string): void {
-    addTombstone(sessionId);
-    if (!sessions.delete(sessionId)) return;
-    refreshRenderedState();
+    this.endSessions([sessionId]);
+  },
+
+  endSessions(sessionIds: readonly string[]): void {
+    let changed = false;
+    for (const sessionId of sessionIds) {
+      addTombstone(sessionId);
+      changed = sessions.delete(sessionId) || changed;
+    }
+    if (changed) refreshRenderedState();
   },
 
   hasSession(sessionId: string): boolean {
     return sessions.has(sessionId);
   },
 
-  /** canonical 반영 후 게이트가 풀린 지연 cancel 처리 */
-  flushDeferredCancels(currentRevision: number): void {
-    if (deferredCancels.size === 0) return;
-    for (const [sessionId, minRevision] of deferredCancels) {
-      if (currentRevision >= minRevision) {
-        deferredCancels.delete(sessionId);
-        this.endSession(sessionId);
-      }
-    }
-  },
-
   /** 테스트·리셋용 전체 정리 */
   clearAll(): void {
     sessions.clear();
     tombstones.clear();
-    deferredCancels.clear();
     refreshRenderedState();
   },
 };

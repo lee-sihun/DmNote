@@ -113,9 +113,6 @@ pub struct PreviewEnvelope {
     pub mode: String,
     pub targets: Vec<u32>,
     pub patch: Map<String, Value>,
-    // cancel 전용: 수신측이 이 revision 반영 후에만 세션을 제거하는 순서 게이트
-    #[serde(default)]
-    pub min_revision: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,7 +215,6 @@ impl PreviewBroker {
             mode: request.mode,
             targets: request.targets,
             patch: request.patch,
-            min_revision: None,
         };
         validate_payload_size(&envelope)?;
 
@@ -302,12 +298,7 @@ impl PreviewBroker {
         cancelled
     }
 
-    pub fn cancel(
-        &self,
-        label: &str,
-        session_id: &str,
-        min_revision: Option<u64>,
-    ) -> Result<(), String> {
+    pub fn cancel(&self, label: &str, session_id: &str) -> Result<(), String> {
         validate_session_id(session_id)?;
         let (recipients, envelope) = {
             let mut state = self.state.lock();
@@ -339,9 +330,7 @@ impl PreviewBroker {
             };
             insert_tombstone(&mut state, session_id.to_string());
             let recipients = clone_channels(&state, Some(label));
-            let mut envelope = cancellation_envelope(session_id, &session);
-            envelope.min_revision = min_revision;
-            (recipients, envelope)
+            (recipients, cancellation_envelope(session_id, &session))
         };
 
         send_envelopes(&recipients, &[envelope]);
@@ -352,12 +341,12 @@ impl PreviewBroker {
         &self,
         label: &str,
         session_id: &str,
-        committed_revision: Option<u64>,
+        broadcast_cancel: bool,
     ) -> Result<bool, String> {
         if Uuid::parse_str(session_id).is_err() {
             return Ok(false);
         }
-        let (recipients, envelope) = {
+        let (recipients, cancellation) = {
             let mut state = self.state.lock();
             if state.tombstones.contains(session_id) {
                 return Ok(false);
@@ -382,14 +371,19 @@ impl PreviewBroker {
                 },
             };
             insert_tombstone(&mut state, session_id.to_string());
-            let recipients = clone_channels(&state, Some(label));
-            let mut envelope = cancellation_envelope(session_id, &session);
-            // 수신측이 커밋 canonical 반영 후에만 세션을 제거하도록 게이트
-            envelope.min_revision = committed_revision;
-            (recipients, envelope)
+            let recipients = if broadcast_cancel {
+                clone_channels(&state, Some(label))
+            } else {
+                Vec::new()
+            };
+            let cancellation =
+                broadcast_cancel.then(|| cancellation_envelope(session_id, &session));
+            (recipients, cancellation)
         };
 
-        send_envelopes(&recipients, &[envelope]);
+        if let Some(cancellation) = cancellation {
+            send_envelopes(&recipients, &[cancellation]);
+        }
         Ok(true)
     }
 
@@ -501,7 +495,6 @@ fn cancellation_envelope(session_id: &str, session: &PreviewSession) -> PreviewE
         mode: String::new(),
         targets: Vec::new(),
         patch: Map::new(),
-        min_revision: None,
     }
 }
 
@@ -574,7 +567,6 @@ mod tests {
             mode: request.mode,
             targets: request.targets,
             patch: request.patch,
-            min_revision: None,
         }
     }
 
@@ -756,34 +748,42 @@ mod tests {
     }
 
     #[test]
-    fn successful_commit_ends_preview_session() {
+    fn committed_sessions_are_tombstoned_without_auxiliary_broadcast() {
+        let broker = PreviewBroker::default();
+        subscribe(&broker, "owner");
+        let observer_messages = subscribe(&broker, "observer");
+        let session_ids = vec![session_id(), session_id()];
+        for session_id in &session_ids {
+            broker
+                .publish("owner", request(session_id, 1))
+                .expect("publish succeeds");
+        }
+
+        for session_id in &session_ids {
+            assert!(broker
+                .finish_committed_session("owner", session_id, false)
+                .expect("commit cleanup succeeds"));
+        }
+        assert_eq!(observer_messages.load(Ordering::SeqCst), 2);
+        for session_id in &session_ids {
+            assert!(broker
+                .publish("owner", request(session_id, 2))
+                .unwrap_err()
+                .contains("already ended"));
+        }
+    }
+
+    #[test]
+    fn no_op_commit_broadcasts_cancel_and_rejects_late_patch() {
         let broker = PreviewBroker::default();
         subscribe(&broker, "owner");
         let observer_messages = subscribe(&broker, "observer");
         let session_id = session_id();
-        broker
-            .publish("owner", request(&session_id, 1))
-            .expect("publish succeeds");
 
         assert!(broker
-            .finish_committed_session("owner", &session_id, Some(7))
+            .finish_committed_session("owner", &session_id, true)
             .expect("commit cleanup succeeds"));
-        assert_eq!(observer_messages.load(Ordering::SeqCst), 2);
-        assert!(broker
-            .publish("owner", request(&session_id, 2))
-            .unwrap_err()
-            .contains("already ended"));
-    }
-
-    #[test]
-    fn commit_before_first_publish_rejects_late_patch() {
-        let broker = PreviewBroker::default();
-        subscribe(&broker, "owner");
-        let session_id = session_id();
-
-        assert!(broker
-            .finish_committed_session("owner", &session_id, None)
-            .expect("commit cleanup succeeds"));
+        assert_eq!(observer_messages.load(Ordering::SeqCst), 1);
 
         assert!(broker
             .publish("owner", request(&session_id, 1))
@@ -798,7 +798,7 @@ mod tests {
         let session_id = session_id();
 
         broker
-            .cancel("owner", &session_id, None)
+            .cancel("owner", &session_id)
             .expect("early cancel succeeds");
 
         assert!(broker

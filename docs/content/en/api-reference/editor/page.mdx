@@ -85,6 +85,8 @@ firmware that violates those barriers.
 interface EditorCommitRequest {
   baseRevision: number;
   mutationId: string;
+  gestureId?: string;
+  gestureIds?: string[];
   changes: EditorPatchV1;
 }
 
@@ -112,6 +114,12 @@ retried with the same ID in the current app process is deduplicated. This is
 intended for immediate IPC retries; the in-memory deduplication window does not
 survive an app restart. Reusing a retained ID for a different request is
 rejected.
+
+`gestureId` is the representative history gesture. `gestureIds` carries every
+preview session coalesced into the request so the committed event can echo the
+complete set. Both fields are optional and accept UUIDs only. The `gestureIds`
+array can contain at most 32 entries, and the combined unique set across both
+fields is also limited to 32 IDs.
 
 If the submitted values are already current, the result keeps the current
 revision, returns an empty `changedFields`, and emits no canonical committed
@@ -153,6 +161,8 @@ the human-readable `message`.
 type EditorCommitErrorCode =
   | 'REVISION_CONFLICT'
   | 'VALIDATION_FAILED'
+  | 'TOO_MANY_GESTURE_IDS'
+  | 'INVALID_GESTURE_ID'
   | 'PAIRED_UPDATE_REQUIRED'
   | 'MUTATION_ID_REUSED'
   | 'IO_ERROR';
@@ -169,13 +179,15 @@ interface EditorCommitError {
 }
 ```
 
-| Code                     | Meaning                                                    | `retryable` |
-| ------------------------ | ---------------------------------------------------------- | ----------- |
-| `REVISION_CONFLICT`      | `baseRevision` is stale; read, reconcile, and commit again | `true`      |
-| `VALIDATION_FAILED`      | The completed document violates an editor validation rule  | `false`     |
-| `PAIRED_UPDATE_REQUIRED` | A structural key change omitted its paired collection      | `false`     |
-| `MUTATION_ID_REUSED`     | The same mutation ID was used for a different request      | `false`     |
-| `IO_ERROR`               | The document could not be persisted                        | `true`      |
+| Code                     | Meaning                                                                   | `retryable` |
+| ------------------------ | ------------------------------------------------------------------------- | ----------- |
+| `REVISION_CONFLICT`      | `baseRevision` is stale; read, reconcile, and commit again                | `true`      |
+| `VALIDATION_FAILED`      | The completed document violates an editor validation rule                 | `false`     |
+| `TOO_MANY_GESTURE_IDS`   | `gestureIds` exceeds 32 entries or the combined unique set exceeds 32 IDs | `false`     |
+| `INVALID_GESTURE_ID`     | A gesture ID is not a UUID within the 64-byte limit                       | `false`     |
+| `PAIRED_UPDATE_REQUIRED` | A structural key change omitted its paired collection                     | `false`     |
+| `MUTATION_ID_REUSED`     | The same mutation ID was used for a different request                     | `false`     |
+| `IO_ERROR`               | The document could not be persisted                                       | `true`      |
 
 `details.currentRevision`, `details.validationCode`, or `details.field` is
 included when it applies to the error.
@@ -192,6 +204,8 @@ interface EditorCommittedV1 {
   schemaVersion: 1;
   revision: number;
   mutationId: string;
+  gestureId?: string | null;
+  gestureIds?: string[];
   origin?: string;
   changedFields: EditorField[];
   patch: EditorPatchV1;

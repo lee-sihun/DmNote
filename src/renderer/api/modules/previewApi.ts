@@ -26,6 +26,6 @@ export const previewApi = {
   publish: (request: PreviewPublishRequest) =>
     invoke<void>('editor_preview_publish', { request }),
 
-  cancel: (sessionId: string, minRevision?: number) =>
-    invoke<void>('editor_preview_cancel', { sessionId, minRevision }),
+  cancel: (sessionId: string) =>
+    invoke<void>('editor_preview_cancel', { sessionId }),
 };

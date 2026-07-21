@@ -5,6 +5,8 @@ use serde::Serialize;
 pub enum EditorCommitErrorCode {
     RevisionConflict,
     ValidationFailed,
+    TooManyGestureIds,
+    InvalidGestureId,
     PairedUpdateRequired,
     MutationIdReused,
     HistoryInProgress,
@@ -56,6 +58,24 @@ impl EditorCommitError {
                 validation_code: Some(validation_code.into()),
                 ..EditorCommitErrorDetails::default()
             }),
+            retryable: false,
+        }
+    }
+
+    pub fn too_many_gesture_ids(max: usize) -> Self {
+        Self {
+            error_code: EditorCommitErrorCode::TooManyGestureIds,
+            message: format!("gesture ID count exceeds {max}"),
+            details: None,
+            retryable: false,
+        }
+    }
+
+    pub fn invalid_gesture_id() -> Self {
+        Self {
+            error_code: EditorCommitErrorCode::InvalidGestureId,
+            message: "gesture IDs must be UUIDs no longer than 64 bytes".to_string(),
+            details: None,
             retryable: false,
         }
     }

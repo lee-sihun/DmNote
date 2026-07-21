@@ -24,6 +24,24 @@ import type {
   KeyCounters,
 } from '@src/types/key/keys';
 
+// 백엔드 gestureId UUID 강제와 동형 (canonical hyphenated + 32-hex simple)
+const GESTURE_ID_PATTERN =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i;
+
+// 플러그인 표면(dmn.keys.*)이 임의 문자열을 넘길 수 있음 - 비 UUID가 드레인에
+// 섞이면 같은 커밋의 사용자 편집까지 INVALID_GESTURE_ID로 통째 실패하므로
+// 유입 지점에서 걸러내고 커밋은 진행
+const sanitizeGestureId = (gestureId?: string): string | undefined => {
+  if (!gestureId || GESTURE_ID_PATTERN.test(gestureId)) return gestureId;
+  console.warn('[keysApi] Dropped non-UUID gestureId:', gestureId);
+  return undefined;
+};
+
+const gestureMeta = (gestureId?: string): { gestureId: string } | undefined => {
+  const safeId = sanitizeGestureId(gestureId);
+  return safeId ? { gestureId: safeId } : undefined;
+};
+
 export const keysApi = {
   get: () => invoke<KeyMappings>('keys_get'),
   getCounters: () => invoke<KeyCounters>('keys_get_counters'),
@@ -45,7 +63,7 @@ export const keysApi = {
             keys: mappings,
             keyPositions: positions,
           },
-          gestureId ? { gestureId } : undefined,
+          gestureMeta(gestureId),
         ),
       () => ({
         keys: structuredClone(mappings),
@@ -61,7 +79,7 @@ export const keysApi = {
             schemaVersion: 1,
             keyPositions: positions,
           },
-          gestureId ? { gestureId } : undefined,
+          gestureMeta(gestureId),
         ),
       () => structuredClone(positions),
     ),
