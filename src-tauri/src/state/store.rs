@@ -3524,6 +3524,8 @@ mod tests {
             settings: None,
             measured_size: None,
             tab_id: Some("4key".to_string()),
+            hidden: false,
+            z_index: None,
         }
     }
 
@@ -3674,6 +3676,37 @@ mod tests {
         drop(redo_barrier);
 
         store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instance_visibility_and_z_index_survive_restart() {
+        let dir = test_directory("plugin-instance-layout-restart-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut expected = saved_plugin_instance(15.0);
+        expected.hidden = true;
+        expected.z_index = Some(-12.0);
+        let committed = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![expected.clone()],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(committed);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+
+        let restored = AppStore::initialize_in_dir(&dir).unwrap();
+        assert_eq!(
+            restored.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![expected]
+        );
+
+        restored.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -3915,6 +3948,8 @@ mod tests {
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let mut default_tab = saved_plugin_instance(10.0);
         default_tab.tab_id = None;
+        default_tab.hidden = true;
+        default_tab.z_index = Some(17.0);
         let mut stale_tab = saved_plugin_instance(30.0);
         stale_tab.tab_id = Some("deleted-tab".to_string());
         let before = vec![default_tab, stale_tab];
@@ -3940,6 +3975,8 @@ mod tests {
         drop(reconciled);
         let mut normalized = saved_plugin_instance(10.0);
         normalized.tab_id = Some("4key".to_string());
+        normalized.hidden = true;
+        normalized.z_index = Some(17.0);
         assert_eq!(
             store.plugin_instances_get("demo-plugin").unwrap().0,
             vec![normalized.clone()]

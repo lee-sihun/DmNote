@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -20,6 +20,10 @@ import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { ElementBounds } from '@utils/grid/smartGuides';
 import type { EditorPatchV1 } from '@src/types/editor';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import {
+  beginPluginInstancesEditSession,
+  endPluginInstancesEditSession,
+} from '@plugins/runtime/displayElement/instancesCommitQueue';
 
 interface ResizeHandle {
   id: string;
@@ -66,6 +70,7 @@ export function useGridResize({
   getOtherElements,
 }: UseGridResizeOptions) {
   const resizeStartRef = useRef(false);
+  const pluginResizeTokensRef = useRef(new Map<string, string>());
   // 드래그 중 프리뷰 bounds (드래그 중일 때만 값이 있음)
   const [previewBounds, setPreviewBounds] = useState<ResizeBounds | null>(null);
   // 최종 적용할 bounds를 저장 (드래그 종료 시 사용)
@@ -82,9 +87,39 @@ export function useGridResize({
     elementBounds: GroupElementBounds[];
   } | null>(null);
 
+  const beginPluginResizeSessions = () => {
+    const pluginElementIds = new Set(
+      selectedElements
+        .filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
+    usePluginDisplayElementStore
+      .getState()
+      .elements.filter((element) => pluginElementIds.has(element.fullId))
+      .forEach((element) => {
+        if (!pluginResizeTokensRef.current.has(element.pluginId)) {
+          pluginResizeTokensRef.current.set(
+            element.pluginId,
+            beginPluginInstancesEditSession(element.pluginId),
+          );
+        }
+      });
+  };
+
+  const endPluginResizeSessions = () => {
+    const tokens = pluginResizeTokensRef.current;
+    pluginResizeTokensRef.current = new Map();
+    tokens.forEach((token, pluginId) => {
+      endPluginInstancesEditSession(pluginId, token);
+    });
+  };
+
+  useEffect(() => endPluginResizeSessions, []);
+
   const handleResizeStart = (_handle?: ResizeHandle) => {
     if (resizeStartRef.current) return;
     resizeStartRef.current = true;
+    beginPluginResizeSessions();
 
     // 기존 스마트 가이드 클리어
     useSmartGuidesStore.getState().clearGuides();
@@ -898,7 +933,11 @@ export function useGridResize({
     setPreviewBounds(null);
     finalBoundsRef.current = null;
 
-    onResizeEnd?.();
+    try {
+      onResizeEnd?.();
+    } finally {
+      endPluginResizeSessions();
+    }
   };
 
   // 그룹 리사이즈 핸들러 - 프리뷰 모드
@@ -1085,7 +1124,11 @@ export function useGridResize({
     setPreviewElementBounds(null);
     finalGroupBoundsRef.current = null;
 
-    onResizeEnd?.();
+    try {
+      onResizeEnd?.();
+    } finally {
+      endPluginResizeSessions();
+    }
   };
 
   return {

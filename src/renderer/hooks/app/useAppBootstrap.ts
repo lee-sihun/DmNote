@@ -141,6 +141,8 @@ export function useAppBootstrap() {
   useEffect(() => {
     let disposed = false;
     let stopSelectionSync: (() => void) | null = null;
+    let editorCoordinatorRetryTimer: ReturnType<typeof setTimeout> | null =
+      null;
     const isOverlayWindow = window.__dmn_window_type === 'overlay';
     let conflictDialogOpen = false;
     let lastShownPermanentEditorError: unknown = null;
@@ -167,6 +169,20 @@ export function useAppBootstrap() {
         timers.forEach((timer) => clearTimeout(timer));
       });
       counterDelayTimers.clear();
+    };
+
+    const scheduleEditorCoordinatorRecovery = () => {
+      if (disposed || editorCoordinatorRetryTimer !== null) return;
+
+      editorCoordinatorRetryTimer = setTimeout(() => {
+        editorCoordinatorRetryTimer = null;
+        if (disposed) return;
+
+        void editorCoordinator
+          .start()
+          .then(() => editorCoordinator.sync())
+          .catch(() => scheduleEditorCoordinatorRecovery());
+      }, 1_000);
     };
 
     const getCounterDelayMs = () => {
@@ -519,6 +535,7 @@ export function useAppBootstrap() {
           await editorCoordinator.sync({ reapply: true });
         } catch (error) {
           console.error('편집 상태 초기화 실패', error);
+          scheduleEditorCoordinatorRecovery();
         }
 
         // 백엔드 undo authority 상태 초기 조회
@@ -776,6 +793,10 @@ export function useAppBootstrap() {
 
     return () => {
       disposed = true;
+      if (editorCoordinatorRetryTimer !== null) {
+        clearTimeout(editorCoordinatorRetryTimer);
+        editorCoordinatorRetryTimer = null;
+      }
       resetHistoryEditorFlushLock();
       stopSelectionSync?.();
       stopPluginRpcHandler?.();

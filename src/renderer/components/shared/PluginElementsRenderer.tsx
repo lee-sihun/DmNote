@@ -59,7 +59,7 @@ interface PluginElementsRendererProps {
     referenceElement: HTMLDivElement | null;
   }) => boolean;
   onMultiDrag?: (deltaX: number, deltaY: number) => void;
-  onMultiDragStart?: () => void;
+  onMultiDragStart?: () => void | (() => void);
   onMultiDragEnd?: () => void;
 }
 

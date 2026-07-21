@@ -54,6 +54,7 @@ interface HarnessProps {
   activeTool?: 'select' | 'eraser';
   onClick: () => void;
   onDoubleClick: () => void;
+  onDragStart: () => void | (() => void);
   onPositionChange: (x: number, y: number) => void;
 }
 
@@ -61,11 +62,13 @@ const Harness = ({
   activeTool = 'select',
   onClick,
   onDoubleClick,
+  onDragStart,
   onPositionChange,
 }: HarnessProps) => {
   const draggable = useDraggable({
     initialX: 0,
     initialY: 0,
+    onDragStart,
     onPositionChange,
   });
 
@@ -93,6 +96,7 @@ describe('useDraggable pointer contract', () => {
   let nextRafId: number;
   let onClick: Mock<() => void>;
   let onDoubleClick: Mock<() => void>;
+  let onDragStart: Mock<() => void | (() => void)>;
   let onPositionChange: Mock<(x: number, y: number) => void>;
 
   const renderHarness = async (activeTool: 'select' | 'eraser' = 'select') => {
@@ -102,6 +106,7 @@ describe('useDraggable pointer contract', () => {
           activeTool={activeTool}
           onClick={onClick}
           onDoubleClick={onDoubleClick}
+          onDragStart={onDragStart}
           onPositionChange={onPositionChange}
         />,
       );
@@ -149,6 +154,7 @@ describe('useDraggable pointer contract', () => {
     });
     onClick = vi.fn();
     onDoubleClick = vi.fn();
+    onDragStart = vi.fn();
     onPositionChange = vi.fn();
     clearGuides.mockClear();
     setDraggingOrResizing.mockClear();
@@ -173,6 +179,7 @@ describe('useDraggable pointer contract', () => {
     });
 
     expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onDragStart).not.toHaveBeenCalled();
     expect(onPositionChange).not.toHaveBeenCalled();
   });
 
@@ -227,6 +234,8 @@ describe('useDraggable pointer contract', () => {
   });
 
   it('commits one drag over 5px and suppresses the following click', async () => {
+    const cleanup = vi.fn();
+    onDragStart.mockReturnValue(cleanup);
     const element = await renderHarness();
 
     await act(async () => {
@@ -241,6 +250,11 @@ describe('useDraggable pointer contract', () => {
 
     expect(onPositionChange).toHaveBeenCalledTimes(1);
     expect(onPositionChange).toHaveBeenCalledWith(10, 0);
+    expect(onDragStart).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(onPositionChange.mock.invocationCallOrder[0]).toBeLessThan(
+      cleanup.mock.invocationCallOrder[0]!,
+    );
     expect(onClick).not.toHaveBeenCalled();
   });
 
@@ -261,6 +275,8 @@ describe('useDraggable pointer contract', () => {
   });
 
   it('ends on blur and restores both element and body cursors', async () => {
+    const cleanup = vi.fn();
+    onDragStart.mockReturnValue(cleanup);
     const element = await renderHarness();
 
     await act(async () => {
@@ -276,6 +292,23 @@ describe('useDraggable pointer contract', () => {
     expect(element.style.cursor).toBe('');
     expect(document.body.style.cursor).toBe('');
     expect(onPositionChange).toHaveBeenCalledTimes(1);
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('active drag를 unmount할 때 gesture cleanup을 한 번 실행한다', async () => {
+    const cleanup = vi.fn();
+    onDragStart.mockReturnValue(cleanup);
+    const element = await renderHarness();
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointermove', { clientX: 11 });
+      flushRaf();
+      root.render(null);
+    });
+
+    expect(onPositionChange).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it('ignores non-primary pointers', async () => {
@@ -320,18 +353,21 @@ describe('useDraggable pointer contract', () => {
   });
 
   it('runs drag completion once across duplicate terminal signals', async () => {
+    const cleanup = vi.fn();
+    onDragStart.mockReturnValue(cleanup);
     const element = await renderHarness();
 
     await act(async () => {
       dispatchPointer(element, 'pointerdown');
       dispatchPointer(element, 'pointermove', { clientX: 11 });
       flushRaf();
-      dispatchPointer(element, 'pointerup', { clientX: 11 });
+      dispatchPointer(element, 'pointercancel', { clientX: 11 });
       dispatchPointer(element, 'lostpointercapture');
       window.dispatchEvent(new Event('blur'));
     });
 
     expect(onPositionChange).toHaveBeenCalledTimes(1);
+    expect(cleanup).toHaveBeenCalledOnce();
     expect(setDraggingOrResizing).toHaveBeenLastCalledWith(false);
     expect(
       setDraggingOrResizing.mock.calls.filter(([value]) => value === false),

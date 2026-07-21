@@ -8,6 +8,8 @@ export interface SavedPluginInstanceWire {
   settings?: Record<string, unknown>;
   measuredSize?: { width: number; height: number };
   tabId?: string;
+  hidden?: boolean;
+  zIndex?: number;
 }
 
 export interface PluginInstancesCommitRequest {

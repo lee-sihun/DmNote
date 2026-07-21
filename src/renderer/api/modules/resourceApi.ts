@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
+import { runLegacyEditorMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
 
 export const fontApi = {
   load: () =>
@@ -8,7 +9,11 @@ export const fontApi = {
 
 export const imageApi = {
   load: () =>
-    invoke<import('@src/types/plugin/api').ImageLoadResult>('image_load'),
+    runLegacyEditorMutation(
+      () =>
+        invoke<import('@src/types/plugin/api').ImageLoadResult>('image_load'),
+      { syncAfter: false },
+    ),
 };
 
 export const soundApi = {
@@ -22,9 +27,14 @@ export const soundApi = {
       displayName,
     }),
   remove: (soundPath: string) =>
-    invoke<import('@src/types/plugin/api').SoundDeleteResult>('sound_delete', {
-      soundPath,
-    }),
+    runLegacyEditorMutation(() =>
+      invoke<import('@src/types/plugin/api').SoundDeleteResult>(
+        'sound_delete',
+        {
+          soundPath,
+        },
+      ),
+    ),
   setHidden: (soundPath: string, hidden: boolean) =>
     invoke<import('@src/types/plugin/api').SoundSetHiddenResult>(
       'sound_set_hidden',
@@ -132,14 +142,18 @@ export const counterAnimationApi = {
   update: (
     request: import('@src/types/plugin/api').CounterAnimationUpdateRequest,
   ) =>
-    invoke<import('@src/types/plugin/api').CounterAnimationUpsertResponse>(
-      'counter_animation_update',
-      { request },
+    runLegacyEditorMutation(() =>
+      invoke<import('@src/types/plugin/api').CounterAnimationUpsertResponse>(
+        'counter_animation_update',
+        { request },
+      ),
     ),
   remove: (id: string) =>
-    invoke<import('@src/types/plugin/api').CounterAnimationDeleteResponse>(
-      'counter_animation_delete',
-      { id },
+    runLegacyEditorMutation(() =>
+      invoke<import('@src/types/plugin/api').CounterAnimationDeleteResponse>(
+        'counter_animation_delete',
+        { id },
+      ),
     ),
   onChanged: (
     listener: (

@@ -94,6 +94,11 @@ import {
   getPreviewOverlayVersion,
   subscribePreviewOverlay,
 } from '@src/renderer/editor/runtime/previewOverlay';
+import {
+  beginPluginInstancesEditSession,
+  endPluginInstancesEditSession,
+  rotatePluginInstancesEditSession,
+} from '@plugins/runtime/displayElement/instancesCommitQueue';
 
 type ToolbarAddRequest = {
   id: number;
@@ -320,6 +325,47 @@ const Grid = ({
     (state) => state.elements,
   );
 
+  const rotatePluginElementSessions = (fullIds: string[]) => {
+    const selectedPluginIds = new Set(fullIds);
+    const pluginIds = new Set(
+      usePluginDisplayElementStore
+        .getState()
+        .elements.filter((element) => selectedPluginIds.has(element.fullId))
+        .map((element) => element.pluginId),
+    );
+    pluginIds.forEach((pluginId) => {
+      rotatePluginInstancesEditSession(pluginId);
+    });
+  };
+
+  const beginSelectedPluginInstancesDrag = () => {
+    const selectedPluginElementIds = new Set(
+      useGridSelectionStore
+        .getState()
+        .selectedElements.filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
+    const tokens = new Map<string, string>();
+    usePluginDisplayElementStore
+      .getState()
+      .elements.filter((element) =>
+        selectedPluginElementIds.has(element.fullId),
+      )
+      .forEach((element) => {
+        if (!tokens.has(element.pluginId)) {
+          tokens.set(
+            element.pluginId,
+            beginPluginInstancesEditSession(element.pluginId),
+          );
+        }
+      });
+    return () => {
+      tokens.forEach((token, pluginId) => {
+        endPluginInstancesEditSession(pluginId, token);
+      });
+    };
+  };
+
   // 내장 통계 요소(Stat Items) 위치 정보
   const canonicalStatPositions = useStatItemStore((state) => state.positions);
   const canonicalGraphPositions = useGraphItemStore((state) => state.positions);
@@ -398,6 +444,7 @@ const Grid = ({
     } else if (selected.type === 'stat') {
       await moveStatForward(selected.index);
     } else if (selected.type === 'plugin') {
+      rotatePluginElementSessions([selected.id]);
       usePluginDisplayElementStore.getState().bringForward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphForward(selected.index);
@@ -415,6 +462,7 @@ const Grid = ({
     } else if (selected.type === 'stat') {
       await moveStatBackward(selected.index);
     } else if (selected.type === 'plugin') {
+      rotatePluginElementSessions([selected.id]);
       usePluginDisplayElementStore.getState().sendBackward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphBackward(selected.index);
@@ -605,6 +653,12 @@ const Grid = ({
   const moveSelectedToFront = async () => {
     if (selectedElements.length === 0) return;
 
+    rotatePluginElementSessions(
+      selectedElements
+        .filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
+
     for (const el of selectedElements) {
       if (el.type === 'key' && el.index !== undefined) {
         if (typeof onMoveToFront === 'function') {
@@ -626,6 +680,12 @@ const Grid = ({
 
   const moveSelectedToBack = async () => {
     if (selectedElements.length === 0) return;
+
+    rotatePluginElementSessions(
+      selectedElements
+        .filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
 
     for (const el of selectedElements) {
       if (el.type === 'key' && el.index !== undefined) {
@@ -1036,8 +1096,9 @@ const Grid = ({
           )}
           selectedElements={selectedElements}
           onMultiDrag={(deltaX, deltaY) =>
-            moveSelectedElements(deltaX, deltaY, false, false)
+            moveSelectedElements(deltaX, deltaY, undefined, false)
           }
+          onMultiDragStart={beginSelectedPluginInstancesDrag}
           onMultiDragEnd={syncSelectedElementsToOverlay}
           activeTool={activeTool}
           onEraserClick={() => {
@@ -1124,8 +1185,9 @@ const Grid = ({
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
-          moveSelectedElements(deltaX, deltaY, false, false)
+          moveSelectedElements(deltaX, deltaY, undefined, false)
         }
+        onMultiDragStart={beginSelectedPluginInstancesDrag}
         onMultiDragEnd={syncSelectedElementsToOverlay}
         activeTool={activeTool}
         onEraserClick={() => {
@@ -1207,8 +1269,9 @@ const Grid = ({
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
-          moveSelectedElements(deltaX, deltaY, false, false)
+          moveSelectedElements(deltaX, deltaY, undefined, false)
         }
+        onMultiDragStart={beginSelectedPluginInstancesDrag}
         onMultiDragEnd={syncSelectedElementsToOverlay}
         activeTool={activeTool}
         onEraserClick={() => {
@@ -1288,8 +1351,9 @@ const Grid = ({
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
-          moveSelectedElements(deltaX, deltaY, false, false)
+          moveSelectedElements(deltaX, deltaY, undefined, false)
         }
+        onMultiDragStart={beginSelectedPluginInstancesDrag}
         onMultiDragEnd={syncSelectedElementsToOverlay}
         activeTool={activeTool}
         onEraserClick={() => {
@@ -1595,8 +1659,9 @@ const Grid = ({
             return true;
           }}
           onMultiDrag={(deltaX, deltaY) =>
-            moveSelectedElements(deltaX, deltaY, false, false)
+            moveSelectedElements(deltaX, deltaY, undefined, false)
           }
+          onMultiDragStart={beginSelectedPluginInstancesDrag}
           onMultiDragEnd={syncSelectedElementsToOverlay}
         />
       </div>

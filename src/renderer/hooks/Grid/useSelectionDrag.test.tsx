@@ -61,7 +61,7 @@ vi.mock('@utils/grid/smartGuides', async (importOriginal) => {
 interface HarnessProps {
   onClick: () => void;
   onMovedCheck: (moved: boolean) => void;
-  onMultiDragStart: () => void;
+  onMultiDragStart: () => void | (() => void);
   onMultiDrag: (dx: number, dy: number) => void;
   onMultiDragEnd: () => void;
 }
@@ -140,7 +140,7 @@ describe('useSelectionDrag', () => {
   let nextRafId: number;
   let onClick: Mock<() => void>;
   let onMovedCheck: Mock<(moved: boolean) => void>;
-  let onMultiDragStart: Mock<() => void>;
+  let onMultiDragStart: Mock<() => void | (() => void)>;
   let onMultiDrag: Mock<(dx: number, dy: number) => void>;
   let onMultiDragEnd: Mock<() => void>;
 
@@ -238,6 +238,8 @@ describe('useSelectionDrag', () => {
 
     expect(down.defaultPrevented).toBe(false);
     expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onMultiDragStart).not.toHaveBeenCalled();
+    expect(onMultiDragEnd).not.toHaveBeenCalled();
   });
 
   it('ignores an additional press during the owned pointer session', async () => {
@@ -247,6 +249,10 @@ describe('useSelectionDrag', () => {
     await act(async () => {
       element.dispatchEvent(pointerEvent('pointerdown', { pointerId: 1 }));
       element.dispatchEvent(pointerEvent('pointerdown', { pointerId: 2 }));
+      element.dispatchEvent(
+        pointerEvent('pointermove', { pointerId: 1, clientX: 7 }),
+      );
+      flushRaf();
       element.dispatchEvent(pointerEvent('pointerup', { pointerId: 1 }));
     });
 
@@ -256,19 +262,43 @@ describe('useSelectionDrag', () => {
   });
 
   it('completes once across duplicate terminal signals', async () => {
+    const cleanup = vi.fn();
+    onMultiDragStart.mockReturnValue(cleanup);
     const element = await renderHarness();
 
     await act(async () => {
       element.dispatchEvent(pointerEvent('pointerdown'));
-      element.dispatchEvent(pointerEvent('pointerup'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 7 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointercancel'));
       element.dispatchEvent(pointerEvent('lostpointercapture'));
       window.dispatchEvent(new Event('blur'));
     });
 
     expect(onMultiDragEnd).toHaveBeenCalledTimes(1);
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(onMultiDragEnd.mock.invocationCallOrder[0]).toBeLessThan(
+      cleanup.mock.invocationCallOrder[0]!,
+    );
     expect(
       setDraggingOrResizing.mock.calls.filter(([value]) => value === false),
     ).toHaveLength(1);
+  });
+
+  it('active drag를 unmount할 때 gesture cleanup을 한 번 실행한다', async () => {
+    const cleanup = vi.fn();
+    onMultiDragStart.mockReturnValue(cleanup);
+    const element = await renderHarness();
+
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 7 }));
+      flushRaf();
+      root.render(null);
+    });
+
+    expect(onMultiDragEnd).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it('keeps the double-click guard across the second stationary press', async () => {
@@ -349,6 +379,10 @@ describe('useSelectionDrag', () => {
     await act(async () => {
       element.dispatchEvent(pointerEvent('pointerdown', { pointerId: 1 }));
       element2.dispatchEvent(pointerEvent('pointerdown', { pointerId: 2 }));
+      element.dispatchEvent(
+        pointerEvent('pointermove', { pointerId: 1, clientX: 7 }),
+      );
+      flushRaf();
     });
     expect(onMultiDragStart).toHaveBeenCalledTimes(1);
     expect(onMultiDragStart2).not.toHaveBeenCalled();
@@ -357,6 +391,10 @@ describe('useSelectionDrag', () => {
     await act(async () => {
       element.dispatchEvent(pointerEvent('pointerup', { pointerId: 1 }));
       element2.dispatchEvent(pointerEvent('pointerdown', { pointerId: 3 }));
+      element2.dispatchEvent(
+        pointerEvent('pointermove', { pointerId: 3, clientX: 7 }),
+      );
+      flushRaf();
     });
     expect(onMultiDragStart2).toHaveBeenCalledTimes(1);
 

@@ -47,7 +47,7 @@ interface DraggableKeyProps {
   isSelected?: boolean;
   selectedElements?: SelectedElement[];
   onMultiDrag?: (dx: number, dy: number) => void;
-  onMultiDragStart?: () => void;
+  onMultiDragStart?: () => void | (() => void);
   onMultiDragEnd?: () => void;
   activeTool?: string;
   onEraserClick?: () => void;

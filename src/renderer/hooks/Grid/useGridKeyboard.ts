@@ -27,7 +27,8 @@ interface UseGridKeyboardParams {
   moveSelectedElements: (
     deltaX: number,
     deltaY: number,
-    saveHistory?: boolean,
+    gestureId?: string,
+    syncToOverlay?: boolean,
   ) => void;
   deleteSelectedElements: () => void;
   clearSelection: () => void;
@@ -57,6 +58,11 @@ export function useGridKeyboard({
   newGroupLabel = 'New Group',
 }: UseGridKeyboardParams): void {
   const lastArrowKeyTime = useRef(0);
+  const arrowGestureId = useRef<string | null>(null);
+  const lastArrowSelectionSignature = useRef<string | null>(null);
+  const selectionSignature = JSON.stringify(
+    selectedElements.map(({ type, id, index }) => ({ type, id, index })),
+  );
   const macOS = isMac();
 
   useHistoryShortcuts({ onUndo, onRedo });
@@ -145,13 +151,19 @@ export function useGridKeyboard({
             break;
         }
 
-        // 일정 시간 내 연속 입력이면 히스토리 저장 안함
+        // 500ms 내 방향키 입력의 undo 병합
         const now = Date.now();
-        const saveHistory =
-          now - lastArrowKeyTime.current > ARROW_KEY_HISTORY_DELAY;
+        if (
+          lastArrowSelectionSignature.current !== selectionSignature ||
+          !arrowGestureId.current ||
+          now - lastArrowKeyTime.current > ARROW_KEY_HISTORY_DELAY
+        ) {
+          arrowGestureId.current = crypto.randomUUID();
+        }
         lastArrowKeyTime.current = now;
+        lastArrowSelectionSignature.current = selectionSignature;
 
-        moveSelectedElements(deltaX, deltaY, saveHistory);
+        moveSelectedElements(deltaX, deltaY, arrowGestureId.current);
         return;
       }
 
@@ -197,5 +209,6 @@ export function useGridKeyboard({
     onMoveForward,
     onMoveBackward,
     newGroupLabel,
+    selectionSignature,
   ]);
 }

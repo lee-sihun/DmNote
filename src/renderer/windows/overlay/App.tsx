@@ -34,6 +34,12 @@ type KeyDelayTimerEntry = { timers: Set<ReturnType<typeof setTimeout>> };
 // 값이 와도 노트가 화면 위로 튀지 않도록 제한
 const MAX_EVENT_AGE_MS = 250;
 
+const validKeySet = (keys: readonly string[]) =>
+  new Set(keys.filter((key) => key.length > 0));
+
+const validKeySignature = (keys: readonly string[]) =>
+  JSON.stringify([...validKeySet(keys)].sort());
+
 export default function App() {
   const isBootstrapped = useKeyStore((state) => state.isBootstrapped);
   useCustomCssInjection();
@@ -364,6 +370,33 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKeyType]);
 
+  // 구독 콜백이 읽는 최신 컨텍스트 - 구독 자체는 마운트 1회로 고정
+  // positions·keyMappings가 deps에 있으면 undo의 canonical 복원마다 재구독되고,
+  // cleanup의 resetAllKeySignals가 눌림 표시 중간에 끼어들어 이중 깜빡임 발생
+  const keyEventContextRef = useRef({
+    noteEffect,
+    keyMappings,
+    positions,
+    selectedKeyType,
+    handleKeyDown,
+    handleKeyUp,
+  });
+  useEffect(() => {
+    keyEventContextRef.current = {
+      noteEffect,
+      keyMappings,
+      positions,
+      selectedKeyType,
+      handleKeyDown,
+      handleKeyUp,
+    };
+  });
+
+  // 리셋 이후 이벤트가 도착한 키 추적 - 스냅샷 재수화보다 최신 이벤트가 우선
+  const seenSinceResetRef = useRef<Set<string>>(new Set());
+  // 탭 전환 재수화가 구독 확립을 기다릴 수 있게 구독 준비 promise 보관
+  const keyEventsReadyRef = useRef<Promise<unknown> | null>(null);
+
   useEffect(() => {
     // 키 딜레이 적용된 신호 업데이트
     const updateKeySignalWithDelay = (key: string, isDown: boolean) => {
@@ -395,7 +428,6 @@ export default function App() {
     });
 
     let hydrationCancelled = false;
-    const seenHydrationKeys = new Set<string>();
 
     // 키 이벤트 구독을 먼저 확립한 뒤 눌림 스냅샷 요청
     const unsubscribe = import('@utils/core/keyEventBus').then(
@@ -403,10 +435,18 @@ export default function App() {
         if (hydrationCancelled) return undefined;
         const unsubscribeKeyEvents = keyEventBus.subscribe(
           ({ key, state, eventAgeMs }) => {
-            seenHydrationKeys.add(key);
+            seenSinceResetRef.current.add(key);
             const isDown = state === 'DOWN';
             // 키 UI 업데이트 (딜레이 적용)
             updateKeySignalWithDelay(key, isDown);
+            const {
+              noteEffect,
+              keyMappings,
+              positions,
+              selectedKeyType,
+              handleKeyDown,
+              handleKeyUp,
+            } = keyEventContextRef.current;
             // 노트 이펙트는 즉시 처리 (딜레이 없음)
             if (noteEffect) {
               // 개별 키의 noteEffectEnabled 확인
@@ -446,21 +486,31 @@ export default function App() {
 
         // 지연 생성된 오버레이 hydration — 구독 이후 이벤트가 온 키는
         // 최신 이벤트가 스냅샷보다 우선하며 KPS·노트 통계에는 반영하지 않음
+        const hydrationSeen = seenSinceResetRef.current;
         void window.api.app
           .bootstrap()
           .then(({ activeKeys }) => {
             if (hydrationCancelled || !activeKeys?.length) return;
+            // 탭 전환 리셋이 끼었으면 이 스냅샷은 낡음 - 전환 effect의 재수화가 담당
+            if (seenSinceResetRef.current !== hydrationSeen) return;
+            const { keyMappings, selectedKeyType } = keyEventContextRef.current;
+            const validKeys = validKeySet(keyMappings[selectedKeyType] ?? []);
             for (const key of activeKeys) {
-              if (!seenHydrationKeys.has(key)) {
+              if (validKeys.has(key) && !hydrationSeen.has(key)) {
                 setKeyActiveSignal(key, true);
               }
             }
           })
-          .catch(() => {});
+          .catch((error) => {
+            if (!hydrationCancelled) {
+              console.error('Failed to hydrate active key state', error);
+            }
+          });
 
         return unsubscribeKeyEvents;
       },
     );
+    keyEventsReadyRef.current = unsubscribe;
     void unsubscribe.catch((error) => {
       console.error('Failed to initialize key state listener', error);
     });
@@ -484,19 +534,56 @@ export default function App() {
         timerEntry.timers.clear();
       });
       keyDelayTimers.clear();
-      // 안전하게 모든 키 신호 초기화(선택적)
+      // 창 단위 정리 - 마운트 1회 구독이므로 여기는 실제 언마운트에서만 실행됨
       resetAllKeySignals();
     };
-  }, [
-    handleKeyDown,
-    handleKeyUp,
-    noteEffect,
-    keyMappings,
-    positions,
-    selectedKeyType,
-  ]);
+    // 콜백이 읽는 값은 keyEventContextRef로 공급 - 구독은 창 수명과 동일
+  }, []);
 
   const currentKeys = keyMappings[selectedKeyType] ?? [];
+  const currentValidKeySignature = validKeySignature(currentKeys);
+
+  // 탭·현재 키 집합 전환 시 예약 타이머와 눌림 신호를 권위 상태로 정합
+  // positions와 다른 탭의 매핑 변경은 signature가 같아 이 effect를 건드리지 않음
+  const keySignalResetArmedRef = useRef(false);
+  useEffect(() => {
+    if (!keySignalResetArmedRef.current) {
+      // 초기 마운트 수화는 구독 effect가 담당
+      keySignalResetArmedRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    keyDelayTimersRef.current.forEach((timerEntry) => {
+      timerEntry.timers.forEach((timer) => clearTimeout(timer));
+      timerEntry.timers.clear();
+    });
+    keyDelayTimersRef.current.clear();
+    const seen = new Set<string>();
+    const validKeys = new Set<string>(JSON.parse(currentValidKeySignature));
+    seenSinceResetRef.current = seen;
+    resetAllKeySignals();
+    void Promise.resolve(keyEventsReadyRef.current)
+      .then(() => window.api.app.bootstrap())
+      .then(({ activeKeys }) => {
+        if (cancelled || !activeKeys?.length) return;
+        // 이후 전환의 리셋이 끼었으면 그쪽 재수화가 담당
+        if (seenSinceResetRef.current !== seen) return;
+        for (const key of activeKeys) {
+          if (validKeys.has(key) && !seen.has(key)) {
+            setKeyActiveSignal(key, true);
+          }
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Failed to rehydrate active key state', error);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedKeyType, currentValidKeySignature]);
+
   const currentPositions = positions[selectedKeyType] ?? [];
   const currentStatPositions = statPositions[selectedKeyType] ?? [];
   const currentGraphPositions = graphPositions[selectedKeyType] ?? [];

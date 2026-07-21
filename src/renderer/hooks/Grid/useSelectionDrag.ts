@@ -30,7 +30,7 @@ interface UseSelectionDragOptions {
   selectedElements: SelectedElementLike[];
   getOtherElements: (excludeId: string) => ElementBounds[];
   getSelectedElementIds?: (element: SelectedElementLike) => string[];
-  onMultiDragStart?: () => void;
+  onMultiDragStart?: () => void | (() => void);
   onMultiDrag?: (dx: number, dy: number) => void;
   onMultiDragEnd?: () => void;
 }
@@ -86,6 +86,8 @@ export const useSelectionDrag = ({
     let lastSnappedDeltaY = 0;
     let rafId: number | null = null;
     let dragEnded = false;
+    let actuallyDragging = false;
+    let finishGesture: (() => void) | null = null;
 
     activePointerIdRef.current = pointerId;
     movedDuringPressRef.current = lastPressMovedRef.current;
@@ -94,8 +96,6 @@ export const useSelectionDrag = ({
     dragTarget.style.userSelect = 'none';
 
     useSmartGuidesStore.getState().clearGuides();
-    useGridSelectionStore.getState().setDraggingOrResizing(true);
-    onMultiDragStart?.();
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       if (dragEnded || moveEvent.pointerId !== activePointerIdRef.current) {
@@ -236,6 +236,12 @@ export const useSelectionDrag = ({
         const moveDeltaX = snappedDeltaX - lastSnappedDeltaX;
         const moveDeltaY = snappedDeltaY - lastSnappedDeltaY;
         if (moveDeltaX !== 0 || moveDeltaY !== 0) {
+          if (!actuallyDragging) {
+            actuallyDragging = true;
+            useGridSelectionStore.getState().setDraggingOrResizing(true);
+            const cleanup = onMultiDragStart?.();
+            finishGesture = typeof cleanup === 'function' ? cleanup : null;
+          }
           lastSnappedDeltaX = snappedDeltaX;
           lastSnappedDeltaY = snappedDeltaY;
           movedDuringPressRef.current = true;
@@ -266,8 +272,15 @@ export const useSelectionDrag = ({
       window.removeEventListener('blur', finishDrag);
       dragTarget.style.userSelect = previousUserSelect;
       useSmartGuidesStore.getState().clearGuides();
-      useGridSelectionStore.getState().setDraggingOrResizing(false);
-      onMultiDragEnd?.();
+      if (actuallyDragging) {
+        useGridSelectionStore.getState().setDraggingOrResizing(false);
+        try {
+          onMultiDragEnd?.();
+        } finally {
+          finishGesture?.();
+          finishGesture = null;
+        }
+      }
     };
 
     const handlePointerEnd = (endEvent: PointerEvent) => {

@@ -4,6 +4,12 @@ const mocks = vi.hoisted(() => ({
   sendPluginRpc: vi.fn(),
   sendBridgeMessageBestEffort: vi.fn(),
   updateElement: vi.fn(),
+  setElements: vi.fn(),
+  rotateEditSession: vi.fn(),
+  elements: [] as Array<{
+    fullId: string;
+    pluginId: string;
+  }>,
 }));
 
 vi.mock('./pluginRpcClient', () => ({
@@ -21,8 +27,16 @@ vi.mock('@utils/plugin/panelModelSync', () => ({
 
 vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
   usePluginDisplayElementStore: {
-    getState: () => ({ elements: [], updateElement: mocks.updateElement }),
+    getState: () => ({
+      elements: mocks.elements,
+      setElements: mocks.setElements,
+      updateElement: mocks.updateElement,
+    }),
   },
+}));
+
+vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
+  rotatePluginInstancesEditSession: mocks.rotateEditSession,
 }));
 
 describe('plugin element panel queue', () => {
@@ -33,6 +47,9 @@ describe('plugin element panel queue', () => {
     mocks.sendPluginRpc.mockReset();
     mocks.sendBridgeMessageBestEffort.mockReset();
     mocks.updateElement.mockReset();
+    mocks.setElements.mockReset();
+    mocks.rotateEditSession.mockReset();
+    mocks.elements = [];
     window.__dmn_window_type = 'panel';
     actions = await import('./pluginElementActions');
   });
@@ -93,5 +110,72 @@ describe('plugin element panel queue', () => {
       measuredSize: { width: 240, height: 80 },
       settings: { accent: 'blue', opacity: 0.8 },
     });
+  });
+
+  it('main의 discrete 삭제는 대상 플러그인별 세션을 먼저 분리한다', () => {
+    window.__dmn_window_type = 'main';
+    mocks.elements = [
+      { fullId: 'plugin-a:one', pluginId: 'plugin-a' },
+      { fullId: 'plugin-a:two', pluginId: 'plugin-a' },
+      { fullId: 'plugin-b:one', pluginId: 'plugin-b' },
+      { fullId: 'plugin-c:one', pluginId: 'plugin-c' },
+    ];
+
+    actions.deletePluginElements([
+      'plugin-a:one',
+      'plugin-a:two',
+      'plugin-b:one',
+    ]);
+
+    expect(mocks.rotateEditSession).toHaveBeenCalledTimes(2);
+    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-a');
+    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-b');
+    expect(mocks.setElements).toHaveBeenCalledWith([
+      { fullId: 'plugin-c:one', pluginId: 'plugin-c' },
+    ]);
+  });
+
+  it('main의 가시성 변경은 대상 플러그인별 세션을 먼저 분리한다', () => {
+    window.__dmn_window_type = 'main';
+    mocks.elements = [
+      { fullId: 'plugin-a:one', pluginId: 'plugin-a' },
+      { fullId: 'plugin-a:two', pluginId: 'plugin-a' },
+      { fullId: 'plugin-b:one', pluginId: 'plugin-b' },
+    ];
+
+    actions.setPluginElementsHidden([
+      { fullId: 'plugin-a:one', hidden: true },
+      { fullId: 'plugin-a:two', hidden: true },
+      { fullId: 'plugin-b:one', hidden: false },
+    ]);
+
+    expect(mocks.rotateEditSession).toHaveBeenCalledTimes(2);
+    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-a');
+    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-b');
+    expect(mocks.rotateEditSession.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.updateElement.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.updateElement).toHaveBeenCalledTimes(3);
+  });
+
+  it('main의 레이어 순서 변경은 대상 플러그인별 세션을 먼저 분리한다', () => {
+    window.__dmn_window_type = 'main';
+    mocks.elements = [
+      { fullId: 'plugin-a:one', pluginId: 'plugin-a' },
+      { fullId: 'plugin-b:one', pluginId: 'plugin-b' },
+    ];
+
+    actions.setPluginElementZIndexes([
+      { fullId: 'plugin-a:one', zIndex: 10 },
+      { fullId: 'plugin-b:one', zIndex: 9 },
+    ]);
+
+    expect(mocks.rotateEditSession).toHaveBeenCalledTimes(2);
+    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-a');
+    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-b');
+    expect(mocks.rotateEditSession.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.updateElement.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.updateElement).toHaveBeenCalledTimes(2);
   });
 });

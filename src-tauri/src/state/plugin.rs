@@ -357,6 +357,14 @@ pub(crate) fn validate_saved_plugin_instances(
                 return Err(format!("INVALID_PLUGIN_INSTANCE_SIZE:{index}"));
             }
         }
+        if instance.z_index.is_some_and(|z_index| {
+            !z_index.is_finite()
+                || z_index.fract() != 0.0
+                || z_index < f64::from(i32::MIN)
+                || z_index > f64::from(i32::MAX)
+        }) {
+            return Err(format!("INVALID_PLUGIN_INSTANCE_Z_INDEX:{index}"));
+        }
         if instance
             .tab_id
             .as_deref()
@@ -664,8 +672,41 @@ mod tests {
             settings: None,
             measured_size: None,
             tab_id: Some("4key".to_string()),
+            hidden: false,
+            z_index: None,
         };
         validate_saved_plugin_instances(&[valid]).unwrap();
+    }
+
+    #[test]
+    fn saved_instance_wire_defaults_legacy_visibility_and_z_index() {
+        let instance = serde_json::from_value::<SavedPluginInstance>(serde_json::json!({
+            "position": { "x": 1.0, "y": 2.0 },
+            "tabId": "4key"
+        }))
+        .unwrap();
+
+        assert!(!instance.hidden);
+        assert_eq!(instance.z_index, None);
+    }
+
+    #[test]
+    fn saved_instance_wire_rejects_invalid_z_indexes() {
+        for z_index in [1.5, f64::from(i32::MAX) + 1.0, f64::NAN] {
+            let instance = SavedPluginInstance {
+                position: PluginPoint { x: 1.0, y: 2.0 },
+                settings: None,
+                measured_size: None,
+                tab_id: Some("4key".to_string()),
+                hidden: false,
+                z_index: Some(z_index),
+            };
+
+            assert_eq!(
+                validate_saved_plugin_instances(&[instance]).unwrap_err(),
+                "INVALID_PLUGIN_INSTANCE_Z_INDEX:0"
+            );
+        }
     }
 
     #[test]
@@ -680,6 +721,8 @@ mod tests {
             settings: Some(settings),
             measured_size: None,
             tab_id: Some("4key".to_string()),
+            hidden: false,
+            z_index: None,
         };
         let request = PluginInstancesCommitRequest {
             plugin_id: "demo".to_string(),

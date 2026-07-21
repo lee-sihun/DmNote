@@ -13,6 +13,7 @@ import {
   registerDisplayElementInstance,
   unregisterDisplayElementInstance,
 } from './instanceRegistry';
+import { rotatePluginInstancesEditSession } from './instancesCommitQueue';
 import {
   resolveFullId,
   resolveInstance,
@@ -25,6 +26,8 @@ import type {
   PluginDisplayElementConfig,
   PluginDisplayElementInternal,
 } from '@src/types/plugin/api';
+
+let internalAddDepth = 0;
 
 /**
  * 내부용 디스플레이 요소 제거 함수
@@ -89,6 +92,10 @@ export const displayElementApi = {
     if (!pluginId) {
       console.warn('[UI API] displayElement.add called outside plugin context');
       return createNoopDisplayElementInstance();
+    }
+
+    if (internalAddDepth === 0) {
+      rotatePluginInstancesEditSession(pluginId);
     }
 
     const id = `element-${Date.now()}-${Math.random()
@@ -183,6 +190,7 @@ export const displayElementApi = {
           .updateElement(targetId, updates);
       },
       removeElement: (targetId) => {
+        rotatePluginInstancesEditSession(pluginId);
         removeDisplayElementInternal(targetId);
       },
       locale: currentLocale,
@@ -338,6 +346,10 @@ export const displayElementApi = {
     const fullId = resolveFullId(target);
     if (!fullId) return;
 
+    const element = usePluginDisplayElementStore
+      .getState()
+      .elements.find((candidate) => candidate.fullId === fullId);
+    if (element) rotatePluginInstancesEditSession(element.pluginId);
     removeDisplayElementInternal(fullId);
   },
 
@@ -361,10 +373,28 @@ export const displayElementApi = {
     const elements = usePluginDisplayElementStore
       .getState()
       .elements.filter((el) => el.pluginId === pluginId);
+    if (elements.length === 0) return;
+
+    rotatePluginInstancesEditSession(pluginId);
     elements.forEach((element) => {
       removeDisplayElementInternal(element.fullId);
     });
   },
 };
 
-export { removeDisplayElementInternal, removeDisplayElementsInternal };
+const addDisplayElementInternal = (
+  element: PluginDisplayElementConfig,
+): DisplayElementInstance => {
+  internalAddDepth += 1;
+  try {
+    return displayElementApi.add(element);
+  } finally {
+    internalAddDepth -= 1;
+  }
+};
+
+export {
+  addDisplayElementInternal,
+  removeDisplayElementInternal,
+  removeDisplayElementsInternal,
+};

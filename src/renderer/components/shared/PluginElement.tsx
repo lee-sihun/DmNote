@@ -38,6 +38,11 @@ import {
   measureConnectedPluginElement,
   resolveResizablePluginElementSize,
 } from '@utils/plugin/pluginElementMeasurement';
+import {
+  beginPluginInstancesEditSession,
+  endPluginInstancesEditSession,
+  rotatePluginInstancesEditSession,
+} from '@plugins/runtime/displayElement/instancesCommitQueue';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
@@ -101,7 +106,7 @@ interface PluginElementProps {
     referenceElement: HTMLDivElement | null;
   }) => boolean;
   onMultiDrag?: (deltaX: number, deltaY: number) => void;
-  onMultiDragStart?: () => void;
+  onMultiDragStart?: () => void | (() => void);
   onMultiDragEnd?: () => void;
 }
 
@@ -426,6 +431,10 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     gridSize: gridSnapSize,
     initialX: calculatedPosition.x,
     initialY: calculatedPosition.y,
+    onDragStart: () => {
+      const token = beginPluginInstancesEditSession(element.pluginId);
+      return () => endPluginInstancesEditSession(element.pluginId, token);
+    },
     onPositionChange: (newX, newY) => {
       // 선택 모드가 아닐 때만 개별 이동
       if (windowType === 'main' && element.draggable && !isSelectionMode) {
@@ -1398,12 +1407,16 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     if (itemId === 'delete') {
       deletePluginElement();
     } else if (itemId === 'bringToFront') {
+      rotatePluginInstancesEditSession(element.pluginId);
       usePluginDisplayElementStore.getState().bringToFront(element.fullId);
     } else if (itemId === 'bringForward') {
+      rotatePluginInstancesEditSession(element.pluginId);
       usePluginDisplayElementStore.getState().bringForward(element.fullId);
     } else if (itemId === 'sendBackward') {
+      rotatePluginInstancesEditSession(element.pluginId);
       usePluginDisplayElementStore.getState().sendBackward(element.fullId);
     } else if (itemId === 'sendToBack') {
+      rotatePluginInstancesEditSession(element.pluginId);
       usePluginDisplayElementStore.getState().sendToBack(element.fullId);
     } else if (itemId.startsWith('custom-')) {
       const index = parseInt(itemId.replace('custom-', ''), 10);

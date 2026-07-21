@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { drainEditorWrites } from '@src/renderer/editor/runtime/editorWriteBarrier';
 import {
+  beginPluginInstancesEditSession,
   clearPluginInstancesEditSessions,
   createPluginInstancesSaveDebounce,
+  endPluginInstancesEditSession,
   enqueuePluginInstancesCommit,
   getPendingPluginInstancesCommitCount,
+  registerPluginInstancesEditSessionFlush,
+  rotatePluginInstancesEditSession,
   touchPluginInstancesEditSession,
 } from './instancesCommitQueue';
 
@@ -20,7 +24,10 @@ const deferred = () => {
 };
 
 describe('plugin instances commit queue lifecycle', () => {
+  const cleanups: Array<() => void> = [];
+
   afterEach(() => {
+    cleanups.splice(0).forEach((cleanup) => cleanup());
     clearPluginInstancesEditSessions();
     vi.useRealTimers();
   });
@@ -37,6 +44,151 @@ describe('plugin instances commit queue lifecycle', () => {
 
     await vi.advanceTimersByTimeAsync(1201);
     expect(touchPluginInstancesEditSession('plugin-a')).not.toBe(first);
+  });
+
+  it('서로 다른 드래그는 다른 gestureId, 한 드래그의 여러 저장은 같은 gestureId를 사용한다', async () => {
+    vi.useFakeTimers();
+    const committedGestureIds: Array<string | undefined> = [];
+    const debounce = createPluginInstancesSaveDebounce({
+      delayMs: 200,
+      save: vi.fn(async ({ gestureId }) => {
+        committedGestureIds.push(gestureId);
+      }),
+      onError: vi.fn(),
+    });
+    cleanups.push(
+      registerPluginInstancesEditSessionFlush('plugin-drag', () => {
+        debounce.flush();
+      }),
+    );
+
+    const firstDrag = rotatePluginInstancesEditSession('plugin-drag');
+    debounce.schedule(touchPluginInstancesEditSession('plugin-drag'));
+    await vi.advanceTimersByTimeAsync(200);
+    debounce.schedule(touchPluginInstancesEditSession('plugin-drag'));
+    await vi.advanceTimersByTimeAsync(200);
+
+    const secondDrag = rotatePluginInstancesEditSession('plugin-drag');
+    debounce.schedule(touchPluginInstancesEditSession('plugin-drag'));
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(secondDrag).not.toBe(firstDrag);
+    expect(committedGestureIds).toEqual([firstDrag, firstDrag, secondDrag]);
+  });
+
+  it('active gesture는 TTL보다 오래 멈춰도 같은 gestureId를 유지한다', async () => {
+    vi.useFakeTimers();
+
+    const token = beginPluginInstancesEditSession('plugin-long-drag');
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(touchPluginInstancesEditSession('plugin-long-drag')).toBe(token);
+
+    endPluginInstancesEditSession('plugin-long-drag', token);
+    expect(touchPluginInstancesEditSession('plugin-long-drag')).not.toBe(token);
+  });
+
+  it('명시적으로 끝난 두 resize는 TTL 안에서도 서로 다른 gestureId를 쓴다', () => {
+    const first = beginPluginInstancesEditSession('plugin-resize');
+    endPluginInstancesEditSession('plugin-resize', first);
+    const second = beginPluginInstancesEditSession('plugin-resize');
+    endPluginInstancesEditSession('plugin-resize', second);
+
+    expect(second).not.toBe(first);
+  });
+
+  it('명시적 end는 최종 pending 저장을 같은 gestureId로 flush한다', async () => {
+    const committedGestureIds: Array<string | undefined> = [];
+    const debounce = createPluginInstancesSaveDebounce({
+      delayMs: 200,
+      save: vi.fn(async ({ gestureId }) => {
+        committedGestureIds.push(gestureId);
+      }),
+      onError: vi.fn(),
+    });
+    cleanups.push(
+      registerPluginInstancesEditSessionFlush('plugin-end-flush', () => {
+        debounce.flush();
+      }),
+    );
+
+    const token = beginPluginInstancesEditSession('plugin-end-flush');
+    debounce.schedule(touchPluginInstancesEditSession('plugin-end-flush'));
+    endPluginInstancesEditSession('plugin-end-flush', token);
+    await Promise.resolve();
+
+    expect(committedGestureIds).toEqual([token]);
+    expect(touchPluginInstancesEditSession('plugin-end-flush')).not.toBe(token);
+  });
+
+  it('stale end는 현재 active gesture를 종료하지 않는다', async () => {
+    vi.useFakeTimers();
+
+    const stale = beginPluginInstancesEditSession('plugin-stale');
+    const current = beginPluginInstancesEditSession('plugin-stale');
+    endPluginInstancesEditSession('plugin-stale', stale);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(touchPluginInstancesEditSession('plugin-stale')).toBe(current);
+
+    endPluginInstancesEditSession('plugin-stale', current);
+    await vi.advanceTimersByTimeAsync(1_201);
+    expect(touchPluginInstancesEditSession('plugin-stale')).not.toBe(current);
+  });
+
+  it('rotate 시 pending debounce를 이전 gestureId와 경계 직전 상태로 flush한다', async () => {
+    vi.useFakeTimers();
+    let snapshot = 'before';
+    const commits: Array<{
+      gestureId?: string;
+      snapshot: string;
+      captureCurrentSnapshot: boolean;
+    }> = [];
+    const debounce = createPluginInstancesSaveDebounce({
+      delayMs: 200,
+      save: vi.fn(async ({ gestureId, captureCurrentSnapshot }) => {
+        commits.push({ gestureId, snapshot, captureCurrentSnapshot });
+      }),
+      onError: vi.fn(),
+    });
+    cleanups.push(
+      registerPluginInstancesEditSessionFlush('plugin-pending', () => {
+        debounce.flush();
+      }),
+    );
+
+    const firstDrag = rotatePluginInstancesEditSession('plugin-pending');
+    snapshot = 'drag-a';
+    debounce.schedule(touchPluginInstancesEditSession('plugin-pending'));
+
+    const secondDrag = rotatePluginInstancesEditSession('plugin-pending');
+    snapshot = 'drag-b';
+    debounce.schedule(touchPluginInstancesEditSession('plugin-pending'));
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(commits).toEqual([
+      {
+        gestureId: firstDrag,
+        snapshot: 'drag-a',
+        captureCurrentSnapshot: true,
+      },
+      {
+        gestureId: secondDrag,
+        snapshot: 'drag-b',
+        captureCurrentSnapshot: false,
+      },
+    ]);
+  });
+
+  it('추가, 삭제, 붙여넣기 경계는 직전 세션과 각각 분리된다', () => {
+    const previous = touchPluginInstancesEditSession('plugin-discrete');
+    const addGesture = rotatePluginInstancesEditSession('plugin-discrete');
+    const deleteGesture = rotatePluginInstancesEditSession('plugin-discrete');
+    const pasteGesture = rotatePluginInstancesEditSession('plugin-discrete');
+
+    expect(
+      new Set([previous, addGesture, deleteGesture, pasteGesture]).size,
+    ).toBe(4);
   });
 
   it('패널 저장 뒤 170ms에 시작한 drain은 파생 저장을 같은 세션으로 완료한다', async () => {

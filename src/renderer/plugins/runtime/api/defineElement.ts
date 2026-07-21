@@ -8,7 +8,10 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { buildValidTabIdSet } from '@constants/keyModes';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
-import { removeDisplayElementsInternal } from '../displayElement/displayElementApi';
+import {
+  addDisplayElementInternal,
+  removeDisplayElementsInternal,
+} from '../displayElement/displayElementApi';
 import {
   notePluginInstancesMutation,
   registerPluginInstancesReapplier,
@@ -17,6 +20,7 @@ import { pluginInstancesApi } from '@api/modules/pluginInstancesApi';
 import {
   createPluginInstancesSaveDebounce,
   enqueuePluginInstancesCommit,
+  registerPluginInstancesEditSessionFlush,
   touchPluginInstancesEditSession,
 } from '../displayElement/instancesCommitQueue';
 import { schedulePluginPanelModelSync } from '@utils/plugin/panelModelSync';
@@ -62,6 +66,8 @@ export interface SavedInstance {
   settings?: Record<string, string | number | boolean>;
   measuredSize?: { width: number; height: number };
   tabId?: string;
+  hidden?: boolean;
+  zIndex?: number;
 }
 
 export const buildSavedPluginInstances = (
@@ -75,6 +81,8 @@ export const buildSavedPluginInstances = (
       settings: element.settings as SavedInstance['settings'],
       measuredSize: element.measuredSize,
       tabId: normalizePluginInstanceTabId(element.tabId),
+      hidden: element.hidden === true,
+      zIndex: element.zIndex,
     }));
 
 interface DefineElementDependencies {
@@ -134,10 +142,16 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
     // 패널 RPC commit과의 stale full-snapshot 경합 방지를 위해 플러그인별 큐로 직렬화
     const commitInstances = (instances: SavedInstance[]) =>
       enqueuePluginInstancesCommit(pluginId, () =>
-        commitInstancesInner(instances),
+        commitInstancesInner(
+          instances,
+          touchPluginInstancesEditSession(pluginId),
+        ),
       );
 
-    const commitInstancesInner = async (instances: SavedInstance[]) => {
+    const commitInstancesInner = async (
+      instances: SavedInstance[],
+      gestureId: string,
+    ) => {
       const buildRequest = () => {
         const mutationId = crypto.randomUUID();
         notePluginInstancesMutation(mutationId);
@@ -145,7 +159,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           pluginId,
           instances,
           mutationId,
-          gestureId: touchPluginInstancesEditSession(pluginId),
+          gestureId,
           observedHistoryEpoch: useHistoryStatusStore.getState().historyEpoch,
           authorityGeneration: getPluginAuthorityGeneration(),
         };
@@ -241,7 +255,15 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
     const buildInstancesFromStore = (): SavedInstance[] =>
       buildInstances(usePluginDisplayElementStore.getState().elements);
 
-    const saveInstances = async (waitForReload = false) => {
+    const saveInstances = async ({
+      waitForReload = false,
+      gestureId,
+      captureCurrentSnapshot = false,
+    }: {
+      waitForReload?: boolean;
+      gestureId?: string;
+      captureCurrentSnapshot?: boolean;
+    } = {}) => {
       // 일반 리로드 중 저장은 폐기, 복원 중 생긴 실제 편집만 리로드 종료 뒤 저장
       if (!instanceSaveBarrier.shouldSave()) return;
       if (waitForReload) {
@@ -252,7 +274,17 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       if (!instanceLifecycle) return;
 
       const generationAtCapture = instanceSaveGeneration;
-      // 스냅샷은 큐 실행 시점에 캡처 - 대기 중 끼어든 commit(패널 RPC 등)을 덮지 않음
+      const capturedInstances = captureCurrentSnapshot
+        ? buildInstancesFromStore().map((instance) => ({
+            ...instance,
+            position: { ...instance.position },
+            settings: instance.settings ? { ...instance.settings } : undefined,
+            measuredSize: instance.measuredSize
+              ? { ...instance.measuredSize }
+              : undefined,
+          }))
+        : null;
+      // 일반 저장은 큐 실행 시점 캡처, 제스처 경계 flush만 이전 상태 고정
       await enqueuePluginInstancesCommit(pluginId, async () => {
         if (waitForReload) {
           while (isReloading()) await waitForReloadEnd();
@@ -261,7 +293,10 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         }
         if (!instanceSaveBarrier.shouldSave()) return;
         if (generationAtCapture !== instanceSaveGeneration) return;
-        await commitInstancesInner(buildInstancesFromStore());
+        await commitInstancesInner(
+          capturedInstances ?? buildInstancesFromStore(),
+          gestureId ?? touchPluginInstancesEditSession(pluginId),
+        );
       });
     };
 
@@ -270,7 +305,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       if (!pending) return;
       pendingRestorationSave = null;
       try {
-        await saveInstances(true);
+        await saveInstances({ waitForReload: true });
         pending.resolve();
       } catch (error) {
         pending.reject(error);
@@ -295,7 +330,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       const INSTANCE_SAVE_DEBOUNCE_MS = 200;
       const instanceSaveDebounce = createPluginInstancesSaveDebounce({
         delayMs: INSTANCE_SAVE_DEBOUNCE_MS,
-        save: saveInstances,
+        save: ({ gestureId, captureCurrentSnapshot }) =>
+          saveInstances({ gestureId, captureCurrentSnapshot }),
         onError: (error) => {
           console.error(
             `[Plugin ${pluginId}] Failed to save instances:`,
@@ -308,6 +344,11 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         instanceSaveGeneration += 1;
       };
       registerCleanup(cancelPendingInstanceSave);
+      registerCleanup(
+        registerPluginInstancesEditSessionFlush(pluginId, () => {
+          instanceSaveDebounce.flush();
+        }),
+      );
 
       const unsubStore = usePluginDisplayElementStore.subscribe(
         (state, prevState) => {
@@ -320,8 +361,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             // 복원 재주입 중 변경은 저장 대상이 아님 (undo 반영 echo 차단)
             if (!instanceSaveBarrier.shouldSave()) return;
             // 변경 시점 기준으로 edit-session TTL 갱신 - debounce가 세션을 쪼개지 않게
-            touchPluginInstancesEditSession(pluginId);
-            instanceSaveDebounce.schedule();
+            const gestureId = touchPluginInstancesEditSession(pluginId);
+            instanceSaveDebounce.schedule(gestureId);
           }
         },
       );
@@ -887,7 +928,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           // 비동기 복원 중 플러그인 컨텍스트 재설정
           window.__dmn_current_plugin_id = pluginId;
 
-          window.api.ui.displayElement.add({
+          addDisplayElementInternal({
             html: '<!-- plugin-element -->',
             position: instance.position,
             draggable: true,
@@ -899,6 +940,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             state: definition.previewState || {},
             measuredSize: instance.measuredSize,
             tabId: normalizePluginInstanceTabId(instance.tabId),
+            hidden: instance.hidden ?? false,
+            zIndex: instance.zIndex,
             onClick: useModalSettings ? handleElementClick : undefined,
             contextMenu: {
               enableDelete: true,

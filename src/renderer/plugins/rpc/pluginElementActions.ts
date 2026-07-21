@@ -11,6 +11,7 @@ import {
   PANEL_MODEL_REQUEST_MESSAGE,
   getPluginPanelModelRevision,
 } from '@utils/plugin/panelModelSync';
+import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 
 import { sendPluginRpc } from './pluginRpcClient';
 
@@ -22,6 +23,19 @@ export const PLUGIN_RPC_OPERATIONS = {
 } as const;
 
 const isPanelWindow = () => window.__dmn_window_type === 'panel';
+
+const rotateTargetPluginSessions = (fullIds: string[]): void => {
+  const targetIds = new Set(fullIds);
+  const pluginIds = new Set(
+    usePluginDisplayElementStore
+      .getState()
+      .elements.filter((element) => targetIds.has(element.fullId))
+      .map((element) => element.pluginId),
+  );
+  pluginIds.forEach((pluginId) => {
+    rotatePluginInstancesEditSession(pluginId);
+  });
+};
 
 // 패널 미러의 마지막 수신 backend revision - RPC expectedModelRevision 토큰
 let mirrorRevision = 0;
@@ -214,6 +228,7 @@ export const setPluginElementsHidden = (
     delegate(PLUGIN_RPC_OPERATIONS.setHidden, { targets });
     return;
   }
+  rotateTargetPluginSessions(targets.map(({ fullId }) => fullId));
   const store = usePluginDisplayElementStore.getState();
   targets.forEach(({ fullId, hidden }) => {
     store.updateElement(fullId, { hidden });
@@ -228,8 +243,10 @@ export const deletePluginElements = (fullIds: string[]): void => {
     return;
   }
   const store = usePluginDisplayElementStore.getState();
+  const targetIds = new Set(fullIds);
+  rotateTargetPluginSessions(fullIds);
   const remaining = store.elements.filter(
-    (element) => !fullIds.includes(element.fullId),
+    (element) => !targetIds.has(element.fullId),
   );
   store.setElements(remaining);
 };
@@ -260,6 +277,7 @@ export const setPluginElementZIndexes = (
     delegate(PLUGIN_RPC_OPERATIONS.setZIndexes, { entries });
     return;
   }
+  rotateTargetPluginSessions(entries.map(({ fullId }) => fullId));
   const store = usePluginDisplayElementStore.getState();
   entries.forEach(({ fullId, zIndex }) => {
     store.updateElement(fullId, { zIndex });

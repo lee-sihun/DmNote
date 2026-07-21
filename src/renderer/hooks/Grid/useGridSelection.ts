@@ -41,6 +41,8 @@ import {
 } from '@utils/layerGroupUtils';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
+import { deletePluginElements } from '@plugins/rpc/pluginElementActions';
+import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 
 interface UseGridSelectionParams {
   selectedElements: SelectedElement[];
@@ -53,7 +55,7 @@ interface UseGridSelectionReturn {
   moveSelectedElements: (
     deltaX: number,
     deltaY: number,
-    saveHistory?: boolean,
+    gestureId?: string,
     syncToOverlay?: boolean,
   ) => void;
   deleteSelectedElements: () => Promise<void>;
@@ -81,19 +83,22 @@ export function useGridSelection({
 
   // 선택된 요소들의 최종 위치를 한 번에 저장
   // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-  const syncSelectedElementsToOverlay = () => {
+  const syncSelectedElementsToOverlay = (gestureId?: string) => {
     const currentPositions = useKeyStore.getState().canonicalPositions;
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
     const currentKnobPositions = useKnobItemStore.getState().positions;
     void editorCoordinator
-      .commitPatch({
-        schemaVersion: 1,
-        keyPositions: currentPositions,
-        statPositions: currentStatPositions,
-        graphPositions: currentGraphPositions,
-        knobPositions: currentKnobPositions,
-      })
+      .commitPatch(
+        {
+          schemaVersion: 1,
+          keyPositions: currentPositions,
+          statPositions: currentStatPositions,
+          graphPositions: currentGraphPositions,
+          knobPositions: currentKnobPositions,
+        },
+        gestureId ? { gestureId } : undefined,
+      )
       .catch((error: Error) => {
         console.error('Failed to persist selected element positions', error);
       });
@@ -110,7 +115,7 @@ export function useGridSelection({
   const moveSelectedElements = (
     deltaX: number,
     deltaY: number,
-    _saveHistory = false,
+    gestureId?: string,
     syncToOverlay = true,
   ) => {
     if (selectedElements.length === 0) return;
@@ -245,7 +250,7 @@ export function useGridSelection({
     }
 
     if (syncToOverlay) {
-      syncSelectedElementsToOverlay();
+      syncSelectedElementsToOverlay(gestureId);
     }
   };
 
@@ -304,12 +309,7 @@ export function useGridSelection({
 
     // 플러그인 요소 배치 삭제
     if (pluginsToDelete.length > 0) {
-      const currentElements = usePluginDisplayElementStore.getState().elements;
-      const deleteSet = new Set(pluginsToDelete);
-      const newElements = currentElements.filter(
-        (el) => !deleteSet.has(el.fullId),
-      );
-      usePluginDisplayElementStore.getState().setElements(newElements);
+      deletePluginElements(pluginsToDelete);
     }
 
     // 통계 요소 배치 삭제
@@ -709,6 +709,11 @@ export function useGridSelection({
 
     // 플러그인 요소 추가
     if (pluginsToAdd.length > 0) {
+      new Set(pluginsToAdd.map((element) => element.pluginId)).forEach(
+        (pluginId) => {
+          rotatePluginInstancesEditSession(pluginId);
+        },
+      );
       const currentElements = usePluginDisplayElementStore.getState().elements;
       const newElements = [...currentElements];
 

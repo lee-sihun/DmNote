@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   CursorType,
@@ -224,6 +224,11 @@ const ResizeHandles = ({
     startBounds: null,
     startAspectRatio: 1,
   });
+  const activeResizeCleanupRef = useRef<(() => void) | null>(null);
+
+  useLayoutEffect(() => {
+    return () => activeResizeCleanupRef.current?.();
+  }, []);
 
   const handleMouseDown = (e: React.MouseEvent, handle: HandleDef) => {
     e.preventDefault();
@@ -248,7 +253,8 @@ const ResizeHandles = ({
       startAspectRatio,
     };
 
-    onResizeStart?.(handle);
+    let resizeStarted = false;
+    let resizeFinished = false;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!resizeRef.current.isResizing) return;
@@ -359,27 +365,43 @@ const ResizeHandles = ({
       }
       // dy === 1: newY = startBounds.y (상단 앵커 유지)
 
-      onResize?.({
+      const result = {
         x: newX,
         y: newY,
         width: newWidth,
         height: newHeight,
         handle: handle!,
-      });
+      };
+      const changed =
+        result.x !== startBounds!.x ||
+        result.y !== startBounds!.y ||
+        result.width !== startBounds!.width ||
+        result.height !== startBounds!.height;
+      if (!resizeStarted && changed) {
+        resizeStarted = true;
+        onResizeStart?.(handle!);
+      }
+      if (resizeStarted) onResize?.(result);
     };
 
     const handleMouseUp = () => {
+      if (resizeFinished) return;
+      resizeFinished = true;
       resizeRef.current.isResizing = false;
+      activeResizeCleanupRef.current = null;
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('blur', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
       unlockCustomCursor();
-      onResizeEnd?.();
+      if (resizeStarted) onResizeEnd?.();
     };
 
+    activeResizeCleanupRef.current = handleMouseUp;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('blur', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
   };
 
   if (!bounds) return null;

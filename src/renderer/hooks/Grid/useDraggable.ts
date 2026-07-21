@@ -27,7 +27,7 @@ interface UseDraggableOptions {
   initialX?: number;
   initialY?: number;
   onPositionChange?: (x: number, y: number) => void;
-  onDragStart?: () => void;
+  onDragStart?: () => void | (() => void);
   zoom?: number;
   panX?: number;
   panY?: number;
@@ -137,7 +137,6 @@ export const useDraggable = ({
 
   // initialX, initialY 변경 시 동기화
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 외부 위치 변경 동기화
     setOffset({ dx: initialX, dy: initialY });
     lastSnappedRef.current = { dx: initialX, dy: initialY };
   }, [initialX, initialY]);
@@ -221,6 +220,7 @@ export const useDraggable = ({
     const initialPosition = { dx, dy };
 
     let rafId: number | null = null;
+    let finishGesture: (() => void) | null = null;
     // 드래그 종료 플래그 (rAF 콜백에서 체크)
     let dragEnded = false;
     // Shift 키 드래그 시 축 고정을 위한 변수
@@ -249,7 +249,8 @@ export const useDraggable = ({
         // 드래그 시작 시 애니메이션 비활성화
         useGridSelectionStore.getState().setDraggingOrResizing(true);
         // 드래그 시작 콜백 호출 (히스토리 저장용)
-        onDragStart?.();
+        const cleanup = onDragStart?.();
+        finishGesture = typeof cleanup === 'function' ? cleanup : null;
 
         // Shift 키가 눌려있으면 처음 움직인 방향으로 축 고정
         if (moveEvent.shiftKey && lockedAxis === null) {
@@ -435,7 +436,12 @@ export const useDraggable = ({
 
         // 최종 위치만 부모에 커밋
         const { dx: finalDx, dy: finalDy } = lastSnappedRef.current;
-        onPositionChange?.(finalDx, finalDy);
+        try {
+          onPositionChange?.(finalDx, finalDy);
+        } finally {
+          finishGesture?.();
+          finishGesture = null;
+        }
       } else {
         // 클릭만 했을 경우 커서만 복구
         dragTarget.style.cursor = '';

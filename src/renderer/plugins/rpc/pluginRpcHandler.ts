@@ -19,6 +19,7 @@ import {
 import {
   clearPluginInstancesEditSessions,
   enqueuePluginInstancesCommit,
+  rotatePluginInstancesEditSession,
   touchPluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import { normalizePluginInstanceTabId } from '@plugins/runtime/displayElement/instanceLifecycle';
@@ -71,7 +72,19 @@ const PERSISTED_PATCH_KEYS = new Set([
   'measuredSize',
   'settings',
   'tabId',
+  'hidden',
+  'zIndex',
 ]);
+
+const MIN_PLUGIN_Z_INDEX = -2_147_483_648;
+const MAX_PLUGIN_Z_INDEX = 2_147_483_647;
+
+const isValidPluginZIndex = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  Number.isInteger(value) &&
+  value >= MIN_PLUGIN_Z_INDEX &&
+  value <= MAX_PLUGIN_Z_INDEX;
 
 const toSavedInstances = (elements: PluginDisplayElementInternal[]) =>
   elements.map((el) => ({
@@ -79,6 +92,8 @@ const toSavedInstances = (elements: PluginDisplayElementInternal[]) =>
     settings: el.settings as Record<string, unknown> | undefined,
     measuredSize: el.measuredSize,
     tabId: normalizePluginInstanceTabId(el.tabId),
+    hidden: el.hidden === true,
+    zIndex: el.zIndex,
   }));
 
 /**
@@ -90,6 +105,7 @@ const commitPluginInstances = async (
   instances: ReturnType<typeof toSavedInstances>,
   authorityGeneration: number,
   rpcRequestId: string,
+  gestureId?: string,
 ): Promise<boolean> => {
   const mutationId = crypto.randomUUID();
   notePluginInstancesMutation(mutationId);
@@ -99,7 +115,7 @@ const commitPluginInstances = async (
         pluginId,
         instances,
         mutationId,
-        gestureId: touchPluginInstancesEditSession(pluginId),
+        gestureId: gestureId ?? touchPluginInstancesEditSession(pluginId),
         observedHistoryEpoch: useHistoryStatusStore.getState().historyEpoch,
         // 요청을 접수한 시점의 generation 고정 - 큐 대기 중 reset이 끼어들면
         // Rust admit이 거절해 이전 세대 요청이 새 runtime을 변경하지 못함
@@ -118,6 +134,75 @@ const commitPluginInstances = async (
   }
 };
 
+interface PersistedElementUpdate {
+  fullId: string;
+  patch: Pick<PluginDisplayElementInternal, 'hidden'> | { zIndex: number };
+}
+
+const commitPersistedElementUpdates = async (
+  updates: PersistedElementUpdate[],
+  requestGeneration: number,
+  rpcRequestId: string,
+  generationLive: () => boolean,
+): Promise<string | null> => {
+  const store = usePluginDisplayElementStore.getState();
+  const updatesByPlugin = new Map<string, PersistedElementUpdate[]>();
+  updates.forEach((update) => {
+    const target = store.elements.find((el) => el.fullId === update.fullId);
+    if (!target) return;
+    const pluginUpdates = updatesByPlugin.get(target.pluginId) ?? [];
+    pluginUpdates.push(update);
+    updatesByPlugin.set(target.pluginId, pluginUpdates);
+  });
+
+  const gestureIds = new Map<string, string>();
+  updatesByPlugin.forEach((_, pluginId) => {
+    gestureIds.set(pluginId, rotatePluginInstancesEditSession(pluginId));
+  });
+
+  for (const [pluginId, pluginUpdates] of updatesByPlugin) {
+    const errorCode = await enqueuePluginInstancesCommit(pluginId, async () => {
+      if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
+      const liveStore = usePluginDisplayElementStore.getState();
+      const patchesById = new Map(
+        pluginUpdates.map(({ fullId, patch }) => [fullId, patch]),
+      );
+      const prospective = liveStore.elements
+        .filter((el) => el.pluginId === pluginId)
+        .map((el) => {
+          const patch = patchesById.get(el.fullId);
+          return patch ? { ...el, ...patch } : el;
+        });
+      const committed = await commitPluginInstances(
+        pluginId,
+        toSavedInstances(prospective),
+        requestGeneration,
+        rpcRequestId,
+        gestureIds.get(pluginId),
+      );
+      if (!committed) return 'INSTANCES_COMMIT_FAILED';
+      if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
+      applyCommittedPluginInstancesProjection(pluginId, () => {
+        const currentStore = usePluginDisplayElementStore.getState();
+        pluginUpdates.forEach(({ fullId, patch }) => {
+          if (
+            currentStore.elements.some(
+              (element) =>
+                element.pluginId === pluginId && element.fullId === fullId,
+            )
+          ) {
+            currentStore.updateElement(fullId, patch);
+          }
+        });
+      });
+      return null;
+    });
+    if (errorCode) return errorCode;
+  }
+
+  return null;
+};
+
 // commit-first가 필요한 op의 비동기 실행 (update의 영속 patch, delete)
 const executePersistedOperation = async (
   operation: string,
@@ -129,6 +214,54 @@ const executePersistedOperation = async (
   // 큐 실행 전후로 세대 재검증 - reset을 가로지른 작업은 projection 없이 폐기
   const generationLive = () =>
     requestGeneration === getPluginAuthorityGeneration();
+
+  if (operation === PLUGIN_RPC_OPERATIONS.setHidden) {
+    const targets = payload.targets;
+    if (
+      !Array.isArray(targets) ||
+      !targets.every(
+        (target) =>
+          target !== null &&
+          typeof target === 'object' &&
+          typeof (target as { fullId?: unknown }).fullId === 'string' &&
+          typeof (target as { hidden?: unknown }).hidden === 'boolean',
+      )
+    ) {
+      return 'INVALID_PAYLOAD';
+    }
+    return commitPersistedElementUpdates(
+      (targets as Array<{ fullId: string; hidden: boolean }>).map(
+        ({ fullId, hidden }) => ({ fullId, patch: { hidden } }),
+      ),
+      requestGeneration,
+      rpcRequestId,
+      generationLive,
+    );
+  }
+
+  if (operation === PLUGIN_RPC_OPERATIONS.setZIndexes) {
+    const entries = payload.entries;
+    if (
+      !Array.isArray(entries) ||
+      !entries.every(
+        (entry) =>
+          entry !== null &&
+          typeof entry === 'object' &&
+          typeof (entry as { fullId?: unknown }).fullId === 'string' &&
+          isValidPluginZIndex((entry as { zIndex?: unknown }).zIndex),
+      )
+    ) {
+      return 'INVALID_PAYLOAD';
+    }
+    return commitPersistedElementUpdates(
+      (entries as Array<{ fullId: string; zIndex: number }>).map(
+        ({ fullId, zIndex }) => ({ fullId, patch: { zIndex } }),
+      ),
+      requestGeneration,
+      rpcRequestId,
+      generationLive,
+    );
+  }
 
   if (operation === PLUGIN_RPC_OPERATIONS.update) {
     const fullId = payload.fullId;
@@ -183,6 +316,12 @@ const executePersistedOperation = async (
     const targets = store.elements.filter((el) => fullIds.includes(el.fullId));
     const byDefinition = new Map<string, string>();
     targets.forEach((el) => byDefinition.set(el.definitionId, el.pluginId));
+    const gestureIds = new Map<string, string>();
+    byDefinition.forEach((pluginId) => {
+      if (!gestureIds.has(pluginId)) {
+        gestureIds.set(pluginId, rotatePluginInstancesEditSession(pluginId));
+      }
+    });
 
     // 플러그인 단위로 commit 성공 직후 projection 적용 - 부분 실패도 플러그인별 정합 유지
     for (const [definitionId, pluginId] of byDefinition) {
@@ -200,6 +339,7 @@ const executePersistedOperation = async (
             toSavedInstances(remainingForDef),
             requestGeneration,
             rpcRequestId,
+            gestureIds.get(pluginId),
           );
           if (!committed) return 'INSTANCES_COMMIT_FAILED';
           if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
@@ -230,7 +370,13 @@ const isPersistedOperation = (
   operation: string,
   payload: Record<string, unknown>,
 ): boolean => {
-  if (operation === PLUGIN_RPC_OPERATIONS.remove) return true;
+  if (
+    operation === PLUGIN_RPC_OPERATIONS.remove ||
+    operation === PLUGIN_RPC_OPERATIONS.setHidden ||
+    operation === PLUGIN_RPC_OPERATIONS.setZIndexes
+  ) {
+    return true;
+  }
   if (operation !== PLUGIN_RPC_OPERATIONS.update) return false;
   const patch = payload.patch;
   if (!patch || typeof patch !== 'object') return false;
@@ -242,27 +388,6 @@ const executeOperation = (
   payload: Record<string, unknown>,
 ): string | null => {
   const store = usePluginDisplayElementStore.getState();
-
-  if (operation === PLUGIN_RPC_OPERATIONS.setHidden) {
-    const targets = payload.targets;
-    if (
-      !Array.isArray(targets) ||
-      !targets.every(
-        (target) =>
-          target &&
-          typeof (target as { fullId?: unknown }).fullId === 'string' &&
-          typeof (target as { hidden?: unknown }).hidden === 'boolean',
-      )
-    ) {
-      return 'INVALID_PAYLOAD';
-    }
-    (targets as Array<{ fullId: string; hidden: boolean }>).forEach(
-      ({ fullId, hidden }) => {
-        store.updateElement(fullId, { hidden });
-      },
-    );
-    return null;
-  }
 
   if (operation === PLUGIN_RPC_OPERATIONS.update) {
     const fullId = payload.fullId;
@@ -285,27 +410,6 @@ const executeOperation = (
         element,
         patch as PluginElementUpdatePatch,
       ),
-    );
-    return null;
-  }
-
-  if (operation === PLUGIN_RPC_OPERATIONS.setZIndexes) {
-    const entries = payload.entries;
-    if (
-      !Array.isArray(entries) ||
-      !entries.every(
-        (entry) =>
-          entry &&
-          typeof (entry as { fullId?: unknown }).fullId === 'string' &&
-          typeof (entry as { zIndex?: unknown }).zIndex === 'number',
-      )
-    ) {
-      return 'INVALID_PAYLOAD';
-    }
-    (entries as Array<{ fullId: string; zIndex: number }>).forEach(
-      ({ fullId, zIndex }) => {
-        store.updateElement(fullId, { zIndex });
-      },
     );
     return null;
   }

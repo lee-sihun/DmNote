@@ -24,8 +24,6 @@ describe('plugin instance persistence projection', () => {
     const transientChanges: Array<Partial<PluginElement>> = [
       { state: { frame: 2 } },
       { html: '<div>two</div>' },
-      { hidden: true },
-      { zIndex: 9 },
       { estimatedSize: { width: 120, height: 90 } },
       { onClick: () => undefined },
       { contextMenu: { enableDelete: false } },
@@ -45,6 +43,8 @@ describe('plugin instance persistence projection', () => {
       { settings: { enabled: false } },
       { measuredSize: { width: 101, height: 80 } },
       { tabId: '8key' },
+      { hidden: true },
+      { zIndex: 9 },
     ];
 
     persistentChanges.forEach((change) => {

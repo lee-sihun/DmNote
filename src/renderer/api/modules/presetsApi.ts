@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
+import { runLegacyEditorMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
 
 import type {
   PresetOperationResult,
@@ -8,9 +9,13 @@ import type {
 
 export const presetsApi = {
   save: () => invoke<PresetOperationResult>('preset_save'),
-  load: () => invoke<PresetOperationResult>('preset_load'),
+  load: () =>
+    runLegacyEditorMutation(() => invoke<PresetOperationResult>('preset_load')),
   saveTab: () => invoke<PresetOperationResult>('preset_save_tab'),
-  loadTab: () => invoke<PresetOperationResult>('preset_load_tab'),
+  loadTab: () =>
+    runLegacyEditorMutation(() =>
+      invoke<PresetOperationResult>('preset_load_tab'),
+    ),
   onSnapshot: (listener: (snapshot: PresetSnapshot) => void) =>
     subscribe<PresetSnapshot>('preset:snapshot', listener),
 };
