@@ -61,7 +61,7 @@ interface UseGridSelectionReturn {
   deleteSelectedElements: () => Promise<void>;
   copySelectedElements: () => void;
   pasteElements: () => Promise<void>;
-  syncSelectedElementsToOverlay: () => void;
+  syncSelectedElementsToOverlay: (gestureId?: string) => void;
   clipboard: ClipboardItem[];
 }
 
@@ -228,6 +228,18 @@ export function useGridSelection({
     // 플러그인 요소 배치 업데이트
     const pluginUpdates = selectedElements.filter((el) => el.type === 'plugin');
     if (pluginUpdates.length > 0) {
+      if (gestureId) {
+        const selectedPluginIds = new Set(
+          pluginUpdates.map((element) => element.id),
+        );
+        new Set(
+          currentPluginElements
+            .filter((element) => selectedPluginIds.has(element.fullId))
+            .map((element) => element.pluginId),
+        ).forEach((pluginId) => {
+          rotatePluginInstancesEditSession(pluginId, gestureId);
+        });
+      }
       const newElements = currentPluginElements.map((pluginEl) => {
         const isSelected = pluginUpdates.some(
           (sel) => sel.id === pluginEl.fullId,
@@ -277,6 +289,7 @@ export function useGridSelection({
     const pluginsToDelete = selectedElements
       .filter((el) => el.type === 'plugin')
       .map((el) => el.id);
+    const gestureId = crypto.randomUUID();
 
     // 먼저 선택 해제 (삭제된 인덱스 참조 방지)
     clearSelection();
@@ -309,7 +322,7 @@ export function useGridSelection({
 
     // 플러그인 요소 배치 삭제
     if (pluginsToDelete.length > 0) {
-      deletePluginElements(pluginsToDelete);
+      deletePluginElements(pluginsToDelete, gestureId);
     }
 
     // 통계 요소 배치 삭제
@@ -382,15 +395,18 @@ export function useGridSelection({
     ) {
       const keyState = useKeyStore.getState();
       try {
-        await editorCoordinator.commitPatch({
-          schemaVersion: 1,
-          ...(keysToDelete.length > 0 ? { keys: keyState.keyMappings } : {}),
-          keyPositions: keyState.canonicalPositions,
-          statPositions: useStatItemStore.getState().positions,
-          graphPositions: useGraphItemStore.getState().positions,
-          knobPositions: useKnobItemStore.getState().positions,
-          layerGroups: useLayerGroupStore.getState().layerGroups,
-        });
+        await editorCoordinator.commitPatch(
+          {
+            schemaVersion: 1,
+            ...(keysToDelete.length > 0 ? { keys: keyState.keyMappings } : {}),
+            keyPositions: keyState.canonicalPositions,
+            statPositions: useStatItemStore.getState().positions,
+            graphPositions: useGraphItemStore.getState().positions,
+            knobPositions: useKnobItemStore.getState().positions,
+            layerGroups: useLayerGroupStore.getState().layerGroups,
+          },
+          { gestureId },
+        );
       } catch (error) {
         console.error('Failed to persist selected element deletion', error);
       }
@@ -503,6 +519,7 @@ export function useGridSelection({
     // 최신 클립보드 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
     const currentClipboard = useGridSelectionStore.getState().clipboard;
     if (currentClipboard.length === 0) return;
+    const gestureId = crypto.randomUUID();
     const clipboardGroups = useGridSelectionStore.getState().clipboardGroups;
 
     // 최신 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
@@ -711,7 +728,7 @@ export function useGridSelection({
     if (pluginsToAdd.length > 0) {
       new Set(pluginsToAdd.map((element) => element.pluginId)).forEach(
         (pluginId) => {
-          rotatePluginInstancesEditSession(pluginId);
+          rotatePluginInstancesEditSession(pluginId, gestureId);
         },
       );
       const currentElements = usePluginDisplayElementStore.getState().elements;
@@ -808,15 +825,18 @@ export function useGridSelection({
 
     // 붙여넣기 전체를 한 revision으로 저장
     try {
-      await editorCoordinator.commitPatch({
-        schemaVersion: 1,
-        ...(pastedKeyMappings ? { keys: pastedKeyMappings } : {}),
-        keyPositions: patch.keyPositions,
-        statPositions: patch.statPositions,
-        graphPositions: patch.graphPositions,
-        knobPositions: patch.knobPositions,
-        layerGroups: useLayerGroupStore.getState().layerGroups,
-      });
+      await editorCoordinator.commitPatch(
+        {
+          schemaVersion: 1,
+          ...(pastedKeyMappings ? { keys: pastedKeyMappings } : {}),
+          keyPositions: patch.keyPositions,
+          statPositions: patch.statPositions,
+          graphPositions: patch.graphPositions,
+          knobPositions: patch.knobPositions,
+          layerGroups: useLayerGroupStore.getState().layerGroups,
+        },
+        { gestureId },
+      );
     } catch (error) {
       console.error('Failed to persist pasted elements', error);
     }

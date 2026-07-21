@@ -324,6 +324,7 @@ const Grid = ({
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
+  const selectedDragGestureIdRef = useRef<string | null>(null);
 
   const rotatePluginElementSessions = (fullIds: string[]) => {
     const selectedPluginIds = new Set(fullIds);
@@ -339,6 +340,8 @@ const Grid = ({
   };
 
   const beginSelectedPluginInstancesDrag = () => {
+    const gestureId = crypto.randomUUID();
+    selectedDragGestureIdRef.current = gestureId;
     const selectedPluginElementIds = new Set(
       useGridSelectionStore
         .getState()
@@ -355,7 +358,7 @@ const Grid = ({
         if (!tokens.has(element.pluginId)) {
           tokens.set(
             element.pluginId,
-            beginPluginInstancesEditSession(element.pluginId),
+            beginPluginInstancesEditSession(element.pluginId, gestureId),
           );
         }
       });
@@ -363,6 +366,9 @@ const Grid = ({
       tokens.forEach((token, pluginId) => {
         endPluginInstancesEditSession(pluginId, token);
       });
+      if (selectedDragGestureIdRef.current === gestureId) {
+        selectedDragGestureIdRef.current = null;
+      }
     };
   };
 
@@ -401,6 +407,11 @@ const Grid = ({
     keyMappings,
     positions,
   });
+  const commitSelectedElementsDrag = () => {
+    syncSelectedElementsToOverlay(
+      selectedDragGestureIdRef.current ?? undefined,
+    );
+  };
 
   // 마퀴 선택 훅 사용
   const { isMarqueeSelecting: _isMarqueeSelecting, startMarqueeSelection } =
@@ -1099,7 +1110,7 @@ const Grid = ({
             moveSelectedElements(deltaX, deltaY, undefined, false)
           }
           onMultiDragStart={beginSelectedPluginInstancesDrag}
-          onMultiDragEnd={syncSelectedElementsToOverlay}
+          onMultiDragEnd={commitSelectedElementsDrag}
           activeTool={activeTool}
           onEraserClick={() => {
             const globalKey = keyMappings[selectedKeyType]?.[index] || '';
@@ -1188,7 +1199,7 @@ const Grid = ({
           moveSelectedElements(deltaX, deltaY, undefined, false)
         }
         onMultiDragStart={beginSelectedPluginInstancesDrag}
-        onMultiDragEnd={syncSelectedElementsToOverlay}
+        onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
@@ -1272,7 +1283,7 @@ const Grid = ({
           moveSelectedElements(deltaX, deltaY, undefined, false)
         }
         onMultiDragStart={beginSelectedPluginInstancesDrag}
-        onMultiDragEnd={syncSelectedElementsToOverlay}
+        onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
@@ -1354,7 +1365,7 @@ const Grid = ({
           moveSelectedElements(deltaX, deltaY, undefined, false)
         }
         onMultiDragStart={beginSelectedPluginInstancesDrag}
-        onMultiDragEnd={syncSelectedElementsToOverlay}
+        onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
           showConfirm(
@@ -1662,7 +1673,7 @@ const Grid = ({
             moveSelectedElements(deltaX, deltaY, undefined, false)
           }
           onMultiDragStart={beginSelectedPluginInstancesDrag}
-          onMultiDragEnd={syncSelectedElementsToOverlay}
+          onMultiDragEnd={commitSelectedElementsDrag}
         />
       </div>
       {/* 스마트 가이드 오버레이 */}

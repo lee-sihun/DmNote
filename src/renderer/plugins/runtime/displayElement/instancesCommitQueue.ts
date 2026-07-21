@@ -37,14 +37,21 @@ const schedulePluginInstancesEditSessionCleanup = (
   }, EDIT_SESSION_TTL_MS);
 };
 
-export const touchPluginInstancesEditSession = (pluginId: string): string => {
+export const touchPluginInstancesEditSession = (
+  pluginId: string,
+  preferredGestureId?: string,
+): string => {
   const now = Date.now();
   let session = editSessions.get(pluginId);
   if (session?.active) return session.id;
-  if (!session || now > session.expiresAt) {
+  if (
+    !session ||
+    now > session.expiresAt ||
+    (preferredGestureId !== undefined && session.id !== preferredGestureId)
+  ) {
     if (session?.cleanupTimer) clearTimeout(session.cleanupTimer);
     session = {
-      id: crypto.randomUUID(),
+      id: preferredGestureId ?? crypto.randomUUID(),
       active: false,
       expiresAt: 0,
       cleanupTimer: null,
@@ -71,22 +78,32 @@ export const registerPluginInstancesEditSessionFlush = (
   };
 };
 
-export const rotatePluginInstancesEditSession = (pluginId: string): string => {
+export const rotatePluginInstancesEditSession = (
+  pluginId: string,
+  preferredGestureId?: string,
+): string => {
+  const current = editSessions.get(pluginId);
+  if (preferredGestureId !== undefined && current?.id === preferredGestureId) {
+    return touchPluginInstancesEditSession(pluginId, preferredGestureId);
+  }
   editSessionFlushers.get(pluginId)?.forEach((flush) => flush());
 
   const previous = editSessions.get(pluginId);
   if (previous?.cleanupTimer) clearTimeout(previous.cleanupTimer);
   editSessions.delete(pluginId);
-  return touchPluginInstancesEditSession(pluginId);
+  return touchPluginInstancesEditSession(pluginId, preferredGestureId);
 };
 
-export const beginPluginInstancesEditSession = (pluginId: string): string => {
+export const beginPluginInstancesEditSession = (
+  pluginId: string,
+  gestureId: string = crypto.randomUUID(),
+): string => {
   editSessionFlushers.get(pluginId)?.forEach((flush) => flush());
 
   const previous = editSessions.get(pluginId);
   if (previous?.cleanupTimer) clearTimeout(previous.cleanupTimer);
   const session = {
-    id: crypto.randomUUID(),
+    id: gestureId,
     active: true,
     expiresAt: Number.POSITIVE_INFINITY,
     cleanupTimer: null,

@@ -144,6 +144,20 @@ fn run_history_operation(
                 );
             }
             Some(HistoryAuxChange::PluginElements { .. }) => {}
+            Some(HistoryAuxChange::PluginElementsBatch { .. }) => {
+                if let Some(change) = committed_change.filter(|change| {
+                    change
+                        .result
+                        .changed_fields
+                        .contains(&crate::models::EditorField::Keys)
+                }) {
+                    state.apply_committed_editor_keys_without_counters(
+                        outcome.runtime_publication_generation,
+                        &change.document.keys,
+                        &change.selected_key_type,
+                    );
+                }
+            }
             None => {
                 if let Some(change) = committed_change.filter(|change| {
                     change
@@ -324,6 +338,21 @@ fn publish_history_aux_change(
                     origin_mutation_id: None,
                 },
             );
+        }
+        Some(HistoryAuxChange::PluginElementsBatch {
+            plugin_ids,
+            revision,
+        }) => {
+            for plugin_id in plugin_ids {
+                publish_plugin_instances_changed(
+                    app,
+                    &PluginInstancesChangedPayload {
+                        plugin_id: plugin_id.clone(),
+                        revision: *revision,
+                        origin_mutation_id: None,
+                    },
+                );
+            }
         }
         None => {}
     }

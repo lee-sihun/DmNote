@@ -115,6 +115,10 @@ pub(crate) enum HistoryAuxChange {
         plugin_id: String,
         revision: u64,
     },
+    PluginElementsBatch {
+        plugin_ids: Vec<String>,
+        revision: u64,
+    },
 }
 
 #[derive(Debug)]
@@ -490,6 +494,7 @@ impl AppStore {
                 return Err("HISTORY_SCOPE_MISMATCH".to_string());
             }
             let target_gesture_id = target.gesture_id.clone();
+            let target_gesture_ids = target.gesture_ids.clone();
 
             let current_store = guard.data.clone();
             let origin = match direction {
@@ -641,6 +646,51 @@ impl AppStore {
                         None,
                         Some(HistoryAuxChange::PluginElements {
                             plugin_id: before.plugin_id,
+                            revision: plugin_model_revision,
+                        }),
+                    )
+                }
+                HistorySnapshot::Compound { snapshots } => {
+                    let current = EditorDocumentV1::from_store(&current_store);
+                    let mut opposite_snapshots = Vec::with_capacity(snapshots.len());
+                    for snapshot in &snapshots {
+                        match snapshot {
+                            HistorySnapshot::Editor { changed_fields, .. } => {
+                                opposite_snapshots.push(HistorySnapshot::Editor {
+                                    changed_fields: changed_fields.clone(),
+                                    before: current.patch_for_fields(changed_fields),
+                                });
+                            }
+                            HistorySnapshot::PluginElements(before) => {
+                                opposite_snapshots.push(HistorySnapshot::PluginElements(
+                                    plugin_elements_snapshot(&current_store, &before.plugin_id)?,
+                                ));
+                            }
+                            _ => {
+                                return Err(
+                                    "compound history contains an unsupported snapshot".to_string()
+                                )
+                            }
+                        }
+                    }
+                    let opposite =
+                        require_history_entry(guard.history.prepare_opposite_compound_entry(
+                            opposite_snapshots,
+                            target_gesture_ids,
+                        )?)?;
+                    let (change, plugin_ids, plugin_model_revision) = self
+                        .commit_compound_history_locked(
+                            &mut guard,
+                            &snapshots,
+                            operation_id,
+                            origin,
+                        )
+                        .map_err(editor_history_error)?;
+                    (
+                        opposite,
+                        change,
+                        Some(HistoryAuxChange::PluginElementsBatch {
+                            plugin_ids,
                             revision: plugin_model_revision,
                         }),
                     )
@@ -800,25 +850,8 @@ impl AppStore {
         options: EditorPatchCommitOptions,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
         let current_store = guard.data.clone();
-        let current = EditorDocumentV1::from_store(&current_store);
-        let mut candidate = current.clone();
-        candidate.apply_patch(changes);
-
-        let mut scratch = current_store.clone();
-        candidate.apply_to_store(&mut scratch);
-        crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
-        candidate = EditorDocumentV1::from_store(&scratch);
-
-        validate_paired_update(
-            &current,
-            &candidate,
-            touched_fields.contains(&EditorField::Keys),
-            touched_fields.contains(&EditorField::KeyPositions),
-        )?;
-        scratch.editor_revision = current_store.editor_revision;
-        validate_document_transition(&current, &candidate, &current_store, &scratch)?;
-
-        let changed_fields = current.changed_fields(&candidate);
+        let (current, candidate, mut scratch, changed_fields) =
+            prepare_editor_patch_transition(&current_store, changes, touched_fields)?;
         if options.enforce_touched_fields
             && changed_fields
                 .iter()
@@ -848,10 +881,10 @@ impl AppStore {
         let history_plan = options
             .record_history
             .then(|| {
-                guard.history.prepare_entry(
+                guard.history.prepare_entry_with_gesture_ids(
                     changed_fields.clone(),
                     current.patch_for_fields(&changed_fields),
-                    options.gesture_id.clone(),
+                    options.gesture_ids.clone(),
                 )
             })
             .transpose()
@@ -899,6 +932,145 @@ impl AppStore {
             history_status,
             runtime_publication_generation: guard.revision,
         })
+    }
+
+    fn commit_compound_history_locked(
+        &self,
+        guard: &mut VersionedStoreState,
+        snapshots: &[HistorySnapshot],
+        operation_id: &str,
+        origin: EditorCommitOrigin,
+    ) -> std::result::Result<(Option<CommittedEditorChange>, Vec<String>, u64), EditorCommitError>
+    {
+        let current_store = guard.data.clone();
+        let mut editor_target = None;
+        let mut plugin_targets = Vec::new();
+        let mut seen_plugin_ids = HashSet::new();
+
+        for snapshot in snapshots {
+            match snapshot {
+                HistorySnapshot::Editor {
+                    changed_fields,
+                    before,
+                } => {
+                    if editor_target.is_some() {
+                        return Err(EditorCommitError::validation(
+                            "HISTORY_COMPOUND_INVALID",
+                            "compound history contains duplicate editor snapshots",
+                        ));
+                    }
+                    editor_target = Some((changed_fields, before));
+                }
+                HistorySnapshot::PluginElements(target) => {
+                    if !seen_plugin_ids.insert(target.plugin_id.as_str()) {
+                        return Err(EditorCommitError::validation(
+                            "HISTORY_COMPOUND_INVALID",
+                            "compound history contains duplicate plugin snapshots",
+                        ));
+                    }
+                    plugin_targets.push(target);
+                }
+                _ => {
+                    return Err(EditorCommitError::validation(
+                        "HISTORY_COMPOUND_INVALID",
+                        "compound history contains an unsupported snapshot",
+                    ))
+                }
+            }
+        }
+
+        let (mut scratch, editor_restore) = if let Some((changed_fields, before)) = editor_target {
+            let (_, candidate, next_store, actual_fields) =
+                prepare_editor_patch_transition(&current_store, before, changed_fields)?;
+            if actual_fields
+                .iter()
+                .any(|field| !changed_fields.contains(field))
+            {
+                return Err(EditorCommitError::validation(
+                    "HISTORY_RESTORE_CHANGED_UNDECLARED_FIELD",
+                    "history restore changed an editor field outside its entry",
+                ));
+            }
+            (next_store, Some((candidate, actual_fields)))
+        } else {
+            (current_store.clone(), None)
+        };
+        let mut plugin_ids = Vec::new();
+        for target in plugin_targets {
+            let current =
+                plugin_elements_snapshot(&current_store, &target.plugin_id).map_err(|error| {
+                    EditorCommitError::validation("HISTORY_COMPOUND_INVALID", error)
+                })?;
+            if current == *target {
+                continue;
+            }
+            apply_plugin_elements_snapshot(&mut scratch, target).map_err(|error| {
+                EditorCommitError::validation("HISTORY_COMPOUND_INVALID", error)
+            })?;
+            plugin_ids.push(target.plugin_id.clone());
+        }
+
+        let editor_changed = editor_restore
+            .as_ref()
+            .is_some_and(|(_, changed_fields)| !changed_fields.is_empty());
+        if !editor_changed && plugin_ids.is_empty() {
+            return Err(EditorCommitError::validation(
+                "HISTORY_TARGET_ALREADY_APPLIED",
+                "history target is already applied",
+            ));
+        }
+
+        let editor_revision = if editor_changed {
+            let revision = next_revision(current_store.editor_revision)?;
+            scratch.editor_revision = revision;
+            revision
+        } else {
+            current_store.editor_revision
+        };
+        let plugin_model_revision = if plugin_ids.is_empty() {
+            guard.plugin_model_revision
+        } else {
+            next_plugin_model_revision(guard.plugin_model_revision).map_err(|error| {
+                EditorCommitError::validation("PLUGIN_MODEL_REVISION_OUT_OF_RANGE", error)
+            })?
+        };
+        let selected_key_type = scratch.selected_key_type.clone();
+        let key_counters = scratch.key_counters.clone();
+
+        self.commit_locked(guard, scratch, ())
+            .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        guard.plugin_model_revision = plugin_model_revision;
+
+        let change = editor_restore.and_then(|(candidate, changed_fields)| {
+            if changed_fields.is_empty() {
+                return None;
+            }
+            let event = origin.event_name().map(|origin| EditorCommittedV1 {
+                schema_version: EDITOR_SCHEMA_VERSION,
+                revision: editor_revision,
+                mutation_id: operation_id.to_string(),
+                gesture_id: None,
+                gesture_ids: Vec::new(),
+                origin,
+                changed_fields: changed_fields.clone(),
+                patch: candidate.patch_for_fields(&changed_fields),
+            });
+            Some(CommittedEditorChange {
+                result: EditorCommitResult {
+                    revision: editor_revision,
+                    changed_fields,
+                },
+                event,
+                replayed: false,
+                document: candidate,
+                selected_key_type,
+                key_counters,
+                history_status: None,
+                runtime_publication_generation: guard.revision,
+            })
+        });
+
+        Ok((change, plugin_ids, plugin_model_revision))
     }
 
     fn commit_custom_tabs_history_locked(
@@ -2233,10 +2405,45 @@ fn editor_error_outcome(code: EditorCommitErrorCode) -> &'static str {
     }
 }
 
+fn prepare_editor_patch_transition(
+    current_store: &AppStoreData,
+    changes: &crate::models::EditorPatchV1,
+    touched_fields: &[EditorField],
+) -> std::result::Result<
+    (
+        EditorDocumentV1,
+        EditorDocumentV1,
+        AppStoreData,
+        Vec<EditorField>,
+    ),
+    EditorCommitError,
+> {
+    let current = EditorDocumentV1::from_store(current_store);
+    let mut candidate = current.clone();
+    candidate.apply_patch(changes);
+
+    let mut scratch = current_store.clone();
+    candidate.apply_to_store(&mut scratch);
+    crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+    candidate = EditorDocumentV1::from_store(&scratch);
+
+    validate_paired_update(
+        &current,
+        &candidate,
+        touched_fields.contains(&EditorField::Keys),
+        touched_fields.contains(&EditorField::KeyPositions),
+    )?;
+    scratch.editor_revision = current_store.editor_revision;
+    validate_document_transition(&current, &candidate, current_store, &scratch)?;
+    let changed_fields = current.changed_fields(&candidate);
+
+    Ok((current, candidate, scratch, changed_fields))
+}
+
 fn require_history_entry(plan: HistoryRecordPlan) -> Result<HistoryEntry, String> {
     match plan {
         HistoryRecordPlan::Entry(entry) => Ok(*entry),
-        HistoryRecordPlan::Merge(_) => Err("HISTORY_INVALID_OPPOSITE_ENTRY".to_string()),
+        HistoryRecordPlan::Merge { .. } => Err("HISTORY_INVALID_OPPOSITE_ENTRY".to_string()),
         HistoryRecordPlan::Truncate => Err(HISTORY_ENTRY_TOO_LARGE.to_string()),
     }
 }
@@ -3807,6 +4014,663 @@ mod tests {
     }
 
     #[test]
+    fn mixed_editor_plugin_gesture_undoes_and_redoes_atomically() {
+        let dir = test_directory("compound-editor-plugin-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let mut editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 40.0),
+        );
+        editor.gesture_id = Some(gesture_id.clone());
+        store.commit_editor_document(editor).unwrap();
+        let plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(42.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id.clone()),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        let first_plugin_revision = plugin.outcome.model_revision;
+        assert_eq!(
+            plugin
+                .outcome
+                .history_status
+                .as_ref()
+                .unwrap()
+                .history_revision,
+            1
+        );
+        drop(plugin);
+        let second_plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "second-plugin",
+                vec![saved_plugin_instance(84.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id),
+                Some(first_plugin_revision),
+            ))
+            .unwrap();
+        assert_eq!(
+            second_plugin
+                .outcome
+                .history_status
+                .as_ref()
+                .unwrap()
+                .history_revision,
+            1
+        );
+        drop(second_plugin);
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(store
+            .plugin_instances_get("second-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(!undo.status.can_undo);
+        assert!(undo.status.can_redo);
+        assert!(undo.change.is_some());
+        assert!(matches!(
+            undo.aux_change,
+            Some(HistoryAuxChange::PluginElementsBatch { ref plugin_ids, .. })
+                if plugin_ids == &["demo-plugin".to_string(), "second-plugin".to_string()]
+        ));
+        drop(undo_barrier);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let redo = store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x + 40.0
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(42.0)]
+        );
+        assert_eq!(
+            store.plugin_instances_get("second-plugin").unwrap().0,
+            vec![saved_plugin_instance(84.0)]
+        );
+        assert!(redo.status.can_undo);
+        drop(redo_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn merged_editor_gesture_aliases_only_join_the_top_plugin_entry() {
+        let dir = test_directory("merged-editor-gesture-alias-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let first_gesture = uuid::Uuid::new_v4().to_string();
+        let second_gesture = uuid::Uuid::new_v4().to_string();
+
+        for (plugin_id, x, gesture_id) in [
+            ("plugin-a", 41.0, first_gesture.clone()),
+            ("plugin-b", 82.0, second_gesture.clone()),
+        ] {
+            let plugin = store
+                .commit_plugin_instances(plugin_instances_request(
+                    plugin_id,
+                    vec![saved_plugin_instance(x)],
+                    uuid::Uuid::new_v4().to_string(),
+                    Some(gesture_id),
+                    Some(store.plugin_model_revision()),
+                ))
+                .unwrap();
+            drop(plugin);
+        }
+
+        let mut editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 60.0),
+        );
+        editor.gesture_id = Some(second_gesture.clone());
+        editor.gesture_ids = vec![first_gesture, second_gesture];
+        store.commit_editor_document(editor).unwrap();
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let first_undo_id = uuid::Uuid::new_v4().to_string();
+        let first_barrier = gate.close(&first_undo_id).unwrap();
+        let first_undo = store
+            .apply_history_operation(HistoryDirection::Undo, &first_undo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![saved_plugin_instance(41.0)]
+        );
+        assert!(store.plugin_instances_get("plugin-b").unwrap().0.is_empty());
+        assert!(first_undo.status.can_undo);
+        assert!(first_undo.status.can_redo);
+        drop(first_barrier);
+
+        let second_undo_id = uuid::Uuid::new_v4().to_string();
+        let second_barrier = gate.close(&second_undo_id).unwrap();
+        let second_undo = store
+            .apply_history_operation(HistoryDirection::Undo, &second_undo_id, &counters, || {})
+            .unwrap();
+        assert!(store.plugin_instances_get("plugin-a").unwrap().0.is_empty());
+        assert!(store.plugin_instances_get("plugin-b").unwrap().0.is_empty());
+        assert!(!second_undo.status.can_undo);
+        assert!(second_undo.status.can_redo);
+        drop(second_barrier);
+
+        let first_redo_id = uuid::Uuid::new_v4().to_string();
+        let first_redo_barrier = gate.close(&first_redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &first_redo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![saved_plugin_instance(41.0)]
+        );
+        assert!(store.plugin_instances_get("plugin-b").unwrap().0.is_empty());
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        drop(first_redo_barrier);
+
+        let second_redo_id = uuid::Uuid::new_v4().to_string();
+        let second_redo_barrier = gate.close(&second_redo_id).unwrap();
+        let second_redo = store
+            .apply_history_operation(HistoryDirection::Redo, &second_redo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.plugin_instances_get("plugin-a").unwrap().0,
+            vec![saved_plugin_instance(41.0)]
+        );
+        assert_eq!(
+            store.plugin_instances_get("plugin-b").unwrap().0,
+            vec![saved_plugin_instance(82.0)]
+        );
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x + 60.0
+        );
+        assert!(second_redo.status.can_undo);
+        assert!(!second_redo.status.can_redo);
+        drop(second_redo_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn multi_alias_editor_commit_stays_above_a_later_editor_commit() {
+        let dir = test_directory("multi-alias-editor-order-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let first_gesture = uuid::Uuid::new_v4().to_string();
+        let second_gesture = uuid::Uuid::new_v4().to_string();
+
+        for (plugin_id, x, gesture_id) in [
+            ("plugin-a", 41.0, first_gesture.clone()),
+            ("plugin-b", 82.0, second_gesture.clone()),
+        ] {
+            let plugin = store
+                .commit_plugin_instances(plugin_instances_request(
+                    plugin_id,
+                    vec![saved_plugin_instance(x)],
+                    uuid::Uuid::new_v4().to_string(),
+                    Some(gesture_id),
+                    Some(store.plugin_model_revision()),
+                ))
+                .unwrap();
+            drop(plugin);
+        }
+
+        let mut intervening_editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 20.0),
+        );
+        intervening_editor.gesture_id = Some(uuid::Uuid::new_v4().to_string());
+        store.commit_editor_document(intervening_editor).unwrap();
+
+        let mut latest_editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 40.0),
+        );
+        latest_editor.gesture_id = Some(second_gesture.clone());
+        latest_editor.gesture_ids = vec![first_gesture, second_gesture];
+        store.commit_editor_document(latest_editor).unwrap();
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        for (expected_x, expected_a, expected_b) in [
+            (initial_x + 20.0, Some(41.0), Some(82.0)),
+            (initial_x, Some(41.0), Some(82.0)),
+            (initial_x, Some(41.0), None),
+            (initial_x, None, None),
+        ] {
+            let undo_id = uuid::Uuid::new_v4().to_string();
+            let barrier = gate.close(&undo_id).unwrap();
+            store
+                .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+                .unwrap();
+            assert_eq!(
+                store.editor_get().document.key_positions["4key"][0].dx,
+                expected_x
+            );
+            assert_eq!(
+                store.plugin_instances_get("plugin-a").unwrap().0,
+                expected_a
+                    .map(|x| vec![saved_plugin_instance(x)])
+                    .unwrap_or_default()
+            );
+            assert_eq!(
+                store.plugin_instances_get("plugin-b").unwrap().0,
+                expected_b
+                    .map(|x| vec![saved_plugin_instance(x)])
+                    .unwrap_or_default()
+            );
+            drop(barrier);
+        }
+        assert!(!store.history_status().can_undo);
+
+        for (expected_x, expected_a, expected_b) in [
+            (initial_x, Some(41.0), None),
+            (initial_x, Some(41.0), Some(82.0)),
+            (initial_x + 20.0, Some(41.0), Some(82.0)),
+            (initial_x + 40.0, Some(41.0), Some(82.0)),
+        ] {
+            let redo_id = uuid::Uuid::new_v4().to_string();
+            let barrier = gate.close(&redo_id).unwrap();
+            store
+                .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+                .unwrap();
+            assert_eq!(
+                store.editor_get().document.key_positions["4key"][0].dx,
+                expected_x
+            );
+            assert_eq!(
+                store.plugin_instances_get("plugin-a").unwrap().0,
+                expected_a
+                    .map(|x| vec![saved_plugin_instance(x)])
+                    .unwrap_or_default()
+            );
+            assert_eq!(
+                store.plugin_instances_get("plugin-b").unwrap().0,
+                expected_b
+                    .map(|x| vec![saved_plugin_instance(x)])
+                    .unwrap_or_default()
+            );
+            drop(barrier);
+        }
+        assert!(!store.history_status().can_redo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn merged_aliases_do_not_cross_an_intervening_same_plugin_edit() {
+        let dir = test_directory("intervening-same-plugin-alias-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let first_gesture = uuid::Uuid::new_v4().to_string();
+        let intervening_gesture = uuid::Uuid::new_v4().to_string();
+        let last_gesture = uuid::Uuid::new_v4().to_string();
+
+        for (x, gesture_id) in [
+            (10.0, first_gesture.clone()),
+            (20.0, intervening_gesture),
+            (30.0, last_gesture.clone()),
+        ] {
+            let plugin = store
+                .commit_plugin_instances(plugin_instances_request(
+                    "demo-plugin",
+                    vec![saved_plugin_instance(x)],
+                    uuid::Uuid::new_v4().to_string(),
+                    Some(gesture_id),
+                    Some(store.plugin_model_revision()),
+                ))
+                .unwrap();
+            drop(plugin);
+        }
+
+        let mut editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 60.0),
+        );
+        editor.gesture_id = Some(last_gesture.clone());
+        editor.gesture_ids = vec![first_gesture, last_gesture];
+        store.commit_editor_document(editor).unwrap();
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        for expected_plugin_x in [Some(20.0), Some(10.0), None] {
+            let undo_id = uuid::Uuid::new_v4().to_string();
+            let barrier = gate.close(&undo_id).unwrap();
+            store
+                .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+                .unwrap();
+            let expected = expected_plugin_x
+                .map(|x| vec![saved_plugin_instance(x)])
+                .unwrap_or_default();
+            assert_eq!(
+                store.plugin_instances_get("demo-plugin").unwrap().0,
+                expected
+            );
+            drop(barrier);
+        }
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        assert!(!store.history_status().can_undo);
+
+        for expected_plugin_x in [10.0, 20.0, 30.0] {
+            let redo_id = uuid::Uuid::new_v4().to_string();
+            let barrier = gate.close(&redo_id).unwrap();
+            store
+                .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+                .unwrap();
+            assert_eq!(
+                store.plugin_instances_get("demo-plugin").unwrap().0,
+                vec![saved_plugin_instance(expected_plugin_x)]
+            );
+            drop(barrier);
+        }
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x + 60.0
+        );
+        assert!(!store.history_status().can_redo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn delayed_plugin_commit_preserves_later_editor_undo_order() {
+        let dir = test_directory("delayed-compound-history-order-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let mut mixed_editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 40.0),
+        );
+        mixed_editor.gesture_id = Some(gesture_id.clone());
+        store.commit_editor_document(mixed_editor).unwrap();
+
+        let later_editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 80.0),
+        );
+        store.commit_editor_document(later_editor).unwrap();
+
+        let plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(42.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(plugin);
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let first_undo_id = uuid::Uuid::new_v4().to_string();
+        let first_barrier = gate.close(&first_undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &first_undo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x + 40.0
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(42.0)]
+        );
+        drop(first_barrier);
+
+        let second_undo_id = uuid::Uuid::new_v4().to_string();
+        let second_barrier = gate.close(&second_undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &second_undo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        drop(second_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn repeated_editor_gesture_keeps_an_intervening_plugin_undo_in_order() {
+        let dir = test_directory("repeated-editor-gesture-order-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let mut first_editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 40.0),
+        );
+        first_editor.gesture_id = Some(gesture_id.clone());
+        store.commit_editor_document(first_editor).unwrap();
+        let plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(42.0)],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(plugin);
+        let mut repeated_editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 80.0),
+        );
+        repeated_editor.gesture_id = Some(gesture_id);
+        store.commit_editor_document(repeated_editor).unwrap();
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let first_undo_id = uuid::Uuid::new_v4().to_string();
+        let first_barrier = gate.close(&first_undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &first_undo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x + 40.0
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(42.0)]
+        );
+        drop(first_barrier);
+
+        let second_undo_id = uuid::Uuid::new_v4().to_string();
+        let second_barrier = gate.close(&second_undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &second_undo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x + 40.0
+        );
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        drop(second_barrier);
+
+        let third_undo_id = uuid::Uuid::new_v4().to_string();
+        let third_barrier = gate.close(&third_undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &third_undo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        drop(third_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_first_compound_undo_restores_both_scopes() {
+        let dir = test_directory("plugin-first-compound-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(91.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id.clone()),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(plugin);
+        let mut editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 35.0),
+        );
+        editor.gesture_id = Some(gesture_id);
+        store.commit_editor_document(editor).unwrap();
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        drop(undo_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn compound_history_persist_failure_changes_neither_scope() {
+        let dir = test_directory("compound-history-persist-failure-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let changed_x = initial_x + 55.0;
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let mut editor = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, changed_x),
+        );
+        editor.gesture_id = Some(gesture_id.clone());
+        store.commit_editor_document(editor).unwrap();
+        let plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(66.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(plugin);
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        store.writer.fail_next_persist();
+        assert!(store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .is_err());
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            changed_x
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(66.0)]
+        );
+        assert!(store.history_status().can_undo);
+        drop(undo_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn plugin_instances_commit_revalidates_admission_after_store_lock_wait() {
         let dir = test_directory("plugin-instances-admission-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -3895,6 +4759,72 @@ mod tests {
             .unwrap();
         assert!(!second.outcome.history_status.as_ref().unwrap().can_undo);
         drop(second);
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mixed_net_zero_gesture_removes_compound_entry() {
+        let dir = test_directory("compound-net-zero-gesture-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let mut editor_out = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x + 25.0),
+        );
+        editor_out.gesture_id = Some(gesture_id.clone());
+        store.commit_editor_document(editor_out).unwrap();
+        let plugin_out = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(25.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id.clone()),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(plugin_out);
+
+        let mut editor_back = editor_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_x),
+        );
+        editor_back.gesture_id = Some(gesture_id.clone());
+        store.commit_editor_document(editor_back).unwrap();
+        let plugin_back = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                Vec::new(),
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        assert!(
+            !plugin_back
+                .outcome
+                .history_status
+                .as_ref()
+                .unwrap()
+                .can_undo
+        );
+        drop(plugin_back);
+
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
         assert!(store
             .plugin_instances_get("demo-plugin")
             .unwrap()

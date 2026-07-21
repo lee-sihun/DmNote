@@ -13,10 +13,12 @@ import { useGridSelection } from './useGridSelection';
 
 import type { KeyPosition } from '@src/types/key/keys';
 
-const { commitPatchMock, sendBridgeMessageMock } = vi.hoisted(() => ({
-  commitPatchMock: vi.fn().mockResolvedValue(undefined),
-  sendBridgeMessageMock: vi.fn(),
-}));
+const { commitPatchMock, rotateSessionMock, sendBridgeMessageMock } =
+  vi.hoisted(() => ({
+    commitPatchMock: vi.fn().mockResolvedValue(undefined),
+    rotateSessionMock: vi.fn(),
+    sendBridgeMessageMock: vi.fn(),
+  }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   editorCoordinator: { commitPatch: commitPatchMock },
@@ -24,6 +26,10 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
 
 vi.mock('@utils/plugin/bridgeMessages', () => ({
   sendBridgeMessageBestEffort: sendBridgeMessageMock,
+}));
+
+vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
+  rotatePluginInstancesEditSession: rotateSessionMock,
 }));
 
 vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
@@ -35,12 +41,19 @@ const position = (): KeyPosition =>
   ({ dx: 0, dy: 0, width: 40, height: 40 } as KeyPosition);
 
 interface HarnessProps {
+  includePlugin?: boolean;
   selectedIndex?: number;
 }
 
-const Harness = ({ selectedIndex = 0 }: HarnessProps) => {
+const Harness = ({
+  includePlugin = false,
+  selectedIndex = 0,
+}: HarnessProps) => {
   const selectedElements = [
     { type: 'key' as const, id: `key-${selectedIndex}`, index: selectedIndex },
+    ...(includePlugin
+      ? [{ type: 'plugin' as const, id: 'plugin-a:element' }]
+      : []),
   ];
   const { moveSelectedElements } = useGridSelection({
     selectedElements,
@@ -71,6 +84,7 @@ describe('useGridKeyboard arrow history burst', () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
     commitPatchMock.mockClear();
+    rotateSessionMock.mockClear();
     sendBridgeMessageMock.mockClear();
     randomUUIDMock = vi
       .spyOn(crypto, 'randomUUID')
@@ -162,5 +176,27 @@ describe('useGridKeyboard arrow history burst', () => {
 
     expect(committedGestureIds()).toEqual([firstGestureId, secondGestureId]);
     expect(randomUUIDMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('혼합 선택 방향키 이동은 editor와 plugin에 같은 gesture를 전달한다', async () => {
+    usePluginDisplayElementStore.setState({
+      elements: [
+        {
+          id: 'element',
+          fullId: 'plugin-a:element',
+          pluginId: 'plugin-a',
+          html: '<div />',
+          position: { x: 0, y: 0 },
+        },
+      ],
+    });
+    await act(async () => {
+      root.render(<Harness includePlugin />);
+    });
+
+    pressArrow('ArrowRight');
+
+    expect(committedGestureIds()).toEqual([firstGestureId]);
+    expect(rotateSessionMock).toHaveBeenCalledWith('plugin-a', firstGestureId);
   });
 });

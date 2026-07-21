@@ -72,8 +72,12 @@ vi.mock('@stores/useSettingsStore', () => ({
 vi.mock('@stores/data/useKeyStore', () => ({
   useKeyStore: {
     getState: () => ({
-      positions: { '4key': [] },
-      canonicalPositions: { '4key': [] },
+      positions: {
+        '4key': [{ dx: 0, dy: 0, width: 40, height: 40 }],
+      },
+      canonicalPositions: {
+        '4key': [{ dx: 0, dy: 0, width: 40, height: 40 }],
+      },
       setPositions: vi.fn(),
     }),
   },
@@ -102,7 +106,7 @@ type ResizeApi = ReturnType<typeof useGridResize>;
 
 interface HarnessProps {
   selectedElements: SelectedElement[];
-  onResizeEnd: () => void;
+  onResizeEnd: (gestureId?: string) => void;
   expose: (api: ResizeApi) => void;
 }
 
@@ -121,13 +125,20 @@ const pluginSelection = (id: string): SelectedElement => ({
   type: 'plugin',
 });
 
+const keySelection = (): SelectedElement => ({
+  id: 'key-0',
+  type: 'key',
+  index: 0,
+});
+
 describe('useGridResize plugin gesture lifecycle', () => {
   let host: HTMLDivElement;
   let root: Root;
   let api: ResizeApi;
   let tokenSequence: number;
   let events: string[];
-  let onResizeEnd: Mock<() => void>;
+  let onResizeEnd: Mock<(gestureId?: string) => void>;
+  let pluginGestureIds: string[];
 
   const renderHarness = async (selectedElements: SelectedElement[]) => {
     await act(async () => {
@@ -150,6 +161,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
     root = createRoot(host);
     tokenSequence = 0;
     events = [];
+    pluginGestureIds = [];
     mocks.begin.mockReset();
     mocks.end.mockReset();
     mocks.updateElement.mockReset();
@@ -157,8 +169,9 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.clearGuides.mockReset();
     mocks.commitPatch.mockClear();
     mocks.elements = [];
-    mocks.begin.mockImplementation((pluginId: string) => {
+    mocks.begin.mockImplementation((pluginId: string, gestureId: string) => {
       const token = `token-${++tokenSequence}`;
+      pluginGestureIds.push(gestureId);
       events.push(`begin:${pluginId}:${token}`);
       return token;
     });
@@ -239,6 +252,31 @@ describe('useGridResize plugin gesture lifecycle', () => {
       'end:plugin-a:token-1',
       'end:plugin-b:token-2',
     ]);
+    expect(new Set(pluginGestureIds).size).toBe(1);
+    expect(onResizeEnd).toHaveBeenCalledWith(pluginGestureIds[0]);
+  });
+
+  it('혼합 그룹 resize는 중복 commit 없이 공유 gesture를 종료 callback에 전달한다', async () => {
+    mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
+    const selected = [keySelection(), pluginSelection('plugin-a:one')];
+    await renderHarness(selected);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleGroupResize({
+        groupBounds: { x: 10, y: 20, width: 200, height: 80 },
+        elementBounds: selected.map((element, index) => ({
+          element,
+          bounds: { x: 10 + index * 100, y: 20, width: 80, height: 80 },
+        })),
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+      api.handleGroupResizeComplete();
+    });
+
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+    expect(onResizeEnd).toHaveBeenCalledTimes(1);
+    expect(onResizeEnd).toHaveBeenCalledWith(pluginGestureIds[0]);
   });
 
   it('active resize 중 unmount하면 보관한 token을 종료한다', async () => {

@@ -97,6 +97,21 @@ describe('plugin instances commit queue lifecycle', () => {
     expect(second).not.toBe(first);
   });
 
+  it('하나의 복합 동작은 여러 plugin session에 같은 gestureId를 주입한다', () => {
+    const sharedGestureId = '00000000-0000-4000-8000-0000000000f4';
+    const first = beginPluginInstancesEditSession('plugin-a', sharedGestureId);
+    const second = beginPluginInstancesEditSession('plugin-b', sharedGestureId);
+    const flush = vi.fn();
+    cleanups.push(registerPluginInstancesEditSessionFlush('plugin-a', flush));
+
+    expect(first).toBe(sharedGestureId);
+    expect(second).toBe(sharedGestureId);
+    expect(rotatePluginInstancesEditSession('plugin-a', sharedGestureId)).toBe(
+      sharedGestureId,
+    );
+    expect(flush).not.toHaveBeenCalled();
+  });
+
   it('명시적 end는 최종 pending 저장을 같은 gestureId로 flush한다', async () => {
     const committedGestureIds: Array<string | undefined> = [];
     const debounce = createPluginInstancesSaveDebounce({

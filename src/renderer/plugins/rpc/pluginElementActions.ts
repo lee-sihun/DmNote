@@ -24,7 +24,10 @@ export const PLUGIN_RPC_OPERATIONS = {
 
 const isPanelWindow = () => window.__dmn_window_type === 'panel';
 
-const rotateTargetPluginSessions = (fullIds: string[]): void => {
+const rotateTargetPluginSessions = (
+  fullIds: string[],
+  gestureId?: string,
+): void => {
   const targetIds = new Set(fullIds);
   const pluginIds = new Set(
     usePluginDisplayElementStore
@@ -33,7 +36,11 @@ const rotateTargetPluginSessions = (fullIds: string[]): void => {
       .map((element) => element.pluginId),
   );
   pluginIds.forEach((pluginId) => {
-    rotatePluginInstancesEditSession(pluginId);
+    if (gestureId) {
+      rotatePluginInstancesEditSession(pluginId, gestureId);
+    } else {
+      rotatePluginInstancesEditSession(pluginId);
+    }
   });
 };
 
@@ -236,7 +243,10 @@ export const setPluginElementsHidden = (
 };
 
 /** 요소 삭제 */
-export const deletePluginElements = (fullIds: string[]): void => {
+export const deletePluginElements = (
+  fullIds: string[],
+  gestureId?: string,
+): void => {
   if (fullIds.length === 0) return;
   if (isPanelWindow()) {
     delegate(PLUGIN_RPC_OPERATIONS.remove, { fullIds });
@@ -244,7 +254,7 @@ export const deletePluginElements = (fullIds: string[]): void => {
   }
   const store = usePluginDisplayElementStore.getState();
   const targetIds = new Set(fullIds);
-  rotateTargetPluginSessions(fullIds);
+  rotateTargetPluginSessions(fullIds, gestureId);
   const remaining = store.elements.filter(
     (element) => !targetIds.has(element.fullId),
   );

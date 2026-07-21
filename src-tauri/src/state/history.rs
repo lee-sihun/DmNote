@@ -33,6 +33,7 @@ pub(crate) enum HistoryScope {
     Counters,
     PresetFull,
     PluginElements,
+    Compound,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,8 +56,17 @@ pub(crate) struct HistoryEntry {
     pub(crate) scope: HistoryScope,
     pub(crate) before: HistorySnapshot,
     pub(crate) gesture_id: Option<String>,
+    pub(crate) gesture_ids: Vec<String>,
     size_bytes: usize,
     access_sequence: u64,
+}
+
+impl HistoryEntry {
+    fn matches_any_gesture(&self, gesture_ids: &[String]) -> bool {
+        gesture_ids
+            .iter()
+            .any(|gesture_id| self.gesture_ids.contains(gesture_id))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -258,6 +268,9 @@ pub(crate) enum HistorySnapshot {
     Counters(KeyCounters),
     PresetFull(Box<PresetFullHistorySnapshot>),
     PluginElements(PluginElementsHistorySnapshot),
+    Compound {
+        snapshots: Vec<HistorySnapshot>,
+    },
 }
 
 impl HistorySnapshot {
@@ -269,8 +282,150 @@ impl HistorySnapshot {
             Self::Counters(_) => HistoryScope::Counters,
             Self::PresetFull(_) => HistoryScope::PresetFull,
             Self::PluginElements(_) => HistoryScope::PluginElements,
+            Self::Compound { .. } => HistoryScope::Compound,
         }
     }
+}
+
+fn merged_editor_before(
+    first_fields: &[EditorField],
+    first_before: &EditorPatchV1,
+    changed_fields: Vec<EditorField>,
+    before: EditorPatchV1,
+) -> HistorySnapshot {
+    let mut merged_fields = first_fields.to_vec();
+    for field in changed_fields {
+        if !merged_fields.contains(&field) {
+            merged_fields.push(field);
+        }
+    }
+    let mut merged_before = before;
+    preserve_editor_before_values(&mut merged_before, first_before);
+    HistorySnapshot::Editor {
+        changed_fields: merged_fields,
+        before: merged_before,
+    }
+}
+
+fn merge_editor_snapshot(
+    existing: &HistorySnapshot,
+    changed_fields: Vec<EditorField>,
+    before: EditorPatchV1,
+) -> Result<HistorySnapshot, String> {
+    match existing {
+        HistorySnapshot::Editor {
+            changed_fields: first_fields,
+            before: first_before,
+        } => Ok(merged_editor_before(
+            first_fields,
+            first_before,
+            changed_fields,
+            before,
+        )),
+        HistorySnapshot::PluginElements(_) => Ok(HistorySnapshot::Compound {
+            snapshots: vec![
+                existing.clone(),
+                HistorySnapshot::Editor {
+                    changed_fields,
+                    before,
+                },
+            ],
+        }),
+        HistorySnapshot::Compound { snapshots } => {
+            validate_compound_snapshots(snapshots)?;
+            let mut merged = snapshots.clone();
+            if let Some(index) = merged
+                .iter()
+                .position(|snapshot| matches!(snapshot, HistorySnapshot::Editor { .. }))
+            {
+                let HistorySnapshot::Editor {
+                    changed_fields: first_fields,
+                    before: first_before,
+                } = &merged[index]
+                else {
+                    unreachable!();
+                };
+                merged[index] =
+                    merged_editor_before(first_fields, first_before, changed_fields, before);
+            } else {
+                merged.push(HistorySnapshot::Editor {
+                    changed_fields,
+                    before,
+                });
+            }
+            Ok(HistorySnapshot::Compound { snapshots: merged })
+        }
+        _ => Err("gesture history cannot merge editor with this scope".to_string()),
+    }
+}
+
+fn merge_plugin_elements_snapshot(
+    existing: &HistorySnapshot,
+    before: PluginElementsHistorySnapshot,
+) -> Result<HistorySnapshot, String> {
+    match existing {
+        HistorySnapshot::Editor { .. } => Ok(HistorySnapshot::Compound {
+            snapshots: vec![existing.clone(), HistorySnapshot::PluginElements(before)],
+        }),
+        HistorySnapshot::PluginElements(first_before) => {
+            if first_before.plugin_id == before.plugin_id {
+                Ok(existing.clone())
+            } else {
+                Ok(HistorySnapshot::Compound {
+                    snapshots: vec![existing.clone(), HistorySnapshot::PluginElements(before)],
+                })
+            }
+        }
+        HistorySnapshot::Compound { snapshots } => {
+            validate_compound_snapshots(snapshots)?;
+            if snapshots.iter().any(|snapshot| {
+                matches!(
+                    snapshot,
+                    HistorySnapshot::PluginElements(first_before)
+                        if first_before.plugin_id == before.plugin_id
+                )
+            }) {
+                return Ok(existing.clone());
+            }
+            let mut merged = snapshots.clone();
+            merged.push(HistorySnapshot::PluginElements(before));
+            Ok(HistorySnapshot::Compound { snapshots: merged })
+        }
+        _ => Err("gesture history cannot merge plugin elements with this scope".to_string()),
+    }
+}
+
+fn validate_compound_snapshots(snapshots: &[HistorySnapshot]) -> Result<(), String> {
+    let mut has_editor = false;
+    let mut plugin_ids = HashSet::new();
+    for snapshot in snapshots {
+        match snapshot {
+            HistorySnapshot::Editor { .. } if !has_editor => has_editor = true,
+            HistorySnapshot::PluginElements(before)
+                if plugin_ids.insert(before.plugin_id.as_str()) => {}
+            HistorySnapshot::Editor { .. } => {
+                return Err("compound history contains duplicate editor snapshots".to_string())
+            }
+            HistorySnapshot::PluginElements(_) => {
+                return Err("compound history contains duplicate plugin snapshots".to_string())
+            }
+            _ => return Err("compound history contains an unsupported snapshot".to_string()),
+        }
+    }
+    if snapshots.is_empty() {
+        return Err("compound history cannot be empty".to_string());
+    }
+    Ok(())
+}
+
+fn normalize_gesture_ids(gesture_ids: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::with_capacity(gesture_ids.len());
+    for gesture_id in gesture_ids {
+        if !normalized.contains(&gesture_id) {
+            normalized.push(gesture_id);
+        }
+    }
+    normalized
 }
 
 #[derive(Serialize)]
@@ -278,14 +433,67 @@ impl HistorySnapshot {
 struct HistoryEntryPayload<'a> {
     scope: HistoryScope,
     before: &'a HistorySnapshot,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    gesture_id: &'a Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    gesture_ids: &'a Vec<String>,
+}
+
+fn refresh_history_entry_size(entry: &mut HistoryEntry) {
+    if let Ok(payload) = serde_json::to_vec(&HistoryEntryPayload {
+        scope: entry.scope,
+        before: &entry.before,
+        gesture_ids: &entry.gesture_ids,
+    }) {
+        entry.size_bytes = payload.len();
+    }
+}
+
+fn remove_net_zero_editor_snapshot(entry: &mut HistoryEntry, canonical: &EditorDocumentV1) -> bool {
+    let editor_is_net_zero = |snapshot: &HistorySnapshot| {
+        matches!(
+            snapshot,
+            HistorySnapshot::Editor {
+                changed_fields,
+                before,
+            } if canonical.patch_for_fields(changed_fields) == *before
+        )
+    };
+    match &mut entry.before {
+        snapshot @ HistorySnapshot::Editor { .. } if editor_is_net_zero(snapshot) => return true,
+        HistorySnapshot::Compound { snapshots } => {
+            snapshots.retain(|snapshot| !editor_is_net_zero(snapshot));
+        }
+        _ => {}
+    }
+    refresh_history_entry_size(entry);
+    matches!(&entry.before, HistorySnapshot::Compound { snapshots } if snapshots.is_empty())
+}
+
+fn remove_net_zero_plugin_snapshot(
+    entry: &mut HistoryEntry,
+    canonical: &PluginElementsHistorySnapshot,
+) -> bool {
+    let plugin_is_net_zero = |snapshot: &HistorySnapshot| matches!(snapshot, HistorySnapshot::PluginElements(before) if before == canonical);
+    match &mut entry.before {
+        snapshot @ HistorySnapshot::PluginElements(_) if plugin_is_net_zero(snapshot) => {
+            return true
+        }
+        HistorySnapshot::Compound { snapshots } => {
+            snapshots.retain(|snapshot| !plugin_is_net_zero(snapshot));
+        }
+        _ => {}
+    }
+    refresh_history_entry_size(entry);
+    matches!(&entry.before, HistorySnapshot::Compound { snapshots } if snapshots.is_empty())
 }
 
 #[derive(Debug)]
 pub(crate) enum HistoryRecordPlan {
     Entry(Box<HistoryEntry>),
-    Merge(Box<HistoryEntry>),
+    Merge {
+        entry: Box<HistoryEntry>,
+        target_access_sequence: u64,
+        remove_access_sequences: Vec<u64>,
+    },
     Truncate,
 }
 
@@ -363,51 +571,60 @@ impl HistoryService {
         self.history_revision
     }
 
+    #[cfg(test)]
     pub(crate) fn prepare_entry(
         &self,
         changed_fields: Vec<EditorField>,
         before: EditorPatchV1,
         gesture_id: Option<String>,
     ) -> Result<HistoryRecordPlan, String> {
-        if let Some(top) = self.past.back().filter(|entry| {
-            self.future.is_empty()
-                && entry.scope == HistoryScope::Editor
-                && gesture_id.is_some()
-                && entry.gesture_id == gesture_id
-        }) {
-            let HistorySnapshot::Editor {
-                changed_fields: first_fields,
-                before: first_before,
-            } = &top.before
-            else {
-                return Err("editor history scope contains a non-editor snapshot".to_string());
-            };
-            let mut merged_fields = first_fields.clone();
-            for field in changed_fields {
-                if !merged_fields.contains(&field) {
-                    merged_fields.push(field);
-                }
+        self.prepare_entry_with_gesture_ids(
+            changed_fields,
+            before,
+            gesture_id.into_iter().collect(),
+        )
+    }
+
+    pub(crate) fn prepare_entry_with_gesture_ids(
+        &self,
+        changed_fields: Vec<EditorField>,
+        before: EditorPatchV1,
+        gesture_ids: Vec<String>,
+    ) -> Result<HistoryRecordPlan, String> {
+        let gesture_ids = normalize_gesture_ids(gesture_ids);
+        if self.future.is_empty() && !gesture_ids.is_empty() {
+            if let Some(top) = self
+                .past
+                .back()
+                .filter(|entry| entry.matches_any_gesture(&gesture_ids))
+            {
+                let merged = merge_editor_snapshot(&top.before, changed_fields, before)?;
+                let mut merged_gesture_ids = top
+                    .gesture_ids
+                    .iter()
+                    .filter(|existing| !gesture_ids.contains(*existing))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                merged_gesture_ids.extend(gesture_ids);
+                return self.prepare_snapshot_with_gesture_ids(
+                    merged.scope(),
+                    merged,
+                    normalize_gesture_ids(merged_gesture_ids),
+                    Some(top.access_sequence),
+                    Vec::new(),
+                );
             }
-            let mut merged_before = before;
-            preserve_editor_before_values(&mut merged_before, first_before);
-            return self.prepare_snapshot(
-                HistoryScope::Editor,
-                HistorySnapshot::Editor {
-                    changed_fields: merged_fields,
-                    before: merged_before,
-                },
-                gesture_id,
-                true,
-            );
         }
-        self.prepare_snapshot(
+
+        self.prepare_snapshot_with_gesture_ids(
             HistoryScope::Editor,
             HistorySnapshot::Editor {
                 changed_fields,
                 before,
             },
-            gesture_id,
-            false,
+            gesture_ids,
+            None,
+            Vec::new(),
         )
     }
 
@@ -424,7 +641,7 @@ impl HistoryService {
                 before,
             },
             gesture_id,
-            false,
+            None,
         )
     }
 
@@ -436,7 +653,7 @@ impl HistoryService {
             HistoryScope::CustomTabs,
             HistorySnapshot::CustomTabs(before),
             None,
-            false,
+            None,
         )
     }
 
@@ -445,7 +662,7 @@ impl HistoryService {
             HistoryScope::Mode,
             HistorySnapshot::Mode(before),
             None,
-            false,
+            None,
         )
     }
 
@@ -457,7 +674,7 @@ impl HistoryService {
             HistoryScope::Counters,
             HistorySnapshot::Counters(before),
             None,
-            false,
+            None,
         )
     }
 
@@ -469,7 +686,7 @@ impl HistoryService {
             HistoryScope::PresetFull,
             HistorySnapshot::PresetFull(Box::new(before)),
             None,
-            false,
+            None,
         )
     }
 
@@ -478,31 +695,29 @@ impl HistoryService {
         before: PluginElementsHistorySnapshot,
         gesture_id: Option<String>,
     ) -> Result<HistoryRecordPlan, String> {
-        if let Some(top) = self.past.back().filter(|entry| {
+        let gesture_ids = gesture_id.into_iter().collect::<Vec<_>>();
+        if let Some(target) = self.past.iter().rev().find(|entry| {
             self.future.is_empty()
-                && entry.scope == HistoryScope::PluginElements
-                && gesture_id.is_some()
-                && entry.gesture_id == gesture_id
+                && !gesture_ids.is_empty()
+                && entry.matches_any_gesture(&gesture_ids)
         }) {
-            let HistorySnapshot::PluginElements(first_before) = &top.before else {
-                return Err(
-                    "plugin elements history scope contains a mismatched snapshot".to_string(),
-                );
-            };
-            if first_before.plugin_id == before.plugin_id {
-                return self.prepare_snapshot(
-                    HistoryScope::PluginElements,
-                    HistorySnapshot::PluginElements(first_before.clone()),
-                    gesture_id,
-                    true,
-                );
-            }
+            let merged = merge_plugin_elements_snapshot(&target.before, before)?;
+            let mut merged_gesture_ids = target.gesture_ids.clone();
+            merged_gesture_ids.extend(gesture_ids);
+            return self.prepare_snapshot_with_gesture_ids(
+                merged.scope(),
+                merged,
+                normalize_gesture_ids(merged_gesture_ids),
+                Some(target.access_sequence),
+                Vec::new(),
+            );
         }
-        self.prepare_snapshot(
+        self.prepare_snapshot_with_gesture_ids(
             HistoryScope::PluginElements,
             HistorySnapshot::PluginElements(before),
-            gesture_id,
-            false,
+            gesture_ids,
+            None,
+            Vec::new(),
         )
     }
 
@@ -514,7 +729,22 @@ impl HistoryService {
             HistoryScope::PluginElements,
             HistorySnapshot::PluginElements(before),
             None,
-            false,
+            None,
+        )
+    }
+
+    pub(crate) fn prepare_opposite_compound_entry(
+        &self,
+        snapshots: Vec<HistorySnapshot>,
+        gesture_ids: Vec<String>,
+    ) -> Result<HistoryRecordPlan, String> {
+        validate_compound_snapshots(&snapshots)?;
+        self.prepare_snapshot_with_gesture_ids(
+            HistoryScope::Compound,
+            HistorySnapshot::Compound { snapshots },
+            gesture_ids,
+            None,
+            Vec::new(),
         )
     }
 
@@ -523,12 +753,31 @@ impl HistoryService {
         scope: HistoryScope,
         before: HistorySnapshot,
         gesture_id: Option<String>,
-        merge: bool,
+        merge_target: Option<u64>,
     ) -> Result<HistoryRecordPlan, String> {
+        self.prepare_snapshot_with_gesture_ids(
+            scope,
+            before,
+            gesture_id.into_iter().collect(),
+            merge_target,
+            Vec::new(),
+        )
+    }
+
+    fn prepare_snapshot_with_gesture_ids(
+        &self,
+        scope: HistoryScope,
+        before: HistorySnapshot,
+        gesture_ids: Vec<String>,
+        merge_target: Option<u64>,
+        remove_access_sequences: Vec<u64>,
+    ) -> Result<HistoryRecordPlan, String> {
+        let gesture_ids = normalize_gesture_ids(gesture_ids);
+        let gesture_id = gesture_ids.last().cloned();
         let size_bytes = serde_json::to_vec(&HistoryEntryPayload {
             scope,
             before: &before,
-            gesture_id: &gesture_id,
+            gesture_ids: &gesture_ids,
         })
         .map_err(|error| format!("failed to serialize history entry: {error}"))?
         .len();
@@ -541,13 +790,17 @@ impl HistoryService {
             scope,
             before,
             gesture_id,
+            gesture_ids,
             size_bytes,
             access_sequence: 0,
         });
-        Ok(if merge {
-            HistoryRecordPlan::Merge(entry)
-        } else {
-            HistoryRecordPlan::Entry(entry)
+        Ok(match merge_target {
+            Some(target_access_sequence) => HistoryRecordPlan::Merge {
+                entry,
+                target_access_sequence,
+                remove_access_sequences,
+            },
+            None => HistoryRecordPlan::Entry(entry),
         })
     }
 
@@ -558,10 +811,20 @@ impl HistoryService {
                 self.push_past(*entry);
                 self.advance_revision();
             }
-            HistoryRecordPlan::Merge(mut entry) => {
-                self.next_access_sequence = self.next_access_sequence.saturating_add(1);
-                entry.access_sequence = self.next_access_sequence;
-                if let Some(previous) = self.past.back_mut() {
+            HistoryRecordPlan::Merge {
+                mut entry,
+                target_access_sequence,
+                remove_access_sequences,
+            } => {
+                for access_sequence in remove_access_sequences {
+                    self.remove_past_by_access_sequence(access_sequence);
+                }
+                if let Some(previous) = self
+                    .past
+                    .iter_mut()
+                    .find(|entry| entry.access_sequence == target_access_sequence)
+                {
+                    entry.access_sequence = previous.access_sequence;
                     self.total_bytes = self.total_bytes.saturating_sub(previous.size_bytes);
                     self.total_bytes = self.total_bytes.saturating_add(entry.size_bytes);
                     *previous = *entry;
@@ -586,23 +849,18 @@ impl HistoryService {
 
     pub(crate) fn apply_editor_record_plan(
         &mut self,
-        plan: HistoryRecordPlan,
+        mut plan: HistoryRecordPlan,
         canonical: &EditorDocumentV1,
     ) {
-        let net_zero_merge = matches!(
-            &plan,
-            HistoryRecordPlan::Merge(entry)
-                if matches!(
-                    &entry.before,
-                    HistorySnapshot::Editor {
-                        changed_fields,
-                        before,
-                    } if canonical.patch_for_fields(changed_fields) == *before
-                )
-        );
-        if net_zero_merge {
+        let remove_entry = match &mut plan {
+            HistoryRecordPlan::Merge { entry, .. } => {
+                remove_net_zero_editor_snapshot(entry, canonical)
+            }
+            _ => false,
+        };
+        if remove_entry {
             self.clear_future();
-            self.pop_past();
+            self.remove_merge_target(&plan);
             self.advance_revision();
             self.enforce_budget();
             return;
@@ -612,20 +870,18 @@ impl HistoryService {
 
     pub(crate) fn apply_plugin_elements_record_plan(
         &mut self,
-        plan: HistoryRecordPlan,
+        mut plan: HistoryRecordPlan,
         canonical: &PluginElementsHistorySnapshot,
     ) {
-        let net_zero_merge = matches!(
-            &plan,
-            HistoryRecordPlan::Merge(entry)
-                if matches!(
-                    &entry.before,
-                    HistorySnapshot::PluginElements(before) if before == canonical
-                )
-        );
-        if net_zero_merge {
+        let remove_entry = match &mut plan {
+            HistoryRecordPlan::Merge { entry, .. } => {
+                remove_net_zero_plugin_snapshot(entry, canonical)
+            }
+            _ => false,
+        };
+        if remove_entry {
             self.clear_future();
-            self.pop_past();
+            self.remove_merge_target(&plan);
             self.advance_revision();
             self.enforce_budget();
             return;
@@ -728,6 +984,34 @@ impl HistoryService {
         let entry = self.future.pop_back()?;
         self.total_bytes = self.total_bytes.saturating_sub(entry.size_bytes);
         Some(entry)
+    }
+
+    fn remove_merge_target(&mut self, plan: &HistoryRecordPlan) {
+        let HistoryRecordPlan::Merge {
+            target_access_sequence,
+            remove_access_sequences,
+            ..
+        } = plan
+        else {
+            return;
+        };
+        for access_sequence in remove_access_sequences {
+            self.remove_past_by_access_sequence(*access_sequence);
+        }
+        self.remove_past_by_access_sequence(*target_access_sequence);
+    }
+
+    fn remove_past_by_access_sequence(&mut self, target_access_sequence: u64) {
+        let Some(index) = self
+            .past
+            .iter()
+            .position(|entry| entry.access_sequence == target_access_sequence)
+        else {
+            return;
+        };
+        if let Some(entry) = self.past.remove(index) {
+            self.total_bytes = self.total_bytes.saturating_sub(entry.size_bytes);
+        }
     }
 
     fn clear_past(&mut self) {
@@ -1013,6 +1297,306 @@ mod tests {
             )])),
             ..EditorPatchV1::default()
         }
+    }
+
+    fn plugin_snapshot(plugin_id: &str) -> PluginElementsHistorySnapshot {
+        PluginElementsHistorySnapshot {
+            plugin_id: plugin_id.to_string(),
+            instances: None,
+        }
+    }
+
+    #[test]
+    fn shared_gesture_merges_editor_and_plugins_into_one_compound_entry() {
+        let mut history = HistoryService::default();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let editor = history
+            .prepare_entry(
+                vec![EditorField::Keys],
+                patch("before"),
+                Some(gesture_id.clone()),
+            )
+            .unwrap();
+        history.apply_record_plan(editor);
+        for plugin_id in ["plugin-a", "plugin-b"] {
+            let plugin = history
+                .prepare_plugin_elements_entry(plugin_snapshot(plugin_id), Some(gesture_id.clone()))
+                .unwrap();
+            history.apply_record_plan(plugin);
+        }
+
+        assert_eq!(history.past.len(), 1);
+        let entry = history.past.back().unwrap();
+        assert_eq!(entry.scope, HistoryScope::Compound);
+        let HistorySnapshot::Compound { snapshots } = &entry.before else {
+            panic!("shared gesture must produce a compound snapshot");
+        };
+        assert_eq!(snapshots.len(), 3);
+        assert!(matches!(snapshots[0], HistorySnapshot::Editor { .. }));
+        assert!(matches!(
+            &snapshots[1],
+            HistorySnapshot::PluginElements(snapshot) if snapshot.plugin_id == "plugin-a"
+        ));
+        assert!(matches!(
+            &snapshots[2],
+            HistorySnapshot::PluginElements(snapshot) if snapshot.plugin_id == "plugin-b"
+        ));
+        assert_eq!(history.history_revision(), 1);
+    }
+
+    #[test]
+    fn delayed_shared_gesture_merges_in_place_without_reordering_later_entry() {
+        let mut history = HistoryService::default();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let editor = history
+            .prepare_entry(
+                vec![EditorField::Keys],
+                patch("before"),
+                Some(gesture_id.clone()),
+            )
+            .unwrap();
+        history.apply_record_plan(editor);
+
+        let later = history
+            .prepare_plugin_elements_entry(plugin_snapshot("later-plugin"), None)
+            .unwrap();
+        history.apply_record_plan(later);
+        let delayed = history
+            .prepare_plugin_elements_entry(plugin_snapshot("shared-plugin"), Some(gesture_id))
+            .unwrap();
+        history.apply_record_plan(delayed);
+
+        assert_eq!(history.past.len(), 2);
+        assert!(matches!(
+            history.past.front().map(|entry| &entry.before),
+            Some(HistorySnapshot::Compound { snapshots }) if snapshots.len() == 2
+        ));
+        assert!(matches!(
+            history.past.back().map(|entry| &entry.before),
+            Some(HistorySnapshot::PluginElements(snapshot))
+                if snapshot.plugin_id == "later-plugin"
+        ));
+        assert_eq!(history.history_revision(), 2);
+    }
+
+    #[test]
+    fn repeated_editor_gesture_does_not_merge_across_an_intervening_entry() {
+        let mut history = HistoryService::default();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let first = history
+            .prepare_entry(
+                vec![EditorField::Keys],
+                patch("first"),
+                Some(gesture_id.clone()),
+            )
+            .unwrap();
+        history.apply_record_plan(first);
+        let intervening = history
+            .prepare_plugin_elements_entry(plugin_snapshot("later-plugin"), None)
+            .unwrap();
+        history.apply_record_plan(intervening);
+
+        let repeated = history
+            .prepare_entry(vec![EditorField::Keys], patch("repeated"), Some(gesture_id))
+            .unwrap();
+        assert!(matches!(repeated, HistoryRecordPlan::Entry(_)));
+        history.apply_record_plan(repeated);
+
+        assert_eq!(history.past.len(), 3);
+        assert!(matches!(
+            history.past.back().map(|entry| &entry.before),
+            Some(HistorySnapshot::Editor { before, .. })
+                if before.keys.as_ref().unwrap()["mode"] == ["repeated"]
+        ));
+    }
+
+    #[test]
+    fn merged_editor_gesture_aliases_absorb_only_the_top_plugin_entry() {
+        let mut history = HistoryService::default();
+        let first_gesture = uuid::Uuid::new_v4().to_string();
+        let second_gesture = uuid::Uuid::new_v4().to_string();
+        for (plugin_id, gesture_id) in [
+            ("plugin-a", first_gesture.clone()),
+            ("plugin-b", second_gesture.clone()),
+        ] {
+            let plugin = history
+                .prepare_plugin_elements_entry(plugin_snapshot(plugin_id), Some(gesture_id))
+                .unwrap();
+            history.apply_record_plan(plugin);
+        }
+
+        let editor = history
+            .prepare_entry_with_gesture_ids(
+                vec![EditorField::Keys],
+                patch("before"),
+                vec![first_gesture.clone(), second_gesture.clone()],
+            )
+            .unwrap();
+        history.apply_record_plan(editor);
+
+        assert_eq!(history.past.len(), 2);
+        let first_entry = history.past.front().unwrap();
+        assert!(matches!(
+            &first_entry.before,
+            HistorySnapshot::PluginElements(snapshot) if snapshot.plugin_id == "plugin-a"
+        ));
+        assert_eq!(first_entry.gesture_ids, vec![first_gesture.clone()]);
+
+        let top = history.past.back().unwrap();
+        assert_eq!(top.gesture_ids, vec![first_gesture, second_gesture]);
+        let HistorySnapshot::Compound { snapshots } = &top.before else {
+            panic!("top history entry must be compound");
+        };
+        assert!(matches!(
+            snapshots.as_slice(),
+            [
+                HistorySnapshot::PluginElements(plugin),
+                HistorySnapshot::Editor { before, .. }
+            ] if plugin.plugin_id == "plugin-b"
+                && before.keys.as_ref().unwrap()["mode"] == ["before"]
+        ));
+    }
+
+    #[test]
+    fn multi_alias_editor_stays_above_a_later_editor_entry() {
+        let mut history = HistoryService::default();
+        let first_gesture = uuid::Uuid::new_v4().to_string();
+        let second_gesture = uuid::Uuid::new_v4().to_string();
+        for (plugin_id, gesture_id) in [
+            ("plugin-a", first_gesture.clone()),
+            ("plugin-b", second_gesture.clone()),
+        ] {
+            let plugin = history
+                .prepare_plugin_elements_entry(plugin_snapshot(plugin_id), Some(gesture_id))
+                .unwrap();
+            history.apply_record_plan(plugin);
+        }
+
+        let intervening_gesture = uuid::Uuid::new_v4().to_string();
+        let intervening_editor = history
+            .prepare_entry(
+                vec![EditorField::Keys],
+                patch("before-intervening-editor"),
+                Some(intervening_gesture.clone()),
+            )
+            .unwrap();
+        history.apply_record_plan(intervening_editor);
+
+        let latest_editor = history
+            .prepare_entry_with_gesture_ids(
+                vec![EditorField::Keys],
+                patch("after-intervening-editor"),
+                vec![first_gesture.clone(), second_gesture.clone()],
+            )
+            .unwrap();
+        assert!(matches!(latest_editor, HistoryRecordPlan::Entry(_)));
+        history.apply_record_plan(latest_editor);
+
+        assert_eq!(history.past.len(), 4);
+        let mut undo_order = history.past.iter().rev();
+        let latest = undo_order.next().unwrap();
+        assert_eq!(latest.gesture_ids, vec![first_gesture, second_gesture]);
+        assert!(matches!(
+            &latest.before,
+            HistorySnapshot::Editor { before, .. }
+                if before.keys.as_ref().unwrap()["mode"] == ["after-intervening-editor"]
+        ));
+
+        let intervening = undo_order.next().unwrap();
+        assert_eq!(intervening.gesture_ids, vec![intervening_gesture]);
+        assert!(matches!(
+            &intervening.before,
+            HistorySnapshot::Editor { before, .. }
+                if before.keys.as_ref().unwrap()["mode"] == ["before-intervening-editor"]
+        ));
+    }
+
+    #[test]
+    fn delayed_net_zero_merge_removes_only_its_original_entry() {
+        let mut history = HistoryService::default();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let original = plugin_snapshot("shared-plugin");
+        let first = history
+            .prepare_plugin_elements_entry(original.clone(), Some(gesture_id.clone()))
+            .unwrap();
+        history.apply_record_plan(first);
+        let later = history
+            .prepare_plugin_elements_entry(plugin_snapshot("later-plugin"), None)
+            .unwrap();
+        history.apply_record_plan(later);
+
+        let back_to_original = history
+            .prepare_plugin_elements_entry(original.clone(), Some(gesture_id))
+            .unwrap();
+        history.apply_plugin_elements_record_plan(back_to_original, &original);
+
+        assert_eq!(history.past.len(), 1);
+        assert!(matches!(
+            history.past.back().map(|entry| &entry.before),
+            Some(HistorySnapshot::PluginElements(snapshot))
+                if snapshot.plugin_id == "later-plugin"
+        ));
+    }
+
+    #[test]
+    fn compound_entry_counts_as_one_budget_slot() {
+        let mut history = HistoryService::with_limits(8 * 1024 * 1024, 32 * 1024 * 1024, 1);
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let editor = history
+            .prepare_entry(
+                vec![EditorField::Keys],
+                patch("before"),
+                Some(gesture_id.clone()),
+            )
+            .unwrap();
+        history.apply_record_plan(editor);
+        let plugin = history
+            .prepare_plugin_elements_entry(plugin_snapshot("plugin-a"), Some(gesture_id))
+            .unwrap();
+        history.apply_record_plan(plugin);
+
+        assert_eq!(history.past.len(), 1);
+        assert!(history.status(false).can_undo);
+    }
+
+    #[test]
+    fn compound_merge_honors_combined_entry_size_limit() {
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let mut probe = HistoryService::default();
+        let editor = probe
+            .prepare_entry(
+                vec![EditorField::Keys],
+                patch("before"),
+                Some(gesture_id.clone()),
+            )
+            .unwrap();
+        probe.apply_record_plan(editor);
+        let compound = probe
+            .prepare_plugin_elements_entry(plugin_snapshot("plugin-a"), Some(gesture_id.clone()))
+            .unwrap();
+        let HistoryRecordPlan::Merge {
+            entry: compound, ..
+        } = compound
+        else {
+            panic!("shared gesture must prepare a compound merge");
+        };
+        let limit = compound.size_bytes - 1;
+
+        let mut history = HistoryService::with_limits(limit, 32 * 1024 * 1024, 50);
+        let editor = history
+            .prepare_entry(
+                vec![EditorField::Keys],
+                patch("before"),
+                Some(gesture_id.clone()),
+            )
+            .unwrap();
+        assert!(matches!(editor, HistoryRecordPlan::Entry(_)));
+        history.apply_record_plan(editor);
+        let oversized = history
+            .prepare_plugin_elements_entry(plugin_snapshot("plugin-a"), Some(gesture_id))
+            .unwrap();
+        assert!(matches!(oversized, HistoryRecordPlan::Truncate));
     }
 
     #[test]
