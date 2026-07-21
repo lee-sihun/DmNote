@@ -41,6 +41,7 @@ import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
 import { resolveElementShadow } from '@src/types/key/shadows';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
@@ -480,8 +481,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     }
   };
 
-  // 스타일 변경 핸들러
-  const _handleStyleChange = (
+  // 타이핑 중 스타일 프리뷰
+  const handleStylePreview = (
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => {
@@ -541,10 +542,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     onKeyPreview?.(keyIndex, { displayText: value });
   };
 
-  const handleDisplayTextBlur = () => {
+  const handleDisplayTextBlur = (value: string) => {
     onKeyUpdate({
       index: keyIndex,
-      displayText: keyPosition.displayText || '',
+      displayText: value,
     });
   };
 
@@ -553,8 +554,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     onKeyPreview?.(keyIndex, { className: value });
   };
 
-  const handleClassNameBlur = () => {
-    onKeyUpdate({ index: keyIndex, className: keyPosition.className || '' });
+  const handleClassNameBlur = (value: string) => {
+    onKeyUpdate({ index: keyIndex, className: value });
   };
 
   // 이미지 피커 열림 상태 (외부 또는 내부)
@@ -610,6 +611,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               isIndividualMode ? keyPosition.dx : localDx ?? keyPosition.dx
             }
             onChange={handlePositionXChange}
+            onPreview={(value) => handleStylePreview('dx', value)}
+            onCancel={() => editGestureController.cancel()}
             prefix="X"
             min={-9999}
             max={9999}
@@ -621,6 +624,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy
             }
             onChange={handlePositionYChange}
+            onPreview={(value) => handleStylePreview('dy', value)}
+            onCancel={() => editGestureController.cancel()}
             prefix="Y"
             min={-9999}
             max={9999}
@@ -639,6 +644,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             }
             onChange={handleWidthChange}
             onBlur={onSizeBlur}
+            onCancel={() => editGestureController.cancel()}
             prefix="W"
             min={1}
             max={999}
@@ -653,6 +659,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             }
             onChange={handleHeightChange}
             onBlur={onSizeBlur}
+            onCancel={() => editGestureController.cancel()}
             prefix="H"
             min={1}
             max={999}
@@ -705,6 +712,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             onChange={(value) =>
               handleStyleChangeComplete('borderWidth', value)
             }
+            onPreview={(value) => handleStylePreview('borderWidth', value)}
+            onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
             max={20}
@@ -720,6 +729,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             onChange={(value) =>
               handleStyleChangeComplete('borderRadius', value)
             }
+            onPreview={(value) => handleStylePreview('borderRadius', value)}
+            onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
             max={100}
@@ -782,6 +793,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               value={keyPosition.displayText || ''}
               onChange={handleDisplayTextChange}
               onBlur={handleDisplayTextBlur}
+              onCancel={() => editGestureController.cancel()}
               placeholder={keyInfo?.displayName || ''}
               width="54px"
             />
@@ -810,6 +822,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           <NumberInput
             value={keyPosition.fontSize ?? 14}
             onChange={(value) => handleStyleChangeComplete('fontSize', value)}
+            onPreview={(value) => handleStylePreview('fontSize', value)}
+            onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={8}
             max={72}
@@ -881,6 +895,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               value={keyPosition.className || ''}
               onChange={handleClassNameChange}
               onBlur={handleClassNameBlur}
+              onCancel={() => editGestureController.cancel()}
               placeholder="className"
               width="90px"
             />
@@ -930,6 +945,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                   Math.max(0, Math.min(200, value)),
                 )
               }
+              onPreview={(value) =>
+                handleStylePreview(
+                  'soundVolume',
+                  Math.max(0, Math.min(200, value)),
+                )
+              }
+              onCancel={() => editGestureController.cancel()}
               suffix="%"
               min={0}
               max={200}

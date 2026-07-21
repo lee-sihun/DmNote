@@ -28,23 +28,36 @@ export async function persistPositionsWithSync(
 /**
  * mappings + positions 변경을 단일 트랜잭션으로 백엔드에 반영
  * 분리 저장은 한쪽만 커밋된 채 강제 종료되면 배열 불일치가 디스크에 남음
+ * 반환 promise로 게스처 정산이 커밋 성패를 추적
  */
 export function persistMappingsAndPositions(
   mappings: KeyMappings,
   positions: KeyPositions,
-): void {
-  window.api.keys.updateWithPositions(mappings, positions).catch((error) => {
+  gestureId?: string,
+): Promise<unknown> {
+  const persisted = window.api.keys.updateWithPositions(
+    mappings,
+    positions,
+    gestureId,
+  );
+  persisted.catch((error) => {
     console.error('Failed to persist key data', error);
   });
+  return persisted;
 }
 
 /**
  * positions만 백엔드에 반영
  */
-export function persistPositions(positions: KeyPositions): void {
-  window.api.keys.updatePositions(positions).catch((error) => {
+export function persistPositions(
+  positions: KeyPositions,
+  gestureId?: string,
+): Promise<unknown> {
+  const persisted = window.api.keys.updatePositions(positions, gestureId);
+  persisted.catch((error) => {
     console.error('Failed to persist positions', error);
   });
+  return persisted;
 }
 
 /**
@@ -54,15 +67,17 @@ export function persistPositionsWithFlag(
   positions: KeyPositions,
   setPositions: (positions: KeyPositions) => void,
   setLocalUpdateInProgress: (value: boolean) => void,
-): void {
+  gestureId?: string,
+): Promise<unknown> {
   setLocalUpdateInProgress(true);
   setPositions(positions);
-  window.api.keys
-    .updatePositions(positions)
+  const persisted = window.api.keys.updatePositions(positions, gestureId);
+  persisted
     .catch((error) => {
       console.error('Failed to persist positions', error);
     })
     .finally(() => {
       setLocalUpdateInProgress(false);
     });
+  return persisted;
 }

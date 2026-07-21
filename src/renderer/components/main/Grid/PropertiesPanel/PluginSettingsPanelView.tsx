@@ -1,3 +1,4 @@
+import { usePressAction } from '@hooks/usePressAction';
 import React from 'react';
 import type {
   PluginSettingSchema,
@@ -58,6 +59,9 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
       reportNormalizationError(pluginSettingsPanel.pluginId, key, error, kind),
   );
 
+  // 설정 입력 blur와 저장 click의 경합 방어
+  const confirmPress = usePressAction(() => handlePluginSettingsPanelConfirm());
+
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className={PANEL_HEADER_CLASS}>
@@ -102,7 +106,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
       {/* 단일 저장 CTA — 취소는 우상단 패널 토글(X)이 담당 */}
       <div className="p-[12px] shrink-0">
         <button
-          onClick={handlePluginSettingsPanelConfirm}
+          {...confirmPress}
           className="w-full h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
         >
           {t('common.save') || '저장'}

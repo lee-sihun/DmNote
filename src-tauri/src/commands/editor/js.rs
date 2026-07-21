@@ -7,9 +7,10 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::{
+    commands::editor::state::emit_best_effort,
     errors::CmdResult,
     models::{CustomJs, JsPlugin},
-    state::AppState,
+    state::{store::AdmittedHistoryOverlapMutation, AppState},
 };
 
 #[derive(Serialize)]
@@ -81,19 +82,14 @@ fn emit_js_state(app: &AppHandle, script: &CustomJs) -> CmdResult<()> {
 
 fn get_normalized_script(state: &State<AppState>) -> CmdResult<CustomJs> {
     let mut script = state.store.snapshot().custom_js;
-    if script.normalize() {
-        state.store.update(|store| {
-            store.custom_js = script.clone();
-        })?;
-    }
+    let _ = script.normalize();
     Ok(script)
 }
 
-fn persist_script(state: &State<AppState>, script: &CustomJs) -> CmdResult<CustomJs> {
-    let data = state.store.update(|store| {
-        store.custom_js = script.clone();
-    })?;
-    Ok(data.custom_js.clone())
+fn emit_history_status<T>(app: &AppHandle, transaction: &AdmittedHistoryOverlapMutation<T>) {
+    if let Some(status) = transaction.history_status.as_ref() {
+        emit_best_effort(app, "history:status", status);
+    }
 }
 
 #[tauri::command]
@@ -112,15 +108,19 @@ pub fn js_toggle(
     app: AppHandle,
     enabled: bool,
 ) -> CmdResult<JsToggleResponse> {
-    state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         store.use_custom_js = enabled;
+        if enabled {
+            let _ = store.custom_js.normalize();
+        }
+        Ok(store.custom_js.clone())
     })?;
 
+    emit_history_status(&app, &transaction);
     app.emit("js:use", &JsToggleResponse { enabled })?;
 
     if enabled {
-        let script = get_normalized_script(&state)?;
-        emit_js_state(&app, &script)?;
+        emit_js_state(&app, &transaction.value)?;
     }
 
     Ok(JsToggleResponse { enabled })
@@ -130,11 +130,13 @@ pub fn js_toggle(
 pub fn js_reset(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
     let default = CustomJs::default();
 
-    state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         store.use_custom_js = false;
         store.custom_js = default.clone();
+        Ok(store.custom_js.clone())
     })?;
 
+    emit_history_status(&app, &transaction);
     app.emit("js:use", &JsToggleResponse { enabled: false })?;
     emit_js_state(&app, &default)?;
     Ok(())
@@ -146,18 +148,21 @@ pub fn js_set_content(
     app: AppHandle,
     content: String,
 ) -> CmdResult<JsSetContentResponse> {
-    let mut script = get_normalized_script(&state)?;
-    if script.plugins.is_empty() {
-        script.content = content.clone();
-    } else if let Some(plugin) = script.plugins.iter_mut().find(|plugin| plugin.enabled) {
-        plugin.content = content.clone();
-    } else if let Some(plugin) = script.plugins.first_mut() {
-        plugin.content = content.clone();
-    }
-
-    let _ = script.normalize();
-    let updated = persist_script(&state, &script)?;
-    emit_js_state(&app, &updated)?;
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
+        let script = &mut store.custom_js;
+        let _ = script.normalize();
+        if script.plugins.is_empty() {
+            script.content = content.clone();
+        } else if let Some(plugin) = script.plugins.iter_mut().find(|plugin| plugin.enabled) {
+            plugin.content = content.clone();
+        } else if let Some(plugin) = script.plugins.first_mut() {
+            plugin.content = content.clone();
+        }
+        let _ = script.normalize();
+        Ok(script.clone())
+    })?;
+    emit_history_status(&app, &transaction);
+    emit_js_state(&app, &transaction.value)?;
 
     Ok(JsSetContentResponse {
         success: true,
@@ -194,7 +199,6 @@ pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsLoadRe
         });
     };
 
-    let mut script = get_normalized_script(&state)?;
     let mut added = Vec::new();
     let mut errors = Vec::new();
 
@@ -220,13 +224,17 @@ pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsLoadRe
         });
     }
 
-    script.plugins.extend(added.clone());
-    script.path = None;
-    script.content.clear();
-    let _ = script.normalize();
-
-    let updated = persist_script(&state, &script)?;
-    emit_js_state(&app, &updated)?;
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
+        let script = &mut store.custom_js;
+        let _ = script.normalize();
+        script.plugins.extend(added.clone());
+        script.path = None;
+        script.content.clear();
+        let _ = script.normalize();
+        Ok(script.clone())
+    })?;
+    emit_history_status(&app, &transaction);
+    emit_js_state(&app, &transaction.value)?;
 
     Ok(JsLoadResponse {
         success: true,
@@ -237,29 +245,42 @@ pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsLoadRe
 
 #[tauri::command]
 pub fn js_reload(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsReloadResponse> {
-    let mut script = get_normalized_script(&state)?;
-    let mut updated_plugins = Vec::new();
+    let script = get_normalized_script(&state)?;
+    let mut loaded_plugins = Vec::new();
     let mut errors = Vec::new();
 
-    for plugin in script.plugins.iter_mut() {
+    for plugin in &script.plugins {
         let Some(ref path) = plugin.path else {
             continue;
         };
         match fs::read_to_string(path) {
-            Ok(content) => {
-                plugin.content = content.clone();
-                updated_plugins.push(plugin.clone());
-            }
+            Ok(content) => loaded_plugins.push((plugin.id.clone(), path.clone(), content)),
             Err(err) => errors.push(JsPluginError::new(path.clone(), err.to_string())),
         }
     }
 
-    let _ = script.normalize();
-    let updated = persist_script(&state, &script)?;
-    emit_js_state(&app, &updated)?;
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
+        let script = &mut store.custom_js;
+        let _ = script.normalize();
+        let mut updated_plugins = Vec::new();
+        for (id, expected_path, content) in &loaded_plugins {
+            if let Some(plugin) = script
+                .plugins
+                .iter_mut()
+                .find(|plugin| plugin.id == *id && plugin.path.as_ref() == Some(expected_path))
+            {
+                plugin.content.clone_from(content);
+                updated_plugins.push(plugin.clone());
+            }
+        }
+        let _ = script.normalize();
+        Ok((script.clone(), updated_plugins))
+    })?;
+    emit_history_status(&app, &transaction);
+    emit_js_state(&app, &transaction.value.0)?;
 
     Ok(JsReloadResponse {
-        updated: updated_plugins,
+        updated: transaction.value.1.clone(),
         errors,
     })
 }
@@ -270,20 +291,28 @@ pub fn js_remove_plugin(
     app: AppHandle,
     id: String,
 ) -> CmdResult<JsRemoveResponse> {
-    let mut script = get_normalized_script(&state)?;
     info!("js_remove_plugin: requested id={}", id);
+    let current = get_normalized_script(&state)?;
     info!(
         "js_remove_plugin: existing ids={}",
-        script
+        current
             .plugins
             .iter()
             .map(|p| p.id.as_str())
             .collect::<Vec<_>>()
             .join(",")
     );
-    let initial_len = script.plugins.len();
-    script.plugins.retain(|plugin| plugin.id != id);
-    if script.plugins.len() == initial_len {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
+        let script = &mut store.custom_js;
+        let _ = script.normalize();
+        let initial_len = script.plugins.len();
+        script.plugins.retain(|plugin| plugin.id != id);
+        let removed = script.plugins.len() != initial_len;
+        let _ = script.normalize();
+        Ok((script.clone(), removed))
+    })?;
+    emit_history_status(&app, &transaction);
+    if !transaction.value.1 {
         info!("js_remove_plugin: id not found");
         return Ok(JsRemoveResponse {
             success: false,
@@ -292,9 +321,7 @@ pub fn js_remove_plugin(
         });
     }
 
-    let _ = script.normalize();
-    let updated = persist_script(&state, &script)?;
-    emit_js_state(&app, &updated)?;
+    emit_js_state(&app, &transaction.value.0)?;
 
     Ok(JsRemoveResponse {
         success: true,
@@ -310,35 +337,39 @@ pub fn js_set_plugin_enabled(
     id: String,
     enabled: bool,
 ) -> CmdResult<JsPluginUpdateResponse> {
-    let mut script = get_normalized_script(&state)?;
+    let current = get_normalized_script(&state)?;
     info!(
         "js_set_plugin_enabled: id={} enabled={} (existing ids={})",
         id,
         enabled,
-        script
+        current
             .plugins
             .iter()
             .map(|p| p.id.as_str())
             .collect::<Vec<_>>()
             .join(",")
     );
-    let mut updated_plugin = None;
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
+        let script = &mut store.custom_js;
+        let _ = script.normalize();
+        let updated_plugin = script.plugins.iter_mut().find_map(|plugin| {
+            (plugin.id == id).then(|| {
+                plugin.enabled = enabled;
+                plugin.clone()
+            })
+        });
+        let _ = script.normalize();
+        Ok((script.clone(), updated_plugin))
+    })?;
 
-    for plugin in script.plugins.iter_mut() {
-        if plugin.id == id {
-            plugin.enabled = enabled;
-            updated_plugin = Some(plugin.clone());
-            break;
-        }
-    }
-
-    if updated_plugin.is_none() {
+    emit_history_status(&app, &transaction);
+    if transaction.value.1.is_none() {
         // 요청 id와 각 플러그인 path/name 로깅
         info!(
             "js_set_plugin_enabled: failed to match id={} among {} plugins (names={})",
             id,
-            script.plugins.len(),
-            script
+            current.plugins.len(),
+            current
                 .plugins
                 .iter()
                 .map(|p| format!("{}:{}", p.id, p.name))
@@ -347,7 +378,7 @@ pub fn js_set_plugin_enabled(
         );
     }
 
-    let Some(plugin) = updated_plugin else {
+    let Some(plugin) = transaction.value.1.clone() else {
         return Ok(JsPluginUpdateResponse {
             success: false,
             plugin: None,
@@ -355,9 +386,7 @@ pub fn js_set_plugin_enabled(
         });
     };
 
-    let _ = script.normalize();
-    let updated = persist_script(&state, &script)?;
-    emit_js_state(&app, &updated)?;
+    emit_js_state(&app, &transaction.value.0)?;
 
     Ok(JsPluginUpdateResponse {
         success: true,

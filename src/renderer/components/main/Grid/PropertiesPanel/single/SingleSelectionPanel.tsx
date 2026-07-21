@@ -36,7 +36,7 @@ import type {
   PluginSettingSchema,
   PluginMessages,
   PluginDefinitionInternal,
-  PluginDisplayElementInternal,
+  PluginPanelElementView,
 } from '@src/types/plugin/api';
 import type { KeyInfo } from '@utils/core/KeyMaps';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
@@ -112,7 +112,7 @@ interface PluginSelectionPanelProps {
   pluginTitle: string;
   setPluginScrollRef: (node: HTMLDivElement | null) => void;
   isPluginResizable: boolean;
-  selectedPluginElement: PluginDisplayElementInternal | null;
+  selectedPluginElement: PluginPanelElementView | null;
   pluginDisplaySize: { width: number; height: number };
   handlePluginPositionXChange: (value: number) => void;
   handlePluginPositionYChange: (value: number) => void;
@@ -681,10 +681,10 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   <TextInput
                     value={graphClassNameDraft}
                     onChange={setGraphClassNameDraft}
-                    onBlur={() =>
+                    onBlur={(value) =>
                       handleGraphUpdate({
                         index: singleGraphIndex,
-                        className: graphClassNameDraft || '',
+                        className: value,
                       })
                     }
                     placeholder="className"
@@ -1364,10 +1364,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     <TextInput
                       value={classNameDraft}
                       onChange={setClassNameDraft}
-                      onBlur={() =>
+                      onBlur={(value) =>
                         handleKnobUpdate({
                           index: singleKnobIndex,
-                          className: classNameDraft || '',
+                          className: value,
                         })
                       }
                       placeholder="className"

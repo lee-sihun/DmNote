@@ -16,6 +16,8 @@ interface PluginInstanceLifecycleDependencies<
   subscribeBootstrap: (listener: () => void) => () => void;
   loadInstances: () => Promise<Instance[] | null>;
   persistInstances: (instances: Instance[]) => Promise<void>;
+  /** 탭 정리 persist - 큐 실행 시점에 유효 탭과 canonical을 모두 재파생 */
+  reconcilePersist: () => Promise<void>;
   getMemoryInstances: () => RuntimePluginInstance[];
   releaseMemoryInstances: (fullIds: readonly string[]) => void;
   timeoutMs?: number;
@@ -25,14 +27,21 @@ const DEFAULT_BOOTSTRAP_TIMEOUT_MS = 10_000;
 
 export const normalizePluginInstanceTabId = (tabId?: string) => tabId || '4key';
 
-export const createPluginInstanceSaveBarrier = () => {
+export const createPluginInstanceSaveBarrier = (
+  onPendingExternalChange: () => void = () => undefined,
+) => {
   let isRestoring = true;
+  let restoreFailed = false;
   let isApplyingRestore = false;
   let hasPendingExternalChanges = false;
 
   const shouldSave = () => {
+    if (restoreFailed) return false;
     if (!isRestoring) return true;
-    if (!isApplyingRestore) hasPendingExternalChanges = true;
+    if (!isApplyingRestore && !hasPendingExternalChanges) {
+      hasPendingExternalChanges = true;
+      onPendingExternalChange();
+    }
     return false;
   };
 
@@ -55,11 +64,20 @@ export const createPluginInstanceSaveBarrier = () => {
 
   const cancelRestoration = () => {
     isRestoring = false;
+    const shouldFlush = hasPendingExternalChanges;
+    hasPendingExternalChanges = false;
+    return shouldFlush;
+  };
+
+  const failRestoration = () => {
+    isRestoring = false;
+    restoreFailed = true;
     hasPendingExternalChanges = false;
   };
 
   return {
     cancelRestoration,
+    failRestoration,
     finishRestoration,
     runRestoreMutation,
     shouldSave,
@@ -84,6 +102,7 @@ export const createPluginInstanceLifecycle = <
     subscribeBootstrap,
     loadInstances,
     persistInstances,
+    reconcilePersist,
     getMemoryInstances,
     releaseMemoryInstances,
     timeoutMs = DEFAULT_BOOTSTRAP_TIMEOUT_MS,
@@ -121,11 +140,16 @@ export const createPluginInstanceLifecycle = <
     }
   };
 
-  const saveInstances = (instances: readonly Instance[]) => {
+  const saveInstances = (
+    instances: readonly Instance[],
+    stillValid?: () => boolean,
+  ) => {
     if (disposed) return Promise.resolve();
     const normalized = normalizeInstances(instances);
     return enqueueStorageTask(async () => {
       if (disposed) return;
+      // undo/redo 재결합이 끼어든 뒤 실행되는 큐 잔여 스냅샷은 폐기 (barrier 승리)
+      if (stillValid && !stillValid()) return;
       await persistInstances(normalized);
     });
   };
@@ -150,22 +174,9 @@ export const createPluginInstanceLifecycle = <
     return enqueueStorageTask(async () => {
       if (disposed) return;
       releaseStaleMemoryInstances(validTabIds);
-      const stored = await loadInstances();
-      if (disposed || !Array.isArray(stored)) return;
-
-      const normalized = normalizeInstances(stored);
-      const liveInstances = normalized.filter((instance) =>
-        validTabIds.has(normalizePluginInstanceTabId(instance.tabId)),
-      );
-      const needsPersist =
-        liveInstances.length !== stored.length ||
-        stored.some(
-          (instance, index) => instance.tabId !== normalized[index]?.tabId,
-        );
-
-      if (needsPersist) {
-        await persistInstances(liveInstances);
-      }
+      // 완성 스냅샷 대신 정리 변환을 위임 - dep이 commit 큐 안에서 유효 탭과
+      // canonical을 모두 다시 읽어야 낡은 판단이 최신 상태를 덮지 않음
+      await reconcilePersist();
     });
   };
 
@@ -212,7 +223,7 @@ export const createPluginInstanceLifecycle = <
             ))
         ) {
           try {
-            await persistInstances(instancesToRestore);
+            await reconcilePersist();
           } catch (error) {
             console.warn(
               '[Plugin] Failed to persist restored instance cleanup:',

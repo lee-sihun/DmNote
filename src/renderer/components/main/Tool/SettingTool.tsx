@@ -10,16 +10,7 @@ import ListPopup from '../Modal/ListPopup';
 import IconSwap from '../common/IconSwap';
 import EyeToggleIcon from '../common/EyeToggleIcon';
 import { TooltipGroup } from '../Modal/TooltipGroup';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { useKeyStore } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { getCounterCacheSnapshot } from '@stores/signals/keyCounterCache';
 import { obsApi } from '@api/modules/obsApi';
-import { useSettingsStore } from '@stores/useSettingsStore';
-import { useFontStore } from '@stores/useFontStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 interface SettingToolProps {
@@ -49,7 +40,6 @@ SettingToolProps) => {
   const setExportImportPopupOpen = useUIStore(
     (state) => state.setExportImportPopupOpen,
   );
-  const pushHistoryState = useHistoryStore((state) => state.pushState);
 
   // isExportImportOpen 상태를 설정하면서 전역 스토어에도 동기화
   const setIsExportImportOpen = (
@@ -134,59 +124,11 @@ SettingToolProps) => {
     }
   };
 
-  const captureHistorySnapshot = async () => {
-    const keyState = useKeyStore.getState();
-    const keyCounters = await window.api.keys
-      .getCounters()
-      .catch(() => getCounterCacheSnapshot());
-
-    const settings = useSettingsStore.getState();
-    const fontState = useFontStore.getState();
-
-    return {
-      keyMappings: keyState.keyMappings,
-      positions: keyState.positions,
-      statPositions: useStatItemStore.getState().positions,
-      graphPositions: useGraphItemStore.getState().positions,
-      pluginElements: usePluginDisplayElementStore.getState().elements,
-      layerGroups: useLayerGroupStore.getState().layerGroups,
-      keyCounters,
-      customTabs: keyState.customTabs,
-      selectedKeyType: keyState.selectedKeyType,
-      settingsSnapshot: {
-        useCustomCSS: settings.useCustomCSS,
-        customCSSContent: settings.customCSSContent,
-        customCSSPath: settings.customCSSPath,
-        useCustomJS: settings.useCustomJS,
-        jsPlugins: settings.jsPlugins,
-        fontSettings: { customFonts: fontState.customFonts },
-        backgroundColor: settings.backgroundColor,
-        noteSettings: settings.noteSettings,
-        noteEffect: settings.noteEffect,
-        tabNoteOverrides: settings.tabNoteOverrides,
-      },
-    };
-  };
-
   const handlePresetLoad = async () => {
     try {
-      const before = await captureHistorySnapshot();
       const result = await window.api.presets.load();
       if (result?.success) {
         useGridSelectionStore.getState().clearSelection();
-        pushHistoryState({
-          keyMappings: before.keyMappings,
-          positions: before.positions,
-          statPositions: before.statPositions,
-          graphPositions: before.graphPositions,
-          pluginElements: before.pluginElements,
-          layerGroups: before.layerGroups,
-          keyCounters: before.keyCounters,
-          customTabs: before.customTabs,
-          selectedKeyType: before.selectedKeyType,
-          settingsSnapshot: before.settingsSnapshot,
-          invalidatesGridSelection: true,
-        });
       }
       showAlert?.(
         result?.success ? t('preset.loadSuccess') : t('preset.loadFail'),
@@ -237,23 +179,9 @@ SettingToolProps) => {
 
   const handlePresetLoadTab = async () => {
     try {
-      const before = await captureHistorySnapshot();
       const result = await window.api.presets.loadTab();
       if (result?.success) {
         useGridSelectionStore.getState().clearSelection();
-        pushHistoryState({
-          keyMappings: before.keyMappings,
-          positions: before.positions,
-          statPositions: before.statPositions,
-          graphPositions: before.graphPositions,
-          pluginElements: before.pluginElements,
-          layerGroups: before.layerGroups,
-          keyCounters: before.keyCounters,
-          customTabs: before.customTabs,
-          selectedKeyType: before.selectedKeyType,
-          settingsSnapshot: before.settingsSnapshot,
-          invalidatesGridSelection: true,
-        });
       }
       showAlert?.(
         result?.success ? t('preset.loadTabSuccess') : t('preset.loadTabFail'),

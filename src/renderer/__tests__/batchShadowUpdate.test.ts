@@ -71,7 +71,7 @@ describe('배치 그림자 부분 변경', () => {
           },
         },
       ],
-      { skipHistory: false, deferSave: true },
+      { deferSave: true },
     );
   });
 
@@ -112,7 +112,7 @@ describe('배치 그림자 부분 변경', () => {
           },
         },
       ],
-      { skipHistory: false, deferSave: true },
+      { deferSave: true },
     );
   });
 });
@@ -142,7 +142,6 @@ describe('통계 그림자 — 눌림 상태 없음', () => {
     const handlers = useBatchHandlers(args);
     handlers.handleBatchShadowChangeComplete('active', { blur: 24 });
     expect(onStatBatchUpdate).toHaveBeenCalledWith([{ index: 0 }], {
-      skipHistory: false,
       deferSave: true,
     });
   });
@@ -266,7 +265,7 @@ describe('배치 색 상태 쌍 보존', () => {
 
     expect(onKeyBatchUpdate).toHaveBeenCalledWith(
       [{ index: 0, backgroundColor: '#abcdef' }],
-      { skipHistory: false, deferSave: true },
+      { deferSave: true },
     );
   });
 
@@ -285,7 +284,7 @@ describe('배치 색 상태 쌍 보존', () => {
           activeBackgroundColor: '#123456',
         },
       ],
-      { skipHistory: false, deferSave: true },
+      { deferSave: true },
     );
   });
 
@@ -305,7 +304,7 @@ describe('배치 색 상태 쌍 보존', () => {
           backgroundGradient: undefined,
         },
       ],
-      { skipHistory: false, deferSave: true },
+      { deferSave: true },
     );
   });
 
@@ -339,7 +338,7 @@ describe('배치 색 상태 쌍 보존', () => {
           activeBackgroundGradient: gradient,
         },
       ],
-      { skipHistory: false, deferSave: true },
+      { deferSave: true },
     );
   });
 });

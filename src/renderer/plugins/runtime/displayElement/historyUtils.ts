@@ -3,12 +3,6 @@
  * Undo/Redo 관련 상태 및 히스토리 저장 기능을 관리합니다.
  */
 
-import { useKeyStore } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-
 // 히스토리 저장 플래그 (undo/redo 중에는 저장하지 않음)
 let isUndoRedoInProgress = false;
 
@@ -17,27 +11,6 @@ let undoRedoChangedAt = 0;
 
 // 초기 로드 플래그 (플러그인 초기 로드 중에는 히스토리 저장하지 않음)
 let isInitialLoading = false;
-
-/**
- * 현재 상태를 히스토리에 저장합니다.
- */
-export const saveToHistory = (): void => {
-  if (isUndoRedoInProgress) return;
-  if (isInitialLoading) return;
-  if (window.__dmn_window_type !== 'main') return;
-
-  const { keyMappings, positions } = useKeyStore.getState();
-  const statPositions = useStatItemStore.getState().positions;
-  const graphPositions = useGraphItemStore.getState().positions;
-  const pluginElements = usePluginDisplayElementStore.getState().elements;
-  useHistoryStore.getState().pushState({
-    keyMappings,
-    positions,
-    statPositions,
-    graphPositions,
-    pluginElements,
-  });
-};
 
 /**
  * Undo/Redo 진행 상태를 설정합니다.

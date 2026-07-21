@@ -1,26 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AppStoreData, CustomTab, GraphPositions, KeyCounters, KeyMappings, KeyPositions, KnobPositions,
-    LayerGroups, SettingsPatchInput, StatPositions, TabNoteOverrides,
+    AppStoreData, GraphPositions, KeyCounters, KeyMappings, KeyPositions, KnobPositions,
+    LayerGroups, StatPositions,
 };
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EditorHistoryRestoreRequest {
-    pub base_revision: u64,
-    pub document: EditorDocumentV1,
-    pub custom_tabs: Vec<CustomTab>,
-    pub selected_key_type: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub key_counters: Option<KeyCounters>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub settings_patch: Option<SettingsPatchInput>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tab_note_overrides: Option<TabNoteOverrides>,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -201,6 +186,8 @@ impl EditorPatchV1 {
 pub struct EditorCommitRequest {
     pub base_revision: u64,
     pub mutation_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gesture_id: Option<String>,
     pub changes: EditorPatchV1,
 }
 
@@ -218,12 +205,33 @@ pub struct EditorGetResult {
     pub document: EditorDocumentV1,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryTruncated {
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryStatus {
+    pub history_revision: u64,
+    pub history_epoch: u64,
+    pub status_seq: u64,
+    pub can_undo: bool,
+    pub can_redo: bool,
+    pub busy: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<HistoryTruncated>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorCommittedV1 {
     pub schema_version: u16,
     pub revision: u64,
     pub mutation_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gesture_id: Option<String>,
     pub origin: String,
     pub changed_fields: Vec<EditorField>,
     pub patch: EditorPatchV1,
@@ -233,6 +241,8 @@ pub struct EditorCommittedV1 {
 pub enum EditorCommitOrigin {
     StrictEditorCommit,
     LegacyAdapter(String),
+    HistoryUndo,
+    HistoryRedo,
     // 이벤트 없는 부팅 복구용 origin 계약
     #[allow(dead_code)]
     LoadRecovery,
@@ -243,6 +253,8 @@ impl EditorCommitOrigin {
         match self {
             Self::StrictEditorCommit => Some("editorCommit".to_string()),
             Self::LegacyAdapter(command) => Some(format!("legacy:{command}")),
+            Self::HistoryUndo => Some("historyUndo".to_string()),
+            Self::HistoryRedo => Some("historyRedo".to_string()),
             Self::LoadRecovery => None,
         }
     }
@@ -256,6 +268,8 @@ pub struct CommittedEditorChange {
     pub document: EditorDocumentV1,
     pub selected_key_type: String,
     pub key_counters: KeyCounters,
+    pub history_status: Option<HistoryStatus>,
+    pub(crate) runtime_publication_generation: u64,
 }
 
 #[derive(Debug, Clone)]

@@ -13,6 +13,7 @@ import type {
   ShortcutsState,
 } from '@src/types/settings/shortcuts';
 import { getDefaultShortcuts } from '@src/renderer/defaults';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 
 type ShortcutKey = keyof ShortcutsState;
 
@@ -189,6 +190,7 @@ const ShortcutsPanelContent = ({
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
       e.preventDefault();
       e.stopPropagation();
 

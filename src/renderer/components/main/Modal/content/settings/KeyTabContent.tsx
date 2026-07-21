@@ -11,6 +11,7 @@ import {
   PropertySection,
 } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import type {
   KeyTabState,
   KeyPreviewData,
@@ -133,6 +134,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       }
 
       const unsubscribe = window.api.keys.onRawInput((payload) => {
+        if (isHistoryEditorFlushLocked()) return;
         if (!payload || payload.state !== 'DOWN') return;
         const targetLabel =
           payload.label ||

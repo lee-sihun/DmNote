@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { emitTo, listen } from '@tauri-apps/api/event';
 
 import type {
   BridgeMessage,
@@ -65,11 +65,18 @@ export const bridgeApi = (() => {
       }),
 
     sendTo: (target: WindowTarget, type: string, data?: unknown) =>
-      invoke<void>('plugin_bridge_send_to', {
-        target,
-        messageType: type,
-        data: data ?? null,
-      }),
+      // 백엔드 브릿지 커맨드는 main·overlay 전용 - panel은 라벨 타깃 이벤트로 직접 전달
+      // (패널 창이 없으면 무해하게 소멸하는 best-effort 경로)
+      target === 'panel'
+        ? emitTo('panel', 'plugin-bridge:message', {
+            type,
+            data: data ?? null,
+          })
+        : invoke<void>('plugin_bridge_send_to', {
+            target,
+            messageType: type,
+            data: data ?? null,
+          }),
 
     on: <T = unknown>(type: string, listener: BridgeMessageListener<T>) => {
       if (!listeners.has(type)) {

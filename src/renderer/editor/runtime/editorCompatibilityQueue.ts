@@ -1,3 +1,5 @@
+import { trackEditorWrite } from './editorWriteBarrier';
+
 let compatibilityWriteQueue: Promise<void> = Promise.resolve();
 
 export const enqueueEditorCompatibilityWrite = <T>(
@@ -9,5 +11,5 @@ export const enqueueEditorCompatibilityWrite = <T>(
     () => undefined,
     () => undefined,
   );
-  return operation.then(result);
+  return trackEditorWrite(operation.then(result));
 };

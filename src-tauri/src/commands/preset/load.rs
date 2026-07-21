@@ -12,17 +12,17 @@ use uuid::Uuid;
 use crate::{
     commands::editor::{
         css::TabCssResponse,
-        state::{emit_best_effort, publish_editor_change},
+        state::{emit_best_effort, publish_editor_change_after_key_runtime},
     },
     custom_css::validate_css_path,
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
-        AppStoreData, CommittedEditorChange, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch,
-        EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec, GraphPositions,
-        KeyMappings, KeyPosition, KeyPositions, KnobPositions, LayerGroups, NoteSettings,
-        NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCss, TabCssOverrides,
-        TabNoteSettings, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        AppStoreData, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, EditorCommitOrigin,
+        EditorField, FontSettings, FontType, GradientSpec, GraphPositions, KeyMappings,
+        KeyPosition, KeyPositions, KnobPositions, LayerGroups, NoteSettings, NoteSettingsPatch,
+        SettingsPatchInput, StatPositions, TabCss, TabCssOverrides, TabNoteSettings,
+        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::AppState,
@@ -34,23 +34,6 @@ use super::{
     EmbeddedLocalSound, PresetFile, PresetOperationResult, PRESET_LOCAL_IMAGE_PREFIX,
     PRESET_LOCAL_SOUND_PREFIX,
 };
-
-fn apply_editor_runtime_best_effort(
-    state: &AppState,
-    app: &AppHandle,
-    change: &CommittedEditorChange,
-) {
-    if let Err(error) = state.apply_committed_editor_key_runtime(
-        app,
-        &change.document.keys,
-        &change.selected_key_type,
-        &change.key_counters,
-    ) {
-        log::error!("[Preset] failed to publish committed key counters: {error:#}");
-    }
-    state.obs_broadcast_counters();
-    state.refresh_obs_snapshot();
-}
 
 fn read_preset_file(path: &Path) -> CmdResult<PresetFile> {
     let content = fs::read_to_string(path)?;
@@ -332,9 +315,11 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         }),
         ..SettingsPatchInput::default()
     };
+    let mut counter_guard = state.lock_key_counters_for_history();
+    let current_key_counters = counter_guard.clone();
     let css_operation_guard = state.lock_css_operation();
     let previous_css_state = state.store.snapshot();
-    let transaction = state.store.commit_legacy_editor_transaction(
+    let transaction = state.store.commit_preset_editor_transaction(
         EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
         &[
             EditorField::Keys,
@@ -344,6 +329,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
             EditorField::KnobPositions,
             EditorField::LayerGroups,
         ],
+        current_key_counters,
         move |store| {
             let previous_tab_css_overrides = store.tab_css_overrides.clone();
             let selected_key_type = choose_selected_key_type(
@@ -374,6 +360,17 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
             ))
         },
     )?;
+    if let Err(error) = state.apply_committed_editor_key_runtime_locked(
+        &app,
+        &mut counter_guard,
+        transaction.change.runtime_publication_generation,
+        &transaction.change.document.keys,
+        &transaction.change.selected_key_type,
+        &transaction.change.key_counters,
+    ) {
+        log::error!("[Preset] failed to publish committed key counters: {error:#}");
+    }
+    drop(counter_guard);
     let current_css_state = state.store.snapshot();
     state.resync_global_css_watcher(&previous_css_state, &current_css_state);
     sync_tab_css_runtime(
@@ -383,16 +380,10 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         &transaction.value.4,
     );
     drop(css_operation_guard);
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
-    if !transaction
-        .change
-        .result
-        .changed_fields
-        .contains(&EditorField::Keys)
-    {
-        apply_editor_runtime_best_effort(state.inner(), &app, &transaction.change);
-    }
+    publish_editor_change_after_key_runtime(state.inner(), &app, &transaction.change);
+    state.obs_broadcast_counters();
 
+    let history_status = transaction.change.history_status.clone();
     let (diff, _, custom_tabs, tab_note_overrides, _) = transaction.value;
     let selected_key_type = transaction.change.selected_key_type.clone();
     let keys = transaction.change.document.keys;
@@ -428,6 +419,9 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
 
     // OBS 브릿지: 프리셋 로드 시 전체 스냅샷 재전송
     state.refresh_obs_snapshot();
+    if let Some(status) = history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
 
     Ok(PresetOperationResult {
         success: true,
@@ -556,8 +550,10 @@ pub fn preset_load_tab(
         None
     };
 
+    let mut counter_guard = state.lock_key_counters_for_history();
+    let current_key_counters = counter_guard.clone();
     let css_operation_guard = state.lock_css_operation();
-    let transaction = state.store.commit_legacy_editor_transaction(
+    let transaction = state.store.commit_preset_editor_transaction(
         EditorCommitOrigin::LegacyAdapter("preset_load_tab".to_string()),
         &[
             EditorField::Keys,
@@ -567,6 +563,7 @@ pub fn preset_load_tab(
             EditorField::KnobPositions,
             EditorField::LayerGroups,
         ],
+        current_key_counters,
         move |store| {
             let previous_tab_css_overrides = store.tab_css_overrides.clone();
             merge_tab_preset_key_pair(store, &current_tab_id, src_keys, imported_key_positions);
@@ -624,6 +621,17 @@ pub fn preset_load_tab(
             ))
         },
     )?;
+    if let Err(error) = state.apply_committed_editor_key_runtime_locked(
+        &app,
+        &mut counter_guard,
+        transaction.change.runtime_publication_generation,
+        &transaction.change.document.keys,
+        &transaction.change.selected_key_type,
+        &transaction.change.key_counters,
+    ) {
+        log::error!("[Preset] failed to publish committed key counters: {error:#}");
+    }
+    drop(counter_guard);
     sync_tab_css_runtime(
         state.inner(),
         &app,
@@ -631,15 +639,9 @@ pub fn preset_load_tab(
         &transaction.value.3,
     );
     drop(css_operation_guard);
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
-    if !transaction
-        .change
-        .result
-        .changed_fields
-        .contains(&EditorField::Keys)
-    {
-        apply_editor_runtime_best_effort(state.inner(), &app, &transaction.change);
-    }
+    publish_editor_change_after_key_runtime(state.inner(), &app, &transaction.change);
+    state.obs_broadcast_counters();
+    let history_status = transaction.change.history_status.clone();
     let (settings_diff, _, full_tab_note_overrides, _) = transaction.value;
     let full_keys = transaction.change.document.keys;
     let full_positions = transaction.change.document.key_positions;
@@ -664,6 +666,9 @@ pub fn preset_load_tab(
 
     // OBS 브릿지: 탭 프리셋 로드 시 전체 스냅샷 재전송
     state.refresh_obs_snapshot();
+    if let Some(status) = history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
 
     Ok(PresetOperationResult {
         success: true,

@@ -7,6 +7,7 @@ import type { ElementShadowSpec } from '@src/types/key/shadows';
 import BatchStyleTabContent from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
 import { BatchGraphOnlyPanel } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
 import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNavContext';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 
 interface CapturedShadowProps {
   activeShadow: ElementShadowSpec;
@@ -17,19 +18,24 @@ interface CapturedShadowProps {
 const captured = vi.hoisted(() => ({
   shadowProps: null as CapturedShadowProps | null,
   colorTabs: [] as Array<boolean | undefined>,
+  textInputs: [] as Array<{ onCancel?: () => void }>,
 }));
 
 vi.mock(
-  '@components/main/Grid/PropertiesPanel/index',
+  '@components/main/Grid/PropertiesPanel/PropertyInputs',
   async (importOriginal) => {
     const mod = await importOriginal<
-      typeof import('@components/main/Grid/PropertiesPanel/index')
+      typeof import('@components/main/Grid/PropertiesPanel/PropertyInputs')
     >();
     return {
       ...mod,
       ColorInput: (props: { showStateTabs?: boolean }) => {
         captured.colorTabs.push(props.showStateTabs);
         return <div data-testid="color-input" />;
+      },
+      TextInput: (props: { onCancel?: () => void }) => {
+        captured.textInputs.push(props);
+        return <div data-testid="text-input" />;
       },
     };
   },
@@ -78,6 +84,7 @@ describe('혼합 선택 active 그림자 집계', () => {
   beforeEach(() => {
     captured.shadowProps = null;
     captured.colorTabs = [];
+    captured.textInputs = [];
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -210,6 +217,61 @@ describe('혼합 선택 active 그림자 집계', () => {
     expect(captured.colorTabs.length).toBeGreaterThan(0);
     expect(captured.colorTabs.every((tabs) => tabs === false)).toBe(true);
   });
+
+  it('표시 텍스트와 클래스명 Escape를 모두 진행 게스처 취소로 연결한다', () => {
+    const cancelGesture = vi
+      .spyOn(editGestureController, 'cancel')
+      .mockImplementation(() => undefined);
+    const shadow: ElementShadowSpec = {
+      enabled: false,
+      color: '#111111',
+      offsetX: 0,
+      offsetY: 4,
+      blur: 10,
+    };
+    const keyPosition = position(shadow, shadow);
+
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost: null,
+          }}
+        >
+          <BatchStyleTabContent
+            selectedCount={2}
+            hideFontControls
+            showShadowControls={false}
+            getMixedValue={mixedGetter([keyPosition, keyPosition])}
+            getSelectedKeysData={() => []}
+            handleBatchAlign={vi.fn()}
+            handleBatchDistribute={vi.fn()}
+            handleBatchSpacing={vi.fn()}
+            batchSpacing={{ isMixed: false, value: 0 }}
+            handleBatchResize={vi.fn()}
+            handleBatchStyleChange={vi.fn()}
+            handleBatchStyleChangeComplete={vi.fn()}
+            showBatchImagePicker={false}
+            onToggleBatchImagePicker={vi.fn()}
+            batchImageButtonRef={React.createRef<HTMLButtonElement>()}
+            panelElement={null}
+            useCustomCSS
+            t={(key) => key}
+          />
+        </PanelNavProvider>,
+      );
+    });
+
+    expect(captured.textInputs).toHaveLength(2);
+    act(() => {
+      captured.textInputs.forEach((props) => props.onCancel?.());
+    });
+    expect(cancelGesture).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('그래프 전용 배치 패널 배선', () => {
@@ -289,6 +351,7 @@ describe('그래프 전용 배치 패널 배선', () => {
     // 실제 배선 고정 — BatchGraphOnlyPanel의 shadowActiveState={false}를
     // 지우면 기본값 true로 탭이 켜져 이 테스트가 실패해야 함
     expect(captured.colorTabs.length).toBeGreaterThan(0);
-    expect(captured.colorTabs.every((tabs) => tabs === false)).toBe(true);
+    expect(captured.colorTabs.some((tabs) => tabs === false)).toBe(true);
+    expect(captured.colorTabs.every((tabs) => tabs !== true)).toBe(true);
   });
 });

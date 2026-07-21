@@ -20,7 +20,7 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   editorCoordinator: { commitPatch: commitPatchMock },
 }));
 
-type BatchOptions = { skipHistory?: boolean; deferSave?: boolean };
+type BatchOptions = { deferSave?: boolean };
 
 const position = (width = 40) =>
   ({ dx: 0, dy: 0, width, height: 40 } as KeyPosition);
@@ -42,6 +42,7 @@ describe('useBatchHandlers mixed collection commits', () => {
     useKeyStore.setState({
       selectedKeyType: '4key',
       positions: { '4key': [position()] },
+      canonicalPositions: { '4key': [position()] },
     });
     useStatItemStore.setState({
       positions: { '4key': [position() as StatItemPosition] },
@@ -109,12 +110,48 @@ describe('useBatchHandlers mixed collection commits', () => {
     expect(deferredOptions).toHaveLength(4);
     expect(deferredOptions.every((options) => options.deferSave)).toBe(true);
     expect(commitPatchMock).toHaveBeenCalledOnce();
-    expect(commitPatchMock).toHaveBeenCalledWith({
-      schemaVersion: 1,
-      keyPositions: { '4key': [expect.objectContaining({ width: 88 })] },
-      statPositions: { '4key': [expect.objectContaining({ width: 88 })] },
-      graphPositions: { '4key': [expect.objectContaining({ width: 88 })] },
-      knobPositions: { '4key': [expect.objectContaining({ width: 88 })] },
+    expect(commitPatchMock).toHaveBeenCalledWith(
+      {
+        schemaVersion: 1,
+        keyPositions: { '4key': [expect.objectContaining({ width: 88 })] },
+        statPositions: { '4key': [expect.objectContaining({ width: 88 })] },
+        graphPositions: { '4key': [expect.objectContaining({ width: 88 })] },
+        knobPositions: { '4key': [expect.objectContaining({ width: 88 })] },
+      },
+      undefined,
+    );
+  });
+
+  it('routes a four-type style preview to each collection once', () => {
+    const onKeyBatchPreview = vi.fn();
+    const onStatBatchPreview = vi.fn();
+    const onGraphBatchPreview = vi.fn();
+    const onKnobBatchPreview = vi.fn();
+    const handlers = useBatchHandlers({
+      selectedKeyLikeElements: [
+        { type: 'key', index: 0 },
+        { type: 'stat', index: 0 },
+        { type: 'graph', index: 0 },
+        { type: 'knob', index: 0 },
+      ],
+      keyPositions: useKeyStore.getState().positions,
+      statPositions: useStatItemStore.getState().positions,
+      graphPositions: useGraphItemStore.getState().positions,
+      knobPositions: useKnobItemStore.getState().positions,
+      selectedKeyType: '4key',
+      onKeyUpdate: vi.fn(),
+      onKeyBatchPreview,
+      onStatUpdate: vi.fn(),
+      onStatBatchPreview,
+      onGraphBatchPreview,
+      onKnobBatchPreview,
     });
+
+    handlers.handleBatchStyleChange('width', 72);
+
+    expect(onKeyBatchPreview).toHaveBeenCalledWith([{ index: 0, width: 72 }]);
+    expect(onStatBatchPreview).toHaveBeenCalledWith([{ index: 0, width: 72 }]);
+    expect(onGraphBatchPreview).toHaveBeenCalledWith([{ index: 0, width: 72 }]);
+    expect(onKnobBatchPreview).toHaveBeenCalledWith([{ index: 0, width: 72 }]);
   });
 });

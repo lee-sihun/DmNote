@@ -333,7 +333,7 @@ export type AppAutoUpdateResult = {
 export type BridgeMessage<T = unknown> = { type: string; data?: T };
 export type BridgeMessageListener<T = unknown> = (data: T) => void;
 export type BridgeAnyListener = (type: string, data: unknown) => void;
-export type WindowTarget = 'main' | 'overlay';
+export type WindowTarget = 'main' | 'overlay' | 'panel';
 
 // UI Plugin 컨텍스트 메뉴 types
 export type KeyMenuContext = {
@@ -623,6 +623,81 @@ export interface PluginDefinitionInternal extends PluginDefinition {
   pluginId: string;
 }
 
+// ========== 분리 패널 read-model 투영 ==========
+
+/**
+ * visible을 main이 현재 settings로 평가한 boolean으로 치환한 스키마
+ * 함수 필드가 없어 창 경계 직렬화 가능
+ */
+export type PluginResolvedSettingSchema =
+  | {
+      type: 'section';
+      label?: string;
+      visible: boolean;
+    }
+  | {
+      type: PluginValueSettingType;
+      default: string | number | boolean;
+      label: string;
+      min?: number;
+      max?: number;
+      step?: number;
+      options?: { label: string; value: string | number | boolean }[];
+      placeholder?: string;
+      visible: boolean;
+    };
+
+/**
+ * 분리 패널로 push되는 definition 투영
+ * template·hook·컨텍스트 메뉴 콜백 등 함수 필드 제외
+ */
+export type PluginDefinitionView = {
+  definitionId: string;
+  name: string;
+  resizable?: boolean;
+  preserveAxis?: 'width' | 'height' | 'both' | 'none';
+  resizeAnchor?: ElementResizeAnchor;
+  settingsUI?: 'panel' | 'modal';
+  resolvedSettingsSchema: Record<string, PluginResolvedSettingSchema>;
+  messages?: PluginMessages;
+};
+
+/** 분리 패널 편집 UI가 실제로 소비하는 요소 필드만 담은 read-model */
+export type PluginPanelElementView = Pick<
+  PluginDisplayElementInternal,
+  | 'id'
+  | 'fullId'
+  | 'pluginId'
+  | 'definitionId'
+  | 'position'
+  | 'settings'
+  | 'measuredSize'
+  | 'estimatedSize'
+  | 'resizeAnchor'
+  | 'zIndex'
+  | 'hidden'
+  | 'width'
+  | 'height'
+  | 'tabId'
+>;
+
+/**
+ * main → panel 플러그인 read-model 스냅샷
+ * backend modelRevision은 RPC 충돌 게이트, pushSeq는 패널의 역행 push 차단 기준
+ */
+export type PluginPanelModelSnapshot = {
+  /** backend canonical plugin_model_revision - RPC expectedModelRevision 도메인 */
+  modelRevision: number;
+  /** push 순서 전용 단조 시퀀스 - 역전된 낡은 push 무시 기준 (revision과 별개) */
+  pushSeq: number;
+  /** main authority generation - 패널이 첫 mutation 전에 설치 */
+  authorityGeneration: number;
+  elements: PluginPanelElementView[];
+  definitions: PluginDefinitionView[];
+  /** fullId → key별 visibility (main이 요소별 현재 settings로 평가, 스키마 본문은 definition view 1회) */
+  elementVisibility: Record<string, Record<string, boolean>>;
+};
+
 // ========== defineSettings API ==========
 
 /**
@@ -833,9 +908,13 @@ export interface DMNoteAPI {
     updateWithPositions(
       mappings: KeyMappings,
       positions: KeyPositions,
+      gestureId?: string,
     ): Promise<{ keys: KeyMappings; positions: KeyPositions }>;
     getPositions(): Promise<KeyPositions>;
-    updatePositions(positions: KeyPositions): Promise<KeyPositions>;
+    updatePositions(
+      positions: KeyPositions,
+      gestureId?: string,
+    ): Promise<KeyPositions>;
     setMode(mode: string): Promise<KeysModeResponse>;
     resetAll(): Promise<KeysResetAllResponse>;
     resetMode(mode: string): Promise<KeysModeResponse>;

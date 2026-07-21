@@ -55,15 +55,24 @@ describe('editor API compatibility adapters', () => {
 
     expect(commitPatch.mock.calls).toEqual([
       [{ schemaVersion: 1, keys: mappings }],
-      [{ schemaVersion: 1, keyPositions: positions }],
+      [{ schemaVersion: 1, keyPositions: positions }, undefined],
       [
         {
           schemaVersion: 1,
           keys: mappings,
           keyPositions: positions,
         },
+        undefined,
       ],
     ]);
+
+    commitPatch.mockClear();
+    commitPatch.mockResolvedValue(structuredClone(document));
+    await keysApi.updatePositions(positions, 'gesture-1');
+    expect(commitPatch).toHaveBeenCalledWith(
+      { schemaVersion: 1, keyPositions: positions },
+      { gestureId: 'gesture-1' },
+    );
   });
 
   it('routes every item collection writer and returns its canonical field', async () => {

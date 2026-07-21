@@ -30,9 +30,22 @@ export async function runAfterEditorFlush<T>(
 }
 
 export const acknowledgeLifecycleAfterEditorFlush = (handshakeId: string) =>
-  runAfterEditorFlush('app lifecycle', () =>
-    invoke<void>('app_quit_after_editor_flush', { handshakeId }),
-  );
+  runAfterEditorFlush('app lifecycle', async () => {
+    const [editorBarrier, pluginElements, pluginSettings] = await Promise.all([
+      import('@src/renderer/editor/runtime/editorWriteBarrier'),
+      import('@plugins/rpc/pluginElementActions'),
+      import('@plugins/rpc/pluginSettingsMirror'),
+    ]);
+    const drained = await Promise.all([
+      editorBarrier.drainEditorWrites(),
+      pluginElements.drainPendingPluginElementWrites(),
+      pluginSettings.drainPendingPluginSettingsWrites(),
+    ]);
+    if (drained.some((succeeded) => !succeeded)) {
+      throw new Error('pending window writes failed to drain');
+    }
+    return invoke<void>('app_quit_after_editor_flush', { handshakeId });
+  });
 
 export const cancelLifecycleEditorFlush = (handshakeId: string) =>
   invoke<void>('app_cancel_editor_flush', { handshakeId });

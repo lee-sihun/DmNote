@@ -93,6 +93,10 @@ export interface EditorCoordinatorOptions {
   focusTarget?: EditorEventTarget | null;
   visibilityTarget?: EditorVisibilityTarget | null;
   readOnly?: boolean | (() => boolean);
+  // committed 이벤트가 canonical에 반영된 직후 호출 (프리뷰 오버레이 정리용)
+  onCommittedApplied?: (event: EditorCommittedV1) => void;
+  // committed·resync 등 canonical revision이 전진한 모든 경로에서 호출
+  onCanonicalRevisionAdvanced?: (revision: number) => void;
 }
 
 export interface EditorSyncOptions {
@@ -113,6 +117,7 @@ interface InFlightCommit {
   target: EditorDocumentV1;
   localFields: EditorField[];
   requestFields: EditorField[];
+  gestureId?: string;
 }
 
 const MAX_AUTO_REBASE_ATTEMPTS = 2;
@@ -202,6 +207,12 @@ export class EditorSaveCoordinator {
   private readonly focusTarget: EditorEventTarget | null;
   private readonly visibilityTarget: EditorVisibilityTarget | null;
   private readonly isReadOnly: () => boolean;
+  private readonly onCommittedApplied:
+    | ((event: EditorCommittedV1) => void)
+    | null;
+  private readonly onCanonicalRevisionAdvanced:
+    | ((revision: number) => void)
+    | null;
 
   private phase: EditorCoordinatorPhase = 'idle';
   private revision: number | null = null;
@@ -210,6 +221,8 @@ export class EditorSaveCoordinator {
   private pendingFields: EditorField[] = [];
   private pendingRequestFields: EditorField[] = [];
   private inFlight: InFlightCommit | null = null;
+  // 커밋 의도 시점에 캡처된 게스처 ID (드레인에서 소비, 실패 시 복원)
+  private pendingGestureId: string | null = null;
   private conflict: EditorConflictState | null = null;
   private error: unknown = null;
   private failureKind: 'transient' | 'permanent' | null = null;
@@ -239,6 +252,9 @@ export class EditorSaveCoordinator {
     this.transport = options.transport;
     this.readDocument = options.readDocument;
     this.applyDocument = options.applyDocument;
+    this.onCommittedApplied = options.onCommittedApplied ?? null;
+    this.onCanonicalRevisionAdvanced =
+      options.onCanonicalRevisionAdvanced ?? null;
     this.createMutationId =
       options.createMutationId ?? (() => crypto.randomUUID());
     this.focusTarget =
@@ -319,7 +335,10 @@ export class EditorSaveCoordinator {
     snapshot: EditorDocumentV1,
     newIntentFields: readonly EditorField[],
     requestFields: readonly EditorField[],
+    gestureId?: string,
   ): Promise<EditorDocumentV1> {
+    // 병합 시 마지막 게스처가 대표 ID, 나머지는 정산 측 cancel 브로드캐스트가 정리
+    if (gestureId) this.pendingGestureId = gestureId;
     if (this.conflict) {
       const conflict = this.conflict;
       const newlyChangedFields = getChangedEditorFields(
@@ -359,7 +378,10 @@ export class EditorSaveCoordinator {
     return clone(this.requireLastAck());
   }
 
-  async commitPatch(changes: EditorPatchV1): Promise<EditorDocumentV1> {
+  async commitPatch(
+    changes: EditorPatchV1,
+    meta?: { gestureId?: string },
+  ): Promise<EditorDocumentV1> {
     this.assertWritable();
     await this.start();
     // gradient canonical 정규화를 assert 앞에 — optimistic·diff·invoke가 같은 값 사용
@@ -383,7 +405,12 @@ export class EditorSaveCoordinator {
     ) {
       this.applyDocument(clone(optimisticDocument), 'localPatch');
     }
-    return this.queueSnapshot(target, newIntentFields, requestFields);
+    return this.queueSnapshot(
+      target,
+      newIntentFields,
+      requestFields,
+      meta?.gestureId,
+    );
   }
 
   async retryPending(): Promise<EditorDocumentV1> {
@@ -423,6 +450,7 @@ export class EditorSaveCoordinator {
       this.pendingLocal = null;
       this.pendingFields = [];
       this.pendingRequestFields = [];
+      this.pendingGestureId = null;
       this.phase = 'idle';
       this.applyDocument(clone(conflict.canonical), 'acceptCanonical');
       this.notify();
@@ -578,6 +606,8 @@ export class EditorSaveCoordinator {
       const baseDocument = clone(this.requireLastAck());
       const baseRevision = this.requireRevision();
       const mutationId = this.createMutationId();
+      const gestureId = this.pendingGestureId ?? undefined;
+      this.pendingGestureId = null;
       const inFlight: InFlightCommit = {
         mutationId,
         baseRevision,
@@ -585,6 +615,7 @@ export class EditorSaveCoordinator {
         target: clone(target),
         localFields,
         requestFields,
+        gestureId,
       };
       this.inFlight = inFlight;
       this.rememberOwnMutation(inFlight);
@@ -596,6 +627,7 @@ export class EditorSaveCoordinator {
           baseRevision,
           mutationId,
           changes: patchForFields(target, requestFields),
+          ...(inFlight.gestureId ? { gestureId: inFlight.gestureId } : {}),
         });
         assertEditorCommitResult(result);
         await this.applyCommitResult(inFlight, result);
@@ -620,6 +652,9 @@ export class EditorSaveCoordinator {
               inFlight.localFields,
               inFlight.requestFields,
             );
+            if (inFlight.gestureId && this.pendingGestureId === null) {
+              this.pendingGestureId = inFlight.gestureId;
+            }
             this.phase = 'error';
             this.error = syncError;
             this.failureKind = 'transient';
@@ -628,6 +663,10 @@ export class EditorSaveCoordinator {
           }
           if (didRebase) {
             rebaseAttempts += 1;
+            // 더 최신 pending 게스처가 없을 때만 실패분 복원
+            if (inFlight.gestureId && this.pendingGestureId === null) {
+              this.pendingGestureId = inFlight.gestureId;
+            }
             continue;
           }
         } else if (isEditorCommitError(error) && error.retryable) {
@@ -636,6 +675,9 @@ export class EditorSaveCoordinator {
             inFlight.localFields,
             inFlight.requestFields,
           );
+          if (inFlight.gestureId && this.pendingGestureId === null) {
+            this.pendingGestureId = inFlight.gestureId;
+          }
           this.phase = 'error';
           this.error = error;
           this.failureKind = 'transient';
@@ -781,6 +823,8 @@ export class EditorSaveCoordinator {
     if (isOwnMutation) {
       this.error = null;
       this.notify();
+      this.onCommittedApplied?.(event);
+      this.onCanonicalRevisionAdvanced?.(event.revision);
       return;
     }
 
@@ -791,6 +835,8 @@ export class EditorSaveCoordinator {
       'event',
       previousCanonical,
     );
+    this.onCommittedApplied?.(event);
+    this.onCanonicalRevisionAdvanced?.(event.revision);
   }
 
   private async fetchAndApplyCanonical(
@@ -809,6 +855,7 @@ export class EditorSaveCoordinator {
     if (!previous) {
       this.applyDocument(clone(result.document), reason);
       this.notify();
+      this.onCanonicalRevisionAdvanced?.(result.revision);
       return;
     }
 
@@ -820,6 +867,7 @@ export class EditorSaveCoordinator {
       reason,
       previous,
     );
+    this.onCanonicalRevisionAdvanced?.(result.revision);
   }
 
   private applyExternalCanonical(
@@ -934,6 +982,7 @@ export class EditorSaveCoordinator {
     this.pendingLocal = null;
     this.pendingFields = [];
     this.pendingRequestFields = [];
+    this.pendingGestureId = null;
     this.phase = 'error';
     this.error = error;
     this.failureKind = 'permanent';

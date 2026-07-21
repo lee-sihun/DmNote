@@ -2,6 +2,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{
+    commands::editor::state::emit_best_effort,
     errors::CmdResult,
     models::{TabNoteOverrides, TabNoteSettings},
     state::AppState,
@@ -52,22 +53,24 @@ pub fn note_tab_set(
     tab_id: String,
     settings: Option<TabNoteSettings>,
 ) -> CmdResult<TabNoteSetResponse> {
-    if let Some(ref note_settings) = settings {
-        state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
+        if let Some(ref note_settings) = settings {
             store
                 .tab_note_overrides
                 .insert(tab_id.clone(), note_settings.clone());
-        })?;
-    } else {
-        state.store.update(|store| {
+        } else {
             store.tab_note_overrides.remove(&tab_id);
-        })?;
-    }
+        }
+        Ok(())
+    })?;
 
     let response = TabNoteResponse {
         tab_id: tab_id.clone(),
         settings: settings.clone(),
     };
+    if let Some(status) = transaction.history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
     app.emit("tabNote:changed", &response)?;
     state.refresh_obs_snapshot();
 
@@ -85,14 +88,18 @@ pub fn note_tab_clear(
     app: AppHandle,
     tab_id: String,
 ) -> CmdResult<TabNoteClearResponse> {
-    state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         store.tab_note_overrides.remove(&tab_id);
+        Ok(())
     })?;
 
     let response = TabNoteResponse {
         tab_id: tab_id.clone(),
         settings: None,
     };
+    if let Some(status) = transaction.history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
     app.emit("tabNote:changed", &response)?;
     state.refresh_obs_snapshot();
 

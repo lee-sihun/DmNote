@@ -77,6 +77,7 @@ libc = "0.2"
 rdev = "0.5.3"
 objc = "0.2"
 objc-foundation = "0.1"
+cocoa = "0.22"
 thread-priority = "1.2"
 
 # objc 크레이트의 매크로에서 발생하는 cfg 경고 억제

@@ -1,3 +1,4 @@
+import { usePressAction } from '@hooks/usePressAction';
 import type { ReactNode } from 'react';
 import Modal from './Modal';
 
@@ -27,6 +28,10 @@ const FullSurfaceModalLayout = ({
   cancelLabel,
   children,
 }: FullSurfaceModalLayoutProps) => {
+  // 입력 blur·IME flush와의 경합으로 첫 click이 유실되는 것을 방어
+  const submitPress = usePressAction(onSubmit);
+  const cancelPress = usePressAction(onClose);
+
   return (
     <Modal fullSurface onClick={onClose} ariaLabel={title}>
       <div
@@ -49,7 +54,7 @@ const FullSurfaceModalLayout = ({
                     ? 'bg-fill-faint text-fg-disabled cursor-not-allowed'
                     : 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
                 }`}
-                onClick={onSubmit}
+                {...submitPress}
                 disabled={submitDisabled}
               >
                 {submitLabel}
@@ -57,7 +62,7 @@ const FullSurfaceModalLayout = ({
               <button
                 type="button"
                 className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
-                onClick={onClose}
+                {...cancelPress}
               >
                 {cancelLabel}
               </button>

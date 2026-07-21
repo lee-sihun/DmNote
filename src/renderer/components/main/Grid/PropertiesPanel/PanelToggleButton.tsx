@@ -1,3 +1,4 @@
+import { usePressAction } from '@hooks/usePressAction';
 import React, { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePressGatedSwap } from '@hooks/usePressGatedSwap';
@@ -71,11 +72,14 @@ const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
     ? t('propertiesPanel.closePanel') || '속성 패널 닫기'
     : t('propertiesPanel.openPanel') || '속성 패널 열기';
 
+  // 설정 세션 중에는 cancel terminal action - 입력 blur와의 click 경합 방어
+  const togglePress = usePressAction(() => onClick());
+
   return (
     <div className="absolute top-0 right-0 z-30 w-[48px] h-[48px] flex items-center justify-center pointer-events-none">
       <button
         ref={ref}
-        onClick={onClick}
+        {...togglePress}
         className="dmn-panel-toggle pointer-events-auto relative w-[32px] h-[32px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
         data-open={open ? 'true' : 'false'}
         title={label}

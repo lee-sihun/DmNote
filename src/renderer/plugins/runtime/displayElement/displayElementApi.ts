@@ -20,7 +20,6 @@ import {
   type DisplayElementTarget,
 } from './targetResolver';
 import { buildDisplayElementTemplate } from './templateBuilder';
-import { saveToHistory } from './historyUtils';
 import type {
   PluginDisplayElement,
   PluginDisplayElementConfig,
@@ -91,9 +90,6 @@ export const displayElementApi = {
       console.warn('[UI API] displayElement.add called outside plugin context');
       return createNoopDisplayElementInstance();
     }
-
-    // 히스토리 저장 (요소 추가 전)
-    saveToHistory();
 
     const id = `element-${Date.now()}-${Math.random()
       .toString(36)
@@ -341,9 +337,6 @@ export const displayElementApi = {
     }
     const fullId = resolveFullId(target);
     if (!fullId) return;
-
-    // 히스토리 저장 (요소 삭제 전)
-    saveToHistory();
 
     removeDisplayElementInternal(fullId);
   },

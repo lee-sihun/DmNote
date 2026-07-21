@@ -10,8 +10,7 @@ use crate::{
     errors::EditorCommitError,
     models::{
         AppStoreData, CustomTab, EditorCommitRequest, EditorDocumentV1, EditorField,
-        EditorHistoryRestoreRequest, ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition,
-        EDITOR_SCHEMA_VERSION,
+        ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition, EDITOR_SCHEMA_VERSION,
     },
 };
 
@@ -20,6 +19,7 @@ pub(crate) const MUTATION_ACK_CAPACITY: usize = 32;
 pub(crate) const MAX_CUSTOM_TABS: usize = 30;
 
 const MAX_MUTATION_ID_BYTES: usize = 64;
+const MAX_GESTURE_ID_BYTES: usize = 64;
 const MAX_MODE_ID_BYTES: usize = 128;
 const MAX_MODES: usize = 64;
 const MAX_ITEMS_PER_MODE: usize = 512;
@@ -43,6 +43,7 @@ pub(crate) type RequestFingerprint = [u8; 32];
 #[serde(rename_all = "camelCase")]
 struct FingerprintPayload<'a> {
     base_revision: u64,
+    gesture_id: Option<&'a str>,
     changes: &'a crate::models::EditorPatchV1,
 }
 
@@ -87,6 +88,17 @@ pub(crate) fn validate_request_envelope(
         ));
     }
 
+    if request
+        .gesture_id
+        .as_ref()
+        .is_some_and(|gesture_id| gesture_id.len() > MAX_GESTURE_ID_BYTES)
+    {
+        return Err(EditorCommitError::validation(
+            "INVALID_GESTURE_ID",
+            "gestureId must be no longer than 64 bytes",
+        ));
+    }
+
     Ok(())
 }
 
@@ -96,39 +108,6 @@ pub(crate) fn validate_revision(revision: u64) -> Result<(), EditorCommitError> 
             "REVISION_OUT_OF_RANGE",
             "editor revision exceeds JavaScript's safe integer range",
         ));
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_history_restore_envelope(
-    request: &EditorHistoryRestoreRequest,
-) -> Result<(), EditorCommitError> {
-    validate_revision(request.base_revision)?;
-    if request.document.schema_version != EDITOR_SCHEMA_VERSION {
-        return Err(EditorCommitError::validation(
-            "UNSUPPORTED_SCHEMA_VERSION",
-            format!(
-                "unsupported editor schema version {}",
-                request.document.schema_version
-            ),
-        ));
-    }
-    let compact_size = serde_json::to_vec(request)
-        .map_err(|error| {
-            EditorCommitError::validation(
-                "INVALID_REQUEST_PAYLOAD",
-                format!("failed to serialize history restore request: {error}"),
-            )
-        })?
-        .len();
-    if compact_size > MAX_REQUEST_BYTES {
-        return Err(EditorCommitError::validation(
-            "REQUEST_TOO_LARGE",
-            format!("history restore request exceeds the {MAX_REQUEST_BYTES} byte limit"),
-        ));
-    }
-    if compact_size >= REQUEST_WARNING_BYTES {
-        log::warn!("[Editor] Large history restore request: {compact_size} compact bytes");
     }
     Ok(())
 }
@@ -222,6 +201,7 @@ pub(crate) fn request_fingerprint(
 ) -> Result<RequestFingerprint, EditorCommitError> {
     let value = serde_json::to_value(FingerprintPayload {
         base_revision: request.base_revision,
+        gesture_id: request.gesture_id.as_deref(),
         changes: &request.changes,
     })
     .map_err(|error| {
@@ -1053,6 +1033,7 @@ mod tests {
         EditorCommitRequest {
             base_revision: 0,
             mutation_id: Uuid::new_v4().to_string(),
+            gesture_id: None,
             changes: EditorPatchV1 {
                 keys: Some(keys),
                 ..EditorPatchV1::default()
@@ -1646,7 +1627,7 @@ mod tests {
     }
 
     #[test]
-    fn revision_and_mutation_id_wire_limits_are_enforced() {
+    fn revision_and_request_id_wire_limits_are_enforced() {
         assert!(validate_revision(MAX_SAFE_EDITOR_REVISION).is_ok());
         assert!(validate_revision(MAX_SAFE_EDITOR_REVISION + 1).is_err());
         assert!(next_revision(MAX_SAFE_EDITOR_REVISION).is_err());
@@ -1654,9 +1635,15 @@ mod tests {
         let invalid = EditorCommitRequest {
             base_revision: 0,
             mutation_id: "not-a-uuid".to_string(),
+            gesture_id: None,
             changes: EditorPatchV1::default(),
         };
         assert!(validate_request_envelope(&invalid).is_err());
+
+        let mut oversized_gesture = request(KeyMappings::new());
+        oversized_gesture.gesture_id = Some("가".repeat(22));
+        assert_eq!(oversized_gesture.gesture_id.as_ref().unwrap().len(), 66);
+        assert!(validate_request_envelope(&oversized_gesture).is_err());
     }
 
     #[test]

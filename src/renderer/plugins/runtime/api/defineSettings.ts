@@ -4,7 +4,10 @@
  */
 
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import {
+  openPluginSettingsSession,
+  cancelPluginSettingsSessionForPlugin,
+} from '@plugins/rpc/pluginSettingsSession';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {
@@ -478,7 +481,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       };
 
       return new Promise((resolve) => {
-        usePropertiesPanelStore.getState().openPluginSettingsPanel({
+        openPluginSettingsSession({
           pluginId,
           definition,
           settings: panelSettings,
@@ -574,6 +577,11 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       if (bridgeCleanup) {
         registerCleanup(bridgeCleanup);
       }
+    }
+
+    // plugin unload·runtime reload 시 열려 있는 설정 세션 settle(false)
+    if (window.__dmn_window_type === 'main') {
+      registerCleanup(() => cancelPluginSettingsSessionForPlugin(pluginId));
     }
 
     // 초기 설정 로드 (비동기)

@@ -2,7 +2,7 @@
   "identifier": "main",
   "description": "Main window capability granting DM Note access",
   "local": true,
-  "windows": ["main", "overlay"],
+  "windows": ["main", "overlay", "panel"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

@@ -745,6 +745,7 @@ const Settings = ({
           useKeyStore.setState({
             keyMappings: result.keys,
             positions: result.positions,
+            canonicalPositions: result.positions,
             customTabs: result.customTabs,
             selectedKeyType: result.selectedKeyType,
           });

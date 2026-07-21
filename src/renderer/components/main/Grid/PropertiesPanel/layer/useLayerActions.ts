@@ -3,13 +3,15 @@
  * 가시성 토글, 이름 변경, 컨텍스트 메뉴, 삭제, 그룹 연산 등
  */
 
+import {
+  setPluginElementsHidden,
+  deletePluginElements,
+} from '@plugins/rpc/pluginElementActions';
 import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
@@ -41,25 +43,6 @@ interface UseLayerActionsParams {
   setLastClickedIndex: (index: number | null) => void;
   setLastClickedDisplayIndex: (index: number | null) => void;
   t: (key: string) => string;
-}
-
-// ============================================================================
-// 히스토리 저장 헬퍼
-// ============================================================================
-
-function pushCurrentStateToHistory(layerGroups?: LayerGroups) {
-  const { keyMappings: km, positions: pos } = useKeyStore.getState();
-  const statPos = useStatItemStore.getState().positions;
-  const graphPos = useGraphItemStore.getState().positions;
-  const pluginEls = usePluginDisplayElementStore.getState().elements;
-  useHistoryStore.getState().pushState({
-    keyMappings: km,
-    positions: pos,
-    statPositions: statPos,
-    graphPositions: graphPos,
-    pluginElements: pluginEls,
-    layerGroups,
-  });
 }
 
 function hasChanged(current: unknown, next: unknown) {
@@ -114,10 +97,9 @@ export function useLayerActions({
     clearPendingDeselect();
     onSelectionFromPanel?.();
 
-    pushCurrentStateToHistory();
-
     if (item.type === 'key' && item.index !== undefined) {
-      const pos = useKeyStore.getState().positions;
+      // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
+      const pos = useKeyStore.getState().canonicalPositions;
       const currentPositions = pos[selectedKeyType] || [];
       const current = currentPositions[item.index];
       if (!current) return;
@@ -221,13 +203,7 @@ export function useLayerActions({
     }
 
     if (item.type === 'plugin') {
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const el = currentPluginElements.find((p) => p.fullId === item.id);
-      if (!el) return;
-      usePluginDisplayElementStore
-        .getState()
-        .updateElement(item.id, { hidden: !el.hidden });
+      setPluginElementsHidden([{ fullId: item.id, hidden: !item.hidden }]);
     }
   };
 
@@ -248,8 +224,6 @@ export function useLayerActions({
     const allHidden = children.every((c) => c.hidden);
     const newHidden = !allHidden;
 
-    pushCurrentStateToHistory();
-
     const changes: EditorPatchV1 = { schemaVersion: 1 };
 
     // 키 positions
@@ -257,7 +231,7 @@ export function useLayerActions({
       (c) => c.type === 'key' && c.index !== undefined,
     );
     if (keyChildren.length > 0) {
-      const pos = useKeyStore.getState().positions;
+      const pos = useKeyStore.getState().canonicalPositions;
       const updatedPositions = { ...pos };
       const modePositions = [...(pos[selectedKeyType] || [])];
       keyChildren.forEach((c) => {
@@ -352,11 +326,9 @@ export function useLayerActions({
 
     // 플러그인
     const pluginChildren = children.filter((c) => c.type === 'plugin');
-    pluginChildren.forEach((c) => {
-      usePluginDisplayElementStore
-        .getState()
-        .updateElement(c.id, { hidden: newHidden });
-    });
+    setPluginElementsHidden(
+      pluginChildren.map((c) => ({ fullId: c.id, hidden: newHidden })),
+    );
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -369,7 +341,7 @@ export function useLayerActions({
     const newLayerName = trimmed === '' ? undefined : trimmed;
 
     if (item.type === 'key' && item.index !== undefined) {
-      const { positions: pos } = useKeyStore.getState();
+      const { canonicalPositions: pos } = useKeyStore.getState();
       const currentPositions = pos[selectedKeyType] || [];
       const current = currentPositions[item.index];
       if (!current) return;
@@ -464,25 +436,12 @@ export function useLayerActions({
     const trimmed = value.trim();
     if (trimmed === '') return;
 
-    const { keyMappings: km, positions: pos } = useKeyStore.getState();
-    const statPos = useStatItemStore.getState().positions;
-    const graphPos = useGraphItemStore.getState().positions;
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
     const currentGroups = useLayerGroupStore.getState().layerGroups;
     const currentModeGroups = currentGroups[selectedKeyType] || [];
     const currentGroup = currentModeGroups.find(
       (group) => group.id === groupId,
     );
     if (!currentGroup || currentGroup.name === trimmed) return;
-
-    useHistoryStore.getState().pushState({
-      keyMappings: km,
-      positions: pos,
-      statPositions: statPos,
-      graphPositions: graphPos,
-      pluginElements: pluginEls,
-      layerGroups: currentGroups,
-    });
 
     const updated: LayerGroups = {
       ...currentGroups,
@@ -507,7 +466,6 @@ export function useLayerActions({
     targetGroupId: string | undefined,
     elementsOverride?: SelectedElement[],
     options?: {
-      skipHistory?: boolean;
       historyLayerGroups?: LayerGroups;
       layerGroupsForNormalization?: LayerGroups;
     },
@@ -516,13 +474,10 @@ export function useLayerActions({
       elementsOverride ?? useGridSelectionStore.getState().selectedElements;
     if (selectedForUpdate.length === 0) return false;
 
-    const { keyMappings: km, positions: pos } = useKeyStore.getState();
+    const { canonicalPositions: pos } = useKeyStore.getState();
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
     const storeLayerGroups = useLayerGroupStore.getState().layerGroups;
-    const historyLayerGroups = options?.historyLayerGroups ?? storeLayerGroups;
     const layerGroupsForNormalization =
       options?.layerGroupsForNormalization ?? storeLayerGroups;
 
@@ -552,17 +507,6 @@ export function useLayerActions({
     const hasChange =
       grouped.changed || normalized.positionsChanged || shouldPersistGroups;
     if (!hasChange) return false;
-
-    if (!options?.skipHistory) {
-      useHistoryStore.getState().pushState({
-        keyMappings: km,
-        positions: pos,
-        statPositions: currentStatPositions,
-        graphPositions: currentGraphPositions,
-        pluginElements: currentPluginElements,
-        layerGroups: historyLayerGroups,
-      });
-    }
 
     useKeyStore.getState().setPositions(normalized.keyPositions);
     useStatItemStore.getState().setPositions(normalized.statPositions);
@@ -759,7 +703,7 @@ export function useLayerActions({
 
       const currentGroups = useLayerGroupStore.getState().layerGroups;
       const modeGroups = currentGroups[selectedKeyType] || [];
-      const keyPos = useKeyStore.getState().positions;
+      const keyPos = useKeyStore.getState().canonicalPositions;
       const statPos = useStatItemStore.getState().positions;
       const graphPos = useGraphItemStore.getState().positions;
       const knobPos = useKnobItemStore.getState().positions;
@@ -839,24 +783,14 @@ export function useLayerActions({
         .filter((el) => el.type === 'plugin')
         .map((el) => el.id);
 
-      // 히스토리 저장
-      if (
-        keysToDelete.length > 0 ||
-        statsToDelete.length > 0 ||
-        graphsToDelete.length > 0 ||
-        knobsToDelete.length > 0 ||
-        pluginsToDelete.length > 0
-      ) {
-        const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-        pushCurrentStateToHistory(currentLayerGroups);
-      }
-
       // 선택 해제
       onSelectionFromPanel?.();
       useGridSelectionStore.getState().clearSelection();
 
-      const { keyMappings: currentMappings, positions: currentKeyPositions } =
-        useKeyStore.getState();
+      const {
+        keyMappings: currentMappings,
+        canonicalPositions: currentKeyPositions,
+      } = useKeyStore.getState();
       const currentStatPositions = useStatItemStore.getState().positions;
       const currentGraphPositions = useGraphItemStore.getState().positions;
       const currentKnobPositions = useKnobItemStore.getState().positions;
@@ -913,15 +847,9 @@ export function useLayerActions({
             }
           : currentKnobPositions;
 
-      // 플러그인 삭제
+      // 플러그인 삭제 - 창 무관 진입점 (패널이면 main으로 RPC 위임)
       if (pluginsToDelete.length > 0) {
-        const currentElements =
-          usePluginDisplayElementStore.getState().elements;
-        const deleteSet = new Set(pluginsToDelete);
-        const newElements = currentElements.filter(
-          (el) => !deleteSet.has(el.fullId),
-        );
-        usePluginDisplayElementStore.getState().setElements(newElements);
+        deletePluginElements(pluginsToDelete);
       }
 
       const normalized = normalizeLayerGroupsForMode({

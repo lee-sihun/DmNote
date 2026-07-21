@@ -121,12 +121,12 @@ interface BatchKeyLikePanelProps {
   handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
   handleBatchSpacing: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   handleBatchSpacingPreview: (spacing: number) => void;
   handleBatchSpacingCommit: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
@@ -1035,12 +1035,12 @@ interface BatchGraphOnlyPanelProps {
   handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
   handleBatchSpacing: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   handleBatchSpacingPreview: (spacing: number) => void;
   handleBatchSpacingCommit: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
@@ -1406,12 +1406,12 @@ interface BatchKnobOnlyPanelProps {
   handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
   handleBatchSpacing: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   handleBatchSpacingPreview: (spacing: number) => void;
   handleBatchSpacingCommit: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;

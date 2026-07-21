@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type {
   PropertyRowProps,
   NumberInputProps,
@@ -21,6 +21,8 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { gradientToCss } from '@src/types/color';
+import { useTranslation } from '@contexts/useTranslation';
+import { registerEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
 
 // ============================================================================
 // 속성 행
@@ -49,6 +51,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   value,
   onChange,
   onBlur,
+  onPreview,
+  onCancel,
   // 미지정 방향은 무제한 — 플러그인 설정 스키마의 optional min/max 계약과 동일
   min = Number.NEGATIVE_INFINITY,
   max = Number.POSITIVE_INFINITY,
@@ -130,6 +134,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   );
   const [isFocused, setIsFocused] = useState(false);
   const [hasUserInput, setHasUserInput] = useState(false);
+  // Escape로 blur된 경우 확정 없이 원복
+  const escapedRef = useRef(false);
 
   useEffect(() => {
     if (!isFocused) {
@@ -141,6 +147,22 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   // 숫자, 마이너스, 소수점(옵션), 백스페이스, Delete, 화살표, Tab, Enter만 허용
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter는 blur를 통해 확정, Escape는 확정 없이 원복
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
+      return;
+    }
+    if (e.key === 'Escape') {
+      // cancel 경로가 없는 입력은 기존 동작대로 무시 (비키 스토어 원복 불가)
+      if (onCancel) {
+        escapedRef.current = true;
+        e.currentTarget.blur();
+      } else {
+        e.preventDefault();
+      }
+      return;
+    }
+
     const allowedKeys = [
       'Backspace',
       'Delete',
@@ -149,7 +171,6 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       'ArrowUp',
       'ArrowDown',
       'Tab',
-      'Enter',
       'Home',
       'End',
     ];
@@ -196,13 +217,15 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
     const clamped = parseAndClamp(newValue);
     if (clamped !== null) {
-      onChange(clamped);
+      // 게스처 모드에서는 타이핑이 preview로만 흐름
+      (onPreview ?? onChange)(clamped);
     }
   };
 
   const handleFocus = () => {
     setIsFocused(true);
     setHasUserInput(false);
+    escapedRef.current = false;
     if (!isMixed) {
       const numericValue =
         typeof value === 'number'
@@ -216,6 +239,17 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   const handleBlur = () => {
     setIsFocused(false);
+
+    // Escape는 확정 없이 표시값 원복
+    if (escapedRef.current) {
+      escapedRef.current = false;
+      setLocalValue(isMixed ? '' : getDisplayValue(value, false));
+      setHasUserInput(false);
+      // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
+      onCancel?.();
+      return;
+    }
+
     const numericValue = sanitizeNumericInput(localValue);
 
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
@@ -306,6 +340,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   value,
   onChange,
   onBlur,
+  onPreview,
+  onCancel,
   min = 0,
   max = 9999,
   prefix,
@@ -376,6 +412,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   });
   const [isFocused, setIsFocused] = useState(false);
   const [hasUserInput, setHasUserInput] = useState(false);
+  // Escape로 blur된 경우 확정 없이 원복
+  const escapedRef = useRef(false);
 
   useEffect(() => {
     if (!isFocused) {
@@ -390,6 +428,22 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   }, [value, isFocused, isMixed]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter는 blur를 통해 확정, Escape는 확정 없이 원복
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
+      return;
+    }
+    if (e.key === 'Escape') {
+      // cancel 경로가 없는 입력은 기존 동작대로 무시 (비키 스토어 원복 불가)
+      if (onCancel) {
+        escapedRef.current = true;
+        e.currentTarget.blur();
+      } else {
+        e.preventDefault();
+      }
+      return;
+    }
+
     const allowedKeys = [
       'Backspace',
       'Delete',
@@ -398,7 +452,6 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       'ArrowUp',
       'ArrowDown',
       'Tab',
-      'Enter',
       'Home',
       'End',
     ];
@@ -417,9 +470,10 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     setLocalValue(newValue);
     setHasUserInput(true);
 
+    const emit = onPreview ?? onChange;
     // 빈 값만 unset, 부호·소수점만 남은 중간 상태는 commit하지 않고 입력 유지
     if (newValue === '') {
-      onChange(undefined);
+      emit(undefined);
       return;
     }
     if (newValue === '-' || newValue === '.' || newValue === '-.') {
@@ -430,12 +484,13 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     if (!Number.isFinite(numValue)) return;
 
     const clamped = Math.min(Math.max(numValue, min), max);
-    onChange(normalizePrecision(clamped));
+    emit(normalizePrecision(clamped));
   };
 
   const handleFocus = () => {
     setIsFocused(true);
     setHasUserInput(false);
+    escapedRef.current = false;
     if (!isMixed && value != null) {
       setLocalValue(String(value));
     } else {
@@ -445,6 +500,21 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 
   const handleBlur = () => {
     setIsFocused(false);
+
+    // Escape는 확정 없이 표시값 원복
+    if (escapedRef.current) {
+      escapedRef.current = false;
+      if (isMixed || value == null) {
+        setLocalValue('');
+      } else {
+        setLocalValue(getDisplayValue(value, false));
+      }
+      setHasUserInput(false);
+      // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
+      onCancel?.();
+      return;
+    }
+
     const cleaned = sanitizeInput(localValue);
 
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
@@ -564,12 +634,21 @@ export const TextInput: React.FC<TextInputProps> = ({
   value,
   onChange,
   onBlur,
+  onPreview,
+  onCancel,
   placeholder,
   width = '90px',
   isMixed = false,
 }) => {
   const [localValue, setLocalValue] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
+  // Escape로 blur된 경우 확정 없이 원복
+  const escapedRef = useRef(false);
+  const previewedRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const sessionActiveRef = useRef(false);
+  const unregisterLifecycleRef = useRef<(() => void) | null>(null);
+  const finalizeRef = useRef<(finalValue: string) => void>(() => undefined);
 
   useEffect(() => {
     if (!isFocused) {
@@ -579,20 +658,87 @@ export const TextInput: React.FC<TextInputProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalValue(e.target.value);
-    onChange(e.target.value);
+    // 게스처 모드에서는 타이핑이 preview로만 흐름
+    if (onPreview) previewedRef.current = true;
+    (onPreview ?? onChange)(e.target.value);
   };
 
-  const handleBlur = () => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter는 blur를 통해 확정, Escape는 확정 없이 원복
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
+    } else if (e.key === 'Escape') {
+      // cancel 경로가 없는 입력은 기존 동작대로 무시
+      if (onCancel) {
+        escapedRef.current = true;
+        e.currentTarget.blur();
+      } else {
+        e.preventDefault();
+      }
+    }
+  };
+
+  const clearLifecycleRegistration = () => {
+    unregisterLifecycleRef.current?.();
+    unregisterLifecycleRef.current = null;
+  };
+
+  const finalize = (finalValue: string) => {
+    if (!sessionActiveRef.current) return;
+    sessionActiveRef.current = false;
+    clearLifecycleRegistration();
     setIsFocused(false);
-    onBlur?.();
+    if (escapedRef.current) {
+      escapedRef.current = false;
+      previewedRef.current = false;
+      setLocalValue(value);
+      // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
+      onCancel?.();
+      return;
+    }
+    // 확정은 입력 컴포넌트의 최종값 기준 (부모 store 재조회 금지)
+    if (onPreview && previewedRef.current) {
+      onChange(finalValue);
+    }
+    previewedRef.current = false;
+    onBlur?.(finalValue);
+  };
+
+  useLayoutEffect(() => {
+    finalizeRef.current = finalize;
+  });
+
+  useEffect(
+    () => () => {
+      sessionActiveRef.current = false;
+      clearLifecycleRegistration();
+    },
+    [],
+  );
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    escapedRef.current = false;
+    previewedRef.current = false;
+    sessionActiveRef.current = true;
+    clearLifecycleRegistration();
+    unregisterLifecycleRef.current = registerEditorDraftForLifecycle(() => {
+      finalizeRef.current(inputRef.current?.value ?? value);
+    });
+  };
+
+  const handleBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+    finalize(event.currentTarget.value);
   };
 
   return (
     <input
+      ref={inputRef}
       type="text"
       value={localValue}
       onChange={handleChange}
-      onFocus={() => setIsFocused(true)}
+      onKeyDown={handleKeyDown}
+      onFocus={handleFocus}
       onBlur={handleBlur}
       placeholder={placeholder}
       className={`text-center h-[23px] p-[6px] bg-inset rounded-md ${
@@ -632,6 +778,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   canvasAnchor,
   gradientSurface = 'background',
 }) => {
+  const { t } = useTranslation();
   // 외부 제어 모드인지 확인
   const isControlled =
     externalIsOpen !== undefined && externalOnToggle !== undefined;
@@ -738,6 +885,10 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 
   // ── gradient 배선 — onModeCommit이 주어진 경우에만 활성화 ──
   const supportsGradient = onModeCommit !== undefined;
+  const showDetachedGradientHint =
+    supportsGradient &&
+    typeof window !== 'undefined' &&
+    window.__dmn_window_type === 'panel';
   const storedGradient =
     stateMode === 'active'
       ? activeGradientValue ?? null
@@ -755,7 +906,10 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       : {},
     fallbackColor: '#ffffff',
     contextKey: `${_stableId}:${stateMode}`,
-    canvasAnchor: open ? canvasAnchor : undefined,
+    // 분리 창에서는 온캔버스 그라디언트 핸들 비활성 - 캔버스는 메인 창에 있고
+    // 편집 세션 콜백이 창 경계를 넘을 수 없음 (Phase E 계약 E5)
+    canvasAnchor:
+      open && window.__dmn_window_type !== 'panel' ? canvasAnchor : undefined,
     canvasSurface: gradientSurface,
     canvasState: stateMode,
     onPreview: (modeValue) => {
@@ -819,7 +973,18 @@ export const ColorInput: React.FC<ColorInputProps> = ({
           stateMode={showStateTabs ? stateMode : undefined}
           onStateModeChange={showStateTabs ? handleStateModeChange : undefined}
           headerSlot={supportsGradient ? gradientState.headerSlot : undefined}
-          footerSlot={supportsGradient ? gradientState.footerSlot : undefined}
+          footerSlot={
+            supportsGradient ? (
+              <>
+                {gradientState.footerSlot}
+                {showDetachedGradientHint && (
+                  <p className="mt-[8px] max-w-[210px] text-caption leading-[1.35] text-fg-muted">
+                    {t('propertiesPanel.detachedGradientHint')}
+                  </p>
+                )}
+              </>
+            ) : undefined
+          }
           gradientSpec={
             supportsGradient ? gradientState.paletteGradientSpec : undefined
           }

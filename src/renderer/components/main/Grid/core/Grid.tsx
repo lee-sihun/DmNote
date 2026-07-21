@@ -1,4 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
 declare global {
   interface Window {
@@ -38,8 +43,7 @@ import {
   useGridSelectionStore,
   isElementInMarquee,
 } from '@stores/grid/useGridSelectionStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
 import { useUIStore } from '@stores/useUIStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -85,6 +89,11 @@ import {
   groupSelectedElements,
   ungroupSelectedElements,
 } from '@utils/grid/groupActions';
+import {
+  composePreviewPositions,
+  getPreviewOverlayVersion,
+  subscribePreviewOverlay,
+} from '@src/renderer/editor/runtime/previewOverlay';
 
 type ToolbarAddRequest = {
   id: number;
@@ -163,7 +172,6 @@ interface GridProps {
     noteAutoYCorrection: boolean,
     noteEffectEnabled: boolean,
   ) => void;
-  onCounterUpdate: (index: number, payload: KeyCounterSettings) => void;
   onCounterPreview: (index: number, payload: KeyCounterSettings) => void;
   onKeyDelete: (index: number) => void;
   onAddKeyAt: (dx: number, dy: number) => void;
@@ -178,8 +186,6 @@ interface GridProps {
   onModalAnimationConsumed: (() => void) | undefined;
   onUndo: () => void;
   onRedo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
   toolbarAddRequest: ToolbarAddRequest;
   onToolbarAddConsumed: (() => void) | undefined;
   isNoteSettingOpen: boolean;
@@ -206,7 +212,6 @@ const Grid = ({
   onKeyPreview,
   onNoteColorUpdate: _onNoteColorUpdate,
   onNoteColorPreview,
-  onCounterUpdate,
   onCounterPreview,
   onKeyDelete,
   onAddKeyAt,
@@ -221,8 +226,6 @@ const Grid = ({
   onModalAnimationConsumed,
   onUndo,
   onRedo,
-  canUndo,
-  canRedo,
   toolbarAddRequest,
   onToolbarAddConsumed,
   isNoteSettingOpen,
@@ -318,9 +321,26 @@ const Grid = ({
   );
 
   // 내장 통계 요소(Stat Items) 위치 정보
-  const statPositions = useStatItemStore((state) => state.positions);
-  const graphPositions = useGraphItemStore((state) => state.positions);
-  const knobPositions = useKnobItemStore((state) => state.positions);
+  const canonicalStatPositions = useStatItemStore((state) => state.positions);
+  const canonicalGraphPositions = useGraphItemStore((state) => state.positions);
+  const canonicalKnobPositions = useKnobItemStore((state) => state.positions);
+  useSyncExternalStore(
+    subscribePreviewOverlay,
+    getPreviewOverlayVersion,
+    getPreviewOverlayVersion,
+  );
+  const statPositions = composePreviewPositions(
+    'statPosition',
+    canonicalStatPositions,
+  );
+  const graphPositions = composePreviewPositions(
+    'graphPosition',
+    canonicalGraphPositions,
+  );
+  const knobPositions = composePreviewPositions(
+    'knobPosition',
+    canonicalKnobPositions,
+  );
 
   // 선택 관련 로직 훅 사용
   const {
@@ -412,8 +432,6 @@ const Grid = ({
     clearSelection,
     copySelectedElements,
     pasteElements,
-    canUndo,
-    canRedo,
     onUndo,
     onRedo,
     onMoveForward: handleSelectedMoveForward,
@@ -805,24 +823,7 @@ const Grid = ({
     if (!isMultiMember) {
       selectElementWithGroup(type, index);
     }
-    const panel = usePropertiesPanelStore.getState();
-    panel.setCanvasPanelMode('property');
-    panel.setCanvasPanelOpen(true);
-  };
-
-  // 드래그 시작 시 히스토리 저장
-  const pushDragHistory = () => {
-    const currentPositions = useKeyStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const { keyMappings: km } = useKeyStore.getState();
-    useHistoryStore.getState().pushState({
-      keyMappings: km,
-      positions: currentPositions,
-      statPositions: useStatItemStore.getState().positions,
-      graphPositions: useGraphItemStore.getState().positions,
-      pluginElements: currentPluginElements,
-    });
+    openPropertiesPanelForSelection();
   };
 
   // 요소 컨텍스트 메뉴 열기
@@ -1038,7 +1039,6 @@ const Grid = ({
             moveSelectedElements(deltaX, deltaY, false, false)
           }
           onMultiDragEnd={syncSelectedElementsToOverlay}
-          onMultiDragStart={pushDragHistory}
           activeTool={activeTool}
           onEraserClick={() => {
             const globalKey = keyMappings[selectedKeyType]?.[index] || '';
@@ -1088,19 +1088,6 @@ const Grid = ({
       if (!prev) return;
       if (prev.dx === dx && prev.dy === dy) return;
 
-      // 히스토리 저장 (키/플러그인과 동일한 스냅샷 기준)
-      const currentKeyPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      useHistoryStore.getState().pushState({
-        keyMappings: km,
-        positions: currentKeyPositions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-
       const nextTabPositions = tabPositions.map((pos, i) =>
         i === index ? { ...pos, dx, dy } : pos,
       );
@@ -1140,7 +1127,6 @@ const Grid = ({
           moveSelectedElements(deltaX, deltaY, false, false)
         }
         onMultiDragEnd={syncSelectedElementsToOverlay}
-        onMultiDragStart={pushDragHistory}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
@@ -1187,18 +1173,6 @@ const Grid = ({
       if (!prev) return;
       if (prev.dx === dx && prev.dy === dy) return;
 
-      const currentKeyPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      useHistoryStore.getState().pushState({
-        keyMappings: km,
-        positions: currentKeyPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: currentPluginElements,
-      });
-
       const nextTabPositions = tabPositions.map((pos, i) =>
         i === index ? { ...pos, dx, dy } : pos,
       );
@@ -1236,7 +1210,6 @@ const Grid = ({
           moveSelectedElements(deltaX, deltaY, false, false)
         }
         onMultiDragEnd={syncSelectedElementsToOverlay}
-        onMultiDragStart={pushDragHistory}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
@@ -1281,18 +1254,6 @@ const Grid = ({
       if (!prev) return;
       if (prev.dx === dx && prev.dy === dy) return;
 
-      const currentKeyPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      useHistoryStore.getState().pushState({
-        keyMappings: km,
-        positions: currentKeyPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-
       const nextTabPositions = tabPositions.map((pos, i) =>
         i === index ? { ...pos, dx, dy } : pos,
       );
@@ -1330,7 +1291,6 @@ const Grid = ({
           moveSelectedElements(deltaX, deltaY, false, false)
         }
         onMultiDragEnd={syncSelectedElementsToOverlay}
-        onMultiDragStart={pushDragHistory}
         activeTool={activeTool}
         onEraserClick={() => {
           showConfirm(
@@ -1638,20 +1598,6 @@ const Grid = ({
             moveSelectedElements(deltaX, deltaY, false, false)
           }
           onMultiDragEnd={syncSelectedElementsToOverlay}
-          onMultiDragStart={() => {
-            // 드래그 시작 시 히스토리 저장
-            const currentPositions = useKeyStore.getState().positions;
-            const currentPluginElements =
-              usePluginDisplayElementStore.getState().elements;
-            const { keyMappings: km } = useKeyStore.getState();
-            useHistoryStore.getState().pushState({
-              keyMappings: km,
-              positions: currentPositions,
-              statPositions: useStatItemStore.getState().positions,
-              graphPositions: useGraphItemStore.getState().positions,
-              pluginElements: currentPluginElements,
-            });
-          }}
         />
       </div>
       {/* 스마트 가이드 오버레이 */}
@@ -2243,7 +2189,6 @@ const Grid = ({
         onKeyUpdate={onKeyUpdate}
         onKeyPreview={onKeyPreview}
         onNoteColorPreview={onNoteColorPreview}
-        onCounterUpdate={onCounterUpdate}
         onCounterPreview={onCounterPreview}
         shouldSkipModalAnimation={shouldSkipModalAnimation}
         onModalAnimationConsumed={onModalAnimationConsumed}

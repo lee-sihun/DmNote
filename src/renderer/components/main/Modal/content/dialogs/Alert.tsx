@@ -1,3 +1,4 @@
+import { usePressAction } from '@hooks/usePressAction';
 import React, { useCallback, useRef } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
@@ -57,6 +58,10 @@ const Alert = ({
   const isConfirm = type === 'confirm';
   const isCustom = type === 'custom';
 
+  // custom dialog의 입력 blur·IME flush와 click 경합 방어 (일반 알림에도 무해)
+  const confirmPress = usePressAction(() => onConfirm?.());
+  const cancelPress = usePressAction(() => onCancel?.());
+
   if (!isOpen) return null;
 
   const confirmLabel = confirmText || t('common.confirm');
@@ -93,7 +98,7 @@ const Alert = ({
           } gap-[8px] mt-[12px]`}
         >
           <button
-            onClick={onConfirm}
+            {...confirmPress}
             className={`${shouldShowCancel ? 'flex-[2]' : 'w-full'} h-[30px] ${
               danger
                 ? 'bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active text-danger-fg'
@@ -104,7 +109,7 @@ const Alert = ({
           </button>
           {shouldShowCancel && (
             <button
-              onClick={onCancel}
+              {...cancelPress}
               className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             >
               {cancelLabel}

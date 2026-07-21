@@ -11,12 +11,6 @@ import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 
-vi.mock('@stores/data/useHistoryStore', () => ({
-  useHistoryStore: {
-    getState: () => ({ pushState: vi.fn() }),
-  },
-}));
-
 const makeStat = (): StatItemPosition => ({
   ...createDefaultKeyPosition(),
   statType: 'kps',

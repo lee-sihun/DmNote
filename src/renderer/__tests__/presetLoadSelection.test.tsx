@@ -9,10 +9,6 @@ const popup = vi.hoisted(() => ({
   onSelect: null as null | ((id: string) => Promise<void>),
 }));
 
-const history = vi.hoisted(() => ({
-  pushState: vi.fn(),
-}));
-
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -22,11 +18,6 @@ vi.mock('@api/modules/obsApi', () => ({
     status: vi.fn().mockResolvedValue({ running: false }),
     onStatus: vi.fn(() => vi.fn()),
   },
-}));
-
-vi.mock('@stores/data/useHistoryStore', () => ({
-  useHistoryStore: (selector: (state: { pushState: () => void }) => unknown) =>
-    selector({ pushState: history.pushState }),
 }));
 
 vi.mock('@components/main/Modal/ListPopup', () => ({
@@ -77,7 +68,6 @@ describe('프리셋 로드 선택 수명', () => {
     document.body.appendChild(host);
     root = createRoot(host);
     popup.onSelect = null;
-    history.pushState.mockReset();
     useGridSelectionStore.getState().clearSelection();
     await act(async () => root.render(<SettingTool />));
   });
@@ -107,9 +97,6 @@ describe('프리셋 로드 선택 수명', () => {
     await invokePopup('import-all');
 
     expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
-    expect(history.pushState).toHaveBeenCalledWith(
-      expect.objectContaining({ invalidatesGridSelection: true }),
-    );
   });
 
   it('탭 프리셋 로드 성공 시 선택을 해제한다', async () => {
@@ -118,9 +105,6 @@ describe('프리셋 로드 선택 수명', () => {
     await invokePopup('import-tab');
 
     expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
-    expect(history.pushState).toHaveBeenCalledWith(
-      expect.objectContaining({ invalidatesGridSelection: true }),
-    );
   });
 
   it('프리셋 로드 실패 시 선택을 보존한다', async () => {

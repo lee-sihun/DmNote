@@ -20,6 +20,7 @@ import {
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';
 
@@ -399,6 +400,14 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     onKeyUpdate({ index: keyIndex, [property]: value });
   };
 
+  // 타이핑 중 스타일 프리뷰
+  const handleStylePreview = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    onKeyPreview?.(keyIndex, { [property]: value });
+  };
+
   return (
     <>
       <PropertySection>
@@ -443,6 +452,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onChange={(value) =>
               handleStyleChangeComplete('noteOffsetX', value)
             }
+            onPreview={(value) => handleStylePreview('noteOffsetX', value)}
+            onCancel={() => editGestureController.cancel()}
             prefix="X"
             allowNegative
             allowDecimal
@@ -456,6 +467,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onChange={(value) =>
               handleStyleChangeComplete('noteOffsetY', value)
             }
+            onPreview={(value) => handleStylePreview('noteOffsetY', value)}
+            onCancel={() => editGestureController.cancel()}
             prefix="Y"
             allowNegative
             allowDecimal
@@ -471,6 +484,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           <OptionalNumberInput
             value={keyPosition.noteWidth}
             onChange={(value) => handleStyleChangeComplete('noteWidth', value)}
+            onPreview={(value) => handleStylePreview('noteWidth', value)}
+            onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={1}
             allowDecimal
@@ -645,6 +660,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onChange={(value) =>
               handleStyleChangeComplete('noteBorderWidth', value)
             }
+            onPreview={(value) => handleStylePreview('noteBorderWidth', value)}
+            onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
             max={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.max}
@@ -663,6 +680,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onChange={(value) =>
               handleStyleChangeComplete('noteBorderRadius', value)
             }
+            onPreview={(value) => handleStylePreview('noteBorderRadius', value)}
+            onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}
             max={NOTE_SETTINGS_CONSTRAINTS.borderRadius.max}
@@ -723,6 +742,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onChange={(value) =>
               handleStyleChangeComplete('noteGlowSize', value)
             }
+            onPreview={(value) => handleStylePreview('noteGlowSize', value)}
+            onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
             max={50}

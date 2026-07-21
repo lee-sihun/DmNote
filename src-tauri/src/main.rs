@@ -27,9 +27,9 @@ use tauri::{
     Position,
 };
 
-use dm_note::compute_compensating_zoom;
+use dm_note::{compute_compensating_zoom, should_apply_compensating_zoom};
 
-use state::{AppState, AppStore};
+use state::{AppState, AppStore, PANEL_LABEL};
 
 fn main() {
     #[cfg(target_os = "windows")]
@@ -80,6 +80,11 @@ fn main() {
         .on_page_load(|webview, payload| {
             if matches!(payload.event(), PageLoadEvent::Finished) {
                 let zoom = compute_compensating_zoom();
+                // macOS WKWebView의 identity zoom은 활성 입력 선택·캐럿을 리셋
+                // Windows는 이전 보정값을 1.0으로 복구해야 하므로 호출 유지
+                if !should_apply_compensating_zoom(zoom) {
+                    return;
+                }
                 let label = webview.label();
                 log::info!(
                     "[zoom-guard] page loaded in '{label}', applying compensating zoom={zoom:.6}"
@@ -139,6 +144,9 @@ fn main() {
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             let app_state = AppState::initialize(store)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+            let preview_broker =
+                services::preview_broker::PreviewBroker::new(app_state.store.history_gate());
+            app.manage(preview_broker);
             app.manage(app_state);
             let handle = app.handle();
             {
@@ -150,7 +158,11 @@ fn main() {
             configure_main_window(app.handle());
 
             #[cfg(target_os = "macos")]
-            launch_macos_dock_helper();
+            {
+                state::macos_termination::install(app.handle())
+                    .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+                launch_macos_dock_helper();
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -205,13 +217,18 @@ fn main() {
             commands::editor::note_tab::note_tab_clear,
             commands::editor::state::editor_get,
             commands::editor::state::editor_commit,
+            commands::editor::history::history_status,
+            commands::editor::history::history_undo,
+            commands::editor::history::history_redo,
+            commands::editor::preview::editor_preview_subscribe,
+            commands::editor::preview::editor_preview_publish,
+            commands::editor::preview::editor_preview_cancel,
+            commands::editor::selection::selection_session_get,
+            commands::editor::selection::selection_session_publish,
             // 키 입력/설정
             commands::keys::keys::keys_get,
             commands::keys::keys::keys_get_counters,
             commands::keys::keys::positions_get,
-            commands::keys::keys::keys_update,
-            commands::keys::keys::keys_update_with_positions,
-            commands::keys::keys::positions_update,
             commands::keys::keys::keys_set_mode,
             commands::keys::keys::keys_reset_all,
             commands::keys::keys::keys_reset_mode,
@@ -226,9 +243,7 @@ fn main() {
             commands::keys::keys::custom_tabs_delete,
             commands::keys::keys::custom_tabs_select,
             commands::keys::keys::custom_tabs_restore,
-            commands::keys::keys::editor_history_restore,
             commands::keys::keys::layer_groups_get,
-            commands::keys::keys::layer_groups_update,
             commands::keys::key_sound::key_sound_get_status,
             commands::keys::key_sound::key_sound_set_enabled,
             commands::keys::key_sound::key_sound_set_volume,
@@ -262,6 +277,12 @@ fn main() {
             commands::layout::overlay::overlay_set_lock,
             commands::layout::overlay::overlay_set_anchor,
             commands::layout::overlay::overlay_resize,
+            commands::layout::panel::panel_window_show,
+            commands::layout::panel::panel_window_close,
+            commands::layout::panel::panel_window_take_view_state,
+            commands::layout::panel::panel_window_close_ack,
+            commands::layout::panel::panel_window_is_open,
+            commands::layout::panel::panel_window_start_dragging,
             // 미디어
             commands::media::image::image_load,
             commands::media::counter_animation::counter_animation_list,
@@ -276,6 +297,12 @@ fn main() {
             // 플러그인
             commands::plugin::bridge::plugin_bridge_send,
             commands::plugin::bridge::plugin_bridge_send_to,
+            commands::plugin::rpc::plugin_rpc_send,
+            commands::plugin::rpc::plugin_rpc_respond,
+            commands::plugin::rpc::plugin_authority_reset,
+            commands::plugin::instances::plugin_instances_commit,
+            commands::plugin::instances::plugin_instances_get,
+            commands::plugin::instances::plugin_instances_reconcile,
             commands::plugin::storage::plugin_storage_get,
             commands::plugin::storage::plugin_storage_set,
             commands::plugin::storage::plugin_storage_remove,
@@ -288,21 +315,40 @@ fn main() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| match event {
-        tauri::RunEvent::ExitRequested { code, api, .. } if code.is_none() => {
-            api.prevent_exit();
-            if let Some(state) = app_handle.try_state::<AppState>() {
-                if let Some(main) = app_handle.get_webview_window("main") {
-                    let _ = main.hide();
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::Destroyed,
+            ..
+        } => {
+            if label == "main" {
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    state.mark_plugin_authority_unavailable();
                 }
-                if let Some(overlay) = app_handle.get_webview_window("overlay") {
-                    let _ = overlay.hide();
+            }
+            if label == PANEL_LABEL {
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    state.handle_panel_window_destroyed(app_handle);
                 }
-                state.request_frontend_shutdown(app_handle.clone());
+            }
+            if let Some(broker) = app_handle.try_state::<services::preview_broker::PreviewBroker>()
+            {
+                broker.remove_label(&label);
             }
         }
-        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+        tauri::RunEvent::ExitRequested { api, .. } => {
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                if !state.is_process_exit_authorized() {
+                    api.prevent_exit();
+                    state.request_frontend_shutdown(app_handle.clone());
+                }
+            }
+        }
+        tauri::RunEvent::Exit => {
             if let Some(state) = app_handle.try_state::<AppState>() {
                 state.arm_shutdown_watchdog("RunEvent state shutdown");
+                if let Err(err) = state.capture_and_flush_panel_bounds_for_lifecycle(app_handle) {
+                    log::warn!("failed to persist panel bounds during RunEvent exit: {err}");
+                }
                 state.shutdown();
                 state.set_shutdown_watchdog_stage("RunEvent process exit");
             }
@@ -525,8 +571,10 @@ fn apply_main_window_configuration(
     // Windows 접근성 텍스트 크기 설정에 의한 WebView2 스케일링을 보상
     let zoom = compute_compensating_zoom();
     log::info!("[zoom-guard] main window initial config: compensating zoom={zoom:.6}");
-    if let Err(err) = window.set_zoom(zoom) {
-        log::warn!("failed to set main window compensating zoom: {err}");
+    if should_apply_compensating_zoom(zoom) {
+        if let Err(err) = window.set_zoom(zoom) {
+            log::warn!("failed to set main window compensating zoom: {err}");
+        }
     }
 
     let state = app.state::<AppState>();
@@ -567,8 +615,8 @@ fn register_dev_capability(app: &tauri::App) -> Result<(), Box<dyn std::error::E
     let builder = DEV_URLS.iter().fold(
         CapabilityBuilder::new("dmnote-dev")
             .local(true)
-            .windows(["main", "overlay"])
-            .webviews(["main", "overlay"])
+            .windows(["main", "overlay", "panel"])
+            .webviews(["main", "overlay", "panel"])
             .permission("dmnote-allow-all"),
         |acc, url| acc.remote((*url).to_string()),
     );

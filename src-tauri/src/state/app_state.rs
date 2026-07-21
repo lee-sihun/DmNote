@@ -1,6 +1,6 @@
 use std::time::Instant;
 use std::{
-    collections::HashSet,
+    collections::{HashSet, VecDeque},
     io::{BufRead, BufReader},
     path::Path,
     process::{Child, ChildStdin, Command, Stdio},
@@ -14,8 +14,8 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use log::{error, warn};
-use parking_lot::{Mutex, RwLock};
-use serde::Serialize;
+use parking_lot::{Condvar, Mutex, RwLock};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -23,11 +23,20 @@ use tauri::{
     AppHandle, Emitter, Manager, Monitor, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
-use tauri_runtime_wry::wry::dpi::{LogicalPosition, LogicalSize};
+use tauri_runtime_wry::wry::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
+use tokio::sync::oneshot;
 
-use super::store::AppStore;
+use super::{
+    history::{
+        HistoryAdmissionGate, HistoryAdmissionLease, HistoryBarrierLease, HistoryBarrierWaiter,
+        HISTORY_IN_PROGRESS,
+    },
+    plugin::{PluginAuthorityLease, PluginRpcRouter, PluginRuntimeAuthority},
+    store::AppStore,
+};
 #[cfg(debug_assertions)]
 use crate::audio::KeySoundDispatchTrace;
+use crate::errors::EditorCommitError;
 use crate::{
     audio::{
         KeySoundEngine, KeySoundOutputBackend, KeySoundOutputDevices, KeySoundOutputState,
@@ -36,30 +45,80 @@ use crate::{
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
-        DefaultsPayload, KeyCounterSettings, KeyCounters, KeyMappings,
-        KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, SettingsDiff,
-        SettingsState,
+        DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters, KeyMappings,
+        KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, PanelBounds,
+        SettingsDiff, SettingsState, TabCssOverrides,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
     state::local_asset_path::path_identity_key,
 };
 
 const OVERLAY_LABEL: &str = "overlay";
+pub(crate) const PANEL_LABEL: &str = "panel";
+const PANEL_ENTRYPOINT: &str = "panel/index.html";
+const RAW_INPUT_WINDOW_LABELS: [&str; 3] = ["main", OVERLAY_LABEL, PANEL_LABEL];
+const FRONTEND_LIFECYCLE_WINDOW_LABELS: [&str; 3] = ["main", OVERLAY_LABEL, PANEL_LABEL];
 const TRAY_ICON_ID: &str = "background-tray";
 const TRAY_MENU_SETTINGS_ID: &str = "tray-settings";
 const TRAY_MENU_QUIT_ID: &str = "tray-quit";
 const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
+const PANEL_WIDTH: f64 = 240.0;
+const PANEL_INITIAL_HEIGHT: f64 = 530.0;
+const PANEL_MIN_HEIGHT: f64 = 360.0;
+const PANEL_MAX_HEIGHT_RATIO: f64 = 0.9;
+const PANEL_FALLBACK_MAX_HEIGHT: f64 = 10_000.0;
+const PANEL_BOUNDS_DEBOUNCE_MS: u64 = 400;
+const PANEL_CLOSE_ACK_TIMEOUT: Duration = Duration::from_millis(1_500);
+const MAX_SELECTION_ELEMENTS: usize = 4_096;
+const MAX_SELECTION_GROUP_IDS: usize = 4_096;
+const MAX_SELECTION_ELEMENT_TYPE_BYTES: usize = 64;
+const MAX_SELECTION_FULL_ID_BYTES: usize = 512;
+const MAX_SELECTION_GROUP_ID_BYTES: usize = 512;
+const MAX_SELECTION_MODE_BYTES: usize = 128;
 const OVERLAY_MARGIN: f64 = 40.0;
 const OVERLAY_BOUNDS_DEBOUNCE_MS: u64 = 400;
 const OVERLAY_CREATION_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
 const EDITOR_FLUSH_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const SHUTDOWN_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_WATCHDOG_EXIT_CODE: i32 = 1;
+const HISTORY_FRONTEND_FLUSH_BUSY: &str = "HISTORY_FRONTEND_FLUSH_BUSY";
+const HISTORY_FRONTEND_FLUSH_CANCELED: &str = "HISTORY_FRONTEND_FLUSH_CANCELED";
+const HISTORY_FRONTEND_FLUSH_EMIT_FAILED: &str = "HISTORY_FRONTEND_FLUSH_EMIT_FAILED";
+const HISTORY_FRONTEND_FLUSH_INTERRUPTED: &str = "HISTORY_FRONTEND_FLUSH_INTERRUPTED";
+const HISTORY_FRONTEND_FLUSH_TIMEOUT: &str = "HISTORY_FRONTEND_FLUSH_TIMEOUT";
 
 struct ShutdownWatchdogState {
     armed: bool,
     stage: &'static str,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PanelBoundsSample {
+    position: PhysicalPosition<i32>,
+    position_scale_factor: f64,
+    size: PhysicalSize<u32>,
+    size_scale_factor: f64,
+    current_scale_factor: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PanelBoundsChange {
+    Moved(PhysicalPosition<i32>),
+    Resized(PhysicalSize<u32>),
+    ScaleFactorChanged {
+        position: Option<PhysicalPosition<i32>>,
+        size: PhysicalSize<u32>,
+        scale_factor: f64,
+    },
+}
+
+#[derive(Debug)]
+struct PanelBoundsSettleState {
+    latest: Option<PanelBoundsSample>,
+    generation: u64,
+    worker_running: bool,
+    active: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -69,17 +128,437 @@ pub(crate) enum FrontendLifecycleAction {
     Restart,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum FrontendFlushAction {
+    Quit,
+    Restart,
+    History,
+}
+
+impl From<FrontendLifecycleAction> for FrontendFlushAction {
+    fn from(action: FrontendLifecycleAction) -> Self {
+        match action {
+            FrontendLifecycleAction::Quit => Self::Quit,
+            FrontendLifecycleAction::Restart => Self::Restart,
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EditorFlushRequest {
     handshake_id: String,
-    action: FrontendLifecycleAction,
+    action: FrontendFlushAction,
+}
+
+enum EditorFlushCompletion {
+    Lifecycle(FrontendLifecycleAction),
+    History {
+        operation_id: String,
+        sender: Option<oneshot::Sender<Result<FrontendHistoryFlushReady, String>>>,
+        phase: FrontendHistoryFlushPhase,
+        barrier: Option<HistoryBarrierLease>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FrontendHistoryFlushPhase {
+    Collecting,
+    Closing,
+    Running,
+}
+
+impl EditorFlushCompletion {
+    fn is_lifecycle(&self) -> bool {
+        matches!(self, Self::Lifecycle(_))
+    }
+
+    fn is_history(&self) -> bool {
+        matches!(self, Self::History { .. })
+    }
+
+    fn history_phase(&self) -> Option<FrontendHistoryFlushPhase> {
+        match self {
+            Self::History { phase, .. } => Some(*phase),
+            Self::Lifecycle(_) => None,
+        }
+    }
+}
+
+pub(crate) struct FrontendHistoryFlushReady {
+    barrier: Option<HistoryBarrierLease>,
+    complete: Option<Box<dyn FnOnce() + Send>>,
+}
+
+impl FrontendHistoryFlushReady {
+    pub(crate) fn take_barrier(&mut self) -> HistoryBarrierLease {
+        self.barrier
+            .take()
+            .expect("history flush barrier can only be taken once")
+    }
+}
+
+impl Drop for FrontendHistoryFlushReady {
+    fn drop(&mut self) {
+        drop(self.barrier.take());
+        if let Some(complete) = self.complete.take() {
+            complete();
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FrontendHistoryFlushReleased {
+    handshake_id: String,
 }
 
 struct EditorFlushHandshake {
     id: String,
-    action: FrontendLifecycleAction,
+    completion: EditorFlushCompletion,
+    target_windows: HashSet<String>,
     pending_windows: HashSet<String>,
+}
+
+fn take_editor_flush_handshake(
+    slot: &mut Option<EditorFlushHandshake>,
+    handshake_id: &str,
+) -> Option<EditorFlushHandshake> {
+    if slot
+        .as_ref()
+        .is_some_and(|active| active.id == handshake_id)
+    {
+        slot.take()
+    } else {
+        None
+    }
+}
+
+fn take_cancelable_editor_flush_handshake(
+    slot: &mut Option<EditorFlushHandshake>,
+    handshake_id: &str,
+) -> Option<EditorFlushHandshake> {
+    if slot.as_ref().is_some_and(|active| {
+        active.id == handshake_id
+            && active.completion.history_phase() != Some(FrontendHistoryFlushPhase::Running)
+    }) {
+        slot.take()
+    } else {
+        None
+    }
+}
+
+enum EditorFlushAcknowledge {
+    LifecycleReady(EditorFlushHandshake),
+    HistoryClosing {
+        handshake_id: String,
+        waiter: HistoryBarrierWaiter,
+    },
+    HistoryCloseFailed {
+        handshake: EditorFlushHandshake,
+        error: String,
+    },
+}
+
+fn acknowledge_editor_flush_handshake(
+    slot: &mut Option<EditorFlushHandshake>,
+    handshake_id: &str,
+    window_label: &str,
+    history_gate: &Arc<HistoryAdmissionGate>,
+) -> Option<EditorFlushAcknowledge> {
+    {
+        let active = slot.as_mut()?;
+        if active.id != handshake_id || !active.pending_windows.remove(window_label) {
+            return None;
+        }
+        if !active.pending_windows.is_empty() {
+            return None;
+        }
+        if active.completion.is_lifecycle() {
+            return slot.take().map(EditorFlushAcknowledge::LifecycleReady);
+        }
+    }
+    begin_history_gate_close(slot, handshake_id, history_gate)
+}
+
+fn begin_history_gate_close(
+    slot: &mut Option<EditorFlushHandshake>,
+    handshake_id: &str,
+    history_gate: &Arc<HistoryAdmissionGate>,
+) -> Option<EditorFlushAcknowledge> {
+    let operation_id = match slot.as_ref() {
+        Some(EditorFlushHandshake {
+            id,
+            completion:
+                EditorFlushCompletion::History {
+                    operation_id,
+                    phase: FrontendHistoryFlushPhase::Collecting,
+                    ..
+                },
+            ..
+        }) if id == handshake_id => operation_id.clone(),
+        _ => return None,
+    };
+    match history_gate.begin_close(&operation_id) {
+        Ok(next_barrier) => {
+            let waiter = next_barrier.waiter();
+            let active = slot
+                .as_mut()
+                .expect("history handshake disappeared while closing gate");
+            let EditorFlushCompletion::History { phase, barrier, .. } = &mut active.completion
+            else {
+                unreachable!("history handshake changed while closing gate");
+            };
+            *phase = FrontendHistoryFlushPhase::Closing;
+            *barrier = Some(next_barrier);
+            Some(EditorFlushAcknowledge::HistoryClosing {
+                handshake_id: handshake_id.to_string(),
+                waiter,
+            })
+        }
+        Err(error) => slot
+            .take()
+            .map(|handshake| EditorFlushAcknowledge::HistoryCloseFailed { handshake, error }),
+    }
+}
+
+enum LifecycleHandshakeInstall {
+    Installed,
+    InterruptedHistory(Box<EditorFlushHandshake>),
+    LifecycleAlreadyActive,
+    DeferredUntilHistoryComplete,
+}
+
+fn install_lifecycle_handshake(
+    slot: &mut Option<EditorFlushHandshake>,
+    next: EditorFlushHandshake,
+) -> LifecycleHandshakeInstall {
+    if slot
+        .as_ref()
+        .is_some_and(|active| active.completion.is_lifecycle())
+    {
+        return LifecycleHandshakeInstall::LifecycleAlreadyActive;
+    }
+    if slot.as_ref().is_some_and(|active| {
+        active.completion.history_phase() == Some(FrontendHistoryFlushPhase::Running)
+    }) {
+        return LifecycleHandshakeInstall::DeferredUntilHistoryComplete;
+    }
+
+    match slot.replace(next) {
+        Some(interrupted) => LifecycleHandshakeInstall::InterruptedHistory(Box::new(interrupted)),
+        None => LifecycleHandshakeInstall::Installed,
+    }
+}
+
+fn install_history_handshake(
+    slot: &mut Option<EditorFlushHandshake>,
+    next: EditorFlushHandshake,
+) -> bool {
+    if slot.is_some() {
+        return false;
+    }
+    *slot = Some(next);
+    true
+}
+
+fn frontend_history_mutation_blocked(
+    slot: &Option<EditorFlushHandshake>,
+    window_label: &str,
+) -> bool {
+    slot.as_ref().is_some_and(|active| {
+        active.completion.is_history() && !active.pending_windows.contains(window_label)
+    })
+}
+
+fn emit_frontend_history_flush_released(
+    app_handle: &AppHandle,
+    handshake_id: &str,
+    target_windows: &HashSet<String>,
+) {
+    let payload = FrontendHistoryFlushReleased {
+        handshake_id: handshake_id.to_string(),
+    };
+    for label in target_windows {
+        if let Err(error) = app_handle.emit_to(label, "app:history-flush-released", &payload) {
+            log::warn!("failed to release history flush lock for {label}: {error}");
+        }
+    }
+}
+
+fn frontend_lifecycle_restore_labels(target_windows: &HashSet<String>) -> Vec<&'static str> {
+    FRONTEND_LIFECYCLE_WINDOW_LABELS
+        .into_iter()
+        .filter(|label| target_windows.contains(*label))
+        .collect()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SelectionSessionElement {
+    pub element_type: String,
+    #[serde(default)]
+    pub index: Option<u32>,
+    #[serde(default)]
+    pub full_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SelectionSessionSnapshot {
+    #[serde(default)]
+    pub selected_elements: Vec<SelectionSessionElement>,
+    #[serde(default)]
+    pub selected_group_ids: Vec<String>,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub selection_revision: u64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct PanelVisibilityPayload {
+    visible: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<PanelVisibilityReason>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum PanelVisibilityReason {
+    Closed,
+    Destroyed,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct PanelCloseRequestedPayload {
+    request_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PanelViewState {
+    pub mode: PanelViewMode,
+    pub active_tab: PanelLayerTab,
+    pub property_active_tab: PanelPropertyTab,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PanelViewMode {
+    Layer,
+    Property,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PanelLayerTab {
+    Layer,
+    Grid,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PanelPropertyTab {
+    Style,
+    Note,
+    Counter,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PanelViewTarget {
+    Main,
+    Panel,
+}
+
+impl PanelViewTarget {
+    fn matches_window(self, label: &str) -> bool {
+        matches!(
+            (self, label),
+            (Self::Main, "main") | (Self::Panel, PANEL_LABEL)
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TargetedPanelViewState {
+    target: PanelViewTarget,
+    view_state: PanelViewState,
+}
+
+fn take_targeted_panel_view_state(
+    slot: &mut Option<TargetedPanelViewState>,
+    window_label: &str,
+) -> Option<PanelViewState> {
+    if slot
+        .as_ref()
+        .is_some_and(|pending| pending.target.matches_window(window_label))
+    {
+        slot.take().map(|pending| pending.view_state)
+    } else {
+        None
+    }
+}
+
+fn clear_targeted_panel_view_state(
+    slot: &mut Option<TargetedPanelViewState>,
+    target: PanelViewTarget,
+) {
+    if slot
+        .as_ref()
+        .is_some_and(|pending| pending.target == target)
+    {
+        *slot = None;
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+enum PanelCloseRequestState {
+    #[default]
+    Idle,
+    Pending(String),
+    Closing,
+}
+
+trait PanelVisibilityEventEmitter {
+    fn emit_panel_visibility(&self, payload: PanelVisibilityPayload) -> Result<()>;
+}
+
+impl PanelVisibilityEventEmitter for AppHandle {
+    fn emit_panel_visibility(&self, payload: PanelVisibilityPayload) -> Result<()> {
+        self.emit("panel:visibility", payload)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct QueuedCounterIncrement {
+    mode: String,
+    key: String,
+}
+
+#[derive(Debug, Default)]
+struct CounterHistoryBarrierState {
+    queueing: bool,
+    active_increments: usize,
+    queued: VecDeque<QueuedCounterIncrement>,
+}
+
+#[derive(Debug, Default)]
+struct RuntimePublicationState {
+    mappings_generation: u64,
+    mode_generation: u64,
+    counters_generation: u64,
+}
+
+#[derive(Debug)]
+pub(crate) struct AdmittedCounterMutation {
+    pub(crate) counters: KeyCounters,
+    pub(crate) history_status: Option<HistoryStatus>,
+    _admission: HistoryAdmissionLease,
 }
 
 /// 카운터 write lock 내부 전용 이벤트 송신 경계
@@ -116,6 +595,159 @@ fn bootstrap_active_keys(keyboard: &KeyboardManager) -> Vec<String> {
     keyboard.pressed_keys()
 }
 
+fn collect_frontend_lifecycle_targets<T>(
+    mut resolve: impl FnMut(&str) -> Option<T>,
+) -> Vec<(String, T)> {
+    FRONTEND_LIFECYCLE_WINDOW_LABELS
+        .into_iter()
+        .filter_map(|label| resolve(label).map(|target| (label.to_string(), target)))
+        .collect()
+}
+
+fn validate_selection_session(snapshot: &SelectionSessionSnapshot) -> Result<(), String> {
+    if snapshot.selected_elements.len() > MAX_SELECTION_ELEMENTS {
+        return Err(format!(
+            "selectedElements exceeds the {MAX_SELECTION_ELEMENTS} item limit"
+        ));
+    }
+    if snapshot.selected_group_ids.len() > MAX_SELECTION_GROUP_IDS {
+        return Err(format!(
+            "selectedGroupIds exceeds the {MAX_SELECTION_GROUP_IDS} item limit"
+        ));
+    }
+    if snapshot.mode.len() > MAX_SELECTION_MODE_BYTES {
+        return Err(format!(
+            "mode exceeds the {MAX_SELECTION_MODE_BYTES} byte limit"
+        ));
+    }
+    for (index, element) in snapshot.selected_elements.iter().enumerate() {
+        if element.element_type.len() > MAX_SELECTION_ELEMENT_TYPE_BYTES {
+            return Err(format!(
+                "selectedElements[{index}].elementType exceeds the {MAX_SELECTION_ELEMENT_TYPE_BYTES} byte limit"
+            ));
+        }
+        if element
+            .full_id
+            .as_ref()
+            .is_some_and(|full_id| full_id.len() > MAX_SELECTION_FULL_ID_BYTES)
+        {
+            return Err(format!(
+                "selectedElements[{index}].fullId exceeds the {MAX_SELECTION_FULL_ID_BYTES} byte limit"
+            ));
+        }
+    }
+    for (index, group_id) in snapshot.selected_group_ids.iter().enumerate() {
+        if group_id.len() > MAX_SELECTION_GROUP_ID_BYTES {
+            return Err(format!(
+                "selectedGroupIds[{index}] exceeds the {MAX_SELECTION_GROUP_ID_BYTES} byte limit"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn publish_selection_snapshot(
+    session: &Mutex<SelectionSessionSnapshot>,
+    mut snapshot: SelectionSessionSnapshot,
+) -> Result<SelectionSessionSnapshot, String> {
+    validate_selection_session(&snapshot)?;
+    let mut current = session.lock();
+    snapshot.selection_revision = current
+        .selection_revision
+        .checked_add(1)
+        .ok_or_else(|| "selection revision overflow".to_string())?;
+    *current = snapshot.clone();
+    Ok(snapshot)
+}
+
+fn publish_panel_visibility_transition(
+    visible_state: &AtomicBool,
+    emitter: &dyn PanelVisibilityEventEmitter,
+    visible: bool,
+    reason: Option<PanelVisibilityReason>,
+) -> Result<()> {
+    let previous = visible_state.swap(visible, Ordering::SeqCst);
+    if previous == visible {
+        return Ok(());
+    }
+    let payload = PanelVisibilityPayload {
+        visible,
+        reason: if visible { None } else { reason },
+    };
+    if let Err(error) = emitter.emit_panel_visibility(payload) {
+        let _ =
+            visible_state.compare_exchange(visible, previous, Ordering::SeqCst, Ordering::SeqCst);
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn publish_panel_hidden_transition(
+    visible_state: &AtomicBool,
+    reason_state: &Mutex<Option<PanelVisibilityReason>>,
+    emitter: &dyn PanelVisibilityEventEmitter,
+    fallback_reason: PanelVisibilityReason,
+) -> Result<()> {
+    let reason = reason_state.lock().take().unwrap_or(fallback_reason);
+    if let Err(error) =
+        publish_panel_visibility_transition(visible_state, emitter, false, Some(reason))
+    {
+        let mut pending = reason_state.lock();
+        if pending.is_none() {
+            *pending = Some(reason);
+        }
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn begin_panel_close_request(state: &Mutex<PanelCloseRequestState>, request_id: &str) -> bool {
+    let mut current = state.lock();
+    if *current != PanelCloseRequestState::Idle {
+        return false;
+    }
+    *current = PanelCloseRequestState::Pending(request_id.to_string());
+    true
+}
+
+fn acknowledge_panel_close_request(
+    state: &Mutex<PanelCloseRequestState>,
+    request_id: &str,
+) -> bool {
+    let mut current = state.lock();
+    if !matches!(&*current, PanelCloseRequestState::Pending(active) if active == request_id) {
+        return false;
+    }
+    *current = PanelCloseRequestState::Idle;
+    true
+}
+
+fn claim_panel_close_timeout(state: &Mutex<PanelCloseRequestState>, request_id: &str) -> bool {
+    let mut current = state.lock();
+    if !matches!(&*current, PanelCloseRequestState::Pending(active) if active == request_id) {
+        return false;
+    }
+    *current = PanelCloseRequestState::Closing;
+    true
+}
+
+fn finish_panel_close(state: &Mutex<PanelCloseRequestState>) {
+    *state.lock() = PanelCloseRequestState::Idle;
+}
+
+fn run_panel_close_timeout(
+    state: &Mutex<PanelCloseRequestState>,
+    request_id: &str,
+    fallback: impl FnOnce() -> Result<()>,
+) -> Result<bool> {
+    if !claim_panel_close_timeout(state, request_id) {
+        return Ok(false);
+    }
+    let result = fallback();
+    finish_panel_close(state);
+    result.map(|()| true)
+}
+
 pub struct AppState {
     pub store: Arc<AppStore>,
     pub settings: SettingsService,
@@ -128,8 +760,20 @@ pub struct AppState {
     /// 메인 스레드 이벤트 콜백에서 획득 금지 — setup 훅은 이벤트 루프 가동 전이라 예외
     overlay_creation_lock: Mutex<()>,
     overlay_bounds_generation: Arc<AtomicU64>,
+    selection_session: Mutex<SelectionSessionSnapshot>,
+    plugin_authority: PluginRuntimeAuthority,
+    plugin_rpc_router: PluginRpcRouter,
+    panel_bounds_generation: Arc<AtomicU64>,
+    panel_visible: AtomicBool,
+    panel_creation_lock: Mutex<()>,
+    panel_close_request: Mutex<PanelCloseRequestState>,
+    panel_destroy_reason: Mutex<Option<PanelVisibilityReason>>,
+    panel_view_state: Mutex<Option<TargetedPanelViewState>>,
     keyboard_task: RwLock<Option<KeyboardDaemonTask>>,
     key_counters: Arc<RwLock<KeyCounters>>,
+    counter_history_barrier: Mutex<CounterHistoryBarrierState>,
+    counter_history_ready: Condvar,
+    runtime_publication: Mutex<RuntimePublicationState>,
     key_counter_enabled: Arc<AtomicBool>,
     /// Raw input stream subscriber count - emit only when > 0
     raw_input_subscribers: Arc<std::sync::atomic::AtomicU32>,
@@ -145,8 +789,10 @@ pub struct AppState {
     /// OBS 모드 시작 전 오버레이 가시성 상태 (복원용)
     obs_previous_overlay_visible: Arc<RwLock<Option<bool>>>,
     shutdown_started: AtomicBool,
+    process_exit_authorized: AtomicBool,
     shutdown_watchdog: Arc<Mutex<ShutdownWatchdogState>>,
     editor_flush_handshake: Arc<Mutex<Option<EditorFlushHandshake>>>,
+    deferred_frontend_lifecycle: Mutex<Option<FrontendLifecycleAction>>,
 }
 
 impl AppState {
@@ -173,6 +819,10 @@ impl AppState {
         let key_sound = Arc::new(KeySoundEngine::with_output_backend(initial_backend));
         let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
         let authorized_css_paths = collect_authorized_css_paths(&snapshot);
+        let selection_session = SelectionSessionSnapshot {
+            mode: snapshot.selected_key_type.clone(),
+            ..SelectionSessionSnapshot::default()
+        };
 
         Ok(Self {
             store,
@@ -183,8 +833,20 @@ impl AppState {
             overlay_initializing: Arc::new(AtomicBool::new(false)),
             overlay_creation_lock: Mutex::new(()),
             overlay_bounds_generation: Arc::new(AtomicU64::new(0)),
+            selection_session: Mutex::new(selection_session),
+            plugin_authority: PluginRuntimeAuthority::default(),
+            plugin_rpc_router: PluginRpcRouter::default(),
+            panel_bounds_generation: Arc::new(AtomicU64::new(0)),
+            panel_visible: AtomicBool::new(false),
+            panel_creation_lock: Mutex::new(()),
+            panel_close_request: Mutex::new(PanelCloseRequestState::Idle),
+            panel_destroy_reason: Mutex::new(None),
+            panel_view_state: Mutex::new(None),
             keyboard_task: RwLock::new(None),
             key_counters,
+            counter_history_barrier: Mutex::new(CounterHistoryBarrierState::default()),
+            counter_history_ready: Condvar::new(),
+            runtime_publication: Mutex::new(RuntimePublicationState::default()),
             key_counter_enabled,
             raw_input_subscribers: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             key_sound,
@@ -194,11 +856,13 @@ impl AppState {
             obs_bridge,
             obs_previous_overlay_visible: Arc::new(RwLock::new(None)),
             shutdown_started: AtomicBool::new(false),
+            process_exit_authorized: AtomicBool::new(false),
             shutdown_watchdog: Arc::new(Mutex::new(ShutdownWatchdogState {
                 armed: false,
                 stage: "shutdown initialization",
             })),
             editor_flush_handshake: Arc::new(Mutex::new(None)),
+            deferred_frontend_lifecycle: Mutex::new(None),
         })
     }
 
@@ -215,6 +879,9 @@ impl AppState {
             }
             if let Some(overlay) = app.get_webview_window("overlay") {
                 overlay.open_devtools();
+            }
+            if let Some(panel) = app.get_webview_window(PANEL_LABEL) {
+                panel.open_devtools();
             }
         }
         self.start_keyboard_hook(app.clone())?;
@@ -759,6 +1426,14 @@ impl AppState {
         self.shutdown_watchdog.lock().stage = stage;
     }
 
+    pub fn is_process_exit_authorized(&self) -> bool {
+        self.process_exit_authorized.load(Ordering::SeqCst)
+    }
+
+    fn authorize_process_exit(&self) {
+        self.process_exit_authorized.store(true, Ordering::SeqCst);
+    }
+
     pub fn request_frontend_shutdown(&self, app_handle: AppHandle) {
         self.request_frontend_lifecycle(app_handle, FrontendLifecycleAction::Quit);
     }
@@ -773,67 +1448,288 @@ impl AppState {
         handshake_id: &str,
         window_label: &str,
     ) {
-        let action = {
+        let prepared = {
             let mut handshake = self.editor_flush_handshake.lock();
-            let Some(active) = handshake.as_mut() else {
-                return;
-            };
-            if active.id != handshake_id || !active.pending_windows.remove(window_label) {
-                return;
-            }
-            if active.pending_windows.is_empty() {
-                handshake.take().map(|completed| completed.action)
-            } else {
-                None
-            }
+            acknowledge_editor_flush_handshake(
+                &mut handshake,
+                handshake_id,
+                window_label,
+                &self.store.history_gate(),
+            )
         };
 
-        if let Some(action) = action {
-            execute_frontend_lifecycle(app_handle, action, self.overlay_force_close.clone());
+        match prepared {
+            Some(EditorFlushAcknowledge::LifecycleReady(completed)) => {
+                self.complete_editor_flush_handshake(app_handle, completed);
+            }
+            Some(EditorFlushAcknowledge::HistoryClosing {
+                handshake_id,
+                waiter,
+            }) => {
+                let drain_result = waiter.wait_for_drain();
+                self.finish_frontend_history_gate_close(app_handle, &handshake_id, drain_result);
+            }
+            Some(EditorFlushAcknowledge::HistoryCloseFailed { handshake, error }) => {
+                log::warn!("failed to close history admission gate: {error}");
+                self.fail_editor_flush_handshake(
+                    &app_handle,
+                    handshake,
+                    HISTORY_FRONTEND_FLUSH_BUSY,
+                );
+            }
+            None => {}
         }
     }
 
-    pub fn cancel_frontend_lifecycle(&self, handshake_id: &str) {
-        let mut handshake = self.editor_flush_handshake.lock();
-        if handshake
-            .as_ref()
-            .is_some_and(|active| active.id == handshake_id)
-        {
-            handshake.take();
+    pub(crate) fn admit_frontend_history_mutation(
+        &self,
+        window_label: &str,
+    ) -> Result<HistoryAdmissionLease, String> {
+        let handshake = self.editor_flush_handshake.lock();
+        if frontend_history_mutation_blocked(&handshake, window_label) {
+            return Err(HISTORY_IN_PROGRESS.to_string());
+        }
+        self.store.history_gate().admit_mutation()
+    }
+
+    pub fn cancel_frontend_lifecycle(&self, app_handle: AppHandle, handshake_id: &str) {
+        let canceled = {
+            let mut handshake = self.editor_flush_handshake.lock();
+            take_cancelable_editor_flush_handshake(&mut handshake, handshake_id)
+        };
+        if let Some(canceled) = canceled {
+            self.fail_editor_flush_handshake(
+                &app_handle,
+                canceled,
+                HISTORY_FRONTEND_FLUSH_CANCELED,
+            );
+        }
+    }
+
+    fn complete_editor_flush_handshake(
+        &self,
+        app_handle: AppHandle,
+        completed: EditorFlushHandshake,
+    ) {
+        let EditorFlushHandshake { completion, .. } = completed;
+        match completion {
+            EditorFlushCompletion::Lifecycle(action) => {
+                execute_frontend_lifecycle(app_handle, action, self.overlay_force_close.clone());
+            }
+            EditorFlushCompletion::History { .. } => {
+                log::error!("history handshake completed through lifecycle path");
+            }
+        }
+    }
+
+    fn finish_frontend_history_gate_close(
+        &self,
+        app_handle: AppHandle,
+        handshake_id: &str,
+        drain_result: std::result::Result<(), String>,
+    ) {
+        if let Err(error) = drain_result {
+            let failed = {
+                let mut active = self.editor_flush_handshake.lock();
+                take_cancelable_editor_flush_handshake(&mut active, handshake_id)
+            };
+            if let Some(failed) = failed {
+                log::warn!("history admission drain was interrupted: {error}");
+                self.fail_editor_flush_handshake(
+                    &app_handle,
+                    failed,
+                    HISTORY_FRONTEND_FLUSH_INTERRUPTED,
+                );
+            }
+            return;
+        }
+
+        let prepared = {
+            let mut active = self.editor_flush_handshake.lock();
+            let Some(handshake) = active.as_mut().filter(|item| item.id == handshake_id) else {
+                return;
+            };
+            let EditorFlushCompletion::History {
+                sender,
+                phase,
+                barrier,
+                ..
+            } = &mut handshake.completion
+            else {
+                return;
+            };
+            if *phase != FrontendHistoryFlushPhase::Closing {
+                return;
+            }
+            let Some(sender) = sender.take() else {
+                return;
+            };
+            let Some(barrier) = barrier.take() else {
+                return;
+            };
+            *phase = FrontendHistoryFlushPhase::Running;
+            Some((sender, barrier))
+        };
+
+        let Some((sender, barrier)) = prepared else {
+            return;
+        };
+        let completion_app = app_handle.clone();
+        let completion_id = handshake_id.to_string();
+        let ready = FrontendHistoryFlushReady {
+            barrier: Some(barrier),
+            complete: Some(Box::new(move || {
+                let state = completion_app.state::<AppState>();
+                state.complete_frontend_history_operation(&completion_app, &completion_id);
+            })),
+        };
+        let _ = sender.send(Ok(ready));
+    }
+
+    fn complete_frontend_history_operation(&self, app_handle: &AppHandle, handshake_id: &str) {
+        let (completed, deferred_action) = {
+            let mut active = self.editor_flush_handshake.lock();
+            let is_running = active.as_ref().is_some_and(|handshake| {
+                handshake.id == handshake_id
+                    && handshake.completion.history_phase()
+                        == Some(FrontendHistoryFlushPhase::Running)
+            });
+            if !is_running {
+                return;
+            }
+            let completed = active
+                .take()
+                .expect("running history handshake disappeared");
+            let deferred_action = self.deferred_frontend_lifecycle.lock().take();
+            (completed, deferred_action)
+        };
+        emit_frontend_history_flush_released(app_handle, &completed.id, &completed.target_windows);
+        if let Some(action) = deferred_action {
+            self.request_frontend_lifecycle(app_handle.clone(), action);
+        }
+    }
+
+    fn fail_editor_flush_handshake(
+        &self,
+        app_handle: &AppHandle,
+        failed: EditorFlushHandshake,
+        history_error: &'static str,
+    ) {
+        let EditorFlushHandshake {
+            id,
+            completion,
+            target_windows,
+            ..
+        } = failed;
+        match completion {
+            EditorFlushCompletion::Lifecycle(_) => {
+                #[cfg(target_os = "macos")]
+                if let Err(error) = super::macos_termination::cancel_pending_termination(app_handle)
+                {
+                    log::warn!("failed to cancel pending macOS termination: {error}");
+                }
+                self.restore_frontend_lifecycle_windows(app_handle, &target_windows);
+            }
+            EditorFlushCompletion::History {
+                sender, barrier, ..
+            } => {
+                drop(barrier);
+                emit_frontend_history_flush_released(app_handle, &id, &target_windows);
+                if let Some(sender) = sender {
+                    let _ = sender.send(Err(history_error.to_string()));
+                }
+            }
+        }
+    }
+
+    fn restore_frontend_lifecycle_windows(
+        &self,
+        app_handle: &AppHandle,
+        target_windows: &HashSet<String>,
+    ) {
+        for label in frontend_lifecycle_restore_labels(target_windows) {
+            match label {
+                "main" => {
+                    if let Err(error) = self.show_main_window(app_handle) {
+                        log::warn!(
+                            "failed to restore main window after canceled lifecycle: {error}"
+                        );
+                    }
+                }
+                OVERLAY_LABEL if *self.overlay_visible.read() => {
+                    if let Err(error) = self.set_overlay_visibility(app_handle, true) {
+                        log::warn!("failed to restore overlay after canceled lifecycle: {error}");
+                    }
+                }
+                PANEL_LABEL => {
+                    if let Some(panel) = app_handle.get_webview_window(PANEL_LABEL) {
+                        if let Err(error) = panel.show() {
+                            log::warn!("failed to restore panel after canceled lifecycle: {error}");
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
     fn request_frontend_lifecycle(&self, app_handle: AppHandle, action: FrontendLifecycleAction) {
-        let targets = ["main", OVERLAY_LABEL]
-            .into_iter()
-            .filter_map(|label| {
-                app_handle
-                    .get_webview_window(label)
-                    .map(|window| (label.to_string(), window))
-            })
-            .collect::<Vec<_>>();
-
-        if targets.is_empty() {
-            execute_frontend_lifecycle(app_handle, action, self.overlay_force_close.clone());
+        if self.overlay_force_close.load(Ordering::SeqCst)
+            || self.shutdown_started.load(Ordering::SeqCst)
+        {
             return;
         }
 
+        let targets =
+            collect_frontend_lifecycle_targets(|label| app_handle.get_webview_window(label));
         let handshake_id = uuid::Uuid::new_v4().to_string();
-        {
-            let mut handshake = self.editor_flush_handshake.lock();
-            if handshake.is_some() {
-                return;
+        let target_windows = targets
+            .iter()
+            .map(|(label, _)| label.clone())
+            .collect::<HashSet<_>>();
+        let next_handshake = EditorFlushHandshake {
+            id: handshake_id.clone(),
+            completion: EditorFlushCompletion::Lifecycle(action),
+            pending_windows: target_windows.clone(),
+            target_windows,
+        };
+        let interrupted_history = {
+            let mut active = self.editor_flush_handshake.lock();
+            match install_lifecycle_handshake(&mut active, next_handshake) {
+                LifecycleHandshakeInstall::Installed => None,
+                LifecycleHandshakeInstall::InterruptedHistory(interrupted) => Some(*interrupted),
+                LifecycleHandshakeInstall::LifecycleAlreadyActive => return,
+                LifecycleHandshakeInstall::DeferredUntilHistoryComplete => {
+                    let mut deferred = self.deferred_frontend_lifecycle.lock();
+                    if deferred.is_none() {
+                        *deferred = Some(action);
+                    }
+                    return;
+                }
             }
-            *handshake = Some(EditorFlushHandshake {
-                id: handshake_id.clone(),
-                action,
-                pending_windows: targets.iter().map(|(label, _)| label.clone()).collect(),
-            });
+        };
+        if let Some(interrupted) = interrupted_history {
+            self.fail_editor_flush_handshake(
+                &app_handle,
+                interrupted,
+                HISTORY_FRONTEND_FLUSH_INTERRUPTED,
+            );
+        }
+
+        if targets.is_empty() {
+            let completed = {
+                let mut active = self.editor_flush_handshake.lock();
+                take_editor_flush_handshake(&mut active, &handshake_id)
+            };
+            if let Some(completed) = completed {
+                self.complete_editor_flush_handshake(app_handle, completed);
+            }
+            return;
         }
 
         let request = EditorFlushRequest {
             handshake_id: handshake_id.clone(),
-            action,
+            action: action.into(),
         };
         let mut failed_windows = Vec::new();
         for (label, window) in &targets {
@@ -844,57 +1740,153 @@ impl AppState {
         }
 
         if !failed_windows.is_empty() {
-            let mut handshake = self.editor_flush_handshake.lock();
-            let Some(active) = handshake.as_ref() else {
+            let canceled = {
+                let mut handshake = self.editor_flush_handshake.lock();
+                take_editor_flush_handshake(&mut handshake, &handshake_id)
+            };
+            let Some(canceled) = canceled else {
                 return;
             };
-            if active.id != handshake_id {
-                return;
-            }
-            handshake.take();
-            drop(handshake);
             log::warn!(
                 "editor flush request failed for {:?}; lifecycle action canceled",
                 failed_windows
             );
-            if let Err(error) = self.show_main_window(&app_handle) {
-                log::warn!("failed to restore main window after canceled lifecycle: {error}");
-            }
-            if *self.overlay_visible.read() {
-                if let Err(error) = self.set_overlay_visibility(&app_handle, true) {
-                    log::warn!("failed to restore overlay after canceled lifecycle: {error}");
-                }
-            }
+            self.fail_editor_flush_handshake(
+                &app_handle,
+                canceled,
+                HISTORY_FRONTEND_FLUSH_EMIT_FAILED,
+            );
             return;
         }
 
-        let handshake = self.editor_flush_handshake.clone();
-        let overlay_force_close = self.overlay_force_close.clone();
-        thread::spawn(move || {
-            thread::sleep(EDITOR_FLUSH_HANDSHAKE_TIMEOUT);
-            let main_is_visible = app_handle
-                .get_webview_window("main")
-                .and_then(|window| window.is_visible().ok())
-                .unwrap_or(false);
-            let timed_out_action = {
-                let mut active = handshake.lock();
-                if active
-                    .as_ref()
-                    .is_some_and(|pending| pending.id == handshake_id)
-                {
-                    active.take().map(|pending| pending.action)
-                } else {
-                    None
+        self.schedule_editor_flush_timeout(app_handle, handshake_id);
+    }
+
+    pub(crate) fn request_frontend_history_flush(
+        &self,
+        app_handle: AppHandle,
+        operation_id: &str,
+    ) -> Result<oneshot::Receiver<Result<FrontendHistoryFlushReady, String>>, String> {
+        if self.overlay_force_close.load(Ordering::SeqCst)
+            || self.shutdown_started.load(Ordering::SeqCst)
+        {
+            return Err(HISTORY_FRONTEND_FLUSH_BUSY.to_string());
+        }
+
+        let targets =
+            collect_frontend_lifecycle_targets(|label| app_handle.get_webview_window(label));
+        let target_windows = targets
+            .iter()
+            .map(|(label, _)| label.clone())
+            .collect::<HashSet<_>>();
+        let handshake_id = uuid::Uuid::new_v4().to_string();
+        let (sender, receiver) = oneshot::channel();
+        let handshake = EditorFlushHandshake {
+            id: handshake_id.clone(),
+            completion: EditorFlushCompletion::History {
+                operation_id: operation_id.to_string(),
+                sender: Some(sender),
+                phase: FrontendHistoryFlushPhase::Collecting,
+                barrier: None,
+            },
+            pending_windows: target_windows.clone(),
+            target_windows,
+        };
+        {
+            let mut active = self.editor_flush_handshake.lock();
+            if self.store.history_gate().is_closed()
+                || !install_history_handshake(&mut active, handshake)
+            {
+                return Err(HISTORY_FRONTEND_FLUSH_BUSY.to_string());
+            }
+        }
+
+        if targets.is_empty() {
+            let prepared = {
+                let mut active = self.editor_flush_handshake.lock();
+                begin_history_gate_close(&mut active, &handshake_id, &self.store.history_gate())
+            };
+            match prepared {
+                Some(EditorFlushAcknowledge::HistoryClosing {
+                    handshake_id,
+                    waiter,
+                }) => {
+                    let drain_result = waiter.wait_for_drain();
+                    self.finish_frontend_history_gate_close(
+                        app_handle,
+                        &handshake_id,
+                        drain_result,
+                    );
                 }
+                Some(EditorFlushAcknowledge::HistoryCloseFailed { handshake, error }) => {
+                    log::warn!("failed to close history admission gate: {error}");
+                    self.fail_editor_flush_handshake(
+                        &app_handle,
+                        handshake,
+                        HISTORY_FRONTEND_FLUSH_BUSY,
+                    );
+                }
+                _ => {}
+            }
+            return Ok(receiver);
+        }
+
+        let request = EditorFlushRequest {
+            handshake_id: handshake_id.clone(),
+            action: FrontendFlushAction::History,
+        };
+        let mut failed_windows = Vec::new();
+        for (label, window) in &targets {
+            if let Err(error) = window.emit("app:close-requested", &request) {
+                log::warn!("failed to request history flush from {label}: {error}");
+                failed_windows.push(label.clone());
+            }
+        }
+
+        if !failed_windows.is_empty() {
+            let failed = {
+                let mut active = self.editor_flush_handshake.lock();
+                take_cancelable_editor_flush_handshake(&mut active, &handshake_id)
+            };
+            if let Some(failed) = failed {
+                log::warn!(
+                    "history frontend flush request failed for {:?}",
+                    failed_windows
+                );
+                self.fail_editor_flush_handshake(
+                    &app_handle,
+                    failed,
+                    HISTORY_FRONTEND_FLUSH_EMIT_FAILED,
+                );
+            }
+            return Ok(receiver);
+        }
+
+        self.schedule_editor_flush_timeout(app_handle, handshake_id);
+        Ok(receiver)
+    }
+
+    fn schedule_editor_flush_timeout(&self, app_handle: AppHandle, handshake_id: String) {
+        let handshake = self.editor_flush_handshake.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(EDITOR_FLUSH_HANDSHAKE_TIMEOUT).await;
+            let timed_out = {
+                let mut active = handshake.lock();
+                take_cancelable_editor_flush_handshake(&mut active, &handshake_id)
             };
 
-            if let Some(action) = timed_out_action {
-                if main_is_visible {
+            if let Some(timed_out) = timed_out {
+                let state = app_handle.state::<AppState>();
+                if timed_out.completion.is_lifecycle() {
                     log::warn!("editor flush handshake timed out; lifecycle action canceled");
                 } else {
-                    log::warn!("editor flush handshake timed out while windows were hidden");
-                    execute_frontend_lifecycle(app_handle, action, overlay_force_close);
+                    log::warn!("editor flush handshake timed out; history action canceled");
                 }
+                state.fail_editor_flush_handshake(
+                    &app_handle,
+                    timed_out,
+                    HISTORY_FRONTEND_FLUSH_TIMEOUT,
+                );
             }
         });
     }
@@ -1273,13 +2265,10 @@ impl AppState {
                                     "device": device_str,
                                 });
 
-                                // 메인 윈도우에 우선 emit
-                                if let Some(main) = app_handle.get_webview_window("main") {
-                                    let _ = main.emit("input:raw", &raw_payload);
-                                }
-                                // 오버레이에도 emit (플러그인용)
-                                if let Some(overlay) = app_handle.get_webview_window(OVERLAY_LABEL) {
-                                    let _ = overlay.emit("input:raw", &raw_payload);
+                                for label in RAW_INPUT_WINDOW_LABELS {
+                                    if let Some(window) = app_handle.get_webview_window(label) {
+                                        let _ = window.emit("input:raw", &raw_payload);
+                                    }
                                 }
                             }
 
@@ -1478,6 +2467,318 @@ impl AppState {
         Ok(())
     }
 
+    pub fn selection_session(&self) -> SelectionSessionSnapshot {
+        self.selection_session.lock().clone()
+    }
+
+    pub fn publish_selection_session(
+        &self,
+        app: &AppHandle,
+        snapshot: SelectionSessionSnapshot,
+    ) -> Result<SelectionSessionSnapshot, String> {
+        let published = publish_selection_snapshot(&self.selection_session, snapshot)?;
+        app.emit("selection:changed", &published)
+            .map_err(|error| error.to_string())?;
+        Ok(published)
+    }
+
+    pub(crate) fn plugin_authority(&self) -> &PluginRuntimeAuthority {
+        &self.plugin_authority
+    }
+
+    pub(crate) fn plugin_rpc_router(&self) -> &PluginRpcRouter {
+        &self.plugin_rpc_router
+    }
+
+    pub(crate) fn reset_plugin_authority(&self) -> Result<PluginAuthorityLease<'_>, String> {
+        self.plugin_authority.reset(&self.plugin_rpc_router)
+    }
+
+    pub fn mark_plugin_authority_unavailable(&self) {
+        self.plugin_authority
+            .mark_unavailable(&self.plugin_rpc_router);
+    }
+
+    pub fn show_panel_window(&self, app: &AppHandle, view_state: PanelViewState) -> Result<()> {
+        let _creation_guard = self.panel_creation_lock.lock();
+        *self.panel_view_state.lock() = Some(TargetedPanelViewState {
+            target: PanelViewTarget::Panel,
+            view_state,
+        });
+        *self.panel_destroy_reason.lock() = None;
+        let result = if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+            let _ = window.unminimize();
+            window
+                .show()
+                .and_then(|()| window.set_focus())
+                .map_err(anyhow::Error::from)
+                .and_then(|()| {
+                    publish_panel_visibility_transition(&self.panel_visible, app, true, None)
+                })
+        } else {
+            self.create_panel_window(app).and_then(|_| {
+                publish_panel_visibility_transition(&self.panel_visible, app, true, None)
+            })
+        };
+        if result.is_err() && app.get_webview_window(PANEL_LABEL).is_none() {
+            clear_targeted_panel_view_state(
+                &mut self.panel_view_state.lock(),
+                PanelViewTarget::Panel,
+            );
+        }
+        result
+    }
+
+    pub fn take_panel_view_state(&self, window_label: &str) -> Option<PanelViewState> {
+        take_targeted_panel_view_state(&mut self.panel_view_state.lock(), window_label)
+    }
+
+    pub fn close_panel_window(&self, app: &AppHandle, view_state: PanelViewState) -> Result<()> {
+        let _creation_guard = self.panel_creation_lock.lock();
+        *self.panel_view_state.lock() = Some(TargetedPanelViewState {
+            target: PanelViewTarget::Main,
+            view_state,
+        });
+        *self.panel_close_request.lock() = PanelCloseRequestState::Closing;
+        let result = self.close_panel_window_inner(app, PanelVisibilityReason::Closed);
+        finish_panel_close(&self.panel_close_request);
+        if result.is_err() && app.get_webview_window(PANEL_LABEL).is_some() {
+            clear_targeted_panel_view_state(
+                &mut self.panel_view_state.lock(),
+                PanelViewTarget::Main,
+            );
+        }
+        result
+    }
+
+    fn close_panel_window_inner(
+        &self,
+        app: &AppHandle,
+        reason: PanelVisibilityReason,
+    ) -> Result<()> {
+        *self.panel_destroy_reason.lock() = Some(reason);
+        let mut bounds_error = None;
+        if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+            if let Err(error) =
+                defer_panel_bounds_from_window(&window, &self.store, &self.panel_bounds_generation)
+            {
+                bounds_error = Some(error);
+            }
+            if let Err(error) =
+                flush_deferred_panel_bounds(&self.store, &self.panel_bounds_generation)
+            {
+                bounds_error.get_or_insert(error);
+            }
+            if let Err(error) = window.destroy() {
+                self.clear_panel_destroy_reason(reason);
+                return Err(error.into());
+            }
+        }
+        self.publish_panel_hidden(app, reason)?;
+        if let Some(error) = bounds_error {
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn publish_panel_hidden(
+        &self,
+        app: &AppHandle,
+        fallback_reason: PanelVisibilityReason,
+    ) -> Result<()> {
+        publish_panel_hidden_transition(
+            &self.panel_visible,
+            &self.panel_destroy_reason,
+            app,
+            fallback_reason,
+        )
+    }
+
+    fn clear_panel_destroy_reason(&self, reason: PanelVisibilityReason) {
+        let mut pending = self.panel_destroy_reason.lock();
+        if *pending == Some(reason) {
+            *pending = None;
+        }
+    }
+
+    pub fn acknowledge_panel_window_close(&self, request_id: &str) -> bool {
+        acknowledge_panel_close_request(&self.panel_close_request, request_id)
+    }
+
+    pub fn is_panel_window_open(&self, app: &AppHandle) -> bool {
+        app.get_webview_window(PANEL_LABEL).is_some()
+    }
+
+    pub fn capture_and_flush_panel_bounds_for_lifecycle(&self, app: &AppHandle) -> Result<()> {
+        if self.shutdown_started.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        let _creation_guard = self.panel_creation_lock.lock();
+        let Some(window) = app.get_webview_window(PANEL_LABEL) else {
+            return Ok(());
+        };
+        defer_panel_bounds_from_window(&window, &self.store, &self.panel_bounds_generation)?;
+        flush_deferred_panel_bounds(&self.store, &self.panel_bounds_generation)
+    }
+
+    pub fn handle_panel_window_destroyed(&self, app: &AppHandle) {
+        self.plugin_rpc_router.remove_window(PANEL_LABEL);
+        clear_targeted_panel_view_state(&mut self.panel_view_state.lock(), PanelViewTarget::Panel);
+        finish_panel_close(&self.panel_close_request);
+        if let Err(error) = self.publish_panel_hidden(app, PanelVisibilityReason::Destroyed) {
+            log::warn!("failed to emit destroyed panel visibility: {error}");
+        }
+    }
+
+    fn create_panel_window(&self, app: &AppHandle) -> Result<WebviewWindow> {
+        let monitor_data = MonitorData::gather(app);
+        let snapshot = self.store.snapshot();
+        let stored_bounds = snapshot.panel_bounds;
+        let layout = resolve_panel_window_layout(stored_bounds, &monitor_data, None);
+
+        let mut builder = WebviewWindowBuilder::new(app, PANEL_LABEL, WebviewUrl::App(PANEL_ENTRYPOINT.into()))
+                .title("DM Note - Panel")
+                // 메인·오버레이와 같은 프레임리스 크롬 - 드래그 영역은 패널 상단 스트립이 담당
+                .decorations(false)
+                .transparent(true)
+                .shadow(true)
+                .resizable(true)
+                .maximizable(false)
+                .always_on_top(false)
+                .skip_taskbar(false)
+                .focused(false)
+                // 비포커스 상태의 첫 클릭이 포커스 획득에만 소비되지 않게 함
+                // (유틸리티 패널 관례 - 버튼이 첫 클릭에 바로 동작)
+                .accept_first_mouse(true)
+                .visible(true)
+                .inner_size(PANEL_WIDTH, layout.height)
+                .min_inner_size(PANEL_WIDTH, PANEL_MIN_HEIGHT)
+                .max_inner_size(PANEL_WIDTH, layout.max_height)
+                .zoom_hotkeys_enabled(false);
+
+        if let Some(position) = layout.position {
+            builder = builder.position(position.x, position.y);
+        }
+
+        let window = builder.build().context("failed to create panel window")?;
+
+        if let Some(position) = layout.position {
+            if let Err(err) = window.set_position(LogicalPosition::new(position.x, position.y)) {
+                log::warn!("failed to restore panel position after build: {err}");
+            }
+        }
+
+        if snapshot.developer_mode_enabled {
+            window.open_devtools();
+        }
+
+        self.configure_panel_window(&window, app, layout.max_height);
+        Ok(window)
+    }
+
+    fn configure_panel_window(
+        &self,
+        window: &WebviewWindow,
+        app: &AppHandle,
+        initial_max_height: f64,
+    ) {
+        let store = self.store.clone();
+        let bounds_generation = self.panel_bounds_generation.clone();
+        let panel_window = window.clone();
+        let app_handle = app.clone();
+        let panel_max_height = Arc::new(Mutex::new(Some(initial_max_height)));
+        let panel_bounds_settle = Arc::new(Mutex::new(PanelBoundsSettleState {
+            latest: panel_bounds_sample_from_window(window).ok(),
+            generation: 0,
+            worker_running: false,
+            active: true,
+        }));
+
+        window.on_window_event(move |event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                if let Err(err) =
+                    defer_panel_bounds_from_window(&panel_window, &store, &bounds_generation)
+                {
+                    log::warn!("failed to capture panel bounds on close request: {err}");
+                }
+                let Some(state) = app_handle.try_state::<AppState>() else {
+                    return;
+                };
+                let request_id = uuid::Uuid::new_v4().to_string();
+                if !begin_panel_close_request(&state.panel_close_request, &request_id) {
+                    return;
+                }
+                let payload = PanelCloseRequestedPayload {
+                    request_id: request_id.clone(),
+                };
+                if let Err(err) = app_handle.emit("panel:close-requested", &payload) {
+                    log::warn!("failed to emit panel close request: {err}");
+                }
+                let timeout_app = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(PANEL_CLOSE_ACK_TIMEOUT).await;
+                    let Some(state) = timeout_app.try_state::<AppState>() else {
+                        return;
+                    };
+                    let _creation_guard = state.panel_creation_lock.lock();
+                    if let Err(error) =
+                        run_panel_close_timeout(&state.panel_close_request, &request_id, || {
+                            state.close_panel_window_inner(
+                                &timeout_app,
+                                PanelVisibilityReason::Destroyed,
+                            )
+                        })
+                    {
+                        log::warn!("failed to close panel after missing ack: {error}");
+                    }
+                });
+            }
+            WindowEvent::Moved(position) => {
+                schedule_panel_bounds_settle(
+                    &panel_window,
+                    &store,
+                    &bounds_generation,
+                    &panel_max_height,
+                    &panel_bounds_settle,
+                    PanelBoundsChange::Moved(*position),
+                );
+            }
+            WindowEvent::Resized(size) => {
+                schedule_panel_bounds_settle(
+                    &panel_window,
+                    &store,
+                    &bounds_generation,
+                    &panel_max_height,
+                    &panel_bounds_settle,
+                    PanelBoundsChange::Resized(*size),
+                );
+            }
+            WindowEvent::ScaleFactorChanged {
+                scale_factor,
+                new_inner_size,
+                ..
+            } => {
+                schedule_panel_bounds_settle(
+                    &panel_window,
+                    &store,
+                    &bounds_generation,
+                    &panel_max_height,
+                    &panel_bounds_settle,
+                    PanelBoundsChange::ScaleFactorChanged {
+                        position: panel_window.outer_position().ok(),
+                        size: *new_inner_size,
+                        scale_factor: *scale_factor,
+                    },
+                );
+            }
+            WindowEvent::Destroyed => {
+                panel_bounds_settle.lock().active = false;
+            }
+            _ => {}
+        });
+    }
+
     fn ensure_overlay_window(&self, app: &AppHandle) -> Result<WebviewWindow> {
         if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
             return Ok(window);
@@ -1570,8 +2871,10 @@ impl AppState {
 
         // Windows 접근성 텍스트 크기 설정에 의한 WebView2 스케일링을 보상
         let zoom = crate::compute_compensating_zoom();
-        if let Err(err) = window.set_zoom(zoom) {
-            log::warn!("failed to set overlay compensating zoom: {err}");
+        if crate::should_apply_compensating_zoom(zoom) {
+            if let Err(err) = window.set_zoom(zoom) {
+                log::warn!("failed to set overlay compensating zoom: {err}");
+            }
         }
 
         // macOS 오버레이 창 포커스 탈취 방지
@@ -1605,8 +2908,6 @@ impl AppState {
             apply_macos_overlay_fullscreen_behavior(&window, snapshot.always_on_top);
         }
         let _ = window.set_maximizable(false);
-
-        self.overlay_force_close.store(false, Ordering::SeqCst);
 
         self.configure_overlay_window(&window, app);
 
@@ -1649,7 +2950,7 @@ impl AppState {
 
         window.on_window_event(move |event| match event {
             WindowEvent::CloseRequested { api, .. } => {
-                if force_close_flag.swap(false, Ordering::SeqCst) {
+                if force_close_flag.load(Ordering::SeqCst) {
                     // 앱 종료 시 — 실제 close 허용
                     *overlay_visible.write() = false;
                 } else {
@@ -1814,6 +3115,9 @@ impl AppState {
                 if let Some(overlay) = app.get_webview_window(OVERLAY_LABEL) {
                     overlay.open_devtools();
                 }
+                if let Some(panel) = app.get_webview_window(PANEL_LABEL) {
+                    panel.open_devtools();
+                }
             }
         }
 
@@ -1850,11 +3154,27 @@ impl AppState {
         if !self.key_counter_enabled.load(Ordering::Relaxed) {
             return None;
         }
+        {
+            let mut barrier = self.counter_history_barrier.lock();
+            if barrier.queueing {
+                barrier.queued.push_back(QueuedCounterIncrement {
+                    mode: mode.to_string(),
+                    key: key.to_string(),
+                });
+                return None;
+            }
+            barrier.active_increments = barrier.active_increments.saturating_add(1);
+        }
         let mut counters = self.key_counters.write();
         let mode_entry = counters.entry(mode.to_string()).or_default();
         let count = mode_entry.entry(key.to_string()).or_insert(0);
         *count = count.saturating_add(1);
         let count = *count;
+        let publication_generation = self.store.runtime_publication_generation();
+        let mut publication = self.runtime_publication.lock();
+        publication.counters_generation =
+            publication.counters_generation.max(publication_generation);
+        drop(publication);
         log::trace!(
             "[IPC] emit keys:counter: mode={}, key={}, count={}",
             mode,
@@ -1866,6 +3186,11 @@ impl AppState {
         if let Err(err) = emit_result {
             error!("failed to emit keys:counter event: {err}");
         }
+        let mut barrier = self.counter_history_barrier.lock();
+        barrier.active_increments = barrier.active_increments.saturating_sub(1);
+        if barrier.active_increments == 0 {
+            self.counter_history_ready.notify_all();
+        }
         Some(count)
     }
 
@@ -1873,37 +3198,103 @@ impl AppState {
         self.key_counters.read().clone()
     }
 
-    /// 카운터 변경과 전체 emit의 단일 write lock 경계
-    fn with_key_counters_write_and_emit<T>(
+    pub(crate) fn begin_counter_history_barrier(&self) {
+        let mut barrier = self.counter_history_barrier.lock();
+        debug_assert!(!barrier.queueing, "counter history barrier already active");
+        barrier.queueing = true;
+        while barrier.active_increments != 0 {
+            self.counter_history_ready.wait(&mut barrier);
+        }
+    }
+
+    pub(crate) fn lock_key_counters_for_history(
+        &self,
+    ) -> parking_lot::RwLockWriteGuard<'_, KeyCounters> {
+        self.key_counters.write()
+    }
+
+    pub(crate) fn replace_history_counters_locked(
+        &self,
+        guard: &mut KeyCounters,
+        generation: u64,
+        counters: &KeyCounters,
+    ) -> bool {
+        let mut publication = self.runtime_publication.lock();
+        if generation <= publication.counters_generation {
+            return false;
+        }
+        *guard = counters.clone();
+        publication.counters_generation = generation;
+        true
+    }
+
+    pub(crate) fn finish_counter_history_barrier(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
-        updater: impl FnOnce(&mut KeyCounters) -> Result<T>,
-    ) -> Result<T> {
-        let mut guard = self.key_counters.write();
-        let result = updater(&mut guard)?;
-        emitter.emit_key_counters(&guard)?;
-        Ok(result)
+        mut counters: parking_lot::RwLockWriteGuard<'_, KeyCounters>,
+        counters_restored: bool,
+        publication_generation: u64,
+    ) {
+        let queued_count = {
+            let mut barrier = self.counter_history_barrier.lock();
+            let queued_count = barrier.queued.len();
+            while let Some(increment) = barrier.queued.pop_front() {
+                let count = counters
+                    .entry(increment.mode)
+                    .or_default()
+                    .entry(increment.key)
+                    .or_insert(0);
+                *count = count.saturating_add(1);
+            }
+            barrier.queueing = false;
+            queued_count
+        };
+        if queued_count != 0 {
+            let mut publication = self.runtime_publication.lock();
+            publication.counters_generation =
+                publication.counters_generation.max(publication_generation);
+        }
+        if counters_restored || queued_count != 0 {
+            if let Err(error) = emitter.emit_key_counters(&counters) {
+                log::error!("failed to emit restored key counters: {error:#}");
+            }
+        }
     }
 
     fn update_key_counters_and_emit(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
+        observed_history_epoch: Option<u64>,
         updater: impl FnOnce(&mut KeyCounters),
-    ) -> Result<KeyCounters> {
-        self.with_key_counters_write_and_emit(emitter, |guard| {
-            let mut scratch = guard.clone();
-            updater(&mut scratch);
-            let persisted = self.store.set_key_counters(scratch)?;
+    ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
+        let admission = self.store.admit_editor_mutation()?;
+        let mut guard = self.key_counters.write();
+        let before = guard.clone();
+        let mut scratch = before.clone();
+        updater(&mut scratch);
+        let (persisted, history_status, publication_generation) = self
+            .store
+            .commit_key_counters_admitted(before, scratch, observed_history_epoch, &admission)?;
+        let mut publication = self.runtime_publication.lock();
+        if publication_generation > publication.counters_generation {
             *guard = persisted.clone();
-            Ok(persisted)
+            let emit_result = emitter.emit_key_counters(&guard);
+            publication.counters_generation = publication_generation;
+            emit_result.map_err(|error| EditorCommitError::io(error.to_string()))?;
+        }
+        Ok(AdmittedCounterMutation {
+            counters: persisted,
+            history_status,
+            _admission: admission,
         })
     }
 
     pub(crate) fn reset_key_counters(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
-    ) -> Result<KeyCounters> {
-        self.update_key_counters_and_emit(emitter, |counters| {
+        observed_history_epoch: Option<u64>,
+    ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
+        self.update_key_counters_and_emit(emitter, observed_history_epoch, |counters| {
             for mode_entry in counters.values_mut() {
                 for value in mode_entry.values_mut() {
                     *value = 0;
@@ -1916,11 +3307,10 @@ impl AppState {
         &self,
         emitter: &dyn KeyCounterEventEmitter,
         counters: KeyCounters,
-        keys: &KeyMappings,
-    ) -> Result<KeyCounters> {
-        self.update_key_counters_and_emit(emitter, |scratch| {
+        observed_history_epoch: Option<u64>,
+    ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
+        self.update_key_counters_and_emit(emitter, observed_history_epoch, |scratch| {
             *scratch = counters;
-            Self::sync_counters_with_keys_impl(scratch, keys);
         })
     }
 
@@ -1928,8 +3318,9 @@ impl AppState {
         &self,
         emitter: &dyn KeyCounterEventEmitter,
         mode: &str,
-    ) -> Result<KeyCounters> {
-        self.update_key_counters_and_emit(emitter, |counters| {
+        observed_history_epoch: Option<u64>,
+    ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
+        self.update_key_counters_and_emit(emitter, observed_history_epoch, |counters| {
             if let Some(entry) = counters.get_mut(mode) {
                 for value in entry.values_mut() {
                     *value = 0;
@@ -1943,8 +3334,9 @@ impl AppState {
         emitter: &dyn KeyCounterEventEmitter,
         mode: &str,
         key: &str,
-    ) -> Result<KeyCounters> {
-        self.update_key_counters_and_emit(emitter, |counters| {
+        observed_history_epoch: Option<u64>,
+    ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
+        self.update_key_counters_and_emit(emitter, observed_history_epoch, |counters| {
             if let Some(entry) = counters.get_mut(mode) {
                 if let Some(value) = entry.get_mut(key) {
                     *value = 0;
@@ -1966,16 +3358,91 @@ impl AppState {
     pub(crate) fn apply_committed_editor_key_runtime(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
+        generation: u64,
         keys: &KeyMappings,
         selected_key_type: &str,
         counters: &KeyCounters,
     ) -> Result<()> {
-        self.keyboard
-            .update_mappings_and_set_mode(keys.clone(), selected_key_type.to_string());
-        self.with_key_counters_write_and_emit(emitter, |guard| {
-            *guard = counters.clone();
-            Ok(())
-        })
+        let mut counter_guard = self.key_counters.write();
+        self.apply_committed_editor_key_runtime_locked(
+            emitter,
+            &mut counter_guard,
+            generation,
+            keys,
+            selected_key_type,
+            counters,
+        )
+    }
+
+    pub(crate) fn apply_committed_editor_key_runtime_locked(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        counter_guard: &mut KeyCounters,
+        generation: u64,
+        keys: &KeyMappings,
+        selected_key_type: &str,
+        counters: &KeyCounters,
+    ) -> Result<()> {
+        let mut publication = self.runtime_publication.lock();
+        Self::apply_key_runtime_if_current(
+            &self.keyboard,
+            &mut publication,
+            generation,
+            keys,
+            selected_key_type,
+        );
+        if generation <= publication.counters_generation {
+            return Ok(());
+        }
+        *counter_guard = counters.clone();
+        let emit_result = emitter.emit_key_counters(counter_guard);
+        publication.counters_generation = generation;
+        emit_result
+    }
+
+    pub(crate) fn apply_committed_editor_keys_without_counters(
+        &self,
+        generation: u64,
+        keys: &KeyMappings,
+        selected_key_type: &str,
+    ) -> bool {
+        let mut publication = self.runtime_publication.lock();
+        Self::apply_key_runtime_if_current(
+            &self.keyboard,
+            &mut publication,
+            generation,
+            keys,
+            selected_key_type,
+        )
+    }
+
+    fn apply_key_runtime_if_current(
+        keyboard: &KeyboardManager,
+        publication: &mut RuntimePublicationState,
+        generation: u64,
+        keys: &KeyMappings,
+        selected_key_type: &str,
+    ) -> bool {
+        let mappings_current = generation >= publication.mappings_generation;
+        let mode_current = generation >= publication.mode_generation
+            && generation >= publication.mappings_generation;
+        match (mappings_current, mode_current) {
+            (true, true) => {
+                keyboard.update_mappings_and_set_mode(keys.clone(), selected_key_type.to_string());
+            }
+            (true, false) => keyboard.update_mappings(keys.clone()),
+            (false, true) => {
+                keyboard.set_mode(selected_key_type.to_string());
+            }
+            (false, false) => {}
+        }
+        if mappings_current {
+            publication.mappings_generation = generation;
+        }
+        if mode_current {
+            publication.mode_generation = generation;
+        }
+        mode_current
     }
 
     fn sync_counters_with_keys_impl(target: &mut KeyCounters, keys: &KeyMappings) {
@@ -2183,6 +3650,12 @@ impl AppState {
             watcher.unwatch_tab(tab_id);
         }
     }
+
+    pub(crate) fn resync_tab_css_watchers(&self, overrides: &TabCssOverrides) {
+        if let Some(watcher) = self.css_watcher.read().as_ref() {
+            watcher.resync_tabs(overrides);
+        }
+    }
 }
 
 fn global_css_watch_path(state: &AppStoreData) -> Option<&str> {
@@ -2274,18 +3747,7 @@ fn attach_main_window_close_handler(
                 return;
             }
 
-            // 즉시 종료 효과를 위해 윈도우 먼저 숨김
-            // 실제 정리/프로세스 종료는 백그라운드 스레드에서 수행
             api.prevent_close();
-            if let Err(err) = main_window.hide() {
-                log::warn!("failed to hide main window during shutdown: {err}");
-            }
-            if let Some(overlay) = app_handle.get_webview_window(OVERLAY_LABEL) {
-                if let Err(err) = overlay.hide() {
-                    log::warn!("failed to hide overlay window during shutdown: {err}");
-                }
-            }
-
             state.request_frontend_shutdown(app_handle.clone());
         }
     });
@@ -2298,12 +3760,33 @@ fn execute_frontend_lifecycle(
 ) {
     match action {
         FrontendLifecycleAction::Quit => {
-            thread::spawn(move || shutdown_application(app_handle, overlay_force_close));
+            if overlay_force_close.swap(true, Ordering::SeqCst) {
+                return;
+            }
+            thread::spawn(move || shutdown_application(app_handle));
         }
         FrontendLifecycleAction::Restart => {
+            if overlay_force_close.swap(true, Ordering::SeqCst) {
+                return;
+            }
             let state = app_handle.state::<AppState>();
             state.arm_shutdown_watchdog("app-restart");
+            if let Err(err) = state.capture_and_flush_panel_bounds_for_lifecycle(&app_handle) {
+                log::warn!("failed to persist panel bounds before restart: {err}");
+            }
             state.shutdown();
+            state.authorize_process_exit();
+            #[cfg(target_os = "macos")]
+            match super::macos_termination::restart_after_canceling_pending_termination(&app_handle)
+            {
+                Ok(true) => return,
+                Ok(false) => {}
+                Err(error) => {
+                    log::warn!(
+                        "failed to cancel pending macOS termination before restart: {error}"
+                    );
+                }
+            }
             app_handle.request_restart();
         }
     }
@@ -2323,11 +3806,7 @@ fn dispatch_remove_tray_icon(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-fn shutdown_application(app_handle: AppHandle, overlay_force_close: Arc<AtomicBool>) {
-    if overlay_force_close.swap(true, Ordering::SeqCst) {
-        return;
-    }
-
+fn shutdown_application(app_handle: AppHandle) {
     app_handle
         .state::<AppState>()
         .arm_shutdown_watchdog("background state shutdown");
@@ -2344,6 +3823,9 @@ fn shutdown_application(app_handle: AppHandle, overlay_force_close: Arc<AtomicBo
         if let Err(err) = state.set_main_window_hidden(persist_hidden) {
             log::warn!("failed to persist main hidden state during shutdown: {err}");
         }
+        if let Err(err) = state.capture_and_flush_panel_bounds_for_lifecycle(&app_handle) {
+            log::warn!("failed to persist panel bounds during shutdown: {err}");
+        }
         state.shutdown();
         state.set_shutdown_watchdog_stage("overlay window close");
     }
@@ -2353,10 +3835,25 @@ fn shutdown_application(app_handle: AppHandle, overlay_force_close: Arc<AtomicBo
             log::warn!("failed to close overlay window during shutdown: {err}");
         }
     }
+    if let Some(panel) = app_handle.get_webview_window(PANEL_LABEL) {
+        if let Err(err) = panel.destroy() {
+            log::warn!("failed to destroy panel window during shutdown: {err}");
+        }
+    }
 
-    app_handle
-        .state::<AppState>()
-        .set_shutdown_watchdog_stage("main event loop exit dispatch");
+    {
+        let state = app_handle.state::<AppState>();
+        state.authorize_process_exit();
+        state.set_shutdown_watchdog_stage("main event loop exit dispatch");
+    }
+    #[cfg(target_os = "macos")]
+    match super::macos_termination::complete_pending_termination(&app_handle) {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(error) => {
+            log::warn!("failed to complete pending macOS termination: {error}");
+        }
+    }
     let app_for_exit = app_handle.clone();
     if let Err(err) = app_handle.run_on_main_thread(move || {
         remove_tray_icon(&app_for_exit);
@@ -2695,6 +4192,303 @@ impl MonitorData {
     }
 }
 
+struct PanelWindowLayout {
+    position: Option<OverlayPosition>,
+    height: f64,
+    max_height: f64,
+}
+
+fn panel_max_height(work_area_height: Option<f64>) -> f64 {
+    work_area_height
+        .filter(|height| height.is_finite() && *height > 0.0)
+        .map(|height| (height * PANEL_MAX_HEIGHT_RATIO).max(PANEL_MIN_HEIGHT))
+        .unwrap_or(PANEL_FALLBACK_MAX_HEIGHT)
+}
+
+fn resolve_panel_window_layout(
+    stored_bounds: Option<PanelBounds>,
+    monitors: &MonitorData,
+    fallback_height: Option<f64>,
+) -> PanelWindowLayout {
+    let target_monitor = stored_bounds
+        .and_then(|bounds| {
+            monitors.find_best_overlap(bounds.x, bounds.y, PANEL_WIDTH, bounds.height)
+        })
+        .or_else(|| monitors.primary_spec());
+    let max_height = panel_max_height(target_monitor.map(|monitor| monitor.logical_height));
+    // 저장된 높이가 없으면 메인 창 높이를 기본값으로 (프로그램 높이 동기)
+    let requested_height = stored_bounds
+        .map(|bounds| bounds.height)
+        .or(fallback_height)
+        .unwrap_or(PANEL_INITIAL_HEIGHT);
+    let height = requested_height.clamp(PANEL_MIN_HEIGHT, max_height);
+    let position = stored_bounds.map(|bounds| {
+        target_monitor
+            .map(|monitor| monitor.clamp(bounds.x, bounds.y, PANEL_WIDTH, height))
+            .unwrap_or(OverlayPosition {
+                x: bounds.x,
+                y: bounds.y,
+            })
+    });
+
+    PanelWindowLayout {
+        position,
+        height,
+        max_height,
+    }
+}
+
+fn changed_panel_max_height(previous: Option<f64>, next: f64) -> Option<f64> {
+    if !next.is_finite() || next <= 0.0 {
+        return None;
+    }
+    if previous.is_some_and(|value| (value - next).abs() < 0.5) {
+        return None;
+    }
+    Some(next)
+}
+
+fn panel_bounds_sample_from_window(window: &WebviewWindow) -> Result<PanelBoundsSample> {
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    Ok(PanelBoundsSample {
+        position: window.outer_position()?,
+        position_scale_factor: scale_factor,
+        size: window.inner_size()?,
+        size_scale_factor: scale_factor,
+        current_scale_factor: scale_factor,
+    })
+}
+
+fn valid_panel_scale_factor(scale_factor: f64) -> f64 {
+    if scale_factor.is_finite() && scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    }
+}
+
+fn panel_bounds_from_sample(sample: PanelBoundsSample) -> PanelBounds {
+    let position = sample
+        .position
+        .to_logical::<f64>(valid_panel_scale_factor(sample.position_scale_factor));
+    let size = sample
+        .size
+        .to_logical::<f64>(valid_panel_scale_factor(sample.size_scale_factor));
+    PanelBounds {
+        x: position.x,
+        y: position.y,
+        height: size.height.max(PANEL_MIN_HEIGHT),
+    }
+}
+
+fn apply_panel_bounds_change(sample: &mut PanelBoundsSample, change: PanelBoundsChange) {
+    match change {
+        PanelBoundsChange::Moved(position) => {
+            sample.position = position;
+            sample.position_scale_factor = sample.current_scale_factor;
+        }
+        PanelBoundsChange::Resized(size) => {
+            sample.size = size;
+            sample.size_scale_factor = sample.current_scale_factor;
+        }
+        PanelBoundsChange::ScaleFactorChanged {
+            position,
+            size,
+            scale_factor,
+        } => {
+            let scale_factor = valid_panel_scale_factor(scale_factor);
+            sample.current_scale_factor = scale_factor;
+            if let Some(position) = position {
+                sample.position = position;
+                sample.position_scale_factor = scale_factor;
+            }
+            sample.size = size;
+            sample.size_scale_factor = scale_factor;
+        }
+    }
+}
+
+fn schedule_panel_bounds_settle(
+    window: &WebviewWindow,
+    store: &Arc<AppStore>,
+    generation: &Arc<AtomicU64>,
+    applied_max_height: &Arc<Mutex<Option<f64>>>,
+    settle_state: &Arc<Mutex<PanelBoundsSettleState>>,
+    change: PanelBoundsChange,
+) {
+    let mut state = settle_state.lock();
+    if !state.active {
+        return;
+    }
+    if state.latest.is_none() {
+        state.latest = panel_bounds_sample_from_window(window).ok();
+    }
+    if let Some(latest) = state.latest.as_mut() {
+        apply_panel_bounds_change(latest, change);
+    }
+    let scheduled_generation = generation.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
+    state.generation = scheduled_generation;
+    if state.worker_running {
+        return;
+    }
+    state.worker_running = true;
+    drop(state);
+
+    let window = window.clone();
+    let store = Arc::clone(store);
+    let generation = Arc::clone(generation);
+    let applied_max_height = Arc::clone(applied_max_height);
+    let settle_state = Arc::clone(settle_state);
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_millis(PANEL_BOUNDS_DEBOUNCE_MS)).await;
+            let (observed_generation, sample) = {
+                let mut state = settle_state.lock();
+                if !state.active {
+                    state.worker_running = false;
+                    return;
+                }
+                if generation.load(Ordering::SeqCst) != state.generation {
+                    state.worker_running = false;
+                    return;
+                }
+                let Some(sample) = state.latest else {
+                    state.worker_running = false;
+                    return;
+                };
+                (state.generation, sample)
+            };
+
+            let is_current = || {
+                let state = settle_state.lock();
+                state.active
+                    && state.generation == observed_generation
+                    && generation.load(Ordering::SeqCst) == observed_generation
+            };
+            if !is_current() {
+                continue;
+            }
+
+            let bounds = panel_bounds_from_sample(sample);
+            if !is_current() {
+                continue;
+            }
+            let persisted = Arc::new(AtomicBool::new(false));
+            let persist_generation = Arc::clone(&generation);
+            let persist_state = Arc::clone(&settle_state);
+            let persisted_result = Arc::clone(&persisted);
+            if let Err(err) = store.update_deferred(move |state| {
+                let settle = persist_state.lock();
+                if settle.active
+                    && settle.generation == observed_generation
+                    && persist_generation.load(Ordering::SeqCst) == observed_generation
+                {
+                    state.panel_bounds = Some(bounds);
+                    persisted_result.store(true, Ordering::SeqCst);
+                }
+            }) {
+                log::warn!("failed to capture settled panel bounds: {err}");
+            } else if persisted.load(Ordering::SeqCst) && is_current() {
+                if let Err(err) = store.flush() {
+                    log::warn!("failed to flush settled panel bounds: {err}");
+                }
+            }
+
+            let constraint_window = window.clone();
+            let constraint_max_height = Arc::clone(&applied_max_height);
+            let constraint_generation = Arc::clone(&generation);
+            let constraint_state = Arc::clone(&settle_state);
+            if let Err(err) = window.app_handle().run_on_main_thread(move || {
+                let is_current = {
+                    let state = constraint_state.lock();
+                    state.active
+                        && state.generation == observed_generation
+                        && constraint_generation.load(Ordering::SeqCst) == observed_generation
+                };
+                if !is_current {
+                    return;
+                }
+                if let Err(err) =
+                    apply_panel_monitor_constraints(&constraint_window, &constraint_max_height)
+                {
+                    log::warn!("failed to update settled panel monitor constraints: {err}");
+                }
+            }) {
+                log::warn!("failed to schedule settled panel constraints: {err}");
+            }
+
+            let mut state = settle_state.lock();
+            if state.generation == observed_generation
+                && generation.load(Ordering::SeqCst) == observed_generation
+            {
+                state.worker_running = false;
+                return;
+            }
+        }
+    });
+}
+
+fn apply_panel_monitor_constraints(
+    window: &WebviewWindow,
+    applied_max_height: &Mutex<Option<f64>>,
+) -> Result<()> {
+    let Some(max_height) = window
+        .current_monitor()?
+        .and_then(MonitorSpec::from_monitor)
+        .map(|monitor| panel_max_height(Some(monitor.logical_height)))
+    else {
+        return Ok(());
+    };
+    let mut applied = applied_max_height.lock();
+    let Some(max_height) = changed_panel_max_height(*applied, max_height) else {
+        return Ok(());
+    };
+    window.set_max_size(Some(tauri::Size::Logical(tauri::LogicalSize::new(
+        PANEL_WIDTH,
+        max_height,
+    ))))?;
+    *applied = Some(max_height);
+    Ok(())
+}
+
+fn defer_panel_bounds_from_window(
+    window: &WebviewWindow,
+    store: &Arc<AppStore>,
+    generation: &Arc<AtomicU64>,
+) -> Result<()> {
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    let position = window.outer_position()?.to_logical::<f64>(scale_factor);
+    let size = window.inner_size()?.to_logical::<f64>(scale_factor);
+    let bounds = PanelBounds {
+        x: position.x,
+        y: position.y,
+        height: size.height.max(PANEL_MIN_HEIGHT),
+    };
+    let scheduled_generation = generation.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
+    store.update_deferred(move |state| {
+        state.panel_bounds = Some(bounds);
+    })?;
+
+    let store = Arc::clone(store);
+    let generation = Arc::clone(generation);
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(PANEL_BOUNDS_DEBOUNCE_MS)).await;
+        if generation.load(Ordering::SeqCst) != scheduled_generation {
+            return;
+        }
+        if let Err(err) = store.flush() {
+            log::warn!("failed to flush debounced panel bounds: {err}");
+        }
+    });
+
+    Ok(())
+}
+
+fn flush_deferred_panel_bounds(store: &Arc<AppStore>, generation: &Arc<AtomicU64>) -> Result<()> {
+    generation.fetch_add(1, Ordering::SeqCst);
+    store.flush()
+}
+
 fn defer_overlay_bounds_from_window(
     window: &WebviewWindow,
     store: &Arc<AppStore>,
@@ -2784,7 +4578,7 @@ impl Drop for KeyboardDaemonTask {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct OverlayPosition {
     x: f64,
     y: f64,
@@ -2792,15 +4586,40 @@ struct OverlayPosition {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{
+        collections::{HashMap, HashSet},
+        sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc,
+        },
+    };
 
     use super::{
-        bootstrap_active_keys, collect_authorized_css_paths, global_css_watch_path,
-        should_create_overlay_on_startup,
+        acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
+        apply_panel_bounds_change, begin_panel_close_request, bootstrap_active_keys,
+        changed_panel_max_height, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
+        frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
+        global_css_watch_path, install_history_handshake, install_lifecycle_handshake,
+        panel_bounds_from_sample, panel_max_height, publish_panel_hidden_transition,
+        publish_panel_visibility_transition, publish_selection_snapshot,
+        resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
+        take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
+        take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
+        EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
+        FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
+        LifecycleHandshakeInstall, MonitorData, Mutex, PanelBoundsChange, PanelBoundsSample,
+        PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
+        PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
+        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
+        SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
+        HISTORY_FRONTEND_FLUSH_INTERRUPTED, MAX_SELECTION_ELEMENTS,
+        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
+        MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
+        PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         keyboard::KeyboardManager,
-        models::{AppStoreData, CustomCss, TabCss},
+        models::{AppStoreData, CustomCss, PanelBounds, TabCss},
         state::local_asset_path::path_identity_key,
     };
     use std::path::Path;
@@ -2811,6 +4630,643 @@ mod tests {
         assert!(should_create_overlay_on_startup(false, true));
         assert!(!should_create_overlay_on_startup(true, false));
         assert!(!should_create_overlay_on_startup(true, true));
+    }
+
+    #[test]
+    fn panel_window_contract_uses_fixed_client_width() {
+        assert_eq!(PANEL_LABEL, "panel");
+        assert_eq!(PANEL_ENTRYPOINT, "panel/index.html");
+        assert_eq!(PANEL_WIDTH, 240.0);
+        assert_eq!(PANEL_INITIAL_HEIGHT, 530.0);
+        assert_eq!(PANEL_MIN_HEIGHT, 360.0);
+        assert_eq!(panel_max_height(Some(1_000.0)), 900.0);
+    }
+
+    #[test]
+    fn raw_input_targets_include_detached_panel() {
+        assert_eq!(
+            RAW_INPUT_WINDOW_LABELS,
+            ["main", OVERLAY_LABEL, PANEL_LABEL]
+        );
+    }
+
+    fn note_panel_view_state() -> PanelViewState {
+        PanelViewState {
+            mode: PanelViewMode::Property,
+            active_tab: PanelLayerTab::Grid,
+            property_active_tab: PanelPropertyTab::Note,
+        }
+    }
+
+    #[test]
+    fn panel_view_state_rejects_invalid_missing_and_unknown_fields() {
+        assert!(serde_json::from_value::<PanelViewState>(serde_json::json!({
+            "mode": "property",
+            "activeTab": "grid",
+            "propertyActiveTab": "invalid"
+        }))
+        .is_err());
+        assert!(serde_json::from_value::<PanelViewState>(serde_json::json!({
+            "mode": "property",
+            "activeTab": "grid"
+        }))
+        .is_err());
+        assert!(serde_json::from_value::<PanelViewState>(serde_json::json!({
+            "mode": "property",
+            "activeTab": "grid",
+            "propertyActiveTab": "note",
+            "extra": true
+        }))
+        .is_err());
+    }
+
+    #[test]
+    fn panel_view_state_is_consumed_once_by_its_target_window() {
+        let expected = note_panel_view_state();
+        let mut slot = Some(TargetedPanelViewState {
+            target: PanelViewTarget::Panel,
+            view_state: expected.clone(),
+        });
+
+        assert_eq!(take_targeted_panel_view_state(&mut slot, "main"), None);
+        assert_eq!(
+            take_targeted_panel_view_state(&mut slot, PANEL_LABEL),
+            Some(expected)
+        );
+        assert_eq!(take_targeted_panel_view_state(&mut slot, PANEL_LABEL), None);
+    }
+
+    #[test]
+    fn settled_panel_bounds_convert_physical_geometry_once() {
+        let bounds = panel_bounds_from_sample(PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_000),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        });
+
+        assert_eq!(bounds.x, 300.0);
+        assert_eq!(bounds.y, 150.0);
+        assert_eq!(bounds.height, 500.0);
+    }
+
+    #[test]
+    fn settled_panel_bounds_preserve_each_geometry_scale_domain() {
+        let mut sample = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_000),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        apply_panel_bounds_change(
+            &mut sample,
+            PanelBoundsChange::ScaleFactorChanged {
+                position: None,
+                size: PhysicalSize::new(480, 1_000),
+                scale_factor: 1.0,
+            },
+        );
+        let bounds = panel_bounds_from_sample(sample);
+
+        assert_eq!(bounds.x, 300.0);
+        assert_eq!(bounds.y, 150.0);
+        assert_eq!(bounds.height, 1_000.0);
+    }
+
+    #[test]
+    fn persisted_panel_bounds_restore_with_height_clamping() {
+        let monitors = MonitorData {
+            specs: Vec::new(),
+            primary_index: None,
+        };
+        let layout = resolve_panel_window_layout(
+            Some(PanelBounds {
+                x: 31.0,
+                y: 47.0,
+                height: 200.0,
+            }),
+            &monitors,
+            None,
+        );
+
+        assert_eq!(layout.height, PANEL_MIN_HEIGHT);
+        let position = layout.position.expect("stored position should be restored");
+        assert_eq!(position.x, 31.0);
+        assert_eq!(position.y, 47.0);
+    }
+
+    #[test]
+    fn panel_monitor_constraint_changes_only_for_a_new_valid_height() {
+        assert_eq!(changed_panel_max_height(Some(900.0), 900.0), None);
+        assert_eq!(changed_panel_max_height(Some(900.0), 900.4), None);
+        assert_eq!(changed_panel_max_height(Some(900.0), 720.0), Some(720.0));
+        assert_eq!(changed_panel_max_height(None, 720.0), Some(720.0));
+        assert_eq!(changed_panel_max_height(Some(900.0), f64::NAN), None);
+        assert_eq!(changed_panel_max_height(Some(900.0), 0.0), None);
+    }
+
+    #[test]
+    fn selection_publish_advances_backend_revision_and_get_matches() {
+        let session = Mutex::new(SelectionSessionSnapshot {
+            mode: "4key".to_string(),
+            ..SelectionSessionSnapshot::default()
+        });
+        let first = publish_selection_snapshot(
+            &session,
+            SelectionSessionSnapshot {
+                selected_elements: vec![SelectionSessionElement {
+                    element_type: "key".to_string(),
+                    index: Some(2),
+                    full_id: Some("key-2".to_string()),
+                }],
+                selected_group_ids: vec!["group-1".to_string()],
+                mode: "4key".to_string(),
+                selection_revision: 999,
+            },
+        )
+        .unwrap();
+        let second = publish_selection_snapshot(&session, first.clone()).unwrap();
+
+        assert_eq!(first.selection_revision, 1);
+        assert_eq!(second.selection_revision, 2);
+        assert_eq!(*session.lock(), second);
+    }
+
+    #[test]
+    fn selection_validation_enforces_collection_and_string_limits() {
+        let oversized_elements = SelectionSessionSnapshot {
+            selected_elements: vec![
+                SelectionSessionElement {
+                    element_type: "key".to_string(),
+                    index: None,
+                    full_id: None,
+                };
+                MAX_SELECTION_ELEMENTS + 1
+            ],
+            ..SelectionSessionSnapshot::default()
+        };
+        assert!(validate_selection_session(&oversized_elements).is_err());
+
+        for invalid in [
+            SelectionSessionSnapshot {
+                selected_elements: vec![SelectionSessionElement {
+                    element_type: "x".repeat(MAX_SELECTION_ELEMENT_TYPE_BYTES + 1),
+                    index: None,
+                    full_id: None,
+                }],
+                ..SelectionSessionSnapshot::default()
+            },
+            SelectionSessionSnapshot {
+                selected_elements: vec![SelectionSessionElement {
+                    element_type: "key".to_string(),
+                    index: None,
+                    full_id: Some("x".repeat(MAX_SELECTION_FULL_ID_BYTES + 1)),
+                }],
+                ..SelectionSessionSnapshot::default()
+            },
+            SelectionSessionSnapshot {
+                selected_group_ids: vec!["x".repeat(MAX_SELECTION_GROUP_ID_BYTES + 1)],
+                ..SelectionSessionSnapshot::default()
+            },
+            SelectionSessionSnapshot {
+                mode: "x".repeat(MAX_SELECTION_MODE_BYTES + 1),
+                ..SelectionSessionSnapshot::default()
+            },
+        ] {
+            assert!(validate_selection_session(&invalid).is_err());
+        }
+    }
+
+    #[derive(Default)]
+    struct TestPanelVisibilityEmitter {
+        events: Mutex<Vec<PanelVisibilityPayload>>,
+    }
+
+    impl PanelVisibilityEventEmitter for TestPanelVisibilityEmitter {
+        fn emit_panel_visibility(&self, payload: PanelVisibilityPayload) -> anyhow::Result<()> {
+            self.events.lock().push(payload);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn panel_visibility_emits_each_open_state_transition_once() {
+        let visible = AtomicBool::new(false);
+        let emitter = TestPanelVisibilityEmitter::default();
+
+        publish_panel_visibility_transition(&visible, &emitter, true, None).unwrap();
+        publish_panel_visibility_transition(&visible, &emitter, true, None).unwrap();
+        publish_panel_visibility_transition(
+            &visible,
+            &emitter,
+            false,
+            Some(PanelVisibilityReason::Closed),
+        )
+        .unwrap();
+
+        assert_eq!(
+            *emitter.events.lock(),
+            vec![
+                PanelVisibilityPayload {
+                    visible: true,
+                    reason: None,
+                },
+                PanelVisibilityPayload {
+                    visible: false,
+                    reason: Some(PanelVisibilityReason::Closed),
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn panel_visibility_wire_distinguishes_closed_and_destroyed() {
+        for (reason, expected) in [
+            (PanelVisibilityReason::Closed, "closed"),
+            (PanelVisibilityReason::Destroyed, "destroyed"),
+        ] {
+            let payload = PanelVisibilityPayload {
+                visible: false,
+                reason: Some(reason),
+            };
+            assert_eq!(
+                serde_json::to_value(payload).unwrap(),
+                serde_json::json!({ "visible": false, "reason": expected })
+            );
+        }
+
+        assert_eq!(
+            serde_json::to_value(PanelVisibilityPayload {
+                visible: true,
+                reason: None,
+            })
+            .unwrap(),
+            serde_json::json!({ "visible": true })
+        );
+    }
+
+    #[test]
+    fn panel_command_close_reason_wins_if_destroyed_event_arrives_first() {
+        let visible = AtomicBool::new(true);
+        let pending_reason = Mutex::new(Some(PanelVisibilityReason::Closed));
+        let emitter = TestPanelVisibilityEmitter::default();
+
+        publish_panel_hidden_transition(
+            &visible,
+            &pending_reason,
+            &emitter,
+            PanelVisibilityReason::Destroyed,
+        )
+        .unwrap();
+        publish_panel_hidden_transition(
+            &visible,
+            &pending_reason,
+            &emitter,
+            PanelVisibilityReason::Destroyed,
+        )
+        .unwrap();
+
+        assert_eq!(
+            *emitter.events.lock(),
+            vec![PanelVisibilityPayload {
+                visible: false,
+                reason: Some(PanelVisibilityReason::Closed),
+            }]
+        );
+    }
+
+    #[test]
+    fn panel_close_request_payload_uses_camel_case_request_id() {
+        let payload = PanelCloseRequestedPayload {
+            request_id: "close-1".to_string(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(payload).unwrap(),
+            serde_json::json!({ "requestId": "close-1" })
+        );
+    }
+
+    #[test]
+    fn panel_close_ack_cancels_timeout_fallback() {
+        let state = Mutex::new(PanelCloseRequestState::Idle);
+        let fallback_calls = Mutex::new(0usize);
+
+        assert!(begin_panel_close_request(&state, "close-1"));
+        assert!(acknowledge_panel_close_request(&state, "close-1"));
+        assert!(!run_panel_close_timeout(&state, "close-1", || {
+            *fallback_calls.lock() += 1;
+            Ok(())
+        })
+        .unwrap());
+
+        assert_eq!(*fallback_calls.lock(), 0);
+        assert_eq!(*state.lock(), PanelCloseRequestState::Idle);
+    }
+
+    #[test]
+    fn panel_close_timeout_is_single_flight_for_repeated_clicks() {
+        let state = Mutex::new(PanelCloseRequestState::Idle);
+        let fallback_calls = Mutex::new(0usize);
+
+        assert!(begin_panel_close_request(&state, "close-1"));
+        assert!(!begin_panel_close_request(&state, "close-2"));
+        assert!(!acknowledge_panel_close_request(&state, "close-2"));
+        assert!(run_panel_close_timeout(&state, "close-1", || {
+            *fallback_calls.lock() += 1;
+            Ok(())
+        })
+        .unwrap());
+        assert!(!run_panel_close_timeout(&state, "close-1", || {
+            *fallback_calls.lock() += 1;
+            Ok(())
+        })
+        .unwrap());
+
+        assert_eq!(*fallback_calls.lock(), 1);
+        assert_eq!(*state.lock(), PanelCloseRequestState::Idle);
+    }
+
+    #[test]
+    fn frontend_lifecycle_targets_include_open_panel_only() {
+        let open_labels = ["main", PANEL_LABEL];
+        let targets =
+            collect_frontend_lifecycle_targets(|label| open_labels.contains(&label).then_some(()));
+        let labels = targets
+            .into_iter()
+            .map(|(label, ())| label)
+            .collect::<Vec<_>>();
+
+        assert_eq!(labels, vec!["main".to_string(), PANEL_LABEL.to_string()]);
+    }
+
+    #[test]
+    fn panel_only_flush_failure_restores_every_original_handshake_target() {
+        let target_windows = ["main", OVERLAY_LABEL, PANEL_LABEL]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<HashSet<_>>();
+        let mut slot = Some(EditorFlushHandshake {
+            id: "handshake-1".to_string(),
+            completion: EditorFlushCompletion::Lifecycle(FrontendLifecycleAction::Quit),
+            target_windows: target_windows.clone(),
+            pending_windows: target_windows,
+        });
+        let active = slot.as_mut().expect("handshake should be active");
+        assert!(active.pending_windows.remove("main"));
+        assert!(active.pending_windows.remove(OVERLAY_LABEL));
+        assert_eq!(
+            active.pending_windows,
+            HashSet::from([PANEL_LABEL.to_string()])
+        );
+
+        let canceled = take_editor_flush_handshake(&mut slot, "handshake-1")
+            .expect("panel failure should cancel the handshake");
+
+        assert_eq!(
+            frontend_lifecycle_restore_labels(&canceled.target_windows),
+            vec!["main", OVERLAY_LABEL, PANEL_LABEL]
+        );
+        assert!(slot.is_none());
+    }
+
+    #[test]
+    fn history_flush_request_keeps_existing_event_contract() {
+        let payload = EditorFlushRequest {
+            handshake_id: "history-1".to_string(),
+            action: FrontendFlushAction::History,
+        };
+
+        assert_eq!(
+            serde_json::to_value(payload).unwrap(),
+            serde_json::json!({
+                "handshakeId": "history-1",
+                "action": "history"
+            })
+        );
+    }
+
+    #[test]
+    fn history_flush_completes_only_after_every_window_ack() {
+        let (sender, mut receiver) = tokio::sync::oneshot::channel();
+        let target_windows = ["main", PANEL_LABEL]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<HashSet<_>>();
+        let mut slot = Some(EditorFlushHandshake {
+            id: "history-1".to_string(),
+            completion: EditorFlushCompletion::History {
+                operation_id: "00000000-0000-0000-0000-000000000001".to_string(),
+                sender: Some(sender),
+                phase: FrontendHistoryFlushPhase::Collecting,
+                barrier: None,
+            },
+            target_windows: target_windows.clone(),
+            pending_windows: target_windows,
+        });
+        let gate = Arc::new(crate::state::history::HistoryAdmissionGate::default());
+
+        assert!(
+            acknowledge_editor_flush_handshake(&mut slot, "history-1", "main", &gate,).is_none()
+        );
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
+
+        let closing =
+            acknowledge_editor_flush_handshake(&mut slot, "history-1", PANEL_LABEL, &gate)
+                .expect("last window should begin gate close");
+        assert!(matches!(
+            closing,
+            EditorFlushAcknowledge::HistoryClosing { .. }
+        ));
+        assert!(gate.is_closed());
+        assert!(slot.as_ref().is_some_and(|active| {
+            active.completion.history_phase() == Some(FrontendHistoryFlushPhase::Closing)
+        }));
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
+    }
+
+    #[test]
+    fn acknowledged_history_window_blocks_new_mutations_while_other_window_drains() {
+        let (sender, _receiver) = tokio::sync::oneshot::channel();
+        let targets = HashSet::from(["main".to_string(), PANEL_LABEL.to_string()]);
+        let mut slot = Some(EditorFlushHandshake {
+            id: "history-1".to_string(),
+            completion: EditorFlushCompletion::History {
+                operation_id: "00000000-0000-0000-0000-000000000001".to_string(),
+                sender: Some(sender),
+                phase: FrontendHistoryFlushPhase::Collecting,
+                barrier: None,
+            },
+            target_windows: targets.clone(),
+            pending_windows: targets,
+        });
+
+        let gate = Arc::new(crate::state::history::HistoryAdmissionGate::default());
+        assert!(
+            acknowledge_editor_flush_handshake(&mut slot, "history-1", "main", &gate,).is_none()
+        );
+        assert!(frontend_history_mutation_blocked(&slot, "main"));
+        assert!(!frontend_history_mutation_blocked(&slot, PANEL_LABEL));
+    }
+
+    #[test]
+    fn history_flush_ready_releases_gate_before_frontend_lock() {
+        let gate = Arc::new(crate::state::history::HistoryAdmissionGate::default());
+        let barrier = gate.close("00000000-0000-0000-0000-000000000001").unwrap();
+        let release_count = Arc::new(AtomicUsize::new(0));
+        let release_count_for_guard = Arc::clone(&release_count);
+        let mut ready = FrontendHistoryFlushReady {
+            barrier: Some(barrier),
+            complete: Some(Box::new(move || {
+                release_count_for_guard.fetch_add(1, Ordering::SeqCst);
+            })),
+        };
+
+        let barrier = ready.take_barrier();
+        assert!(gate.is_closed());
+        drop(barrier);
+        assert!(!gate.is_closed());
+        assert_eq!(release_count.load(Ordering::SeqCst), 0);
+
+        drop(ready);
+        assert_eq!(release_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn lifecycle_flush_interrupts_history_but_history_cannot_replace_lifecycle() {
+        let (history_sender, mut history_receiver) = tokio::sync::oneshot::channel();
+        let mut slot = Some(EditorFlushHandshake {
+            id: "history-1".to_string(),
+            completion: EditorFlushCompletion::History {
+                operation_id: "00000000-0000-0000-0000-000000000001".to_string(),
+                sender: Some(history_sender),
+                phase: FrontendHistoryFlushPhase::Collecting,
+                barrier: None,
+            },
+            target_windows: HashSet::from(["main".to_string()]),
+            pending_windows: HashSet::from(["main".to_string()]),
+        });
+        let lifecycle = EditorFlushHandshake {
+            id: "quit-1".to_string(),
+            completion: EditorFlushCompletion::Lifecycle(FrontendLifecycleAction::Quit),
+            target_windows: HashSet::from(["main".to_string()]),
+            pending_windows: HashSet::from(["main".to_string()]),
+        };
+
+        let LifecycleHandshakeInstall::InterruptedHistory(interrupted) =
+            install_lifecycle_handshake(&mut slot, lifecycle)
+        else {
+            panic!("lifecycle should replace history");
+        };
+        let interrupted = *interrupted;
+        let EditorFlushCompletion::History { sender, .. } = interrupted.completion else {
+            panic!("interrupted completion should be history");
+        };
+        assert!(sender
+            .expect("history sender should still be present")
+            .send(Err(HISTORY_FRONTEND_FLUSH_INTERRUPTED.to_string()))
+            .is_ok());
+        assert!(matches!(
+            history_receiver.try_recv().unwrap(),
+            Err(error) if error == HISTORY_FRONTEND_FLUSH_INTERRUPTED
+        ));
+
+        let (next_history_sender, _next_history_receiver) = tokio::sync::oneshot::channel();
+        let next_history = EditorFlushHandshake {
+            id: "history-2".to_string(),
+            completion: EditorFlushCompletion::History {
+                operation_id: "00000000-0000-0000-0000-000000000002".to_string(),
+                sender: Some(next_history_sender),
+                phase: FrontendHistoryFlushPhase::Collecting,
+                barrier: None,
+            },
+            target_windows: HashSet::from(["main".to_string()]),
+            pending_windows: HashSet::from(["main".to_string()]),
+        };
+        assert!(!install_history_handshake(&mut slot, next_history));
+        assert!(slot
+            .as_ref()
+            .is_some_and(|active| active.completion.is_lifecycle()));
+    }
+
+    #[test]
+    fn closing_history_can_time_out_and_reopen_the_gate() {
+        let (sender, _receiver) = tokio::sync::oneshot::channel();
+        let gate = Arc::new(crate::state::history::HistoryAdmissionGate::default());
+        let mut slot = Some(EditorFlushHandshake {
+            id: "history-closing".to_string(),
+            completion: EditorFlushCompletion::History {
+                operation_id: "00000000-0000-0000-0000-000000000003".to_string(),
+                sender: Some(sender),
+                phase: FrontendHistoryFlushPhase::Collecting,
+                barrier: None,
+            },
+            target_windows: HashSet::from(["main".to_string()]),
+            pending_windows: HashSet::from(["main".to_string()]),
+        });
+
+        assert!(matches!(
+            acknowledge_editor_flush_handshake(&mut slot, "history-closing", "main", &gate,),
+            Some(EditorFlushAcknowledge::HistoryClosing { .. })
+        ));
+        assert!(gate.is_closed());
+
+        let timed_out = take_cancelable_editor_flush_handshake(&mut slot, "history-closing")
+            .expect("closing history should remain cancelable");
+        drop(timed_out);
+
+        assert!(!gate.is_closed());
+        assert!(slot.is_none());
+    }
+
+    #[test]
+    fn running_history_defers_lifecycle_and_blocks_new_history() {
+        let mut slot = Some(EditorFlushHandshake {
+            id: "history-running".to_string(),
+            completion: EditorFlushCompletion::History {
+                operation_id: "00000000-0000-0000-0000-000000000004".to_string(),
+                sender: None,
+                phase: FrontendHistoryFlushPhase::Running,
+                barrier: None,
+            },
+            target_windows: HashSet::from(["main".to_string()]),
+            pending_windows: HashSet::new(),
+        });
+        let lifecycle = EditorFlushHandshake {
+            id: "quit-deferred".to_string(),
+            completion: EditorFlushCompletion::Lifecycle(FrontendLifecycleAction::Quit),
+            target_windows: HashSet::from(["main".to_string()]),
+            pending_windows: HashSet::from(["main".to_string()]),
+        };
+
+        assert!(matches!(
+            install_lifecycle_handshake(&mut slot, lifecycle),
+            LifecycleHandshakeInstall::DeferredUntilHistoryComplete
+        ));
+        assert!(take_cancelable_editor_flush_handshake(&mut slot, "history-running").is_none());
+
+        let (sender, _receiver) = tokio::sync::oneshot::channel();
+        let next_history = EditorFlushHandshake {
+            id: "history-next".to_string(),
+            completion: EditorFlushCompletion::History {
+                operation_id: "00000000-0000-0000-0000-000000000005".to_string(),
+                sender: Some(sender),
+                phase: FrontendHistoryFlushPhase::Collecting,
+                barrier: None,
+            },
+            target_windows: HashSet::from(["main".to_string()]),
+            pending_windows: HashSet::from(["main".to_string()]),
+        };
+        assert!(!install_history_handshake(&mut slot, next_history));
+        assert!(take_cancelable_editor_flush_handshake(&mut slot, "history-old").is_none());
     }
 
     #[test]

@@ -4,20 +4,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useKeyManager } from '@hooks/useKeyManager';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import {
-  useHistoryStore,
-  type HistoryState,
-} from '@stores/data/useHistoryStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
-import { persistRestoredState } from '@src/renderer/editor/runtime/editorSnapshot';
-
-vi.mock('@src/renderer/editor/runtime/editorSnapshot', () => ({
-  pushCurrentStateToHistory: vi.fn(),
-  applyRestoredStateToStores: vi.fn(),
-  applyRestoredPluginElements: vi.fn(),
-  persistRestoredState: vi.fn(),
-}));
 
 vi.mock('@src/renderer/editor/runtime/persistState', () => ({
   persistPositionsWithSync: vi.fn(),
@@ -68,26 +56,6 @@ describe('키 삭제 선택 정리', () => {
     return manager;
   };
 
-  const restoredState = (): HistoryState => ({
-    keyMappings: { '4key': ['A', 'B', 'C', 'D'] },
-    positions: {
-      '4key': [
-        createDefaultKeyPosition(),
-        createDefaultKeyPosition(),
-        createDefaultKeyPosition(),
-        createDefaultKeyPosition(),
-      ],
-    },
-    statPositions: { '4key': [] },
-    graphPositions: { '4key': [] },
-    knobPositions: { '4key': [] },
-    pluginElements: [],
-    layerGroups: { '4key': [] },
-    keyCounters: {},
-    customTabs: [],
-    selectedKeyType: '4key',
-  });
-
   beforeEach(() => {
     resetMode.mockReset().mockResolvedValue({ success: true });
     window.api = {
@@ -111,7 +79,6 @@ describe('키 삭제 선택 정리', () => {
       isLocalUpdateInProgress: false,
     });
     useGridSelectionStore.getState().clearSelection();
-    useHistoryStore.setState({ past: [], future: [] });
     vi.clearAllMocks();
   });
 
@@ -119,7 +86,6 @@ describe('키 삭제 선택 정리', () => {
     act(() => root.unmount());
     host.remove();
     useGridSelectionStore.getState().clearSelection();
-    useHistoryStore.setState({ past: [], future: [] });
     window.api = originalApi;
   });
 
@@ -168,139 +134,6 @@ describe('키 삭제 선택 정리', () => {
     act(() => root.render(<Harness />));
 
     await act(async () => latest().handleResetCurrentMode());
-
-    expect(useGridSelectionStore.getState().selectedElements).toEqual(
-      selection,
-    );
-  });
-
-  it('undo로 선택된 종류의 배열 길이가 바뀌면 선택을 해제한다', async () => {
-    useKeyStore.setState({
-      keyMappings: { '4key': ['B', 'C', 'D'] },
-      positions: {
-        '4key': [
-          createDefaultKeyPosition(),
-          createDefaultKeyPosition(),
-          createDefaultKeyPosition(),
-        ],
-      },
-    });
-    useHistoryStore.setState({ past: [restoredState()], future: [] });
-    useGridSelectionStore
-      .getState()
-      .setSelectedElements([{ type: 'key', id: 'key-0', index: 0 }]);
-    act(() => root.render(<Harness />));
-
-    await act(async () => latest().handleUndo());
-
-    expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
-  });
-
-  it('redo로 선택된 종류의 배열 길이가 바뀌면 선택을 해제한다', async () => {
-    useKeyStore.setState({
-      keyMappings: { '4key': ['B', 'C', 'D'] },
-      positions: {
-        '4key': [
-          createDefaultKeyPosition(),
-          createDefaultKeyPosition(),
-          createDefaultKeyPosition(),
-        ],
-      },
-    });
-    useHistoryStore.setState({ past: [], future: [restoredState()] });
-    useGridSelectionStore
-      .getState()
-      .setSelectedElements([{ type: 'key', id: 'key-0', index: 0 }]);
-    act(() => root.render(<Harness />));
-
-    await act(async () => latest().handleRedo());
-
-    expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
-  });
-
-  it('길이가 같은 스타일 undo는 선택을 보존한다', async () => {
-    const target = restoredState();
-    target.keyMappings = { '4key': ['A', 'B', 'C'] };
-    target.positions = {
-      '4key': [
-        { ...createDefaultKeyPosition(), backgroundColor: '#123456' },
-        createDefaultKeyPosition(),
-        createDefaultKeyPosition(),
-      ],
-    };
-    useHistoryStore.setState({ past: [target], future: [] });
-    const selection = [{ type: 'key' as const, id: 'key-0', index: 0 }];
-    useGridSelectionStore.getState().setSelectedElements(selection);
-    act(() => root.render(<Harness />));
-
-    await act(async () => latest().handleUndo());
-
-    expect(useGridSelectionStore.getState().selectedElements).toEqual(
-      selection,
-    );
-  });
-
-  it('같은 개수의 프리셋 교체 undo와 redo는 모두 선택을 해제한다', async () => {
-    const target = restoredState();
-    target.keyMappings = { '4key': ['D', 'E', 'F'] };
-    target.positions = {
-      '4key': [
-        createDefaultKeyPosition(),
-        createDefaultKeyPosition(),
-        createDefaultKeyPosition(),
-      ],
-    };
-    target.invalidatesGridSelection = true;
-    useHistoryStore.setState({ past: [target], future: [] });
-    useGridSelectionStore
-      .getState()
-      .setSelectedElements([{ type: 'key', id: 'key-0', index: 0 }]);
-    act(() => root.render(<Harness />));
-
-    await act(async () => latest().handleUndo());
-
-    expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
-    expect(
-      useHistoryStore.getState().future.at(-1)?.invalidatesGridSelection,
-    ).toBe(true);
-
-    useGridSelectionStore
-      .getState()
-      .setSelectedElements([{ type: 'key', id: 'key-0', index: 0 }]);
-    await act(async () => latest().handleRedo());
-
-    expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
-    expect(
-      useHistoryStore.getState().past.at(-1)?.invalidatesGridSelection,
-    ).toBe(true);
-  });
-
-  it('끝에 요소만 복원하는 undo는 앞쪽 선택을 보존한다', async () => {
-    useHistoryStore.setState({ past: [restoredState()], future: [] });
-    const selection = [{ type: 'key' as const, id: 'key-0', index: 0 }];
-    useGridSelectionStore.getState().setSelectedElements(selection);
-    act(() => root.render(<Harness />));
-
-    await act(async () => latest().handleUndo());
-
-    expect(useGridSelectionStore.getState().selectedElements).toEqual(
-      selection,
-    );
-  });
-
-  it('undo 저장 실패 시 선택을 보존한다', async () => {
-    vi.mocked(persistRestoredState).mockRejectedValueOnce(
-      new Error('injected failure'),
-    );
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const target = restoredState();
-    target.invalidatesGridSelection = true;
-    useHistoryStore.setState({ past: [target], future: [] });
-    const selection = [{ type: 'key' as const, id: 'key-0', index: 0 }];
-    useGridSelectionStore.getState().setSelectedElements(selection);
-    act(() => root.render(<Harness />));
-
-    await act(async () => latest().handleUndo());
 
     expect(useGridSelectionStore.getState().selectedElements).toEqual(
       selection,

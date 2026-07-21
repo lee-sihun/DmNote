@@ -27,6 +27,32 @@ import {
 import { stableStringify } from '@utils/core/stableStringify';
 import { useTranslation } from '@contexts/useTranslation';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { previewApi } from '@api/modules/previewApi';
+import { panelWindowApi } from '@api/modules/selectionSessionApi';
+import {
+  initSelectionSync,
+  resetSelectionForModeChange,
+} from '@src/renderer/editor/runtime/selectionSync';
+import { usePanelWindowStore } from '@stores/grid/usePanelWindowStore';
+import { applyPanelViewState } from '@stores/grid/panelViewHandoff';
+import { initPluginRpcHandler } from '@plugins/rpc/pluginRpcHandler';
+import {
+  initPluginSettingsSessionHost,
+  notePanelVisibilityForSettingsSession,
+} from '@plugins/rpc/pluginSettingsSession';
+import { initPluginInstancesUndoSync } from '@plugins/runtime/displayElement/instancesUndoSync';
+import { historyApi } from '@api/modules/historyApi';
+import {
+  useHistoryStatusStore,
+  syncHistoryStatus,
+} from '@stores/data/useHistoryStatusStore';
+import { previewOverlay } from '@src/renderer/editor/runtime/previewOverlay';
+import { flushFocusedEditorForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
+import {
+  acquireHistoryEditorFlushLock,
+  releaseHistoryEditorFlushLock,
+  resetHistoryEditorFlushLock,
+} from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import type { BootstrapPayload } from '@src/types/app';
 import type { CustomTab } from '@src/types/key/keys';
 import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/editorCoordinator';
@@ -116,6 +142,7 @@ export function useAppBootstrap() {
 
   useEffect(() => {
     let disposed = false;
+    let stopSelectionSync: (() => void) | null = null;
     const isOverlayWindow = window.__dmn_window_type === 'overlay';
     let conflictDialogOpen = false;
     let lastShownPermanentEditorError: unknown = null;
@@ -448,6 +475,7 @@ export function useAppBootstrap() {
           ...state,
           keyMappings: bootstrap.keys,
           positions: bootstrap.positions,
+          canonicalPositions: bootstrap.positions,
           customTabs: bootstrap.customTabs,
           selectedKeyType: bootstrap.selectedKeyType,
         }));
@@ -495,7 +523,30 @@ export function useAppBootstrap() {
           console.error('편집 상태 초기화 실패', error);
         }
 
+        // 다른 창의 편집 프리뷰 수신 (재구독 시 브로커가 이전 채널 교체)
+        previewApi
+          .subscribe((envelope) => {
+            previewOverlay.applyRemoteEnvelope(envelope);
+          })
+          .catch((error) => {
+            console.error('프리뷰 채널 구독 실패', error);
+          });
+
+        // 백엔드 undo authority 상태 초기 조회
+        void syncHistoryStatus();
+
+        // 분리 패널 창 존재 여부 초기 조회 (메인 인라인 gating)
+        if (window.__dmn_window_type === 'main') {
+          panelWindowApi
+            .isOpen()
+            .then((open) => {
+              usePanelWindowStore.getState().setDetached(open);
+            })
+            .catch(() => {});
+        }
+
         finalizeBootstrap();
+        startSelectionSyncOnceReady();
       } catch (error) {
         console.error('초기 부트스트랩 실패', error);
       } finally {
@@ -508,31 +559,108 @@ export function useAppBootstrap() {
       }
     })();
 
+    // authoritative 상태(selectedKeyType 등) 적용 후 시작 (H2: 유실 창·모드 시차 제거)
+    // 호출이 위쪽 async 블록에 있어 hoisting되는 함수 선언 사용
+    function startSelectionSyncOnceReady() {
+      if (disposed || stopSelectionSync) return;
+      if (
+        window.__dmn_runtime !== 'obs' &&
+        window.__dmn_window_type !== 'overlay'
+      ) {
+        stopSelectionSync = initSelectionSync();
+      }
+    }
+
+    // main = 플러그인 단일 authority - 패널발 mutation RPC 수신
+    const stopPluginRpcHandler =
+      window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
+        ? initPluginRpcHandler()
+        : null;
+    // 설정 세션 host - lease 이동 시 세션 이전, panel 재요청 응답
+    const stopPluginSettingsSessionHost =
+      window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
+        ? initPluginSettingsSessionHost()
+        : null;
+    // 플러그인 인스턴스 undo/redo의 canonical 재결합 (C4)
+    const stopPluginInstancesUndoSync =
+      window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
+        ? initPluginInstancesUndoSync()
+        : null;
+
     const unsubscribers = [
       editorCoordinator.subscribe(handleEditorCoordinatorState),
-      subscribe<{ handshakeId: string; action: 'quit' | 'restart' }>(
-        'app:close-requested',
-        ({ handshakeId, action }) => {
-          if (disposed) return;
-          void acknowledgeLifecycleAfterEditorFlush(handshakeId).catch(
-            (error) => {
-              console.error(`편집 상태 저장 후 ${action} 실패`, error);
-              void (async () => {
-                await cancelLifecycleEditorFlush(handshakeId).catch(
-                  () => undefined,
-                );
-                const overlay = await window.api.overlay
-                  .get()
-                  .catch(() => null);
-                await window.api.window.showMain();
-                if (overlay?.visible) {
-                  await window.api.overlay.setVisible(true);
-                }
-              })().catch((showError) => {
-                console.error('종료 취소 후 창 복원 실패', showError);
-              });
-            },
-          );
+      // undo/redo 가능 여부 projection (revision 역전은 스토어가 무시)
+      historyApi.onStatus((status) => {
+        useHistoryStatusStore.getState().applyStatus(status);
+      }),
+      // 분리 패널 창 가시성 → 인라인 패널 gating
+      panelWindowApi.onVisibility(({ visible, reason }) => {
+        if (window.__dmn_window_type === 'main') {
+          notePanelVisibilityForSettingsSession(visible, reason);
+          if (visible) {
+            usePanelWindowStore.getState().setDetached(true);
+            return;
+          }
+          void panelWindowApi
+            .takeViewState()
+            .then((viewState) => {
+              if (viewState) applyPanelViewState(viewState);
+            })
+            .catch((error) => {
+              console.error('분리 패널 뷰 상태 복원 실패', error);
+            })
+            .finally(() => {
+              usePanelWindowStore.getState().setDetached(false);
+            });
+          return;
+        }
+
+        if (window.__dmn_window_type === 'panel' && visible) {
+          void panelWindowApi
+            .takeViewState()
+            .then((viewState) => {
+              if (viewState) applyPanelViewState(viewState);
+            })
+            .catch((error) => {
+              console.error('분리 패널 뷰 상태 적용 실패', error);
+            });
+        }
+      }),
+      subscribe<{
+        handshakeId: string;
+        action: 'quit' | 'restart' | 'history';
+      }>('app:close-requested', ({ handshakeId, action }) => {
+        if (disposed) return;
+        if (action === 'history') {
+          acquireHistoryEditorFlushLock(handshakeId);
+        }
+        void (async () => {
+          const committed = await flushFocusedEditorForLifecycle();
+          if (!committed) {
+            throw new Error('pending focused editor failed to commit');
+          }
+          await acknowledgeLifecycleAfterEditorFlush(handshakeId);
+        })().catch((error) => {
+          console.error(`편집 상태 저장 후 ${action} 실패`, error);
+          void (async () => {
+            await cancelLifecycleEditorFlush(handshakeId).catch(
+              () => undefined,
+            );
+            if (action === 'history') return;
+            const overlay = await window.api.overlay.get().catch(() => null);
+            await window.api.window.showMain();
+            if (overlay?.visible) {
+              await window.api.overlay.setVisible(true);
+            }
+          })().catch((showError) => {
+            console.error('종료 취소 후 창 복원 실패', showError);
+          });
+        });
+      }),
+      subscribe<{ handshakeId: string }>(
+        'app:history-flush-released',
+        ({ handshakeId }) => {
+          releaseHistoryEditorFlushLock(handshakeId);
         },
       ),
       window.api.settings.onChanged((diff: SettingsDiff) => {
@@ -541,6 +669,10 @@ export function useAppBootstrap() {
       }),
       window.api.keys.onModeChanged(({ mode }) => {
         useKeyStore.setState((state) => ({ ...state, selectedKeyType: mode }));
+        // 이전 모드 선택 index가 새 모드 요소로 재해석되는 것 방지
+        if (!isOverlayWindow && window.__dmn_runtime !== 'obs') {
+          resetSelectionForModeChange();
+        }
       }),
       window.api.keys.onCountersChanged((snapshot) => {
         clearCounterDelayTimers();
@@ -655,6 +787,11 @@ export function useAppBootstrap() {
 
     return () => {
       disposed = true;
+      resetHistoryEditorFlushLock();
+      stopSelectionSync?.();
+      stopPluginRpcHandler?.();
+      stopPluginSettingsSessionHost?.();
+      stopPluginInstancesUndoSync?.();
       unsubscribers.forEach((unsubscribe) => {
         try {
           unsubscribe();

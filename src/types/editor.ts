@@ -1,8 +1,6 @@
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import {
   keyPositionSchema,
-  type CustomTab,
-  type KeyCounters,
   type KeyMappings,
   type KeyPositions,
 } from '@src/types/key/keys';
@@ -12,8 +10,6 @@ import {
   type StatItemPositions,
 } from '@src/types/key/statItems';
 import type { LayerGroups } from '@src/types/layerGroups';
-import type { SettingsPatchInput } from '@src/types/settings/settings';
-import type { TabNoteOverrides } from '@src/types/settings/noteSettings';
 import { canonicalizePositionGradients } from '@src/types/color';
 
 export const EDITOR_SCHEMA_VERSION = 1 as const;
@@ -47,6 +43,8 @@ export interface EditorCommitRequest {
   baseRevision: number;
   mutationId: string;
   changes: EditorPatchV1;
+  // 프리뷰 게스처 커밋 연동용, 성공 시 committed 이벤트로 echo
+  gestureId?: string;
 }
 
 export interface EditorCommitResult {
@@ -59,16 +57,6 @@ export interface EditorGetResult {
   document: EditorDocumentV1;
 }
 
-export interface EditorHistoryRestoreRequest {
-  baseRevision: number;
-  document: EditorDocumentV1;
-  customTabs: CustomTab[];
-  selectedKeyType: string;
-  keyCounters?: KeyCounters;
-  settingsPatch?: SettingsPatchInput;
-  tabNoteOverrides?: TabNoteOverrides;
-}
-
 export interface EditorCommittedV1 {
   schemaVersion: typeof EDITOR_SCHEMA_VERSION;
   revision: number;
@@ -76,6 +64,8 @@ export interface EditorCommittedV1 {
   origin?: string;
   changedFields: EditorField[];
   patch: EditorPatchV1;
+  // 커밋 요청의 gestureId echo, 수신 창의 프리뷰 오버레이 정리 신호
+  gestureId?: string | null;
 }
 
 export type EditorCommitErrorCode =
@@ -83,7 +73,11 @@ export type EditorCommitErrorCode =
   | 'VALIDATION_FAILED'
   | 'PAIRED_UPDATE_REQUIRED'
   | 'MUTATION_ID_REUSED'
-  | 'IO_ERROR';
+  | 'IO_ERROR'
+  // undo/redo barrier 진행 중, retryable
+  | 'HISTORY_IN_PROGRESS'
+  // observedHistoryEpoch가 낡음, retryable
+  | 'HISTORY_EPOCH_CONFLICT';
 
 export interface EditorCommitErrorDetails {
   currentRevision?: number;
@@ -104,6 +98,8 @@ const EDITOR_ERROR_CODES = new Set<EditorCommitErrorCode>([
   'PAIRED_UPDATE_REQUIRED',
   'MUTATION_ID_REUSED',
   'IO_ERROR',
+  'HISTORY_IN_PROGRESS',
+  'HISTORY_EPOCH_CONFLICT',
 ]);
 
 const EDITOR_FIELD_SET = new Set<string>(EDITOR_FIELDS);

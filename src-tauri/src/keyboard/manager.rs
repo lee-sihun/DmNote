@@ -74,6 +74,18 @@ impl KeyboardManager {
         mode_exists
     }
 
+    pub fn update_mappings(&self, mappings: KeyMappings) {
+        let mut mappings_guard = self.mappings.write();
+        let current_mode = self.current_mode.read();
+        let next_valid_keys = Self::valid_keys_for_mode(&mappings, &current_mode);
+        let mut valid_keys = self.valid_keys.write();
+        let mut active_keys = self.active_keys.write();
+
+        Self::retain_active_keys(&mut active_keys, &current_mode, &next_valid_keys);
+        *mappings_guard = mappings;
+        *valid_keys = next_valid_keys;
+    }
+
     pub fn current_mode(&self) -> String {
         self.current_mode.read().clone()
     }

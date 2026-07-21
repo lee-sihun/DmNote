@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -6,8 +12,10 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
@@ -18,6 +26,7 @@ import {
   omitLayoutSettingValues,
   type SettingsNormalizationErrorKind,
 } from '@plugins/runtime/settingsSections';
+import { updatePluginElement } from '@plugins/rpc/pluginElementActions';
 import {
   toRgbHexColor,
   parseAlphaPercent,
@@ -30,6 +39,7 @@ import type { KnobItemPosition } from '@src/types/key/knobs';
 import type {
   PluginSettingSchema,
   PluginMessages,
+  PluginDefinitionInternal,
   RawInputPayload,
 } from '@src/types/plugin/api';
 import {
@@ -37,11 +47,17 @@ import {
   normalizeCounterSettings,
 } from '@src/types/key/keys';
 import { useLenis } from '@hooks/useLenis';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import {
+  composePreviewPositions,
+  getPreviewOverlayVersion,
+  subscribePreviewOverlay,
+} from '@src/renderer/editor/runtime/previewOverlay';
 
 // 분리된 컴포넌트들 및 훅
 import {
   TABS,
-  TabType,
   PropertyRow,
   PropertySection,
   NumberInput,
@@ -59,7 +75,10 @@ import {
   useBatchHandlers,
   usePanelScroll,
 } from './PropertiesPanel/index';
-import { SIDE_PANEL_FRAME_CLASS } from './PropertiesPanel/panelChrome';
+import {
+  SIDE_PANEL_FRAME_CLASS,
+  WINDOW_PANEL_FRAME_CLASS,
+} from './PropertiesPanel/panelChrome';
 import { PanelNavProvider } from './PropertiesPanel/PanelNavContext';
 import PanelHeaderActions from './PropertiesPanel/PanelHeaderActions';
 import PanelToggleButton from './PropertiesPanel/PanelToggleButton';
@@ -81,6 +100,22 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
   }
 };
 
+const shouldNormalizePropertyTabToStyle = (
+  elements: Array<{ type: string }>,
+  activeTab: (typeof TABS)[keyof typeof TABS],
+): boolean => {
+  if (activeTab === TABS.STYLE) return false;
+  const hasKey = elements.some((element) => element.type === 'key');
+  const hasStat = elements.some((element) => element.type === 'stat');
+  const hasGraph = elements.some((element) => element.type === 'graph');
+  const hasPlugin = elements.some((element) => element.type === 'plugin');
+
+  if (activeTab === TABS.NOTE && hasStat && !hasKey && !hasPlugin) {
+    return true;
+  }
+  return hasGraph && !hasKey && !hasStat && !hasPlugin;
+};
+
 // 서브 페이지 exit 전환 시간 — --ui-duration-page와 동기
 const PAGE_EXIT_MS = 250;
 
@@ -93,13 +128,20 @@ interface PropertiesPanelProps {
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyBatchUpdate?: (
     updates: Array<{ index: number } & Partial<KeyPosition>>,
-    options?: { skipHistory?: boolean; deferSave?: boolean },
+    options?: { deferSave?: boolean },
   ) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   onKeyBatchPreview?: (
     updates: Array<{ index: number } & Partial<KeyPosition>>,
   ) => void;
   onKeyMappingChange?: (index: number, newKey: string) => void;
+  // 분리 창 전환 액션 - 메인은 detach, 분리 창은 reattach
+  detachAction?: 'detach' | 'reattach';
+  onDetachAction?: () => void;
+  // 분리 창에서는 인셋 채움 프레임 사용
+  frameVariant?: 'inline' | 'window';
+  // 분리 창의 authoritative 선택 동기화 완료 여부
+  selectionSyncReady?: boolean;
 }
 
 // ============================================================================
@@ -109,6 +151,10 @@ interface PropertiesPanelProps {
 const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onPositionChange,
   onKeyUpdate,
+  detachAction,
+  onDetachAction,
+  frameVariant = 'inline',
+  selectionSyncReady = true,
   onKeyBatchUpdate,
   onKeyPreview,
   onKeyBatchPreview,
@@ -118,21 +164,41 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedElements = useGridSelectionStore(
     (state) => state.selectedElements,
   );
-  const pushHistoryState = useHistoryStore((state) => state.pushState);
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const positions = useKeyStore((state) => state.positions);
   const keyMappings = useKeyStore((state) => state.keyMappings);
-  const statItemPositions = useStatItemStore((state) => state.positions);
-  const graphItemPositions = useGraphItemStore((state) => state.positions);
+  const canonicalStatItemPositions = useStatItemStore(
+    (state) => state.positions,
+  );
+  const canonicalGraphItemPositions = useGraphItemStore(
+    (state) => state.positions,
+  );
+  const canonicalKnobItemPositions = useKnobItemStore(
+    (state) => state.positions,
+  );
+  useSyncExternalStore(
+    subscribePreviewOverlay,
+    getPreviewOverlayVersion,
+    getPreviewOverlayVersion,
+  );
+  const statItemPositions = composePreviewPositions(
+    'statPosition',
+    canonicalStatItemPositions,
+  );
+  const graphItemPositions = composePreviewPositions(
+    'graphPosition',
+    canonicalGraphItemPositions,
+  );
+  const knobItemPositions = composePreviewPositions(
+    'knobPosition',
+    canonicalKnobItemPositions,
+  );
   const { useCustomCSS } = useSettingsStore();
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements,
+    selectPropertyPanelPluginElements,
   );
   const pluginDefinitions = usePluginDisplayElementStore(
     (state) => state.definitions,
-  );
-  const updatePluginElement = usePluginDisplayElementStore(
-    (state) => state.updateElement,
   );
   const pluginSettingsPanel = usePropertiesPanelStore(
     (state) => state.pluginSettingsPanel,
@@ -140,9 +206,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const closePluginSettingsPanel = usePropertiesPanelStore(
     (state) => state.closePluginSettingsPanel,
   );
-  const isPanelVisible = usePropertiesPanelStore(
+  const isPanelVisibleStore = usePropertiesPanelStore(
     (state) => state.isCanvasPanelOpen,
   );
+  // 분리 창은 창 자체가 패널 - 가시성 개념이 없어 항상 열림으로 취급해야
+  // 선택 도착·해제가 모드를 property로 강제하거나 내용을 숨기지 않음
+  const isPanelVisible = frameVariant === 'window' || isPanelVisibleStore;
   const setIsPanelVisible = usePropertiesPanelStore(
     (state) => state.setCanvasPanelOpen,
   );
@@ -186,9 +255,43 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   })();
 
+  const pluginDefinitionViews = usePluginDisplayElementStore(
+    (state) => state.definitionViews,
+  );
+  const pluginElementVisibilityViews = usePluginDisplayElementStore(
+    (state) => state.elementVisibilityViews,
+  );
+
   const selectedPluginDefinition = (() => {
     if (!selectedPluginElement?.definitionId) return null;
-    return pluginDefinitions.get(selectedPluginElement.definitionId) || null;
+    const local = pluginDefinitions.get(selectedPluginElement.definitionId);
+    if (local) return local;
+    // 분리 패널 창 - main이 push한 definition 투영으로 폴백
+    // visibility는 main이 요소별 현재 settings로 평가한 오버레이를 병합
+    const view = pluginDefinitionViews.get(selectedPluginElement.definitionId);
+    if (!view) return null;
+    const visibilityOverlay = pluginElementVisibilityViews.get(
+      selectedPluginElement.fullId,
+    );
+    const settings = visibilityOverlay
+      ? Object.fromEntries(
+          Object.entries(view.resolvedSettingsSchema).map(([key, schema]) => [
+            key,
+            { ...schema, visible: visibilityOverlay[key] ?? schema.visible },
+          ]),
+        )
+      : view.resolvedSettingsSchema;
+    return {
+      id: view.definitionId,
+      pluginId: selectedPluginElement.pluginId,
+      name: view.name,
+      resizable: view.resizable,
+      preserveAxis: view.preserveAxis,
+      resizeAnchor: view.resizeAnchor,
+      settingsUI: view.settingsUI,
+      settings,
+      messages: view.messages,
+    } as unknown as PluginDefinitionInternal;
   })();
 
   const pluginSettingsUI = selectedPluginDefinition?.settingsUI ?? 'panel';
@@ -237,7 +340,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleGraphIndex !== null
       ? graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null
       : null;
-  const knobItemPositions = useKnobItemStore((state) => state.positions);
   const singleKnobIndex =
     selectedKnobElements.length === 1 ? selectedKnobElements[0].index : null;
   const singleKnobPosition: KnobItemPosition | null =
@@ -305,14 +407,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [localState, setLocalState] = useState<
     Partial<KeyPosition> & { dx?: number; dy?: number }
   >({});
-  const pluginSettingsHistoryRef = useRef<string | null>(null);
   const pluginVisibilityErrorsRef = useRef(new Set<string>());
-  const pluginTransformHistoryRef = useRef<string | null>(null);
-
-  // preview가 store를 직접 변경하므로, commit이 아닌 preview 시작 시 히스토리 저장
-  const statPreviewHistorySavedRef = useRef(false);
-  const graphPreviewHistorySavedRef = useRef(false);
-  const knobPreviewHistorySavedRef = useRef(false);
   const [pluginPanelSettings, setPluginPanelSettings] = useState<
     Record<string, unknown>
   >({});
@@ -388,8 +483,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   }, [selectedKeyType]);
 
-  // 탭 상태
-  const [activeTab, setActiveTab] = useState<TabType>(TABS.STYLE);
+  const activeTab = usePropertiesPanelStore(
+    (state) => state.propertyPanelActiveTab,
+  );
+  const setActiveTab = usePropertiesPanelStore(
+    (state) => state.setPropertyPanelActiveTab,
+  );
 
   // 인-패널 내비게이션 — 피커 서브 페이지 (키는 트리거 사이트별 유니크)
   // activePageKey는 애니메이션 상태, renderPageKey는 마운트 상태 —
@@ -450,6 +549,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     if (!activePageKey) return;
     const onKey = (event: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       const target = event.target;
       if (
@@ -477,41 +577,50 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return () => document.removeEventListener('keydown', onKey, true);
   }, [activePageKey, closePage]);
 
-  // 통계 요소 선택 시 NOTE 탭 숨김 처리
+  // Escape로 플러그인 설정 세션 취소 - 서브 페이지·모달이 없을 때만
   useEffect(() => {
-    if (
-      selectedKeyLikeElements.length === 0 ||
-      selectedPluginElements.length > 0
-    ) {
-      return;
-    }
-    const shouldHideNote =
-      selectedStatElements.length > 0 && selectedKeyElements.length === 0;
-    if (shouldHideNote && activeTab === TABS.NOTE) {
-      setActiveTab(TABS.STYLE);
-    }
-  }, [
-    activeTab,
-    selectedKeyLikeElements.length,
-    selectedPluginElements.length,
-    selectedStatElements.length,
-    selectedKeyElements.length,
-  ]);
+    if (!pluginSettingsPanel || activePageKey) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (
+        document.querySelector(
+          '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      handlePluginSettingsPanelCancelImpl.current();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [pluginSettingsPanel, activePageKey]);
 
-  // 그래프만 선택된 상태에서는 STYLE 탭만 사용
+  // 선택 동기화 중 이전 렌더의 effect가 최신 탭을 덮지 않도록 커밋 직전 재확인
   useEffect(() => {
-    const graphOnlySelection =
-      selectedGraphElements.length > 0 &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedPluginElements.length === 0;
-    if (graphOnlySelection && activeTab !== TABS.STYLE) {
+    if (frameVariant === 'window' && !selectionSyncReady) return;
+    const latestTab = usePropertiesPanelStore.getState().propertyPanelActiveTab;
+    const latestSelection = useGridSelectionStore.getState().selectedElements;
+    if (shouldNormalizePropertyTabToStyle(latestSelection, latestTab)) {
       setActiveTab(TABS.STYLE);
     }
   }, [
+    frameVariant,
+    selectionSyncReady,
     activeTab,
-    selectedGraphElements.length,
-    selectedKeyLikeElements.length,
-    selectedPluginElements.length,
+    selectedElements,
+    setActiveTab,
   ]);
 
   // 레이어 이름 변경: 현재 선택된 요소의 layerName 가져오기
@@ -550,20 +659,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       (group) => group.id === groupId,
     );
     if (!currentGroup || currentGroup.name === trimmed) return;
-
-    const { keyMappings: km, positions: pos } = useKeyStore.getState();
-    const statPos = useStatItemStore.getState().positions;
-    const graphPos = useGraphItemStore.getState().positions;
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-
-    useHistoryStore.getState().pushState({
-      keyMappings: km,
-      positions: pos,
-      statPositions: statPos,
-      graphPositions: graphPos,
-      pluginElements: pluginEls,
-      layerGroups: currentGroups,
-    });
 
     const updated = {
       ...currentGroups,
@@ -788,11 +883,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   }, [pluginSettingsPanel]);
 
-  useEffect(() => {
-    pluginSettingsHistoryRef.current = null;
-    pluginTransformHistoryRef.current = null;
-  }, [selectedPluginElement?.fullId]);
-
   // 선택된 키가 변경될 때 패널 열기/닫기
   useEffect(() => {
     const hasSelection =
@@ -868,6 +958,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // property로 남아 있으면 다음 캔버스 클릭이 목록을 건너뛰고 편집으로 점프함
   // (플러그인 설정 패널 종료·설정 왕복 리마운트 경로 포함)
   useEffect(() => {
+    // 분리 창의 초기 동기화 전 빈 선택은 아직 원격 상태 미도착 - 정규화 보류
+    // (600ms 폴백 마운트 시 핸드오프의 property가 layer로 덮이는 경합 방지)
+    if (frameVariant === 'window' && !selectionSyncReady) return;
     if (
       isPanelVisible &&
       !pluginSettingsPanel &&
@@ -878,6 +971,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setPanelMode('layer');
     }
   }, [
+    frameVariant,
+    selectionSyncReady,
     isPanelVisible,
     pluginSettingsPanel,
     panelMode,
@@ -998,6 +1093,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (!isListening) return undefined;
 
     const blockKeyboardEvents = (e: KeyboardEvent) => {
+      if (
+        e.key === 'Escape' &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.shiftKey
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsListening(false);
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
     };
@@ -1036,6 +1143,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     const unsubscribe = window.api.keys.onRawInput(
       (payload: RawInputPayload) => {
+        if (isHistoryEditorFlushLocked()) return;
         if (!payload || payload.state !== 'DOWN') return;
         const targetLabel =
           payload.label ||
@@ -1043,6 +1151,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         if (!targetLabel) return;
 
         const info = getKeyInfoByGlobalKey(targetLabel);
+
+        if (info.globalKey === 'ESCAPE') {
+          setIsListening(false);
+          return;
+        }
 
         justAssignedRef.current = true;
         setTimeout(() => {
@@ -1097,7 +1210,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setPanelMode(panelMode === 'layer' ? 'property' : 'layer');
   };
 
-  const showFrame = isPanelVisible || !!pluginSettingsPanel;
+  // 분리 창은 접힘 없음 - 창 자체가 패널이므로 항상 표시
+  const showFrame =
+    frameVariant === 'window' || isPanelVisible || !!pluginSettingsPanel;
 
   const pluginDefaultSettings = getDefaultSettings(
     selectedPluginDefinition?.settings,
@@ -1111,94 +1226,38 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     ),
   };
 
-  const ensurePluginSettingsHistory = () => {
-    if (!selectedPluginElement) return;
-    if (pluginSettingsHistoryRef.current === selectedPluginElement.fullId) {
-      return;
-    }
-    pushHistoryState({
-      keyMappings,
-      positions,
-      statPositions: statItemPositions,
-      graphPositions: graphItemPositions,
-      pluginElements,
-    });
-    pluginSettingsHistoryRef.current = selectedPluginElement.fullId;
-  };
-
-  const ensurePluginTransformHistory = () => {
-    if (!selectedPluginElement) return;
-    if (pluginTransformHistoryRef.current === selectedPluginElement.fullId) {
-      return;
-    }
-    pushHistoryState({
-      keyMappings,
-      positions,
-      statPositions: statItemPositions,
-      graphPositions: graphItemPositions,
-      pluginElements,
-    });
-    pluginTransformHistoryRef.current = selectedPluginElement.fullId;
-  };
-
   const handlePluginPositionXChange = (value: number) => {
     if (!selectedPluginElement) return;
-    ensurePluginTransformHistory();
     updatePluginElement(selectedPluginElement.fullId, {
-      position: {
-        x: value,
-        y: selectedPluginElement.position.y,
-      },
+      position: { x: value },
     });
   };
 
   const handlePluginPositionYChange = (value: number) => {
     if (!selectedPluginElement) return;
-    ensurePluginTransformHistory();
     updatePluginElement(selectedPluginElement.fullId, {
-      position: {
-        x: selectedPluginElement.position.x,
-        y: value,
-      },
+      position: { y: value },
     });
   };
 
   const handlePluginWidthChange = (value: number) => {
     if (!selectedPluginElement) return;
-    ensurePluginTransformHistory();
-    const baseHeight =
-      selectedPluginElement.measuredSize?.height ??
-      selectedPluginElement.estimatedSize?.height ??
-      150;
     updatePluginElement(selectedPluginElement.fullId, {
-      measuredSize: {
-        width: value,
-        height: baseHeight,
-      },
+      measuredSize: { width: value },
     });
   };
 
   const handlePluginHeightChange = (value: number) => {
     if (!selectedPluginElement) return;
-    ensurePluginTransformHistory();
-    const baseWidth =
-      selectedPluginElement.measuredSize?.width ??
-      selectedPluginElement.estimatedSize?.width ??
-      200;
     updatePluginElement(selectedPluginElement.fullId, {
-      measuredSize: {
-        width: baseWidth,
-        height: value,
-      },
+      measuredSize: { height: value },
     });
   };
 
   const handlePluginSettingChange = (key: string, value: unknown) => {
     if (!selectedPluginElement) return;
-    ensurePluginSettingsHistory();
     updatePluginElement(selectedPluginElement.fullId, {
       settings: {
-        ...resolvedPluginSettings,
         [key]: value,
       },
     });
@@ -1272,21 +1331,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    if (!statPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-    }
-    statPreviewHistorySavedRef.current = false;
-
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
     );
@@ -1294,8 +1338,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setPositions(nextPositions);
-    window.api.statItems
-      .updatePositions(nextPositions)
+    const persisted = window.api.statItems.updatePositions(nextPositions);
+    editGestureController.settleCommit(persisted);
+    void persisted
       .catch((error) => {
         console.error('Failed to update stat item', error);
       })
@@ -1313,24 +1358,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
-    if (!statPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      statPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-    useStatItemStore.getState().setPositions(nextPositions);
+    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
+      domain: 'statPosition',
+    });
   };
 
   const handleStatBatchPreview = (
@@ -1343,38 +1373,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (list.length === 0) return;
 
-    const updateMap = new Map<number, Partial<StatItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
-    if (!statPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      statPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
+    const entries = updates.flatMap(({ index, ...patch }) =>
+      list[index] ? [{ index, patch: { ...patch } }] : [],
+    );
+    editGestureController.preview(mode, entries, {
+      domain: 'statPosition',
     });
-    const nextPositions = { ...current, [mode]: nextList };
-    useStatItemStore.getState().setPositions(nextPositions);
   };
 
   const handleStatBatchUpdate = (
     updates: Array<{ index: number } & Partial<StatItemPosition>>,
-    options?: { skipHistory?: boolean; deferSave?: boolean },
+    options?: { deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -1390,21 +1399,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     }
     if (updateMap.size === 0) return;
-
-    if (!options?.skipHistory && !statPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-    }
-    statPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
@@ -1438,21 +1432,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    if (!graphPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: currentPluginElements,
-      });
-    }
-    graphPreviewHistorySavedRef.current = false;
-
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
     );
@@ -1478,21 +1457,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const current = useKnobItemStore.getState().positions;
     const list = current[mode] || [];
     if (!list[index]) return;
-
-    if (!knobPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-    }
-    knobPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as KnobItemPosition) : pos,
@@ -1520,23 +1484,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    if (!knobPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      knobPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as KnobItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-    useKnobItemStore.getState().setPositions(nextPositions);
+    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
+      domain: 'knobPosition',
+    });
   };
 
   const handleKnobBatchPreview = (
@@ -1549,37 +1499,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (list.length === 0) return;
 
-    const updateMap = new Map<number, Partial<KnobItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    if (!knobPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      knobPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as KnobItemPosition) : pos;
+    const entries = updates.flatMap(({ index, ...patch }) =>
+      list[index] ? [{ index, patch: { ...patch } }] : [],
+    );
+    editGestureController.preview(mode, entries, {
+      domain: 'knobPosition',
     });
-    const nextPositions = { ...current, [mode]: nextList };
-    useKnobItemStore.getState().setPositions(nextPositions);
   };
 
   const handleKnobBatchUpdate = (
     updates: Array<{ index: number } & Partial<KnobItemPosition>>,
-    options?: { skipHistory?: boolean; deferSave?: boolean },
+    options?: { deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -1595,21 +1525,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     }
     if (updateMap.size === 0) return;
-
-    if (!options?.skipHistory && !knobPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-    }
-    knobPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
@@ -1643,24 +1558,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
-    if (!graphPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      graphPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-    useGraphItemStore.getState().setPositions(nextPositions);
+    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
+      domain: 'graphPosition',
+    });
   };
 
   const handleGraphBatchPreview = (
@@ -1673,38 +1573,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (list.length === 0) return;
 
-    const updateMap = new Map<number, Partial<GraphItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
-    if (!graphPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      graphPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
+    const entries = updates.flatMap(({ index, ...patch }) =>
+      list[index] ? [{ index, patch: { ...patch } }] : [],
+    );
+    editGestureController.preview(mode, entries, {
+      domain: 'graphPosition',
     });
-    const nextPositions = { ...current, [mode]: nextList };
-    useGraphItemStore.getState().setPositions(nextPositions);
   };
 
   const handleGraphBatchUpdate = (
     updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-    options?: { skipHistory?: boolean; deferSave?: boolean },
+    options?: { deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -1720,21 +1599,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     }
     if (updateMap.size === 0) return;
-
-    if (!options?.skipHistory && !graphPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: currentPluginElements,
-      });
-    }
-    graphPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
@@ -3115,7 +2979,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             pageHost,
           }}
         >
-          <div className={SIDE_PANEL_FRAME_CLASS}>
+          <div
+            className={
+              frameVariant === 'window'
+                ? WINDOW_PANEL_FRAME_CLASS
+                : SIDE_PANEL_FRAME_CLASS
+            }
+          >
             {/* inert — 슬라이드 아웃된 레이어를 키보드 탭 순회·접근성 트리에서 제외 */}
             <div
               className="dmn-panel-page"
@@ -3131,6 +3001,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   displayedPanelMode === 'layer' && !hasAnySelection
                 }
                 onToggleMode={handleToggleMode}
+                detachAction={detachAction}
+                onDetachAction={onDetachAction}
+                edgeAligned={frameVariant === 'window'}
               />
             </div>
             <div
@@ -3143,7 +3016,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
         </PanelNavProvider>
       )}
-      {toggleButton}
+      {frameVariant !== 'window' && toggleButton}
     </>
   );
 };

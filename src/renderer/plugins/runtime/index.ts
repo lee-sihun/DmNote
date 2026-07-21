@@ -22,7 +22,6 @@ export {
   displayElementInstanceRegistry,
   setUndoRedoInProgress,
   setInitialLoading,
-  saveToHistory,
   resolveFullId,
   resolveInstance,
   type DisplayElementTarget,

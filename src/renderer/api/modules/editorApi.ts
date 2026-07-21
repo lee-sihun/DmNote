@@ -4,7 +4,6 @@ import { subscribe } from './shared';
 import {
   assertEditorCommitResult,
   assertEditorCommittedEvent,
-  assertEditorDocument,
   assertEditorGetResult,
   assertSafeEditorRevision,
 } from '@src/types/editor';
@@ -15,21 +14,7 @@ import type {
   EditorCommitResult,
   EditorCommittedV1,
   EditorGetResult,
-  EditorHistoryRestoreRequest,
 } from '@src/types/editor';
-
-export const restoreEditorHistory = async (
-  request: EditorHistoryRestoreRequest,
-): Promise<EditorCommitResult> => {
-  if (window.__dmn_runtime === 'obs') throw new EditorReadOnlyError();
-  assertSafeEditorRevision(request.baseRevision, 'history baseRevision');
-  assertEditorDocument(request.document, 'history document');
-  const result = await invoke<EditorCommitResult>('editor_history_restore', {
-    request,
-  });
-  assertEditorCommitResult(result);
-  return result;
-};
 
 export const editorApi = {
   get: async (): Promise<EditorGetResult> => {

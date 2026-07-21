@@ -7,6 +7,8 @@ pub enum EditorCommitErrorCode {
     ValidationFailed,
     PairedUpdateRequired,
     MutationIdReused,
+    HistoryInProgress,
+    HistoryEpochConflict,
     IoError,
 }
 
@@ -19,6 +21,8 @@ pub struct EditorCommitErrorDetails {
     pub validation_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_history_epoch: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -83,6 +87,27 @@ impl EditorCommitError {
             error_code: EditorCommitErrorCode::IoError,
             message: message.into(),
             details: None,
+            retryable: true,
+        }
+    }
+
+    pub fn history_in_progress() -> Self {
+        Self {
+            error_code: EditorCommitErrorCode::HistoryInProgress,
+            message: "history operation is in progress".to_string(),
+            details: None,
+            retryable: true,
+        }
+    }
+
+    pub fn history_epoch_conflict(current_history_epoch: u64) -> Self {
+        Self {
+            error_code: EditorCommitErrorCode::HistoryEpochConflict,
+            message: "history epoch conflict".to_string(),
+            details: Some(EditorCommitErrorDetails {
+                current_history_epoch: Some(current_history_epoch),
+                ..EditorCommitErrorDetails::default()
+            }),
             retryable: true,
         }
     }

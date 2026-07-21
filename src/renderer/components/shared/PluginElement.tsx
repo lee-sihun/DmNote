@@ -8,10 +8,6 @@ import {
 } from '@src/types/plugin/api';
 import { useDraggable } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { useKeyStore as useKeyStoreForHistory } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
@@ -20,7 +16,7 @@ import {
   isElementInMarquee,
 } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useTranslation } from '@contexts/useTranslation';
 import ListPopup, { ListItem } from '../main/Modal/ListPopup';
@@ -38,6 +34,10 @@ import {
   getPluginMenuRuntimeState,
   normalizeStateKeys,
 } from '@utils/plugin/pluginMenuRuntimeState';
+import {
+  measureConnectedPluginElement,
+  resolveResizablePluginElementSize,
+} from '@utils/plugin/pluginElementMeasurement';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
@@ -403,23 +403,6 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     };
   })();
 
-  // 히스토리 저장 함수 (드래그 시작 시 호출)
-  const saveToHistory = () => {
-    if (windowType !== 'main') return;
-
-    const { keyMappings, positions } = useKeyStoreForHistory.getState();
-    const statPositions = useStatItemStore.getState().positions;
-    const graphPositions = useGraphItemStore.getState().positions;
-    const pluginElements = usePluginDisplayElementStore.getState().elements;
-    useHistoryStore.getState().pushState({
-      keyMappings,
-      positions,
-      statPositions,
-      graphPositions,
-      pluginElements,
-    });
-  };
-
   // 스마트 가이드를 위한 다른 요소들의 bounds 가져오기
   const { getOtherElements } = useSmartGuidesElements();
 
@@ -443,7 +426,6 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     gridSize: gridSnapSize,
     initialX: calculatedPosition.x,
     initialY: calculatedPosition.y,
-    onDragStart: saveToHistory, // 드래그 시작 시 히스토리 저장
     onPositionChange: (newX, newY) => {
       // 선택 모드가 아닐 때만 개별 이동
       if (windowType === 'main' && element.draggable && !isSelectionMode) {
@@ -562,6 +544,8 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     const target = element.scoped ? shadowRoot : containerRef.current;
     if (!target) return;
 
+    let measurementFrame: number | null = null;
+
     // 메인 윈도우에서만 실제 크기 측정 후 store 업데이트
     // resizable인 경우: 이미 measuredSize가 있고 재측정이 필요하지 않으면 스킵
     const isResizableWithSize =
@@ -570,8 +554,10 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       !needsRemeasureRef.current;
 
     if (windowType === 'main' && containerRef.current && !isResizableWithSize) {
-      requestAnimationFrame(() => {
-        if (containerRef.current) {
+      const measurementTarget = containerRef.current;
+      measurementFrame = requestAnimationFrame(() => {
+        measurementFrame = null;
+        if (containerRef.current === measurementTarget) {
           // 재측정이 필요한 경우, 일시적으로 크기 제약을 풀어 자연스러운 콘텐츠 크기 측정
           const needsRemeasure =
             needsRemeasureRef.current && definition?.resizable;
@@ -593,15 +579,21 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
             }
           }
 
-          const rect = containerRef.current.getBoundingClientRect();
-          const measuredWidth = Math.ceil(rect.width / zoom);
-          const measuredHeight = Math.ceil(rect.height / zoom);
+          const measuredSize = measureConnectedPluginElement(
+            measurementTarget,
+            zoom,
+          );
 
           // 스타일 복원
           if (needsRemeasure) {
             containerRef.current.style.width = originalWidth;
             containerRef.current.style.height = originalHeight;
           }
+
+          if (!measuredSize) return;
+
+          const measuredWidth = measuredSize.width;
+          const measuredHeight = measuredSize.height;
 
           // 설정 변경으로 인한 재측정인 경우, preserveAxis에 해당하는 축은 유지
           let finalWidth = measuredWidth;
@@ -814,6 +806,9 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
 
       // 정리
       return () => {
+        if (measurementFrame !== null) {
+          cancelAnimationFrame(measurementFrame);
+        }
         target.removeEventListener('click', handleCheckboxToggle);
         target.removeEventListener('click', handleEvent);
         target.removeEventListener('change', handleEvent);
@@ -1049,11 +1044,11 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       pointerEvents: windowType === 'main' ? 'auto' : 'none',
     };
 
-    // resizable 플러그인 요소의 경우 명시적 크기 적용
-    // 내부 콘텐츠가 width/height: 100%로 이 크기를 따라감
-    if (definition?.resizable && element.measuredSize) {
-      baseStyle.width = element.measuredSize.width;
-      baseStyle.height = element.measuredSize.height;
+    // resizable 요소는 첫 측정 전에도 부모 크기를 제공
+    if (definition?.resizable) {
+      const renderSize = resolveResizablePluginElementSize(element);
+      baseStyle.width = renderSize.width;
+      baseStyle.height = renderSize.height;
       baseStyle.overflow = 'hidden';
     }
 
@@ -1061,8 +1056,8 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
   })();
 
   const attachRef = (node: HTMLDivElement | null) => {
+    containerRef.current = node;
     if (node) {
-      containerRef.current = node;
       // 선택 모드가 아닐 때만 드래그 ref 연결
       if (element.draggable && windowType === 'main' && !isSelectionMode) {
         draggableRef(node);
@@ -1312,9 +1307,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
         id: element.fullId,
       });
     }
-    const panel = usePropertiesPanelStore.getState();
-    panel.setCanvasPanelMode('property');
-    panel.setCanvasPanelOpen(true);
+    openPropertiesPanelForSelection();
   };
 
   const createActionsProxy = (elementId: string) =>

@@ -11,7 +11,6 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
 import {
   useGridSelectionStore,
   type SelectedElement,
@@ -81,8 +80,9 @@ export function useGridSelection({
   const setClipboard = useGridSelectionStore((state) => state.setClipboard);
 
   // 선택된 요소들의 최종 위치를 한 번에 저장
+  // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
   const syncSelectedElementsToOverlay = () => {
-    const currentPositions = useKeyStore.getState().positions;
+    const currentPositions = useKeyStore.getState().canonicalPositions;
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
     const currentKnobPositions = useKnobItemStore.getState().positions;
@@ -110,29 +110,16 @@ export function useGridSelection({
   const moveSelectedElements = (
     deltaX: number,
     deltaY: number,
-    saveHistory = false,
+    _saveHistory = false,
     syncToOverlay = true,
   ) => {
     if (selectedElements.length === 0) return;
 
     // 현재 상태 직접 가져오기 (클로저 문제 방지)
-    const currentPositions = useKeyStore.getState().positions;
+    // setPositions는 canonical 쓰기이므로 base도 canonical에서 읽는다
+    const currentPositions = useKeyStore.getState().canonicalPositions;
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
-
-    // 히스토리 저장 (옵션)
-    if (saveHistory) {
-      const { keyMappings: km } = useKeyStore.getState();
-      const currentStatPositions = useStatItemStore.getState().positions;
-      const currentGraphPositions = useGraphItemStore.getState().positions;
-      useHistoryStore.getState().pushState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: currentStatPositions,
-        graphPositions: currentGraphPositions,
-        pluginElements: currentPluginElements,
-      });
-    }
 
     // 키 위치 배치 업데이트
     const keyUpdates = selectedElements.filter(
@@ -286,36 +273,13 @@ export function useGridSelection({
       .filter((el) => el.type === 'plugin')
       .map((el) => el.id);
 
-    // 히스토리 저장
-    if (
-      keysToDelete.length > 0 ||
-      statsToDelete.length > 0 ||
-      graphsToDelete.length > 0 ||
-      knobsToDelete.length > 0 ||
-      pluginsToDelete.length > 0
-    ) {
-      const { keyMappings: km, positions: pos } = useKeyStore.getState();
-      const currentStatPositions = useStatItemStore.getState().positions;
-      const currentGraphPositions = useGraphItemStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-      useHistoryStore.getState().pushState({
-        keyMappings: km,
-        positions: pos,
-        statPositions: currentStatPositions,
-        graphPositions: currentGraphPositions,
-        pluginElements: currentPluginElements,
-        layerGroups: currentLayerGroups,
-      });
-    }
-
     // 먼저 선택 해제 (삭제된 인덱스 참조 방지)
     clearSelection();
 
     // 키 배치 삭제 (atomic update로 한 번의 리렌더링만 발생)
     if (keysToDelete.length > 0) {
-      const { keyMappings: km, positions: pos } = useKeyStore.getState();
+      const { keyMappings: km, canonicalPositions: pos } =
+        useKeyStore.getState();
       const mapping = km[selectedKeyType] || [];
       const posArray = pos[selectedKeyType] || [];
 
@@ -389,7 +353,7 @@ export function useGridSelection({
 
     const normalized = normalizeLayerGroupsForMode({
       mode: selectedKeyType,
-      keyPositions: useKeyStore.getState().positions,
+      keyPositions: useKeyStore.getState().canonicalPositions,
       statPositions: useStatItemStore.getState().positions,
       graphPositions: useGraphItemStore.getState().positions,
       knobPositions: useKnobItemStore.getState().positions,
@@ -421,7 +385,7 @@ export function useGridSelection({
         await editorCoordinator.commitPatch({
           schemaVersion: 1,
           ...(keysToDelete.length > 0 ? { keys: keyState.keyMappings } : {}),
-          keyPositions: keyState.positions,
+          keyPositions: keyState.canonicalPositions,
           statPositions: useStatItemStore.getState().positions,
           graphPositions: useGraphItemStore.getState().positions,
           knobPositions: useKnobItemStore.getState().positions,
@@ -438,7 +402,8 @@ export function useGridSelection({
     if (selectedElements.length === 0) return;
 
     // 최신 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
-    const { keyMappings: km, positions: pos } = useKeyStore.getState();
+    // 클립보드는 이후 paste 커밋의 원본이므로 canonical 기준으로 캡처
+    const { keyMappings: km, canonicalPositions: pos } = useKeyStore.getState();
     const currentMappings = km[selectedKeyType] || [];
     const currentPositions = pos[selectedKeyType] || [];
     const currentStatPositions =
@@ -541,10 +506,6 @@ export function useGridSelection({
     const clipboardGroups = useGridSelectionStore.getState().clipboardGroups;
 
     // 최신 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
-    const { keyMappings: km, positions: pos } = useKeyStore.getState();
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const currentGraphPositions = useGraphItemStore.getState().positions;
     const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
 
     // 현재 선택 상태 캡처 (paste 후 선택이 바뀌기 전에 앵커 계산용)
@@ -552,17 +513,6 @@ export function useGridSelection({
       useGridSelectionStore.getState().selectedElements;
     const currentSelectedGroupIds =
       useGridSelectionStore.getState().selectedGroupIds;
-
-    // 히스토리 저장 (layerGroups 포함)
-    const historyStore = useHistoryStore.getState();
-    historyStore.pushState({
-      keyMappings: { ...km },
-      positions: { ...pos },
-      statPositions: { ...useStatItemStore.getState().positions },
-      graphPositions: { ...currentGraphPositions },
-      pluginElements: [...currentPluginElements],
-      layerGroups: { ...currentLayerGroups },
-    });
 
     // 그룹 복사인 경우: 새 그룹 생성 + groupId 매핑
     const groupIdMap = new Map<string, string>();
@@ -665,7 +615,7 @@ export function useGridSelection({
     // 키 추가
     if (keysToAdd.length > 0) {
       const km = useKeyStore.getState().keyMappings;
-      const pos = useKeyStore.getState().positions;
+      const pos = useKeyStore.getState().canonicalPositions;
       const mapping = [...(km[selectedKeyType] || [])];
       const posArray = [...(pos[selectedKeyType] || [])];
 
@@ -782,7 +732,7 @@ export function useGridSelection({
     }
 
     // === Phase 2: paste 위치 결정 + zIndex 재계산 ===
-    const freshKeyPos = useKeyStore.getState().positions;
+    const freshKeyPos = useKeyStore.getState().canonicalPositions;
     const freshStatPos = useStatItemStore.getState().positions;
     const freshGraphPos = useGraphItemStore.getState().positions;
     const freshKnobPos = useKnobItemStore.getState().positions;

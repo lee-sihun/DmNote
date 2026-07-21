@@ -32,27 +32,37 @@ export const keysApi = {
       () => editorCoordinator.commitPatch({ schemaVersion: 1, keys: mappings }),
       () => structuredClone(mappings),
     ),
-  updateWithPositions: (mappings: KeyMappings, positions: KeyPositions) =>
+  updateWithPositions: (
+    mappings: KeyMappings,
+    positions: KeyPositions,
+    gestureId?: string,
+  ) =>
     enqueueEditorCompatibilityWrite(
       () =>
-        editorCoordinator.commitPatch({
-          schemaVersion: 1,
-          keys: mappings,
-          keyPositions: positions,
-        }),
+        editorCoordinator.commitPatch(
+          {
+            schemaVersion: 1,
+            keys: mappings,
+            keyPositions: positions,
+          },
+          gestureId ? { gestureId } : undefined,
+        ),
       () => ({
         keys: structuredClone(mappings),
         positions: structuredClone(positions),
       }),
     ),
   getPositions: () => invoke<KeyPositions>('positions_get'),
-  updatePositions: (positions: KeyPositions) =>
+  updatePositions: (positions: KeyPositions, gestureId?: string) =>
     enqueueEditorCompatibilityWrite(
       () =>
-        editorCoordinator.commitPatch({
-          schemaVersion: 1,
-          keyPositions: positions,
-        }),
+        editorCoordinator.commitPatch(
+          {
+            schemaVersion: 1,
+            keyPositions: positions,
+          },
+          gestureId ? { gestureId } : undefined,
+        ),
       () => structuredClone(positions),
     ),
   setMode: (mode: string) =>
@@ -78,10 +88,15 @@ export const keysApi = {
   ): ReadyUnsubscribe => subscribe<KeyStatePayload>('keys:state', listener),
   onRawInput: (listener: (payload: RawInputPayload) => void): Unsubscribe => {
     let unsubscribeFn: (() => void) | null = null;
+    let cancelled = false;
 
     rawKeyEventBus
       .subscribe(listener)
       .then((unsub) => {
+        if (cancelled) {
+          unsub();
+          return;
+        }
         unsubscribeFn = unsub;
       })
       .catch((error) => {
@@ -89,9 +104,10 @@ export const keysApi = {
       });
 
     return () => {
-      if (unsubscribeFn) {
-        unsubscribeFn();
-      }
+      if (cancelled) return;
+      cancelled = true;
+      unsubscribeFn?.();
+      unsubscribeFn = null;
     };
   },
   onCounterChanged: (listener: (payload: KeyCounterUpdate) => void) =>

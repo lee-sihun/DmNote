@@ -9,7 +9,10 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
 import { isMac } from '@utils/core/platform';
 import { useLenis } from '@hooks/useLenis';
 import ListPopup from '@components/main/Modal/ListPopup';
@@ -64,7 +67,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const graphPositions = useGraphItemStore((state) => state.positions);
   const knobPositions = useKnobItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements,
+    selectPropertyPanelPluginElements,
   );
 
   const selectedElements = useGridSelectionStore(

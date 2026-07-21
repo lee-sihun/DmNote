@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
@@ -35,6 +34,7 @@ import {
   resolveElementShadow,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
@@ -75,12 +75,12 @@ interface BatchStyleTabContentProps {
   handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
   handleBatchSpacing: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string },
   ) => void;
   handleBatchSpacingPreview?: (spacing: number) => void;
   handleBatchSpacingCommit?: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string },
   ) => void;
   batchSpacing: { isMixed: boolean; value: number };
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
@@ -309,13 +309,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     handleBatchShadowEnabledChange?.(enabled);
   };
 
-  // 간격 입력 세션 동안 첫 변경만 히스토리를 남기고 이후는 skipHistory로 묶는다.
+  // 간격 입력 세션의 debounce 커밋들을 같은 gestureId로 묶어 백엔드가 한 entry로 병합
   const lastSpacingRef = useRef<number | null>(null);
   const lastCommittedSpacingRef = useRef<number | null>(null);
   const spacingDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const spacingHistorySeededRef = useRef(false);
+  const spacingGestureIdRef = useRef<string | null>(null);
 
   const isSameSpacingValue = (a: number | null, b: number | null): boolean => {
     if (a === null || b === null) return false;
@@ -323,9 +323,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   };
 
   const commitSpacing = (spacing: number) => {
-    const options = spacingHistorySeededRef.current
-      ? { skipHistory: true }
-      : undefined;
+    spacingGestureIdRef.current ??= crypto.randomUUID();
+    const options = { gestureId: spacingGestureIdRef.current };
 
     if (handleBatchSpacingCommit) {
       handleBatchSpacingCommit(spacing, options);
@@ -333,7 +332,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       handleBatchSpacing(spacing, options);
     }
 
-    spacingHistorySeededRef.current = true;
     lastCommittedSpacingRef.current = spacing;
   };
 
@@ -370,7 +368,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
     lastSpacingRef.current = null;
     lastCommittedSpacingRef.current = null;
-    spacingHistorySeededRef.current = false;
+    spacingGestureIdRef.current = null;
   };
 
   useEffect(() => {
@@ -703,6 +701,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           <NumberInput
             value={getMixedValue((pos) => pos.width, 60).value}
             onChange={(value) => handleBatchResize('width', value)}
+            onPreview={(value) => handleBatchStyleChange('width', value)}
             prefix="W"
             min={10}
             max={500}
@@ -713,6 +712,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           <NumberInput
             value={getMixedValue((pos) => pos.height, 60).value}
             onChange={(value) => handleBatchResize('height', value)}
+            onPreview={(value) => handleBatchStyleChange('height', value)}
             prefix="H"
             min={10}
             max={500}
@@ -881,6 +881,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             onChange={(value) =>
               handleBatchStyleChangeComplete('borderWidth', value)
             }
+            onPreview={(value) => handleBatchStyleChange('borderWidth', value)}
             suffix="px"
             min={0}
             max={20}
@@ -903,6 +904,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             onChange={(value) =>
               handleBatchStyleChangeComplete('borderRadius', value)
             }
+            onPreview={(value) => handleBatchStyleChange('borderRadius', value)}
             suffix="px"
             min={0}
             max={100}
@@ -966,6 +968,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                     onChange={(v) =>
                       handleBatchStyleChangeComplete('displayText', v)
                     }
+                    onPreview={(v) => handleBatchStyleChange('displayText', v)}
+                    onCancel={() => editGestureController.cancel()}
                     placeholder={isMixed ? 'Mixed' : value}
                     width="54px"
                     isMixed={isMixed}
@@ -1005,6 +1009,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   value={getMixedValue((pos) => pos.fontSize, 14).value}
                   onChange={(value) =>
                     handleBatchStyleChangeComplete('fontSize', value)
+                  }
+                  onPreview={(value) =>
+                    handleBatchStyleChange('fontSize', value)
                   }
                   suffix="px"
                   min={8}
@@ -1135,6 +1142,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               onChange={(value) => {
                 handleBatchStyleChangeComplete('className', value);
               }}
+              onPreview={(value) => handleBatchStyleChange('className', value)}
+              onCancel={() => editGestureController.cancel()}
               placeholder={
                 getMixedValue((pos) => pos.className, '').isMixed
                   ? 'Mixed'

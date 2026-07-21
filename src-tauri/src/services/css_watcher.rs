@@ -16,10 +16,11 @@ use parking_lot::RwLock;
 use tauri::{AppHandle, Manager};
 
 use crate::commands::editor::{css::TabCssResponse, state::emit_best_effort};
-use crate::state::{AppState, AppStore};
+use crate::errors::EditorCommitError;
+use crate::state::{store::AdmittedHistoryOverlapMutation, AppState, AppStore};
 use crate::{
     custom_css::{custom_css_settings_diff, validate_css_path, ValidatedCssFile},
-    models::{AppStoreData, CustomCss, TabCss},
+    models::{AppStoreData, CustomCss, TabCss, TabCssOverrides},
     state::local_asset_path::path_identity_key,
 };
 
@@ -73,6 +74,30 @@ impl CssWatcher {
     /// 탭별 CSS 워칭 중지
     pub fn unwatch_tab(&self, tab_id: &str) {
         self.unwatch_target(&CssWatchTarget::Tab(tab_id.to_string()));
+    }
+
+    pub fn resync_tabs(&self, overrides: &TabCssOverrides) {
+        {
+            let mut watchers = self.watchers.write();
+            watchers.retain(|_, entry| {
+                entry
+                    .targets
+                    .retain(|target| matches!(target, CssWatchTarget::Global));
+                !entry.targets.is_empty()
+            });
+        }
+
+        for (tab_id, css) in overrides {
+            if !css.enabled {
+                continue;
+            }
+            let Some(path) = css.path.as_deref() else {
+                continue;
+            };
+            if let Err(error) = self.watch_tab(path, tab_id) {
+                log::warn!("[CssWatcher] Failed to restore tab CSS watcher {tab_id}: {error}");
+            }
+        }
     }
 
     /// 특정 경로에 대한 워칭 시작
@@ -246,19 +271,18 @@ fn reload_css_consumers(store: &AppStore, app: &AppHandle, path: &str) -> Result
             error.detail
         )
     })?;
-    let mut committed_global = None;
-    let mut committed_tabs = Vec::new();
-    store
-        .update(|state| {
-            (committed_global, committed_tabs) = apply_reload_if_current(state, path, &loaded);
-        })
-        .map_err(|error| error.to_string())?;
+    let transaction = commit_css_reload(store, path, &loaded).map_err(|error| error.to_string())?;
+    let (committed_global, committed_tabs) = &transaction.value;
+
+    if let Some(status) = transaction.history_status.as_ref() {
+        emit_best_effort(app, "history:status", status);
+    }
 
     if let Some(css) = committed_global.as_ref() {
         emit_best_effort(app, "css:content", css);
         app_state.notify_obs_settings_diff(custom_css_settings_diff(&store.snapshot()));
     }
-    for (tab_id, css) in &committed_tabs {
+    for (tab_id, css) in committed_tabs {
         emit_best_effort(
             app,
             "tabCss:changed",
@@ -282,7 +306,17 @@ fn reload_css_consumers(store: &AppStore, app: &AppHandle, path: &str) -> Result
     Ok(())
 }
 
-fn apply_reload_if_current(
+pub(crate) type CssReloadChanges = (Option<CustomCss>, Vec<(String, TabCss)>);
+
+pub(crate) fn commit_css_reload(
+    store: &AppStore,
+    path: &str,
+    loaded: &ValidatedCssFile,
+) -> Result<AdmittedHistoryOverlapMutation<CssReloadChanges>, EditorCommitError> {
+    store.commit_history_overlap_mutation(|state| Ok(apply_reload_if_current(state, path, loaded)))
+}
+
+pub(crate) fn apply_reload_if_current(
     state: &mut AppStoreData,
     path: &str,
     loaded: &ValidatedCssFile,

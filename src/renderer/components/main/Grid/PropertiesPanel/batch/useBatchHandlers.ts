@@ -21,6 +21,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
@@ -142,8 +143,9 @@ type KeyLikeBatchUpdate = {
 } & Partial<KeyPosition>;
 
 type BatchCommitOptions = {
-  skipHistory?: boolean;
   deferSave?: boolean;
+  // 세션 단위 히스토리 병합용 (백엔드가 같은 gestureId 연속 커밋을 한 entry로 흡수)
+  gestureId?: string;
 };
 
 interface SpacingAxisPlan {
@@ -825,38 +827,23 @@ export function useBatchHandlers({
       return;
     }
 
-    let hasSavedHistory = options?.skipHistory === true;
     if (keyUpdates.length > 0) {
-      dispatchKeyUpdates(keyUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-        deferSave: true,
-      });
-      hasSavedHistory = true;
+      dispatchKeyUpdates(keyUpdates, 'commit', { deferSave: true });
     }
     if (statUpdates.length > 0) {
-      dispatchStatUpdates(statUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-        deferSave: true,
-      });
-      hasSavedHistory = true;
+      dispatchStatUpdates(statUpdates, 'commit', { deferSave: true });
     }
     if (graphUpdates.length > 0) {
-      dispatchGraphUpdates(graphUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-        deferSave: true,
-      });
-      hasSavedHistory = true;
+      dispatchGraphUpdates(graphUpdates, 'commit', { deferSave: true });
     }
     if (knobUpdates.length > 0) {
-      dispatchKnobUpdates(knobUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-        deferSave: true,
-      });
+      dispatchKnobUpdates(knobUpdates, 'commit', { deferSave: true });
     }
 
     const patch: EditorPatchV1 = { schemaVersion: 1 };
     if (keyUpdates.length > 0) {
-      patch.keyPositions = useKeyStore.getState().positions;
+      // deferSave로 canonical에 반영된 최신 값 기준 (rendered 승격 금지)
+      patch.keyPositions = useKeyStore.getState().canonicalPositions;
     }
     if (statUpdates.length > 0) {
       patch.statPositions = useStatItemStore.getState().positions;
@@ -867,7 +854,15 @@ export function useBatchHandlers({
     if (knobUpdates.length > 0) {
       patch.knobPositions = useKnobItemStore.getState().positions;
     }
-    void editorCoordinator.commitPatch(patch).catch((error) => {
+    const sessionGestureId =
+      options?.gestureId ?? editGestureController.activeGestureId();
+    const commitPromise = editorCoordinator.commitPatch(
+      patch,
+      sessionGestureId ? { gestureId: sessionGestureId } : undefined,
+    );
+    // 배치 프리뷰 게스처를 combined 커밋 성패로 정산
+    editGestureController.settleCommit(commitPromise);
+    void commitPromise.catch((error) => {
       console.error('Failed to commit combined batch update', error);
     });
   };

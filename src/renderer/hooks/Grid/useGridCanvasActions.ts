@@ -8,7 +8,6 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { reconcileSelectionAfterIndexedElementDeletion } from '@stores/grid/useGridSelectionStore';
 import type { KeyPosition } from '@src/types/key/keys';
 import type {
@@ -34,9 +33,9 @@ import {
   DEFAULT_ELEMENT_RADIUS,
 } from '@utils/core/elementDefaults';
 
-// 공통: zIndex 목록 수집
+// 공통: zIndex 목록 수집 - 결과가 persist되는 z 계산에 쓰이므로 canonical 기준
 function collectAllZIndexes(mode: string) {
-  const keyPos = useKeyStore.getState().positions[mode] || [];
+  const keyPos = useKeyStore.getState().canonicalPositions[mode] || [];
   const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
 
   const statPos = useStatItemStore.getState().positions[mode] || [];
@@ -96,24 +95,6 @@ function getMinZIndex(mode: string): number {
     ...knobZIndexes,
     ...pluginZIndexes,
   );
-}
-
-// 히스토리 push 헬퍼
-function pushHistorySnapshot(
-  currentStatPositions: StatItemPositions,
-  currentGraphPositions: GraphItemPositions,
-) {
-  const currentKeyPositions = useKeyStore.getState().positions;
-  const currentPluginElements =
-    usePluginDisplayElementStore.getState().elements;
-  const { keyMappings: km } = useKeyStore.getState();
-  useHistoryStore.getState().pushState({
-    keyMappings: km,
-    positions: currentKeyPositions,
-    statPositions: currentStatPositions,
-    graphPositions: currentGraphPositions,
-    pluginElements: currentPluginElements,
-  });
 }
 
 // Stat positions persist 헬퍼
@@ -211,7 +192,6 @@ export interface CanvasActions {
   persistStatPositions: typeof persistStatPositions;
   persistGraphPositions: typeof persistGraphPositions;
   persistKnobPositions: typeof persistKnobPositions;
-  pushHistorySnapshot: typeof pushHistorySnapshot;
 }
 
 export interface DuplicateState {
@@ -240,8 +220,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[indexToDelete]) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
-
     const nextPositions = {
       ...current,
       [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
@@ -256,7 +234,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -274,7 +251,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const target = tabPositions[index];
     if (!target) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -295,7 +271,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const target = tabPositions[index];
     if (!target) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -315,7 +290,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const minZ = getMinZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -378,7 +352,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const current = store.positions;
     const tabPositions = current[selectedKeyType] || [];
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -396,8 +369,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[indexToDelete]) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
-
     const nextPositions = {
       ...current,
       [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
@@ -412,7 +383,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -430,7 +400,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const target = tabPositions[index];
     if (!target) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -451,7 +420,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const target = tabPositions[index];
     if (!target) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -471,7 +439,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const minZ = getMinZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -505,7 +472,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const current = store.positions;
     const tabPositions = current[selectedKeyType] || [];
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -519,7 +485,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
 
   const addStatAtPosition = (dx: number, dy: number) => {
     const current = useStatItemStore.getState().positions;
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
 
     const list = [...(current[selectedKeyType] || [])];
     list.push({
@@ -555,7 +520,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
 
   const addGraphAtPosition = (dx: number, dy: number) => {
     const current = useGraphItemStore.getState().positions;
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
 
     const list = [...(current[selectedKeyType] || [])];
     list.push({
@@ -603,18 +567,10 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     persistGraphPositions(nextPositions, 'Failed to add graph item');
   };
 
-  // 노브 히스토리 스냅샷 (현재 stat/graph 캡처)
-  const pushKnobHistory = () =>
-    pushHistorySnapshot(
-      useStatItemStore.getState().positions,
-      useGraphItemStore.getState().positions,
-    );
-
   const deleteKnobAtIndex = (indexToDelete: number) => {
     const current = useKnobItemStore.getState().positions;
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[indexToDelete]) return;
-    pushKnobHistory();
     const nextPositions = {
       ...current,
       [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
@@ -627,7 +583,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const current = useKnobItemStore.getState().positions;
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
-    pushKnobHistory();
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -643,7 +598,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     const target = tabPositions[index];
     if (!target) return;
-    pushKnobHistory();
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -662,7 +616,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     const target = tabPositions[index];
     if (!target) return;
-    pushKnobHistory();
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -680,7 +633,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const current = useKnobItemStore.getState().positions;
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
-    pushKnobHistory();
     const minZ = getMinZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -711,7 +663,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     if (!templatePosition) return;
     const current = useKnobItemStore.getState().positions;
     const tabPositions = current[selectedKeyType] || [];
-    pushKnobHistory();
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -725,7 +676,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
 
   const addKnobAtPosition = (dx: number, dy: number) => {
     const current = useKnobItemStore.getState().positions;
-    pushKnobHistory();
     const list = [...(current[selectedKeyType] || [])];
     list.push({
       axisId: '',
@@ -790,6 +740,5 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     persistStatPositions,
     persistGraphPositions,
     persistKnobPositions,
-    pushHistorySnapshot,
   };
 }

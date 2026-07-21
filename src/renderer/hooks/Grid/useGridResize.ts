@@ -4,7 +4,6 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
@@ -83,7 +82,6 @@ export function useGridResize({
     elementBounds: GroupElementBounds[];
   } | null>(null);
 
-  // 리사이즈 시작 시 히스토리 저장
   const handleResizeStart = (_handle?: ResizeHandle) => {
     if (resizeStartRef.current) return;
     resizeStartRef.current = true;
@@ -93,20 +91,6 @@ export function useGridResize({
 
     // 리사이즈 시작 시 애니메이션 비활성화
     useGridSelectionStore.getState().setDraggingOrResizing(true);
-
-    const currentPositions = useKeyStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const currentStatPositions = useStatItemStore.getState().positions;
-    const currentGraphPositions = useGraphItemStore.getState().positions;
-    const { keyMappings } = useKeyStore.getState();
-    useHistoryStore.getState().pushState({
-      keyMappings,
-      positions: currentPositions,
-      statPositions: currentStatPositions,
-      graphPositions: currentGraphPositions,
-      pluginElements: currentPluginElements,
-    });
   };
 
   // 공용 리사이즈 프리뷰 처리 (스마트 가이드 포함)
@@ -807,8 +791,8 @@ export function useGridResize({
       const element = selectedElements[0];
 
       if (element.type === 'key' && element.index !== undefined) {
-        // 키 요소에 최종 크기 적용
-        const positions = useKeyStore.getState().positions;
+        // 키 요소에 최종 크기 적용 - 커밋 base는 canonical
+        const positions = useKeyStore.getState().canonicalPositions;
         const setPositions = useKeyStore.getState().setPositions;
         const current = positions[selectedKeyType] || [];
         const nextPositions: KeyPositions = {
@@ -939,7 +923,8 @@ export function useGridResize({
 
     const finalData = finalGroupBoundsRef.current;
     if (finalData && finalData.elementBounds.length > 0) {
-      const positions = useKeyStore.getState().positions;
+      // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
+      const positions = useKeyStore.getState().canonicalPositions;
       const setPositions = useKeyStore.getState().setPositions;
       const current = positions[selectedKeyType] || [];
       const pluginStore = usePluginDisplayElementStore.getState();

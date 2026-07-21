@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
+import { usePressAction } from '@hooks/usePressAction';
 import React, { useEffect, useState } from 'react';
 import Modal from '../../Modal';
 import { useTranslation } from '@contexts/useTranslation';
@@ -59,6 +60,10 @@ const TabNameModal = ({
     onClose();
   };
 
+  // IME 조합 종료·onChange flush와의 경합으로 첫 click이 유실되는 것을 방어
+  const submitPress = usePressAction(handleSubmit);
+  const cancelPress = usePressAction(onClose);
+
   if (!isOpen) return null;
 
   return (
@@ -85,13 +90,13 @@ const TabNameModal = ({
         <div className="flex gap-[8px]">
           <button
             className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
-            onClick={handleSubmit}
+            {...submitPress}
           >
             {t('tabs.create')}
           </button>
           <button
             className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
-            onClick={onClose}
+            {...cancelPress}
           >
             {t('common.cancel')}
           </button>

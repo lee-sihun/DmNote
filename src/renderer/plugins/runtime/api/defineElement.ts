@@ -6,15 +6,31 @@
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { buildValidTabIdSet } from '@constants/keyModes';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { removeDisplayElementsInternal } from '../displayElement/displayElementApi';
 import {
+  notePluginInstancesMutation,
+  registerPluginInstancesReapplier,
+} from '../displayElement/instancesUndoSync';
+import { pluginInstancesApi } from '@api/modules/pluginInstancesApi';
+import {
+  createPluginInstancesSaveDebounce,
+  enqueuePluginInstancesCommit,
+  touchPluginInstancesEditSession,
+} from '../displayElement/instancesCommitQueue';
+import { schedulePluginPanelModelSync } from '@utils/plugin/panelModelSync';
+import { noteBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
+import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
+import {
+  useHistoryStatusStore,
+  syncHistoryStatus,
+} from '@stores/data/useHistoryStatusStore';
+import {
   createPluginInstanceLifecycle,
   createPluginInstanceSaveBarrier,
   normalizePluginInstanceTabId,
+  type PluginRestoreReadiness,
 } from '../displayElement/instanceLifecycle';
 import {
   SECTION_WRAPPER_CLASS,
@@ -39,13 +55,27 @@ import type {
   PluginDisplayElementConfig,
 } from '@src/types/plugin/api';
 import type { SettingsState } from '@src/types/settings/settings';
+import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
 
-interface SavedInstance {
+export interface SavedInstance {
   position: { x: number; y: number };
   settings?: Record<string, string | number | boolean>;
   measuredSize?: { width: number; height: number };
   tabId?: string;
 }
+
+export const buildSavedPluginInstances = (
+  elements: readonly PluginDisplayElementInternal[],
+  definitionId: string,
+): SavedInstance[] =>
+  elements
+    .filter((element) => element.definitionId === definitionId)
+    .map((element) => ({
+      position: element.position,
+      settings: element.settings as SavedInstance['settings'],
+      measuredSize: element.measuredSize,
+      tabId: normalizePluginInstanceTabId(element.tabId),
+    }));
 
 interface DefineElementDependencies {
   pluginId: string;
@@ -55,6 +85,7 @@ interface DefineElementDependencies {
     fn: (...args: unknown[]) => unknown,
   ) => (...args: unknown[]) => unknown;
   isReloading: () => boolean;
+  waitForReloadEnd: () => Promise<void>;
 }
 
 /**
@@ -67,6 +98,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
     registerCleanup,
     wrapFunctionWithContext,
     isReloading,
+    waitForReloadEnd,
   } = deps;
   const visibilityErrorKeys = new Set<string>();
 
@@ -82,7 +114,70 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
     const INSTANCES_KEY = 'instances';
 
-    const instanceSaveBarrier = createPluginInstanceSaveBarrier();
+    let pendingRestorationSave: {
+      resolve: () => void;
+      reject: (error: unknown) => void;
+    } | null = null;
+    const instanceSaveBarrier = createPluginInstanceSaveBarrier(() => {
+      if (pendingRestorationSave) return;
+      let resolve!: () => void;
+      let reject!: (error: unknown) => void;
+      const pending = new Promise<void>((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+      });
+      pendingRestorationSave = { resolve, reject };
+      void trackEditorWrite(pending);
+    });
+
+    // canonical commit (C4) - admission·epoch·dedupe·no-op·gesture 병합은 백엔드 규율
+    // 패널 RPC commit과의 stale full-snapshot 경합 방지를 위해 플러그인별 큐로 직렬화
+    const commitInstances = (instances: SavedInstance[]) =>
+      enqueuePluginInstancesCommit(pluginId, () =>
+        commitInstancesInner(instances),
+      );
+
+    const commitInstancesInner = async (instances: SavedInstance[]) => {
+      const buildRequest = () => {
+        const mutationId = crypto.randomUUID();
+        notePluginInstancesMutation(mutationId);
+        return {
+          pluginId,
+          instances,
+          mutationId,
+          gestureId: touchPluginInstancesEditSession(pluginId),
+          observedHistoryEpoch: useHistoryStatusStore.getState().historyEpoch,
+          authorityGeneration: getPluginAuthorityGeneration(),
+        };
+      };
+      try {
+        const result = await pluginInstancesApi.commit(buildRequest());
+        noteBackendPluginRevision(result.modelRevision);
+        // 전진한 revision을 패널 미러에 반드시 전파 - store 변경이 없어도
+        // 패널의 revision 충돌 재시도가 자력으로 수렴할 수 있게 함
+        if (result.changed) {
+          const { elements, definitions } =
+            usePluginDisplayElementStore.getState();
+          schedulePluginPanelModelSync(elements, definitions);
+        }
+      } catch (error) {
+        // 낡은 epoch 관측 = barrier(undo·프리셋 복원)와 경합 - barrier가 이긴다
+        // 캡처값 재시도는 undo 직전 상태를 되살리므로 폐기하고 status만 재동기화
+        if (String(error).includes('HISTORY_EPOCH_CONFLICT')) {
+          console.warn(
+            `[Plugin ${pluginId}] Instance save dropped by history barrier`,
+          );
+          await syncHistoryStatus();
+          return;
+        }
+        throw error;
+      }
+    };
+
+    // undo 재결합 직전 pending 저장 취소용 - main 블록에서 실제 구현 주입
+    let cancelPendingInstanceSave: () => void = () => {};
+    // 취소 세대 - debounce 타이머뿐 아니라 이미 큐에 들어간 저장도 무효화
+    let instanceSaveGeneration = 0;
 
     const instanceLifecycle =
       window.__dmn_window_type === 'main'
@@ -98,8 +193,35 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               const stored = await namespacedStorage.get(INSTANCES_KEY);
               return Array.isArray(stored) ? (stored as SavedInstance[]) : null;
             },
-            persistInstances: (instances) =>
-              namespacedStorage.set(INSTANCES_KEY, instances),
+            persistInstances: (instances) => commitInstances(instances),
+            // 탭 정리는 백엔드 단일 write-lock에서 원자 수행 - get과 commit
+            // 사이에 bulk clear 등이 끼어 지워진 인스턴스가 부활하지 않음.
+            // 유효 탭은 큐 실행 시점 파생, invoke 비행 중 탭 undo는 epoch가 거절
+            reconcilePersist: () =>
+              enqueuePluginInstancesCommit(pluginId, async () => {
+                const validTabIds = buildValidTabIdSet(
+                  useKeyStore.getState().customTabs.map((tab) => tab.id),
+                );
+                const mutationId = crypto.randomUUID();
+                notePluginInstancesMutation(mutationId);
+                try {
+                  const result = await pluginInstancesApi.reconcile({
+                    pluginId,
+                    validTabIds: [...validTabIds],
+                    mutationId,
+                    observedHistoryEpoch:
+                      useHistoryStatusStore.getState().historyEpoch,
+                    authorityGeneration: getPluginAuthorityGeneration(),
+                  });
+                  noteBackendPluginRevision(result.modelRevision);
+                } catch (error) {
+                  if (String(error).includes('HISTORY_EPOCH_CONFLICT')) {
+                    await syncHistoryStatus();
+                    return;
+                  }
+                  throw error;
+                }
+              }),
             getMemoryInstances: () =>
               usePluginDisplayElementStore
                 .getState()
@@ -112,43 +234,94 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           })
         : null;
 
-    const saveInstances = async () => {
-      // 전역 리로드 중이거나 개별 복원 중에는 저장하지 않음
-      if (isReloading() || !instanceSaveBarrier.shouldSave()) return;
+    const buildInstances = (
+      elements: readonly PluginDisplayElementInternal[],
+    ): SavedInstance[] => buildSavedPluginInstances(elements, defId);
 
-      const elements = usePluginDisplayElementStore
-        .getState()
-        .elements.filter((el) => el.definitionId === defId);
+    const buildInstancesFromStore = (): SavedInstance[] =>
+      buildInstances(usePluginDisplayElementStore.getState().elements);
 
-      const instances: SavedInstance[] = elements.map((el) => ({
-        position: el.position,
-        settings: el.settings as SavedInstance['settings'],
-        measuredSize: el.measuredSize,
-        tabId: normalizePluginInstanceTabId(el.tabId),
-      }));
+    const saveInstances = async (waitForReload = false) => {
+      // 일반 리로드 중 저장은 폐기, 복원 중 생긴 실제 편집만 리로드 종료 뒤 저장
+      if (!instanceSaveBarrier.shouldSave()) return;
+      if (waitForReload) {
+        while (isReloading()) await waitForReloadEnd();
+      } else if (isReloading()) {
+        return;
+      }
+      if (!instanceLifecycle) return;
 
-      await instanceLifecycle?.saveInstances(instances);
+      const generationAtCapture = instanceSaveGeneration;
+      // 스냅샷은 큐 실행 시점에 캡처 - 대기 중 끼어든 commit(패널 RPC 등)을 덮지 않음
+      await enqueuePluginInstancesCommit(pluginId, async () => {
+        if (waitForReload) {
+          while (isReloading()) await waitForReloadEnd();
+        } else if (isReloading()) {
+          return;
+        }
+        if (!instanceSaveBarrier.shouldSave()) return;
+        if (generationAtCapture !== instanceSaveGeneration) return;
+        await commitInstancesInner(buildInstancesFromStore());
+      });
+    };
+
+    const flushPendingRestorationSave = async () => {
+      const pending = pendingRestorationSave;
+      if (!pending) return;
+      pendingRestorationSave = null;
+      try {
+        await saveInstances(true);
+        pending.resolve();
+      } catch (error) {
+        pending.reject(error);
+        throw error;
+      }
+    };
+
+    const discardPendingRestorationSave = () => {
+      const pending = pendingRestorationSave;
+      pendingRestorationSave = null;
+      pending?.resolve();
+    };
+
+    const failPendingRestorationSave = (error: unknown) => {
+      const pending = pendingRestorationSave;
+      pendingRestorationSave = null;
+      pending?.reject(error);
     };
 
     if (window.__dmn_window_type === 'main') {
+      // 드래그 등 프레임 단위 변경의 commit 스팸 방지 - trailing debounce
+      const INSTANCE_SAVE_DEBOUNCE_MS = 200;
+      const instanceSaveDebounce = createPluginInstancesSaveDebounce({
+        delayMs: INSTANCE_SAVE_DEBOUNCE_MS,
+        save: saveInstances,
+        onError: (error) => {
+          console.error(
+            `[Plugin ${pluginId}] Failed to save instances:`,
+            error,
+          );
+        },
+      });
+      cancelPendingInstanceSave = () => {
+        instanceSaveDebounce.cancel();
+        instanceSaveGeneration += 1;
+      };
+      registerCleanup(cancelPendingInstanceSave);
+
       const unsubStore = usePluginDisplayElementStore.subscribe(
         (state, prevState) => {
-          const currentElements = state.elements.filter(
-            (el) => el.definitionId === defId,
-          );
-          const prevElements = prevState.elements.filter(
-            (el) => el.definitionId === defId,
-          );
+          const currentInstances = buildInstances(state.elements);
+          const prevInstances = buildInstances(prevState.elements);
 
           if (
-            JSON.stringify(currentElements) !== JSON.stringify(prevElements)
+            JSON.stringify(currentInstances) !== JSON.stringify(prevInstances)
           ) {
-            void saveInstances().catch((error) => {
-              console.error(
-                `[Plugin ${pluginId}] Failed to save instances:`,
-                error,
-              );
-            });
+            // 복원 재주입 중 변경은 저장 대상이 아님 (undo 반영 echo 차단)
+            if (!instanceSaveBarrier.shouldSave()) return;
+            // 변경 시점 기준으로 edit-session TTL 갱신 - debounce가 세션을 쪼개지 않게
+            touchPluginInstancesEditSession(pluginId);
+            instanceSaveDebounce.schedule();
           }
         },
       );
@@ -289,22 +462,6 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         );
         return;
       }
-
-      // 설정 변경 전 히스토리 저장
-      const { keyMappings, positions } = useKeyStore.getState();
-      const statPositions = useStatItemStore.getState().positions;
-      const graphPositions = useGraphItemStore.getState().positions;
-      const pluginElements = usePluginDisplayElementStore.getState().elements;
-      const { pushState } = await import('@stores/data/useHistoryStore').then(
-        (m) => m.useHistoryStore.getState(),
-      );
-      pushState({
-        keyMappings,
-        positions,
-        statPositions,
-        graphPositions,
-        pluginElements,
-      });
 
       const currentSettings: Record<string, unknown> = omitLayoutSettingValues(
         definition.settings,
@@ -695,97 +852,144 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       window.__dmn_element_restorers?.delete(defId);
     });
 
-    if (instanceLifecycle) {
-      const restoreTimer = setTimeout(() => {
-        void instanceLifecycle
-          .startRestore(
-            () => {
-              const keyState = useKeyStore.getState();
-              return buildValidTabIdSet(
-                keyState.customTabs.map((tab) => tab.id),
-              );
-            },
-            (savedInstances, readiness) => {
-              instanceSaveBarrier.runRestoreMutation(() => {
-                if (readiness === 'failed') {
-                  console.warn(
-                    `[Plugin ${pluginId}] Bootstrap timed out; restoring all instances`,
-                  );
-                }
-
-                const maxInstances = definition.maxInstances;
-                let instancesToRestore = savedInstances;
-
-                if (maxInstances && maxInstances > 0) {
-                  const instancesByTab = new Map<string, SavedInstance[]>();
-                  savedInstances.forEach((instance) => {
-                    const tabId = normalizePluginInstanceTabId(instance.tabId);
-                    if (!instancesByTab.has(tabId)) {
-                      instancesByTab.set(tabId, []);
-                    }
-                    instancesByTab.get(tabId)!.push(instance);
-                  });
-
-                  instancesToRestore = [];
-                  instancesByTab.forEach((instances) => {
-                    instancesToRestore.push(
-                      ...instances.slice(0, maxInstances),
-                    );
-                  });
-                }
-
-                instancesToRestore.forEach((instance) => {
-                  // 비동기 복원 중 플러그인 컨텍스트 재설정
-                  window.__dmn_current_plugin_id = pluginId;
-
-                  window.api.ui.displayElement.add({
-                    html: '<!-- plugin-element -->',
-                    position: instance.position,
-                    draggable: true,
-                    definitionId: defId,
-                    settings: omitLayoutSettingValues(
-                      definition.settings,
-                      instance.settings || { ...defaultSettings },
-                    ) as Record<string, string | number | boolean>,
-                    state: definition.previewState || {},
-                    measuredSize: instance.measuredSize,
-                    tabId: normalizePluginInstanceTabId(instance.tabId),
-                    onClick: useModalSettings ? handleElementClick : undefined,
-                    contextMenu: {
-                      enableDelete: true,
-                      deleteLabel: definition.contextMenu?.delete || '삭제',
-                      customItems: buildCustomContextMenuItems(),
-                    },
-                  } as unknown as PluginDisplayElementConfig);
-                });
-              });
-            },
-          )
-          .then(
-            () => {
-              if (instanceSaveBarrier.finishRestoration()) {
-                void saveInstances().catch((error) => {
-                  console.error(
-                    `[Plugin ${pluginId}] Failed to flush pending instance changes:`,
-                    error,
-                  );
-                });
-              }
-            },
-            (error) => {
-              instanceSaveBarrier.cancelRestoration();
-              console.error(
-                `[Plugin ${pluginId}] Failed to restore instances:`,
-                error,
-              );
-            },
+    // 저장 스냅샷을 화면 요소로 재주입 - 초기 복원과 undo 재결합이 공유
+    const applyInstancesSnapshot = (
+      savedInstances: SavedInstance[],
+      readiness: 'ready' | 'failed',
+    ) => {
+      instanceSaveBarrier.runRestoreMutation(() => {
+        if (readiness === 'failed') {
+          console.warn(
+            `[Plugin ${pluginId}] Bootstrap timed out; restoring all instances`,
           );
-      }, 0);
+        }
+
+        const maxInstances = definition.maxInstances;
+        let instancesToRestore = savedInstances;
+
+        if (maxInstances && maxInstances > 0) {
+          const instancesByTab = new Map<string, SavedInstance[]>();
+          savedInstances.forEach((instance) => {
+            const tabId = normalizePluginInstanceTabId(instance.tabId);
+            if (!instancesByTab.has(tabId)) {
+              instancesByTab.set(tabId, []);
+            }
+            instancesByTab.get(tabId)!.push(instance);
+          });
+
+          instancesToRestore = [];
+          instancesByTab.forEach((instances) => {
+            instancesToRestore.push(...instances.slice(0, maxInstances));
+          });
+        }
+
+        instancesToRestore.forEach((instance) => {
+          // 비동기 복원 중 플러그인 컨텍스트 재설정
+          window.__dmn_current_plugin_id = pluginId;
+
+          window.api.ui.displayElement.add({
+            html: '<!-- plugin-element -->',
+            position: instance.position,
+            draggable: true,
+            definitionId: defId,
+            settings: omitLayoutSettingValues(
+              definition.settings,
+              instance.settings || { ...defaultSettings },
+            ) as Record<string, string | number | boolean>,
+            state: definition.previewState || {},
+            measuredSize: instance.measuredSize,
+            tabId: normalizePluginInstanceTabId(instance.tabId),
+            onClick: useModalSettings ? handleElementClick : undefined,
+            contextMenu: {
+              enableDelete: true,
+              deleteLabel: definition.contextMenu?.delete || '삭제',
+              customItems: buildCustomContextMenuItems(),
+            },
+          } as unknown as PluginDisplayElementConfig);
+        });
+      });
+    };
+
+    if (window.__dmn_window_type === 'main') {
+      // undo/redo의 canonical 재결합 - 현 요소 제거 후 스냅샷 재주입
+      registerCleanup(
+        registerPluginInstancesReapplier(pluginId, defId, {
+          // 이벤트 도착 즉시 호출 - 낡은 메모리를 커밋할 pending 저장 차단
+          cancelPendingSave: () => cancelPendingInstanceSave(),
+          reapply: (instances) => {
+            instanceSaveBarrier.runRestoreMutation(() => {
+              const currentIds = usePluginDisplayElementStore
+                .getState()
+                .elements.filter((el) => el.definitionId === defId)
+                .map((el) => el.fullId);
+              if (currentIds.length > 0) {
+                removeDisplayElementsInternal(currentIds);
+              }
+            });
+            applyInstancesSnapshot(instances as SavedInstance[], 'ready');
+          },
+        }),
+      );
+    }
+
+    if (instanceLifecycle) {
+      let restoreStarted = false;
+      let settleScheduledRestore: (() => void) | null = null;
+      const scheduledRestore = new Promise<PluginRestoreReadiness>(
+        (resolve, reject) => {
+          settleScheduledRestore = () => resolve('pending');
+          const restoreTimer = setTimeout(() => {
+            restoreStarted = true;
+            settleScheduledRestore = null;
+            try {
+              void instanceLifecycle
+                .startRestore(
+                  () => {
+                    const keyState = useKeyStore.getState();
+                    return buildValidTabIdSet(
+                      keyState.customTabs.map((tab) => tab.id),
+                    );
+                  },
+                  (savedInstances, readiness) =>
+                    applyInstancesSnapshot(savedInstances, readiness),
+                )
+                .then(resolve, reject);
+            } catch (error) {
+              reject(error);
+            }
+          }, 0);
+          registerCleanup(() => {
+            clearTimeout(restoreTimer);
+            if (!restoreStarted) {
+              settleScheduledRestore?.();
+              settleScheduledRestore = null;
+            }
+          });
+        },
+      );
+      const restoreWork = scheduledRestore.then(
+        async () => {
+          if (instanceSaveBarrier.finishRestoration()) {
+            await flushPendingRestorationSave();
+          }
+        },
+        (error) => {
+          instanceSaveBarrier.failRestoration();
+          failPendingRestorationSave(error);
+          throw error;
+        },
+      );
+      void trackEditorWrite(restoreWork).catch((error) => {
+        console.error(
+          `[Plugin ${pluginId}] Failed to restore instances:`,
+          error,
+        );
+      });
 
       registerCleanup(() => {
-        clearTimeout(restoreTimer);
         instanceLifecycle.dispose();
         instanceSaveBarrier.cancelRestoration();
+        discardPendingRestorationSave();
       });
     } else {
       instanceSaveBarrier.finishRestoration();

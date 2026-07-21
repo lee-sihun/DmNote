@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/refs */
+import { usePressAction } from '@hooks/usePressAction';
 import React from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
@@ -181,6 +182,9 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
     handleKeyPreview({ activeTransparent: checked });
   };
 
+  // 입력 blur 커밋과의 경합으로 첫 click이 유실되는 것을 방어
+  const submitPress = usePressAction(() => handleSubmit());
+  const cancelPress = usePressAction(() => handleClose());
   return (
     <Modal
       onClick={handleClose}
@@ -220,13 +224,13 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
         {/* 저장/취소 버튼 */}
         <div className="flex gap-[8px] mt-[12px]">
           <button
-            onClick={handleSubmit}
+            {...submitPress}
             className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.save')}
           </button>
           <button
-            onClick={handleClose}
+            {...cancelPress}
             className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.cancel')}

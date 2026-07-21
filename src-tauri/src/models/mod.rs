@@ -1,7 +1,9 @@
 pub mod editor;
 pub mod obs;
+pub mod plugin;
 
 pub use editor::*;
+pub use plugin::*;
 
 use serde::de::Error as DeError;
 use serde::ser::{Error as SerError, SerializeMap};
@@ -1660,6 +1662,14 @@ pub struct OverlayBounds {
     pub width: f64,
     pub height: f64,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelBounds {
+    pub x: f64,
+    pub y: f64,
+    pub height: f64,
+}
 impl OverlayResizeAnchor {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -1763,6 +1773,8 @@ pub struct AppStoreData {
     pub custom_js: CustomJs,
     pub overlay_resize_anchor: OverlayResizeAnchor,
     pub overlay_bounds: Option<OverlayBounds>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_bounds: Option<PanelBounds>,
     pub overlay_last_content_top_offset: Option<f64>,
     #[serde(default)]
     pub overlay_bounds_are_logical: bool,
@@ -1838,6 +1850,7 @@ impl Default for AppStoreData {
             custom_js: CustomJs::default(),
             overlay_resize_anchor: OverlayResizeAnchor::TopLeft,
             overlay_bounds: None,
+            panel_bounds: None,
             overlay_last_content_top_offset: None,
             overlay_bounds_are_logical: false,
             key_counter_enabled: false,

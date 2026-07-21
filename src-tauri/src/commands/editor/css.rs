@@ -18,13 +18,19 @@ use crate::{
     defaults::default_keys,
     errors::CmdResult,
     models::{AppStoreData, CustomCss, CustomCssHistoryEntry, TabCss, TabCssOverrides},
-    state::{atomic_file::atomic_replace, AppState},
+    state::{atomic_file::atomic_replace, store::AdmittedHistoryOverlapMutation, AppState},
 };
 
 /// OBS 브릿지에 CSS 설정 변경을 settings_diff로 전달 (전체 스냅샷 브로드캐스트 방지)
 fn notify_obs_css(state: &AppState) {
     let snap = state.store.snapshot();
     state.notify_obs_settings_diff(custom_css_settings_diff(&snap));
+}
+
+fn emit_history_status<T>(app: &AppHandle, transaction: &AdmittedHistoryOverlapMutation<T>) {
+    if let Some(status) = transaction.history_status.as_ref() {
+        emit_best_effort(app, "history:status", status);
+    }
 }
 
 #[derive(Serialize)]
@@ -125,13 +131,13 @@ fn commit_loaded_css(
     state: &AppState,
     loaded: &ValidatedCssFile,
     touch_history: bool,
-) -> CmdResult<(CustomCss, bool)> {
+) -> CmdResult<AdmittedHistoryOverlapMutation<(CustomCss, bool)>> {
     let css = CustomCss {
         path: Some(loaded.canonical_path.clone()),
         content: loaded.content.clone(),
     };
     let timestamp = current_unix_millis();
-    let updated = state.store.update(|store| {
+    Ok(state.store.commit_history_overlap_mutation(|store| {
         store.custom_css = css.clone();
         if touch_history {
             record_custom_css_load(
@@ -146,8 +152,8 @@ fn commit_loaded_css(
                 timestamp,
             );
         }
-    })?;
-    Ok((css, updated.use_custom_css))
+        Ok((css, store.use_custom_css))
+    })?)
 }
 
 // ========== 탭별 CSS 응답 타입 ==========
@@ -241,10 +247,11 @@ pub fn css_toggle(
     enabled: bool,
 ) -> CmdResult<CssToggleResponse> {
     let _operation_guard = state.lock_css_operation();
-    state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         store.use_custom_css = enabled;
+        Ok(store.custom_css.clone())
     })?;
-    let css = state.store.snapshot().custom_css;
+    let css = &transaction.value;
     if enabled {
         state.unwatch_global_css();
         if let Some(path) = &css.path {
@@ -256,9 +263,10 @@ pub fn css_toggle(
         state.unwatch_global_css();
     }
 
+    emit_history_status(&app, &transaction);
     emit_best_effort(&app, "css:use", &CssToggleResponse { enabled });
     if enabled {
-        emit_best_effort(&app, "css:content", &css);
+        emit_best_effort(&app, "css:content", css);
     }
     notify_obs_css(&state);
     Ok(CssToggleResponse { enabled })
@@ -267,12 +275,14 @@ pub fn css_toggle(
 #[tauri::command]
 pub fn css_reset(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
     let _operation_guard = state.lock_css_operation();
-    state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         store.use_custom_css = false;
         store.custom_css = CustomCss::default();
+        Ok(())
     })?;
     state.unwatch_global_css();
 
+    emit_history_status(&app, &transaction);
     emit_best_effort(&app, "css:use", &CssToggleResponse { enabled: false });
     emit_best_effort(&app, "css:content", &CustomCss::default());
 
@@ -293,14 +303,13 @@ pub fn css_set_content(
             error: Some(CssHistoryErrorCode::TooLarge.as_str().to_string()),
         });
     }
-    let mut current = state.store.snapshot().custom_css;
-    current.content = content;
-
-    state.store.update(|store| {
-        store.custom_css = current.clone();
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
+        store.custom_css.content = content;
+        Ok(store.custom_css.clone())
     })?;
 
-    emit_best_effort(&app, "css:content", &current);
+    emit_history_status(&app, &transaction);
+    emit_best_effort(&app, "css:content", &transaction.value);
 
     notify_obs_css(&state);
     Ok(CssSetContentResponse {
@@ -336,15 +345,17 @@ pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<CssLoad
             });
         }
     };
-    let (css, use_custom_css) = commit_loaded_css(&state, &loaded, true)?;
+    let transaction = commit_loaded_css(&state, &loaded, true)?;
+    let (css, use_custom_css) = &transaction.value;
     state.authorize_css_path(&loaded.canonical_path);
     state.unwatch_global_css();
-    if use_custom_css {
+    if *use_custom_css {
         if let Err(error) = state.watch_global_css(&loaded.canonical_path) {
             log::warn!("[css_load] Failed to start watching: {error}");
         }
     }
-    emit_best_effort(&app, "css:content", &css);
+    emit_history_status(&app, &transaction);
+    emit_best_effort(&app, "css:content", css);
     notify_obs_css(&state);
 
     Ok(CssLoadResponse {
@@ -404,15 +415,17 @@ pub fn css_history_activate(
         ));
     }
 
-    let (css, use_custom_css) = commit_loaded_css(&state, &loaded, false)?;
+    let transaction = commit_loaded_css(&state, &loaded, false)?;
+    let (css, use_custom_css) = &transaction.value;
     state.authorize_css_path(&loaded.canonical_path);
     state.unwatch_global_css();
-    if use_custom_css {
+    if *use_custom_css {
         if let Err(error) = state.watch_global_css(&loaded.canonical_path) {
             log::warn!("[css_history_activate] Failed to start watching: {error}");
         }
     }
-    emit_best_effort(&app, "css:content", &css);
+    emit_history_status(&app, &transaction);
+    emit_best_effort(&app, "css:content", css);
     notify_obs_css(&state);
 
     Ok(CssActivateResponse {
@@ -429,14 +442,15 @@ pub fn css_history_remove(
     path: String,
 ) -> CmdResult<Vec<CustomCssHistoryItem>> {
     let operation_guard = state.lock_css_operation();
-    let updated = state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         store
             .custom_css_history
             .retain(|entry| !history_paths_match(&entry.path, &path));
         normalize_custom_css_history(&mut store.custom_css_history);
+        Ok(store.custom_css_history.clone())
     })?;
     drop(operation_guard);
-    Ok(history_items(&updated.custom_css_history))
+    Ok(history_items(&transaction.value))
 }
 
 // ========== 탭별 CSS 커맨드 ==========
@@ -492,14 +506,16 @@ pub fn css_tab_load(
         content: loaded.content,
         enabled: true,
     };
-    state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
+        Ok(())
     })?;
     state.authorize_css_path(&loaded.canonical_path);
     state.unwatch_tab_css(&tab_id);
     if let Err(error) = state.watch_tab_css(&loaded.canonical_path, &tab_id) {
         log::warn!("[css_tab_load] Failed to watch tab {tab_id}: {error}");
     }
+    emit_history_status(&app, &transaction);
     emit_best_effort(
         &app,
         "tabCss:changed",
@@ -525,11 +541,13 @@ pub fn css_tab_clear(
     tab_id: String,
 ) -> CmdResult<TabCssClearResponse> {
     let _operation_guard = state.lock_css_operation();
-    state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         replace_tab_css_override(store, &tab_id, None);
+        Ok(())
     })?;
     state.unwatch_tab_css(&tab_id);
 
+    emit_history_status(&app, &transaction);
     emit_best_effort(
         &app,
         "tabCss:changed",
@@ -555,8 +573,9 @@ pub fn css_tab_set(
 ) -> CmdResult<TabCssSetResponse> {
     let _operation_guard = state.lock_css_operation();
     let css = css.map(|tab_css| prepare_tab_css_for_set(&state, tab_css));
-    state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         replace_tab_css_override(store, &tab_id, css.clone());
+        Ok(())
     })?;
     state.unwatch_tab_css(&tab_id);
     if let Some(path) = css
@@ -569,6 +588,7 @@ pub fn css_tab_set(
         }
     }
 
+    emit_history_status(&app, &transaction);
     emit_best_effort(
         &app,
         "tabCss:changed",
@@ -594,12 +614,10 @@ pub fn css_tab_toggle(
     enabled: bool,
 ) -> CmdResult<TabCssToggleResponse> {
     let _operation_guard = state.lock_css_operation();
-    let mut updated_css: Option<TabCss> = None;
-
-    state.store.update(|store| {
-        if let Some(tab_css) = store.tab_css_overrides.get_mut(&tab_id) {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
+        let updated_css = if let Some(tab_css) = store.tab_css_overrides.get_mut(&tab_id) {
             tab_css.enabled = enabled;
-            updated_css = Some(tab_css.clone());
+            tab_css.clone()
         } else {
             // 탭 CSS가 없으면 기본 설정으로 생성
             let new_css = TabCss {
@@ -610,31 +628,31 @@ pub fn css_tab_toggle(
             store
                 .tab_css_overrides
                 .insert(tab_id.clone(), new_css.clone());
-            updated_css = Some(new_css);
-        }
+            new_css
+        };
+        Ok(updated_css)
     })?;
 
     state.unwatch_tab_css(&tab_id);
-    if let Some(ref css) = updated_css {
-        if enabled {
-            if let Some(path) = &css.path {
-                if let Err(err) = state.watch_tab_css(path, &tab_id) {
-                    log::warn!(
-                        "[css_tab_toggle] Failed to start watching tab {}: {}",
-                        tab_id,
-                        err
-                    );
-                }
+    if enabled {
+        if let Some(path) = &transaction.value.path {
+            if let Err(err) = state.watch_tab_css(path, &tab_id) {
+                log::warn!(
+                    "[css_tab_toggle] Failed to start watching tab {}: {}",
+                    tab_id,
+                    err
+                );
             }
         }
     }
 
+    emit_history_status(&app, &transaction);
     emit_best_effort(
         &app,
         "tabCss:changed",
         &TabCssResponse {
             tab_id: tab_id.clone(),
-            css: updated_css,
+            css: Some(transaction.value.clone()),
         },
     );
 
@@ -750,19 +768,21 @@ pub fn css_tab_activate_history(
         enabled: true,
     };
     let timestamp = current_unix_millis();
-    state.store.update(|store| {
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
         replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
         touch_custom_css_history(
             &mut store.custom_css_history,
             &loaded.canonical_path,
             timestamp,
         );
+        Ok(())
     })?;
     state.authorize_css_path(&loaded.canonical_path);
     state.unwatch_tab_css(&tab_id);
     if let Err(error) = state.watch_tab_css(&loaded.canonical_path, &tab_id) {
         log::warn!("[css_tab_activate_history] Failed to watch tab {tab_id}: {error}");
     }
+    emit_history_status(&app, &transaction);
     emit_best_effort(
         &app,
         "tabCss:changed",

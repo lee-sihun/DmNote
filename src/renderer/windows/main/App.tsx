@@ -1,4 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
+import {
+  usePanelWindowStore,
+  detachPropertiesPanel,
+} from '@stores/grid/usePanelWindowStore';
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
@@ -28,6 +32,7 @@ import {
 } from '@hooks/app/useUpdateCheck';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 
 import { useUIStore } from '@stores/useUIStore';
 
@@ -144,7 +149,6 @@ export default function App() {
     handleKeyMappingChange,
     handleNoteColorUpdate,
     handleNoteColorPreview,
-    handleCounterSettingsUpdate,
     handleCounterSettingsPreview,
     handleAddKeyAt,
     handleDuplicateKey,
@@ -156,8 +160,6 @@ export default function App() {
     handleResetCurrentMode,
     handleUndo,
     handleRedo,
-    canUndo,
-    canRedo,
   } = useKeyManager();
   const { color, palette, setPalette, handleColorChange, handlePaletteClose } =
     usePalette();
@@ -169,6 +171,7 @@ export default function App() {
   } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
+  const isPanelDetached = usePanelWindowStore((state) => state.isDetached);
   const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
     useState(false);
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
@@ -274,6 +277,7 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
       if (!matchesShortcut(e, shortcuts?.switchKeyMode)) return;
       // 캔버스 전용 단축키, 설정 화면에서는 기본 Tab 탐색 유지
       if (isSettingsOpen) return;
@@ -312,6 +316,7 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
       if (!matchesShortcut(e, shortcuts?.toggleSettingsPanel)) return;
       // 캔버스(그리드) 화면에서만 동작
       if (isSettingsOpen) return;
@@ -672,7 +677,6 @@ export default function App() {
               onKeyPreview={handleKeyPreview}
               onNoteColorUpdate={handleNoteColorUpdate}
               onNoteColorPreview={handleNoteColorPreview}
-              onCounterUpdate={handleCounterSettingsUpdate}
               onCounterPreview={handleCounterSettingsPreview}
               onKeyDelete={handleDeleteKey}
               onAddKeyAt={handleAddKeyAt}
@@ -691,24 +695,26 @@ export default function App() {
               }
               onUndo={handleUndo}
               onRedo={handleRedo}
-              canUndo={canUndo}
-              canRedo={canRedo}
               toolbarAddRequest={toolbarAddRequest}
               onToolbarAddConsumed={() => setToolbarAddRequest(null)}
               isNoteSettingOpen={isNoteSettingOpen}
               setIsNoteSettingOpen={setIsNoteSettingOpen}
             />
-            <PropertiesPanel
-              onPositionChange={handlePositionChange}
-              onKeyUpdate={(data) => {
-                const { index, ...updates } = data;
-                handleKeyStyleUpdate(index, updates);
-              }}
-              onKeyBatchUpdate={handleKeyBatchStyleUpdate}
-              onKeyPreview={handleKeyPreview}
-              onKeyBatchPreview={handleKeyBatchPreview}
-              onKeyMappingChange={handleKeyMappingChange}
-            />
+            {!isPanelDetached && (
+              <PropertiesPanel
+                onPositionChange={handlePositionChange}
+                onKeyUpdate={(data) => {
+                  const { index, ...updates } = data;
+                  handleKeyStyleUpdate(index, updates);
+                }}
+                onKeyBatchUpdate={handleKeyBatchStyleUpdate}
+                onKeyPreview={handleKeyPreview}
+                onKeyBatchPreview={handleKeyBatchPreview}
+                onKeyMappingChange={handleKeyMappingChange}
+                detachAction="detach"
+                onDetachAction={() => void detachPropertiesPanel()}
+              />
+            )}
           </div>
         )}
       </div>

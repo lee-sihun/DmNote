@@ -1,6 +1,7 @@
 use tauri::{AppHandle, State};
 
 use crate::{
+    commands::editor::state::emit_best_effort,
     errors::CmdResult,
     models::{SettingsPatchInput, SettingsState},
     state::AppState,
@@ -28,11 +29,22 @@ pub fn settings_update(
     } else {
         None
     };
-    let diff = state.settings.apply_patch(patch)?;
+    let transaction = state.store.commit_history_overlap_mutation(|store| {
+        Ok(crate::services::settings::apply_patch_to_store(
+            store, &patch,
+        ))
+    })?;
     if let Some(previous) = previous.as_ref() {
         state.resync_global_css_watcher(previous, &state.store.snapshot());
     }
     drop(operation_guard);
-    state.emit_settings_changed(&diff, &app)?;
-    Ok(diff.full.unwrap_or_else(|| state.settings.snapshot()))
+    if let Some(status) = transaction.history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
+    state.emit_settings_changed(&transaction.value, &app)?;
+    Ok(transaction
+        .value
+        .full
+        .clone()
+        .unwrap_or_else(|| state.settings.snapshot()))
 }

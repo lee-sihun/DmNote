@@ -19,6 +19,8 @@ import {
   groupSelectedElements,
   ungroupSelectedElements,
 } from '@utils/grid/groupActions';
+import { useHistoryShortcuts } from './useHistoryShortcuts';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 
 interface UseGridKeyboardParams {
   selectedElements: SelectedElement[];
@@ -31,8 +33,6 @@ interface UseGridKeyboardParams {
   clearSelection: () => void;
   copySelectedElements: () => void;
   pasteElements: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
   onMoveForward?: () => void;
@@ -50,8 +50,6 @@ export function useGridKeyboard({
   clearSelection,
   copySelectedElements,
   pasteElements,
-  canUndo,
-  canRedo,
   onUndo,
   onRedo,
   onMoveForward,
@@ -61,9 +59,12 @@ export function useGridKeyboard({
   const lastArrowKeyTime = useRef(0);
   const macOS = isMac();
 
+  useHistoryShortcuts({ onUndo, onRedo });
+
   // 선택 요소 키보드 조작
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
       if (typeof window !== 'undefined' && window.__dmn_isKeyListening) {
         return;
       }
@@ -197,50 +198,4 @@ export function useGridKeyboard({
     onMoveBackward,
     newGroupLabel,
   ]);
-
-  // Undo/Redo 단축키 처리
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (typeof window !== 'undefined' && window.__dmn_isKeyListening) {
-        return;
-      }
-      // 입력 요소에서는 단축키 무시
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-
-      const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
-
-      // Ctrl+Z: 실행 취소
-      if (
-        isPrimaryModifierPressed &&
-        !e.shiftKey &&
-        e.key.toLowerCase() === 'z'
-      ) {
-        e.preventDefault();
-        if (canUndo && typeof onUndo === 'function') {
-          onUndo();
-        }
-      }
-      // Ctrl+Shift+Z: 다시 실행
-      else if (
-        isPrimaryModifierPressed &&
-        e.shiftKey &&
-        e.key.toLowerCase() === 'z'
-      ) {
-        e.preventDefault();
-        if (canRedo && typeof onRedo === 'function') {
-          onRedo();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [macOS, canUndo, canRedo, onUndo, onRedo]);
 }

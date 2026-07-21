@@ -4,38 +4,38 @@ use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use crate::{
-    commands::editor::state::{
-        emit_best_effort, publish_editor_change, publish_legacy_editor_fields,
-    },
+    commands::editor::state::{emit_best_effort, publish_editor_change},
     defaults::{default_keys, default_positions},
     errors::CmdResult,
     models::{
         AppStoreData, CommittedEditorChange, CustomCssPatch, CustomTab, EditorCommitOrigin,
-        EditorCommitResult, EditorDocumentV1, EditorField, EditorHistoryRestoreRequest,
-        KeyCounters, KeyMappings, KeyPositions, LayerGroups, NoteSettings, NoteSettingsPatch,
-        SettingsPatchInput,
+        EditorDocumentV1, EditorField, KeyCounters, KeyMappings, KeyPositions, LayerGroups,
+        NoteSettings, NoteSettingsPatch, SettingsPatchInput,
     },
     services::settings::apply_patch_to_store,
-    state::{editor::validate_history_restore_metadata, AppState},
+    state::{editor::validate_history_restore_metadata, history::HistoryScope, AppState},
 };
 
 const MAX_CUSTOM_TABS: usize = 30;
 
 fn publish_legacy_key_noop_runtime(
     state: &AppState,
-    app: &AppHandle,
+    _app: &AppHandle,
     change: &CommittedEditorChange,
 ) {
-    if let Err(error) = state.apply_committed_editor_key_runtime(
-        app,
+    state.apply_committed_editor_keys_without_counters(
+        change.runtime_publication_generation,
         &change.document.keys,
         &change.selected_key_type,
-        &change.key_counters,
-    ) {
-        log::error!("[Keys] failed to publish committed key counters: {error:#}");
-    }
+    );
     state.obs_broadcast_counters();
     state.refresh_obs_snapshot();
+}
+
+fn emit_aux_history_status(app: &AppHandle, change: &CommittedEditorChange) {
+    if let Some(status) = change.history_status.as_ref() {
+        emit_best_effort(app, "history:status", status);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,6 +89,15 @@ fn is_selectable_mode(store: &AppStoreData, mode: &str) -> bool {
         || (store.keys.contains_key(mode) && store.custom_tabs.iter().any(|tab| tab.id == mode))
 }
 
+fn select_mode_if_available(store: &mut AppStoreData, requested: &str) -> (bool, String) {
+    if !is_selectable_mode(store, requested) {
+        return (false, store.selected_key_type.clone());
+    }
+    store.selected_key_type = requested.to_string();
+    (true, store.selected_key_type.clone())
+}
+
+#[cfg(test)]
 fn set_mode_with<Commit, ApplyRuntime>(
     store: &AppStoreData,
     requested: String,
@@ -210,13 +219,6 @@ pub struct ResetModeResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KeysWithPositionsResponse {
-    pub keys: KeyMappings,
-    pub positions: KeyPositions,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CustomTabChangePayload {
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
@@ -254,131 +256,40 @@ pub fn keys_get_counters(state: State<'_, AppState>) -> CmdResult<KeyCounters> {
 }
 
 #[tauri::command]
-pub fn keys_update(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    mappings: KeyMappings,
-) -> CmdResult<KeyMappings> {
-    let previous_mode = state.keyboard.current_mode();
-    let transaction = state.store.commit_legacy_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("keys_update".to_string()),
-        &[EditorField::Keys],
-        move |store| {
-            store.keys = mappings;
-            Ok(())
-        },
-    )?;
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
-    if !transaction
-        .change
-        .result
-        .changed_fields
-        .contains(&EditorField::Keys)
-    {
-        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
-    }
-    let updated = transaction.change.document.keys;
-    emit_best_effort(&app, "keys:changed", &updated);
-    if previous_mode != transaction.change.selected_key_type {
-        emit_best_effort(
-            &app,
-            "keys:mode-changed",
-            &serde_json::json!({ "mode": &transaction.change.selected_key_type }),
-        );
-    }
-    Ok(updated)
-}
-
-#[tauri::command]
-pub fn keys_update_with_positions(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    mappings: KeyMappings,
-    positions: KeyPositions,
-) -> CmdResult<KeysWithPositionsResponse> {
-    let previous_mode = state.keyboard.current_mode();
-    let transaction = state.store.commit_legacy_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("keys_update_with_positions".to_string()),
-        &[EditorField::Keys, EditorField::KeyPositions],
-        move |store| {
-            store.keys = mappings;
-            store.key_positions = positions;
-            Ok(())
-        },
-    )?;
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
-    if !transaction
-        .change
-        .result
-        .changed_fields
-        .contains(&EditorField::Keys)
-    {
-        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
-    }
-    let keys = transaction.change.document.keys;
-    let positions = transaction.change.document.key_positions;
-    emit_best_effort(&app, "keys:changed", &keys);
-    emit_best_effort(&app, "positions:changed", &positions);
-    if previous_mode != transaction.change.selected_key_type {
-        emit_best_effort(
-            &app,
-            "keys:mode-changed",
-            &serde_json::json!({ "mode": &transaction.change.selected_key_type }),
-        );
-    }
-    Ok(KeysWithPositionsResponse { keys, positions })
-}
-
-#[tauri::command]
-pub fn positions_update(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    positions: KeyPositions,
-) -> CmdResult<KeyPositions> {
-    let transaction = state.store.commit_legacy_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("positions_update".to_string()),
-        &[EditorField::KeyPositions],
-        move |store| {
-            store.key_positions = positions;
-            Ok(())
-        },
-    )?;
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
-    let updated = transaction.change.document.key_positions;
-    emit_best_effort(&app, "positions:changed", &updated);
-    if transaction.change.event.is_none() {
-        state.refresh_obs_snapshot();
-    }
-    Ok(updated)
-}
-
-#[tauri::command]
 pub fn keys_set_mode(
     state: State<'_, AppState>,
     app: AppHandle,
     mode: String,
+    observed_history_epoch: Option<u64>,
 ) -> CmdResult<ModeResponse> {
-    let snapshot = state.store.snapshot();
-    set_mode_with(
-        &snapshot,
-        mode,
-        |candidate| {
-            state
-                .store
-                .set_selected_key_type(candidate)
-                .map_err(Into::into)
-        },
-        |effective| {
-            state.keyboard.set_mode(effective.to_string());
-            emit_best_effort(
-                &app,
-                "keys:mode-changed",
-                &serde_json::json!({ "mode": effective }),
-            );
-            state.refresh_obs_snapshot();
-            Ok(())
-        },
-    )
+    let requested = mode.clone();
+    let transaction = state.store.commit_aux_editor_transaction(
+        HistoryScope::Mode,
+        observed_history_epoch,
+        EditorCommitOrigin::LegacyAdapter("keys_set_mode".to_string()),
+        &[],
+        move |store| Ok(select_mode_if_available(store, &requested)),
+    )?;
+    let (success, effective) = transaction.value.clone();
+    if success
+        && state.apply_committed_editor_keys_without_counters(
+            transaction.change.runtime_publication_generation,
+            &transaction.change.document.keys,
+            &effective,
+        )
+    {
+        emit_best_effort(
+            &app,
+            "keys:mode-changed",
+            &serde_json::json!({ "mode": &effective }),
+        );
+        state.refresh_obs_snapshot();
+    }
+    emit_aux_history_status(&app, &transaction.change);
+    Ok(ModeResponse {
+        success,
+        mode: effective,
+    })
 }
 
 #[tauri::command]
@@ -604,6 +515,7 @@ pub fn custom_tabs_create(
     state: State<'_, AppState>,
     app: AppHandle,
     name: String,
+    observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabCreateResult> {
     if name.trim().is_empty() {
         return Ok(CustomTabCreateResult {
@@ -618,7 +530,9 @@ pub fn custom_tabs_create(
         id: id.clone(),
         name: trimmed,
     };
-    let transaction = state.store.commit_legacy_editor_transaction(
+    let transaction = state.store.commit_aux_editor_transaction(
+        HistoryScope::CustomTabs,
+        observed_history_epoch,
         EditorCommitOrigin::LegacyAdapter("custom_tabs_create".to_string()),
         &[EditorField::Keys, EditorField::KeyPositions],
         |store| {
@@ -669,6 +583,7 @@ pub fn custom_tabs_create(
         "keys:mode-changed",
         &serde_json::json!({ "mode": &id }),
     );
+    emit_aux_history_status(&app, &transaction.change);
 
     Ok(CustomTabCreateResult {
         result: Some(tab),
@@ -681,8 +596,11 @@ pub fn custom_tabs_delete(
     state: State<'_, AppState>,
     app: AppHandle,
     id: String,
+    observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabDeleteResult> {
-    let transaction = state.store.commit_legacy_editor_transaction(
+    let transaction = state.store.commit_aux_editor_transaction(
+        HistoryScope::CustomTabs,
+        observed_history_epoch,
         EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
         &[
             EditorField::Keys,
@@ -765,6 +683,7 @@ pub fn custom_tabs_delete(
         "keys:mode-changed",
         &serde_json::json!({ "mode": &selected_key_type }),
     );
+    emit_aux_history_status(&app, &transaction.change);
 
     Ok(CustomTabDeleteResult {
         success: true,
@@ -786,42 +705,52 @@ pub fn custom_tabs_select(
     state: State<'_, AppState>,
     app: AppHandle,
     id: String,
+    observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabSelectResult> {
-    let snapshot = state.store.snapshot();
-    if !is_selectable_mode(&snapshot, &id) {
-        return Ok(CustomTabSelectResult {
-            success: false,
-            selected: snapshot.selected_key_type,
-            error: Some("not-found".to_string()),
-        });
+    let requested = id;
+    let transaction = state.store.commit_aux_editor_transaction(
+        HistoryScope::Mode,
+        observed_history_epoch,
+        EditorCommitOrigin::LegacyAdapter("custom_tabs_select".to_string()),
+        &[],
+        move |store| Ok(select_mode_if_available(store, &requested)),
+    )?;
+    let (success, selected) = transaction.value.clone();
+    if success
+        && state.apply_committed_editor_keys_without_counters(
+            transaction.change.runtime_publication_generation,
+            &transaction.change.document.keys,
+            &selected,
+        )
+    {
+        emit_best_effort(
+            &app,
+            "keys:mode-changed",
+            &serde_json::json!({ "mode": &selected }),
+        );
+        state.refresh_obs_snapshot();
     }
-
-    let selected = state.store.set_selected_key_type(id)?;
-    state.keyboard.set_mode(selected.clone());
-
-    emit_best_effort(
-        &app,
-        "keys:mode-changed",
-        &serde_json::json!({ "mode": &selected }),
-    );
-    state.refresh_obs_snapshot();
+    emit_aux_history_status(&app, &transaction.change);
 
     Ok(CustomTabSelectResult {
-        success: true,
+        success,
         selected,
-        error: None,
+        error: (!success).then(|| "not-found".to_string()),
     })
 }
 
-/// undo/redo 시 커스텀 탭 목록 + 모드를 원자적으로 복원
+/// 커스텀 탭 목록과 선택 모드를 원자적으로 복원
 #[tauri::command]
 pub fn custom_tabs_restore(
     state: State<'_, AppState>,
     app: AppHandle,
     custom_tabs: Vec<CustomTab>,
     selected_key_type: String,
+    observed_history_epoch: Option<u64>,
 ) -> CmdResult<()> {
-    let transaction = state.store.commit_legacy_editor_transaction(
+    let transaction = state.store.commit_aux_editor_transaction(
+        HistoryScope::CustomTabs,
+        observed_history_epoch,
         EditorCommitOrigin::LegacyAdapter("custom_tabs_restore".to_string()),
         &[],
         move |store| {
@@ -837,8 +766,11 @@ pub fn custom_tabs_restore(
     )?;
     let (custom_tabs, selected_key_type) = transaction.value;
 
-    state.keyboard.set_mode(selected_key_type.clone());
-
+    state.apply_committed_editor_keys_without_counters(
+        transaction.change.runtime_publication_generation,
+        &transaction.change.document.keys,
+        &selected_key_type,
+    );
     emit_best_effort(
         &app,
         "customTabs:changed",
@@ -853,66 +785,22 @@ pub fn custom_tabs_restore(
         &serde_json::json!({ "mode": &selected_key_type }),
     );
     state.refresh_obs_snapshot();
+    emit_aux_history_status(&app, &transaction.change);
     Ok(())
 }
 
-/// Undo/Redo의 결합 상태를 revision 선조건 아래 한 번에 복원
 #[tauri::command]
-pub fn editor_history_restore(
+pub fn keys_reset_counters(
     state: State<'_, AppState>,
     app: AppHandle,
-    request: EditorHistoryRestoreRequest,
-) -> CmdResult<EditorCommitResult> {
-    let transaction = state.store.restore_editor_history(request)?;
-    let changed_fields = transaction.change.result.changed_fields.clone();
-
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
-    publish_legacy_editor_fields(state.inner(), &app, &transaction.change, &changed_fields);
-    if !changed_fields.contains(&EditorField::Keys) {
-        publish_legacy_key_noop_runtime(state.inner(), &app, &transaction.change);
-    }
-
-    let snapshot = state.store.snapshot();
-    emit_best_effort(
-        &app,
-        "customTabs:changed",
-        &CustomTabChangePayload {
-            custom_tabs: snapshot.custom_tabs.clone(),
-            selected_key_type: snapshot.selected_key_type.clone(),
-        },
-    );
-    emit_best_effort(
-        &app,
-        "keys:mode-changed",
-        &serde_json::json!({ "mode": &snapshot.selected_key_type }),
-    );
-    emit_best_effort(&app, "tabNote:changed_all", &snapshot.tab_note_overrides);
-    emit_best_effort(
-        &app,
-        "css:use",
-        &serde_json::json!({ "enabled": snapshot.use_custom_css }),
-    );
-    emit_best_effort(&app, "css:content", &snapshot.custom_css);
-    emit_best_effort(
-        &app,
-        "js:use",
-        &serde_json::json!({ "enabled": snapshot.use_custom_js }),
-    );
-    emit_best_effort(&app, "js:content", &snapshot.custom_js);
-
-    if let Some(diff) = transaction.value.as_ref() {
-        if let Err(error) = state.emit_settings_changed(diff, &app) {
-            log::error!("[History] failed to publish restored settings: {error:#}");
-        }
-    }
-    Ok(transaction.change.result)
-}
-
-#[tauri::command]
-pub fn keys_reset_counters(state: State<'_, AppState>, app: AppHandle) -> CmdResult<KeyCounters> {
-    let snapshot = state.reset_key_counters(&app)?;
+    observed_history_epoch: Option<u64>,
+) -> CmdResult<KeyCounters> {
+    let mutation = state.reset_key_counters(&app, observed_history_epoch)?;
     state.obs_broadcast_counters();
-    Ok(snapshot)
+    if let Some(status) = mutation.history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
+    Ok(mutation.counters)
 }
 
 #[tauri::command]
@@ -920,10 +808,14 @@ pub fn keys_reset_counters_mode(
     state: State<'_, AppState>,
     app: AppHandle,
     mode: String,
+    observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let snapshot = state.reset_mode_counters(&app, &mode)?;
+    let mutation = state.reset_mode_counters(&app, &mode, observed_history_epoch)?;
     state.obs_broadcast_counters();
-    Ok(snapshot)
+    if let Some(status) = mutation.history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
+    Ok(mutation.counters)
 }
 
 #[tauri::command]
@@ -932,10 +824,14 @@ pub fn keys_reset_single_counter(
     app: AppHandle,
     mode: String,
     key: String,
+    observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let snapshot = state.reset_single_key_counter(&app, &mode, &key)?;
+    let mutation = state.reset_single_key_counter(&app, &mode, &key, observed_history_epoch)?;
     state.obs_broadcast_counters();
-    Ok(snapshot)
+    if let Some(status) = mutation.history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
+    Ok(mutation.counters)
 }
 
 #[tauri::command]
@@ -943,39 +839,19 @@ pub fn keys_set_counters(
     state: State<'_, AppState>,
     app: AppHandle,
     counters: KeyCounters,
+    observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let keys_snapshot = state.store.snapshot().keys;
-    let updated = state.replace_key_counters(&app, counters, &keys_snapshot)?;
+    let mutation = state.replace_key_counters(&app, counters, observed_history_epoch)?;
     state.obs_broadcast_counters();
-    Ok(updated)
+    if let Some(status) = mutation.history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
+    Ok(mutation.counters)
 }
 
 #[tauri::command]
 pub fn layer_groups_get(state: State<'_, AppState>) -> CmdResult<LayerGroups> {
     Ok(state.store.snapshot().layer_groups)
-}
-
-#[tauri::command]
-pub fn layer_groups_update(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    groups: LayerGroups,
-) -> CmdResult<LayerGroups> {
-    let transaction = state.store.commit_legacy_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("layer_groups_update".to_string()),
-        &[EditorField::LayerGroups],
-        move |store| {
-            store.layer_groups = groups;
-            Ok(())
-        },
-    )?;
-    publish_editor_change(state.inner(), &app, &transaction.change, false);
-    let updated = transaction.change.document.layer_groups;
-    emit_best_effort(&app, "layerGroups:changed", &updated);
-    if transaction.change.event.is_none() {
-        state.refresh_obs_snapshot();
-    }
-    Ok(updated)
 }
 
 fn generate_custom_tab_id() -> String {
@@ -1011,7 +887,7 @@ pub fn raw_input_unsubscribe(state: State<'_, AppState>) -> CmdResult<RawInputSu
 mod tests {
     use super::{
         delete_custom_tab_data, plan_custom_tab_delete, reset_all_editor_data, reset_mode_data,
-        reset_mode_kind, set_mode_with, ModeResetKind,
+        reset_mode_kind, select_mode_if_available, set_mode_with, ModeResetKind,
     };
     use crate::{
         defaults::{default_keys, default_positions},
@@ -1236,5 +1112,23 @@ mod tests {
         assert_eq!(keyboard.current_mode(), "8key");
         assert_eq!(commit_calls.get(), 0);
         assert_eq!(emit_calls.get(), 0);
+    }
+
+    #[test]
+    fn selection_after_concurrent_delete_uses_locked_store_state() {
+        let stale_snapshot = populated_custom_tab_store();
+        assert!(super::is_selectable_mode(&stale_snapshot, TARGET_TAB));
+
+        let mut locked_store = stale_snapshot;
+        let delete_plan = plan_custom_tab_delete(&locked_store, TARGET_TAB).unwrap();
+        delete_custom_tab_data(&mut locked_store, TARGET_TAB, &delete_plan);
+        let selected_after_delete = locked_store.selected_key_type.clone();
+
+        let (success, selected) = select_mode_if_available(&mut locked_store, TARGET_TAB);
+
+        assert!(!success);
+        assert_eq!(selected, selected_after_delete);
+        assert_eq!(locked_store.selected_key_type, selected_after_delete);
+        assert!(!locked_store.keys.contains_key(TARGET_TAB));
     }
 }

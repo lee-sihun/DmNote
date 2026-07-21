@@ -275,10 +275,11 @@ mod tests {
     }
 
     #[test]
-    fn preset_wire_schema_excludes_custom_css_history() {
+    fn preset_wire_schema_excludes_internal_store_fields() {
         let serialized = serde_json::to_value(PresetFile::default()).unwrap();
 
         assert!(serialized.get("customCssHistory").is_none());
+        assert!(serialized.get("panelBounds").is_none());
     }
 
     #[derive(Deserialize)]

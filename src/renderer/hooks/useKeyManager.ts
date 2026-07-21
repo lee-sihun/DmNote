@@ -1,16 +1,18 @@
 import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useKnobItemStore } from '@stores/data/useKnobItemStore';
-import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
 import {
-  invalidateSelectionForChangedIndexedElementArrays,
+  useHistoryStatusStore,
+  syncHistoryStatus,
+} from '@stores/data/useHistoryStatusStore';
+import { historyApi } from '@api/modules/historyApi';
+import {
   reconcileSelectionAfterIndexedElementDeletion,
   useGridSelectionStore,
 } from '@stores/grid/useGridSelectionStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
 import { setUndoRedoInProgress } from '@api/pluginDisplayElements';
 import { removeDisplayElementsInternal } from '@plugins/runtime/displayElement/displayElementApi';
 import type {
@@ -20,7 +22,8 @@ import type {
   KeyCounterSettings,
   ImageFit,
 } from '@src/types/key/keys';
-import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import { normalizeCounterSettings } from '@src/types/key/keys';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 
 // editor/model — 순수 상태 변환 함수
 import {
@@ -44,18 +47,11 @@ import {
 
 // editor/runtime — store/API 연동
 import {
-  pushCurrentStateToHistory,
-  applyRestoredStateToStores,
-  applyRestoredPluginElements,
-  persistRestoredState,
-} from '@src/renderer/editor/runtime/editorSnapshot';
-import {
   persistPositionsWithSync,
   persistMappingsAndPositions,
   persistPositions,
   persistPositionsWithFlag,
 } from '@src/renderer/editor/runtime/persistState';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 
 type SelectedKey = { key: string; index: number } | null;
 
@@ -76,11 +72,14 @@ type KeyUpdatePayload = {
   noteGlowColor?: NoteColor;
   noteAutoYCorrection?: boolean;
   className?: string;
+  counter?: KeyCounterSettings;
 };
 
 /** 플러그인 요소에서 zIndex + bounds 정보 추출 */
 function getPluginExternalElements(): ExternalZIndexSource[] {
-  const pluginElements = usePluginDisplayElementStore.getState().elements;
+  const pluginElements = selectPropertyPanelPluginElements(
+    usePluginDisplayElementStore.getState(),
+  );
   return pluginElements.map((el) => ({
     zIndex: el.zIndex ?? 0,
     bounds: {
@@ -94,58 +93,71 @@ function getPluginExternalElements(): ExternalZIndexSource[] {
 
 /** 플러그인 요소의 zIndex 목록 추출 */
 function getPluginZIndexes(): number[] {
-  const pluginElements = usePluginDisplayElementStore.getState().elements;
+  const pluginElements = selectPropertyPanelPluginElements(
+    usePluginDisplayElementStore.getState(),
+  );
   return pluginElements.map((el) => el.zIndex ?? 0);
 }
+
+// 프리뷰 patch 구성: undefined 필드 제외, width/height는 유효 숫자만
+const buildPreviewPatch = (
+  updates: Record<string, unknown>,
+): Record<string, unknown> | null => {
+  const patch: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(updates)) {
+    if (value === undefined) continue;
+    if (
+      (field === 'width' || field === 'height') &&
+      (typeof value !== 'number' || Number.isNaN(value))
+    ) {
+      continue;
+    }
+    patch[field] = value;
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+};
 
 export function useKeyManager() {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const positions = useKeyStore((state) => state.positions);
+  // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
+  const canonicalPositions = useKeyStore((state) => state.canonicalPositions);
   const setKeyMappings = useKeyStore((state) => state.setKeyMappings);
   const setPositions = useKeyStore((state) => state.setPositions);
   const setLocalUpdateInProgress = useKeyStore(
     (state) => state.setLocalUpdateInProgress,
   );
 
-  const canUndo = useHistoryStore((state) => state.canUndo);
-  const canRedo = useHistoryStore((state) => state.canRedo);
-  const undo = useHistoryStore((state) => state.undo);
-  const redo = useHistoryStore((state) => state.redo);
-
   const [selectedKey, setSelectedKey] = useState<SelectedKey>(null);
 
-  // preview 시작 시 히스토리 저장 여부 추적
-  // preview가 store를 직접 변경하므로, commit 시점이 아닌 preview 시작 시점에 저장해야 함
-  const previewHistorySavedRef = useRef(false);
+  // undo/redo 로컬 single-flight 가드
+  const historyActionInFlightRef = useRef(false);
 
   // ────────────────────────────────────────────────────────────────────────
   // 키 CRUD
   // ────────────────────────────────────────────────────────────────────────
 
   const handlePositionChange = (index: number, dx: number, dy: number) => {
-    const current = positions[selectedKeyType] || [];
-    const oldPosition = current[index];
-    if (oldPosition && (oldPosition.dx !== dx || oldPosition.dy !== dy)) {
-      pushCurrentStateToHistory();
-    }
-
     const nextPositions = updateKeyPosition(
-      positions,
+      canonicalPositions,
       selectedKeyType,
       index,
       dx,
       dy,
     );
     setPositions(nextPositions);
-    persistPositions(nextPositions);
+    editGestureController.settleCommit(
+      persistPositions(
+        nextPositions,
+        editGestureController.activeGestureId() ?? undefined,
+      ),
+    );
   };
 
   const handleKeyUpdate = (keyData: KeyUpdatePayload) => {
-    pushCurrentStateToHistory();
-
     const mapping = keyMappings[selectedKeyType] || [];
-    const pos = positions[selectedKeyType] || [];
+    const pos = canonicalPositions[selectedKeyType] || [];
 
     if (selectedKey) {
       const updatedMappings: KeyMappings = {
@@ -156,7 +168,7 @@ export function useKeyManager() {
       };
 
       const updatedPositions: KeyPositions = {
-        ...positions,
+        ...canonicalPositions,
         [selectedKeyType]: pos.map((value, idx) =>
           idx === selectedKey.index
             ? {
@@ -184,6 +196,10 @@ export function useKeyManager() {
                   value.noteAutoYCorrection ??
                   true,
                 className: keyData.className ?? value.className ?? '',
+                // 모달 Save의 counter까지 단일 커밋으로 병합 (이중 커밋 방지)
+                counter: keyData.counter
+                  ? normalizeCounterSettings(keyData.counter)
+                  : value.counter,
               }
             : value,
         ),
@@ -191,22 +207,32 @@ export function useKeyManager() {
 
       setKeyMappings(updatedMappings);
       setPositions(updatedPositions);
-      persistMappingsAndPositions(updatedMappings, updatedPositions);
+      editGestureController.settleCommit(
+        persistMappingsAndPositions(
+          updatedMappings,
+          updatedPositions,
+          editGestureController.activeGestureId() ?? undefined,
+        ),
+      );
       setSelectedKey(null);
     }
   };
 
   const handleAddKey = () => {
-    pushCurrentStateToHistory();
-    const result = addKey(keyMappings, positions, selectedKeyType);
+    const result = addKey(keyMappings, canonicalPositions, selectedKeyType);
     setKeyMappings(result.mappings);
     setPositions(result.positions);
     persistMappingsAndPositions(result.mappings, result.positions);
   };
 
   const handleAddKeyAt = (dx: number, dy: number) => {
-    pushCurrentStateToHistory();
-    const result = addKey(keyMappings, positions, selectedKeyType, dx, dy);
+    const result = addKey(
+      keyMappings,
+      canonicalPositions,
+      selectedKeyType,
+      dx,
+      dy,
+    );
     setKeyMappings(result.mappings);
     setPositions(result.positions);
     persistMappingsAndPositions(result.mappings, result.positions);
@@ -215,7 +241,7 @@ export function useKeyManager() {
   const handleDuplicateKey = (sourceIndex: number, dx: number, dy: number) => {
     const result = duplicateKey(
       keyMappings,
-      positions,
+      canonicalPositions,
       selectedKeyType,
       sourceIndex,
       dx,
@@ -223,17 +249,15 @@ export function useKeyManager() {
     );
     if (!result) return;
 
-    pushCurrentStateToHistory();
     setKeyMappings(result.mappings);
     setPositions(result.positions);
     persistMappingsAndPositions(result.mappings, result.positions);
   };
 
   const handleDeleteKey = (indexToDelete: number) => {
-    pushCurrentStateToHistory();
     const result = removeKey(
       keyMappings,
-      positions,
+      canonicalPositions,
       selectedKeyType,
       indexToDelete,
     );
@@ -257,19 +281,28 @@ export function useKeyManager() {
     noteGlowOpacity: number,
     noteGlowColor: NoteColor | undefined,
   ) => {
-    pushCurrentStateToHistory();
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const updatedPositions = updateNoteColor(state.positions, mode, index, {
-      noteColor,
-      noteOpacity,
-      noteGlowEnabled,
-      noteGlowSize,
-      noteGlowOpacity,
-      noteGlowColor,
-    });
+    const updatedPositions = updateNoteColor(
+      state.canonicalPositions,
+      mode,
+      index,
+      {
+        noteColor,
+        noteOpacity,
+        noteGlowEnabled,
+        noteGlowSize,
+        noteGlowOpacity,
+        noteGlowColor,
+      },
+    );
     setPositions(updatedPositions);
-    persistPositions(updatedPositions);
+    editGestureController.settleCommit(
+      persistPositions(
+        updatedPositions,
+        editGestureController.activeGestureId() ?? undefined,
+      ),
+    );
   };
 
   const handleNoteColorPreview = (
@@ -285,18 +318,22 @@ export function useKeyManager() {
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const updatedPositions = updateNoteColor(state.positions, mode, index, {
-      noteColor,
-      noteOpacity,
-      noteGlowEnabled,
-      noteGlowSize,
-      noteGlowOpacity,
-      noteGlowColor,
-      noteAutoYCorrection,
-      noteEffectEnabled,
-    });
-    setPositions(updatedPositions);
-    persistPositions(updatedPositions);
+    if (!(state.canonicalPositions[mode] || [])[index]) return;
+    editGestureController.preview(mode, [
+      {
+        index,
+        patch: {
+          noteColor,
+          noteOpacity,
+          noteGlowEnabled,
+          noteGlowSize,
+          noteGlowOpacity,
+          noteGlowColor: noteGlowColor ?? noteColor,
+          ...(noteAutoYCorrection !== undefined && { noteAutoYCorrection }),
+          ...(noteEffectEnabled !== undefined && { noteEffectEnabled }),
+        },
+      },
+    ]);
   };
 
   const handleKeyPreview = (
@@ -329,123 +366,11 @@ export function useKeyManager() {
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const current = state.positions[mode] || [];
-    if (!current[index]) return;
+    if (!(state.canonicalPositions[mode] || [])[index]) return;
 
-    // preview가 store를 직접 변경하므로, 첫 preview 시 히스토리 저장
-    if (!previewHistorySavedRef.current) {
-      pushCurrentStateToHistory();
-      previewHistorySavedRef.current = true;
-    }
-
-    // 프리뷰는 필드별 undefined 체크를 유지해야 하므로 직접 매핑
-    const updatedPositions: KeyPositions = {
-      ...state.positions,
-      [mode]: current.map((pos, i) =>
-        i === index
-          ? {
-              ...pos,
-              activeImage:
-                updates.activeImage !== undefined
-                  ? updates.activeImage
-                  : pos.activeImage,
-              inactiveImage:
-                updates.inactiveImage !== undefined
-                  ? updates.inactiveImage
-                  : pos.inactiveImage,
-              soundPath:
-                updates.soundPath !== undefined
-                  ? updates.soundPath
-                  : pos.soundPath,
-              soundVolume:
-                updates.soundVolume !== undefined
-                  ? updates.soundVolume
-                  : pos.soundVolume,
-              activeTransparent:
-                updates.activeTransparent !== undefined
-                  ? updates.activeTransparent
-                  : pos.activeTransparent ?? false,
-              idleTransparent:
-                updates.idleTransparent !== undefined
-                  ? updates.idleTransparent
-                  : pos.idleTransparent ?? false,
-              width:
-                typeof updates.width === 'number' &&
-                !Number.isNaN(updates.width)
-                  ? updates.width
-                  : pos.width,
-              height:
-                typeof updates.height === 'number' &&
-                !Number.isNaN(updates.height)
-                  ? updates.height
-                  : pos.height,
-              className:
-                updates.className !== undefined
-                  ? updates.className
-                  : pos.className ?? '',
-              backgroundColor:
-                updates.backgroundColor !== undefined
-                  ? updates.backgroundColor
-                  : pos.backgroundColor,
-              activeBackgroundColor:
-                updates.activeBackgroundColor !== undefined
-                  ? updates.activeBackgroundColor
-                  : pos.activeBackgroundColor,
-              borderColor:
-                updates.borderColor !== undefined
-                  ? updates.borderColor
-                  : pos.borderColor,
-              activeBorderColor:
-                updates.activeBorderColor !== undefined
-                  ? updates.activeBorderColor
-                  : pos.activeBorderColor,
-              borderWidth:
-                updates.borderWidth !== undefined
-                  ? updates.borderWidth
-                  : pos.borderWidth,
-              borderRadius:
-                updates.borderRadius !== undefined
-                  ? updates.borderRadius
-                  : pos.borderRadius,
-              fontSize:
-                updates.fontSize !== undefined
-                  ? updates.fontSize
-                  : pos.fontSize,
-              fontColor:
-                updates.fontColor !== undefined
-                  ? updates.fontColor
-                  : pos.fontColor,
-              activeFontColor:
-                updates.activeFontColor !== undefined
-                  ? updates.activeFontColor
-                  : pos.activeFontColor,
-              idleImageFit:
-                updates.idleImageFit !== undefined
-                  ? updates.idleImageFit
-                  : pos.idleImageFit,
-              activeImageFit:
-                updates.activeImageFit !== undefined
-                  ? updates.activeImageFit
-                  : pos.activeImageFit,
-              imageFit:
-                updates.imageFit !== undefined
-                  ? updates.imageFit
-                  : pos.imageFit,
-              useInlineStyles:
-                updates.useInlineStyles !== undefined
-                  ? updates.useInlineStyles
-                  : pos.useInlineStyles,
-              displayText:
-                updates.displayText !== undefined
-                  ? updates.displayText
-                  : pos.displayText,
-            }
-          : pos,
-      ),
-    };
-
-    setPositions(updatedPositions);
-    persistPositions(updatedPositions);
+    const patch = buildPreviewPatch(updates);
+    if (!patch) return;
+    editGestureController.preview(mode, [{ index, patch }]);
   };
 
   const handleKeyBatchPreview = (
@@ -480,145 +405,40 @@ export function useKeyManager() {
   ) => {
     if (updates.length === 0) return;
 
-    // preview가 store를 직접 변경하므로, 첫 preview 시 히스토리 저장
-    if (!previewHistorySavedRef.current) {
-      pushCurrentStateToHistory();
-      previewHistorySavedRef.current = true;
-    }
-
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const current = state.positions[mode] || [];
+    const current = state.canonicalPositions[mode] || [];
 
-    const updateMap = new Map<number, (typeof updates)[number]>();
-    for (const update of updates) {
-      if (current[update.index]) {
-        updateMap.set(update.index, update);
-      }
+    const entries: Array<{ index: number; patch: Record<string, unknown> }> =
+      [];
+    for (const { index, ...fields } of updates) {
+      if (!current[index]) continue;
+      const patch = buildPreviewPatch(fields);
+      if (patch) entries.push({ index, patch });
     }
-    if (updateMap.size === 0) return;
-
-    const updatedPositions: KeyPositions = {
-      ...state.positions,
-      [mode]: current.map((pos, i) => {
-        const update = updateMap.get(i);
-        if (!update) return pos;
-
-        return {
-          ...pos,
-          activeImage:
-            update.activeImage !== undefined
-              ? update.activeImage
-              : pos.activeImage,
-          inactiveImage:
-            update.inactiveImage !== undefined
-              ? update.inactiveImage
-              : pos.inactiveImage,
-          soundPath:
-            update.soundPath !== undefined ? update.soundPath : pos.soundPath,
-          soundVolume:
-            update.soundVolume !== undefined
-              ? update.soundVolume
-              : pos.soundVolume,
-          activeTransparent:
-            update.activeTransparent !== undefined
-              ? update.activeTransparent
-              : pos.activeTransparent ?? false,
-          idleTransparent:
-            update.idleTransparent !== undefined
-              ? update.idleTransparent
-              : pos.idleTransparent ?? false,
-          width:
-            typeof update.width === 'number' && !Number.isNaN(update.width)
-              ? update.width
-              : pos.width,
-          height:
-            typeof update.height === 'number' && !Number.isNaN(update.height)
-              ? update.height
-              : pos.height,
-          className:
-            update.className !== undefined
-              ? update.className
-              : pos.className ?? '',
-          backgroundColor:
-            update.backgroundColor !== undefined
-              ? update.backgroundColor
-              : pos.backgroundColor,
-          activeBackgroundColor:
-            update.activeBackgroundColor !== undefined
-              ? update.activeBackgroundColor
-              : pos.activeBackgroundColor,
-          borderColor:
-            update.borderColor !== undefined
-              ? update.borderColor
-              : pos.borderColor,
-          activeBorderColor:
-            update.activeBorderColor !== undefined
-              ? update.activeBorderColor
-              : pos.activeBorderColor,
-          borderWidth:
-            update.borderWidth !== undefined
-              ? update.borderWidth
-              : pos.borderWidth,
-          borderRadius:
-            update.borderRadius !== undefined
-              ? update.borderRadius
-              : pos.borderRadius,
-          fontSize:
-            update.fontSize !== undefined ? update.fontSize : pos.fontSize,
-          fontColor:
-            update.fontColor !== undefined ? update.fontColor : pos.fontColor,
-          activeFontColor:
-            update.activeFontColor !== undefined
-              ? update.activeFontColor
-              : pos.activeFontColor,
-          idleImageFit:
-            update.idleImageFit !== undefined
-              ? update.idleImageFit
-              : pos.idleImageFit,
-          activeImageFit:
-            update.activeImageFit !== undefined
-              ? update.activeImageFit
-              : pos.activeImageFit,
-          imageFit:
-            update.imageFit !== undefined ? update.imageFit : pos.imageFit,
-          useInlineStyles:
-            update.useInlineStyles !== undefined
-              ? update.useInlineStyles
-              : pos.useInlineStyles,
-          displayText:
-            update.displayText !== undefined
-              ? update.displayText
-              : pos.displayText,
-          noteColor:
-            update.noteColor !== undefined ? update.noteColor : pos.noteColor,
-          noteGlowColor:
-            update.noteGlowColor !== undefined
-              ? update.noteGlowColor
-              : pos.noteGlowColor,
-        };
-      }),
-    };
-
-    setPositions(updatedPositions);
-    persistPositions(updatedPositions);
+    if (entries.length === 0) return;
+    editGestureController.preview(mode, entries);
   };
 
   const handleCounterSettingsUpdate = (
     index: number,
     payload: KeyCounterSettings,
   ) => {
-    pushCurrentStateToHistory();
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
     const updatedPositions = updateCounterSettings(
-      state.positions,
+      state.canonicalPositions,
       mode,
       index,
       payload,
     );
     setPositions(updatedPositions);
-    persistPositions(updatedPositions);
+    editGestureController.settleCommit(
+      persistPositions(
+        updatedPositions,
+        editGestureController.activeGestureId() ?? undefined,
+      ),
+    );
   };
 
   const handleCounterSettingsPreview = (
@@ -627,14 +447,10 @@ export function useKeyManager() {
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const updatedPositions = updateCounterSettings(
-      state.positions,
-      mode,
-      index,
-      payload,
-    );
-    setPositions(updatedPositions);
-    persistPositions(updatedPositions);
+    if (!(state.canonicalPositions[mode] || [])[index]) return;
+    editGestureController.preview(mode, [
+      { index, patch: { counter: normalizeCounterSettings(payload) } },
+    ]);
   };
 
   // ────────────────────────────────────────────────────────────────────────
@@ -642,11 +458,10 @@ export function useKeyManager() {
   // ────────────────────────────────────────────────────────────────────────
 
   const handleMoveToFront = async (index: number) => {
-    pushCurrentStateToHistory();
-    const pos = positions[selectedKeyType] || [];
+    const pos = canonicalPositions[selectedKeyType] || [];
     const updated = computeMoveToFront(pos, index, getPluginZIndexes());
     const updatedPositions: KeyPositions = {
-      ...positions,
+      ...canonicalPositions,
       [selectedKeyType]: updated,
     };
     await persistPositionsWithSync(
@@ -657,11 +472,10 @@ export function useKeyManager() {
   };
 
   const handleMoveToBack = async (index: number) => {
-    pushCurrentStateToHistory();
-    const pos = positions[selectedKeyType] || [];
+    const pos = canonicalPositions[selectedKeyType] || [];
     const updated = computeMoveToBack(pos, index, getPluginZIndexes());
     const updatedPositions: KeyPositions = {
-      ...positions,
+      ...canonicalPositions,
       [selectedKeyType]: updated,
     };
     await persistPositionsWithSync(
@@ -672,11 +486,10 @@ export function useKeyManager() {
   };
 
   const handleMoveForward = async (index: number) => {
-    pushCurrentStateToHistory();
-    const pos = positions[selectedKeyType] || [];
+    const pos = canonicalPositions[selectedKeyType] || [];
     const updated = computeMoveForward(pos, index, getPluginExternalElements());
     const updatedPositions: KeyPositions = {
-      ...positions,
+      ...canonicalPositions,
       [selectedKeyType]: updated,
     };
     await persistPositionsWithSync(
@@ -687,15 +500,14 @@ export function useKeyManager() {
   };
 
   const handleMoveBackward = async (index: number) => {
-    pushCurrentStateToHistory();
-    const pos = positions[selectedKeyType] || [];
+    const pos = canonicalPositions[selectedKeyType] || [];
     const updated = computeMoveBackward(
       pos,
       index,
       getPluginExternalElements(),
     );
     const updatedPositions: KeyPositions = {
-      ...positions,
+      ...canonicalPositions,
       [selectedKeyType]: updated,
     };
     await persistPositionsWithSync(
@@ -710,7 +522,6 @@ export function useKeyManager() {
   // ────────────────────────────────────────────────────────────────────────
 
   const handleKeyMappingChange = (index: number, newKey: string) => {
-    pushCurrentStateToHistory();
     const updatedMappings = updateKeyMapping(
       keyMappings,
       selectedKeyType,
@@ -729,54 +540,50 @@ export function useKeyManager() {
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    if (!(state.positions[mode] || [])[index]) return;
+    if (!(state.canonicalPositions[mode] || [])[index]) return;
 
-    // preview에서 이미 히스토리를 저장했으면 skip
-    if (!previewHistorySavedRef.current) {
-      pushCurrentStateToHistory();
-    }
-    previewHistorySavedRef.current = false;
     const updatedPositions = updateKeyStyle(
-      state.positions,
+      state.canonicalPositions,
       mode,
       index,
       updates,
     );
-    persistPositionsWithFlag(
-      updatedPositions,
-      setPositions,
-      setLocalUpdateInProgress,
+    editGestureController.settleCommit(
+      persistPositionsWithFlag(
+        updatedPositions,
+        setPositions,
+        setLocalUpdateInProgress,
+        editGestureController.activeGestureId() ?? undefined,
+      ),
     );
   };
 
   const handleKeyBatchStyleUpdate = (
     updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>,
-    options?: { skipHistory?: boolean; deferSave?: boolean },
+    options?: { deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
     const updatedPositions = batchUpdateKeyStyle(
-      state.positions,
+      state.canonicalPositions,
       mode,
       updates,
     );
-    if (updatedPositions === state.positions) return;
+    if (updatedPositions === state.canonicalPositions) return;
 
-    // preview에서 이미 히스토리를 저장했으면 skip
-    if (!options?.skipHistory && !previewHistorySavedRef.current) {
-      pushCurrentStateToHistory();
-    }
-    previewHistorySavedRef.current = false;
     if (options?.deferSave) {
       setPositions(updatedPositions);
       return;
     }
-    persistPositionsWithFlag(
-      updatedPositions,
-      setPositions,
-      setLocalUpdateInProgress,
+    editGestureController.settleCommit(
+      persistPositionsWithFlag(
+        updatedPositions,
+        setPositions,
+        setLocalUpdateInProgress,
+        editGestureController.activeGestureId() ?? undefined,
+      ),
     );
   };
 
@@ -803,102 +610,43 @@ export function useKeyManager() {
     }
   };
 
+  // undo/redo는 백엔드 authority가 실행 - 복원 결과는 canonical 이벤트로 각 창에 전파
+  // 플러그인 표시 요소는 백엔드 canonical 승격 전까지 undo 대상이 아님
   const executeHistoryAction = async (
-    action: typeof undo | typeof redo,
-    label: string,
-  ) => {
+    direction: 'undo' | 'redo',
+  ): Promise<void> => {
+    // 로컬 single-flight - 연타가 busy 검사를 동시에 통과하는 것 방지
+    if (historyActionInFlightRef.current) return;
+    if (useHistoryStatusStore.getState().busy) return;
+    historyActionInFlightRef.current = true;
     setUndoRedoInProgress(true);
     try {
-      try {
-        await editorCoordinator.flush();
-      } catch (error) {
-        console.error(`Failed to flush before ${label}`, error);
-        return;
-      }
-      const baseRevision = editorCoordinator.getState().revision;
-      if (baseRevision === null) {
-        console.error(
-          `Failed to apply ${label}: editor revision is unavailable`,
-        );
-        return;
-      }
+      // 현재 창 프리뷰 취소 후 백엔드가 모든 편집 창의 저장을 정산
+      editGestureController.cancel();
 
-      const currentKeyState = useKeyStore.getState();
-      const currentStatPositions = useStatItemStore.getState().positions;
-      const currentGraphPositions = useGraphItemStore.getState().positions;
-      const currentKnobPositions = useKnobItemStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-      const historyBefore = useHistoryStore.getState();
-      const targetState = action({
-        keyMappings: currentKeyState.keyMappings,
-        positions: currentKeyState.positions,
-        statPositions: currentStatPositions,
-        graphPositions: currentGraphPositions,
-        knobPositions: currentKnobPositions,
-        pluginElements: currentPluginElements,
-        layerGroups: currentLayerGroups,
-      });
-
-      if (targetState) {
-        try {
-          await persistRestoredState(targetState, baseRevision);
-        } catch (error) {
-          useHistoryStore.setState({
-            past: historyBefore.past,
-            future: historyBefore.future,
-          });
-          console.error(`Failed to apply ${label}`, error);
-          return;
-        }
-
-        try {
-          const mode = currentKeyState.selectedKeyType;
-          if (targetState.invalidatesGridSelection) {
-            useGridSelectionStore.getState().clearSelection();
-          } else {
-            invalidateSelectionForChangedIndexedElementArrays(
-              {
-                keyMappings: currentKeyState.keyMappings[mode] ?? [],
-                keyPositions: currentKeyState.positions[mode] ?? [],
-                stat: currentStatPositions[mode] ?? [],
-                graph: currentGraphPositions[mode] ?? [],
-                knob: currentKnobPositions[mode] ?? [],
-              },
-              {
-                keyMappings: targetState.keyMappings[mode] ?? [],
-                keyPositions: targetState.positions[mode] ?? [],
-                stat: targetState.statPositions[mode] ?? [],
-                graph: targetState.graphPositions[mode] ?? [],
-                knob: targetState.knobPositions[mode] ?? [],
-              },
-            );
-          }
-          applyRestoredStateToStores(targetState);
-          applyRestoredPluginElements(
-            targetState.pluginElements as
-              | PluginDisplayElementInternal[]
-              | undefined,
-            currentPluginElements,
-            targetState.pluginElements
-              ? new Set(targetState.pluginElements.map((el) => el.fullId))
-              : undefined,
-          );
-        } catch (error) {
-          console.error(`Failed to refresh the ${label} view`, error);
-          void editorCoordinator.sync({ reapply: true }).catch((syncError) => {
-            console.error(`Failed to resync after ${label}`, syncError);
-          });
-        }
+      const operationId = crypto.randomUUID();
+      const status =
+        direction === 'undo'
+          ? await historyApi.undo(operationId)
+          : await historyApi.redo(operationId);
+      useHistoryStatusStore.getState().applyStatus(status);
+    } catch (error) {
+      const message = String(error);
+      const nothingToApply =
+        message.includes('HISTORY_NOTHING_TO_UNDO') ||
+        message.includes('HISTORY_NOTHING_TO_REDO');
+      if (!nothingToApply) {
+        console.error(`Failed to apply ${direction}`, error);
       }
+      void syncHistoryStatus();
     } finally {
+      historyActionInFlightRef.current = false;
       setUndoRedoInProgress(false);
     }
   };
 
-  const handleUndo = () => executeHistoryAction(undo, 'undo');
-  const handleRedo = () => executeHistoryAction(redo, 'redo');
+  const handleUndo = () => void executeHistoryAction('undo');
+  const handleRedo = () => void executeHistoryAction('redo');
 
   return {
     selectedKey,
@@ -927,7 +675,5 @@ export function useKeyManager() {
     handleResetCurrentMode,
     handleUndo,
     handleRedo,
-    canUndo: canUndo(),
-    canRedo: canRedo(),
   };
 }

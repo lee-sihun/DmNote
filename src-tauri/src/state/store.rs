@@ -2,17 +2,18 @@ use std::{
     collections::{HashSet, VecDeque},
     fs,
     path::{Component, Path, PathBuf},
-    sync::mpsc,
+    sync::{mpsc, Arc},
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use crate::errors::{EditorCommitError, EditorCommitErrorCode};
 use crate::models::{
-    AppStoreData, CommittedEditorChange, EditorCommitOrigin, EditorCommitRequest,
-    EditorCommitResult, EditorCommittedV1, EditorDocumentV1, EditorField, EditorGetResult,
-    EditorHistoryRestoreRequest, EditorTransactionResult, FontType, KeyCounters, KeyPosition,
-    SettingsDiff, SettingsState, EDITOR_SCHEMA_VERSION,
+    AppStoreData, CommittedEditorChange, CustomCssPatch, CustomJsPatch, EditorCommitOrigin,
+    EditorCommitRequest, EditorCommitResult, EditorCommittedV1, EditorDocumentV1, EditorField,
+    EditorGetResult, EditorTransactionResult, FontType, HistoryStatus, KeyCounters, KeyPosition,
+    NoteSettingsPatch, PluginInstancesCommitRequest, PluginInstancesReconcileRequest,
+    SavedPluginInstance, SettingsDiff, SettingsPatchInput, SettingsState, EDITOR_SCHEMA_VERSION,
 };
 use anyhow::{anyhow, Context, Result};
 use parking_lot::{Mutex, RwLock, RwLockWriteGuard};
@@ -25,14 +26,25 @@ use super::builtin_sounds::seed_builtin_sounds;
 use super::editor::{
     next_revision, repair_selected_mode, request_fingerprint, request_payload_size,
     sync_key_counters, touched_pair, validate_document_transition,
-    validate_history_restore_envelope, validate_history_restore_metadata, validate_paired_update,
-    validate_request_envelope, RequestFingerprint, MUTATION_ACK_CAPACITY,
+    validate_history_restore_metadata, validate_paired_update, validate_request_envelope,
+    RequestFingerprint, MUTATION_ACK_CAPACITY,
+};
+use super::history::{
+    CustomTabsHistorySnapshot, HistoryAdmissionGate, HistoryAdmissionLease, HistoryDirection,
+    HistoryEntry, HistoryRecordPlan, HistoryScope, HistoryService, HistorySnapshot,
+    PluginElementsHistorySnapshot, PresetFullHistorySnapshot, PresetHistorySettingsSnapshot,
+    HISTORY_ENTRY_TOO_LARGE, HISTORY_IN_PROGRESS,
 };
 use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
 use super::migration::{
     find_legacy_store_file, is_foreign_portable_asset_reference, load_store_from_path,
     migrate_key_images_to_app_data, migrate_local_fonts_to_app_data, normalize_state,
     rehome_foreign_asset_references,
+};
+use super::plugin::{
+    decode_plugin_instances, encode_plugin_instances, normalize_plugin_instance_tab_id,
+    plugin_instances_storage_key, validate_plugin_id, validate_plugin_instances_reconcile_request,
+    validate_plugin_instances_request,
 };
 
 const TRASH_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -64,6 +76,7 @@ pub struct AppStore {
     state: RwLock<VersionedStoreState>,
     writer: StoreWriter,
     skip_asset_sweep: bool,
+    history_gate: Arc<HistoryAdmissionGate>,
 }
 
 struct VersionedStoreState {
@@ -72,6 +85,78 @@ struct VersionedStoreState {
     dirty: bool,
     accepting_writes: bool,
     mutation_acks: VecDeque<MutationAck>,
+    plugin_model_revision: u64,
+    history: HistoryService,
+}
+
+#[derive(Debug)]
+pub(crate) struct HistoryOperationResult {
+    pub(crate) status: HistoryStatus,
+    pub(crate) change: Option<CommittedEditorChange>,
+    pub(crate) aux_change: Option<HistoryAuxChange>,
+    pub(crate) replayed: bool,
+    pub(crate) runtime_publication_generation: u64,
+}
+
+#[derive(Debug)]
+pub(crate) enum HistoryAuxChange {
+    CustomTabs {
+        snapshot: Box<CustomTabsHistorySnapshot>,
+        changed_tab_css_ids: Vec<String>,
+    },
+    PresetFull {
+        snapshot: Box<PresetFullHistorySnapshot>,
+        settings_diff: Box<SettingsDiff>,
+        changed_tab_css_ids: Vec<String>,
+    },
+    Mode(String),
+    Counters(KeyCounters),
+    PluginElements {
+        plugin_id: String,
+        revision: u64,
+    },
+}
+
+#[derive(Debug)]
+pub(crate) struct PluginInstancesCommitOutcome {
+    pub(crate) plugin_id: String,
+    pub(crate) model_revision: u64,
+    pub(crate) changed: bool,
+    pub(crate) history_status: Option<HistoryStatus>,
+}
+
+#[derive(Debug)]
+pub(crate) struct AdmittedPluginInstancesCommit {
+    pub(crate) outcome: PluginInstancesCommitOutcome,
+    _admission: HistoryAdmissionLease,
+}
+
+#[derive(Debug)]
+pub(crate) struct AdmittedPluginStorageMutation<T> {
+    pub(crate) value: T,
+    pub(crate) history_status: Option<HistoryStatus>,
+    pub(crate) plugin_instances_changes: Vec<PluginInstancesStorageChange>,
+    _admission: HistoryAdmissionLease,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PluginInstancesStorageChange {
+    pub(crate) plugin_id: String,
+    pub(crate) revision: u64,
+}
+
+#[derive(Debug)]
+pub(crate) struct AdmittedEditorTransaction<T> {
+    pub(crate) value: T,
+    pub(crate) change: CommittedEditorChange,
+    _admission: HistoryAdmissionLease,
+}
+
+#[derive(Debug)]
+pub(crate) struct AdmittedHistoryOverlapMutation<T> {
+    pub(crate) value: T,
+    pub(crate) history_status: Option<HistoryStatus>,
+    _admission: HistoryAdmissionLease,
 }
 
 #[derive(Clone)]
@@ -79,6 +164,28 @@ struct MutationAck {
     id: String,
     fingerprint: RequestFingerprint,
     result: EditorCommitResult,
+}
+
+struct PluginInstancesMutationInput {
+    plugin_id: String,
+    instances: Vec<SavedPluginInstance>,
+    gesture_id: Option<String>,
+}
+
+struct EditorPatchCommitOptions {
+    mutation_id: String,
+    gesture_id: Option<String>,
+    origin: EditorCommitOrigin,
+    record_history: bool,
+    apply_key_side_effects: bool,
+    enforce_touched_fields: bool,
+}
+
+#[derive(Default)]
+struct EditorTransactionHistoryOptions {
+    scope: Option<HistoryScope>,
+    observed_epoch: Option<u64>,
+    key_counters: Option<KeyCounters>,
 }
 
 struct PersistTicket {
@@ -203,12 +310,15 @@ impl AppStore {
             writer: StoreWriter::start(path.clone())?,
             path,
             skip_asset_sweep,
+            history_gate: Arc::new(HistoryAdmissionGate::default()),
             state: RwLock::new(VersionedStoreState {
                 data: state,
                 revision: 0,
                 dirty: false,
                 accepting_writes: true,
                 mutation_acks: VecDeque::with_capacity(MUTATION_ACK_CAPACITY),
+                plugin_model_revision: 0,
+                history: HistoryService::default(),
             }),
         })
     }
@@ -259,7 +369,7 @@ impl AppStore {
         self.commit_locked(&mut guard, scratch, ())
     }
 
-    /// `overlay_bounds`, `overlay_bounds_are_logical`, `overlay_last_content_top_offset` 전용
+    /// overlay·panel bounds 전용
     /// 다른 데이터에는 일반 update를 사용해 성공한 저장만 committed로 공개해야 함
     pub(crate) fn update_deferred(&self, updater: impl FnOnce(&mut AppStoreData)) -> Result<()> {
         let mut guard = self.lock_for_update()?;
@@ -327,57 +437,256 @@ impl AppStore {
         }
     }
 
-    pub(crate) fn restore_editor_history(
-        &self,
-        request: EditorHistoryRestoreRequest,
-    ) -> std::result::Result<EditorTransactionResult<Option<SettingsDiff>>, EditorCommitError> {
-        validate_history_restore_envelope(&request)?;
-        let EditorHistoryRestoreRequest {
-            base_revision,
-            document,
-            custom_tabs,
-            selected_key_type,
-            key_counters,
-            settings_patch,
-            tab_note_overrides,
-        } = request;
-
-        self.commit_legacy_editor_transaction(
-            EditorCommitOrigin::LegacyAdapter("editor_history_restore".to_string()),
-            &[
-                EditorField::Keys,
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-                EditorField::KnobPositions,
-                EditorField::LayerGroups,
-            ],
-            move |store| {
-                if store.editor_revision != base_revision {
-                    return Err(EditorCommitError::revision_conflict(store.editor_revision));
-                }
-                validate_history_restore_metadata(&document, &custom_tabs, &selected_key_type)?;
-
-                store.custom_tabs = custom_tabs;
-                store.selected_key_type = selected_key_type;
-                document.apply_to_store(store);
-                if let Some(counters) = key_counters {
-                    store.key_counters = counters;
-                }
-                if let Some(overrides) = tab_note_overrides {
-                    store.tab_note_overrides = overrides;
-                }
-                let settings_diff = settings_patch
-                    .as_ref()
-                    .map(|patch| crate::services::settings::apply_patch_to_store(store, patch));
-                Ok(settings_diff)
-            },
-        )
+    pub(crate) fn history_gate(&self) -> Arc<HistoryAdmissionGate> {
+        Arc::clone(&self.history_gate)
     }
 
+    pub(crate) fn history_status(&self) -> HistoryStatus {
+        self.state
+            .write()
+            .history
+            .issue_status(self.history_gate.is_closed())
+    }
+
+    pub(crate) fn runtime_publication_generation(&self) -> u64 {
+        self.state.read().revision
+    }
+
+    pub(crate) fn plugin_model_revision(&self) -> u64 {
+        self.state.read().plugin_model_revision
+    }
+
+    pub(crate) fn apply_history_operation(
+        &self,
+        direction: HistoryDirection,
+        operation_id: &str,
+        current_key_counters: &KeyCounters,
+        cancel_previews: impl FnOnce(),
+    ) -> Result<HistoryOperationResult, String> {
+        if operation_id.len() > 64 || uuid::Uuid::parse_str(operation_id).is_err() {
+            return Err("INVALID_HISTORY_OPERATION_ID".to_string());
+        }
+
+        let mut guard = self.lock_for_update().map_err(|error| error.to_string())?;
+        if guard.history.operation_replayed(operation_id, direction)? {
+            return Ok(HistoryOperationResult {
+                status: guard.history.status(false),
+                change: None,
+                aux_change: None,
+                replayed: true,
+                runtime_publication_generation: guard.revision,
+            });
+        }
+        guard.history.begin_barrier();
+        cancel_previews();
+        let result = (|| {
+            let target = guard
+                .history
+                .target(direction)
+                .cloned()
+                .ok_or_else(|| direction.empty_error().to_string())?;
+            if target.scope != target.before.scope() {
+                return Err("HISTORY_SCOPE_MISMATCH".to_string());
+            }
+            let target_gesture_id = target.gesture_id.clone();
+
+            let current_store = guard.data.clone();
+            let origin = match direction {
+                HistoryDirection::Undo => EditorCommitOrigin::HistoryUndo,
+                HistoryDirection::Redo => EditorCommitOrigin::HistoryRedo,
+            };
+            let (opposite, change, aux_change) = match target.before {
+                HistorySnapshot::Editor {
+                    changed_fields,
+                    before,
+                } => {
+                    let current = EditorDocumentV1::from_store(&current_store);
+                    let opposite =
+                        require_history_entry(guard.history.prepare_opposite_editor_entry(
+                            changed_fields.clone(),
+                            current.patch_for_fields(&changed_fields),
+                            target_gesture_id,
+                        )?)?;
+                    let change = self
+                        .commit_editor_patch_locked(
+                            &mut guard,
+                            &before,
+                            &changed_fields,
+                            EditorPatchCommitOptions {
+                                mutation_id: operation_id.to_string(),
+                                gesture_id: None,
+                                origin,
+                                record_history: false,
+                                apply_key_side_effects: false,
+                                enforce_touched_fields: true,
+                            },
+                        )
+                        .map_err(editor_history_error)?;
+                    if change.result.changed_fields.is_empty() {
+                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                    }
+                    (opposite, Some(change), None)
+                }
+                HistorySnapshot::CustomTabs(before) => {
+                    let mut current_snapshot =
+                        CustomTabsHistorySnapshot::from_store_for_target(&current_store, &before);
+                    current_snapshot.key_counters = current_key_counters.clone();
+                    let mut changed_tab_css_ids =
+                        before.tab_css_patch.keys().cloned().collect::<Vec<_>>();
+                    changed_tab_css_ids.sort();
+                    let opposite = require_history_entry(
+                        guard.history.prepare_custom_tabs_entry(current_snapshot)?,
+                    )?;
+                    let change = self
+                        .commit_custom_tabs_history_locked(
+                            &mut guard,
+                            &before,
+                            operation_id,
+                            origin,
+                        )
+                        .map_err(editor_history_error)?;
+                    (
+                        opposite,
+                        change,
+                        Some(HistoryAuxChange::CustomTabs {
+                            snapshot: Box::new(before),
+                            changed_tab_css_ids,
+                        }),
+                    )
+                }
+                HistorySnapshot::PresetFull(before) => {
+                    let mut current_snapshot =
+                        PresetFullHistorySnapshot::from_store(&current_store);
+                    current_snapshot.key_counters = current_key_counters.clone();
+                    if current_snapshot == *before {
+                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                    }
+                    let changed_tab_css_ids = changed_map_ids(
+                        &current_store.tab_css_overrides,
+                        &before.tab_css_overrides,
+                    );
+                    let opposite = require_history_entry(
+                        guard.history.prepare_preset_full_entry(current_snapshot)?,
+                    )?;
+                    let (change, settings_diff) = self
+                        .commit_preset_full_history_locked(
+                            &mut guard,
+                            &before,
+                            operation_id,
+                            origin,
+                        )
+                        .map_err(editor_history_error)?;
+                    (
+                        opposite,
+                        change,
+                        Some(HistoryAuxChange::PresetFull {
+                            snapshot: before,
+                            settings_diff: Box::new(settings_diff),
+                            changed_tab_css_ids,
+                        }),
+                    )
+                }
+                HistorySnapshot::Mode(before) => {
+                    let opposite = require_history_entry(
+                        guard
+                            .history
+                            .prepare_mode_entry(current_store.selected_key_type.clone())?,
+                    )?;
+                    if current_store.selected_key_type == before {
+                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                    }
+                    let mut scratch = current_store;
+                    scratch.selected_key_type = before.clone();
+                    self.commit_locked(&mut guard, scratch, ())
+                        .map_err(|error| error.to_string())?;
+                    (opposite, None, Some(HistoryAuxChange::Mode(before)))
+                }
+                HistorySnapshot::Counters(before) => {
+                    let opposite = require_history_entry(
+                        guard
+                            .history
+                            .prepare_counters_entry(current_key_counters.clone())?,
+                    )?;
+                    if current_store.key_counters == before {
+                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                    }
+                    let mut scratch = current_store;
+                    scratch.key_counters = before.clone();
+                    self.commit_locked(&mut guard, scratch, ())
+                        .map_err(|error| error.to_string())?;
+                    (opposite, None, Some(HistoryAuxChange::Counters(before)))
+                }
+                HistorySnapshot::PluginElements(before) => {
+                    let current_snapshot =
+                        plugin_elements_snapshot(&current_store, &before.plugin_id)?;
+                    if current_snapshot == before {
+                        return Err("HISTORY_TARGET_ALREADY_APPLIED".to_string());
+                    }
+                    let opposite = require_history_entry(
+                        guard
+                            .history
+                            .prepare_opposite_plugin_elements_entry(current_snapshot)?,
+                    )?;
+                    let mut scratch = current_store;
+                    apply_plugin_elements_snapshot(&mut scratch, &before)?;
+                    let plugin_model_revision =
+                        next_plugin_model_revision(guard.plugin_model_revision)?;
+                    self.commit_locked(&mut guard, scratch, ())
+                        .map_err(|error| error.to_string())?;
+                    guard.plugin_model_revision = plugin_model_revision;
+                    (
+                        opposite,
+                        None,
+                        Some(HistoryAuxChange::PluginElements {
+                            plugin_id: before.plugin_id,
+                            revision: plugin_model_revision,
+                        }),
+                    )
+                }
+            };
+
+            guard
+                .history
+                .commit_operation(direction, operation_id.to_string(), opposite);
+            Ok(HistoryOperationResult {
+                status: guard.history.status(false),
+                change,
+                aux_change,
+                replayed: false,
+                runtime_publication_generation: guard.revision,
+            })
+        })();
+        guard.history.finish_barrier();
+        result.map(|mut outcome| {
+            outcome.status = guard.history.status(false);
+            outcome
+        })
+    }
+
+    #[cfg(test)]
     pub fn commit_editor_document(
         &self,
         request: EditorCommitRequest,
+    ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
+        let admission = self.admit_editor_mutation()?;
+        self.commit_editor_document_admitted(request, &admission)
+    }
+
+    pub(crate) fn admit_editor_mutation(
+        &self,
+    ) -> std::result::Result<HistoryAdmissionLease, EditorCommitError> {
+        self.history_gate
+            .admit_mutation()
+            .map_err(|error| match error.as_str() {
+                HISTORY_IN_PROGRESS => EditorCommitError::history_in_progress(),
+                _ => EditorCommitError::io(error),
+            })
+    }
+
+    pub(crate) fn commit_editor_document_admitted(
+        &self,
+        request: EditorCommitRequest,
+        admission: &HistoryAdmissionLease,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
         let started = Instant::now();
         let base_revision = request.base_revision;
@@ -387,7 +696,7 @@ impl AppStore {
         let payload_size = request_payload_size(&request);
         let payload_bytes = payload_size.as_ref().copied().unwrap_or(0);
         let result = match payload_size {
-            Ok(_) => self.commit_editor_document_inner(request),
+            Ok(_) => self.commit_editor_document_inner(request, admission),
             Err(error) => Err(error),
         };
         let current_revision = result
@@ -418,12 +727,16 @@ impl AppStore {
     fn commit_editor_document_inner(
         &self,
         request: EditorCommitRequest,
+        admission: &HistoryAdmissionLease,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
         validate_request_envelope(&request)?;
         let fingerprint = request_fingerprint(&request)?;
         let mut guard = self
             .lock_for_update()
             .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        admission
+            .revalidate_for(&self.history_gate)
+            .map_err(|_| EditorCommitError::history_in_progress())?;
 
         if let Some(ack) = guard
             .mutation_acks
@@ -440,6 +753,8 @@ impl AppStore {
                 document: EditorDocumentV1::from_store(&guard.data),
                 selected_key_type: guard.data.selected_key_type.clone(),
                 key_counters: guard.data.key_counters.clone(),
+                history_status: None,
+                runtime_publication_generation: guard.revision,
             });
         }
 
@@ -449,10 +764,40 @@ impl AppStore {
             ));
         }
 
+        let touched_fields = request.changes.included_fields();
+        let change = self.commit_editor_patch_locked(
+            &mut guard,
+            &request.changes,
+            &touched_fields,
+            EditorPatchCommitOptions {
+                mutation_id: request.mutation_id.clone(),
+                gesture_id: request.gesture_id,
+                origin: EditorCommitOrigin::StrictEditorCommit,
+                record_history: true,
+                apply_key_side_effects: true,
+                enforce_touched_fields: false,
+            },
+        )?;
+        insert_mutation_ack(
+            &mut guard.mutation_acks,
+            request.mutation_id,
+            fingerprint,
+            change.result.clone(),
+        );
+        Ok(change)
+    }
+
+    fn commit_editor_patch_locked(
+        &self,
+        guard: &mut VersionedStoreState,
+        changes: &crate::models::EditorPatchV1,
+        touched_fields: &[EditorField],
+        options: EditorPatchCommitOptions,
+    ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
         let current_store = guard.data.clone();
         let current = EditorDocumentV1::from_store(&current_store);
         let mut candidate = current.clone();
-        candidate.apply_patch(&request.changes);
+        candidate.apply_patch(changes);
 
         let mut scratch = current_store.clone();
         candidate.apply_to_store(&mut scratch);
@@ -462,37 +807,55 @@ impl AppStore {
         validate_paired_update(
             &current,
             &candidate,
-            request.changes.includes(EditorField::Keys),
-            request.changes.includes(EditorField::KeyPositions),
+            touched_fields.contains(&EditorField::Keys),
+            touched_fields.contains(&EditorField::KeyPositions),
         )?;
-
         scratch.editor_revision = current_store.editor_revision;
         validate_document_transition(&current, &candidate, &current_store, &scratch)?;
 
         let changed_fields = current.changed_fields(&candidate);
+        if options.enforce_touched_fields
+            && changed_fields
+                .iter()
+                .any(|field| !touched_fields.contains(field))
+        {
+            return Err(EditorCommitError::validation(
+                "HISTORY_RESTORE_CHANGED_UNDECLARED_FIELD",
+                "history restore changed an editor field outside its entry",
+            ));
+        }
         if changed_fields.is_empty() {
-            let result = EditorCommitResult {
-                revision: current_store.editor_revision,
-                changed_fields,
-            };
-            insert_mutation_ack(
-                &mut guard.mutation_acks,
-                request.mutation_id,
-                fingerprint,
-                result.clone(),
-            );
             return Ok(CommittedEditorChange {
-                result,
+                result: EditorCommitResult {
+                    revision: current_store.editor_revision,
+                    changed_fields,
+                },
                 event: None,
                 replayed: false,
                 document: current,
                 selected_key_type: current_store.selected_key_type,
                 key_counters: current_store.key_counters,
+                history_status: None,
+                runtime_publication_generation: guard.revision,
             });
         }
 
+        let history_plan = options
+            .record_history
+            .then(|| {
+                guard.history.prepare_entry(
+                    changed_fields.clone(),
+                    current.patch_for_fields(&changed_fields),
+                    options.gesture_id.clone(),
+                )
+            })
+            .transpose()
+            .map_err(|error| {
+                EditorCommitError::validation("HISTORY_SERIALIZATION_FAILED", error)
+            })?;
+
         let revision = next_revision(current_store.editor_revision)?;
-        if changed_fields.contains(&EditorField::Keys) {
+        if options.apply_key_side_effects && changed_fields.contains(&EditorField::Keys) {
             sync_key_counters(&mut scratch.key_counters, &candidate.keys);
             repair_selected_mode(&mut scratch);
         }
@@ -500,38 +863,183 @@ impl AppStore {
         let selected_key_type = scratch.selected_key_type.clone();
         let key_counters = scratch.key_counters.clone();
 
-        self.commit_locked(&mut guard, scratch, ())
+        self.commit_locked(guard, scratch, ())
             .map_err(|error| EditorCommitError::io(error.to_string()))?;
 
-        let result = EditorCommitResult {
-            revision,
-            changed_fields: changed_fields.clone(),
-        };
-        insert_mutation_ack(
-            &mut guard.mutation_acks,
-            request.mutation_id.clone(),
-            fingerprint,
-            result.clone(),
-        );
-        let event = EditorCommittedV1 {
+        let history_status = history_plan.map(|plan| {
+            guard.history.apply_editor_record_plan(plan, &candidate);
+            guard.history.issue_status(self.history_gate.is_closed())
+        });
+        let event = options.origin.event_name().map(|origin| EditorCommittedV1 {
             schema_version: EDITOR_SCHEMA_VERSION,
             revision,
-            mutation_id: request.mutation_id,
-            origin: EditorCommitOrigin::StrictEditorCommit
-                .event_name()
-                .expect("strict editor commit always has an event origin"),
+            mutation_id: options.mutation_id,
+            gesture_id: options.gesture_id,
+            origin,
             changed_fields: changed_fields.clone(),
             patch: candidate.patch_for_fields(&changed_fields),
-        };
+        });
 
         Ok(CommittedEditorChange {
-            result,
-            event: Some(event),
+            result: EditorCommitResult {
+                revision,
+                changed_fields,
+            },
+            event,
             replayed: false,
             document: candidate,
             selected_key_type,
             key_counters,
+            history_status,
+            runtime_publication_generation: guard.revision,
         })
+    }
+
+    fn commit_custom_tabs_history_locked(
+        &self,
+        guard: &mut VersionedStoreState,
+        target: &CustomTabsHistorySnapshot,
+        operation_id: &str,
+        origin: EditorCommitOrigin,
+    ) -> std::result::Result<Option<CommittedEditorChange>, EditorCommitError> {
+        let current_store = guard.data.clone();
+        if target.matches_store(&current_store) {
+            return Err(EditorCommitError::validation(
+                "HISTORY_TARGET_ALREADY_APPLIED",
+                "history target is already applied",
+            ));
+        }
+
+        validate_history_restore_metadata(
+            &target.document,
+            &target.custom_tabs,
+            &target.selected_key_type,
+        )?;
+        let current = EditorDocumentV1::from_store(&current_store);
+        let mut scratch = current_store.clone();
+        target.document.apply_to_store(&mut scratch);
+        scratch.custom_tabs = target.custom_tabs.clone();
+        scratch.selected_key_type = target.selected_key_type.clone();
+        scratch.key_counters = target.key_counters.clone();
+        target.apply_override_patches(&mut scratch);
+        crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        let candidate = EditorDocumentV1::from_store(&scratch);
+        validate_paired_update(&current, &candidate, true, true)?;
+        scratch.editor_revision = current_store.editor_revision;
+        validate_document_transition(&current, &candidate, &current_store, &scratch)?;
+
+        let changed_fields = current.changed_fields(&candidate);
+        let revision = if changed_fields.is_empty() {
+            current_store.editor_revision
+        } else {
+            let revision = next_revision(current_store.editor_revision)?;
+            scratch.editor_revision = revision;
+            revision
+        };
+        let selected_key_type = scratch.selected_key_type.clone();
+        let key_counters = scratch.key_counters.clone();
+        self.commit_locked(guard, scratch, ())
+            .map_err(|error| EditorCommitError::io(error.to_string()))?;
+
+        if changed_fields.is_empty() {
+            return Ok(None);
+        }
+        let event = origin.event_name().map(|origin| EditorCommittedV1 {
+            schema_version: EDITOR_SCHEMA_VERSION,
+            revision,
+            mutation_id: operation_id.to_string(),
+            gesture_id: None,
+            origin,
+            changed_fields: changed_fields.clone(),
+            patch: candidate.patch_for_fields(&changed_fields),
+        });
+        Ok(Some(CommittedEditorChange {
+            result: EditorCommitResult {
+                revision,
+                changed_fields,
+            },
+            event,
+            replayed: false,
+            document: candidate,
+            selected_key_type,
+            key_counters,
+            history_status: None,
+            runtime_publication_generation: guard.revision,
+        }))
+    }
+
+    fn commit_preset_full_history_locked(
+        &self,
+        guard: &mut VersionedStoreState,
+        target: &PresetFullHistorySnapshot,
+        operation_id: &str,
+        origin: EditorCommitOrigin,
+    ) -> std::result::Result<(Option<CommittedEditorChange>, SettingsDiff), EditorCommitError> {
+        let current_store = guard.data.clone();
+        validate_history_restore_metadata(
+            &target.document,
+            &target.custom_tabs,
+            &target.selected_key_type,
+        )?;
+        let current = EditorDocumentV1::from_store(&current_store);
+        let mut scratch = current_store.clone();
+        target.document.apply_to_store(&mut scratch);
+        scratch.custom_tabs = target.custom_tabs.clone();
+        scratch.selected_key_type = target.selected_key_type.clone();
+        scratch.key_counters = target.key_counters.clone();
+        scratch.tab_note_overrides = target.settings.tab_note_overrides.clone();
+        scratch.tab_css_overrides = target.tab_css_overrides.clone();
+        let settings_diff = crate::services::settings::apply_patch_to_store(
+            &mut scratch,
+            &preset_history_settings_patch(&target.settings),
+        );
+        crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        let candidate = EditorDocumentV1::from_store(&scratch);
+        validate_paired_update(&current, &candidate, true, true)?;
+        scratch.editor_revision = current_store.editor_revision;
+        validate_document_transition(&current, &candidate, &current_store, &scratch)?;
+
+        let changed_fields = current.changed_fields(&candidate);
+        let revision = if changed_fields.is_empty() {
+            current_store.editor_revision
+        } else {
+            let revision = next_revision(current_store.editor_revision)?;
+            scratch.editor_revision = revision;
+            revision
+        };
+        let selected_key_type = scratch.selected_key_type.clone();
+        let key_counters = scratch.key_counters.clone();
+        self.commit_locked(guard, scratch, ())
+            .map_err(|error| EditorCommitError::io(error.to_string()))?;
+
+        if changed_fields.is_empty() {
+            return Ok((None, settings_diff));
+        }
+        let event = origin.event_name().map(|origin| EditorCommittedV1 {
+            schema_version: EDITOR_SCHEMA_VERSION,
+            revision,
+            mutation_id: operation_id.to_string(),
+            gesture_id: None,
+            origin,
+            changed_fields: changed_fields.clone(),
+            patch: candidate.patch_for_fields(&changed_fields),
+        });
+        Ok((
+            Some(CommittedEditorChange {
+                result: EditorCommitResult {
+                    revision,
+                    changed_fields,
+                },
+                event,
+                replayed: false,
+                document: candidate,
+                selected_key_type,
+                key_counters,
+                history_status: None,
+                runtime_publication_generation: guard.revision,
+            }),
+            settings_diff,
+        ))
     }
 
     pub(crate) fn commit_legacy_editor_transaction<T>(
@@ -539,12 +1047,118 @@ impl AppStore {
         origin: EditorCommitOrigin,
         touched_fields: &[EditorField],
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
-    ) -> std::result::Result<EditorTransactionResult<T>, EditorCommitError> {
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_editor_transaction_with_history(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions::default(),
+            updater,
+        )
+    }
+
+    pub(crate) fn commit_history_overlap_mutation<T>(
+        &self,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedHistoryOverlapMutation<T>, EditorCommitError> {
+        let admission = self.admit_editor_mutation()?;
+        let mut guard = self
+            .lock_for_update()
+            .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        admission
+            .revalidate_for(&self.history_gate)
+            .map_err(|_| EditorCommitError::history_in_progress())?;
+
+        let current_store = guard.data.clone();
+        let current_overlap = PresetFullHistorySnapshot::from_store(&current_store);
+        let mut scratch = current_store.clone();
+        let value = updater(&mut scratch)?;
+        if scratch.editor_revision != current_store.editor_revision
+            || EditorDocumentV1::from_store(&scratch)
+                != EditorDocumentV1::from_store(&current_store)
+        {
+            return Err(EditorCommitError::validation(
+                "UNDECLARED_EDITOR_FIELD",
+                "history overlap mutation changed an editor field",
+            ));
+        }
+        let overlap_changed = !current_overlap.matches_store(&scratch);
+        if scratch != current_store {
+            self.commit_locked(&mut guard, scratch, ())
+                .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        }
+        let history_status = (overlap_changed && guard.history.invalidate_future())
+            .then(|| guard.history.issue_status(self.history_gate.is_closed()));
+        Ok(AdmittedHistoryOverlapMutation {
+            value,
+            history_status,
+            _admission: admission,
+        })
+    }
+
+    pub(crate) fn commit_preset_editor_transaction<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        current_key_counters: KeyCounters,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_editor_transaction_with_history(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions {
+                scope: Some(HistoryScope::PresetFull),
+                observed_epoch: None,
+                key_counters: Some(current_key_counters),
+            },
+            updater,
+        )
+    }
+
+    pub(crate) fn commit_aux_editor_transaction<T>(
+        &self,
+        scope: HistoryScope,
+        observed_history_epoch: Option<u64>,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        if !matches!(scope, HistoryScope::CustomTabs | HistoryScope::Mode) {
+            return Err(EditorCommitError::validation(
+                "INVALID_AUX_HISTORY_SCOPE",
+                "aux editor transaction requires a custom tabs or mode scope",
+            ));
+        }
+        self.commit_editor_transaction_with_history(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions {
+                scope: Some(scope),
+                observed_epoch: observed_history_epoch,
+                key_counters: None,
+            },
+            updater,
+        )
+    }
+
+    fn commit_editor_transaction_with_history<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        history_options: EditorTransactionHistoryOptions,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        let admission = self.admit_editor_mutation()?;
         let started = Instant::now();
         let origin_name = origin
             .event_name()
             .unwrap_or_else(|| "loadRecovery".to_string());
-        let result = self.commit_legacy_editor_transaction_inner(origin, touched_fields, updater);
+        let result = self.commit_legacy_editor_transaction_inner(
+            origin,
+            touched_fields,
+            &admission,
+            history_options,
+            updater,
+        );
         let (outcome, changed_fields) = match &result {
             Ok(transaction) if transaction.change.result.changed_fields.is_empty() => (
                 "no_editor_change",
@@ -562,21 +1176,34 @@ impl AppStore {
             "origin={origin_name} outcome={outcome} changedFields={changed_fields:?} durationMs={}",
             started.elapsed().as_millis()
         );
-        result
+        result.map(|transaction| AdmittedEditorTransaction {
+            value: transaction.value,
+            change: transaction.change,
+            _admission: admission,
+        })
     }
 
     fn commit_legacy_editor_transaction_inner<T>(
         &self,
         origin: EditorCommitOrigin,
         touched_fields: &[EditorField],
+        admission: &HistoryAdmissionLease,
+        history_options: EditorTransactionHistoryOptions,
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<EditorTransactionResult<T>, EditorCommitError> {
         let mut guard = self
             .lock_for_update()
             .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        admission
+            .revalidate_for(&self.history_gate)
+            .map_err(|_| EditorCommitError::history_in_progress())?;
+        validate_observed_history_epoch(&guard.history, history_options.observed_epoch)?;
         let current_store = guard.data.clone();
         let current = EditorDocumentV1::from_store(&current_store);
         let mut scratch = current_store.clone();
+        if let Some(counters) = history_options.key_counters.as_ref() {
+            scratch.key_counters = counters.clone();
+        }
         let value = updater(&mut scratch)?;
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
 
@@ -605,6 +1232,40 @@ impl AppStore {
             sync_key_counters(&mut scratch.key_counters, &candidate.keys);
         }
 
+        let history_plan = match history_options.scope {
+            Some(HistoryScope::CustomTabs) => {
+                let before = CustomTabsHistorySnapshot::from_transition(&current_store, &scratch);
+                (!before.matches_store(&scratch))
+                    .then(|| guard.history.prepare_custom_tabs_entry(before))
+                    .transpose()
+            }
+            Some(HistoryScope::Mode) => (current_store.selected_key_type
+                != scratch.selected_key_type)
+                .then(|| {
+                    guard
+                        .history
+                        .prepare_mode_entry(current_store.selected_key_type.clone())
+                })
+                .transpose(),
+            Some(HistoryScope::PresetFull) => {
+                let mut before = PresetFullHistorySnapshot::from_store(&current_store);
+                if let Some(counters) = history_options.key_counters {
+                    before.key_counters = counters;
+                }
+                (!before.matches_store(&scratch))
+                    .then(|| guard.history.prepare_preset_full_entry(before))
+                    .transpose()
+            }
+            Some(_) => {
+                return Err(EditorCommitError::validation(
+                    "INVALID_AUX_HISTORY_SCOPE",
+                    "unsupported aux history scope",
+                ));
+            }
+            None => Ok(None),
+        }
+        .map_err(|error| EditorCommitError::validation("HISTORY_SERIALIZATION_FAILED", error))?;
+
         let revision = if changed_fields.is_empty() {
             current_store.editor_revision
         } else {
@@ -620,6 +1281,10 @@ impl AppStore {
             self.commit_locked(&mut guard, scratch, ())
                 .map_err(|error| EditorCommitError::io(error.to_string()))?;
         }
+        let history_status = history_plan.map(|plan| {
+            guard.history.apply_record_plan(plan);
+            guard.history.issue_status(self.history_gate.is_closed())
+        });
 
         let event = if changed_fields.is_empty() {
             None
@@ -628,6 +1293,7 @@ impl AppStore {
                 schema_version: EDITOR_SCHEMA_VERSION,
                 revision,
                 mutation_id: uuid::Uuid::new_v4().to_string(),
+                gesture_id: None,
                 origin,
                 changed_fields: changed_fields.clone(),
                 patch: candidate.patch_for_fields(&changed_fields),
@@ -643,6 +1309,8 @@ impl AppStore {
             document: candidate,
             selected_key_type,
             key_counters,
+            history_status,
+            runtime_publication_generation: guard.revision,
         };
 
         Ok(EditorTransactionResult { value, change })
@@ -655,12 +1323,208 @@ impl AppStore {
         )
     }
 
-    pub fn set_selected_key_type(&self, key: impl Into<String>) -> Result<String> {
-        let key = key.into();
-        self.update_committed(
-            move |state| state.selected_key_type = key,
-            |state| state.selected_key_type.clone(),
+    pub(crate) fn commit_key_counters_admitted(
+        &self,
+        before: KeyCounters,
+        mut counters: KeyCounters,
+        observed_history_epoch: Option<u64>,
+        admission: &HistoryAdmissionLease,
+    ) -> std::result::Result<(KeyCounters, Option<HistoryStatus>, u64), EditorCommitError> {
+        let mut guard = self
+            .lock_for_update()
+            .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        admission
+            .revalidate_for(&self.history_gate)
+            .map_err(|_| EditorCommitError::history_in_progress())?;
+        validate_observed_history_epoch(&guard.history, observed_history_epoch)?;
+        sync_key_counters(&mut counters, &guard.data.keys);
+        let runtime_changed = before != counters;
+        let plan = runtime_changed
+            .then(|| guard.history.prepare_counters_entry(before))
+            .transpose()
+            .map_err(|error| {
+                EditorCommitError::validation("HISTORY_SERIALIZATION_FAILED", error)
+            })?;
+        if runtime_changed || guard.data.key_counters != counters {
+            let mut scratch = guard.data.clone();
+            scratch.key_counters = counters.clone();
+            self.commit_locked(&mut guard, scratch, ())
+                .map_err(|error| EditorCommitError::io(error.to_string()))?;
+        }
+        let status = plan.map(|plan| {
+            guard.history.apply_record_plan(plan);
+            guard.history.issue_status(self.history_gate.is_closed())
+        });
+        Ok((counters, status, guard.revision))
+    }
+
+    pub(crate) fn plugin_instances_get(
+        &self,
+        plugin_id: &str,
+    ) -> std::result::Result<(Vec<SavedPluginInstance>, u64), String> {
+        validate_plugin_id(plugin_id)?;
+        let guard = self.state.read();
+        let key = plugin_instances_storage_key(plugin_id);
+        let instances =
+            decode_plugin_instances(guard.data.plugin_data.get(&key))?.unwrap_or_default();
+        Ok((instances, guard.plugin_model_revision))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn commit_plugin_instances(
+        &self,
+        request: PluginInstancesCommitRequest,
+    ) -> std::result::Result<AdmittedPluginInstancesCommit, String> {
+        let admission = self.history_gate.admit_mutation()?;
+        self.commit_plugin_instances_with_admission(request, admission)
+    }
+
+    pub(crate) fn commit_plugin_instances_with_admission(
+        &self,
+        request: PluginInstancesCommitRequest,
+        admission: HistoryAdmissionLease,
+    ) -> std::result::Result<AdmittedPluginInstancesCommit, String> {
+        validate_plugin_instances_request(&request)?;
+        let outcome = self.commit_plugin_instances_admitted(request, &admission)?;
+        Ok(AdmittedPluginInstancesCommit {
+            outcome,
+            _admission: admission,
+        })
+    }
+
+    fn commit_plugin_instances_admitted(
+        &self,
+        request: PluginInstancesCommitRequest,
+        admission: &HistoryAdmissionLease,
+    ) -> std::result::Result<PluginInstancesCommitOutcome, String> {
+        let mut guard = self.lock_for_update().map_err(|error| error.to_string())?;
+        admission.revalidate_for(&self.history_gate)?;
+
+        if request
+            .observed_history_epoch
+            .is_some_and(|epoch| epoch != guard.history.history_epoch())
+        {
+            return Err("HISTORY_EPOCH_CONFLICT".to_string());
+        }
+        if request
+            .expected_model_revision
+            .is_some_and(|revision| revision != guard.plugin_model_revision)
+        {
+            return Err("PLUGIN_MODEL_REVISION_CONFLICT".to_string());
+        }
+
+        let current_snapshot = plugin_elements_snapshot(&guard.data, &request.plugin_id)?;
+        self.apply_plugin_instances_mutation_locked(
+            &mut guard,
+            current_snapshot,
+            PluginInstancesMutationInput {
+                plugin_id: request.plugin_id,
+                instances: request.instances,
+                gesture_id: request.gesture_id,
+            },
         )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reconcile_plugin_instances(
+        &self,
+        request: PluginInstancesReconcileRequest,
+    ) -> std::result::Result<AdmittedPluginInstancesCommit, String> {
+        let admission = self.history_gate.admit_mutation()?;
+        self.reconcile_plugin_instances_with_admission(request, admission)
+    }
+
+    pub(crate) fn reconcile_plugin_instances_with_admission(
+        &self,
+        request: PluginInstancesReconcileRequest,
+        admission: HistoryAdmissionLease,
+    ) -> std::result::Result<AdmittedPluginInstancesCommit, String> {
+        validate_plugin_instances_reconcile_request(&request)?;
+        let outcome = self.reconcile_plugin_instances_admitted(request, &admission)?;
+        Ok(AdmittedPluginInstancesCommit {
+            outcome,
+            _admission: admission,
+        })
+    }
+
+    fn reconcile_plugin_instances_admitted(
+        &self,
+        request: PluginInstancesReconcileRequest,
+        admission: &HistoryAdmissionLease,
+    ) -> std::result::Result<PluginInstancesCommitOutcome, String> {
+        let mut guard = self.lock_for_update().map_err(|error| error.to_string())?;
+        admission.revalidate_for(&self.history_gate)?;
+
+        if request
+            .observed_history_epoch
+            .is_some_and(|epoch| epoch != guard.history.history_epoch())
+        {
+            return Err("HISTORY_EPOCH_CONFLICT".to_string());
+        }
+
+        let current_snapshot = plugin_elements_snapshot(&guard.data, &request.plugin_id)?;
+        let valid_tab_ids = request.valid_tab_ids.into_iter().collect::<HashSet<_>>();
+        let mut reconciled = current_snapshot.instances.clone().unwrap_or_default();
+        reconciled.retain_mut(|instance| {
+            let tab_id = normalize_plugin_instance_tab_id(instance.tab_id.as_deref()).to_string();
+            if !valid_tab_ids.contains(&tab_id) {
+                return false;
+            }
+            instance.tab_id = Some(tab_id);
+            true
+        });
+
+        self.apply_plugin_instances_mutation_locked(
+            &mut guard,
+            current_snapshot,
+            PluginInstancesMutationInput {
+                plugin_id: request.plugin_id,
+                instances: reconciled,
+                gesture_id: None,
+            },
+        )
+    }
+
+    fn apply_plugin_instances_mutation_locked(
+        &self,
+        guard: &mut VersionedStoreState,
+        current_snapshot: PluginElementsHistorySnapshot,
+        mutation: PluginInstancesMutationInput,
+    ) -> std::result::Result<PluginInstancesCommitOutcome, String> {
+        let current_instances = current_snapshot.instances.clone().unwrap_or_default();
+        if current_instances == mutation.instances {
+            return Ok(PluginInstancesCommitOutcome {
+                plugin_id: mutation.plugin_id,
+                model_revision: guard.plugin_model_revision,
+                changed: false,
+                history_status: None,
+            });
+        }
+
+        let history_plan = guard
+            .history
+            .prepare_plugin_elements_entry(current_snapshot, mutation.gesture_id)?;
+        let mut scratch = guard.data.clone();
+        let canonical = PluginElementsHistorySnapshot {
+            plugin_id: mutation.plugin_id.clone(),
+            instances: (!mutation.instances.is_empty()).then_some(mutation.instances),
+        };
+        apply_plugin_elements_snapshot(&mut scratch, &canonical)?;
+        let plugin_model_revision = next_plugin_model_revision(guard.plugin_model_revision)?;
+        self.commit_locked(guard, scratch, ())
+            .map_err(|error| error.to_string())?;
+        guard.plugin_model_revision = plugin_model_revision;
+        guard
+            .history
+            .apply_plugin_elements_record_plan(history_plan, &canonical);
+        let history_status = Some(guard.history.issue_status(self.history_gate.is_closed()));
+
+        Ok(PluginInstancesCommitOutcome {
+            plugin_id: mutation.plugin_id,
+            model_revision: plugin_model_revision,
+            changed: true,
+            history_status,
+        })
     }
 
     // 플러그인 데이터 관련 메서드
@@ -669,30 +1533,191 @@ impl AppStore {
         Ok(guard.data.plugin_data.get(key).cloned())
     }
 
-    pub fn set_plugin_data(&self, key: &str, value: Value) -> Result<()> {
+    pub(crate) fn set_plugin_data(
+        &self,
+        key: &str,
+        value: Value,
+    ) -> Result<AdmittedPluginStorageMutation<()>> {
+        if is_plugin_instances_storage_key(key) {
+            return Err(anyhow!("PLUGIN_INSTANCES_KEY_RESERVED"));
+        }
+        let admission = self
+            .history_gate
+            .admit_mutation()
+            .map_err(anyhow::Error::msg)?;
         let mut guard = self.lock_for_update()?;
+        admission
+            .revalidate_for(&self.history_gate)
+            .map_err(anyhow::Error::msg)?;
+        if guard.data.plugin_data.get(key) == Some(&value) {
+            return Ok(AdmittedPluginStorageMutation {
+                value: (),
+                history_status: None,
+                plugin_instances_changes: Vec::new(),
+                _admission: admission,
+            });
+        }
         let mut scratch = guard.data.clone();
         scratch.plugin_data.insert(key.to_string(), value);
-        self.commit_locked(&mut guard, scratch, ())
+        self.commit_locked(&mut guard, scratch, ())?;
+        Ok(AdmittedPluginStorageMutation {
+            value: (),
+            history_status: None,
+            plugin_instances_changes: Vec::new(),
+            _admission: admission,
+        })
     }
 
-    pub fn remove_plugin_data(&self, key: &str) -> Result<()> {
+    pub(crate) fn remove_plugin_data(
+        &self,
+        key: &str,
+    ) -> Result<AdmittedPluginStorageMutation<()>> {
+        if is_plugin_instances_storage_key(key) {
+            return Err(anyhow!("PLUGIN_INSTANCES_KEY_RESERVED"));
+        }
+        let admission = self
+            .history_gate
+            .admit_mutation()
+            .map_err(anyhow::Error::msg)?;
         let mut guard = self.lock_for_update()?;
+        admission
+            .revalidate_for(&self.history_gate)
+            .map_err(anyhow::Error::msg)?;
+        if !guard.data.plugin_data.contains_key(key) {
+            return Ok(AdmittedPluginStorageMutation {
+                value: (),
+                history_status: None,
+                plugin_instances_changes: Vec::new(),
+                _admission: admission,
+            });
+        }
         let mut scratch = guard.data.clone();
         scratch.plugin_data.remove(key);
-        self.commit_locked(&mut guard, scratch, ())
+        self.commit_locked(&mut guard, scratch, ())?;
+        Ok(AdmittedPluginStorageMutation {
+            value: (),
+            history_status: None,
+            plugin_instances_changes: Vec::new(),
+            _admission: admission,
+        })
     }
 
-    pub fn clear_all_plugin_data(&self) -> Result<()> {
+    pub(crate) fn clear_all_plugin_data(&self) -> Result<AdmittedPluginStorageMutation<()>> {
+        let admission = self
+            .history_gate
+            .admit_mutation()
+            .map_err(anyhow::Error::msg)?;
         let mut guard = self.lock_for_update()?;
+        admission
+            .revalidate_for(&self.history_gate)
+            .map_err(anyhow::Error::msg)?;
+        if guard.data.plugin_data.is_empty() {
+            return Ok(AdmittedPluginStorageMutation {
+                value: (),
+                history_status: None,
+                plugin_instances_changes: Vec::new(),
+                _admission: admission,
+            });
+        }
         let mut scratch = guard.data.clone();
+        let affected_plugin_ids =
+            collect_plugin_instance_ids(scratch.plugin_data.keys().map(String::as_str));
+        let instance_data_changed = !affected_plugin_ids.is_empty();
+        let next_model_revision = instance_data_changed
+            .then(|| next_plugin_model_revision(guard.plugin_model_revision))
+            .transpose()
+            .map_err(anyhow::Error::msg)?;
         scratch.plugin_data.clear();
-        self.commit_locked(&mut guard, scratch, ())
+        self.commit_locked(&mut guard, scratch, ())?;
+        if let Some(revision) = next_model_revision {
+            guard.plugin_model_revision = revision;
+        }
+        let history_status = (instance_data_changed && guard.history.invalidate_future())
+            .then(|| guard.history.issue_status(self.history_gate.is_closed()));
+        let plugin_instances_changes = next_model_revision
+            .map(|revision| {
+                affected_plugin_ids
+                    .into_iter()
+                    .map(|plugin_id| PluginInstancesStorageChange {
+                        plugin_id,
+                        revision,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(AdmittedPluginStorageMutation {
+            value: (),
+            history_status,
+            plugin_instances_changes,
+            _admission: admission,
+        })
     }
 
     pub fn get_all_plugin_keys(&self) -> Result<Vec<String>> {
         let guard = self.state.read();
         Ok(guard.data.plugin_data.keys().cloned().collect())
+    }
+
+    pub(crate) fn remove_plugin_data_by_prefix(
+        &self,
+        prefix: &str,
+    ) -> Result<AdmittedPluginStorageMutation<usize>> {
+        let admission = self
+            .history_gate
+            .admit_mutation()
+            .map_err(anyhow::Error::msg)?;
+        let mut guard = self.lock_for_update()?;
+        admission
+            .revalidate_for(&self.history_gate)
+            .map_err(anyhow::Error::msg)?;
+        let keys = guard
+            .data
+            .plugin_data
+            .keys()
+            .filter(|key| key.starts_with(prefix))
+            .cloned()
+            .collect::<Vec<_>>();
+        if keys.is_empty() {
+            return Ok(AdmittedPluginStorageMutation {
+                value: 0,
+                history_status: None,
+                plugin_instances_changes: Vec::new(),
+                _admission: admission,
+            });
+        }
+        let affected_plugin_ids = collect_plugin_instance_ids(keys.iter().map(String::as_str));
+        let instance_data_changed = !affected_plugin_ids.is_empty();
+        let next_model_revision = instance_data_changed
+            .then(|| next_plugin_model_revision(guard.plugin_model_revision))
+            .transpose()
+            .map_err(anyhow::Error::msg)?;
+        let mut scratch = guard.data.clone();
+        for key in &keys {
+            scratch.plugin_data.remove(key);
+        }
+        self.commit_locked(&mut guard, scratch, ())?;
+        if let Some(revision) = next_model_revision {
+            guard.plugin_model_revision = revision;
+        }
+        let history_status = (instance_data_changed && guard.history.invalidate_future())
+            .then(|| guard.history.issue_status(self.history_gate.is_closed()));
+        let plugin_instances_changes = next_model_revision
+            .map(|revision| {
+                affected_plugin_ids
+                    .into_iter()
+                    .map(|plugin_id| PluginInstancesStorageChange {
+                        plugin_id,
+                        revision,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(AdmittedPluginStorageMutation {
+            value: keys.len(),
+            history_status,
+            plugin_instances_changes,
+            _admission: admission,
+        })
     }
 
     /// 앱 종료 시점에 한 번 호출하는 자원 정리.
@@ -1191,8 +2216,148 @@ fn editor_error_outcome(code: EditorCommitErrorCode) -> &'static str {
         EditorCommitErrorCode::ValidationFailed => "validation_failed",
         EditorCommitErrorCode::PairedUpdateRequired => "paired_update_required",
         EditorCommitErrorCode::MutationIdReused => "mutation_id_reused",
+        EditorCommitErrorCode::HistoryInProgress => "history_in_progress",
+        EditorCommitErrorCode::HistoryEpochConflict => "history_epoch_conflict",
         EditorCommitErrorCode::IoError => "io_error",
     }
+}
+
+fn require_history_entry(plan: HistoryRecordPlan) -> Result<HistoryEntry, String> {
+    match plan {
+        HistoryRecordPlan::Entry(entry) => Ok(*entry),
+        HistoryRecordPlan::Merge(_) => Err("HISTORY_INVALID_OPPOSITE_ENTRY".to_string()),
+        HistoryRecordPlan::Truncate => Err(HISTORY_ENTRY_TOO_LARGE.to_string()),
+    }
+}
+
+fn plugin_elements_snapshot(
+    store: &AppStoreData,
+    plugin_id: &str,
+) -> Result<PluginElementsHistorySnapshot, String> {
+    validate_plugin_id(plugin_id)?;
+    let key = plugin_instances_storage_key(plugin_id);
+    Ok(PluginElementsHistorySnapshot {
+        plugin_id: plugin_id.to_string(),
+        instances: decode_plugin_instances(store.plugin_data.get(&key))?,
+    })
+}
+
+fn next_plugin_model_revision(current: u64) -> Result<u64, String> {
+    current
+        .checked_add(1)
+        .filter(|revision| *revision <= crate::state::editor::MAX_SAFE_EDITOR_REVISION)
+        .ok_or_else(|| "PLUGIN_MODEL_REVISION_OUT_OF_RANGE".to_string())
+}
+
+fn plugin_id_from_instances_storage_key(key: &str) -> Option<&str> {
+    key.strip_prefix("plugin_data_")
+        .and_then(|key| key.strip_suffix("/instances"))
+        .filter(|plugin_id| !plugin_id.is_empty())
+}
+
+fn is_plugin_instances_storage_key(key: &str) -> bool {
+    plugin_id_from_instances_storage_key(key).is_some()
+}
+
+fn collect_plugin_instance_ids<'a>(keys: impl Iterator<Item = &'a str>) -> Vec<String> {
+    let mut plugin_ids = keys
+        .filter_map(plugin_id_from_instances_storage_key)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    plugin_ids.sort_unstable();
+    plugin_ids.dedup();
+    plugin_ids
+}
+
+fn apply_plugin_elements_snapshot(
+    store: &mut AppStoreData,
+    snapshot: &PluginElementsHistorySnapshot,
+) -> Result<(), String> {
+    validate_plugin_id(&snapshot.plugin_id)?;
+    let key = plugin_instances_storage_key(&snapshot.plugin_id);
+    match snapshot
+        .instances
+        .as_deref()
+        .map(encode_plugin_instances)
+        .transpose()?
+    {
+        Some(Some(value)) => {
+            store.plugin_data.insert(key, value);
+        }
+        Some(None) | None => {
+            store.plugin_data.remove(&key);
+        }
+    }
+    Ok(())
+}
+
+fn editor_history_error(error: EditorCommitError) -> String {
+    format!("{:?}: {}", error.error_code, error.message)
+}
+
+fn validate_observed_history_epoch(
+    history: &HistoryService,
+    observed_history_epoch: Option<u64>,
+) -> std::result::Result<(), EditorCommitError> {
+    if observed_history_epoch.is_some_and(|observed| observed != history.history_epoch()) {
+        return Err(EditorCommitError::history_epoch_conflict(
+            history.history_epoch(),
+        ));
+    }
+    Ok(())
+}
+
+fn preset_history_settings_patch(settings: &PresetHistorySettingsSnapshot) -> SettingsPatchInput {
+    let note = &settings.note_settings;
+    SettingsPatchInput {
+        note_effect: Some(settings.note_effect),
+        laboratory_enabled: Some(settings.laboratory_enabled),
+        note_settings: Some(NoteSettingsPatch {
+            frame_limit: Some(note.frame_limit),
+            speed: Some(note.speed),
+            track_height: Some(note.track_height),
+            reverse: Some(note.reverse),
+            fade_position: Some(note.fade_position.clone()),
+            fade_top_px: Some(note.fade_top_px),
+            fade_bottom_px: Some(note.fade_bottom_px),
+            reverse_fade_top_px: Some(note.reverse_fade_top_px),
+            reverse_fade_bottom_px: Some(note.reverse_fade_bottom_px),
+            delayed_note_enabled: Some(note.delayed_note_enabled),
+            short_note_threshold_ms: Some(note.short_note_threshold_ms),
+            short_note_min_length_px: Some(note.short_note_min_length_px),
+            key_display_delay_ms: Some(note.key_display_delay_ms),
+        }),
+        background_color: Some(settings.background_color.clone()),
+        use_custom_css: Some(settings.use_custom_css),
+        custom_css: Some(CustomCssPatch {
+            path: Some(settings.custom_css.path.clone()),
+            content: Some(settings.custom_css.content.clone()),
+        }),
+        font_settings: Some(settings.font_settings.clone()),
+        use_custom_js: Some(settings.use_custom_js),
+        custom_js: Some(CustomJsPatch {
+            path: Some(settings.custom_js.path.clone()),
+            content: Some(settings.custom_js.content.clone()),
+            plugins: Some(settings.custom_js.plugins.clone()),
+        }),
+        ..SettingsPatchInput::default()
+    }
+}
+
+fn changed_map_ids<T: PartialEq>(
+    current: &std::collections::HashMap<String, T>,
+    target: &std::collections::HashMap<String, T>,
+) -> Vec<String> {
+    let mut ids = current
+        .keys()
+        .chain(target.keys())
+        .filter(|id| current.get(*id) != target.get(*id))
+        .cloned()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids
 }
 
 fn insert_mutation_ack(
@@ -1378,7 +2543,7 @@ fn resolve_local_asset_path(app_data_dir: &Path, path: &str) -> LocalAssetPathRe
     }
 }
 
-// 실존하지 않는 외래 참조는 해석 실패로 취급 — sweep 보류 fail-safe 유도
+// 실존하지 않는 외래 참조는 해석 실패로 취급, sweep 보류 fail-safe 유도
 fn classify_absolute_asset_path(
     app_data_dir: &Path,
     raw: &str,
@@ -2017,7 +3182,7 @@ fn collect_sound_deletion_reference_keys(
     data: &AppStoreData,
     sounds_dir: &Path,
 ) -> HashSet<String> {
-    // sounds_dir는 항상 <appData>/sounds — 분류 루트는 부모로 유도
+    // sounds_dir는 항상 <appData>/sounds, 분류 루트는 부모로 유도
     let app_data_dir = sounds_dir.parent().unwrap_or(sounds_dir);
     let mut keys = collect_local_sound_paths(app_data_dir, data).keys;
     for entry in data.sound_library.values() {
@@ -2217,23 +3382,33 @@ mod tests {
         collect_local_sound_path_keys, collect_local_sound_paths, purge_expired_trash_sessions_at,
         recover_interrupted_processed_wav_replacements_with,
         recover_interrupted_sound_deletions_with, stage_sound_files_for_deletion,
-        sweep_unreferenced_asset_files, system_time_millis, AppStore, TrashSession,
-        PROCESSED_WAV_TRANSACTION_LOCK, TRASH_RETENTION,
+        sweep_unreferenced_asset_files, system_time_millis, AppStore, HistoryAuxChange,
+        TrashSession, PROCESSED_WAV_TRANSACTION_LOCK, TRASH_RETENTION,
     };
     use crate::{
+        custom_css::ValidatedCssFile,
         defaults::default_positions,
         errors::{EditorCommitError, EditorCommitErrorCode},
         keyboard::KeyboardManager,
         models::{
-            AppStoreData, CommittedEditorChange, CustomFont, CustomTab, EditorCommitOrigin,
-            EditorCommitRequest, EditorDocumentV1, EditorField, EditorHistoryRestoreRequest,
-            EditorPatchV1, FontType, GraphPosition, GraphStatType, GraphType, KeyCounters,
-            KeyPosition, KnobPosition, OverlayBounds, PendingProcessedWavReplacement,
-            SettingsPatchInput, SoundLibraryEntry, SoundSource, StatPosition, StatType,
-            TabNoteSettings,
+            AppStoreData, CommittedEditorChange, CustomCss, CustomFont, CustomTab,
+            EditorCommitOrigin, EditorCommitRequest, EditorDocumentV1, EditorField, EditorPatchV1,
+            FontSettings, FontType, GraphPosition, GraphStatType, GraphType, JsPlugin, KeyCounters,
+            KeyPosition, KnobPosition, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
+            PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
+            SavedPluginInstance, SettingsPatchInput, SoundLibraryEntry, SoundSource, StatPosition,
+            StatType, TabCss, TabNoteSettings,
         },
-        services::settings::apply_patch_to_store,
-        state::{app_state::KeyCounterEventEmitter, local_asset_path::path_identity_key, AppState},
+        services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
+        state::{
+            app_state::KeyCounterEventEmitter,
+            history::{
+                HistoryDirection, HistoryScope, PresetFullHistorySnapshot, HISTORY_ENTRY_TOO_LARGE,
+                HISTORY_IN_PROGRESS,
+            },
+            local_asset_path::path_identity_key,
+            AppState,
+        },
     };
     use serde_json::{json, Value};
     use std::{
@@ -2243,7 +3418,8 @@ mod tests {
             atomic::{AtomicBool, Ordering},
             mpsc, Arc, Barrier, Mutex,
         },
-        time::{Duration, SystemTime, UNIX_EPOCH},
+        thread,
+        time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     };
 
     fn test_directory(label: &str) -> std::path::PathBuf {
@@ -2316,6 +3492,7 @@ mod tests {
         EditorCommitRequest {
             base_revision,
             mutation_id: mutation_id.into(),
+            gesture_id: None,
             changes,
         }
     }
@@ -2326,6 +3503,50 @@ mod tests {
         EditorPatchV1 {
             key_positions: Some(positions),
             ..EditorPatchV1::default()
+        }
+    }
+
+    fn saved_plugin_instance(x: f64) -> SavedPluginInstance {
+        SavedPluginInstance {
+            position: PluginPoint { x, y: 20.0 },
+            settings: None,
+            measured_size: None,
+            tab_id: Some("4key".to_string()),
+        }
+    }
+
+    fn plugin_instances_request(
+        plugin_id: &str,
+        instances: Vec<SavedPluginInstance>,
+        mutation_id: String,
+        gesture_id: Option<String>,
+        expected_model_revision: Option<u64>,
+    ) -> PluginInstancesCommitRequest {
+        PluginInstancesCommitRequest {
+            plugin_id: plugin_id.to_string(),
+            instances,
+            mutation_id,
+            gesture_id,
+            observed_history_epoch: None,
+            expected_model_revision,
+            authority_generation: 1,
+        }
+    }
+
+    fn plugin_instances_reconcile_request(
+        plugin_id: &str,
+        valid_tab_ids: &[&str],
+        mutation_id: String,
+    ) -> PluginInstancesReconcileRequest {
+        PluginInstancesReconcileRequest {
+            plugin_id: plugin_id.to_string(),
+            valid_tab_ids: valid_tab_ids
+                .iter()
+                .map(|tab_id| (*tab_id).to_string())
+                .collect(),
+            mutation_id,
+            observed_history_epoch: None,
+            authority_generation: 1,
         }
     }
 
@@ -2347,6 +3568,669 @@ mod tests {
     }
 
     #[test]
+    fn plugin_instances_commit_records_merges_and_skips_noop() {
+        let dir = test_directory("plugin-instances-commit-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_revision = store.plugin_model_revision();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let first_request = plugin_instances_request(
+            "demo-plugin",
+            vec![saved_plugin_instance(10.0)],
+            uuid::Uuid::new_v4().to_string(),
+            Some(gesture_id.clone()),
+            Some(initial_revision),
+        );
+        let first = store.commit_plugin_instances(first_request).unwrap();
+        let first_revision = first.outcome.model_revision;
+        assert!(first.outcome.changed);
+        assert_eq!(
+            first
+                .outcome
+                .history_status
+                .as_ref()
+                .unwrap()
+                .history_revision,
+            1
+        );
+        drop(first);
+
+        let second_request = plugin_instances_request(
+            "demo-plugin",
+            vec![saved_plugin_instance(30.0)],
+            uuid::Uuid::new_v4().to_string(),
+            Some(gesture_id),
+            Some(first_revision),
+        );
+        let second = store.commit_plugin_instances(second_request).unwrap();
+        let second_revision = second.outcome.model_revision;
+        assert_eq!(
+            second
+                .outcome
+                .history_status
+                .as_ref()
+                .unwrap()
+                .history_revision,
+            1
+        );
+        drop(second);
+
+        let noop = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(30.0)],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(second_revision),
+            ))
+            .unwrap();
+        assert!(!noop.outcome.changed);
+        assert!(noop.outcome.history_status.is_none());
+        drop(noop);
+
+        let (instances, revision) = store.plugin_instances_get("demo-plugin").unwrap();
+        assert_eq!(instances, vec![saved_plugin_instance(30.0)]);
+        assert_eq!(revision, second_revision);
+        assert_eq!(store.history_status().history_revision, 1);
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(undo.status.can_redo);
+        drop(undo_barrier);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let redo = store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(30.0)]
+        );
+        assert!(redo.status.can_undo);
+        drop(redo_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instances_history_budget_truncates_after_successful_commit() {
+        let dir = test_directory("plugin-instances-budget-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .state
+            .write()
+            .history
+            .set_limits_for_test(1, 32 * 1024 * 1024, 50);
+        let expected_revision = store.plugin_model_revision();
+
+        let committed = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(expected_revision),
+            ))
+            .unwrap();
+        let status = committed.outcome.history_status.as_ref().unwrap();
+        assert!(committed.outcome.changed);
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        assert_eq!(
+            status.truncated.as_ref().unwrap().reason,
+            HISTORY_ENTRY_TOO_LARGE
+        );
+        drop(committed);
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(10.0)]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instances_undo_redo_restore_backend_without_runtime_projection() {
+        let dir = test_directory("plugin-instances-history-restore-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let expected_revision = store.plugin_model_revision();
+        let committed = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(42.0)],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(expected_revision),
+            ))
+            .unwrap();
+        drop(committed);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        let counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        let Some(HistoryAuxChange::PluginElements {
+            plugin_id,
+            revision: undo_revision,
+        }) = undo.aux_change
+        else {
+            panic!("plugin undo must expose its projection payload");
+        };
+        assert_eq!(plugin_id, "demo-plugin");
+        assert_eq!(undo_revision, store.plugin_model_revision());
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(undo.status.can_redo);
+        drop(undo_barrier);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let redo = store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(42.0)]
+        );
+        assert!(redo.status.can_undo);
+        drop(redo_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instances_commit_revalidates_admission_after_store_lock_wait() {
+        let dir = test_directory("plugin-instances-admission-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = Arc::new(AppStore::initialize_in_dir(&dir).unwrap());
+        let expected_revision = store.plugin_model_revision();
+        let request = plugin_instances_request(
+            "demo-plugin",
+            vec![saved_plugin_instance(10.0)],
+            uuid::Uuid::new_v4().to_string(),
+            None,
+            Some(expected_revision),
+        );
+        let store_guard = store.state.write();
+        let commit_store = Arc::clone(&store);
+        let commit = thread::spawn(move || commit_store.commit_plugin_instances(request));
+        let gate = store.history_gate();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while gate.active_mutations() == 0 {
+            assert!(
+                Instant::now() < deadline,
+                "plugin mutation was not admitted"
+            );
+            thread::yield_now();
+        }
+
+        let barrier_gate = Arc::clone(&gate);
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let (barrier_ready_tx, barrier_ready_rx) = mpsc::channel();
+        let (release_barrier_tx, release_barrier_rx) = mpsc::channel();
+        let barrier = thread::spawn(move || {
+            let lease = barrier_gate.close(&operation_id).unwrap();
+            barrier_ready_tx.send(()).unwrap();
+            release_barrier_rx.recv().unwrap();
+            drop(lease);
+        });
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !gate.is_closed() {
+            assert!(Instant::now() < deadline, "history gate did not close");
+            thread::yield_now();
+        }
+
+        drop(store_guard);
+        assert_eq!(commit.join().unwrap().unwrap_err(), HISTORY_IN_PROGRESS);
+        barrier_ready_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+        release_barrier_tx.send(()).unwrap();
+        barrier.join().unwrap();
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instances_net_zero_gesture_removes_merged_entry() {
+        let dir = test_directory("plugin-instances-net-zero-gesture-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let expected_revision = store.plugin_model_revision();
+        let first = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id.clone()),
+                Some(expected_revision),
+            ))
+            .unwrap();
+        let next_revision = first.outcome.model_revision;
+        drop(first);
+
+        let second = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                Vec::new(),
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id),
+                Some(next_revision),
+            ))
+            .unwrap();
+        assert!(!second.outcome.history_status.as_ref().unwrap().can_undo);
+        drop(second);
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instances_reconcile_is_noop_when_canonical_tabs_are_valid() {
+        let dir = test_directory("plugin-instances-reconcile-noop-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let committed = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(committed);
+        let revision = store.plugin_model_revision();
+        let history_revision = store.history_status().history_revision;
+
+        let reconciled = store
+            .reconcile_plugin_instances(plugin_instances_reconcile_request(
+                "demo-plugin",
+                &["4key", "5key"],
+                uuid::Uuid::new_v4().to_string(),
+            ))
+            .unwrap();
+
+        assert!(!reconciled.outcome.changed);
+        assert!(reconciled.outcome.history_status.is_none());
+        assert_eq!(reconciled.outcome.model_revision, revision);
+        drop(reconciled);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instances_reconcile_records_and_round_trips_history() {
+        let dir = test_directory("plugin-instances-reconcile-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut default_tab = saved_plugin_instance(10.0);
+        default_tab.tab_id = None;
+        let mut stale_tab = saved_plugin_instance(30.0);
+        stale_tab.tab_id = Some("deleted-tab".to_string());
+        let before = vec![default_tab, stale_tab];
+        let committed = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                before.clone(),
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(committed);
+
+        let request = plugin_instances_reconcile_request(
+            "demo-plugin",
+            &["4key"],
+            uuid::Uuid::new_v4().to_string(),
+        );
+        let reconciled = store.reconcile_plugin_instances(request).unwrap();
+        assert!(reconciled.outcome.changed);
+        assert!(reconciled.outcome.history_status.is_some());
+        drop(reconciled);
+        let mut normalized = saved_plugin_instance(10.0);
+        normalized.tab_id = Some("4key".to_string());
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![normalized.clone()]
+        );
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(undo_barrier);
+        assert_eq!(store.plugin_instances_get("demo-plugin").unwrap().0, before);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(redo_barrier);
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![normalized]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instances_reconcile_rejects_stale_history_epoch_after_undo() {
+        let dir = test_directory("plugin-instances-reconcile-history-epoch-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let restored_instances = vec![saved_plugin_instance(10.0)];
+        let first = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                restored_instances.clone(),
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(first);
+
+        let mut replacement = saved_plugin_instance(30.0);
+        replacement.tab_id = Some("5key".to_string());
+        let second = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![replacement],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(second);
+        let stale_epoch = store.history_status().history_epoch;
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &operation_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_ne!(undo.status.history_epoch, stale_epoch);
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            restored_instances
+        );
+
+        let before_revision = store.plugin_model_revision();
+        let before_status = store.history_status();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let mut request = plugin_instances_reconcile_request("demo-plugin", &["5key"], mutation_id);
+        request.observed_history_epoch = Some(stale_epoch);
+        assert_eq!(
+            store.reconcile_plugin_instances(request).unwrap_err(),
+            "HISTORY_EPOCH_CONFLICT"
+        );
+        assert_eq!(store.plugin_model_revision(), before_revision);
+        let after_status = store.history_status();
+        assert_eq!(
+            after_status.history_revision,
+            before_status.history_revision
+        );
+        assert_eq!(after_status.history_epoch, before_status.history_epoch);
+        assert_eq!(after_status.can_undo, before_status.can_undo);
+        assert_eq!(after_status.can_redo, before_status.can_redo);
+        assert_eq!(after_status.busy, before_status.busy);
+        assert_eq!(after_status.truncated, before_status.truncated);
+        assert!(after_status.status_seq > before_status.status_seq);
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            restored_instances
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instances_reconcile_cannot_resurrect_after_bulk_clear() {
+        let dir = test_directory("plugin-instances-reconcile-clear-race-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = Arc::new(AppStore::initialize_in_dir(&dir).unwrap());
+        let committed = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(committed);
+        let stale_snapshot = store.plugin_instances_get("demo-plugin").unwrap().0;
+        assert!(!stale_snapshot.is_empty());
+
+        let store_guard = store.state.write();
+        let reconcile_store = Arc::clone(&store);
+        let reconcile = thread::spawn(move || {
+            let result =
+                reconcile_store.reconcile_plugin_instances(plugin_instances_reconcile_request(
+                    "demo-plugin",
+                    &["4key"],
+                    uuid::Uuid::new_v4().to_string(),
+                ));
+            result.map(|outcome| outcome.outcome.changed)
+        });
+        let clear_store = Arc::clone(&store);
+        let clear = thread::spawn(move || {
+            let result = clear_store.remove_plugin_data_by_prefix("plugin_data_demo-plugin/");
+            result.map(|outcome| outcome.value)
+        });
+
+        let gate = store.history_gate();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while gate.active_mutations() < 2 {
+            assert!(
+                Instant::now() < deadline,
+                "plugin mutations were not admitted"
+            );
+            thread::yield_now();
+        }
+        drop(store_guard);
+
+        reconcile.join().unwrap().unwrap();
+        assert_eq!(clear.join().unwrap().unwrap(), 1);
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn generic_instance_storage_set_and_remove_are_reserved() {
+        let dir = test_directory("plugin-instances-reserved-key-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let committed = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(committed);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        let counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert!(store.history_status().can_redo);
+        let revision = store.plugin_model_revision();
+
+        let set_error = store
+            .set_plugin_data(
+                "plugin_data_demo-plugin/instances",
+                serde_json::to_value(vec![saved_plugin_instance(90.0)]).unwrap(),
+            )
+            .unwrap_err();
+        let remove_error = store
+            .remove_plugin_data("plugin_data_demo-plugin/instances")
+            .unwrap_err();
+
+        assert_eq!(set_error.to_string(), "PLUGIN_INSTANCES_KEY_RESERVED");
+        assert_eq!(remove_error.to_string(), "PLUGIN_INSTANCES_KEY_RESERVED");
+        assert_eq!(store.plugin_model_revision(), revision);
+        assert!(store.history_status().can_redo);
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn bulk_plugin_storage_deletion_reports_each_instance_revision() {
+        let dir = test_directory("plugin-instances-bulk-delete-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+
+        for plugin_id in ["alpha", "beta"] {
+            let committed = store
+                .commit_plugin_instances(plugin_instances_request(
+                    plugin_id,
+                    vec![saved_plugin_instance(10.0)],
+                    uuid::Uuid::new_v4().to_string(),
+                    None,
+                    Some(store.plugin_model_revision()),
+                ))
+                .unwrap();
+            drop(committed);
+        }
+        drop(
+            store
+                .set_plugin_data("plugin_data_alpha/preferences", json!({ "enabled": true }))
+                .unwrap(),
+        );
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        let counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert!(store.history_status().can_redo);
+
+        let prefix_revision = store.plugin_model_revision() + 1;
+        let prefix_delete = store
+            .remove_plugin_data_by_prefix("plugin_data_alpha/")
+            .unwrap();
+        assert_eq!(prefix_delete.value, 2);
+        assert!(!prefix_delete.history_status.as_ref().unwrap().can_redo);
+        assert_eq!(
+            prefix_delete.plugin_instances_changes,
+            vec![super::PluginInstancesStorageChange {
+                plugin_id: "alpha".to_string(),
+                revision: prefix_revision,
+            }]
+        );
+        drop(prefix_delete);
+        assert!(store.plugin_instances_get("alpha").unwrap().0.is_empty());
+        assert!(store.plugin_instances_get("beta").unwrap().0.is_empty());
+
+        for plugin_id in ["beta", "gamma"] {
+            let committed = store
+                .commit_plugin_instances(plugin_instances_request(
+                    plugin_id,
+                    vec![saved_plugin_instance(20.0)],
+                    uuid::Uuid::new_v4().to_string(),
+                    None,
+                    Some(store.plugin_model_revision()),
+                ))
+                .unwrap();
+            drop(committed);
+        }
+
+        let clear_revision = store.plugin_model_revision() + 1;
+        let clear = store.clear_all_plugin_data().unwrap();
+        assert_eq!(
+            clear.plugin_instances_changes,
+            vec![
+                super::PluginInstancesStorageChange {
+                    plugin_id: "beta".to_string(),
+                    revision: clear_revision,
+                },
+                super::PluginInstancesStorageChange {
+                    plugin_id: "gamma".to_string(),
+                    revision: clear_revision,
+                },
+            ]
+        );
+        drop(clear);
+        assert_eq!(store.plugin_model_revision(), clear_revision);
+        assert!(store.plugin_instances_get("beta").unwrap().0.is_empty());
+        assert!(store.plugin_instances_get("gamma").unwrap().0.is_empty());
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn strict_editor_commit_persists_once_and_synchronizes_key_counters() {
         let dir = test_directory("strict-editor-success-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -2356,7 +4240,8 @@ mod tests {
         let old_key = before.keys["4key"][0].clone();
         let mut keys = before.keys.clone();
         keys.get_mut("4key").unwrap()[0] = "StrictKey".to_string();
-        let request = editor_request(
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let mut request = editor_request(
             0,
             uuid::Uuid::new_v4().to_string(),
             EditorPatchV1 {
@@ -2364,18 +4249,25 @@ mod tests {
                 ..EditorPatchV1::default()
             },
         );
+        request.gesture_id = Some(gesture_id.clone());
 
         let change = store.commit_editor_document(request).unwrap();
 
         assert_eq!(change.result.revision, 1);
         assert_eq!(change.result.changed_fields, vec![EditorField::Keys]);
         assert_eq!(change.event.as_ref().unwrap().origin, "editorCommit");
+        assert_eq!(
+            change.event.as_ref().unwrap().gesture_id.as_deref(),
+            Some(gesture_id.as_str())
+        );
         assert_eq!(store.writer.persist_count(), persist_count + 1);
         let snapshot = store.snapshot();
         assert_eq!(snapshot.editor_revision, 1);
         assert_eq!(snapshot.keys["4key"][0], "StrictKey");
         assert_eq!(snapshot.key_counters["4key"]["StrictKey"], 0);
         assert!(!snapshot.key_counters["4key"].contains_key(&old_key));
+        assert_eq!(change.history_status.unwrap().history_revision, 1);
+        assert!(store.history_status().can_undo);
 
         store.flush_and_shutdown().unwrap();
         drop(store);
@@ -2384,6 +4276,1578 @@ mod tests {
             .data;
         assert_eq!(reloaded.editor_revision, 1);
         assert_eq!(reloaded.keys["4key"][0], "StrictKey");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_commit_history_skips_no_op_and_deduplicates_mutation() {
+        let dir = test_directory("editor-history-recording-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+
+        let no_op = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_dx),
+        );
+        let no_op_change = store.commit_editor_document(no_op).unwrap();
+        assert!(no_op_change.result.changed_fields.is_empty());
+        assert_eq!(store.history_status().history_revision, 0);
+
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_request(0, mutation_id, position_patch(&store, initial_dx + 12.0));
+        let committed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(committed.history_status.unwrap().history_revision, 1);
+
+        let replayed = store.commit_editor_document(request).unwrap();
+        assert!(replayed.replayed);
+        assert!(replayed.history_status.is_none());
+        assert_eq!(store.history_status().history_revision, 1);
+
+        let repeated_value = editor_request(
+            1,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_dx + 12.0),
+        );
+        let repeated_value = store.commit_editor_document(repeated_value).unwrap();
+        assert!(repeated_value.result.changed_fields.is_empty());
+        assert_eq!(store.history_status().history_revision, 1);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_commits_with_the_same_gesture_merge_into_one_history_entry() {
+        let dir = test_directory("editor-history-gesture-merge-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let mut first = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_dx + 4.0),
+        );
+        first.gesture_id = Some(gesture_id.clone());
+        let first = store.commit_editor_document(first).unwrap();
+        assert_eq!(first.history_status.unwrap().history_revision, 1);
+
+        let mut second = editor_request(
+            1,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_dx + 8.0),
+        );
+        second.gesture_id = Some(gesture_id);
+        let second = store.commit_editor_document(second).unwrap();
+        assert_eq!(second.history_status.unwrap().history_revision, 1);
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_dx
+        );
+        assert!(!store.state.read().history.status(false).can_undo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn net_zero_gesture_removes_its_entry_and_exposes_the_lower_history() {
+        let dir = test_directory("editor-history-net-zero-gesture-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let gesture_base_dx = initial_dx + 10.0;
+
+        store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, gesture_base_dx),
+            ))
+            .unwrap();
+
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let mut outward = editor_request(
+            1,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, gesture_base_dx + 5.0),
+        );
+        outward.gesture_id = Some(gesture_id.clone());
+        store.commit_editor_document(outward).unwrap();
+
+        let mut returned = editor_request(
+            2,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, gesture_base_dx),
+        );
+        returned.gesture_id = Some(gesture_id);
+        let returned = store.commit_editor_document(returned).unwrap();
+        let status = returned.history_status.as_ref().unwrap();
+        assert!(status.can_undo);
+        assert_eq!(status.history_revision, 3);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            gesture_base_dx
+        );
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_dx
+        );
+        assert!(!store.state.read().history.status(false).can_undo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn unrecorded_preset_overlap_mutations_clear_redo_only_when_overlap_changes() {
+        let dir = test_directory("history-overlap-redo-invalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+
+        for (index, mutate_css) in [false, true].into_iter().enumerate() {
+            let base_revision = store.editor_get().revision;
+            store
+                .commit_editor_document(editor_request(
+                    base_revision,
+                    uuid::Uuid::new_v4().to_string(),
+                    position_patch(&store, initial_dx + index as f64 + 1.0),
+                ))
+                .unwrap();
+            let operation_id = uuid::Uuid::new_v4().to_string();
+            let gate = store.history_gate();
+            let barrier = gate.close(&operation_id).unwrap();
+            let current_counters = store.snapshot().key_counters;
+            store
+                .apply_history_operation(
+                    HistoryDirection::Undo,
+                    &operation_id,
+                    &current_counters,
+                    || {},
+                )
+                .unwrap();
+            drop(barrier);
+            let before_mutation = store.state.read().history.status(false);
+            assert!(before_mutation.can_redo);
+
+            let transaction = store
+                .commit_history_overlap_mutation(|data| {
+                    if mutate_css {
+                        data.custom_css.content = format!("body {{ opacity: {}; }}", index + 1);
+                    } else {
+                        apply_patch_to_store(
+                            data,
+                            &SettingsPatchInput {
+                                background_color: Some(format!("#{:06x}", index + 1)),
+                                ..SettingsPatchInput::default()
+                            },
+                        );
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            let status = transaction.history_status.as_ref().unwrap();
+            assert!(!status.can_redo);
+            assert_eq!(
+                status.history_revision,
+                before_mutation.history_revision + 1
+            );
+            drop(transaction);
+        }
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn css_watcher_reload_after_undo_preserves_latest_canonical_and_invalidates_redo() {
+        let dir = test_directory("css-watcher-history-interleaving-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let watched_path = "/tmp/dmnote-history-watched.css";
+        store
+            .update(|data| {
+                data.use_custom_css = true;
+                data.custom_css = CustomCss {
+                    path: Some(watched_path.to_string()),
+                    content: "before".to_string(),
+                };
+            })
+            .unwrap();
+
+        let current_counters = store.snapshot().key_counters;
+        let preset = store
+            .commit_preset_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("css_watcher_preset_test".to_string()),
+                &[],
+                current_counters,
+                |data| {
+                    data.custom_css.content = "preset".to_string();
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            preset
+                .change
+                .history_status
+                .as_ref()
+                .unwrap()
+                .history_revision,
+            1
+        );
+        drop(preset);
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&undo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.snapshot().custom_css.content, "before");
+        assert!(store.state.read().history.status(false).can_redo);
+
+        let loaded = ValidatedCssFile {
+            canonical_path: watched_path.to_string(),
+            content: "after-hot-reload".to_string(),
+        };
+        let transaction = commit_css_reload(&store, watched_path, &loaded).unwrap();
+        assert_eq!(
+            transaction.value.0.as_ref().unwrap().content,
+            "after-hot-reload"
+        );
+        let status = transaction.history_status.as_ref().unwrap();
+        assert!(!status.can_redo);
+        drop(transaction);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let redo = store.apply_history_operation(
+            HistoryDirection::Redo,
+            &redo_id,
+            &current_counters,
+            || {},
+        );
+        drop(barrier);
+        assert_eq!(redo.unwrap_err(), "HISTORY_NOTHING_TO_REDO");
+        assert_eq!(store.snapshot().custom_css.content, "after-hot-reload");
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mode_history_records_restores_and_rejects_stale_epoch() {
+        let dir = test_directory("mode-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_mode = store.snapshot().selected_key_type;
+        let next_mode = if initial_mode == "8key" {
+            "4key".to_string()
+        } else {
+            "8key".to_string()
+        };
+
+        let no_op = store
+            .commit_aux_editor_transaction(
+                HistoryScope::Mode,
+                Some(0),
+                EditorCommitOrigin::LegacyAdapter("mode_noop_test".to_string()),
+                &[],
+                |data| Ok(data.selected_key_type.clone()),
+            )
+            .unwrap();
+        assert!(no_op.change.history_status.is_none());
+        drop(no_op);
+        assert_eq!(store.history_status().history_revision, 0);
+
+        let transaction = store
+            .commit_aux_editor_transaction(
+                HistoryScope::Mode,
+                Some(0),
+                EditorCommitOrigin::LegacyAdapter("mode_history_test".to_string()),
+                &[],
+                |data| {
+                    data.selected_key_type = next_mode.clone();
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let recorded = transaction.change.history_status.as_ref().unwrap();
+        assert_eq!(recorded.history_revision, 1);
+        assert_eq!(recorded.history_epoch, 0);
+        assert!(recorded.can_undo);
+        drop(transaction);
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert!(matches!(
+            undo.aux_change,
+            Some(HistoryAuxChange::Mode(ref mode)) if mode == &initial_mode
+        ));
+        assert_eq!(store.snapshot().selected_key_type, initial_mode);
+        assert_eq!(undo.status.history_epoch, 1);
+        assert!(undo.status.can_redo);
+
+        let before_stale = store.snapshot();
+        let before_stale_status = store.history_status();
+        let stale = store
+            .commit_aux_editor_transaction(
+                HistoryScope::Mode,
+                Some(0),
+                EditorCommitOrigin::LegacyAdapter("mode_stale_test".to_string()),
+                &[],
+                |data| {
+                    data.selected_key_type = next_mode;
+                    Ok(())
+                },
+            )
+            .unwrap_err();
+        assert_eq!(
+            stale.error_code,
+            EditorCommitErrorCode::HistoryEpochConflict
+        );
+        assert!(stale.retryable);
+        assert_eq!(
+            stale
+                .details
+                .as_ref()
+                .and_then(|details| details.current_history_epoch),
+            Some(1)
+        );
+        assert_eq!(store.snapshot(), before_stale);
+        let after_stale_status = store.history_status();
+        assert_eq!(
+            after_stale_status.history_revision,
+            before_stale_status.history_revision
+        );
+        assert_eq!(
+            after_stale_status.history_epoch,
+            before_stale_status.history_epoch
+        );
+        assert_eq!(after_stale_status.can_undo, before_stale_status.can_undo);
+        assert_eq!(after_stale_status.can_redo, before_stale_status.can_redo);
+        assert_eq!(after_stale_status.busy, before_stale_status.busy);
+        assert_eq!(after_stale_status.truncated, before_stale_status.truncated);
+        assert!(after_stale_status.status_seq > before_stale_status.status_seq);
+
+        let busy_id = uuid::Uuid::new_v4().to_string();
+        let busy_barrier = gate.close(&busy_id).unwrap();
+        let busy = store
+            .commit_aux_editor_transaction(
+                HistoryScope::Mode,
+                None,
+                EditorCommitOrigin::LegacyAdapter("mode_busy_test".to_string()),
+                &[],
+                |data| Ok(data.selected_key_type.clone()),
+            )
+            .unwrap_err();
+        assert_eq!(busy.error_code, EditorCommitErrorCode::HistoryInProgress);
+        assert!(busy.retryable);
+        drop(busy_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn custom_tabs_history_restores_typed_state_and_editor_revision() {
+        let dir = test_directory("custom-tabs-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.snapshot();
+        let tab = CustomTab {
+            id: "history-custom-tab".to_string(),
+            name: "History Custom Tab".to_string(),
+        };
+        let tab_id = tab.id.clone();
+
+        let transaction = store
+            .commit_aux_editor_transaction(
+                HistoryScope::CustomTabs,
+                None,
+                EditorCommitOrigin::LegacyAdapter("custom_tabs_history_test".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |data| {
+                    data.custom_tabs.push(tab);
+                    data.keys.insert(tab_id.clone(), Vec::new());
+                    data.key_positions.insert(tab_id.clone(), Vec::new());
+                    data.selected_key_type = tab_id;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(transaction.change.result.revision, 1);
+        assert_eq!(
+            transaction.change.result.changed_fields,
+            vec![EditorField::Keys, EditorField::KeyPositions]
+        );
+        assert_eq!(
+            transaction
+                .change
+                .history_status
+                .as_ref()
+                .unwrap()
+                .history_revision,
+            1
+        );
+        let changed = store.snapshot();
+        drop(transaction);
+
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&undo_id).unwrap();
+        let current_counters = changed.key_counters.clone();
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {})
+            .unwrap();
+        drop(barrier);
+        let Some(HistoryAuxChange::CustomTabs {
+            snapshot: restored, ..
+        }) = undo.aux_change.as_ref()
+        else {
+            panic!("custom tabs history change expected");
+        };
+        assert_eq!(restored.custom_tabs, initial.custom_tabs);
+        assert_eq!(restored.selected_key_type, initial.selected_key_type);
+        assert_eq!(restored.document, EditorDocumentV1::from_store(&initial));
+        assert_eq!(restored.key_counters, initial.key_counters);
+        assert_eq!(store.snapshot().editor_revision, 2);
+        assert_eq!(
+            undo.change.as_ref().unwrap().event.as_ref().unwrap().origin,
+            "historyUndo"
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let redo = store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &current_counters, || {})
+            .unwrap();
+        drop(redo_barrier);
+        assert!(matches!(
+            redo.aux_change,
+            Some(HistoryAuxChange::CustomTabs { .. })
+        ));
+        assert_eq!(
+            EditorDocumentV1::from_store(&store.snapshot()),
+            EditorDocumentV1::from_store(&changed)
+        );
+        assert_eq!(store.snapshot().custom_tabs, changed.custom_tabs);
+        assert_eq!(
+            store.snapshot().selected_key_type,
+            changed.selected_key_type
+        );
+        assert_eq!(store.snapshot().editor_revision, 3);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn custom_tab_delete_history_restores_note_css_and_change_projection() {
+        let dir = test_directory("custom-tab-override-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let tab_id = "history-override-tab".to_string();
+        let created_tab_id = tab_id.clone();
+        let create = store
+            .commit_aux_editor_transaction(
+                HistoryScope::CustomTabs,
+                None,
+                EditorCommitOrigin::LegacyAdapter("custom_tab_override_create".to_string()),
+                &[EditorField::Keys, EditorField::KeyPositions],
+                |data| {
+                    data.custom_tabs.push(CustomTab {
+                        id: created_tab_id.clone(),
+                        name: "Override History".to_string(),
+                    });
+                    data.keys.insert(created_tab_id.clone(), Vec::new());
+                    data.key_positions
+                        .insert(created_tab_id.clone(), Vec::new());
+                    data.selected_key_type = created_tab_id;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(create);
+
+        let css = TabCss {
+            path: Some(dir.join("restored.css").to_string_lossy().to_string()),
+            content: ".restored {}".to_string(),
+            enabled: true,
+        };
+        let note = TabNoteSettings::default();
+        store
+            .update(|data| {
+                data.tab_css_overrides.insert(tab_id.clone(), css.clone());
+                data.tab_note_overrides.insert(tab_id.clone(), note.clone());
+            })
+            .unwrap();
+
+        let deleted_tab_id = tab_id.clone();
+        let delete = store
+            .commit_aux_editor_transaction(
+                HistoryScope::CustomTabs,
+                None,
+                EditorCommitOrigin::LegacyAdapter("custom_tab_override_delete".to_string()),
+                &[
+                    EditorField::Keys,
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                    EditorField::LayerGroups,
+                ],
+                |data| {
+                    data.custom_tabs.retain(|tab| tab.id != deleted_tab_id);
+                    data.keys.remove(&deleted_tab_id);
+                    data.key_positions.remove(&deleted_tab_id);
+                    data.stat_positions.remove(&deleted_tab_id);
+                    data.graph_positions.remove(&deleted_tab_id);
+                    data.knob_positions.remove(&deleted_tab_id);
+                    data.layer_groups.remove(&deleted_tab_id);
+                    data.key_counters.remove(&deleted_tab_id);
+                    data.tab_css_overrides.remove(&deleted_tab_id);
+                    data.tab_note_overrides.remove(&deleted_tab_id);
+                    data.selected_key_type = "4key".to_string();
+                    Ok(())
+                },
+            )
+            .unwrap();
+        drop(delete);
+        assert!(!store.snapshot().tab_css_overrides.contains_key(&tab_id));
+        assert!(!store.snapshot().tab_note_overrides.contains_key(&tab_id));
+
+        let other_tab_id = "4key".to_string();
+        let other_css = TabCss {
+            path: Some(dir.join("other.css").to_string_lossy().to_string()),
+            content: ".other {}".to_string(),
+            enabled: false,
+        };
+        let other_note = TabNoteSettings {
+            speed: Some(777),
+            ..TabNoteSettings::default()
+        };
+        store
+            .update(|data| {
+                data.tab_css_overrides
+                    .insert(other_tab_id.clone(), other_css.clone());
+                data.tab_note_overrides
+                    .insert(other_tab_id.clone(), other_note.clone());
+            })
+            .unwrap();
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {})
+            .unwrap();
+        drop(undo_barrier);
+        let Some(HistoryAuxChange::CustomTabs {
+            snapshot,
+            changed_tab_css_ids,
+        }) = undo.aux_change.as_ref()
+        else {
+            panic!("custom tabs history change expected");
+        };
+        assert_eq!(snapshot.tab_css_patch[&tab_id], Some(css.clone()));
+        assert_eq!(snapshot.tab_note_patch[&tab_id], Some(note.clone()));
+        assert_eq!(changed_tab_css_ids, std::slice::from_ref(&tab_id));
+        assert_eq!(store.snapshot().tab_css_overrides[&tab_id], css);
+        assert_eq!(store.snapshot().tab_note_overrides[&tab_id], note);
+        assert_eq!(store.snapshot().tab_css_overrides[&other_tab_id], other_css);
+        assert_eq!(
+            store.snapshot().tab_note_overrides[&other_tab_id],
+            other_note
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let redo = store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &current_counters, || {})
+            .unwrap();
+        drop(redo_barrier);
+        let Some(HistoryAuxChange::CustomTabs {
+            snapshot,
+            changed_tab_css_ids,
+        }) = redo.aux_change.as_ref()
+        else {
+            panic!("custom tabs history change expected");
+        };
+        assert_eq!(snapshot.tab_css_patch[&tab_id], None);
+        assert_eq!(snapshot.tab_note_patch[&tab_id], None);
+        assert_eq!(changed_tab_css_ids, std::slice::from_ref(&tab_id));
+        assert!(!store.snapshot().tab_css_overrides.contains_key(&tab_id));
+        assert!(!store.snapshot().tab_note_overrides.contains_key(&tab_id));
+        assert_eq!(store.snapshot().tab_css_overrides[&other_tab_id], other_css);
+        assert_eq!(
+            store.snapshot().tab_note_overrides[&other_tab_id],
+            other_note
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn preset_full_history_restores_settings_and_preserves_redo_snapshot() {
+        let dir = test_directory("preset-full-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mode = store.snapshot().selected_key_type;
+        let original_key = store.snapshot().keys[&mode][0].clone();
+        let initial_plugin = JsPlugin {
+            id: "initial-plugin".to_string(),
+            name: "Initial Plugin".to_string(),
+            path: None,
+            content: "initial".to_string(),
+            enabled: true,
+        };
+        let initial_font = CustomFont {
+            id: "initial-font".to_string(),
+            font_type: FontType::Web,
+            name: "InitialFont".to_string(),
+            display_name: "Initial Font".to_string(),
+            enabled: true,
+            local_path: None,
+            css_content: Some("initial-font-css".to_string()),
+        };
+        store
+            .update(|data| {
+                data.key_counters
+                    .entry(mode.clone())
+                    .or_default()
+                    .insert(original_key.clone(), 3);
+                data.use_custom_css = false;
+                data.custom_css = CustomCss {
+                    path: Some(dir.join("initial.css").to_string_lossy().to_string()),
+                    content: ".initial {}".to_string(),
+                };
+                data.use_custom_js = false;
+                data.custom_js.path = Some(dir.join("initial.js").to_string_lossy().to_string());
+                data.custom_js.content = "initial();".to_string();
+                data.custom_js.plugins = vec![initial_plugin.clone()];
+                data.font_settings = FontSettings {
+                    custom_fonts: vec![initial_font.clone()],
+                };
+                data.background_color = "#111111".to_string();
+                data.note_settings.speed = 321;
+                data.note_effect = false;
+                data.laboratory_enabled = false;
+                data.tab_note_overrides.insert(
+                    mode.clone(),
+                    TabNoteSettings {
+                        speed: Some(333),
+                        ..TabNoteSettings::default()
+                    },
+                );
+                data.tab_css_overrides.insert(
+                    mode.clone(),
+                    TabCss {
+                        path: Some(dir.join("initial-tab.css").to_string_lossy().to_string()),
+                        content: ".initial-tab {}".to_string(),
+                        enabled: true,
+                    },
+                );
+            })
+            .unwrap();
+        let mut runtime_counters = store.snapshot().key_counters;
+        runtime_counters
+            .entry(mode.clone())
+            .or_default()
+            .insert(original_key.clone(), 11);
+        let mut initial = PresetFullHistorySnapshot::from_store(&store.snapshot());
+        initial.key_counters = runtime_counters.clone();
+
+        let preset_key = "PresetHistoryKey".to_string();
+        let preset_plugin = JsPlugin {
+            id: "preset-plugin".to_string(),
+            name: "Preset Plugin".to_string(),
+            path: None,
+            content: "preset".to_string(),
+            enabled: false,
+        };
+        let preset_font = CustomFont {
+            id: "preset-font".to_string(),
+            font_type: FontType::Web,
+            name: "PresetFont".to_string(),
+            display_name: "Preset Font".to_string(),
+            enabled: true,
+            local_path: None,
+            css_content: Some("preset-font-css".to_string()),
+        };
+        let transaction = store
+            .commit_preset_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("preset_full_history_test".to_string()),
+                &[EditorField::Keys],
+                runtime_counters,
+                |data| {
+                    data.keys.get_mut(&mode).unwrap()[0] = preset_key.clone();
+                    data.use_custom_css = true;
+                    data.custom_css = CustomCss {
+                        path: Some(dir.join("preset.css").to_string_lossy().to_string()),
+                        content: ".preset {}".to_string(),
+                    };
+                    data.use_custom_js = true;
+                    data.custom_js.path = Some(dir.join("preset.js").to_string_lossy().to_string());
+                    data.custom_js.content = "preset();".to_string();
+                    data.custom_js.plugins = vec![preset_plugin.clone()];
+                    data.font_settings = FontSettings {
+                        custom_fonts: vec![preset_font.clone()],
+                    };
+                    data.background_color = "#abcdef".to_string();
+                    data.note_settings.speed = 654;
+                    data.note_effect = true;
+                    data.laboratory_enabled = true;
+                    data.tab_note_overrides.insert(
+                        mode.clone(),
+                        TabNoteSettings {
+                            speed: Some(777),
+                            ..TabNoteSettings::default()
+                        },
+                    );
+                    data.tab_css_overrides.insert(
+                        mode.clone(),
+                        TabCss {
+                            path: Some(dir.join("preset-tab.css").to_string_lossy().to_string()),
+                            content: ".preset-tab {}".to_string(),
+                            enabled: false,
+                        },
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            transaction
+                .change
+                .history_status
+                .as_ref()
+                .unwrap()
+                .history_revision,
+            1
+        );
+        assert_eq!(transaction.change.result.revision, 1);
+        drop(transaction);
+        let preset = PresetFullHistorySnapshot::from_store(&store.snapshot());
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {})
+            .unwrap();
+        drop(undo_barrier);
+        let Some(HistoryAuxChange::PresetFull {
+            snapshot,
+            settings_diff,
+            changed_tab_css_ids,
+        }) = undo.aux_change.as_ref()
+        else {
+            panic!("preset full history change expected");
+        };
+        assert_eq!(snapshot.as_ref(), &initial);
+        assert!(settings_diff.changed.use_custom_css.is_some());
+        assert!(settings_diff.changed.custom_css.is_some());
+        assert!(settings_diff.changed.use_custom_js.is_some());
+        assert!(settings_diff.changed.custom_js.is_some());
+        assert!(settings_diff.changed.font_settings.is_some());
+        assert!(settings_diff.changed.background_color.is_some());
+        assert!(settings_diff.changed.note_settings.is_some());
+        assert!(settings_diff.changed.note_effect.is_some());
+        assert!(settings_diff.changed.laboratory_enabled.is_some());
+        assert_eq!(changed_tab_css_ids, std::slice::from_ref(&mode));
+        assert_eq!(
+            PresetFullHistorySnapshot::from_store(&store.snapshot()),
+            initial
+        );
+        assert_eq!(store.snapshot().editor_revision, 2);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let redo = store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &current_counters, || {})
+            .unwrap();
+        drop(redo_barrier);
+        let Some(HistoryAuxChange::PresetFull {
+            snapshot,
+            settings_diff,
+            changed_tab_css_ids,
+        }) = redo.aux_change.as_ref()
+        else {
+            panic!("preset full redo change expected");
+        };
+        assert_eq!(snapshot.as_ref(), &preset);
+        assert_eq!(
+            settings_diff.changed.background_color.as_deref(),
+            Some("#abcdef")
+        );
+        assert_eq!(changed_tab_css_ids, std::slice::from_ref(&mode));
+        assert_eq!(
+            PresetFullHistorySnapshot::from_store(&store.snapshot()),
+            preset
+        );
+        assert_eq!(store.snapshot().editor_revision, 3);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn oversized_aux_record_truncates_history_after_persisting_mutation() {
+        let dir = test_directory("aux-history-truncation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_mode = store.snapshot().selected_key_type;
+        let next_mode = if initial_mode == "8key" {
+            "4key".to_string()
+        } else {
+            "8key".to_string()
+        };
+        store
+            .state
+            .write()
+            .history
+            .set_limits_for_test(1, 32 * 1024 * 1024, 50);
+
+        let transaction = store
+            .commit_aux_editor_transaction(
+                HistoryScope::Mode,
+                None,
+                EditorCommitOrigin::LegacyAdapter("mode_truncation_test".to_string()),
+                &[],
+                |data| {
+                    data.selected_key_type = next_mode.clone();
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let status = transaction.change.history_status.unwrap();
+
+        assert_eq!(store.snapshot().selected_key_type, next_mode);
+        assert_eq!(status.history_revision, 1);
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        assert_eq!(status.truncated.unwrap().reason, HISTORY_ENTRY_TOO_LARGE);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn history_undo_redo_restore_revision_event_and_reject_stale_commit() {
+        let dir = test_directory("editor-history-undo-redo-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let committed_dx = initial_dx + 18.0;
+        let commit = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, committed_dx),
+        );
+        store.commit_editor_document(commit).unwrap();
+
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&undo_id).unwrap();
+        let cancel_count = std::cell::Cell::new(0);
+        let current_counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {
+                cancel_count.set(cancel_count.get() + 1);
+            })
+            .unwrap();
+        drop(barrier);
+
+        assert_eq!(cancel_count.get(), 1);
+        assert!(!undo.status.busy);
+        assert_eq!(undo.change.as_ref().unwrap().result.revision, 2);
+        assert_eq!(
+            undo.change.as_ref().unwrap().event.as_ref().unwrap().origin,
+            "historyUndo"
+        );
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_dx
+        );
+        assert!(!undo.status.can_undo);
+        assert!(undo.status.can_redo);
+
+        let replay_barrier = gate.close(&undo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let replay = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {
+                cancel_count.set(cancel_count.get() + 1);
+            })
+            .unwrap();
+        drop(replay_barrier);
+        assert!(replay.replayed);
+        assert_eq!(cancel_count.get(), 1);
+        assert_eq!(store.editor_get().revision, 2);
+
+        let stale = editor_request(
+            1,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, committed_dx + 5.0),
+        );
+        let stale_error = store.commit_editor_document(stale).unwrap_err();
+        assert_eq!(
+            stale_error.error_code,
+            EditorCommitErrorCode::RevisionConflict
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let redo = store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &current_counters, || {})
+            .unwrap();
+        drop(redo_barrier);
+        assert_eq!(redo.change.as_ref().unwrap().result.revision, 3);
+        assert_eq!(
+            redo.change.as_ref().unwrap().event.as_ref().unwrap().origin,
+            "historyRedo"
+        );
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            committed_dx
+        );
+        assert!(redo.status.can_undo);
+        assert!(!redo.status.can_redo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn oversized_recorded_commit_clears_history_after_persisting_mutation() {
+        let dir = test_directory("editor-history-truncation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let first = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_dx + 1.0),
+        );
+        store.commit_editor_document(first).unwrap();
+        store
+            .state
+            .write()
+            .history
+            .set_limits_for_test(1, 32 * 1024 * 1024, 50);
+
+        let second = editor_request(
+            1,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_dx + 2.0),
+        );
+        let change = store.commit_editor_document(second).unwrap();
+        let status = change.history_status.unwrap();
+
+        assert_eq!(change.result.revision, 2);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_dx + 2.0
+        );
+        assert_eq!(status.history_revision, 2);
+        assert!(!status.can_undo);
+        assert!(!status.can_redo);
+        assert_eq!(status.truncated.unwrap().reason, "HISTORY_ENTRY_TOO_LARGE");
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_history_undo_does_not_restore_key_counters() {
+        let dir = test_directory("editor-history-counter-scope-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.snapshot();
+        let old_key = before.keys["4key"][0].clone();
+        let new_key = "HistoryCounterScopeKey".to_string();
+        let mut keys = before.keys;
+        keys.get_mut("4key").unwrap()[0] = new_key.clone();
+        let commit = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                keys: Some(keys),
+                ..EditorPatchV1::default()
+            },
+        );
+        store.commit_editor_document(commit).unwrap();
+        let counters_after_commit = store.snapshot().key_counters;
+        assert!(counters_after_commit["4key"].contains_key(&new_key));
+        assert!(!counters_after_commit["4key"].contains_key(&old_key));
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+
+        let restored = store.snapshot();
+        assert_eq!(restored.keys["4key"][0], old_key);
+        assert_eq!(restored.key_counters, counters_after_commit);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn history_undo_rejects_oversized_opposite_without_state_change() {
+        let dir = test_directory("editor-history-undo-budget-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let commit = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_dx + 9.0),
+        );
+        store.commit_editor_document(commit).unwrap();
+        store
+            .state
+            .write()
+            .history
+            .set_limits_for_test(1, 32 * 1024 * 1024, 50);
+        let before_store = store.snapshot();
+        let before_status = store.history_status();
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        assert!(store.history_status().busy);
+        let current_counters = store.snapshot().key_counters;
+        let error = store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap_err();
+        drop(barrier);
+        assert!(!store.history_status().busy);
+
+        assert_eq!(error, "HISTORY_ENTRY_TOO_LARGE");
+        assert_eq!(store.snapshot(), before_store);
+        let after_status = store.history_status();
+        assert_eq!(
+            after_status.history_revision,
+            before_status.history_revision
+        );
+        assert_eq!(after_status.history_epoch, before_status.history_epoch + 1);
+        assert_eq!(after_status.can_undo, before_status.can_undo);
+        assert_eq!(after_status.can_redo, before_status.can_redo);
+        assert_eq!(after_status.truncated, before_status.truncated);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_mutation_is_rejected_while_history_gate_is_closed() {
+        let dir = test_directory("editor-history-admission-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let request = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, 42.0),
+        );
+
+        let error = store.commit_editor_document(request).unwrap_err();
+        assert!(error.retryable);
+        assert_eq!(error.error_code, EditorCommitErrorCode::HistoryInProgress);
+        assert_eq!(
+            serde_json::to_value(&error).unwrap()["errorCode"],
+            "HISTORY_IN_PROGRESS"
+        );
+        drop(barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn strict_commit_revalidates_admission_after_waiting_for_store_lock() {
+        let dir = test_directory("editor-history-admission-revalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = Arc::new(AppStore::initialize_in_dir(&dir).unwrap());
+        let initial_dx = store.editor_get().document.key_positions["4key"][0].dx;
+        let request = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            position_patch(&store, initial_dx + 7.0),
+        );
+        let admission = store.admit_editor_mutation().unwrap();
+        let store_guard = store.state.write();
+        let commit_store = Arc::clone(&store);
+        let (commit_started_tx, commit_started_rx) = mpsc::channel();
+        let commit = thread::spawn(move || {
+            commit_started_tx.send(()).unwrap();
+            commit_store.commit_editor_document_admitted(request, &admission)
+        });
+        commit_started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+
+        let gate = store.history_gate();
+        let barrier_gate = Arc::clone(&gate);
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let (barrier_ready_tx, barrier_ready_rx) = mpsc::channel();
+        let (release_barrier_tx, release_barrier_rx) = mpsc::channel();
+        let barrier = thread::spawn(move || {
+            let lease = barrier_gate.close(&operation_id).unwrap();
+            barrier_ready_tx.send(()).unwrap();
+            release_barrier_rx.recv().unwrap();
+            drop(lease);
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !gate.is_closed() {
+            assert!(Instant::now() < deadline, "history gate did not close");
+            thread::yield_now();
+        }
+        assert!(matches!(
+            barrier_ready_rx.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+
+        drop(store_guard);
+        let error = commit.join().unwrap().unwrap_err();
+        assert_eq!(error.error_code, EditorCommitErrorCode::HistoryInProgress);
+        assert!(error.retryable);
+        barrier_ready_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+        release_barrier_tx.send(()).unwrap();
+        barrier.join().unwrap();
+
+        assert_eq!(store.editor_get().revision, 0);
+        assert_eq!(store.history_status().history_revision, 0);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn aux_mutation_revalidates_admission_after_waiting_for_store_lock() {
+        let dir = test_directory("aux-history-admission-revalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = Arc::new(AppStore::initialize_in_dir(&dir).unwrap());
+        let initial_mode = store.snapshot().selected_key_type;
+        let next_mode = if initial_mode == "8key" {
+            "4key".to_string()
+        } else {
+            "8key".to_string()
+        };
+        let store_guard = store.state.write();
+        let mutation_store = Arc::clone(&store);
+        let (mutation_started_tx, mutation_started_rx) = mpsc::channel();
+        let mutation = thread::spawn(move || {
+            mutation_started_tx.send(()).unwrap();
+            mutation_store.commit_aux_editor_transaction(
+                HistoryScope::Mode,
+                None,
+                EditorCommitOrigin::LegacyAdapter("aux_revalidation_test".to_string()),
+                &[],
+                |data| {
+                    data.selected_key_type = next_mode;
+                    Ok(())
+                },
+            )
+        });
+        mutation_started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+
+        let gate = store.history_gate();
+        let admission_deadline = Instant::now() + Duration::from_secs(2);
+        while gate.active_mutations() == 0 {
+            assert!(
+                Instant::now() < admission_deadline,
+                "aux mutation was not admitted"
+            );
+            thread::yield_now();
+        }
+        let barrier_gate = Arc::clone(&gate);
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let (barrier_ready_tx, barrier_ready_rx) = mpsc::channel();
+        let (release_barrier_tx, release_barrier_rx) = mpsc::channel();
+        let barrier = thread::spawn(move || {
+            let lease = barrier_gate.close(&operation_id).unwrap();
+            barrier_ready_tx.send(()).unwrap();
+            release_barrier_rx.recv().unwrap();
+            drop(lease);
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !gate.is_closed() {
+            assert!(Instant::now() < deadline, "history gate did not close");
+            thread::yield_now();
+        }
+        assert!(matches!(
+            barrier_ready_rx.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+
+        drop(store_guard);
+        let error = mutation.join().unwrap().unwrap_err();
+        assert_eq!(error.error_code, EditorCommitErrorCode::HistoryInProgress);
+        assert!(error.retryable);
+        barrier_ready_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+        release_barrier_tx.send(()).unwrap();
+        barrier.join().unwrap();
+
+        assert_eq!(store.snapshot().selected_key_type, initial_mode);
+        assert_eq!(store.history_status().history_revision, 0);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn css_watcher_reload_revalidates_after_waiting_for_store_lock() {
+        let dir = test_directory("css-watcher-admission-revalidation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = Arc::new(AppStore::initialize_in_dir(&dir).unwrap());
+        let watched_path = "/tmp/dmnote-watcher-revalidation.css";
+        store
+            .update(|data| {
+                data.use_custom_css = true;
+                data.custom_css = CustomCss {
+                    path: Some(watched_path.to_string()),
+                    content: "before".to_string(),
+                };
+            })
+            .unwrap();
+        let store_guard = store.state.write();
+        let mutation_store = Arc::clone(&store);
+        let loaded = ValidatedCssFile {
+            canonical_path: watched_path.to_string(),
+            content: "blocked-reload".to_string(),
+        };
+        let mutation =
+            thread::spawn(move || commit_css_reload(&mutation_store, watched_path, &loaded));
+
+        let gate = store.history_gate();
+        let admission_deadline = Instant::now() + Duration::from_secs(2);
+        while gate.active_mutations() == 0 {
+            assert!(
+                Instant::now() < admission_deadline,
+                "CSS watcher reload was not admitted"
+            );
+            thread::yield_now();
+        }
+        let barrier_gate = Arc::clone(&gate);
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let (barrier_ready_tx, barrier_ready_rx) = mpsc::channel();
+        let (release_barrier_tx, release_barrier_rx) = mpsc::channel();
+        let barrier = thread::spawn(move || {
+            let lease = barrier_gate.close(&operation_id).unwrap();
+            barrier_ready_tx.send(()).unwrap();
+            release_barrier_rx.recv().unwrap();
+            drop(lease);
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !gate.is_closed() {
+            assert!(Instant::now() < deadline, "history gate did not close");
+            thread::yield_now();
+        }
+        assert!(matches!(
+            barrier_ready_rx.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+
+        drop(store_guard);
+        let error = mutation.join().unwrap().unwrap_err();
+        assert_eq!(error.error_code, EditorCommitErrorCode::HistoryInProgress);
+        assert!(error.retryable);
+        barrier_ready_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+        release_barrier_tx.send(()).unwrap();
+        barrier.join().unwrap();
+
+        assert_eq!(store.snapshot().custom_css.content, "before");
+        assert_eq!(store.state.read().history.history_revision(), 0);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn legacy_keys_publication_drains_before_history_restore() {
+        let dir = test_directory("legacy-editor-publication-drain-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let state =
+            Arc::new(AppState::initialize(AppStore::initialize_in_dir(&dir).unwrap()).unwrap());
+        let initial = state.store.snapshot();
+        let mode = initial.selected_key_type.clone();
+        let original_key = initial.keys[&mode][0].clone();
+
+        let mut strict_keys = initial.keys.clone();
+        strict_keys.get_mut(&mode).unwrap()[0] = "StrictHistoryKey".to_string();
+        state
+            .store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    keys: Some(strict_keys),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+
+        let legacy_key = "LegacyPublishedKey".to_string();
+        let mut legacy_keys = state.store.snapshot().keys;
+        legacy_keys.get_mut(&mode).unwrap()[0] = legacy_key.clone();
+        let transaction = state
+            .store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("legacy_publish_test".to_string()),
+                &[EditorField::Keys],
+                move |data| {
+                    data.keys = legacy_keys;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let expected_counters = transaction.change.key_counters.clone();
+
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let (runtime_started_tx, runtime_started_rx) = mpsc::channel();
+        let (release_runtime_tx, release_runtime_rx) = mpsc::channel();
+        let emitter = TestCounterEmitter::blocking_snapshot(
+            Arc::clone(&events),
+            mode.clone(),
+            legacy_key.clone(),
+            runtime_started_tx,
+            release_runtime_rx,
+        );
+        let publisher_state = Arc::clone(&state);
+        let publisher_events = Arc::clone(&events);
+        let publisher = thread::spawn(move || {
+            publisher_state
+                .apply_committed_editor_key_runtime(
+                    &emitter,
+                    transaction.change.runtime_publication_generation,
+                    &transaction.change.document.keys,
+                    &transaction.change.selected_key_type,
+                    &transaction.change.key_counters,
+                )
+                .unwrap();
+            publisher_events
+                .lock()
+                .unwrap()
+                .push("legacy:published".to_string());
+            drop(transaction);
+        });
+        runtime_started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+
+        let gate = state.store.history_gate();
+        let undo_gate = Arc::clone(&gate);
+        let undo_state = Arc::clone(&state);
+        let undo_events = Arc::clone(&events);
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let (undo_done_tx, undo_done_rx) = mpsc::channel();
+        let undo = thread::spawn(move || {
+            let barrier = undo_gate.close(&operation_id).unwrap();
+            let counter_guard = undo_state.lock_key_counters_for_history();
+            let current_counters = counter_guard.clone();
+            let outcome = undo_state
+                .store
+                .apply_history_operation(
+                    HistoryDirection::Undo,
+                    &operation_id,
+                    &current_counters,
+                    || {},
+                )
+                .unwrap();
+            let change = outcome.change.as_ref().unwrap();
+            undo_state.apply_committed_editor_keys_without_counters(
+                outcome.runtime_publication_generation,
+                &change.document.keys,
+                &change.selected_key_type,
+            );
+            undo_events
+                .lock()
+                .unwrap()
+                .push("undo:restored".to_string());
+            drop(counter_guard);
+            drop(barrier);
+            undo_done_tx.send(()).unwrap();
+            outcome
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !gate.is_closed() {
+            assert!(Instant::now() < deadline, "history gate did not close");
+            thread::yield_now();
+        }
+        assert!(matches!(
+            undo_done_rx.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+
+        release_runtime_tx.send(()).unwrap();
+        publisher.join().unwrap();
+        undo_done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let outcome = undo.join().unwrap();
+
+        assert_eq!(outcome.change.unwrap().result.revision, 3);
+        assert_eq!(state.store.snapshot().keys[&mode][0], original_key);
+        assert_eq!(state.snapshot_key_counters(), expected_counters);
+        assert!(state.keyboard.register_key_down(&mode, &original_key));
+        assert!(!state.keyboard.register_key_down(&mode, &legacy_key));
+        assert_eq!(
+            *events.lock().unwrap(),
+            vec![
+                "snapshot:0".to_string(),
+                "legacy:published".to_string(),
+                "undo:restored".to_string(),
+            ]
+        );
+
+        state.shutdown();
+        drop(state);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn stale_key_publisher_cannot_overwrite_newer_counter_runtime() {
+        let dir = test_directory("stale-key-counter-publication-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = AppState::initialize(AppStore::initialize_in_dir(&dir).unwrap()).unwrap();
+        let initial = state.store.snapshot();
+        let mode = initial.selected_key_type.clone();
+        let old_key = initial.keys[&mode][0].clone();
+        let new_key = "PublicationOrderedKey".to_string();
+        let mut changed_keys = initial.keys;
+        changed_keys.get_mut(&mode).unwrap()[0] = new_key.clone();
+
+        let stale_transaction = state
+            .store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("stale_key_publisher_test".to_string()),
+                &[EditorField::Keys],
+                move |data| {
+                    data.keys = changed_keys;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert!(state.keyboard.register_key_down(&mode, &old_key));
+        assert!(!state.keyboard.register_key_down(&mode, &new_key));
+
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let counter_emitter =
+            TestCounterEmitter::new(Arc::clone(&events), mode.clone(), new_key.clone());
+        let mut newer_counters = state.snapshot_key_counters();
+        newer_counters.remove(&mode);
+        newer_counters.insert(mode.clone(), [(new_key.clone(), 9)].into_iter().collect());
+        let counter_mutation = state
+            .replace_key_counters(&counter_emitter, newer_counters, None)
+            .unwrap();
+        assert_eq!(counter_mutation.counters[&mode][&new_key], 9);
+        drop(counter_mutation);
+        events.lock().unwrap().clear();
+
+        let stale_emitter =
+            TestCounterEmitter::new(Arc::clone(&events), mode.clone(), new_key.clone());
+        state
+            .apply_committed_editor_key_runtime(
+                &stale_emitter,
+                stale_transaction.change.runtime_publication_generation,
+                &stale_transaction.change.document.keys,
+                &stale_transaction.change.selected_key_type,
+                &stale_transaction.change.key_counters,
+            )
+            .unwrap();
+        drop(stale_transaction);
+
+        assert_eq!(state.snapshot_key_counters()[&mode][&new_key], 9);
+        assert_eq!(state.store.snapshot().key_counters[&mode][&new_key], 9);
+        assert!(state.keyboard.register_key_down(&mode, &new_key));
+        assert!(!state.keyboard.register_key_down(&mode, &old_key));
+        assert!(events.lock().unwrap().is_empty());
+
+        state.shutdown();
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -3236,115 +6700,6 @@ mod tests {
     }
 
     #[test]
-    fn history_restore_commits_all_core_state_once_and_fails_closed() {
-        let dir = test_directory("history-restore-transaction-test");
-        std::fs::create_dir_all(&dir).unwrap();
-        let store = AppStore::initialize_in_dir(&dir).unwrap();
-        store
-            .set_plugin_data("history_fixture", json!({ "kept": true }))
-            .unwrap();
-        let before = store.snapshot();
-        let persist_count = store.writer.persist_count();
-        let mut document = EditorDocumentV1::from_store(&before);
-        document.key_positions.get_mut("4key").unwrap()[0].dx = 456.0;
-        let mut counters = before.key_counters.clone();
-        let first_key = before.keys["4key"][0].clone();
-        counters
-            .get_mut("4key")
-            .unwrap()
-            .insert(first_key.clone(), 77);
-        let mut tab_note_overrides = HashMap::new();
-        tab_note_overrides.insert(
-            "4key".to_string(),
-            TabNoteSettings {
-                speed: Some(777),
-                ..TabNoteSettings::default()
-            },
-        );
-
-        let transaction = store
-            .restore_editor_history(EditorHistoryRestoreRequest {
-                base_revision: before.editor_revision,
-                document,
-                custom_tabs: before.custom_tabs.clone(),
-                selected_key_type: before.selected_key_type.clone(),
-                key_counters: Some(counters),
-                settings_patch: Some(SettingsPatchInput {
-                    background_color: Some("#123456".to_string()),
-                    ..SettingsPatchInput::default()
-                }),
-                tab_note_overrides: Some(tab_note_overrides),
-            })
-            .unwrap();
-
-        assert_eq!(store.writer.persist_count(), persist_count + 1);
-        assert_eq!(
-            transaction.change.result.revision,
-            before.editor_revision + 1
-        );
-        assert_eq!(
-            transaction.change.result.changed_fields,
-            vec![EditorField::KeyPositions]
-        );
-        assert!(transaction.value.is_some());
-        let committed = store.snapshot();
-        assert_eq!(committed.key_positions["4key"][0].dx, 456.0);
-        assert_eq!(committed.key_counters["4key"][&first_key], 77);
-        assert_eq!(committed.background_color, "#123456");
-        assert_eq!(committed.tab_note_overrides["4key"].speed, Some(777));
-        assert_eq!(committed.plugin_data["history_fixture"]["kept"], true);
-
-        let before_failure = store.snapshot();
-        let disk_before_failure = std::fs::read(dir.join("store.json")).unwrap();
-        let mut failed_document = EditorDocumentV1::from_store(&before_failure);
-        failed_document.key_positions.get_mut("4key").unwrap()[0].dx = 999.0;
-        store.writer.fail_next_persist();
-        let failed = store.restore_editor_history(EditorHistoryRestoreRequest {
-            base_revision: before_failure.editor_revision,
-            document: failed_document.clone(),
-            custom_tabs: before_failure.custom_tabs.clone(),
-            selected_key_type: before_failure.selected_key_type.clone(),
-            key_counters: None,
-            settings_patch: Some(SettingsPatchInput {
-                background_color: Some("#FFFFFF".to_string()),
-                ..SettingsPatchInput::default()
-            }),
-            tab_note_overrides: None,
-        });
-
-        assert_eq!(
-            failed.unwrap_err().error_code,
-            EditorCommitErrorCode::IoError
-        );
-        assert_eq!(store.snapshot(), before_failure);
-        assert_eq!(
-            std::fs::read(dir.join("store.json")).unwrap(),
-            disk_before_failure
-        );
-
-        let persist_count = store.writer.persist_count();
-        let stale = store.restore_editor_history(EditorHistoryRestoreRequest {
-            base_revision: before_failure.editor_revision - 1,
-            document: failed_document,
-            custom_tabs: before_failure.custom_tabs.clone(),
-            selected_key_type: before_failure.selected_key_type.clone(),
-            key_counters: None,
-            settings_patch: None,
-            tab_note_overrides: None,
-        });
-        assert_eq!(
-            stale.unwrap_err().error_code,
-            EditorCommitErrorCode::RevisionConflict
-        );
-        assert_eq!(store.writer.persist_count(), persist_count);
-        assert_eq!(store.snapshot(), before_failure);
-
-        store.flush_and_shutdown().unwrap();
-        drop(store);
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn failed_preset_style_commit_keeps_revision_and_key_runtime_unchanged() {
         let dir = test_directory("preset-runtime-failure-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -3605,6 +6960,29 @@ mod tests {
     }
 
     #[test]
+    fn panel_bounds_persist_and_restore_across_store_reopen() {
+        let dir = test_directory("panel-bounds-persist-test");
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let bounds = PanelBounds {
+            x: 31.0,
+            y: 47.0,
+            height: 512.0,
+        };
+
+        store
+            .update_deferred(|state| state.panel_bounds = Some(bounds))
+            .unwrap();
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+
+        let reopened = AppStore::initialize_in_dir(&dir).unwrap();
+        assert_eq!(reopened.snapshot().panel_bounds, Some(bounds));
+        reopened.flush_and_shutdown().unwrap();
+        drop(reopened);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn regular_update_commits_pending_deferred_state() {
         let dir = test_directory("store-deferred-regular-update-test");
         let store = AppStore::initialize_in_dir(&dir).unwrap();
@@ -3808,7 +7186,7 @@ mod tests {
         state.store.writer.fail_next_persist();
         let emitter = TestCounterEmitter::new(Arc::new(Mutex::new(Vec::new())), mode, key);
 
-        assert!(state.reset_key_counters(&emitter).is_err());
+        assert!(state.reset_key_counters(&emitter, None).is_err());
         assert_eq!(state.snapshot_key_counters(), before_runtime);
         assert_eq!(state.store.snapshot(), before_store);
         assert_eq!(std::fs::read(dir.join("store.json")).unwrap(), before_disk);
@@ -3846,8 +7224,9 @@ mod tests {
             release_snapshot_rx,
         ));
         let reset_state = Arc::clone(&state);
-        let reset_handle =
-            std::thread::spawn(move || reset_state.reset_key_counters(reset_emitter.as_ref()));
+        let reset_handle = std::thread::spawn(move || {
+            reset_state.reset_key_counters(reset_emitter.as_ref(), None)
+        });
         snapshot_emitted_rx
             .recv_timeout(Duration::from_secs(3))
             .unwrap();
@@ -3879,7 +7258,7 @@ mod tests {
 
         release_snapshot_tx.send(()).unwrap();
         let reset_snapshot = reset_handle.join().unwrap().unwrap();
-        assert_eq!(reset_snapshot[&mode][&key], 0);
+        assert_eq!(reset_snapshot.counters[&mode][&key], 0);
         assert_eq!(
             increment_done_rx
                 .recv_timeout(Duration::from_secs(3))
@@ -3889,6 +7268,146 @@ mod tests {
         increment_handle.join().unwrap();
         assert_eq!(*events.lock().unwrap(), vec!["snapshot:0", "counter:1"]);
         assert_eq!(state.snapshot_key_counters()[&mode][&key], 1);
+
+        state.shutdown();
+        drop(state);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn queued_increment_survives_same_generation_noop_key_publication() {
+        let dir = test_directory("counter-history-queue-test");
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let snapshot = store.snapshot();
+        let mode = snapshot.selected_key_type.clone();
+        let key = snapshot.keys[&mode][0].clone();
+        store
+            .update(|data| {
+                data.key_counter_enabled = true;
+            })
+            .unwrap();
+        let state = Arc::new(AppState::initialize(store).unwrap());
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mutation_emitter =
+            TestCounterEmitter::new(Arc::clone(&events), mode.clone(), key.clone());
+        let mut changed_counters = state.snapshot_key_counters();
+        changed_counters
+            .entry(mode.clone())
+            .or_default()
+            .insert(key.clone(), 7);
+        let mutation = state
+            .replace_key_counters(&mutation_emitter, changed_counters, Some(0))
+            .unwrap();
+        assert_eq!(mutation.counters[&mode][&key], 7);
+        assert_eq!(
+            mutation.history_status.as_ref().unwrap().history_revision,
+            1
+        );
+        drop(mutation);
+        events.lock().unwrap().clear();
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = state.store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        state.begin_counter_history_barrier();
+        let mut counter_guard = state.lock_key_counters_for_history();
+        let current_counters = counter_guard.clone();
+        let undo = state
+            .store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &operation_id,
+                &current_counters,
+                || {},
+            )
+            .unwrap();
+        let Some(HistoryAuxChange::Counters(restored)) = undo.aux_change.as_ref() else {
+            panic!("counter history change expected");
+        };
+        state.replace_history_counters_locked(
+            &mut counter_guard,
+            undo.runtime_publication_generation,
+            restored,
+        );
+        assert_eq!(counter_guard[&mode][&key], 0);
+
+        let increment_state = Arc::clone(&state);
+        let increment_mode = mode.clone();
+        let increment_key = key.clone();
+        let increment_events = Arc::clone(&events);
+        let (increment_done_tx, increment_done_rx) = mpsc::channel();
+        let increment = thread::spawn(move || {
+            let emitter = TestCounterEmitter::new(
+                increment_events,
+                increment_mode.clone(),
+                increment_key.clone(),
+            );
+            let count = increment_state.increment_key_counter_and_emit(
+                &emitter,
+                &increment_mode,
+                &increment_key,
+            );
+            increment_done_tx.send(count).unwrap();
+        });
+        assert_eq!(
+            increment_done_rx
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap(),
+            None
+        );
+        increment.join().unwrap();
+        assert!(events.lock().unwrap().is_empty());
+
+        let history_emitter =
+            TestCounterEmitter::new(Arc::clone(&events), mode.clone(), key.clone());
+        state.finish_counter_history_barrier(
+            &history_emitter,
+            counter_guard,
+            true,
+            undo.runtime_publication_generation,
+        );
+        drop(barrier);
+
+        assert_eq!(state.snapshot_key_counters()[&mode][&key], 1);
+        assert_eq!(state.store.snapshot().key_counters[&mode][&key], 0);
+        assert_eq!(*events.lock().unwrap(), vec!["snapshot:1"]);
+        assert_eq!(undo.status.history_epoch, 1);
+        assert!(undo.status.can_redo);
+
+        let noop = state
+            .store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter(
+                    "same_generation_noop_key_publication".to_string(),
+                ),
+                &[EditorField::Keys],
+                |_| Ok(()),
+            )
+            .unwrap();
+        assert!(noop.change.result.changed_fields.is_empty());
+        assert_eq!(
+            noop.change.runtime_publication_generation,
+            undo.runtime_publication_generation
+        );
+        assert_eq!(noop.change.key_counters[&mode][&key], 0);
+        state
+            .apply_committed_editor_key_runtime(
+                &history_emitter,
+                noop.change.runtime_publication_generation,
+                &noop.change.document.keys,
+                &noop.change.selected_key_type,
+                &noop.change.key_counters,
+            )
+            .unwrap();
+        state.apply_committed_editor_keys_without_counters(
+            noop.change.runtime_publication_generation,
+            &noop.change.document.keys,
+            &noop.change.selected_key_type,
+        );
+        drop(noop);
+
+        assert_eq!(state.snapshot_key_counters()[&mode][&key], 1);
+        assert_eq!(*events.lock().unwrap(), vec!["snapshot:1"]);
 
         state.shutdown();
         drop(state);

@@ -1,3 +1,4 @@
+import { usePressAction } from '@hooks/usePressAction';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Checkbox from '@components/main/common/Checkbox';
 import TabSwitch from '@components/main/common/TabSwitch';
@@ -439,6 +440,10 @@ const NoteSetting = ({
     </div>
   );
 
+  // 입력 blur·IME flush와의 경합으로 첫 click이 유실되는 것을 방어
+  const savePress = usePressAction(handleSave);
+  const cancelPress = usePressAction(onClose);
+
   return (
     <Modal onClick={onClose} ariaLabel={title ?? t('keySetting.tabNote')}>
       <div
@@ -484,13 +489,13 @@ const NoteSetting = ({
 
         <div className="flex gap-[8px] mt-[12px]">
           <button
-            onClick={handleSave}
+            {...savePress}
             className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('noteSetting.save')}
           </button>
           <button
-            onClick={onClose}
+            {...cancelPress}
             className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('noteSetting.cancel')}

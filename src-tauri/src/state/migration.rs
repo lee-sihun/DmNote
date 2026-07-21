@@ -31,6 +31,7 @@ use crate::{
 const LEGACY_OVERLAY_WIDTH: f64 = 860.0;
 const LEGACY_OVERLAY_HEIGHT: f64 = 320.0;
 const APP_DATA_MARKER: &str = "com.dmnote.desktop";
+const LEGACY_PANEL_DETACH_ENABLED_KEY: &str = "panelDetachEnabled";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AssetCategory {
@@ -83,6 +84,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                                     .map(|c| !c.trim().is_empty())
                                     .unwrap_or(false)
                         });
+                    needs_persist |= remove_legacy_panel_detach_setting(&mut data);
                     let active_css_path = data.custom_css.path.clone();
                     needs_persist |= migrate_custom_css_history_at_load(
                         &mut data.custom_css_history,
@@ -783,6 +785,7 @@ fn has_convertible_note_border_color(data: &AppStoreData) -> bool {
 
 /// store 데이터 정규화 및 레거시 마이그레이션 적용
 pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
+    remove_legacy_panel_detach_setting(&mut data);
     normalize_custom_css_history(&mut data.custom_css_history);
     repair_editor_revision(&mut data);
 
@@ -863,6 +866,12 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     let _ = data.custom_js.normalize();
 
     data
+}
+
+fn remove_legacy_panel_detach_setting(data: &mut AppStoreData) -> bool {
+    data.plugin_data
+        .remove(LEGACY_PANEL_DETACH_ENABLED_KEY)
+        .is_some()
 }
 
 pub(crate) fn canonicalize_gradient_pairs(data: &mut AppStoreData) -> (bool, bool) {
@@ -1843,6 +1852,7 @@ mod tests {
         load_store_from_path, migrate_local_fonts_to_app_data, migrate_sound_library_enabled,
         normalize_state, parse_portable_asset_reference, rehome_foreign_asset_references,
         rgba_to_hex, AssetCategory, LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH,
+        LEGACY_PANEL_DETACH_ENABLED_KEY,
     };
     use crate::{
         defaults::{default_keys, default_positions},
@@ -1924,6 +1934,56 @@ mod tests {
             .unwrap_or_else(|error| panic!("Tauri {version} fixture must load: {error:#}"));
         let _ = std::fs::remove_file(path);
         loaded.data
+    }
+
+    #[test]
+    fn legacy_panel_detach_setting_is_removed_without_touching_plugin_data() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-panel-detach-setting-migration-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let data = normalize_state(AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        });
+        let mut raw = serde_json::to_value(data).unwrap();
+        let raw_object = raw.as_object_mut().unwrap();
+        raw_object.insert(
+            LEGACY_PANEL_DETACH_ENABLED_KEY.to_string(),
+            serde_json::json!(false),
+        );
+        raw_object.insert(
+            "plugin_data_fixture/settings".to_string(),
+            serde_json::json!({ "kept": true }),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+        assert!(!loaded
+            .data
+            .plugin_data
+            .contains_key(LEGACY_PANEL_DETACH_ENABLED_KEY));
+        assert_eq!(
+            loaded.data.plugin_data["plugin_data_fixture/settings"]["kept"],
+            true
+        );
+
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert!(!reloaded
+            .data
+            .plugin_data
+            .contains_key(LEGACY_PANEL_DETACH_ENABLED_KEY));
+        assert_eq!(
+            reloaded.data.plugin_data["plugin_data_fixture/settings"]["kept"],
+            true
+        );
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

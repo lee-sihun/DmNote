@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import type { PluginSettingsDefinition } from '@src/types/plugin/api';
 import {
   LAYER_PANEL_TABS,
+  TABS,
   type LayerPanelTabType,
+  type TabType,
 } from '@components/main/Grid/PropertiesPanel/types';
 
 export type PluginSettingsPanelPayload = {
@@ -29,6 +31,9 @@ interface PropertiesPanelState {
   // 캔버스 패널 (레이어 패널) 탭 상태
   canvasPanelActiveTab: LayerPanelTabType;
   setCanvasPanelActiveTab: (tab: LayerPanelTabType) => void;
+
+  propertyPanelActiveTab: TabType;
+  setPropertyPanelActiveTab: (tab: TabType) => void;
 
   // 캔버스 사이드 패널(속성 패널) 열림 상태
   isCanvasPanelOpen: boolean;
@@ -68,6 +73,9 @@ export const usePropertiesPanelStore = create<PropertiesPanelState>(
     // 캔버스 패널 탭 상태
     canvasPanelActiveTab: LAYER_PANEL_TABS.LAYER,
     setCanvasPanelActiveTab: (tab) => set({ canvasPanelActiveTab: tab }),
+
+    propertyPanelActiveTab: TABS.STYLE,
+    setPropertyPanelActiveTab: (tab) => set({ propertyPanelActiveTab: tab }),
 
     isCanvasPanelOpen: false,
     setCanvasPanelOpen: (value) => set({ isCanvasPanelOpen: value }),

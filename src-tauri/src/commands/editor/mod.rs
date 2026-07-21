@@ -1,4 +1,7 @@
 pub mod css;
+pub mod history;
 pub mod js;
 pub mod note_tab;
+pub mod preview;
+pub mod selection;
 pub mod state;

@@ -46,6 +46,10 @@ export interface NumberInputProps {
   value: number | string;
   onChange: (value: number) => void;
   onBlur?: () => void;
+  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
+  onPreview?: (value: number) => void;
+  /** Escape 원복 시 호출 (게스처 취소 연동) */
+  onCancel?: () => void;
   min?: number;
   max?: number;
   prefix?: string;
@@ -61,6 +65,10 @@ export interface OptionalNumberInputProps {
   value?: number;
   onChange: (value?: number) => void;
   onBlur?: () => void;
+  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
+  onPreview?: (value?: number) => void;
+  /** Escape 원복 시 호출 (게스처 취소 연동) */
+  onCancel?: () => void;
   min?: number;
   max?: number;
   prefix?: string;
@@ -109,7 +117,11 @@ export interface ToggleSwitchProps {
 export interface TextInputProps {
   value: string;
   onChange: (value: string) => void;
-  onBlur?: () => void;
+  onBlur?: (value: string) => void;
+  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
+  onPreview?: (value: string) => void;
+  /** Escape 원복 시 호출 (게스처 취소 연동) */
+  onCancel?: () => void;
   placeholder?: string;
   width?: string;
   isMixed?: boolean;

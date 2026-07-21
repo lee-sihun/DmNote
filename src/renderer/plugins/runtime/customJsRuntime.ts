@@ -12,6 +12,9 @@
  * - api/: defineElement, defineSettings 등 플러그인 API
  */
 
+import { pluginRpcApi } from '@api/modules/pluginRpcApi';
+import { setPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
+import { noteBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
@@ -45,8 +48,20 @@ export function createCustomJsRuntime(): CustomJsRuntime {
 
   // 전역 플래그: removeAll/injectAll 실행 중에는 저장 비활성화
   let isReloading = false;
+  const reloadSettledWaiters = new Set<() => void>();
 
   const getIsReloading = () => isReloading;
+  const setReloading = (next: boolean) => {
+    isReloading = next;
+    if (next) return;
+    const waiters = [...reloadSettledWaiters];
+    reloadSettledWaiters.clear();
+    waiters.forEach((resolve) => resolve());
+  };
+  const waitForReloadEnd = (): Promise<void> => {
+    if (!isReloading) return Promise.resolve();
+    return new Promise((resolve) => reloadSettledWaiters.add(resolve));
+  };
 
   const safeRun = (fn?: () => void, label?: string) => {
     if (typeof fn !== 'function') return;
@@ -155,6 +170,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
         pluginId,
         registerCleanup: (cleanup) => registerCleanup(pluginId, cleanup),
         isReloading: getIsReloading,
+        waitForReloadEnd,
       });
 
       // 플러그인용 Window 프록시 생성
@@ -253,25 +269,63 @@ ${plugin.content}
     }
   };
 
+  // main = 플러그인 단일 authority - 재주입 경계마다 generation 전진
+  // reset 완료(새 generation 설치) 후에만 주입해 이전 generation 요청이
+  // 새 runtime에 수용되거나 낡은 generation 스냅샷이 공개되지 않게 함
+  const resetPluginAuthorityForRuntime = async (): Promise<boolean> => {
+    if (window.__dmn_window_type !== 'main' || window.__dmn_runtime === 'obs') {
+      return true;
+    }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const snapshot = await pluginRpcApi.authorityReset();
+        setPluginAuthorityGeneration(snapshot.authorityGeneration);
+        noteBackendPluginRevision(snapshot.modelRevision);
+        return true;
+      } catch (error) {
+        console.error('Failed to reset plugin authority', error);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+    return false;
+  };
+
+  // 재주입 세대 - reset 대기 중 다음 injectAll이 시작되면 이전 세대 주입을 중단
+  let injectGeneration = 0;
+
   const injectAll = () => {
-    isReloading = true;
+    setReloading(true);
     setInitialLoading(true);
     removeAll();
-    if (!enabled) {
-      isReloading = false;
-      setInitialLoading(false);
-      return;
-    }
+    injectGeneration += 1;
+    const generation = injectGeneration;
 
-    currentPlugins
-      .filter((plugin) => plugin.enabled && plugin.content)
-      .forEach((plugin) => injectPlugin(plugin));
+    void resetPluginAuthorityForRuntime().then((resetOk) => {
+      if (disposed || generation !== injectGeneration) return;
+      if (!resetOk) {
+        // fail-closed - 이전 세대 요청·세션이 새 runtime에 유효로 남지 않게 주입 중단
+        console.error('Skipping plugin injection: authority reset failed');
+        setReloading(false);
+        setInitialLoading(false);
+        return;
+      }
+      if (!enabled) {
+        setReloading(false);
+        setInitialLoading(false);
+        return;
+      }
 
-    // 모든 플러그인의 복원이 완료될 때까지 딜레이 후 리로드 플래그 해제
-    setTimeout(() => {
-      isReloading = false;
-      setInitialLoading(false);
-    }, 100);
+      currentPlugins
+        .filter((plugin) => plugin.enabled && plugin.content)
+        .forEach((plugin) => injectPlugin(plugin));
+
+      // 모든 플러그인의 복원이 완료될 때까지 딜레이 후 리로드 플래그 해제
+      setTimeout(() => {
+        if (generation !== injectGeneration) return;
+        setReloading(false);
+        setInitialLoading(false);
+      }, 100);
+    });
   };
 
   const syncPlugins = (next: JsPlugin[]) => {
@@ -280,6 +334,7 @@ ${plugin.content}
       injectAll();
     } else {
       removeAll();
+      void resetPluginAuthorityForRuntime();
     }
   };
 
@@ -303,6 +358,7 @@ ${plugin.content}
           injectAll();
         } else {
           removeAll();
+          void resetPluginAuthorityForRuntime();
         }
       })
       .catch((error) => {
@@ -317,6 +373,7 @@ ${plugin.content}
         injectAll();
       } else {
         removeAll();
+        void resetPluginAuthorityForRuntime();
       }
     });
 
@@ -345,6 +402,7 @@ ${plugin.content}
     disposed = true;
     cleanupSubscriptions();
     removeAll();
+    setReloading(false);
   };
 
   return { initialize, dispose };
