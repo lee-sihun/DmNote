@@ -120,7 +120,13 @@ fn start_panel_window_dragging(
             } else {
                 let modifier_flags = NSEvent::modifierFlags(current_event);
                 let timestamp = NSEvent::timestamp(current_event);
-                let event_number = NSEvent::eventNumber(current_event);
+                // eventNumber는 마우스 계열 이벤트에만 유효, 키 이벤트 등에 조회하면 NSInternalInconsistencyException
+                let event_type: NSUInteger = msg_send![current_event, type];
+                let event_number = if is_mouse_event_type(event_type) {
+                    NSEvent::eventNumber(current_event)
+                } else {
+                    0
+                };
                 (modifier_flags, timestamp, event_number)
             };
 
@@ -176,9 +182,24 @@ fn is_panel_mouse_down_event(
     event_type == 1 && event_window_number == target_window_number
 }
 
+// NSLeftMouseDown(1)~NSMouseExited(9), NSOtherMouse*(25~27)
+fn is_mouse_event_type(event_type: u64) -> bool {
+    matches!(event_type, 1..=9 | 25..=27)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{is_panel_mouse_down_event, panel_drag_local_coordinates};
+    use super::{is_mouse_event_type, is_panel_mouse_down_event, panel_drag_local_coordinates};
+
+    #[test]
+    fn panel_drag_synthetic_event_borrows_event_number_from_mouse_events_only() {
+        assert!(is_mouse_event_type(1));
+        assert!(is_mouse_event_type(9));
+        assert!(is_mouse_event_type(26));
+        assert!(!is_mouse_event_type(10)); // NSKeyDown
+        assert!(!is_mouse_event_type(11)); // NSKeyUp
+        assert!(!is_mouse_event_type(12)); // NSFlagsChanged
+    }
 
     #[test]
     fn panel_drag_reuses_only_the_target_windows_mouse_down_event() {

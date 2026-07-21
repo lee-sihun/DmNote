@@ -93,7 +93,7 @@ struct ShutdownWatchdogState {
     stage: &'static str,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct PanelBoundsSample {
     position: PhysicalPosition<i32>,
     position_scale_factor: f64,
@@ -104,6 +104,7 @@ struct PanelBoundsSample {
 
 #[derive(Debug, Clone, Copy)]
 enum PanelBoundsChange {
+    Snapshot(PanelBoundsSample),
     Moved(PhysicalPosition<i32>),
     Resized(PhysicalSize<u32>),
     ScaleFactorChanged {
@@ -113,12 +114,29 @@ enum PanelBoundsChange {
     },
 }
 
-#[derive(Debug)]
-struct PanelBoundsSettleState {
+#[derive(Default)]
+struct PanelBoundsPersistenceState {
     latest: Option<PanelBoundsSample>,
+    window: Option<WebviewWindow>,
+    applied_max_height: Option<f64>,
+    session: u64,
     generation: u64,
     worker_running: bool,
+    dirty: bool,
     active: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PanelBoundsPersistWork {
+    session: u64,
+    generation: u64,
+    sample: PanelBoundsSample,
+}
+
+struct PanelBoundsPersistenceController {
+    store: Arc<AppStore>,
+    state: Mutex<PanelBoundsPersistenceState>,
+    persist_lock: Mutex<()>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -763,7 +781,7 @@ pub struct AppState {
     selection_session: Mutex<SelectionSessionSnapshot>,
     plugin_authority: PluginRuntimeAuthority,
     plugin_rpc_router: PluginRpcRouter,
-    panel_bounds_generation: Arc<AtomicU64>,
+    panel_bounds_persistence: Arc<PanelBoundsPersistenceController>,
     panel_visible: AtomicBool,
     panel_creation_lock: Mutex<()>,
     panel_close_request: Mutex<PanelCloseRequestState>,
@@ -819,6 +837,8 @@ impl AppState {
         let key_sound = Arc::new(KeySoundEngine::with_output_backend(initial_backend));
         let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
         let authorized_css_paths = collect_authorized_css_paths(&snapshot);
+        let panel_bounds_persistence =
+            Arc::new(PanelBoundsPersistenceController::new(Arc::clone(&store)));
         let selection_session = SelectionSessionSnapshot {
             mode: snapshot.selected_key_type.clone(),
             ..SelectionSessionSnapshot::default()
@@ -836,7 +856,7 @@ impl AppState {
             selection_session: Mutex::new(selection_session),
             plugin_authority: PluginRuntimeAuthority::default(),
             plugin_rpc_router: PluginRpcRouter::default(),
-            panel_bounds_generation: Arc::new(AtomicU64::new(0)),
+            panel_bounds_persistence,
             panel_visible: AtomicBool::new(false),
             panel_creation_lock: Mutex::new(()),
             panel_close_request: Mutex::new(PanelCloseRequestState::Idle),
@@ -2559,15 +2579,8 @@ impl AppState {
         *self.panel_destroy_reason.lock() = Some(reason);
         let mut bounds_error = None;
         if let Some(window) = app.get_webview_window(PANEL_LABEL) {
-            if let Err(error) =
-                defer_panel_bounds_from_window(&window, &self.store, &self.panel_bounds_generation)
-            {
+            if let Err(error) = self.panel_bounds_persistence.flush_now(&window) {
                 bounds_error = Some(error);
-            }
-            if let Err(error) =
-                flush_deferred_panel_bounds(&self.store, &self.panel_bounds_generation)
-            {
-                bounds_error.get_or_insert(error);
             }
             if let Err(error) = window.destroy() {
                 self.clear_panel_destroy_reason(reason);
@@ -2617,8 +2630,7 @@ impl AppState {
         let Some(window) = app.get_webview_window(PANEL_LABEL) else {
             return Ok(());
         };
-        defer_panel_bounds_from_window(&window, &self.store, &self.panel_bounds_generation)?;
-        flush_deferred_panel_bounds(&self.store, &self.panel_bounds_generation)
+        self.panel_bounds_persistence.flush_now(&window)
     }
 
     pub fn handle_panel_window_destroyed(&self, app: &AppHandle) {
@@ -2682,25 +2694,22 @@ impl AppState {
         app: &AppHandle,
         initial_max_height: f64,
     ) {
-        let store = self.store.clone();
-        let bounds_generation = self.panel_bounds_generation.clone();
+        let bounds_session = self
+            .panel_bounds_persistence
+            .attach(window, initial_max_height);
+        let bounds_persistence = Arc::clone(&self.panel_bounds_persistence);
         let panel_window = window.clone();
         let app_handle = app.clone();
-        let panel_max_height = Arc::new(Mutex::new(Some(initial_max_height)));
-        let panel_bounds_settle = Arc::new(Mutex::new(PanelBoundsSettleState {
-            latest: panel_bounds_sample_from_window(window).ok(),
-            generation: 0,
-            worker_running: false,
-            active: true,
-        }));
 
         window.on_window_event(move |event| match event {
             WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
-                if let Err(err) =
-                    defer_panel_bounds_from_window(&panel_window, &store, &bounds_generation)
-                {
-                    log::warn!("failed to capture panel bounds on close request: {err}");
+                match panel_bounds_sample_from_window(&panel_window) {
+                    Ok(sample) => bounds_persistence
+                        .record_event(bounds_session, PanelBoundsChange::Snapshot(sample)),
+                    Err(err) => {
+                        log::warn!("failed to capture panel bounds on close request: {err}")
+                    }
                 }
                 let Some(state) = app_handle.try_state::<AppState>() else {
                     return;
@@ -2735,36 +2744,19 @@ impl AppState {
                 });
             }
             WindowEvent::Moved(position) => {
-                schedule_panel_bounds_settle(
-                    &panel_window,
-                    &store,
-                    &bounds_generation,
-                    &panel_max_height,
-                    &panel_bounds_settle,
-                    PanelBoundsChange::Moved(*position),
-                );
+                bounds_persistence
+                    .record_event(bounds_session, PanelBoundsChange::Moved(*position));
             }
             WindowEvent::Resized(size) => {
-                schedule_panel_bounds_settle(
-                    &panel_window,
-                    &store,
-                    &bounds_generation,
-                    &panel_max_height,
-                    &panel_bounds_settle,
-                    PanelBoundsChange::Resized(*size),
-                );
+                bounds_persistence.record_event(bounds_session, PanelBoundsChange::Resized(*size));
             }
             WindowEvent::ScaleFactorChanged {
                 scale_factor,
                 new_inner_size,
                 ..
             } => {
-                schedule_panel_bounds_settle(
-                    &panel_window,
-                    &store,
-                    &bounds_generation,
-                    &panel_max_height,
-                    &panel_bounds_settle,
+                bounds_persistence.record_event(
+                    bounds_session,
                     PanelBoundsChange::ScaleFactorChanged {
                         position: panel_window.outer_position().ok(),
                         size: *new_inner_size,
@@ -2773,7 +2765,7 @@ impl AppState {
                 );
             }
             WindowEvent::Destroyed => {
-                panel_bounds_settle.lock().active = false;
+                bounds_persistence.deactivate(bounds_session);
             }
             _ => {}
         });
@@ -4283,6 +4275,7 @@ fn panel_bounds_from_sample(sample: PanelBoundsSample) -> PanelBounds {
 
 fn apply_panel_bounds_change(sample: &mut PanelBoundsSample, change: PanelBoundsChange) {
     match change {
+        PanelBoundsChange::Snapshot(snapshot) => *sample = snapshot,
         PanelBoundsChange::Moved(position) => {
             sample.position = position;
             sample.position_scale_factor = sample.current_scale_factor;
@@ -4308,185 +4301,266 @@ fn apply_panel_bounds_change(sample: &mut PanelBoundsSample, change: PanelBounds
     }
 }
 
-fn schedule_panel_bounds_settle(
-    window: &WebviewWindow,
-    store: &Arc<AppStore>,
-    generation: &Arc<AtomicU64>,
-    applied_max_height: &Arc<Mutex<Option<f64>>>,
-    settle_state: &Arc<Mutex<PanelBoundsSettleState>>,
-    change: PanelBoundsChange,
-) {
-    let mut state = settle_state.lock();
-    if !state.active {
-        return;
+impl PanelBoundsPersistenceController {
+    fn new(store: Arc<AppStore>) -> Self {
+        Self {
+            store,
+            state: Mutex::new(PanelBoundsPersistenceState::default()),
+            persist_lock: Mutex::new(()),
+        }
     }
-    if state.latest.is_none() {
-        state.latest = panel_bounds_sample_from_window(window).ok();
+
+    fn attach(&self, window: &WebviewWindow, max_height: f64) -> u64 {
+        let latest = panel_bounds_sample_from_window(window).ok();
+        let mut state = self.state.lock();
+        state.session = state.session.wrapping_add(1);
+        state.latest = latest;
+        state.window = Some(window.clone());
+        state.applied_max_height = Some(max_height);
+        state.generation = state.generation.wrapping_add(1);
+        state.dirty = false;
+        state.active = true;
+        state.session
     }
-    if let Some(latest) = state.latest.as_mut() {
-        apply_panel_bounds_change(latest, change);
-    }
-    let scheduled_generation = generation.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
-    state.generation = scheduled_generation;
-    if state.worker_running {
-        return;
-    }
-    state.worker_running = true;
-    drop(state);
 
-    let window = window.clone();
-    let store = Arc::clone(store);
-    let generation = Arc::clone(generation);
-    let applied_max_height = Arc::clone(applied_max_height);
-    let settle_state = Arc::clone(settle_state);
-    tauri::async_runtime::spawn(async move {
-        loop {
-            tokio::time::sleep(Duration::from_millis(PANEL_BOUNDS_DEBOUNCE_MS)).await;
-            let (observed_generation, sample) = {
-                let mut state = settle_state.lock();
-                if !state.active {
-                    state.worker_running = false;
-                    return;
-                }
-                if generation.load(Ordering::SeqCst) != state.generation {
-                    state.worker_running = false;
-                    return;
-                }
-                let Some(sample) = state.latest else {
-                    state.worker_running = false;
-                    return;
-                };
-                (state.generation, sample)
-            };
-
-            let is_current = || {
-                let state = settle_state.lock();
-                state.active
-                    && state.generation == observed_generation
-                    && generation.load(Ordering::SeqCst) == observed_generation
-            };
-            if !is_current() {
-                continue;
-            }
-
-            let bounds = panel_bounds_from_sample(sample);
-            if !is_current() {
-                continue;
-            }
-            let persisted = Arc::new(AtomicBool::new(false));
-            let persist_generation = Arc::clone(&generation);
-            let persist_state = Arc::clone(&settle_state);
-            let persisted_result = Arc::clone(&persisted);
-            if let Err(err) = store.update_deferred(move |state| {
-                let settle = persist_state.lock();
-                if settle.active
-                    && settle.generation == observed_generation
-                    && persist_generation.load(Ordering::SeqCst) == observed_generation
-                {
-                    state.panel_bounds = Some(bounds);
-                    persisted_result.store(true, Ordering::SeqCst);
-                }
-            }) {
-                log::warn!("failed to capture settled panel bounds: {err}");
-            } else if persisted.load(Ordering::SeqCst) && is_current() {
-                if let Err(err) = store.flush() {
-                    log::warn!("failed to flush settled panel bounds: {err}");
-                }
-            }
-
-            let constraint_window = window.clone();
-            let constraint_max_height = Arc::clone(&applied_max_height);
-            let constraint_generation = Arc::clone(&generation);
-            let constraint_state = Arc::clone(&settle_state);
-            if let Err(err) = window.app_handle().run_on_main_thread(move || {
-                let is_current = {
-                    let state = constraint_state.lock();
-                    state.active
-                        && state.generation == observed_generation
-                        && constraint_generation.load(Ordering::SeqCst) == observed_generation
-                };
-                if !is_current {
-                    return;
-                }
-                if let Err(err) =
-                    apply_panel_monitor_constraints(&constraint_window, &constraint_max_height)
-                {
-                    log::warn!("failed to update settled panel monitor constraints: {err}");
-                }
-            }) {
-                log::warn!("failed to schedule settled panel constraints: {err}");
-            }
-
-            let mut state = settle_state.lock();
-            if state.generation == observed_generation
-                && generation.load(Ordering::SeqCst) == observed_generation
-            {
-                state.worker_running = false;
+    fn record_event(self: &Arc<Self>, session: u64, change: PanelBoundsChange) {
+        let should_spawn = {
+            let mut state = self.state.lock();
+            if !state.active || state.session != session {
                 return;
             }
+            if state.latest.is_none() {
+                state.latest = state
+                    .window
+                    .as_ref()
+                    .and_then(|window| panel_bounds_sample_from_window(window).ok());
+            }
+            Self::record_change(&mut state, session, change)
+        };
+        if should_spawn {
+            self.spawn_worker();
         }
-    });
-}
+    }
 
-fn apply_panel_monitor_constraints(
-    window: &WebviewWindow,
-    applied_max_height: &Mutex<Option<f64>>,
-) -> Result<()> {
-    let Some(max_height) = window
-        .current_monitor()?
-        .and_then(MonitorSpec::from_monitor)
-        .map(|monitor| panel_max_height(Some(monitor.logical_height)))
-    else {
-        return Ok(());
-    };
-    let mut applied = applied_max_height.lock();
-    let Some(max_height) = changed_panel_max_height(*applied, max_height) else {
-        return Ok(());
-    };
-    window.set_max_size(Some(tauri::Size::Logical(tauri::LogicalSize::new(
-        PANEL_WIDTH,
-        max_height,
-    ))))?;
-    *applied = Some(max_height);
-    Ok(())
-}
-
-fn defer_panel_bounds_from_window(
-    window: &WebviewWindow,
-    store: &Arc<AppStore>,
-    generation: &Arc<AtomicU64>,
-) -> Result<()> {
-    let scale_factor = window.scale_factor().unwrap_or(1.0);
-    let position = window.outer_position()?.to_logical::<f64>(scale_factor);
-    let size = window.inner_size()?.to_logical::<f64>(scale_factor);
-    let bounds = PanelBounds {
-        x: position.x,
-        y: position.y,
-        height: size.height.max(PANEL_MIN_HEIGHT),
-    };
-    let scheduled_generation = generation.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
-    store.update_deferred(move |state| {
-        state.panel_bounds = Some(bounds);
-    })?;
-
-    let store = Arc::clone(store);
-    let generation = Arc::clone(generation);
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(PANEL_BOUNDS_DEBOUNCE_MS)).await;
-        if generation.load(Ordering::SeqCst) != scheduled_generation {
-            return;
+    fn record_change(
+        state: &mut PanelBoundsPersistenceState,
+        session: u64,
+        change: PanelBoundsChange,
+    ) -> bool {
+        if !state.active || state.session != session {
+            return false;
         }
-        if let Err(err) = store.flush() {
-            log::warn!("failed to flush debounced panel bounds: {err}");
+        if let PanelBoundsChange::Snapshot(snapshot) = change {
+            state.latest = Some(snapshot);
+            return Self::mark_dirty(state);
         }
-    });
+        let Some(latest) = state.latest.as_mut() else {
+            return false;
+        };
+        apply_panel_bounds_change(latest, change);
+        Self::mark_dirty(state)
+    }
 
-    Ok(())
-}
+    fn mark_dirty(state: &mut PanelBoundsPersistenceState) -> bool {
+        state.generation = state.generation.wrapping_add(1);
+        state.dirty = true;
+        let should_spawn = !state.worker_running;
+        state.worker_running = true;
+        should_spawn
+    }
 
-fn flush_deferred_panel_bounds(store: &Arc<AppStore>, generation: &Arc<AtomicU64>) -> Result<()> {
-    generation.fetch_add(1, Ordering::SeqCst);
-    store.flush()
+    fn take_dirty_work(state: &mut PanelBoundsPersistenceState) -> Option<PanelBoundsPersistWork> {
+        let sample = state.latest.filter(|_| state.active && state.dirty)?;
+        state.dirty = false;
+        Some(PanelBoundsPersistWork {
+            session: state.session,
+            generation: state.generation,
+            sample,
+        })
+    }
+
+    fn work_is_current(state: &PanelBoundsPersistenceState, work: &PanelBoundsPersistWork) -> bool {
+        state.active && state.session == work.session && state.generation == work.generation
+    }
+
+    fn restore_failed_work(
+        state: &mut PanelBoundsPersistenceState,
+        work: &PanelBoundsPersistWork,
+    ) -> bool {
+        if !Self::work_is_current(state, work) {
+            return false;
+        }
+        state.dirty = true;
+        true
+    }
+
+    fn persist_sample(&self, sample: PanelBoundsSample) -> Result<()> {
+        let bounds = panel_bounds_from_sample(sample);
+        self.store
+            .update_deferred(move |data| {
+                data.panel_bounds = Some(bounds);
+            })
+            .context("failed to capture settled panel bounds")?;
+        self.store
+            .flush()
+            .context("failed to flush settled panel bounds")
+    }
+
+    fn persist_worker_work(&self, work: PanelBoundsPersistWork) -> Result<bool> {
+        let _persist_guard = self.persist_lock.lock();
+        if !Self::work_is_current(&self.state.lock(), &work) {
+            return Ok(false);
+        }
+        self.persist_sample(work.sample)?;
+        Ok(true)
+    }
+
+    fn spawn_worker(self: &Arc<Self>) {
+        let controller = Arc::clone(self);
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(PANEL_BOUNDS_DEBOUNCE_MS)).await;
+                let (work, window) = {
+                    let mut state = controller.state.lock();
+                    let Some(work) = Self::take_dirty_work(&mut state) else {
+                        state.worker_running = false;
+                        return;
+                    };
+                    (work, state.window.clone())
+                };
+
+                let persist_result = controller.persist_worker_work(work);
+                if let Err(err) = &persist_result {
+                    log::warn!("failed to persist settled panel bounds: {err:#}");
+                }
+
+                if let Some(window) = window {
+                    let constraint_controller = Arc::clone(&controller);
+                    let constraint_window = window.clone();
+                    if let Err(err) = window.app_handle().run_on_main_thread(move || {
+                        if let Err(err) = constraint_controller.apply_monitor_constraints(
+                            &constraint_window,
+                            work.session,
+                            work.generation,
+                        ) {
+                            log::warn!("failed to update settled panel monitor constraints: {err}");
+                        }
+                    }) {
+                        log::warn!("failed to schedule settled panel constraints: {err}");
+                    }
+                }
+
+                let mut state = controller.state.lock();
+                if persist_result.is_err() && Self::restore_failed_work(&mut state, &work) {
+                    state.worker_running = false;
+                    return;
+                }
+                if !state.active || !state.dirty {
+                    state.worker_running = false;
+                    return;
+                }
+            }
+        });
+    }
+
+    fn apply_monitor_constraints(
+        &self,
+        window: &WebviewWindow,
+        session: u64,
+        generation: u64,
+    ) -> Result<()> {
+        let Some(max_height) = window
+            .current_monitor()?
+            .and_then(MonitorSpec::from_monitor)
+            .map(|monitor| panel_max_height(Some(monitor.logical_height)))
+        else {
+            return Ok(());
+        };
+        let max_height = {
+            let state = self.state.lock();
+            if !state.active || state.session != session || state.generation != generation {
+                return Ok(());
+            }
+            changed_panel_max_height(state.applied_max_height, max_height)
+        };
+        let Some(max_height) = max_height else {
+            return Ok(());
+        };
+        window.set_max_size(Some(tauri::Size::Logical(tauri::LogicalSize::new(
+            PANEL_WIDTH,
+            max_height,
+        ))))?;
+        let mut state = self.state.lock();
+        if state.active && state.session == session && state.generation == generation {
+            state.applied_max_height = Some(max_height);
+        }
+        Ok(())
+    }
+
+    fn flush_now(&self, window: &WebviewWindow) -> Result<()> {
+        let _persist_guard = self.persist_lock.lock();
+        let generation_before_sample = self.state.lock().generation;
+        let sampled = panel_bounds_sample_from_window(window);
+        Self::flush_samples(&self.state, generation_before_sample, sampled, |sample| {
+            self.persist_sample(sample)
+        })
+    }
+
+    fn flush_samples(
+        state_mutex: &Mutex<PanelBoundsPersistenceState>,
+        generation_before_sample: u64,
+        sampled: Result<PanelBoundsSample>,
+        mut persist: impl FnMut(PanelBoundsSample) -> Result<()>,
+    ) -> Result<()> {
+        let mut work = {
+            let mut state = state_mutex.lock();
+            let sampled = match sampled {
+                Ok(sample) => sample,
+                Err(error) => state.latest.ok_or(error)?,
+            };
+            let sample = if state.generation != generation_before_sample {
+                state.latest.unwrap_or(sampled)
+            } else {
+                sampled
+            };
+            state.latest = Some(sample);
+            state.generation = state.generation.wrapping_add(1);
+            state.dirty = false;
+            PanelBoundsPersistWork {
+                session: state.session,
+                generation: state.generation,
+                sample,
+            }
+        };
+
+        loop {
+            if let Err(error) = persist(work.sample) {
+                Self::restore_failed_work(&mut state_mutex.lock(), &work);
+                return Err(error);
+            }
+            let Some(next) = Self::take_dirty_work(&mut state_mutex.lock()) else {
+                return Ok(());
+            };
+            work = next;
+        }
+    }
+
+    fn deactivate(&self, session: u64) {
+        let mut state = self.state.lock();
+        Self::deactivate_state(&mut state, session);
+    }
+
+    fn deactivate_state(state: &mut PanelBoundsPersistenceState, session: u64) -> bool {
+        if state.session != session {
+            return false;
+        }
+        state.active = false;
+        state.window = None;
+        state.applied_max_height = None;
+        state.generation = state.generation.wrapping_add(1);
+        state.dirty = false;
+        true
+    }
 }
 
 fn defer_overlay_bounds_from_window(
@@ -4607,7 +4681,8 @@ mod tests {
         take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
         EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
         FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
-        LifecycleHandshakeInstall, MonitorData, Mutex, PanelBoundsChange, PanelBoundsSample,
+        LifecycleHandshakeInstall, MonitorData, Mutex, PanelBoundsChange,
+        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
         PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
         PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
         PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
@@ -4712,7 +4787,7 @@ mod tests {
     }
 
     #[test]
-    fn settled_panel_bounds_preserve_each_geometry_scale_domain() {
+    fn panel_bounds_controller_preserves_scale_domains_and_coalesces_events() {
         let mut sample = PanelBoundsSample {
             position: PhysicalPosition::new(600, 300),
             position_scale_factor: 2.0,
@@ -4733,6 +4808,243 @@ mod tests {
         assert_eq!(bounds.x, 300.0);
         assert_eq!(bounds.y, 150.0);
         assert_eq!(bounds.height, 1_000.0);
+        let mut state = PanelBoundsPersistenceState {
+            latest: Some(sample),
+            session: 1,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        };
+        assert!(PanelBoundsPersistenceController::record_change(
+            &mut state,
+            1,
+            PanelBoundsChange::Moved(PhysicalPosition::new(800, 400)),
+        ));
+        assert!(!PanelBoundsPersistenceController::record_change(
+            &mut state,
+            1,
+            PanelBoundsChange::Resized(PhysicalSize::new(480, 1_200)),
+        ));
+        assert_eq!(
+            (state.generation, state.worker_running, state.dirty),
+            (2, true, true)
+        );
+        let mut empty_state = PanelBoundsPersistenceState {
+            session: 1,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        };
+        assert!(PanelBoundsPersistenceController::record_change(
+            &mut empty_state,
+            1,
+            PanelBoundsChange::Snapshot(sample),
+        ));
+        assert_eq!(empty_state.latest, Some(sample));
+    }
+
+    #[test]
+    fn panel_bounds_deactivate_ignores_a_stale_session_token() {
+        let sample = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_000),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        let mut state = PanelBoundsPersistenceState {
+            latest: Some(sample),
+            applied_max_height: Some(900.0),
+            session: 2,
+            generation: 7,
+            dirty: true,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        };
+
+        assert!(!PanelBoundsPersistenceController::deactivate_state(
+            &mut state, 1,
+        ));
+        assert!(state.active);
+        assert_eq!(state.session, 2);
+        assert_eq!(state.generation, 7);
+        assert!(state.dirty);
+        assert_eq!(state.latest, Some(sample));
+        assert_eq!(state.applied_max_height, Some(900.0));
+    }
+
+    #[test]
+    fn panel_bounds_record_event_ignores_a_stale_session_token() {
+        let sample = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_000),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        let mut state = PanelBoundsPersistenceState {
+            latest: Some(sample),
+            session: 2,
+            generation: 7,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        };
+
+        assert!(!PanelBoundsPersistenceController::record_change(
+            &mut state,
+            1,
+            PanelBoundsChange::Moved(PhysicalPosition::new(800, 400)),
+        ));
+        assert_eq!(state.latest, Some(sample));
+        assert_eq!(state.generation, 7);
+        assert!(!state.dirty);
+        assert!(!state.worker_running);
+    }
+
+    #[test]
+    fn panel_bounds_flush_keeps_event_after_sample_that_old_code_overwrote() {
+        let initial = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_000),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        let state = Mutex::new(PanelBoundsPersistenceState {
+            latest: Some(initial),
+            session: 4,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        });
+        let generation_before_sample = state.lock().generation;
+        let sampled = state.lock().latest.unwrap();
+
+        assert!(PanelBoundsPersistenceController::record_change(
+            &mut state.lock(),
+            4,
+            PanelBoundsChange::Moved(PhysicalPosition::new(800, 400)),
+        ));
+        let expected = state.lock().latest.unwrap();
+        let mut persisted = Vec::new();
+
+        PanelBoundsPersistenceController::flush_samples(
+            &state,
+            generation_before_sample,
+            Ok(sampled),
+            |sample| {
+                persisted.push(sample);
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert_eq!(persisted, vec![expected]);
+        let state = state.lock();
+        assert_eq!(state.latest, Some(expected));
+        assert!(!state.dirty);
+    }
+
+    #[test]
+    fn panel_bounds_flush_and_event_interleave_without_loss_or_duplicate_sample() {
+        let initial = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_000),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        let state = Mutex::new(PanelBoundsPersistenceState {
+            latest: Some(initial),
+            session: 4,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        });
+        let mut persisted = Vec::new();
+
+        PanelBoundsPersistenceController::flush_samples(&state, 0, Ok(initial), |sample| {
+            persisted.push(sample);
+            if persisted.len() == 1 {
+                assert!(PanelBoundsPersistenceController::record_change(
+                    &mut state.lock(),
+                    4,
+                    PanelBoundsChange::Moved(PhysicalPosition::new(800, 400)),
+                ));
+            }
+            Ok(())
+        })
+        .unwrap();
+
+        let mut expected_latest = initial;
+        apply_panel_bounds_change(
+            &mut expected_latest,
+            PanelBoundsChange::Moved(PhysicalPosition::new(800, 400)),
+        );
+        assert_eq!(persisted, vec![initial, expected_latest]);
+        let state = state.lock();
+        assert_eq!(state.latest, Some(expected_latest));
+        assert!(!state.dirty);
+    }
+
+    #[test]
+    fn panel_bounds_flush_uses_latest_when_window_read_fails() {
+        let latest = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_000),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        let state = Mutex::new(PanelBoundsPersistenceState {
+            latest: Some(latest),
+            session: 5,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        });
+        let mut persisted = Vec::new();
+
+        PanelBoundsPersistenceController::flush_samples(
+            &state,
+            0,
+            Err(anyhow::anyhow!("window bounds unavailable")),
+            |sample| {
+                persisted.push(sample);
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(persisted, vec![latest]);
+
+        let empty = Mutex::new(PanelBoundsPersistenceState::default());
+        assert!(PanelBoundsPersistenceController::flush_samples(
+            &empty,
+            0,
+            Err(anyhow::anyhow!("window bounds unavailable")),
+            |_| panic!("missing bounds must not be persisted"),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn panel_bounds_flush_failure_restores_dirty_state() {
+        let sample = PanelBoundsSample {
+            position: PhysicalPosition::new(600, 300),
+            position_scale_factor: 2.0,
+            size: PhysicalSize::new(480, 1_000),
+            size_scale_factor: 2.0,
+            current_scale_factor: 2.0,
+        };
+        let state = Mutex::new(PanelBoundsPersistenceState {
+            latest: Some(sample),
+            session: 6,
+            active: true,
+            ..PanelBoundsPersistenceState::default()
+        });
+
+        assert!(
+            PanelBoundsPersistenceController::flush_samples(&state, 0, Ok(sample), |_| Err(
+                anyhow::anyhow!("disk unavailable")
+            ),)
+            .is_err()
+        );
+        assert!(state.lock().dirty);
     }
 
     #[test]
