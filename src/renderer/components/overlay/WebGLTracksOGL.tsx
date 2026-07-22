@@ -441,6 +441,8 @@ interface NoteEvent {
 interface NoteBuffer {
   version: number;
   activeCount: number;
+  timeEpoch: number;
+  maybeRebaseEpoch(nowMs: number): boolean;
   noteInfo: Float32Array;
   noteSize: Float32Array;
   noteColorTop: Float32Array;
@@ -679,6 +681,15 @@ export function WebGLTracksOGL({
         resetFrameClock(frameClockRef.current);
       }
 
+      // Float32 정밀도 유지 - 장시간 실행 시 epoch 이동, noteInfo 전체 재업로드 예약
+      if (noteBuffer.maybeRebaseEpoch(renderTime)) {
+        queueAttributeUpload(
+          pendingUpdateRef.current,
+          FINALIZE_ATTRIBUTE_KEYS,
+          noteBuffer.activeCount,
+        );
+      }
+
       // 프레임 시작 시 배치 업데이트 적용
       if (pendingUpdateRef.current.dirtySinceFrame) {
         const geometryTarget = geometryRef.current;
@@ -708,7 +719,9 @@ export function WebGLTracksOGL({
         pendingUpdateRef.current.instancedCount = null;
       }
 
-      programRef.current.uniforms.uTime.value = renderTime;
+      // uTime도 epoch 상대값 - noteInfo와 같은 기준이어야 길이·이동 계산이 성립
+      programRef.current.uniforms.uTime.value =
+        renderTime - noteBuffer.timeEpoch;
       rendererRef.current.render({
         scene: sceneRef.current,
         camera: cameraRef.current,

@@ -14,6 +14,7 @@ import type {
   ModeChangePayload,
   CustomTabsChangePayload,
   KeyStatePayload,
+  KeysResetPayload,
   CustomTabResult,
   CustomTabDeleteResult,
   RawInputPayload,
@@ -110,6 +111,10 @@ export const keysApi = {
   onKeyState: (
     listener: (payload: KeyStatePayload) => void,
   ): ReadyUnsubscribe => subscribe<KeyStatePayload>('keys:state', listener),
+  // 키보드 훅 (재)시작 등으로 눌림 상태가 통째로 무효화될 때 발화
+  onKeysReset: (
+    listener: (payload: KeysResetPayload) => void,
+  ): ReadyUnsubscribe => subscribe<KeysResetPayload>('keys:reset', listener),
   onRawInput: (listener: (payload: RawInputPayload) => void): Unsubscribe => {
     let unsubscribeFn: (() => void) | null = null;
     let cancelled = false;

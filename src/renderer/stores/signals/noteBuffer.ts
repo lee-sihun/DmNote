@@ -3,6 +3,13 @@ import { toRgbHexColor } from '@utils/color/colorUtils';
 
 const MAX_NOTES = 2048;
 
+// GPU 시각의 Float32 정밀도 유지 한도. performance.now()가 수일 누적되면
+// 간격이 32~64ms로 벌어져 짧은 노트 길이가 양자화되므로, 이 한도를 넘으면
+// epoch를 현재로 옮겨 절대값을 작게 유지 (2^21ms ≈ 35분, 해당 구간 정밀도 0.125ms)
+const EPOCH_REBASE_LIMIT_MS = 2_097_152;
+// 셰이더 sentinel(startTime 0.0 = 빈 슬롯, endTime 0.0 = 활성)과의 우연 충돌 방지
+const EPOCH_ZERO_NUDGE = 1e-4;
+
 const SRGB_TO_LINEAR = new Float32Array(256);
 for (let i = 0; i < 256; i += 1) {
   const c = i / 255;
@@ -212,6 +219,8 @@ export class NoteBuffer {
   private trackLayouts: Map<string, ResolvedTrackLayout>;
   // allocate() 시프트 후 Map이 오래된 첫 인덱스. Infinity = Map 최신 상태
   private dirtyIndexStart: number;
+  // noteInfo 시각의 기준점 - GPU에는 (원시 시각 - epoch)만 전달
+  private epoch: number;
 
   activeCount: number;
   version: number;
@@ -237,6 +246,42 @@ export class NoteBuffer {
     this.activeCount = 0;
     this.version = 0;
     this.dirtyIndexStart = Infinity;
+    this.epoch = 0;
+  }
+
+  get timeEpoch(): number {
+    return this.epoch;
+  }
+
+  // 원시 시각(performance.now 기준) → GPU 저장 시각
+  private toGpuTime(t: number): number {
+    const v = t - this.epoch;
+    return v === 0 ? EPOCH_ZERO_NUDGE : v;
+  }
+
+  // 한도 초과 시 epoch를 nowMs로 이동하고 저장된 시각을 재기준화.
+  // true 반환 시 호출자가 noteInfo 전체 재업로드를 예약해야 함
+  maybeRebaseEpoch(nowMs: number): boolean {
+    const delta = nowMs - this.epoch;
+    if (delta <= EPOCH_REBASE_LIMIT_MS) return false;
+    for (let i = 0; i < this.activeCount; i += 1) {
+      const infoOffset = i * 3;
+      if (this.noteInfo[infoOffset] !== 0) {
+        this.noteInfo[infoOffset] -= delta;
+        if (this.noteInfo[infoOffset] === 0) {
+          this.noteInfo[infoOffset] = -EPOCH_ZERO_NUDGE;
+        }
+      }
+      if (this.noteInfo[infoOffset + 1] !== 0) {
+        this.noteInfo[infoOffset + 1] -= delta;
+        if (this.noteInfo[infoOffset + 1] === 0) {
+          this.noteInfo[infoOffset + 1] = -EPOCH_ZERO_NUDGE;
+        }
+      }
+    }
+    this.epoch = nowMs;
+    this.version += 1;
+    return true;
   }
 
   // allocate() 시프트로 오염된 Map 항목을 한 번에 재구축
@@ -277,6 +322,8 @@ export class NoteBuffer {
     if (this.activeCount >= MAX_NOTES) {
       return -1;
     }
+    // 'add' 이벤트가 전 속성 업로드를 예약하므로 여기서의 재기준화는 별도 예약 불필요
+    this.maybeRebaseEpoch(startTime);
     const {
       opacityTop,
       opacityBottom,
@@ -374,7 +421,7 @@ export class NoteBuffer {
     this.activeCount += 1;
 
     const infoOffset = insertIndex * 3;
-    this.noteInfo[infoOffset] = startTime;
+    this.noteInfo[infoOffset] = this.toGpuTime(startTime);
     this.noteInfo[infoOffset + 1] = 0;
     this.noteInfo[infoOffset + 2] = layout.position.dx;
 
@@ -427,7 +474,7 @@ export class NoteBuffer {
     if (index === undefined) {
       return -1;
     }
-    this.noteInfo[index * 3 + 1] = endTime;
+    this.noteInfo[index * 3 + 1] = this.toGpuTime(endTime);
     this.version += 1;
     return index;
   }

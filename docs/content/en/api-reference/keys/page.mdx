@@ -28,6 +28,9 @@ interface KeyStateEvent {
   // Elapsed time (ms) between input capture and event emit.
   // Recover the real input time with `performance.now() - eventAgeMs`.
   eventAgeMs?: number;
+  // UP events only. Physical hold duration (ms) measured by the input
+  // daemon at capture time - immune to delivery latency and jitter.
+  holdDurationMs?: number;
 }
 
 const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
@@ -43,6 +46,23 @@ starting point (e.g. before requesting a snapshot):
 ```typescript
 const unsub = dmn.keys.onKeyState(handler);
 await unsub.ready; // subscription is live from this point
+```
+
+### `dmn.keys.onKeysReset(callback): ReadyUnsubscribe`
+
+Fires when the pressed-key state is invalidated as a whole, e.g. when the
+keyboard hook (re)starts after a global shortcut change. Any state derived
+from previous `onKeyState` events (held keys, active visualizations) should
+be cleared and rebuilt from a fresh snapshot.
+
+```typescript
+interface KeysResetEvent {
+  reason: string; // e.g., 'hook_restart'
+}
+
+dmn.keys.onKeysReset(({ reason }) => {
+  console.log(`key state reset: ${reason}`);
+});
 ```
 
 ### `dmn.keys.onRawInput(callback): Unsubscribe`

@@ -8,7 +8,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
-use std::io::Write;
 use std::mem::size_of;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -27,8 +26,6 @@ use crate::ipc::{HidAxisMessage, HookKeyState, HookMessage, InputDeviceKind};
 
 /// 축 값 전송 최소 간격(ms) — 고빈도 노브 입력이 파이프/입력 스레드를 막지 않도록.
 const AXIS_THROTTLE_MS: u64 = 12;
-
-type Sink = Box<dyn Write + Send>;
 
 /// 디바이스별 정적 정보 (preparsed data + caps 캐시)
 struct DeviceCaps {
@@ -64,6 +61,7 @@ struct DeviceState {
 pub struct HidProcessor {
     devices: HashMap<usize, DeviceCaps>,
     states: HashMap<usize, DeviceState>,
+    hold_tracker: super::HoldTracker<super::WindowsHidPhysicalId>,
 }
 
 fn now_ms() -> u64 {
@@ -78,11 +76,18 @@ impl HidProcessor {
         Self {
             devices: HashMap::new(),
             states: HashMap::new(),
+            hold_tracker: super::HoldTracker::default(),
         }
     }
 
     /// WM_INPUT (RIM_TYPEHID) 진입점
-    pub fn handle_hid(&mut self, raw: &RAWINPUT, hdevice: HANDLE, sink: &mut Sink) {
+    pub fn handle_hid(
+        &mut self,
+        raw: &RAWINPUT,
+        hdevice: HANDLE,
+        captured: super::InputCapture,
+        output: &super::OutputSender,
+    ) {
         let key = hdevice.0 as usize;
         if let std::collections::hash_map::Entry::Vacant(e) = self.devices.entry(key) {
             match build_device_caps(hdevice) {
@@ -105,11 +110,17 @@ impl HidProcessor {
 
         for i in 0..count {
             let report = unsafe { std::slice::from_raw_parts(base.add(i * size), size) };
-            self.decode_report(key, report, sink);
+            self.decode_report(key, report, captured, output);
         }
     }
 
-    fn decode_report(&mut self, key: usize, report: &[u8], sink: &mut Sink) {
+    fn decode_report(
+        &mut self,
+        key: usize,
+        report: &[u8],
+        captured: super::InputCapture,
+        output: &super::OutputSender,
+    ) {
         // 동일 리포트 반복 skip — 상수 주기 전송 디바이스의 폭주 방지
         {
             let state = self.states.entry(key).or_default();
@@ -194,23 +205,45 @@ impl HidProcessor {
 
         // caps 차용 종료 — 이후 상태(states) 갱신 + 전송
         let now = now_ms();
-        let state = self.states.entry(key).or_default();
-
-        // 버튼 엣지
-        let down: Vec<(u16, u16)> = current.difference(&state.prev_buttons).copied().collect();
-        let up: Vec<(u16, u16)> = state.prev_buttons.difference(&current).copied().collect();
-        state.prev_buttons = current;
+        let (down, up) = {
+            let state = self.states.entry(key).or_default();
+            let down: Vec<_> = current.difference(&state.prev_buttons).copied().collect();
+            let up: Vec<_> = state.prev_buttons.difference(&current).copied().collect();
+            state.prev_buttons = current;
+            (down, up)
+        };
 
         for (page, usage) in down {
             let label = button_label(vid, pid, page, usage);
-            let _ = super::write_message(sink, &button_msg(label, HookKeyState::Down));
+            let labels = self.hold_tracker.press(
+                super::windows_hid_physical_id(key, page, usage),
+                captured.instant,
+                vec![label],
+            );
+            output.send(super::DaemonOutput::Hook(button_msg(
+                labels,
+                HookKeyState::Down,
+                None,
+                captured.input_ts_ms,
+            )));
         }
         for (page, usage) in up {
             let label = button_label(vid, pid, page, usage);
-            let _ = super::write_message(sink, &button_msg(label, HookKeyState::Up));
+            let release = self.hold_tracker.release(
+                super::windows_hid_physical_id(key, page, usage),
+                captured.instant,
+                vec![label],
+            );
+            output.send(super::DaemonOutput::Hook(button_msg(
+                release.labels,
+                HookKeyState::Up,
+                release.hold_duration_ms,
+                captured.input_ts_ms,
+            )));
         }
 
         // 축 throttle 전송
+        let state = self.states.entry(key).or_default();
         for (page, usage, value, full) in axis_values {
             let th = state.axis.entry((page, usage)).or_default();
             let changed = !th.sent || th.last_value != value;
@@ -218,14 +251,11 @@ impl HidProcessor {
                 th.last_value = value;
                 th.last_emit_ms = now;
                 th.sent = true;
-                let _ = super::write_axis(
-                    sink,
-                    &HidAxisMessage {
-                        axis_id: axis_label(vid, pid, page, usage),
-                        value,
-                        full,
-                    },
-                );
+                output.send(super::DaemonOutput::Axis(HidAxisMessage {
+                    axis_id: axis_label(vid, pid, page, usage),
+                    value,
+                    full,
+                }));
             }
         }
     }
@@ -239,14 +269,21 @@ fn axis_label(vid: u16, pid: u16, page: u16, usage: u16) -> String {
     format!("HIDA:{:04x}:{:04x}:{}:{}", vid, pid, page, usage)
 }
 
-fn button_msg(label: String, state: HookKeyState) -> HookMessage {
+fn button_msg(
+    labels: Vec<String>,
+    state: HookKeyState,
+    hold_duration_ms: Option<f64>,
+    input_ts_ms: Option<f64>,
+) -> HookMessage {
     HookMessage {
         device: InputDeviceKind::Gamepad,
-        labels: vec![label],
+        labels,
         state,
         vk_code: None,
         scan_code: None,
         flags: None,
+        hold_duration_ms,
+        input_ts_ms,
     }
 }
 

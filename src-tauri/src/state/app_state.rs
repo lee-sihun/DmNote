@@ -1,4 +1,3 @@
-use std::time::Instant;
 use std::{
     collections::{HashSet, VecDeque},
     io::{BufRead, BufReader},
@@ -9,7 +8,7 @@ use std::{
         Arc,
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -82,6 +81,9 @@ const OVERLAY_CREATION_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
 const EDITOR_FLUSH_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const SHUTDOWN_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_WATCHDOG_EXIT_CODE: i32 = 1;
+const MAX_INPUT_EVENT_AGE_MS: f64 = 10_000.0;
+const KEYBOARD_DAEMON_STABLE_RUNTIME: Duration = Duration::from_secs(30);
+const KEYBOARD_RECOVERY_DELAYS_MS: [u64; 5] = [250, 500, 1_000, 2_000, 4_000];
 const HISTORY_FRONTEND_FLUSH_BUSY: &str = "HISTORY_FRONTEND_FLUSH_BUSY";
 const HISTORY_FRONTEND_FLUSH_CANCELED: &str = "HISTORY_FRONTEND_FLUSH_CANCELED";
 const HISTORY_FRONTEND_FLUSH_EMIT_FAILED: &str = "HISTORY_FRONTEND_FLUSH_EMIT_FAILED";
@@ -572,6 +574,12 @@ struct RuntimePublicationState {
     counters_generation: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct KeyboardRecoveryPlan {
+    attempt: usize,
+    delay: Duration,
+}
+
 #[derive(Debug)]
 pub(crate) struct AdmittedCounterMutation {
     pub(crate) counters: KeyCounters,
@@ -609,8 +617,78 @@ fn should_create_overlay_on_startup(obs_mode_enabled: bool, overlay_visible: boo
     !obs_mode_enabled && overlay_visible
 }
 
-fn bootstrap_active_keys(keyboard: &KeyboardManager) -> Vec<String> {
-    keyboard.pressed_keys()
+fn bootstrap_keyboard_state(keyboard: &KeyboardManager) -> (String, Vec<String>) {
+    keyboard.current_mode_and_pressed_keys()
+}
+
+fn unix_epoch_ms() -> Option<f64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs_f64() * 1000.0)
+}
+
+fn resolve_event_age_ms(
+    input_ts_ms: Option<f64>,
+    now_wall_ms: Option<f64>,
+    fallback_age_ms: f64,
+) -> f64 {
+    let Some(event_age_ms) = input_ts_ms
+        .zip(now_wall_ms)
+        .map(|(input_ts_ms, now_wall_ms)| now_wall_ms - input_ts_ms)
+    else {
+        return fallback_age_ms;
+    };
+    if event_age_ms.is_finite() && (0.0..=MAX_INPUT_EVENT_AGE_MS).contains(&event_age_ms) {
+        event_age_ms
+    } else {
+        fallback_age_ms
+    }
+}
+
+fn next_keyboard_recovery_plan(
+    current_attempt: usize,
+    daemon_uptime: Duration,
+) -> Option<KeyboardRecoveryPlan> {
+    let attempt = if daemon_uptime >= KEYBOARD_DAEMON_STABLE_RUNTIME {
+        1
+    } else {
+        current_attempt.saturating_add(1)
+    };
+    let delay_ms = *KEYBOARD_RECOVERY_DELAYS_MS.get(attempt.checked_sub(1)?)?;
+    Some(KeyboardRecoveryPlan {
+        attempt,
+        delay: Duration::from_millis(delay_ms),
+    })
+}
+
+fn should_recover_keyboard_daemon(
+    shutdown_started: bool,
+    current_generation: u64,
+    task_generation: Option<u64>,
+    failed_generation: u64,
+) -> bool {
+    !shutdown_started
+        && current_generation == failed_generation
+        && task_generation == Some(failed_generation)
+}
+
+fn key_state_payload(
+    key: &str,
+    state: &str,
+    mode: &str,
+    event_age_ms: f64,
+    is_down: bool,
+    hold_duration_ms: Option<f64>,
+) -> serde_json::Value {
+    let mut payload =
+        json!({ "key": key, "state": state, "mode": mode, "eventAgeMs": event_age_ms });
+    if !is_down {
+        if let Some(hold_duration_ms) = hold_duration_ms {
+            payload["holdDurationMs"] = json!(hold_duration_ms);
+        }
+    }
+    payload
 }
 
 fn collect_frontend_lifecycle_targets<T>(
@@ -788,6 +866,7 @@ pub struct AppState {
     panel_destroy_reason: Mutex<Option<PanelVisibilityReason>>,
     panel_view_state: Mutex<Option<TargetedPanelViewState>>,
     keyboard_task: RwLock<Option<KeyboardDaemonTask>>,
+    keyboard_task_generation: AtomicU64,
     key_counters: Arc<RwLock<KeyCounters>>,
     counter_history_barrier: Mutex<CounterHistoryBarrierState>,
     counter_history_ready: Condvar,
@@ -863,6 +942,7 @@ impl AppState {
             panel_destroy_reason: Mutex::new(None),
             panel_view_state: Mutex::new(None),
             keyboard_task: RwLock::new(None),
+            keyboard_task_generation: AtomicU64::new(0),
             key_counters,
             counter_history_barrier: Mutex::new(CounterHistoryBarrierState::default()),
             counter_history_ready: Condvar::new(),
@@ -1037,6 +1117,7 @@ impl AppState {
         let state = self.store.snapshot();
         let mut custom_js = state.custom_js.clone();
         let _ = custom_js.normalize();
+        let (current_mode, active_keys) = bootstrap_keyboard_state(&self.keyboard);
         BootstrapPayload {
             defaults: DefaultsPayload {
                 settings: SettingsState::default(),
@@ -1073,8 +1154,8 @@ impl AppState {
             knob_positions: state.knob_positions.clone(),
             custom_tabs: state.custom_tabs.clone(),
             selected_key_type: state.selected_key_type.clone(),
-            current_mode: self.keyboard.current_mode(),
-            active_keys: bootstrap_active_keys(&self.keyboard),
+            current_mode,
+            active_keys,
             overlay: BootstrapOverlayState {
                 visible: *self.overlay_visible.read(),
                 locked: state.overlay_locked,
@@ -1406,7 +1487,12 @@ impl AppState {
         }
         self.overlay_bounds_generation
             .fetch_add(1, Ordering::SeqCst);
-        if let Some(task) = self.keyboard_task.write().take() {
+        self.keyboard_task_generation.fetch_add(1, Ordering::SeqCst);
+        let keyboard_task = {
+            let mut task_guard = self.keyboard_task.write();
+            task_guard.take()
+        };
+        if let Some(task) = keyboard_task {
             drop(task);
         }
         if let Some(watcher) = self.css_watcher.write().take() {
@@ -2062,8 +2148,44 @@ impl AppState {
         if task_guard.is_some() {
             return Ok(());
         }
+        self.start_keyboard_hook_locked(app, &mut task_guard, 0, None)
+    }
 
-        self.clear_active_keys();
+    fn start_keyboard_hook_locked(
+        &self,
+        app: AppHandle,
+        task_slot: &mut Option<KeyboardDaemonTask>,
+        recovery_attempt: usize,
+        expected_generation: Option<u64>,
+    ) -> Result<()> {
+        if self.shutdown_started.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+
+        let generation = if let Some(expected_generation) = expected_generation {
+            let next_generation = expected_generation.wrapping_add(1);
+            if self
+                .keyboard_task_generation
+                .compare_exchange(
+                    expected_generation,
+                    next_generation,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                )
+                .is_err()
+            {
+                return Ok(());
+            }
+            next_generation
+        } else {
+            self.keyboard_task_generation
+                .fetch_add(1, Ordering::SeqCst)
+                .wrapping_add(1)
+        };
+
+        self.reset_keyboard_hook_state(&app);
+
+        let daemon_started_at = Instant::now();
 
         let current_exe = std::env::current_exe().context("failed to locate dm-note executable")?;
         let shortcuts_json = serde_json::to_string(&self.store.settings_snapshot().shortcuts)
@@ -2145,10 +2267,14 @@ impl AppState {
                     let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
                 }
 
+                let mut exit_reason = None;
                 while running_reader.load(Ordering::SeqCst) {
                     let mut line = String::new();
                     match reader.read_line(&mut line) {
-                        Ok(0) => break,
+                        Ok(0) => {
+                            exit_reason = Some(String::from("output EOF"));
+                            break;
+                        }
                         Ok(_) => {
                             let s = line.trim();
                             if s.is_empty() {
@@ -2257,6 +2383,8 @@ impl AppState {
                                     vk_code: None,
                                     scan_code: None,
                                     flags: None,
+                                    hold_duration_ms: None,
+                                    input_ts_ms: None,
                                 }
                             };
 
@@ -2380,11 +2508,21 @@ impl AppState {
                                     }
                                 }
                             }
-                            // 입력 수신~emit 사이 경과 시간(ms). 오버레이가
-                            // performance.now() - eventAgeMs로 실제 입력 시각을 복원해
-                            // 노트 시작 위치가 렌더 프레임 경계에 양자화되는 것을 방지
-                            let event_age_ms = recv_at.elapsed().as_secs_f64() * 1000.0;
-                            let payload = json!({ "key": key_label, "state": state, "mode": mode, "eventAgeMs": event_age_ms });
+                            // 데몬 캡처 시각부터 emit까지 경과 시간
+                            let fallback_age_ms = recv_at.elapsed().as_secs_f64() * 1000.0;
+                            let event_age_ms = resolve_event_age_ms(
+                                message.input_ts_ms,
+                                unix_epoch_ms(),
+                                fallback_age_ms,
+                            );
+                            let payload = key_state_payload(
+                                &key_label,
+                                state,
+                                &mode,
+                                event_age_ms,
+                                is_down,
+                                message.hold_duration_ms,
+                            );
 
                             let mut emitted = false;
                             if let Some(overlay) = overlay_window.as_ref() {
@@ -2442,9 +2580,34 @@ impl AppState {
                             {
                                 continue;
                             }
+                            exit_reason = Some(format!("output read failed: {err}"));
                             break;
                         }
                     }
+                }
+                if running_reader.load(Ordering::SeqCst) {
+                    let exit_reason =
+                        exit_reason.unwrap_or_else(|| String::from("reader loop stopped"));
+                    let daemon_uptime = daemon_started_at.elapsed();
+                    let recovery_plan =
+                        next_keyboard_recovery_plan(recovery_attempt, daemon_uptime);
+                    if let Some(plan) = recovery_plan {
+                        warn!(
+                            "keyboard daemon ended unexpectedly ({exit_reason}); scheduling recovery attempt {}/{} in {} ms",
+                            plan.attempt,
+                            KEYBOARD_RECOVERY_DELAYS_MS.len(),
+                            plan.delay.as_millis()
+                        );
+                    } else {
+                        error!(
+                            "keyboard daemon ended unexpectedly ({exit_reason}); automatic recovery limit reached after {recovery_attempt} attempts"
+                        );
+                    }
+                    AppState::schedule_keyboard_hook_recovery(
+                        app_handle,
+                        generation,
+                        recovery_plan,
+                    );
                 }
             })
             .map_err(|err| anyhow!("failed to spawn keyboard daemon reader: {err}"))?;
@@ -2477,7 +2640,8 @@ impl AppState {
             None
         };
 
-        *task_guard = Some(KeyboardDaemonTask {
+        *task_slot = Some(KeyboardDaemonTask {
+            generation,
             running,
             reader_handle: Some(reader_handle),
             stderr_handle,
@@ -2485,6 +2649,74 @@ impl AppState {
             child: Some(child),
         });
         Ok(())
+    }
+
+    fn schedule_keyboard_hook_recovery(
+        app: AppHandle,
+        failed_generation: u64,
+        plan: Option<KeyboardRecoveryPlan>,
+    ) {
+        let fallback_app = app.clone();
+        let spawn_result = thread::Builder::new()
+            .name("keyboard-daemon-supervisor".into())
+            .spawn(move || {
+                if let Some(plan) = plan {
+                    thread::sleep(plan.delay);
+                }
+                let app_state = app.state::<AppState>();
+                let mut task_guard = app_state.keyboard_task.write();
+                let task_generation = task_guard.as_ref().map(|task| task.generation);
+                if !should_recover_keyboard_daemon(
+                    app_state.shutdown_started.load(Ordering::SeqCst),
+                    app_state.keyboard_task_generation.load(Ordering::SeqCst),
+                    task_generation,
+                    failed_generation,
+                ) {
+                    log::debug!(
+                        "keyboard daemon recovery canceled for generation {failed_generation}"
+                    );
+                    return;
+                }
+
+                let previous_task = task_guard.take();
+                drop(previous_task);
+                if let Some(plan) = plan {
+                    if let Err(err) = app_state.start_keyboard_hook_locked(
+                        app.clone(),
+                        &mut task_guard,
+                        plan.attempt,
+                        Some(failed_generation),
+                    ) {
+                        error!(
+                            "failed to recover keyboard daemon on attempt {}: {err:#}",
+                            plan.attempt
+                        );
+                    }
+                } else {
+                    app_state.reset_keyboard_hook_state(&app);
+                }
+            });
+        if let Err(err) = spawn_result {
+            error!("failed to spawn keyboard daemon supervisor: {err}");
+            fallback_app
+                .state::<AppState>()
+                .reset_keyboard_hook_state(&fallback_app);
+        }
+    }
+
+    fn reset_keyboard_hook_state(&self, app: &AppHandle) {
+        self.clear_active_keys();
+        if let Err(err) = app.emit("keys:reset", &json!({ "reason": "hook_restart" })) {
+            warn!("failed to emit keys:reset: {err}");
+        }
+    }
+
+    fn restart_keyboard_hook(&self, app: AppHandle) -> Result<()> {
+        self.keyboard_task_generation.fetch_add(1, Ordering::SeqCst);
+        let mut task_guard = self.keyboard_task.write();
+        let previous_task = task_guard.take();
+        drop(previous_task);
+        self.start_keyboard_hook_locked(app, &mut task_guard, 0, None)
     }
 
     pub fn selection_session(&self) -> SelectionSessionSnapshot {
@@ -3128,10 +3360,7 @@ impl AppState {
 
         if diff.changed.shortcuts.is_some() {
             // 변경된 글로벌 단축키 적용을 위해 키보드 daemon 재시작
-            if let Some(task) = self.keyboard_task.write().take() {
-                drop(task);
-            }
-            self.start_keyboard_hook(app.clone())?;
+            self.restart_keyboard_hook(app.clone())?;
         }
 
         Ok(())
@@ -4621,6 +4850,7 @@ fn flush_deferred_overlay_bounds(store: &Arc<AppStore>, generation: &Arc<AtomicU
 }
 
 struct KeyboardDaemonTask {
+    generation: u64,
     running: Arc<AtomicBool>,
     reader_handle: Option<JoinHandle<()>>,
     stderr_handle: Option<JoinHandle<()>>,
@@ -4666,17 +4896,19 @@ mod tests {
             atomic::{AtomicBool, AtomicUsize, Ordering},
             Arc,
         },
+        time::Duration,
     };
 
     use super::{
         acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
-        apply_panel_bounds_change, begin_panel_close_request, bootstrap_active_keys,
+        apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
         changed_panel_max_height, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
         frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
         global_css_watch_path, install_history_handshake, install_lifecycle_handshake,
-        panel_bounds_from_sample, panel_max_height, publish_panel_hidden_transition,
-        publish_panel_visibility_transition, publish_selection_snapshot,
-        resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
+        key_state_payload, next_keyboard_recovery_plan, panel_bounds_from_sample, panel_max_height,
+        publish_panel_hidden_transition, publish_panel_visibility_transition,
+        publish_selection_snapshot, resolve_event_age_ms, resolve_panel_window_layout,
+        run_panel_close_timeout, should_create_overlay_on_startup, should_recover_keyboard_daemon,
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
         take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
         EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
@@ -4687,10 +4919,11 @@ mod tests {
         PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
         PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
         SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
-        HISTORY_FRONTEND_FLUSH_INTERRUPTED, MAX_SELECTION_ELEMENTS,
-        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
-        MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
-        PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
+        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
+        MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
+        OVERLAY_LABEL, PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
+        PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         keyboard::KeyboardManager,
@@ -5582,14 +5815,78 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_active_keys_include_registered_event_key_names() {
+    fn bootstrap_keyboard_state_includes_mode_and_registered_event_key_names() {
         let manager = KeyboardManager::new(
             HashMap::from([("4key".to_string(), vec!["KeyD".to_string()])]),
             "4key",
         );
 
         assert!(manager.register_key_down("4key", "KeyD"));
-        assert_eq!(bootstrap_active_keys(&manager), vec!["KeyD"]);
+        assert_eq!(
+            bootstrap_keyboard_state(&manager),
+            ("4key".to_string(), vec!["KeyD".to_string()])
+        );
+    }
+
+    #[test]
+    fn event_age_uses_daemon_wall_clock_timestamp_when_sane() {
+        assert_eq!(
+            resolve_event_age_ms(Some(1_000.0), Some(1_025.5), 3.0),
+            25.5
+        );
+    }
+
+    #[test]
+    fn event_age_falls_back_for_invalid_wall_clock_delta() {
+        for input_ts_ms in [Some(2_000.0), Some(f64::NAN), Some(-f64::INFINITY)] {
+            assert_eq!(resolve_event_age_ms(input_ts_ms, Some(1_000.0), 7.0), 7.0);
+        }
+        assert_eq!(
+            resolve_event_age_ms(Some(1_000.0), Some(11_001.0), 7.0),
+            7.0
+        );
+        assert_eq!(resolve_event_age_ms(None, Some(1_000.0), 7.0), 7.0);
+    }
+
+    #[test]
+    fn key_state_payload_exposes_hold_duration_on_up_only() {
+        let down = key_state_payload("A", "DOWN", "4key", 2.0, true, Some(15.0));
+        let up = key_state_payload("A", "UP", "4key", 3.0, false, Some(15.0));
+        let unmatched_up = key_state_payload("A", "UP", "4key", 3.0, false, None);
+
+        assert!(down.get("holdDurationMs").is_none());
+        assert_eq!(up["holdDurationMs"], serde_json::json!(15.0));
+        assert!(unmatched_up.get("holdDurationMs").is_none());
+    }
+
+    #[test]
+    fn keyboard_recovery_backoff_grows_and_stops_at_the_limit() {
+        let mut current_attempt = 0;
+        for (index, delay_ms) in KEYBOARD_RECOVERY_DELAYS_MS.into_iter().enumerate() {
+            let plan = next_keyboard_recovery_plan(current_attempt, Duration::ZERO).unwrap();
+            assert_eq!(plan.attempt, index + 1);
+            assert_eq!(plan.delay, Duration::from_millis(delay_ms));
+            current_attempt = plan.attempt;
+        }
+
+        assert!(next_keyboard_recovery_plan(current_attempt, Duration::ZERO).is_none());
+    }
+
+    #[test]
+    fn stable_keyboard_daemon_resets_the_recovery_budget() {
+        let plan = next_keyboard_recovery_plan(5, KEYBOARD_DAEMON_STABLE_RUNTIME).unwrap();
+
+        assert_eq!(plan.attempt, 1);
+        assert_eq!(plan.delay, Duration::from_millis(250));
+    }
+
+    #[test]
+    fn keyboard_recovery_guard_rejects_teardown_and_stale_tasks() {
+        assert!(should_recover_keyboard_daemon(false, 7, Some(7), 7));
+        assert!(!should_recover_keyboard_daemon(true, 7, Some(7), 7));
+        assert!(!should_recover_keyboard_daemon(false, 8, Some(7), 7));
+        assert!(!should_recover_keyboard_daemon(false, 7, Some(8), 7));
+        assert!(!should_recover_keyboard_daemon(false, 7, None, 7));
     }
 
     #[test]

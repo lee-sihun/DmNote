@@ -38,6 +38,12 @@ export type KeyStatePayload = {
   mode: string;
   /** 입력 수신~emit 경과 시간(ms). performance.now() - eventAgeMs로 실제 입력 시각 복원 */
   eventAgeMs?: number;
+  /** UP 한정. 데몬이 입력 캡처 시점 기준으로 측정한 물리 눌림 지속 시간(ms) */
+  holdDurationMs?: number;
+};
+export type KeysResetPayload = {
+  /** 리셋 사유 (예: hook_restart) */
+  reason: string;
 };
 export type InputDevice = 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
 export type RawInputPayload = {
@@ -925,6 +931,9 @@ export interface DMNoteAPI {
     ): Unsubscribe;
     onModeChanged(listener: (payload: ModeChangePayload) => void): Unsubscribe;
     onKeyState(listener: (payload: KeyStatePayload) => void): ReadyUnsubscribe;
+    onKeysReset(
+      listener: (payload: KeysResetPayload) => void,
+    ): ReadyUnsubscribe;
     onRawInput(listener: (payload: RawInputPayload) => void): Unsubscribe;
     resetCounters(): Promise<KeyCounters>;
     resetCountersMode(mode: string): Promise<KeyCounters>;

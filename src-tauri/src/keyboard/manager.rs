@@ -146,7 +146,12 @@ impl KeyboardManager {
         self.active_keys.write().clear();
     }
 
+    #[cfg(test)]
     pub fn pressed_keys(&self) -> Vec<String> {
+        self.current_mode_and_pressed_keys().1
+    }
+
+    pub fn current_mode_and_pressed_keys(&self) -> (String, Vec<String>) {
         let current_mode = self.current_mode.read();
         let prefix = format!("{current_mode}::");
         let active_keys = self.active_keys.read();
@@ -155,7 +160,7 @@ impl KeyboardManager {
             .filter_map(|entry| entry.strip_prefix(&prefix).map(str::to_string))
             .collect();
         keys.sort();
-        keys
+        (current_mode.clone(), keys)
     }
 
     fn rebuild_valid_keys(&self) {
@@ -332,5 +337,22 @@ mod tests {
         assert!(manager.set_mode("target"));
         assert!(manager.pressed_keys().is_empty());
         assert_eq!(manager.match_and_register(["KeyD"], true), None);
+    }
+
+    #[test]
+    fn current_mode_and_pressed_keys_share_one_snapshot() {
+        let manager = KeyboardManager::new(
+            HashMap::from([
+                ("source".to_string(), vec!["KeyD".to_string()]),
+                ("target".to_string(), vec!["KeyF".to_string()]),
+            ]),
+            "source",
+        );
+        assert!(manager.register_key_down("source", "KeyD"));
+
+        assert_eq!(
+            manager.current_mode_and_pressed_keys(),
+            ("source".to_string(), vec!["KeyD".to_string()])
+        );
     }
 }

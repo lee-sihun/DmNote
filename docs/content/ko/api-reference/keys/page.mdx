@@ -223,6 +223,9 @@ interface KeyStatePayload {
   // 입력 수신~emit 경과 시간(ms).
   // `performance.now() - eventAgeMs`로 실제 입력 시각 복원
   eventAgeMs?: number;
+  // UP 이벤트 한정. 입력 데몬이 캡처 시점에 측정한 물리 눌림
+  // 지속 시간(ms) - 전달 지연·지터의 영향을 받지 않음
+  holdDurationMs?: number;
 }
 ```
 
@@ -239,6 +242,24 @@ const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
 ```javascript
 const unsub = dmn.keys.onKeyState(handler);
 await unsub.ready; // 이 시점부터 구독이 활성
+```
+
+### onKeysReset(listener)
+
+눌림 상태 전체가 무효화될 때 발화합니다. 예를 들어 글로벌 단축키 변경으로
+키보드 훅이 재시작되면 이전 `onKeyState` 이벤트에서 파생된 상태(눌림 유지,
+활성 시각화)는 더 이상 유효하지 않으므로, 정리 후 새 스냅샷으로 재구성하세요.
+
+```typescript
+interface KeysResetPayload {
+  reason: string; // 예: "hook_restart"
+}
+```
+
+```javascript
+dmn.keys.onKeysReset(({ reason }) => {
+  console.log(`키 상태 리셋: ${reason}`);
+});
 ```
 
 ### onRawInput(listener)

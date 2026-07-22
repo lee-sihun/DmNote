@@ -43,6 +43,12 @@ pub struct HookMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub flags: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub hold_duration_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub input_ts_ms: Option<f64>,
 }
 
 #[repr(u8)]
@@ -142,5 +148,55 @@ pub fn pipe_client_connect(name: &str) -> anyhow::Result<std::fs::File> {
         };
         let file = std::fs::File::from_raw_handle(handle.0);
         Ok(file)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HookKeyState, HookMessage, InputDeviceKind};
+
+    #[test]
+    fn hook_message_accepts_legacy_payload_without_timing_fields() {
+        let message: HookMessage =
+            serde_json::from_str(r#"{"device":"keyboard","labels":["A"],"state":"DOWN"}"#).unwrap();
+
+        assert_eq!(message.hold_duration_ms, None);
+        assert_eq!(message.input_ts_ms, None);
+    }
+
+    #[test]
+    fn hook_message_omits_absent_timing_fields() {
+        let message = HookMessage {
+            device: InputDeviceKind::Keyboard,
+            labels: vec!["A".to_string()],
+            state: HookKeyState::Down,
+            vk_code: None,
+            scan_code: None,
+            flags: None,
+            hold_duration_ms: None,
+            input_ts_ms: None,
+        };
+
+        let value = serde_json::to_value(message).unwrap();
+        assert!(value.get("hold_duration_ms").is_none());
+        assert!(value.get("input_ts_ms").is_none());
+    }
+
+    #[test]
+    fn hook_message_serializes_present_timing_fields() {
+        let message = HookMessage {
+            device: InputDeviceKind::Keyboard,
+            labels: vec!["A".to_string()],
+            state: HookKeyState::Up,
+            vk_code: None,
+            scan_code: None,
+            flags: None,
+            hold_duration_ms: Some(12.5),
+            input_ts_ms: Some(1_500.25),
+        };
+
+        let value = serde_json::to_value(message).unwrap();
+        assert_eq!(value["hold_duration_ms"], 12.5);
+        assert_eq!(value["input_ts_ms"], 1_500.25);
     }
 }

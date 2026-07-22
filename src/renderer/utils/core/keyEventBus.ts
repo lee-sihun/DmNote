@@ -8,6 +8,7 @@ type KeyStatePayload = {
   state: string;
   mode: string;
   eventAgeMs?: number;
+  holdDurationMs?: number;
 };
 
 type KeyEventListener = (payload: KeyStatePayload) => void;

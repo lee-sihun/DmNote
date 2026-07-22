@@ -28,15 +28,29 @@ type NoteSubscriber = (event: NoteEvent) => void;
 interface NoteState {
   useDelay: boolean;
   downTime?: number;
+  // 판정 폴백용 비클램프 보정 시각 - 표시용 downTime과 분리
+  physDownTime?: number;
   releaseTime: number | null;
+  physReleaseTime?: number;
+  // 데몬이 캡처 시점에 측정한 물리 hold (UP payload, 검증 통과 값만)
+  holdDurationMs?: number;
   startTime: number | null;
   startTimer: ReturnType<typeof setTimeout> | null;
   finalizeTimer: ReturnType<typeof setTimeout> | null;
   noteId: string | null;
   created: boolean;
   released: boolean;
+  // press 시작 시점 정책 스냅샷 - mid-press 설정 변경에도 판정·길이 일관 유지
   delayMs?: number;
-  releasedBeforeStart?: boolean;
+  minLengthMs?: number;
+}
+
+// 키 이벤트 시각 정보. displayTime은 클램프 보정(표시 위치 전용),
+// physTime은 비클램프 보정(hold 폴백 전용)
+export interface NoteKeyTiming {
+  displayTime?: number;
+  physTime?: number;
+  holdDurationMs?: number;
 }
 
 interface NoteSettings {
@@ -60,9 +74,10 @@ interface UseNoteSystemOptions {
 interface UseNoteSystemReturn {
   notesRef: React.MutableRefObject<Record<string, Note[]>>;
   subscribe: (callback: NoteSubscriber) => () => void;
-  handleKeyDown: (keyName: string, eventTime?: number) => void;
-  handleKeyUp: (keyName: string, eventTime?: number) => void;
+  handleKeyDown: (keyName: string, timing?: NoteKeyTiming) => void;
+  handleKeyUp: (keyName: string, timing?: NoteKeyTiming) => void;
   finalizeAllActive: () => void;
+  reconcileActiveNotes: (activeKeys: ReadonlySet<string>) => void;
   noteBuffer: NoteBuffer;
   updateTrackLayouts: (layouts: TrackLayoutInput[]) => void;
 }
@@ -451,28 +466,24 @@ export function useNoteSystem({
   const scheduleNoteFinalization = (
     keyName: string,
     state: NoteState,
-    options: { forceMinLength?: boolean } = {},
   ): void => {
-    const { forceMinLength = false } = options;
     if (!state?.noteId || state.startTime == null) return;
 
     const releaseTime = state.releaseTime ?? performance.now();
-    const noteRef = state.noteId
-      ? noteLookupRef.current.get(state.noteId)
-      : null;
-    const baselineStart =
-      noteRef?.startTime ?? state.startTime ?? state.downTime ?? releaseTime;
-    const clampedStart = Math.min(releaseTime, baselineStart);
-    const holdDurationFromStart = Math.max(0, releaseTime - clampedStart);
-    // delayed mode: 시작 표시가 threshold만큼 지연되므로 실제 입력 유지 시간 기준으로 길이 계산 (종료도 동일하게 지연)
-    const physicalHoldMs =
-      state.useDelay && state.downTime != null
-        ? Math.max(0, releaseTime - state.downTime)
-        : holdDurationFromStart;
-    const minLengthMs = computeMinLengthMs();
-    const desiredDuration = forceMinLength
+    // 판정용 물리 hold: 데몬 authoritative 값 우선, 없으면 비클램프 보정 시각 차 폴백
+    const physDown = state.physDownTime ?? state.downTime;
+    const physRelease = state.physReleaseTime ?? releaseTime;
+    const fallbackHold =
+      physDown != null ? Math.max(0, physRelease - physDown) : 0;
+    const holdMs = state.holdDurationMs ?? fallbackHold;
+    // 단/롱 판정은 실행 순서(타이머 vs UP 도착)가 아니라 물리 hold와 press 시점
+    // 스냅샷 threshold의 비교로만 결정 - 전달 지연·지터에 불변
+    const threshold = state.delayMs ?? 0;
+    const minLengthMs = state.minLengthMs ?? computeMinLengthMs();
+    const isShort = state.useDelay && holdMs < threshold;
+    const desiredDuration = isShort
       ? minLengthMs
-      : Math.max(minLengthMs, physicalHoldMs);
+      : Math.max(minLengthMs, holdMs);
     const safeDuration = Math.max(desiredDuration, 1);
     const targetEndTime = state.startTime + safeDuration;
 
@@ -500,8 +511,8 @@ export function useNoteSystem({
     finalizeTimersRef.current.set(state.noteId, timer);
   };
 
-  // 노트 생성/완료. eventTime: 실제 입력 시각(performance.now 기준 보정값)
-  const handleKeyDown = (keyName: string, eventTime?: number): void => {
+  // 노트 생성/완료. timing.displayTime: 표시용 보정 시각, timing.physTime: 판정 폴백용
+  const handleKeyDown = (keyName: string, timing?: NoteKeyTiming): void => {
     if (!noteEffectEnabled.current) return;
 
     const useDelay = delayEnabledRef.current && delayMsRef.current > 0;
@@ -517,10 +528,11 @@ export function useNoteSystem({
 
     if (useDelay) {
       const delayMs = delayMsRef.current;
-      const downTime = eventTime ?? performance.now();
+      const downTime = timing?.displayTime ?? performance.now();
       const state: NoteState = {
         useDelay: true,
         downTime,
+        physDownTime: timing?.physTime ?? downTime,
         releaseTime: null,
         startTime: null,
         startTimer: null,
@@ -529,7 +541,7 @@ export function useNoteSystem({
         created: false,
         released: false,
         delayMs,
-        releasedBeforeStart: false,
+        minLengthMs: computeMinLengthMs(),
       };
 
       const startTimer = setTimeout(() => {
@@ -545,10 +557,9 @@ export function useNoteSystem({
         state.created = true;
         state.startTime = overrideStart;
 
+        // 생성 전에 UP이 먼저 도착한 press - 단/롱은 finalize 계산이 hold로 판정
         if (state.released) {
-          const forceMinLength = !!state.releasedBeforeStart;
-          scheduleNoteFinalization(keyName, state, { forceMinLength });
-          state.releasedBeforeStart = false;
+          scheduleNoteFinalization(keyName, state);
         }
         // 실제 입력 시각 기준으로 노트 등장 시점을 맞춤. 입력 시각이 과거면
         // 남은 대기를 0으로 clamp해 타이머가 음수가 되지 않도록 함
@@ -559,7 +570,7 @@ export function useNoteSystem({
       return;
     }
 
-    const noteId = createNote(keyName, eventTime);
+    const noteId = createNote(keyName, timing?.displayTime);
     const createdNote = noteLookupRef.current.get(noteId);
     const noteStartTime = createdNote?.startTime ?? performance.now();
     stateList.push({
@@ -574,7 +585,7 @@ export function useNoteSystem({
     });
   };
 
-  const handleKeyUp = (keyName: string, eventTime?: number): void => {
+  const handleKeyUp = (keyName: string, timing?: NoteKeyTiming): void => {
     if (!noteEffectEnabled.current) return;
 
     const stateList = activeNotes.current.get(keyName);
@@ -590,9 +601,16 @@ export function useNoteSystem({
 
     if (!state) return;
 
-    const now = eventTime ?? performance.now();
+    const now = timing?.displayTime ?? performance.now();
     state.released = true;
     state.releaseTime = now;
+    state.physReleaseTime = timing?.physTime ?? now;
+    // NaN·음수 방어: 검증 실패 값은 폴백 계산으로 강등
+    const rawHold = timing?.holdDurationMs;
+    state.holdDurationMs =
+      typeof rawHold === 'number' && Number.isFinite(rawHold) && rawHold >= 0
+        ? rawHold
+        : undefined;
 
     if (!state.useDelay) {
       if (state.created && state.noteId) {
@@ -603,7 +621,6 @@ export function useNoteSystem({
     }
 
     if (state.startTimer) {
-      state.releasedBeforeStart = true;
       // 아직 노트가 생성되지 않았으므로 타이머가 실행되면 finalize를 스케줄링한다
       return;
     }
@@ -691,12 +708,47 @@ export function useNoteSystem({
   };
   const finalizeAllActive = (): void => finalizeAllActiveRef.current();
 
+  // UP 유실 복구: 스냅샷 기준 실제로 눌려 있지 않은 키의 활성 press를 종료.
+  // 유실된 release의 실제 시각은 복원 불가하므로 현재 시각 finalize로
+  // 성장만 정지시킨다 (실패 복구 경로이지 정상 판정이 아님)
+  const reconcileActiveNotes = (activeKeys: ReadonlySet<string>): void => {
+    const now = performance.now();
+    for (const [keyName, stateList] of activeNotes.current.entries()) {
+      if (activeKeys.has(keyName)) continue;
+      if (!Array.isArray(stateList)) continue;
+      // removeState가 배열을 변형하므로 사본 순회
+      for (const state of [...stateList]) {
+        if (!state || state.released) continue;
+        state.released = true;
+        state.releaseTime = now;
+        state.physReleaseTime = now;
+        if (state.startTimer) {
+          // 노트 생성 전이면 표시된 것이 없으므로 조용히 취소
+          clearTimeout(state.startTimer);
+          state.startTimer = null;
+          removeState(keyName, state);
+          continue;
+        }
+        // 성장 즉시 정지 - schedule 경유 시 delay 모드는 threshold만큼 더 자람
+        if (state.created && state.noteId) {
+          finalizeNote(
+            keyName,
+            state.noteId,
+            Math.max(now, state.startTime ?? 0),
+          );
+        }
+        removeState(keyName, state);
+      }
+    }
+  };
+
   return {
     notesRef,
     subscribe,
     handleKeyDown: effectiveHandleKeyDown,
     handleKeyUp: effectiveHandleKeyUp,
     finalizeAllActive,
+    reconcileActiveNotes,
     noteBuffer: noteBufferRef.current,
     updateTrackLayouts: (layouts: TrackLayoutInput[]) =>
       noteBufferRef.current.updateTrackLayouts(layouts),

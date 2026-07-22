@@ -370,6 +370,7 @@ impl ObsBridgeService {
             "settings:changed",
             "editor:committed",
             "keys:state",
+            "keys:reset",
             "keys:changed",
             "keys:counters",
             "keys:counter",
