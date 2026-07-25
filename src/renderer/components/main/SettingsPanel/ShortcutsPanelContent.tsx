@@ -335,11 +335,6 @@ const ShortcutsPanelContent = ({
               {notice}
             </div>
           ) : null}
-
-          {/* 우클릭 해제·Backspace 초기화 안내 - 구 모달의 발견성 복원 */}
-          <p className="px-[2px] text-caption text-fg-faint">
-            {t('shortcutSetting.hint')}
-          </p>
         </div>
       </div>
 

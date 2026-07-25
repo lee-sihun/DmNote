@@ -121,7 +121,6 @@
     "zoomOut": "줌 축소",
     "resetZoom": "줌 초기화",
     "listening": "키 입력...",
-    "hint": "우클릭: 해제, (입력 대기 중) Backspace: 초기화, Esc: 취소",
     "unassigned": "미지정",
     "movedFrom": "{{name}}의 기존 단축키가 해제되었습니다.",
     "saveFailed": "단축키 저장에 실패했습니다."

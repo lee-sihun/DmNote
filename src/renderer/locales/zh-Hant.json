@@ -121,7 +121,6 @@
     "zoomOut": "縮小",
     "resetZoom": "重置縮放",
     "listening": "按下按鍵...",
-    "hint": "右鍵單擊解除綁定. 監聽時: 退格鍵清除, Esc 取消.",
     "unassigned": "未分配",
     "movedFrom": "已從「{{name}}」移除該快捷鍵。",
     "saveFailed": "儲存快捷鍵失敗."

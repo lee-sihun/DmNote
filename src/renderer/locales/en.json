@@ -121,7 +121,6 @@
     "zoomOut": "Zoom Out",
     "resetZoom": "Reset Zoom",
     "listening": "Press keys...",
-    "hint": "Right-click to unbind. While listening: Backspace to clear, Esc to cancel.",
     "unassigned": "Unassigned",
     "movedFrom": "This shortcut was unassigned from {{name}}.",
     "saveFailed": "Failed to save shortcuts."
