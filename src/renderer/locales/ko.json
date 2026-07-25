@@ -450,6 +450,7 @@
     "releaseNotes": "릴리즈 노트",
     "skipVersion": "이 버전 건너뛰기",
     "goToRelease": "릴리즈 페이지로 이동",
+    "releasePage": "릴리즈 페이지",
     "autoUpdate": "자동 업데이트",
     "autoUpdating": "업데이트 중...",
     "autoUpdateFailed": "자동 업데이트에 실패했습니다.",

@@ -450,6 +450,7 @@
     "releaseNotes": "Что нового",
     "skipVersion": "Пропустить",
     "goToRelease": "К релизу",
+    "releasePage": "Страница релиза",
     "autoUpdate": "Автообновление",
     "autoUpdating": "Обновление...",
     "autoUpdateFailed": "Автообновление не удалось.",

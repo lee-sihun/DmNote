@@ -450,6 +450,7 @@
     "releaseNotes": "Release Notes",
     "skipVersion": "Skip this version",
     "goToRelease": "Go to Release",
+    "releasePage": "Release Page",
     "autoUpdate": "Auto Update",
     "autoUpdating": "Updating...",
     "autoUpdateFailed": "Automatic update failed.",

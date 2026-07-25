@@ -450,6 +450,7 @@
     "releaseNotes": "发布说明",
     "skipVersion": "跳过此版本",
     "goToRelease": "前往发布页面",
+    "releasePage": "发布页面",
     "autoUpdate": "自动更新",
     "autoUpdating": "更新中...",
     "autoUpdateFailed": "自动更新失败.",
