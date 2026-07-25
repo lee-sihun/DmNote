@@ -85,7 +85,7 @@ describe('사이드 패널 팝업 앵커 정렬', () => {
     ).toEqual({ x: 795, y: 495 });
   });
 
-  it('패널 외부 피커 3종이 같은 앵커 정렬 계산을 사용한다', () => {
+  it('패널 외부 피커 3종이 공용 표시 호스트를 거쳐 같은 앵커 정렬을 쓴다', () => {
     const files = ['ColorPicker.tsx', 'ImagePicker.tsx', 'ShadowPicker.tsx'];
 
     for (const file of files) {
@@ -97,9 +97,21 @@ describe('사이드 패널 팝업 앵커 정렬', () => {
         ),
         'utf8',
       );
-      expect(source).toContain('usePanelAnchoredPopupPosition');
-      expect(source).toContain('referenceRef,');
-      expect(source).not.toContain('panelRect.bottom');
+      // 좌표 계산을 각자 들고 있으면 팝업·페이지 표현이 갈라진다
+      expect(source).toContain('PickerSurface');
+      expect(source).not.toContain('usePanelAnchoredPopupPosition');
+      expect(source).not.toContain('FloatingPopup');
     }
+
+    const surface = readFileSync(
+      resolve(
+        process.cwd(),
+        'src/renderer/components/main/Grid/PropertiesPanel/PickerSurface.tsx',
+      ),
+      'utf8',
+    );
+    expect(surface).toContain('usePanelAnchoredPopupPosition');
+    expect(surface).toContain('referenceRef,');
+    expect(surface).not.toContain('panelRect.bottom');
   });
 });

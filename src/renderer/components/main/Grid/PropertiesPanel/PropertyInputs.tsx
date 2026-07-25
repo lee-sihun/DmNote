@@ -38,10 +38,15 @@ export const PropertyRow: React.FC<PropertyRowProps> = ({
   </div>
 );
 
-// 그룹 카드 — 관련 속성 행을 하나의 면으로 묶는 섹션 컨테이너
+// 그룹 카드 — 관련 속성 행을 하나의 면으로 묶는 섹션 컨테이너.
+// data 표식은 분리 창 피커가 좌우 정렬·폭을 맞추는 기준
 export const PropertySection: React.FC<{ children: React.ReactNode }> = ({
   children,
-}) => <div className={SECTION_CARD_CLASS}>{children}</div>;
+}) => (
+  <div data-dmn-section="true" className={SECTION_CARD_CLASS}>
+    {children}
+  </div>
+);
 
 // ============================================================================
 // 숫자 입력

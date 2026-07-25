@@ -63,8 +63,10 @@ const TRAY_MENU_QUIT_ID: &str = "tray-quit";
 const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const PANEL_WIDTH: f64 = 240.0;
-const PANEL_INITIAL_HEIGHT: f64 = 530.0;
-const PANEL_MIN_HEIGHT: f64 = 360.0;
+// 피커가 트리거 행 아래에 그대로 들어갈 세로 여유 - 이보다 낮으면 팝업이
+// 매번 위로 뒤집히거나 창 경계로 클램프됨. 늘리는 것만 허용
+const PANEL_INITIAL_HEIGHT: f64 = 712.0;
+const PANEL_MIN_HEIGHT: f64 = 712.0;
 const PANEL_MAX_HEIGHT_RATIO: f64 = 0.9;
 const PANEL_FALLBACK_MAX_HEIGHT: f64 = 10_000.0;
 const PANEL_BOUNDS_DEBOUNCE_MS: u64 = 400;
@@ -2896,7 +2898,7 @@ impl AppState {
                 .accept_first_mouse(true)
                 .visible(true)
                 .inner_size(PANEL_WIDTH, layout.height)
-                .min_inner_size(PANEL_WIDTH, PANEL_MIN_HEIGHT)
+                .min_inner_size(PANEL_WIDTH, layout.min_height)
                 .max_inner_size(PANEL_WIDTH, layout.max_height)
                 .zoom_hotkeys_enabled(false);
 
@@ -4416,14 +4418,20 @@ impl MonitorData {
 struct PanelWindowLayout {
     position: Option<OverlayPosition>,
     height: f64,
+    min_height: f64,
     max_height: f64,
 }
 
-fn panel_max_height(work_area_height: Option<f64>) -> f64 {
-    work_area_height
-        .filter(|height| height.is_finite() && *height > 0.0)
-        .map(|height| (height * PANEL_MAX_HEIGHT_RATIO).max(PANEL_MIN_HEIGHT))
-        .unwrap_or(PANEL_FALLBACK_MAX_HEIGHT)
+// 작업 영역이 하한보다 좁으면 하한을 화면에 맞춰 낮춤 - 그러지 않으면 창 아래쪽이
+// 화면 밖으로 나가 리사이즈 가장자리에 손이 닿지 않는다
+fn panel_height_bounds(work_area_height: Option<f64>) -> (f64, f64) {
+    let Some(work_area_height) =
+        work_area_height.filter(|height| height.is_finite() && *height > 0.0)
+    else {
+        return (PANEL_MIN_HEIGHT, PANEL_FALLBACK_MAX_HEIGHT);
+    };
+    let max_height = work_area_height * PANEL_MAX_HEIGHT_RATIO;
+    (PANEL_MIN_HEIGHT.min(max_height), max_height)
 }
 
 fn resolve_panel_window_layout(
@@ -4436,13 +4444,14 @@ fn resolve_panel_window_layout(
             monitors.find_best_overlap(bounds.x, bounds.y, PANEL_WIDTH, bounds.height)
         })
         .or_else(|| monitors.primary_spec());
-    let max_height = panel_max_height(target_monitor.map(|monitor| monitor.logical_height));
+    let (min_height, max_height) =
+        panel_height_bounds(target_monitor.map(|monitor| monitor.logical_height));
     // 저장된 높이가 없으면 메인 창 높이를 기본값으로 (프로그램 높이 동기)
     let requested_height = stored_bounds
         .map(|bounds| bounds.height)
         .or(fallback_height)
         .unwrap_or(PANEL_INITIAL_HEIGHT);
-    let height = requested_height.clamp(PANEL_MIN_HEIGHT, max_height);
+    let height = requested_height.clamp(min_height, max_height);
     let position = stored_bounds.map(|bounds| {
         target_monitor
             .map(|monitor| monitor.clamp(bounds.x, bounds.y, PANEL_WIDTH, height))
@@ -4455,6 +4464,7 @@ fn resolve_panel_window_layout(
     PanelWindowLayout {
         position,
         height,
+        min_height,
         max_height,
     }
 }
@@ -4498,7 +4508,7 @@ fn panel_bounds_from_sample(sample: PanelBoundsSample) -> PanelBounds {
     PanelBounds {
         x: position.x,
         y: position.y,
-        height: size.height.max(PANEL_MIN_HEIGHT),
+        height: size.height,
     }
 }
 
@@ -4698,10 +4708,10 @@ impl PanelBoundsPersistenceController {
         session: u64,
         generation: u64,
     ) -> Result<()> {
-        let Some(max_height) = window
+        let Some((min_height, monitor_max_height)) = window
             .current_monitor()?
             .and_then(MonitorSpec::from_monitor)
-            .map(|monitor| panel_max_height(Some(monitor.logical_height)))
+            .map(|monitor| panel_height_bounds(Some(monitor.logical_height)))
         else {
             return Ok(());
         };
@@ -4710,11 +4720,16 @@ impl PanelBoundsPersistenceController {
             if !state.active || state.session != session || state.generation != generation {
                 return Ok(());
             }
-            changed_panel_max_height(state.applied_max_height, max_height)
+            changed_panel_max_height(state.applied_max_height, monitor_max_height)
         };
         let Some(max_height) = max_height else {
             return Ok(());
         };
+        // 좁은 모니터로 옮겨가면 하한도 함께 내려야 창이 화면 밖으로 나가지 않음
+        window.set_min_size(Some(tauri::Size::Logical(tauri::LogicalSize::new(
+            PANEL_WIDTH,
+            min_height,
+        ))))?;
         window.set_max_size(Some(tauri::Size::Logical(tauri::LogicalSize::new(
             PANEL_WIDTH,
             max_height,
@@ -4905,15 +4920,15 @@ mod tests {
         changed_panel_max_height, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
         frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
         global_css_watch_path, install_history_handshake, install_lifecycle_handshake,
-        key_state_payload, next_keyboard_recovery_plan, panel_bounds_from_sample, panel_max_height,
-        publish_panel_hidden_transition, publish_panel_visibility_transition,
+        key_state_payload, next_keyboard_recovery_plan, panel_bounds_from_sample,
+        panel_height_bounds, publish_panel_hidden_transition, publish_panel_visibility_transition,
         publish_selection_snapshot, resolve_event_age_ms, resolve_panel_window_layout,
         run_panel_close_timeout, should_create_overlay_on_startup, should_recover_keyboard_daemon,
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
         take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
         EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
         FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
-        LifecycleHandshakeInstall, MonitorData, Mutex, PanelBoundsChange,
+        LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex, PanelBoundsChange,
         PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
         PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
         PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
@@ -4945,9 +4960,41 @@ mod tests {
         assert_eq!(PANEL_LABEL, "panel");
         assert_eq!(PANEL_ENTRYPOINT, "panel/index.html");
         assert_eq!(PANEL_WIDTH, 240.0);
-        assert_eq!(PANEL_INITIAL_HEIGHT, 530.0);
-        assert_eq!(PANEL_MIN_HEIGHT, 360.0);
-        assert_eq!(panel_max_height(Some(1_000.0)), 900.0);
+        assert_eq!(PANEL_INITIAL_HEIGHT, 712.0);
+        assert_eq!(PANEL_MIN_HEIGHT, 712.0);
+        // 넉넉한 화면에서는 하한이 그대로 유지됨
+        assert_eq!(
+            panel_height_bounds(Some(1_000.0)),
+            (PANEL_MIN_HEIGHT, 900.0)
+        );
+        // 하한보다 좁은 작업 영역에서는 하한이 화면에 맞춰 내려감 - clamp 역전 방지
+        assert_eq!(panel_height_bounds(Some(600.0)), (540.0, 540.0));
+        let (min_height, max_height) = panel_height_bounds(None);
+        assert_eq!(min_height, PANEL_MIN_HEIGHT);
+        assert!(max_height >= min_height);
+    }
+
+    #[test]
+    fn panel_layout_never_exceeds_a_small_work_area() {
+        let monitors = MonitorData {
+            specs: vec![MonitorSpec {
+                logical_origin_x: 0.0,
+                logical_origin_y: 0.0,
+                logical_width: 1_280.0,
+                logical_height: 680.0,
+                physical_origin_x: 0.0,
+                physical_origin_y: 0.0,
+                physical_width: 1_280.0,
+                physical_height: 680.0,
+                scale_factor: 1.0,
+            }],
+            primary_index: Some(0),
+        };
+        let layout = resolve_panel_window_layout(None, &monitors, None);
+
+        assert!(layout.min_height <= layout.max_height);
+        assert!(layout.height <= 680.0);
+        assert_eq!(layout.height, layout.max_height);
     }
 
     #[test]
@@ -5009,14 +5056,15 @@ mod tests {
         let bounds = panel_bounds_from_sample(PanelBoundsSample {
             position: PhysicalPosition::new(600, 300),
             position_scale_factor: 2.0,
-            size: PhysicalSize::new(480, 1_000),
+            size: PhysicalSize::new(480, 1_600),
             size_scale_factor: 2.0,
             current_scale_factor: 2.0,
         });
 
         assert_eq!(bounds.x, 300.0);
         assert_eq!(bounds.y, 150.0);
-        assert_eq!(bounds.height, 500.0);
+        // 표본은 실측 그대로 - 하한은 복원 시 모니터 기준으로 다시 적용됨
+        assert_eq!(bounds.height, 800.0);
     }
 
     #[test]

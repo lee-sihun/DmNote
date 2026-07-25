@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ElementShadowSpec } from '@src/types/key/shadows';
-import FloatingPopup from '../../FloatingPopup';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
 import ColorPicker from './ColorPicker';
 import { ColorSwatchButton } from './ColorSwatch';
 import TabSwitch from '@components/main/common/TabSwitch';
@@ -9,7 +9,6 @@ import {
   PropertyRow,
   PropertySection,
 } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
-import { usePanelAnchoredPopupPosition } from '@hooks/ui/usePanelAnchoredPopupPosition';
 
 type ShadowState = 'idle' | 'active';
 
@@ -88,129 +87,108 @@ const ShadowPicker = ({
     onClose();
   };
 
-  const pickerContainerRef = useRef<HTMLDivElement>(null);
-  const fixedPosition = usePanelAnchoredPopupPosition({
-    open,
-    panelElement,
-    referenceRef,
-    popupRef: pickerContainerRef,
-    fallbackWidth: 204,
-    fallbackHeight: 210,
-  });
-
-  const effectiveOffsetY = fixedPosition ? 0 : -93;
+  const shadowLabel = t('propertiesPanel.shadow') || '그림자';
 
   return (
-    <FloatingPopup
+    <PickerSurface
       open={open}
-      ariaLabel={t('propertiesPanel.shadow') || '그림자'}
+      ariaLabel={shadowLabel}
       referenceRef={referenceRef}
-      fixedX={fixedPosition?.x}
-      fixedY={fixedPosition?.y}
-      placement="right-start"
-      offset={32}
-      offsetY={effectiveOffsetY}
-      className="z-50"
+      panelElement={panelElement}
+      fallbackWidth={204}
+      fallbackHeight={210}
+      cardClassName="flex flex-col p-[8px] gap-[8px] w-[204px] bg-glass-heavy backdrop-glass rounded-popup shadow-elevation-3"
+      offsetY={-93}
       interactiveRefs={interactiveRefs}
       onClose={handleClose}
-      autoClose={false}
-      portalToBody={Boolean(panelElement)}
-      animate={!panelElement}
-    >
-      <div
-        ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[204px] bg-glass-heavy backdrop-glass rounded-popup shadow-elevation-3"
-        style={{
-          visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
-        }}
-      >
-        {/* 상태 전환 — 눌림 상태가 없는 요소는 대기만 */}
-        {showActiveState ? (
-          <TabSwitch
-            tabs={[
-              { id: 'idle', label: t('propertiesPanel.shadowIdle') || '대기' },
-              {
-                id: 'active',
-                label: t('propertiesPanel.shadowActive') || '입력',
-              },
-            ]}
-            activeTab={effectiveState}
-            onTabChange={handleStateChange}
+      overlay={
+        colorOpen ? (
+          <ColorPicker
+            open
+            referenceRef={colorButtonRef}
+            color={draftColor}
+            onColorChange={(color) => {
+              if (typeof color === 'string') setDraftColor(color);
+            }}
+            onColorChangeComplete={(color) => {
+              if (typeof color !== 'string') return;
+              setDraftColor(color);
+              update({ color });
+            }}
+            onClose={() => setColorOpen(false)}
+            solidOnly
+            placement="left-start"
+            offsetY={0}
+            interactiveRefs={[colorButtonRef]}
           />
-        ) : null}
-
-        <PropertySection>
-          <PropertyRow label={t('propertiesPanel.shadowColor') || '색상'}>
-            {mixed ? (
-              <span className="text-fg-faint text-body italic">Mixed</span>
-            ) : null}
-            <ColorSwatchButton
-              ref={colorButtonRef}
-              type="button"
-              onClick={() => setColorOpen((prev) => !prev)}
-              open={colorOpen}
-              className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
-              surfaceClassName="rounded-md"
-              color={draftColor}
-            />
-          </PropertyRow>
-
-          <PropertyRow label={t('propertiesPanel.shadowOffset') || '위치'}>
-            <NumberInput
-              value={current.offsetX}
-              onChange={(value) => update({ offsetX: value })}
-              prefix="X"
-              min={-100}
-              max={100}
-              allowDecimal
-              decimalScale={1}
-            />
-            <NumberInput
-              value={current.offsetY}
-              onChange={(value) => update({ offsetY: value })}
-              prefix="Y"
-              min={-100}
-              max={100}
-              allowDecimal
-              decimalScale={1}
-            />
-          </PropertyRow>
-
-          <PropertyRow label={t('propertiesPanel.shadowBlur') || '흐림'}>
-            <NumberInput
-              value={current.blur}
-              onChange={(value) => update({ blur: value })}
-              suffix="px"
-              min={0}
-              max={100}
-              allowDecimal
-              decimalScale={1}
-            />
-          </PropertyRow>
-        </PropertySection>
-      </div>
-
-      {colorOpen ? (
-        <ColorPicker
-          open
-          referenceRef={colorButtonRef}
-          color={draftColor}
-          onColorChange={(color) => {
-            if (typeof color === 'string') setDraftColor(color);
-          }}
-          onColorChangeComplete={(color) => {
-            if (typeof color !== 'string') return;
-            setDraftColor(color);
-            update({ color });
-          }}
-          onClose={() => setColorOpen(false)}
-          solidOnly
-          placement="left-start"
-          offsetY={0}
-          interactiveRefs={[colorButtonRef]}
+        ) : null
+      }
+    >
+      {/* 상태 전환 — 눌림 상태가 없는 요소는 대기만 */}
+      {showActiveState ? (
+        <TabSwitch
+          tabs={[
+            { id: 'idle', label: t('propertiesPanel.shadowIdle') || '대기' },
+            {
+              id: 'active',
+              label: t('propertiesPanel.shadowActive') || '입력',
+            },
+          ]}
+          activeTab={effectiveState}
+          onTabChange={handleStateChange}
         />
       ) : null}
-    </FloatingPopup>
+
+      <PropertySection>
+        <PropertyRow label={t('propertiesPanel.shadowColor') || '색상'}>
+          {mixed ? (
+            <span className="text-fg-faint text-body italic">Mixed</span>
+          ) : null}
+          <ColorSwatchButton
+            ref={colorButtonRef}
+            type="button"
+            onClick={() => setColorOpen((prev) => !prev)}
+            open={colorOpen}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={draftColor}
+          />
+        </PropertyRow>
+
+        <PropertyRow label={t('propertiesPanel.shadowOffset') || '위치'}>
+          <NumberInput
+            value={current.offsetX}
+            onChange={(value) => update({ offsetX: value })}
+            prefix="X"
+            min={-100}
+            max={100}
+            allowDecimal
+            decimalScale={1}
+          />
+          <NumberInput
+            value={current.offsetY}
+            onChange={(value) => update({ offsetY: value })}
+            prefix="Y"
+            min={-100}
+            max={100}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+
+        <PropertyRow label={t('propertiesPanel.shadowBlur') || '흐림'}>
+          <NumberInput
+            value={current.blur}
+            onChange={(value) => update({ blur: value })}
+            suffix="px"
+            min={0}
+            max={100}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+      </PropertySection>
+    </PickerSurface>
   );
 };
 

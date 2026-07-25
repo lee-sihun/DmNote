@@ -9,7 +9,11 @@ import {
   autoUpdate,
   type Placement,
 } from '@floating-ui/react';
-import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
+import {
+  isInsideHigherPopupLayer,
+  isTopmostPopupLayer,
+  registerPopupLayer,
+} from './popupLayer';
 
 interface FloatingPopupBaseProps {
   open: boolean;
@@ -270,6 +274,8 @@ const FloatingPopup = ({
           target instanceof Element &&
           !!target.closest('[data-dmn-gradient-overlay="true"]');
         if (isInsideGradientOverlay) return;
+        // 위에 쌓인 팝업(자식 피커 등)은 body 포털이라 floating 내부로 인식되지 않음
+        if (isInsideHigherPopupLayer(refs.floating.current, target)) return;
         onClose();
       };
 
@@ -421,6 +427,12 @@ const FloatingPopup = ({
         target instanceof Element &&
         !!target.closest('[data-dmn-gradient-overlay="true"]');
       if (isInsideGradientOverlay) {
+        pointerCapturedInside = false;
+        return;
+      }
+
+      // 위에 쌓인 팝업(자식 피커 등)은 body 포털이라 floating 내부로 인식되지 않음
+      if (isInsideHigherPopupLayer(floatingEl, target)) {
         pointerCapturedInside = false;
         return;
       }

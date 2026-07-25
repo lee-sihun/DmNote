@@ -6,7 +6,7 @@ import {
   HueSlider,
   AlphaSlider,
 } from './colorPickerPrimitives';
-import FloatingPopup from '../../FloatingPopup';
+import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
 import TabSwitch from '@components/main/common/TabSwitch';
 import {
   MODES,
@@ -32,7 +32,6 @@ import {
   type GradientSpec,
 } from '@src/types/color';
 import { ColorSwatchButton, ColorSwatchSurface } from './ColorSwatch';
-import { usePanelAnchoredPopupPosition } from '@hooks/ui/usePanelAnchoredPopupPosition';
 
 type ColorValue = string | GradientColor;
 type PaletteValue = ColorValue | GradientSpecColor;
@@ -611,7 +610,6 @@ const ColorPickerWrapper = ({
     }
   };
 
-  const pickerContainerRef = useRef<HTMLDivElement | null>(null);
   const showStateSwitch =
     stateMode != null && typeof onStateModeChange === 'function';
 
@@ -669,18 +667,6 @@ const ColorPickerWrapper = ({
     if (opacityPercentFocusTarget === 'bottom') return;
     setOpacityPercentBottomInput(String(Math.round(resolvedOpacityBottom!)));
   }, [opacityPercentFocusTarget, resolvedOpacityBottom, showOpacityControl]);
-
-  const fixedPosition = usePanelAnchoredPopupPosition({
-    open,
-    panelElement,
-    referenceRef,
-    popupRef: pickerContainerRef,
-    fallbackWidth: 168,
-    fallbackHeight: 300,
-  });
-
-  // fixedPosition이 있으면 offsetY를 무시 (이미 정확한 좌표가 계산됨)
-  const effectiveOffsetY = fixedPosition ? 0 : offsetY;
 
   const clampOpacityPercent = (value: number): number => {
     const num = Number(value);
@@ -771,208 +757,193 @@ const ColorPickerWrapper = ({
   })();
 
   return (
-    <FloatingPopup
+    <PickerSurface
       open={open}
       ariaLabel={t('noteColor.color')}
       referenceRef={referenceRef}
-      fixedX={
-        fixedPosition?.x ??
-        (typeof position === 'object' ? position?.x : undefined)
-      }
-      fixedY={
-        fixedPosition?.y ??
-        (typeof position === 'object' ? position?.y : undefined)
-      }
+      panelElement={panelElement}
+      fallbackWidth={168}
+      fallbackHeight={300}
+      cardClassName="flex flex-col p-[10px] gap-[12px] w-[168px] bg-glass-heavy backdrop-glass rounded-popup shadow-elevation-3"
       placement={placement}
-      offset={32}
-      offsetY={effectiveOffsetY}
-      className="z-50"
+      offsetY={offsetY}
+      fallbackFixedX={typeof position === 'object' ? position?.x : undefined}
+      fallbackFixedY={typeof position === 'object' ? position?.y : undefined}
+      closeOnScroll={closeOnScroll}
+      portalToBody={portalToBody}
       interactiveRefs={interactiveRefs}
       onClose={handleClose}
-      autoClose={false}
-      closeOnScroll={closeOnScroll}
-      portalToBody={Boolean(panelElement) || portalToBody}
-      animate={!panelElement}
     >
-      <div
-        ref={pickerContainerRef}
-        className="flex flex-col p-[10px] gap-[12px] w-[168px] bg-glass-heavy backdrop-glass rounded-popup shadow-elevation-3"
-        style={{
-          visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
-        }}
-      >
-        {showStateSwitch && (
-          <StateSwitch state={stateMode} onChange={onStateModeChange} />
-        )}
-        {headerSlot}
-        {!solidOnly && <ModeSwitch mode={mode} onChange={handleModeSwitch} />}
+      {showStateSwitch && (
+        <StateSwitch state={stateMode} onChange={onStateModeChange} />
+      )}
+      {headerSlot}
+      {!solidOnly && <ModeSwitch mode={mode} onChange={handleModeSwitch} />}
 
-        <SaturationArea
+      <SaturationArea
+        color={selectedColor}
+        onChange={handleChange}
+        onChangeComplete={handleChangeComplete}
+      />
+
+      {/* 트랙 쌍 — 그룹 간 12px / 쌍 내부 6px (모달·패널 섹션 리듬과 동일) */}
+      <div className="flex flex-col gap-[6px]">
+        <HueSlider
           color={selectedColor}
           onChange={handleChange}
           onChangeComplete={handleChangeComplete}
         />
-
-        {/* 트랙 쌍 — 그룹 간 12px / 쌍 내부 6px (모달·패널 섹션 리듬과 동일) */}
-        <div className="flex flex-col gap-[6px]">
-          <HueSlider
+        {solidOnly && (
+          <AlphaSlider
             color={selectedColor}
-            onChange={handleChange}
-            onChangeComplete={handleChangeComplete}
+            onChange={(color: ColorObject) => {
+              // Alpha 변경 시 hex 값은 유지하고 alpha만 동기화 (hex 입력 깜빡임 방지)
+              setAlphaWithSync(color.rgb.a, false);
+            }}
+            onChangeComplete={(color: ColorObject) => {
+              setAlphaWithSync(color.rgb.a, true);
+            }}
           />
-          {solidOnly && (
-            <AlphaSlider
-              color={selectedColor}
-              onChange={(color: ColorObject) => {
-                // Alpha 변경 시 hex 값은 유지하고 alpha만 동기화 (hex 입력 깜빡임 방지)
-                setAlphaWithSync(color.rgb.a, false);
-              }}
-              onChangeComplete={(color: ColorObject) => {
-                setAlphaWithSync(color.rgb.a, true);
-              }}
-            />
-          )}
+        )}
 
-          {showOpacityControl && (
-            <AlphaSlider
-              color={opacitySliderColor}
-              onChange={(c: ColorObject) => {
-                const target = opacitySliderTarget;
-                const next = clampOpacityPercent((c?.rgb?.a ?? 1) * 100);
-                if (
-                  opacityPercentFocusTarget === null ||
-                  opacityPercentFocusTarget !== target
-                ) {
-                  if (target === 'solid')
-                    setOpacityPercentSolidInput(String(next));
-                  else if (target === 'top')
-                    setOpacityPercentTopInput(String(next));
-                  else setOpacityPercentBottomInput(String(next));
-                }
-                onOpacityPercentChange?.(next, target);
-              }}
-              onChangeComplete={(c: ColorObject) => {
-                const target = opacitySliderTarget;
-                const next = clampOpacityPercent((c?.rgb?.a ?? 1) * 100);
+        {showOpacityControl && (
+          <AlphaSlider
+            color={opacitySliderColor}
+            onChange={(c: ColorObject) => {
+              const target = opacitySliderTarget;
+              const next = clampOpacityPercent((c?.rgb?.a ?? 1) * 100);
+              if (
+                opacityPercentFocusTarget === null ||
+                opacityPercentFocusTarget !== target
+              ) {
                 if (target === 'solid')
                   setOpacityPercentSolidInput(String(next));
                 else if (target === 'top')
                   setOpacityPercentTopInput(String(next));
                 else setOpacityPercentBottomInput(String(next));
-                onOpacityPercentChange?.(next, target);
-                onOpacityPercentChangeComplete?.(next, target);
-              }}
-            />
-          )}
-        </div>
-
-        {solidOnly || mode === MODES.solid ? (
-          <Input
-            value={inputValue}
-            onValueChange={handleInputChange}
-            onValueCommit={commitSolidInput}
-            previewColor={selectedColor.hex}
-            alpha={
-              solidOnly
-                ? alpha
-                : showOpacityControl
-                ? clampOpacityPercent(opacityPercent as number) / 100
-                : undefined
-            }
-            alphaPercentValue={
-              solidOnly
-                ? alphaPercentInput
-                : showOpacityControl
-                ? opacityPercentSolidInput
-                : undefined
-            }
-            onAlphaPercentChange={
-              solidOnly
-                ? handleAlphaPercentChange
-                : showOpacityControl
-                ? handleOpacityPercentSolidChange
-                : undefined
-            }
-            onAlphaPercentCommit={
-              solidOnly
-                ? commitAlphaPercent
-                : showOpacityControl
-                ? commitOpacityPercentSolid
-                : undefined
-            }
-            onAlphaPercentFocusChange={
-              solidOnly
-                ? setIsAlphaPercentFocused
-                : showOpacityControl
-                ? (focused: boolean) =>
-                    setOpacityPercentFocusTarget(focused ? 'solid' : null)
-                : undefined
-            }
-          />
-        ) : (
-          <GradientInputs
-            topValue={gradientTop}
-            bottomValue={gradientBottom}
-            onTopChange={handleGradientInputChange(setGradientTop)}
-            onBottomChange={handleGradientInputChange(setGradientBottom)}
-            onTopCommit={() => {
-              commitGradient();
-              selectGradient('top');
+              }
+              onOpacityPercentChange?.(next, target);
             }}
-            onBottomCommit={() => {
-              commitGradient();
-              selectGradient('bottom');
+            onChangeComplete={(c: ColorObject) => {
+              const target = opacitySliderTarget;
+              const next = clampOpacityPercent((c?.rgb?.a ?? 1) * 100);
+              if (target === 'solid') setOpacityPercentSolidInput(String(next));
+              else if (target === 'top')
+                setOpacityPercentTopInput(String(next));
+              else setOpacityPercentBottomInput(String(next));
+              onOpacityPercentChange?.(next, target);
+              onOpacityPercentChangeComplete?.(next, target);
             }}
-            selected={gradientSelected}
-            onSelect={(s: GradientSide) => selectGradient(s)}
-            rightTopValue={
-              showOpacityControl ? opacityPercentTopInput : undefined
-            }
-            rightBottomValue={
-              showOpacityControl ? opacityPercentBottomInput : undefined
-            }
-            onRightValueChange={
-              showOpacityControl
-                ? (target: GradientSide, raw: string) => {
-                    if (target === 'top') handleOpacityPercentTopChange(raw);
-                    else handleOpacityPercentBottomChange(raw);
-                  }
-                : undefined
-            }
-            onRightCommit={
-              showOpacityControl
-                ? (target: GradientSide) => {
-                    if (target === 'top') commitOpacityPercentTop();
-                    else commitOpacityPercentBottom();
-                  }
-                : undefined
-            }
-            onRightFocusChange={
-              showOpacityControl
-                ? (target: GradientSide, focused: boolean) =>
-                    setOpacityPercentFocusTarget(focused ? target : null)
-                : undefined
-            }
-            rightTitle={opacityPercentLabel || 'Opacity'}
           />
         )}
+      </div>
 
-        {/* 팔레트 섹션 — spec 지원 피커는 solidOnly여도 그라데이션 행 표시.
+      {solidOnly || mode === MODES.solid ? (
+        <Input
+          value={inputValue}
+          onValueChange={handleInputChange}
+          onValueCommit={commitSolidInput}
+          previewColor={selectedColor.hex}
+          alpha={
+            solidOnly
+              ? alpha
+              : showOpacityControl
+              ? clampOpacityPercent(opacityPercent as number) / 100
+              : undefined
+          }
+          alphaPercentValue={
+            solidOnly
+              ? alphaPercentInput
+              : showOpacityControl
+              ? opacityPercentSolidInput
+              : undefined
+          }
+          onAlphaPercentChange={
+            solidOnly
+              ? handleAlphaPercentChange
+              : showOpacityControl
+              ? handleOpacityPercentSolidChange
+              : undefined
+          }
+          onAlphaPercentCommit={
+            solidOnly
+              ? commitAlphaPercent
+              : showOpacityControl
+              ? commitOpacityPercentSolid
+              : undefined
+          }
+          onAlphaPercentFocusChange={
+            solidOnly
+              ? setIsAlphaPercentFocused
+              : showOpacityControl
+              ? (focused: boolean) =>
+                  setOpacityPercentFocusTarget(focused ? 'solid' : null)
+              : undefined
+          }
+        />
+      ) : (
+        <GradientInputs
+          topValue={gradientTop}
+          bottomValue={gradientBottom}
+          onTopChange={handleGradientInputChange(setGradientTop)}
+          onBottomChange={handleGradientInputChange(setGradientBottom)}
+          onTopCommit={() => {
+            commitGradient();
+            selectGradient('top');
+          }}
+          onBottomCommit={() => {
+            commitGradient();
+            selectGradient('bottom');
+          }}
+          selected={gradientSelected}
+          onSelect={(s: GradientSide) => selectGradient(s)}
+          rightTopValue={
+            showOpacityControl ? opacityPercentTopInput : undefined
+          }
+          rightBottomValue={
+            showOpacityControl ? opacityPercentBottomInput : undefined
+          }
+          onRightValueChange={
+            showOpacityControl
+              ? (target: GradientSide, raw: string) => {
+                  if (target === 'top') handleOpacityPercentTopChange(raw);
+                  else handleOpacityPercentBottomChange(raw);
+                }
+              : undefined
+          }
+          onRightCommit={
+            showOpacityControl
+              ? (target: GradientSide) => {
+                  if (target === 'top') commitOpacityPercentTop();
+                  else commitOpacityPercentBottom();
+                }
+              : undefined
+          }
+          onRightFocusChange={
+            showOpacityControl
+              ? (target: GradientSide, focused: boolean) =>
+                  setOpacityPercentFocusTarget(focused ? target : null)
+              : undefined
+          }
+          rightTitle={opacityPercentLabel || 'Opacity'}
+        />
+      )}
+
+      {/* 팔레트 섹션 — spec 지원 피커는 solidOnly여도 그라데이션 행 표시.
             미지원(구형) 피커에서는 알파를 보존할 수 없는 spec 항목을 표시에서
             제외 (저장 데이터는 유지, 패딩 전에 필터) */}
-        <ColorPaletteSection
-          solidPalette={solidPalette}
-          gradientPalette={
-            onGradientSpecSelect
-              ? gradientPalette
-              : gradientPalette.filter((c) => !isGradientSpecColor(c))
-          }
-          onPaletteClick={handlePaletteClick}
-          showGradient={!solidOnly || gradientSpec !== undefined}
-        />
-        {footerSlot}
-      </div>
-    </FloatingPopup>
+      <ColorPaletteSection
+        solidPalette={solidPalette}
+        gradientPalette={
+          onGradientSpecSelect
+            ? gradientPalette
+            : gradientPalette.filter((c) => !isGradientSpecColor(c))
+        }
+        onPaletteClick={handlePaletteClick}
+        showGradient={!solidOnly || gradientSpec !== undefined}
+      />
+      {footerSlot}
+    </PickerSurface>
   );
 };
 

@@ -30,6 +30,7 @@ vi.mock('@components/main/Modal/FloatingPopup', () => ({
 
 vi.mock('@hooks/ui/usePanelAnchoredPopupPosition', () => ({
   usePanelAnchoredPopupPosition: () => null,
+  useTriggerAnchoredPopupPosition: () => ({ settled: true, position: null }),
 }));
 
 vi.mock('@contexts/useTranslation', () => ({
