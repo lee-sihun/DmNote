@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 
-// 피커 행의 ⋮ 버튼/우클릭으로 여는 컨텍스트 메뉴 상태 관리
+// 피커 행의 ⋮ 버튼/행 클릭/우클릭으로 여는 컨텍스트 메뉴 상태 관리
 export const usePickerItemMenu = <TKey>() => {
   const [menuKey, setMenuKey] = useState<TKey | null>(null);
   const [menuPosition, setMenuPosition] = useState<{
@@ -22,18 +22,39 @@ export const usePickerItemMenu = <TKey>() => {
     pressedWhileOpenKeyRef.current = menuKey === key ? key : null;
   };
 
-  const openFromButton = (event: React.MouseEvent<HTMLElement>, key: TKey) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const openAt = (key: TKey, position: { x: number; y: number }) => {
     const pressedWhileOpen = pressedWhileOpenKeyRef.current === key;
     pressedWhileOpenKeyRef.current = null;
     if (pressedWhileOpen || menuKey === key) {
       close();
       return;
     }
-    const rect = event.currentTarget.getBoundingClientRect();
-    setMenuPosition({ x: rect.right + 4, y: rect.top - 2 });
+    setMenuPosition(position);
     setMenuKey(key);
+  };
+
+  const openFromButton = (event: React.MouseEvent<HTMLElement>, key: TKey) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    openAt(key, { x: rect.right + 4, y: rect.top - 2 });
+  };
+
+  // 행 본문 좌클릭 - 포인터 위치에서 열고, 키보드 조작은 행 왼쪽 아래에 붙임
+  const openFromRow = (
+    event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>,
+    key: TKey,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if ('clientX' in event && event.detail > 0) {
+      openAt(key, { x: event.clientX, y: event.clientY });
+      return;
+    }
+    // 포인터 기록은 마우스 경로 전용 - 키보드 조작은 현재 열림 상태만 보고 토글
+    pressedWhileOpenKeyRef.current = null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    openAt(key, { x: rect.left + 8, y: rect.bottom });
   };
 
   const openFromContextMenu = (
@@ -55,6 +76,7 @@ export const usePickerItemMenu = <TKey>() => {
     menuPosition,
     capturePressState,
     openFromButton,
+    openFromRow,
     openFromContextMenu,
     close,
   };

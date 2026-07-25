@@ -12,7 +12,9 @@ import {
   PANEL_LIST_SCROLL_CLASS,
   PANEL_LIST_WELL_CLASS,
   PANEL_PILL_CLASS,
+  PANEL_ROW_NAME_ACTIVE_CLASS,
   PANEL_ROW_NAME_CLASS,
+  PANEL_ROW_NAME_UNAVAILABLE_CLASS,
   PANEL_SECTION_CLASS,
   PANEL_STATUS_BADGE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
@@ -207,6 +209,16 @@ const CssPanelContent = ({
                 return (
                   <div
                     key={item.path}
+                    role="button"
+                    tabIndex={0}
+                    onPointerDown={() => menu.capturePressState(item.path)}
+                    onClick={(event) => menu.openFromRow(event, item.path)}
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        menu.openFromRow(event, item.path);
+                      }
+                    }}
                     onContextMenu={(event) =>
                       menu.openFromContextMenu(event, item.path)
                     }
@@ -215,7 +227,9 @@ const CssPanelContent = ({
                   >
                     <span
                       className={`${PANEL_ROW_NAME_CLASS} ${
-                        available ? 'text-fg' : 'text-fg-disabled'
+                        available
+                          ? PANEL_ROW_NAME_ACTIVE_CLASS
+                          : PANEL_ROW_NAME_UNAVAILABLE_CLASS
                       }`}
                     >
                       {pathBaseName(item.path)}
@@ -229,7 +243,10 @@ const CssPanelContent = ({
                       </span>
                     ) : (
                       <button
-                        onClick={() => void handleActivate(item)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleActivate(item);
+                        }}
                         disabled={!available || pendingPath !== null}
                         className={`${PANEL_PILL_CLASS} ${
                           available

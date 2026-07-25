@@ -11,7 +11,9 @@ import {
   PANEL_LIST_SCROLL_CLASS,
   PANEL_LIST_WELL_CLASS,
   PANEL_PILL_CLASS,
+  PANEL_ROW_NAME_ACTIVE_CLASS,
   PANEL_ROW_NAME_CLASS,
+  PANEL_ROW_NAME_INACTIVE_CLASS,
   PANEL_SECTION_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
 import { SettingToggleRow } from '@components/main/common/SettingRow';
@@ -72,6 +74,16 @@ const PluginsPanelContent = ({
                 return (
                   <div
                     key={plugin.id}
+                    role="button"
+                    tabIndex={0}
+                    onPointerDown={() => menu.capturePressState(plugin.id)}
+                    onClick={(event) => menu.openFromRow(event, plugin.id)}
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        menu.openFromRow(event, plugin.id);
+                      }
+                    }}
                     onContextMenu={(event) =>
                       menu.openFromContextMenu(event, plugin.id)
                     }
@@ -80,7 +92,9 @@ const PluginsPanelContent = ({
                   >
                     <span
                       className={`${PANEL_ROW_NAME_CLASS} ${
-                        plugin.enabled ? 'text-fg' : 'text-fg-muted'
+                        plugin.enabled
+                          ? PANEL_ROW_NAME_ACTIVE_CLASS
+                          : PANEL_ROW_NAME_INACTIVE_CLASS
                       }`}
                     >
                       {plugin.name}

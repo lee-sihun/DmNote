@@ -5,8 +5,9 @@ export const PANEL_SECTION_CLASS =
   'bg-inset rounded-surface px-[14px] py-[8px] flex flex-col';
 
 // 설정 페인 목록 행 - 토글 카드와 같은 밀도 (min-h-36, 인셋은 카드 px-14가 담당)
+// 행 전체가 항목 메뉴 트리거 - group으로 이름 밝기 호버를 묶음
 export const PANEL_LIST_ROW_CLASS =
-  'w-full min-h-[36px] flex items-center gap-[8px] text-label';
+  'group w-full min-h-[36px] flex items-center gap-[8px] text-label cursor-pointer';
 
 // 채움 상태 2단 - 알약·푸터 버튼이 공유하는 인터랙티브/비활성 배경
 export const FILL_INTERACTIVE_CLASS =
@@ -27,6 +28,13 @@ export const PANEL_LIST_EMPTY_CLASS =
   'h-full flex items-center justify-center text-fg-faint text-body';
 export const PANEL_ROW_NAME_CLASS =
   'min-w-0 flex-1 truncate text-left transition-colors duration-fast';
+
+// 행 이름 밝기 - 평소 한 단계 낮추고 행 호버에서 올려 메뉴가 있음을 알림
+export const PANEL_ROW_NAME_ACTIVE_CLASS = 'text-fg-muted group-hover:text-fg';
+export const PANEL_ROW_NAME_INACTIVE_CLASS =
+  'text-fg-faint group-hover:text-fg-muted';
+export const PANEL_ROW_NAME_UNAVAILABLE_CLASS =
+  'text-fg-disabled group-hover:text-fg-faint';
 
 // 히스토리 행 트레일링 표식 - 현재 항목 라벨과 상태 배지
 export const PANEL_APPLIED_LABEL_CLASS =
