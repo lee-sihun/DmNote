@@ -3,10 +3,11 @@ import { toRgbHexColor } from '@utils/color/colorUtils';
 
 const MAX_NOTES = 2048;
 
-// GPU 시각의 Float32 정밀도 유지 한도. performance.now()가 수일 누적되면
-// 간격이 32~64ms로 벌어져 짧은 노트 길이가 양자화되므로, 이 한도를 넘으면
-// epoch를 현재로 옮겨 절대값을 작게 유지 (2^21ms ≈ 35분, 해당 구간 정밀도 0.125ms)
-const EPOCH_REBASE_LIMIT_MS = 2_097_152;
+// GPU 시각은 Float32라 절대값이 커질수록 간격이 벌어진다. 노트 길이보다 간격이
+// 넓어지면 시작·종료가 같은 값으로 뭉개져 길이가 0이 되므로 epoch를 주기적으로 옮긴다.
+// 최소 노트 길이는 1px / 9999px/s ≈ 0.10001ms 이고 2^19ms 구간의 간격은 0.0625ms라,
+// 이 한도에서는 설정 범위 전체가 안전하다. 한도를 올리면 정밀도 테스트가 깨진다
+const EPOCH_REBASE_LIMIT_MS = 524_288;
 // 셰이더 sentinel(startTime 0.0 = 빈 슬롯, endTime 0.0 = 활성)과의 우연 충돌 방지
 const EPOCH_ZERO_NUDGE = 1e-4;
 

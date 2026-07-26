@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { createNoteBuffer } from './noteBuffer';
 
 const layoutFor = (trackKey: string) => ({
@@ -49,9 +50,36 @@ describe('NoteBuffer 시각 저장', () => {
     buffer.updateTrackLayouts([layoutFor('Z')]);
     buffer.allocate('Z', 'note-1', 500);
 
-    expect(buffer.maybeRebaseEpoch(2_000_000)).toBe(false);
+    expect(buffer.maybeRebaseEpoch(524_288)).toBe(false);
     expect(buffer.timeEpoch).toBe(0);
     expect(buffer.noteInfo[0]).toBe(500);
+  });
+
+  it('Float32 간격이 설정 가능한 최소 노트 길이보다 작다', () => {
+    const rebaseLimitMs = 2 ** 19;
+    const float32SpacingMs = 2 ** (Math.floor(Math.log2(rebaseLimitMs)) - 23);
+    const minimumNoteLengthMs =
+      (NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.min * 1000) /
+      NOTE_SETTINGS_CONSTRAINTS.speed.max;
+
+    expect(bufferAtEpochBoundary(rebaseLimitMs)).toBe(false);
+    expect(bufferAtEpochBoundary(rebaseLimitMs + 1)).toBe(true);
+    expect(float32SpacingMs).toBe(0.0625);
+    expect(minimumNoteLengthMs).toBeGreaterThan(float32SpacingMs);
+  });
+
+  it('이전 한도에서도 최소 노트 길이가 0으로 양자화되지 않는다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([layoutFor('Z')]);
+    const startTime = 2 ** 21;
+    const minimumNoteLengthMs =
+      (NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.min * 1000) /
+      NOTE_SETTINGS_CONSTRAINTS.speed.max;
+
+    buffer.allocate('Z', 'note-1', startTime);
+    buffer.finalize('note-1', startTime + minimumNoteLengthMs);
+
+    expect(buffer.noteInfo[1] - buffer.noteInfo[0]).toBeGreaterThan(0);
   });
 
   it('장시간 유휴 후 첫 할당은 자동 재기준화되고 sentinel 0을 피한다', () => {
@@ -79,3 +107,8 @@ describe('NoteBuffer 시각 저장', () => {
     expect(buffer.noteInfo[1]).toBeCloseTo(50, 3);
   });
 });
+
+const bufferAtEpochBoundary = (nowMs: number): boolean => {
+  const buffer = createNoteBuffer();
+  return buffer.maybeRebaseEpoch(nowMs);
+};
