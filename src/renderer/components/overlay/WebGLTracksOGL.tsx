@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Renderer, Camera, Transform, Program, Geometry, Mesh } from 'ogl';
 import type { OGLRenderingContext } from 'ogl';
 import { animationScheduler } from '@utils/animation/animationScheduler';
+import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
 import { resolvedFadeValues } from '@src/types/settings/noteSettings';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 import {
@@ -609,11 +610,15 @@ export function WebGLTracksOGL({
       depthWrite: false,
       uniforms: {
         uTime: { value: 0 },
-        uFlowSpeed: { value: noteSettings.speed || 180 },
+        uFlowSpeed: {
+          value: noteSettings.speed || DEFAULT_NOTE_SETTINGS.speed,
+        },
         uScreenHeight: { value: window.innerHeight },
         uCanvasBottomDomY: { value: window.innerHeight },
         uDomPerPx: { value: 1 },
-        uTrackHeight: { value: noteSettings.trackHeight || 150 },
+        uTrackHeight: {
+          value: noteSettings.trackHeight || DEFAULT_NOTE_SETTINGS.trackHeight,
+        },
         uReverse: { value: noteSettings.reverse ? 1.0 : 0.0 },
         uFadeTopPx: { value: resolvedFadeValues(noteSettings).topPx },
         uFadeBottomPx: { value: resolvedFadeValues(noteSettings).bottomPx },
@@ -845,8 +850,10 @@ export function WebGLTracksOGL({
     const uniforms = programRef.current.uniforms;
     frameLimitRef.current = normalizeFrameLimit(noteSettings?.frameLimit);
     resetFrameClock(frameClockRef.current);
-    uniforms.uFlowSpeed.value = noteSettings.speed || 180;
-    uniforms.uTrackHeight.value = noteSettings.trackHeight || 150;
+    uniforms.uFlowSpeed.value =
+      noteSettings.speed || DEFAULT_NOTE_SETTINGS.speed;
+    uniforms.uTrackHeight.value =
+      noteSettings.trackHeight || DEFAULT_NOTE_SETTINGS.trackHeight;
     uniforms.uReverse.value = noteSettings.reverse ? 1.0 : 0.0;
     const fade = resolvedFadeValues(noteSettings);
     uniforms.uFadeTopPx.value = fade.topPx;
@@ -891,7 +898,8 @@ export function WebGLTracksOGL({
     };
 
     const refreshCrop = (): void => {
-      const trackHeight = noteSettings?.trackHeight || 150;
+      const trackHeight =
+        noteSettings?.trackHeight || DEFAULT_NOTE_SETTINGS.trackHeight;
       const desired = computeTrackBounds(tracks, trackHeight);
       const applied = cropAppliedRef.current;
       // 노트가 살아있는 동안엔 확장만 — 축소는 버퍼가 빌 때 반영 (기존 노트 클리핑 방지)
