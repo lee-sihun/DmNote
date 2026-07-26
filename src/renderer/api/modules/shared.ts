@@ -13,12 +13,26 @@ export function subscribe<T>(
   const ready = registration.then(() => undefined);
   let unsubscribed = false;
 
-  void ready.catch(() => undefined);
+  void ready.catch((error) => {
+    console.error(`[API] Failed to subscribe to event "${event}":`, error);
+  });
 
   const unsubscribe = () => {
     if (unsubscribed) return;
     unsubscribed = true;
-    void registration.then((unlisten) => unlisten()).catch(() => undefined);
+    void registration.then(
+      (unlisten) => {
+        void Promise.resolve()
+          .then(() => unlisten())
+          .catch((error) => {
+            console.error(
+              `[API] Failed to unsubscribe from event "${event}":`,
+              error,
+            );
+          });
+      },
+      () => undefined,
+    );
   };
 
   return Object.assign(unsubscribe, { ready });
