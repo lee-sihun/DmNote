@@ -588,6 +588,7 @@ fn apply_main_window_configuration(
             if let Err(err) = window.show() {
                 log::warn!("failed to show main window after tray init error: {err}");
             }
+            let _ = window.set_focus();
             if let Err(err) = state.set_main_window_hidden(false) {
                 log::warn!("failed to reset main hidden state after tray init error: {err}");
             }
@@ -598,6 +599,8 @@ fn apply_main_window_configuration(
     if let Err(err) = window.show() {
         log::warn!("failed to show main window after configuration: {err}");
     }
+    // 창 설정에 focus 필드가 없어 생성 기본값에 의존 중이라 시작 포커스를 명시
+    let _ = window.set_focus();
     if let Err(err) = state.set_main_window_hidden(false) {
         log::warn!("failed to persist visible main window state: {err}");
     }
