@@ -36,7 +36,7 @@ export const NOTE_SETTINGS_CONSTRAINTS = {
   },
   keyDisplayDelayMs: {
     min: 0,
-    max: 9999,
+    max: 30000,
     default: 0,
   },
   fadeTopPx: {
