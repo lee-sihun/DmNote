@@ -6,6 +6,13 @@ import {
   NoteBuffer,
   TrackLayoutInput,
 } from '@stores/signals/noteBuffer';
+import {
+  computeNoteLengthMs,
+  createNoteLengthPolicy,
+  toEffectiveMinLengthPx,
+  toMinLengthMs,
+  type NoteLengthPolicy,
+} from '@utils/core/noteLengthPolicy';
 
 interface Note {
   id: string;
@@ -40,9 +47,8 @@ interface NoteState {
   noteId: string | null;
   created: boolean;
   released: boolean;
-  // press 시작 시점 정책 스냅샷 - mid-press 설정 변경에도 판정·길이 일관 유지
-  delayMs?: number;
-  minLengthMs?: number;
+  // press 시작 시점 길이 정책 스냅샷
+  lengthPolicy?: NoteLengthPolicy;
 }
 
 // 키 이벤트 시각 정보. displayTime은 클램프 보정(표시 위치 전용),
@@ -457,17 +463,22 @@ export function useNoteSystem({
   };
 
   const computeMinLengthMs = (): number => {
-    const minPx = shortNoteMinLengthPxRef.current || 0;
-    const flowSpeed = flowSpeedRef.current || DEFAULT_NOTE_SETTINGS.speed;
-    if (minPx <= 0 || flowSpeed <= 0) return 0;
-    return Math.round((minPx * 1000) / flowSpeed);
+    const minLengthPx = shortNoteMinLengthPxRef.current || 0;
+    const trackHeight =
+      trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
+    return toMinLengthMs(
+      toEffectiveMinLengthPx(minLengthPx, trackHeight),
+      flowSpeedRef.current || DEFAULT_NOTE_SETTINGS.speed,
+    );
   };
 
   const scheduleNoteFinalization = (
     keyName: string,
     state: NoteState,
   ): void => {
-    if (!state?.noteId || state.startTime == null) return;
+    if (!state?.noteId || state.startTime == null || !state.lengthPolicy) {
+      return;
+    }
 
     const releaseTime = state.releaseTime ?? performance.now();
     // 판정용 물리 hold: 데몬 authoritative 값 우선, 없으면 비클램프 보정 시각 차 폴백
@@ -476,16 +487,20 @@ export function useNoteSystem({
     const fallbackHold =
       physDown != null ? Math.max(0, physRelease - physDown) : 0;
     const holdMs = state.holdDurationMs ?? fallbackHold;
-    // 단/롱 판정은 실행 순서(타이머 vs UP 도착)가 아니라 물리 hold와 press 시점
-    // 스냅샷 threshold의 비교로만 결정 - 전달 지연·지터에 불변
-    const threshold = state.delayMs ?? 0;
-    const minLengthMs = state.minLengthMs ?? computeMinLengthMs();
-    const isShort = state.useDelay && holdMs < threshold;
-    const desiredDuration = isShort
-      ? minLengthMs
-      : Math.max(minLengthMs, holdMs);
-    const safeDuration = Math.max(desiredDuration, 1);
-    const targetEndTime = state.startTime + safeDuration;
+    // 데몬 hold와 press 시점 정책으로만 길이 결정
+    const computedNoteLengthMs = computeNoteLengthMs(
+      holdMs,
+      state.lengthPolicy,
+    );
+    // 잘못된 입력에서만 노트 소실 방지
+    const noteLengthMs =
+      Number.isFinite(computedNoteLengthMs) && computedNoteLengthMs > 0
+        ? computedNoteLengthMs
+        : 1;
+    const targetEndTime = Math.max(
+      state.startTime + noteLengthMs,
+      performance.now(),
+    );
 
     if (state.finalizeTimer) {
       clearTimeout(state.finalizeTimer);
@@ -493,6 +508,10 @@ export function useNoteSystem({
       state.finalizeTimer = null;
     }
 
+    // 타이머가 늦게 실행돼 targetEndTime이 과거가 돼도 실행 시점으로 다시 밀지 않는다.
+    // 셰이더에서 머리 위치는 startTime에만 의존해 완료 전후가 동일하고, 꼬리만
+    // 원래 떨어졌어야 할 자리로 이동한다. 다시 클램프하면 꼬리를 제자리에 묶어
+    // 롱노트 길이만 늘어난다
     const finalizeState = (): void => {
       finalizeTimersRef.current.delete(state.noteId!);
       state.finalizeTimer = null;
@@ -527,7 +546,11 @@ export function useNoteSystem({
     }
 
     if (useDelay) {
-      const delayMs = delayMsRef.current;
+      const thresholdMs = delayMsRef.current;
+      const lengthPolicy = createNoteLengthPolicy(
+        computeMinLengthMs(),
+        thresholdMs,
+      );
       const downTime = timing?.displayTime ?? performance.now();
       const state: NoteState = {
         useDelay: true,
@@ -540,18 +563,18 @@ export function useNoteSystem({
         noteId: null,
         created: false,
         released: false,
-        delayMs,
-        minLengthMs: computeMinLengthMs(),
+        lengthPolicy,
       };
 
-      const startTimer = setTimeout(() => {
+      const createDelayedNote = (): void => {
         state.startTimer = null;
         if (!noteEffectEnabled.current) {
           removeState(keyName, state);
           return;
         }
 
-        const overrideStart = state.downTime! + state.delayMs!;
+        const overrideStart =
+          state.downTime! + state.lengthPolicy!.displayDelayMs;
         const noteId = createNote(keyName, overrideStart);
         state.noteId = noteId;
         state.created = true;
@@ -561,12 +584,18 @@ export function useNoteSystem({
         if (state.released) {
           scheduleNoteFinalization(keyName, state);
         }
-        // 실제 입력 시각 기준으로 노트 등장 시점을 맞춤. 입력 시각이 과거면
-        // 남은 대기를 0으로 clamp해 타이머가 음수가 되지 않도록 함
-      }, Math.max(0, downTime + delayMs - performance.now()));
+      };
 
-      state.startTimer = startTimer;
       stateList.push(state);
+      // 실제 입력 시각 기준으로 노트 등장 시점을 맞춤
+      const remainingDelay =
+        downTime + lengthPolicy.displayDelayMs - performance.now();
+      if (remainingDelay <= 0) {
+        createDelayedNote();
+        return;
+      }
+
+      state.startTimer = setTimeout(createDelayedNote, remainingDelay);
       return;
     }
 

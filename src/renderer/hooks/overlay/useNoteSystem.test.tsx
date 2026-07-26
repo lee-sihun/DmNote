@@ -25,7 +25,7 @@ const Harness = ({ noteEffect, noteSettings, onResult }: HarnessProps) => {
   return null;
 };
 
-// threshold 100ms, 최소 길이 10px @ 400px/s = 25ms
+// m=25, T=100, D=37.5, C=62.5, W=37.5
 const DELAY_SETTINGS = {
   speed: 400,
   trackHeight: 300,
@@ -34,7 +34,17 @@ const DELAY_SETTINGS = {
   shortNoteMinLengthPx: 10,
 };
 
-describe('useNoteSystem 단/롱 판정', () => {
+const REFERENCE_LENGTHS = [
+  { holdMs: 40, lengthMs: 25 },
+  { holdMs: 62.5, lengthMs: 25 },
+  { holdMs: 70, lengthMs: 36.4 },
+  { holdMs: 80, lengthMs: 59.37777777777778 },
+  { holdMs: 99, lengthMs: 98.92142222222222 },
+  { holdMs: 100, lengthMs: 100 },
+  { holdMs: 150, lengthMs: 150 },
+] as const;
+
+describe('useNoteSystem 길이 연속성', () => {
   let container: HTMLDivElement;
   let root: Root;
   let result: HookResult;
@@ -68,6 +78,25 @@ describe('useNoteSystem 단/롱 판정', () => {
   const noteOf = (key: string, index = 0) =>
     result.notesRef.current[key]?.[index];
 
+  const releaseWithDaemonHold = async (
+    key: string,
+    holdMs: number,
+    settleMs = Math.ceil(37.5 + Math.max(25, holdMs)) + 1,
+  ) => {
+    const downTime = nowMs;
+    result.handleKeyDown(key, {
+      displayTime: downTime,
+      physTime: downTime,
+    });
+    result.handleKeyUp(key, {
+      displayTime: downTime + holdMs,
+      physTime: downTime + holdMs,
+      holdDurationMs: holdMs,
+    });
+    await advance(settleMs);
+    return { downTime, note: noteOf(key)! };
+  };
+
   beforeEach(() => {
     vi.useFakeTimers();
     nowMs = 0;
@@ -84,118 +113,175 @@ describe('useNoteSystem 단/롱 판정', () => {
     vi.restoreAllMocks();
   });
 
-  it('UP이 startTimer 이후 도착해도 hold < threshold면 고정 길이 단노트다', async () => {
+  it('계약 참조 수치대로 램프 길이를 계산한다', async () => {
     await render();
 
-    // 물리 hold 80ms < threshold 100ms인 탭. 전달 지연으로 UP 콜백은
-    // 타이머 발화(100ms) 뒤인 110ms에 도착 - 1.6.1 회귀의 핵심 시나리오
-    result.handleKeyDown('Z', { displayTime: 0, physTime: 0 });
-    await advance(105);
-    result.handleKeyUp('Z', {
-      displayTime: 80,
-      physTime: 80,
-      holdDurationMs: 80,
-    });
-    await advance(30);
+    for (const [index, { holdMs, lengthMs }] of REFERENCE_LENGTHS.entries()) {
+      const { downTime, note } = await releaseWithDaemonHold(
+        `R${index}`,
+        holdMs,
+      );
 
-    const note = noteOf('Z');
-    expect(note).toBeDefined();
-    expect(note!.isActive).toBe(false);
-    expect(note!.startTime).toBe(100);
-    // 단노트 고정 길이 25ms (80ms가 아님)
-    expect(note!.endTime).toBe(125);
+      expect(note.isActive).toBe(false);
+      expect(note.startTime).toBe(downTime + 37.5);
+      expect(note.endTime).toBeCloseTo(downTime + 37.5 + lengthMs, 3);
+    }
   });
 
-  it('UP이 startTimer 이전에 도착해도 hold >= threshold면 롱노트다', async () => {
+  it('C와 T 경계에서 길이가 연속이다', async () => {
     await render();
 
-    // 배치 전달로 DOWN/UP이 함께 늦게 도착한 진짜 600ms 홀드.
-    // 기존 코드는 타이머 생존만 보고 단노트로 오분류했다
+    const atC = await releaseWithDaemonHold('C0', 62.5);
+    const afterC = await releaseWithDaemonHold('C1', 62.501);
+    const beforeT = await releaseWithDaemonHold('T0', 99.999);
+    const atT = await releaseWithDaemonHold('T1', 100);
+
+    const lengthAtC = atC.note.endTime! - atC.note.startTime;
+    const lengthAfterC = afterC.note.endTime! - afterC.note.startTime;
+    const lengthBeforeT = beforeT.note.endTime! - beforeT.note.startTime;
+    const lengthAtT = atT.note.endTime! - atT.note.startTime;
+
+    expect(lengthAtC).toBe(25);
+    expect(lengthAfterC - lengthAtC).toBeCloseTo(0.001, 3);
+    expect(lengthAtT).toBe(100);
+    expect(lengthAtT - lengthBeforeT).toBeCloseTo(0.001, 3);
+  });
+
+  it('hold가 증가할 때 길이가 감소하지 않고 램프 이후에는 증가한다', async () => {
+    await render();
+
+    const measuredLengths: number[] = [];
+    for (const [index, { holdMs }] of REFERENCE_LENGTHS.entries()) {
+      const { note } = await releaseWithDaemonHold(`M${index}`, holdMs);
+      measuredLengths.push(note.endTime! - note.startTime);
+    }
+
+    for (let index = 1; index < measuredLengths.length; index += 1) {
+      expect(measuredLengths[index]).toBeGreaterThanOrEqual(
+        measuredLengths[index - 1],
+      );
+    }
+    for (let index = 2; index < measuredLengths.length; index += 1) {
+      expect(measuredLengths[index]).toBeGreaterThan(
+        measuredLengths[index - 1],
+      );
+    }
+  });
+
+  it('h >= T에서는 hold 길이를 그대로 보존한다', async () => {
+    await render();
+
+    for (const [index, holdMs] of [100, 150, 500].entries()) {
+      const { note } = await releaseWithDaemonHold(`L${index}`, holdMs);
+      expect(note.endTime! - note.startTime).toBe(holdMs);
+    }
+  });
+
+  it('T <= m이면 D=0과 L=max(m,h)로 폴백한다', async () => {
+    await render({ ...DELAY_SETTINGS, shortNoteThresholdMs: 20 });
+
+    result.handleKeyDown('SYNC', { displayTime: nowMs, physTime: nowMs });
+    expect(noteOf('SYNC')).toBeDefined();
+    result.handleKeyUp('SYNC', {
+      displayTime: nowMs + 10,
+      physTime: nowMs + 10,
+      holdDurationMs: 10,
+    });
+
+    const short = await releaseWithDaemonHold('D0', 10, 30);
+    const boundary = await releaseWithDaemonHold('D1', 20, 30);
+    const long = await releaseWithDaemonHold('D2', 40, 50);
+
+    expect(short.note.startTime).toBe(short.downTime);
+    expect(short.note.endTime! - short.note.startTime).toBe(25);
+    expect(boundary.note.startTime).toBe(boundary.downTime);
+    expect(boundary.note.endTime! - boundary.note.startTime).toBe(25);
+    expect(long.note.startTime).toBe(long.downTime);
+    expect(long.note.endTime! - long.note.startTime).toBe(40);
+  });
+
+  it('UP 전달이 늦으면 NoShrink 클램프로 현재 시각보다 줄지 않는다', async () => {
+    await render();
+
+    result.handleKeyDown('N', { displayTime: 0, physTime: 0 });
+    await advance(80);
+    result.handleKeyUp('N', {
+      displayTime: 62.5,
+      physTime: 62.5,
+      holdDurationMs: 62.5,
+    });
+
+    const note = noteOf('N');
+    expect(note!.startTime).toBe(37.5);
+    expect(note!.endTime).toBe(80);
+  });
+
+  it('startTimer 이전 UP도 데몬 hold가 T 이상이면 롱노트로 보존한다', async () => {
+    await render();
+
+    // 배치 전달된 실제 600ms 홀드를 타이머 생존 여부로 오분류하지 않음
     result.handleKeyDown('Z', { displayTime: 0, physTime: 0 });
     result.handleKeyUp('Z', {
       displayTime: 5,
       physTime: 5,
       holdDurationMs: 600,
     });
-    await advance(100);
-    await advance(650);
+    await advance(638);
 
     const note = noteOf('Z');
     expect(note!.isActive).toBe(false);
-    expect(note!.startTime).toBe(100);
-    expect(note!.endTime).toBe(700);
-  });
-
-  it('경계 정책: hold == threshold는 롱, 미만은 단', async () => {
-    await render();
-
-    result.handleKeyDown('A', { displayTime: 0, physTime: 0 });
-    await advance(105);
-    result.handleKeyUp('A', {
-      displayTime: 100,
-      physTime: 100,
-      holdDurationMs: 100,
-    });
-    await advance(120);
-    expect(noteOf('A')!.endTime).toBe(200);
-
-    result.handleKeyDown('B', { displayTime: nowMs, physTime: nowMs });
-    const bDown = nowMs;
-    await advance(105);
-    result.handleKeyUp('B', {
-      displayTime: bDown + 99,
-      physTime: bDown + 99,
-      holdDurationMs: 99,
-    });
-    await advance(30);
-    expect(noteOf('B')!.endTime).toBe(bDown + 125);
+    expect(note!.startTime).toBe(37.5);
+    expect(note!.endTime).toBe(637.5);
   });
 
   it('holdDurationMs가 NaN·음수면 비클램프 시각 차로 폴백한다', async () => {
     await render();
 
     result.handleKeyDown('N', { displayTime: 0, physTime: 0 });
-    await advance(105);
     result.handleKeyUp('N', {
       displayTime: 30,
       physTime: 30,
       holdDurationMs: Number.NaN,
     });
-    await advance(30);
-    // 폴백 hold 30ms < 100ms → 단노트
-    expect(noteOf('N')!.endTime).toBe(125);
+    await advance(63);
+    expect(noteOf('N')!.startTime).toBe(37.5);
+    expect(noteOf('N')!.endTime).toBe(62.5);
 
     result.handleKeyDown('M', { displayTime: nowMs, physTime: nowMs });
     const mDown = nowMs;
-    await advance(105);
     result.handleKeyUp('M', {
       displayTime: mDown + 40,
       physTime: mDown + 40,
       holdDurationMs: -5,
     });
-    await advance(30);
-    expect(noteOf('M')!.endTime).toBe(mDown + 125);
+    await advance(63);
+    expect(noteOf('M')!.startTime).toBe(mDown + 37.5);
+    expect(noteOf('M')!.endTime).toBe(mDown + 62.5);
   });
 
-  it('mid-press 설정 변경에도 press 시작 시점의 threshold로 판정한다', async () => {
+  it('mid-press 설정 변경에도 m, T, D, C, W 스냅샷을 유지한다', async () => {
     await render();
 
     result.handleKeyDown('S', { displayTime: 0, physTime: 0 });
-    // press 진행 중 threshold를 100 → 30으로 낮춰도 진행 중 press에는 미적용
-    await render({ ...DELAY_SETTINGS, shortNoteThresholdMs: 30 });
-    result.handleKeyUp('S', {
-      displayTime: 60,
-      physTime: 60,
-      holdDurationMs: 60,
+    await render({
+      ...DELAY_SETTINGS,
+      speed: 800,
+      shortNoteThresholdMs: 60,
+      shortNoteMinLengthPx: 40,
     });
-    await advance(105);
-    await advance(30);
+    result.handleKeyUp('S', {
+      displayTime: 80,
+      physTime: 80,
+      holdDurationMs: 80,
+    });
+    await advance(100);
 
-    // 스냅샷 threshold 100 기준 단노트 (라이브 값 30이었다면 롱노트 160)
-    expect(noteOf('S')!.endTime).toBe(125);
+    const note = noteOf('S');
+    expect(note!.startTime).toBe(37.5);
+    expect(note!.endTime).toBeCloseTo(96.87777777777778, 3);
   });
 
-  it('reconcile: 스냅샷에 없는 키의 활성 노트를 현재 시각으로 종료한다', async () => {
+  it('UP 유실 시 reconcileActiveNotes가 활성 노트를 현재 시각으로 종료한다', async () => {
     await render();
 
     result.handleKeyDown('Z', { displayTime: 0, physTime: 0 });
@@ -222,7 +308,7 @@ describe('useNoteSystem 단/롱 판정', () => {
     expect(noteOf('H')!.isActive).toBe(true);
 
     result.handleKeyDown('P', { displayTime: nowMs, physTime: nowMs });
-    await advance(50);
+    await advance(20);
     act(() => {
       result.reconcileActiveNotes(new Set(['H']));
     });
