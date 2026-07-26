@@ -571,6 +571,12 @@ impl ObsBridgeService {
                 result = listener.accept() => {
                     match result {
                         Ok((stream, addr)) => {
+                            // 작은 키 이벤트 연속 전송의 Nagle 지연 방지
+                            if let Err(error) = stream.set_nodelay(true) {
+                                log::warn!(
+                                    "[ObsBridge] TCP_NODELAY 설정 실패 from {addr}: {error}"
+                                );
+                            }
                             let bridge = Arc::clone(self);
                             tokio::spawn(async move {
                                 bridge.handle_connection(stream, addr).await;
