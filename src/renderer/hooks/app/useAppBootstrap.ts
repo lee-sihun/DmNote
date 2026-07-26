@@ -54,7 +54,10 @@ import {
 import type { BootstrapPayload } from '@src/types/app';
 import type { CustomTab } from '@src/types/key/keys';
 import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/editorCoordinator';
-import type { TabNoteOverrides } from '@src/types/settings/noteSettings';
+import {
+  mergeNoteSettings,
+  type TabNoteOverrides,
+} from '@src/types/settings/noteSettings';
 import type {
   SettingsDiff,
   OverlayResizeAnchor,
@@ -147,9 +150,14 @@ export function useAppBootstrap() {
     let conflictDialogOpen = false;
     let lastShownPermanentEditorError: unknown = null;
     // 키 표시 딜레이와 동기화를 위한 카운터 업데이트 지연
+    type CounterDelayTimerHandle = ReturnType<typeof setTimeout>;
     const counterDelayTimers = new Map<
       string,
-      Set<ReturnType<typeof setTimeout>>
+      Map<CounterDelayTimerHandle, () => void>
+    >();
+    const pendingCounterDelayTimers = new Map<
+      CounterDelayTimerHandle,
+      () => void
     >();
 
     const composeCounterKey = (mode?: string, key?: string) =>
@@ -159,16 +167,31 @@ export function useAppBootstrap() {
       if (composedKey) {
         const timers = counterDelayTimers.get(composedKey);
         if (timers) {
-          timers.forEach((timer) => clearTimeout(timer));
+          timers.forEach((_apply, timer) => {
+            clearTimeout(timer);
+            pendingCounterDelayTimers.delete(timer);
+          });
           counterDelayTimers.delete(composedKey);
         }
         return;
       }
 
-      counterDelayTimers.forEach((timers) => {
-        timers.forEach((timer) => clearTimeout(timer));
-      });
+      pendingCounterDelayTimers.forEach((_apply, timer) => clearTimeout(timer));
+      pendingCounterDelayTimers.clear();
+      counterDelayTimers.forEach((timers) => timers.clear());
       counterDelayTimers.clear();
+    };
+
+    const flushCounterDelayTimers = () => {
+      const pending = [...pendingCounterDelayTimers.entries()];
+      pendingCounterDelayTimers.clear();
+      counterDelayTimers.forEach((timers) => timers.clear());
+      counterDelayTimers.clear();
+
+      pending.forEach(([timer, apply]) => {
+        clearTimeout(timer);
+        apply();
+      });
     };
 
     const scheduleEditorCoordinatorRecovery = () => {
@@ -185,10 +208,27 @@ export function useAppBootstrap() {
       }, 1_000);
     };
 
-    const getCounterDelayMs = () => {
-      const { noteSettings } = useSettingsStore.getState();
-      const delay = Number(noteSettings?.keyDisplayDelayMs ?? 0);
+    const resolveCounterDelayMs = (
+      noteSettings: SettingsStateSnapshot['noteSettings'],
+      tabNoteOverrides: SettingsStateSnapshot['tabNoteOverrides'],
+      selectedKeyType: string,
+    ) => {
+      const effectiveSettings = mergeNoteSettings(
+        noteSettings,
+        tabNoteOverrides?.[selectedKeyType],
+      );
+      const delay = Number(effectiveSettings.keyDisplayDelayMs ?? 0);
       return delay > 0 ? delay : 0;
+    };
+
+    const getCounterDelayMs = () => {
+      const { noteSettings, tabNoteOverrides } = useSettingsStore.getState();
+      const { selectedKeyType } = useKeyStore.getState();
+      return resolveCounterDelayMs(
+        noteSettings,
+        tabNoteOverrides,
+        selectedKeyType,
+      );
     };
 
     const scheduleCounterUpdate = (
@@ -205,24 +245,30 @@ export function useAppBootstrap() {
         return;
       }
 
-      const timer = setTimeout(() => {
+      const apply = () => {
         if (disposed) return;
         setKeyCounter(mode, key, count);
+      };
+      const timer = setTimeout(() => {
+        const pendingApply = pendingCounterDelayTimers.get(timer);
+        if (!pendingApply) return;
+
+        pendingCounterDelayTimers.delete(timer);
         const timers = counterDelayTimers.get(composedKey);
-        if (timers) {
-          timers.delete(timer);
-          if (timers.size === 0) {
-            counterDelayTimers.delete(composedKey);
-          }
+        timers?.delete(timer);
+        if (timers?.size === 0) {
+          counterDelayTimers.delete(composedKey);
         }
+        pendingApply();
       }, delayMs);
 
       const existing = counterDelayTimers.get(composedKey);
       if (existing) {
-        existing.add(timer);
+        existing.set(timer, apply);
       } else {
-        counterDelayTimers.set(composedKey, new Set([timer]));
+        counterDelayTimers.set(composedKey, new Map([[timer, apply]]));
       }
+      pendingCounterDelayTimers.set(timer, apply);
     };
 
     const { setAll, merge } = useSettingsStore.getState();
@@ -757,12 +803,24 @@ export function useAppBootstrap() {
         void runResync();
       }),
       useSettingsStore.subscribe((state, previousState) => {
-        const nextDelay = Number(state.noteSettings?.keyDisplayDelayMs ?? 0);
-        const prevDelay = previousState
-          ? Number(previousState.noteSettings?.keyDisplayDelayMs ?? 0)
-          : 0;
-        if (nextDelay <= 0 && prevDelay > 0) {
-          clearCounterDelayTimers();
+        const { selectedKeyType } = useKeyStore.getState();
+        const nextDelay = resolveCounterDelayMs(
+          state.noteSettings,
+          state.tabNoteOverrides,
+          selectedKeyType,
+        );
+        const prevDelay = resolveCounterDelayMs(
+          previousState.noteSettings,
+          previousState.tabNoteOverrides,
+          selectedKeyType,
+        );
+        if (nextDelay !== prevDelay) {
+          flushCounterDelayTimers();
+        }
+      }),
+      useKeyStore.subscribe((state, previousState) => {
+        if (state.selectedKeyType !== previousState.selectedKeyType) {
+          flushCounterDelayTimers();
         }
       }),
     ];

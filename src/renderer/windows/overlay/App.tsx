@@ -29,7 +29,35 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
 
-type KeyDelayTimerEntry = { timers: Set<ReturnType<typeof setTimeout>> };
+type KeyDelayTimerHandle = ReturnType<typeof setTimeout>;
+type KeyDelayTimerEntry = {
+  timers: Map<KeyDelayTimerHandle, () => void>;
+};
+
+const cancelKeyDelayTimers = (
+  entries: Map<string, KeyDelayTimerEntry>,
+  pendingTimers: Map<KeyDelayTimerHandle, () => void>,
+) => {
+  pendingTimers.forEach((_apply, timer) => clearTimeout(timer));
+  pendingTimers.clear();
+  entries.forEach((entry) => entry.timers.clear());
+  entries.clear();
+};
+
+const flushKeyDelayTimers = (
+  entries: Map<string, KeyDelayTimerEntry>,
+  pendingTimers: Map<KeyDelayTimerHandle, () => void>,
+) => {
+  const pending = [...pendingTimers.entries()];
+  pendingTimers.clear();
+  entries.forEach((entry) => entry.timers.clear());
+  entries.clear();
+
+  pending.forEach(([timer, apply]) => {
+    clearTimeout(timer);
+    apply();
+  });
+};
 
 // 입력 시각 보정용 age 상한(ms). 백엔드 stall/클럭 이상으로 비정상적으로 큰
 // 값이 와도 노트가 화면 위로 튀지 않도록 제한
@@ -344,14 +372,23 @@ export default function App() {
   // 키 딜레이 설정
   const keyDisplayDelayMs = Number(noteSettings?.keyDisplayDelayMs ?? 0);
 
+  // 키 딜레이 타이머 관리 (down/up 별도 관리)
+  const keyDelayTimersRef = useRef<Map<string, KeyDelayTimerEntry>>(new Map());
+  const pendingKeyDelayTimersRef = useRef<Map<KeyDelayTimerHandle, () => void>>(
+    new Map(),
+  );
+
   // 키 딜레이 값을 ref로 관리하여 클로저 문제 방지
   const keyDisplayDelayMsRef = useRef(keyDisplayDelayMs);
   useEffect(() => {
+    if (keyDisplayDelayMsRef.current !== keyDisplayDelayMs) {
+      flushKeyDelayTimers(
+        keyDelayTimersRef.current,
+        pendingKeyDelayTimersRef.current,
+      );
+    }
     keyDisplayDelayMsRef.current = keyDisplayDelayMs;
   }, [keyDisplayDelayMs]);
-
-  // 키 딜레이 타이머 관리 (down/up 별도 관리)
-  const keyDelayTimersRef = useRef<Map<string, KeyDelayTimerEntry>>(new Map());
 
   // 키 활성 상태는 signals로 관리하여 App 리렌더를 방지
   const [_layoutVersion, setLayoutVersion] = useState(0);
@@ -414,22 +451,36 @@ export default function App() {
 
       let timerEntry = keyDelayTimersRef.current.get(key);
       if (!timerEntry) {
-        timerEntry = { timers: new Set() };
+        timerEntry = { timers: new Map() };
         keyDelayTimersRef.current.set(key, timerEntry);
       }
 
       if (delayMs <= 0) {
-        timerEntry.timers.forEach((timer) => clearTimeout(timer));
+        timerEntry.timers.forEach((_apply, timer) => {
+          clearTimeout(timer);
+          pendingKeyDelayTimersRef.current.delete(timer);
+        });
         timerEntry.timers.clear();
+        keyDelayTimersRef.current.delete(key);
         setKeyActiveSignal(key, isDown);
         return;
       }
 
+      const apply = () => setKeyActiveSignal(key, isDown);
       const timer = setTimeout(() => {
-        setKeyActiveSignal(key, isDown);
-        timerEntry?.timers.delete(timer);
+        const pendingApply = pendingKeyDelayTimersRef.current.get(timer);
+        if (!pendingApply) return;
+
+        pendingKeyDelayTimersRef.current.delete(timer);
+        const currentEntry = keyDelayTimersRef.current.get(key);
+        currentEntry?.timers.delete(timer);
+        if (currentEntry?.timers.size === 0) {
+          keyDelayTimersRef.current.delete(key);
+        }
+        pendingApply();
       }, delayMs);
-      timerEntry.timers.add(timer);
+      timerEntry.timers.set(timer, apply);
+      pendingKeyDelayTimersRef.current.set(timer, apply);
     };
 
     // HID 축 이벤트 버스 초기화 (input:axis 구독 → axisSignals 누적)
@@ -590,11 +641,10 @@ export default function App() {
       reconcileGenerationRef.current += 1;
       const { finalizeAllActive } = keyEventContextRef.current;
       finalizeAllActive();
-      keyDelayTimersRef.current.forEach((timerEntry) => {
-        timerEntry.timers.forEach((timer) => clearTimeout(timer));
-        timerEntry.timers.clear();
-      });
-      keyDelayTimersRef.current.clear();
+      cancelKeyDelayTimers(
+        keyDelayTimersRef.current,
+        pendingKeyDelayTimersRef.current,
+      );
       const seen = new Set<string>();
       seenSinceResetRef.current = seen;
       resetAllKeySignals();
@@ -619,6 +669,7 @@ export default function App() {
     });
 
     const keyDelayTimers = keyDelayTimersRef.current;
+    const pendingKeyDelayTimers = pendingKeyDelayTimersRef.current;
 
     return () => {
       hydrationCancelled = true;
@@ -634,11 +685,7 @@ export default function App() {
         })
         .catch(() => undefined);
       // 키 딜레이 타이머 정리
-      keyDelayTimers.forEach((timerEntry) => {
-        timerEntry.timers.forEach((timer) => clearTimeout(timer));
-        timerEntry.timers.clear();
-      });
-      keyDelayTimers.clear();
+      cancelKeyDelayTimers(keyDelayTimers, pendingKeyDelayTimers);
       // 창 단위 정리 - 마운트 1회 구독이므로 여기는 실제 언마운트에서만 실행됨
       resetAllKeySignals();
     };
@@ -660,11 +707,10 @@ export default function App() {
     // 탭 전환은 진행 중 대조의 스냅샷을 낡게 만든다
     reconcileGenerationRef.current += 1;
     let cancelled = false;
-    keyDelayTimersRef.current.forEach((timerEntry) => {
-      timerEntry.timers.forEach((timer) => clearTimeout(timer));
-      timerEntry.timers.clear();
-    });
-    keyDelayTimersRef.current.clear();
+    cancelKeyDelayTimers(
+      keyDelayTimersRef.current,
+      pendingKeyDelayTimersRef.current,
+    );
     const seen = new Set<string>();
     const validKeys = new Set<string>(JSON.parse(currentValidKeySignature));
     seenSinceResetRef.current = seen;
