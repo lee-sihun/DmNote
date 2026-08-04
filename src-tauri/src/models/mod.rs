@@ -62,9 +62,15 @@ fn default_sound_source() -> SoundSource {
     SoundSource::Local
 }
 
+fn default_sound_enabled() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SoundLibraryEntry {
+    #[serde(default = "default_sound_enabled")]
+    pub enabled: bool,
     #[serde(default = "default_sound_source")]
     pub source: SoundSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -80,6 +86,7 @@ pub struct SoundLibraryEntry {
 impl Default for SoundLibraryEntry {
     fn default() -> Self {
         Self {
+            enabled: true,
             source: SoundSource::Local,
             original_path: None,
             trim_start_ratio: None,

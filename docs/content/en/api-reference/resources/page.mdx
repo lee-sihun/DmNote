@@ -1,0 +1,76 @@
+---
+title: Resource API
+description: Font, image, and sound resource APIs
+---
+
+# Resource API
+
+## Font
+
+### `dmn.font.load()`
+
+Opens the system file picker, imports a font, and returns its app-managed path.
+
+```typescript
+const result = await dmn.font.load();
+// { success: boolean, error?: string, fontPath?: string }
+```
+
+## Image
+
+### `dmn.image.load()`
+
+Opens the system file picker, imports an image, and returns its app-managed path.
+
+```typescript
+const result = await dmn.image.load();
+// { success: boolean, error?: string, imagePath?: string }
+```
+
+## Sound
+
+### `dmn.sound.load()`
+
+Opens the system file picker, imports a sound, and returns its app-managed path.
+
+### `dmn.sound.list()`
+
+Returns the available local and built-in sounds.
+
+```typescript
+type SoundListItem = {
+  soundPath: string;
+  fileName: string;
+  sizeBytes: number;
+  modifiedAtMs?: number;
+  enabled: boolean;
+  source: 'local' | 'builtin';
+  originalPath?: string;
+  trimStartRatio?: number;
+  trimEndRatio?: number;
+  displayName?: string;
+};
+```
+
+### `dmn.sound.rename(soundPath, displayName)`
+
+Changes the display name of a local sound. Built-in sounds cannot be renamed.
+
+### `dmn.sound.remove(soundPath)`
+
+Deletes a local sound. Built-in sounds cannot be deleted.
+
+### `dmn.sound.setEnabled(soundPath, enabled)`
+
+> Deprecated: retained for compatibility with existing plugins. The current sound picker does not use the enabled state.
+
+Updates and returns the legacy enabled state.
+
+```typescript
+const result = await dmn.sound.setEnabled(soundPath, false);
+// { success: true, soundPath, enabled: false }
+```
+
+### Sound editing
+
+`saveProcessedWav`, `loadOriginal`, and `updateProcessedWav` support the built-in sound editor. Paths returned by the resource APIs must be treated as opaque app-managed identifiers.

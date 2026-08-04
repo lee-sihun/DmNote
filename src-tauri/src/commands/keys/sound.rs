@@ -35,6 +35,7 @@ pub struct SoundListItem {
     pub size_bytes: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modified_at_ms: Option<u64>,
+    pub enabled: bool,
     pub source: SoundSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_path: Option<String>,
@@ -65,6 +66,14 @@ pub struct SoundSaveProcessedWavResponse {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sound_path: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoundSetEnabledResponse {
+    pub success: bool,
+    pub sound_path: String,
+    pub enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -187,6 +196,7 @@ pub fn sound_list(
             file_name,
             size_bytes: metadata.len(),
             modified_at_ms,
+            enabled: entry_meta.enabled,
             source: entry_meta.source,
             original_path: entry_meta.original_path,
             trim_start_ratio: entry_meta.trim_start_ratio,
@@ -228,6 +238,31 @@ pub fn sound_list(
     });
 
     Ok(items)
+}
+
+#[tauri::command]
+pub fn sound_set_enabled(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    sound_path: String,
+    enabled: bool,
+) -> CmdResult<SoundSetEnabledResponse> {
+    let sounds_dir = ensure_sounds_dir(&app)?;
+    let validated_path = validate_sound_path(&sounds_dir, &sound_path)?;
+    if !validated_path.exists() {
+        return Err(CommandError::msg("대상 사운드 파일이 존재하지 않습니다."));
+    }
+
+    let path_key = normalize_path_string(&validated_path);
+    state.store.update(|s| {
+        s.sound_library.entry(path_key.clone()).or_default().enabled = enabled;
+    })?;
+
+    Ok(SoundSetEnabledResponse {
+        success: true,
+        sound_path: path_key,
+        enabled,
+    })
 }
 
 #[tauri::command]
@@ -459,6 +494,7 @@ pub fn sound_save_processed_wav(
         s.sound_library.insert(
             dest_path_str.clone(),
             SoundLibraryEntry {
+                enabled: true,
                 source: SoundSource::Local,
                 original_path: original_rel_path.clone(),
                 trim_start_ratio: request.trim_start_ratio,
