@@ -1,0 +1,34 @@
+---
+title: 리소스 API
+description: 폰트, 이미지, 사운드 리소스 API
+---
+
+# 리소스 API
+
+## 폰트
+
+### `dmn.font.load()`
+
+시스템 파일 선택기를 열어 폰트를 가져오고 앱이 관리하는 경로를 반환합니다.
+
+```typescript
+const result = await dmn.font.load();
+// { success: boolean, error?: string, fontPath?: string }
+```
+
+## 이미지
+
+### `dmn.image.load()`
+
+시스템 파일 선택기를 열어 이미지를 가져오고 앱이 관리하는 경로를 반환합니다.
+
+```typescript
+const result = await dmn.image.load();
+// { success: boolean, error?: string, imagePath?: string }
+```
+
+## 사운드
+
+사운드 라이브러리의 표시 여부, 편집, 호환성 API는 별도의 [사운드 API 레퍼런스](/docs/api-reference/sound)를 참고하세요.
+
+리소스 API가 반환하는 경로는 앱이 관리하는 불투명 식별자로 취급해야 합니다.

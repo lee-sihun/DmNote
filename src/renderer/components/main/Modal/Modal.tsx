@@ -1,23 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { getFocusableElements } from '@utils/focusableElements';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
-
-const FOCUSABLE_SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[contenteditable="true"]',
-  '[tabindex]:not([tabindex="-1"])',
-].join(',');
-
-const getFocusableElements = (root: HTMLElement) =>
-  Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) =>
-      !element.closest('[hidden], [aria-hidden="true"]') &&
-      element.getAttribute('aria-disabled') !== 'true',
-  );
 
 interface ModalProps {
   onClick?: () => void;
