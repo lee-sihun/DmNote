@@ -5,6 +5,7 @@ export default {
   knobs: "노브 (knobs)",
   settings: "설정 (settings)",
   overlay: "오버레이 (overlay)",
+  resources: "리소스 (resources)",
   "css-js": "CSS/JS",
   sound: "사운드 (sound)",
   presets: "프리셋 (presets)",
