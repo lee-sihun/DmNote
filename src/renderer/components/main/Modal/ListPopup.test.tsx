@@ -1,6 +1,6 @@
 import React, { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ListPopup, { type ListItem } from './ListPopup';
 
 describe('ListPopup keyboard contract', () => {
@@ -12,6 +12,9 @@ describe('ListPopup keyboard contract', () => {
 
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    vi.spyOn(Element.prototype, 'getClientRects').mockReturnValue([
+      document.createElement('div').getBoundingClientRect(),
+    ] as unknown as DOMRectList);
     opener = document.createElement('button');
     opener.textContent = 'Open menu';
     nextButton = document.createElement('button');
@@ -26,6 +29,7 @@ describe('ListPopup keyboard contract', () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     document.body.innerHTML = '';
+    vi.restoreAllMocks();
   });
 
   const renderMenu = async (items: ListItem[]) => {

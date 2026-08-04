@@ -150,9 +150,25 @@ const GradientAxisOverlay = ({
   } | null>(null);
   // 드래그 세션 해제자 — begin에서 등록, 종료 경로 어디서든 1회 실행
   const detachRef = useRef<(() => void) | null>(null);
+  const cancelActiveDragRef = useRef<() => void>(() => {});
 
-  // 드래그 중 언마운트(피커 닫힘 등)에도 window 리스너 정리
-  useEffect(() => () => detachRef.current?.(), []);
+  // 드래그 중 오버레이가 언마운트되면 현재 소유 세션의 preview도 복원
+  useEffect(() => () => cancelActiveDragRef.current(), []);
+
+  // 피커 종료·대상 교체로 세션이 사라진 뒤에도 남은 window 리스너 즉시 정리
+  useEffect(() => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (
+      session &&
+      drag.ownerGeneration === useGradientEditStore.getState().generation
+    ) {
+      return;
+    }
+    detachRef.current?.();
+    setDragAngle(null);
+    setDragStop(null);
+  }, [session]);
 
   if (!session) return null;
 
@@ -442,6 +458,8 @@ const GradientAxisOverlay = ({
       live.apply(drag.startSpec, false);
     }
   };
+  // eslint-disable-next-line react-hooks/refs
+  cancelActiveDragRef.current = cancelActiveDrag;
 
   const handleWindowCancel = (e: PointerEvent) => {
     const drag = dragRef.current;

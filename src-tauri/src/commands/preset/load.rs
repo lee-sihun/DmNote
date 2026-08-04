@@ -176,6 +176,11 @@ struct ResolvedFullPresetSettings {
     custom_js: CustomJs,
 }
 
+struct ImportedCssPaths {
+    global: Option<String>,
+    tabs: Vec<String>,
+}
+
 /// 과거 프리셋에 없던 전역 필드는 현재 값을 보존해 신규 설정을 지우지 않음
 fn resolve_full_preset_settings(
     preset: &mut PresetFile,
@@ -221,6 +226,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     };
 
     let mut preset = read_preset_file(&path)?;
+    let has_imported_global_css = preset.custom_css.is_some();
     let current = state.store.snapshot();
     let resolved_settings = resolve_full_preset_settings(&mut preset, &current);
 
@@ -261,6 +267,19 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     let css_use = resolved_settings.use_custom_css;
     let mut custom_css = resolved_settings.custom_css;
     normalize_imported_custom_css(&mut custom_css, "preset_load");
+    let imported_css_paths = ImportedCssPaths {
+        global: if has_imported_global_css {
+            custom_css.path.clone()
+        } else {
+            None
+        },
+        tabs: preset_tab_css_overrides
+            .as_ref()
+            .into_iter()
+            .flat_map(|overrides| overrides.values())
+            .filter_map(|css| css.path.clone())
+            .collect(),
+    };
     let js_use = resolved_settings.use_custom_js;
     let custom_js = resolved_settings.custom_js;
     let has_font_settings = preset.font_settings.is_some();
@@ -372,6 +391,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     }
     drop(counter_guard);
     let current_css_state = state.store.snapshot();
+    authorize_committed_preset_css_paths(state.inner(), &current_css_state, &imported_css_paths);
     state.resync_global_css_watcher(&previous_css_state, &current_css_state);
     sync_tab_css_runtime(
         state.inner(),
@@ -540,6 +560,15 @@ pub fn preset_load_tab(
             css
         })
     });
+    let imported_css_paths = ImportedCssPaths {
+        global: None,
+        tabs: imported_tab_css
+            .as_ref()
+            .and_then(|css| css.as_ref())
+            .and_then(|css| css.path.clone())
+            .into_iter()
+            .collect(),
+    };
 
     // 프리셋에 담긴 폰트를 현재 폰트 목록에 병합 (탭 로드는 전역 설정을 덮지 않음)
     let prepared_font_settings = if let Some(imported_fonts) = font_settings {
@@ -632,6 +661,11 @@ pub fn preset_load_tab(
         log::error!("[Preset] failed to publish committed key counters: {error:#}");
     }
     drop(counter_guard);
+    authorize_committed_preset_css_paths(
+        state.inner(),
+        &state.store.snapshot(),
+        &imported_css_paths,
+    );
     sync_tab_css_runtime(
         state.inner(),
         &app,
@@ -710,6 +744,40 @@ fn sync_tab_css_runtime(
             },
         );
     }
+}
+
+fn authorize_committed_preset_css_paths(
+    state: &AppState,
+    committed: &AppStoreData,
+    imported: &ImportedCssPaths,
+) {
+    for path in committed_preset_css_paths(committed, imported) {
+        state.authorize_css_path(&path);
+    }
+}
+
+fn committed_preset_css_paths(
+    committed: &AppStoreData,
+    imported: &ImportedCssPaths,
+) -> Vec<String> {
+    let mut paths = BTreeSet::new();
+    if let Some(path) = imported
+        .global
+        .as_ref()
+        .filter(|path| committed.custom_css.path.as_ref() == Some(path))
+    {
+        paths.insert(path.clone());
+    }
+    for path in &imported.tabs {
+        if committed
+            .tab_css_overrides
+            .values()
+            .any(|css| css.path.as_ref() == Some(path))
+        {
+            paths.insert(path.clone());
+        }
+    }
+    paths.into_iter().collect()
 }
 
 fn normalize_imported_custom_css(css: &mut CustomCss, operation: &str) {
@@ -1503,6 +1571,57 @@ mod tests {
         apply_patch_to_store(&mut store, &patch);
 
         assert_eq!(store.custom_css_history, history);
+    }
+
+    #[test]
+    fn committed_preset_css_paths_exclude_unrelated_store_paths() {
+        let mut committed = AppStoreData {
+            custom_css: CustomCss {
+                path: Some("/tmp/unrelated-global.css".to_string()),
+                content: String::new(),
+            },
+            ..AppStoreData::default()
+        };
+        committed.tab_css_overrides.insert(
+            "4key".to_string(),
+            TabCss {
+                path: Some("/tmp/imported-tab.css".to_string()),
+                content: String::new(),
+                enabled: true,
+            },
+        );
+        committed.tab_css_overrides.insert(
+            "7key".to_string(),
+            TabCss {
+                path: Some("/tmp/unrelated.css".to_string()),
+                content: String::new(),
+                enabled: true,
+            },
+        );
+        let imported = ImportedCssPaths {
+            global: None,
+            tabs: vec![
+                "/tmp/imported-tab.css".to_string(),
+                "/tmp/not-committed.css".to_string(),
+            ],
+        };
+
+        assert_eq!(
+            committed_preset_css_paths(&committed, &imported),
+            vec!["/tmp/imported-tab.css".to_string()]
+        );
+
+        let imported_with_global = ImportedCssPaths {
+            global: Some("/tmp/unrelated-global.css".to_string()),
+            tabs: imported.tabs,
+        };
+        assert_eq!(
+            committed_preset_css_paths(&committed, &imported_with_global),
+            vec![
+                "/tmp/imported-tab.css".to_string(),
+                "/tmp/unrelated-global.css".to_string(),
+            ]
+        );
     }
 
     #[test]
