@@ -82,6 +82,19 @@ export const useSelectionDrag = ({
     const startClientX = event.clientX;
     const startClientY = event.clientY;
     const previousUserSelect = dragTarget.style.userSelect;
+    const selectedIds = new Set(
+      selectedElements.flatMap((element) => getSelectedElementIds(element)),
+    );
+    // 선택 요소는 시작 좌표를 고정 — 프레임별 최신 store 좌표에 누적 delta를
+    // 다시 더하면 다중 드래그 그룹 bounds가 매 프레임 벌어짐
+    const selectedStartBounds = new Map<string, ElementBounds>();
+    if (selectedElements.length > 1) {
+      getOtherElements(elementId).forEach((bounds) => {
+        if (selectedIds.has(bounds.id)) {
+          selectedStartBounds.set(bounds.id, bounds);
+        }
+      });
+    }
     let lastSnappedDeltaX = 0;
     let lastSnappedDeltaY = 0;
     let rafId: number | null = null;
@@ -115,9 +128,6 @@ export const useSelectionDrag = ({
         const alignmentGuidesEnabled = gridSettings?.alignmentGuides !== false;
         const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
         const otherElements = getOtherElements(elementId);
-        const selectedIds = new Set(
-          selectedElements.flatMap((element) => getSelectedElementIds(element)),
-        );
         const nonSelectedElements = otherElements.filter(
           (element) => !selectedIds.has(element.id),
         );
@@ -142,10 +152,11 @@ export const useSelectionDrag = ({
                   selectedElement.index === elementIndex);
               if (isCurrentElement) return draggedBounds;
 
-              const selectedIds = getSelectedElementIds(selectedElement);
-              const found = otherElements.find((element) =>
-                selectedIds.includes(element.id),
-              );
+              const found = getSelectedElementIds(selectedElement)
+                .map((id) => selectedStartBounds.get(id))
+                .find(
+                  (bounds): bounds is ElementBounds => bounds !== undefined,
+                );
               if (!found) return null;
               return calculateBounds(
                 found.left + rawDeltaX,
