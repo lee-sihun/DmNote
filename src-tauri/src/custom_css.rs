@@ -104,6 +104,12 @@ pub(crate) fn validate_css_path(path: &Path) -> Result<ValidatedCssFile, CssPath
     })
 }
 
+pub(crate) fn canonicalize_legacy_css_path(path: &str) -> String {
+    validate_css_path(Path::new(path))
+        .map(|loaded| loaded.canonical_path)
+        .unwrap_or_else(|_| path.to_string())
+}
+
 pub(crate) fn inspect_css_history_status(path: &Path) -> CustomCssHistoryStatus {
     let canonical = match canonicalize_css_path(path) {
         Ok(path) => path,

@@ -375,6 +375,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         },
     )?;
     let current_css_state = state.store.snapshot();
+    state.authorize_css_paths_from_store(&current_css_state);
     state.resync_global_css_watcher(&previous_css_state, &current_css_state);
     sync_tab_css_runtime(
         state.inner(),
@@ -624,6 +625,7 @@ pub fn preset_load_tab(
             ))
         },
     )?;
+    state.authorize_css_paths_from_store(&state.store.snapshot());
     sync_tab_css_runtime(
         state.inner(),
         &app,

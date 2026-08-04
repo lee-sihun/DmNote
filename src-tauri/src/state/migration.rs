@@ -16,7 +16,10 @@ use uuid::Uuid;
 use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
 
 use crate::{
-    custom_css::{migrate_custom_css_history_at_load, normalize_custom_css_history},
+    custom_css::{
+        canonicalize_legacy_css_path, migrate_custom_css_history_at_load,
+        normalize_custom_css_history,
+    },
     defaults::{default_keys, default_positions},
     models::{
         AppStoreData, CounterAnimationPreset, CustomCss, CustomCssHistoryEntry, CustomFont,
@@ -69,79 +72,99 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
     // 바이트로 읽어 잘못된 UTF-8도 IO 에러 대신 JSON 파싱 실패로 흘려 복구 분기에 합류
     let content = fs::read(path)
         .with_context(|| format!("failed to read store file at {}", path.display()))?;
-    let (state, needs_persist, repaired) = match serde_json::from_slice::<Value>(&content) {
-        Ok(mut value) => {
-            let sound_library_migrated = migrate_sound_library_enabled(&mut value);
-            match serde_json::from_value::<AppStoreData>(value.clone()) {
-                Ok(mut data) => {
-                    let mut needs_persist = sound_library_migrated
-                        || data.font_settings.custom_fonts.iter().any(|font| {
-                            font.font_type == FontType::Local
-                                && font
-                                    .css_content
-                                    .as_ref()
-                                    .map(|c| !c.trim().is_empty())
-                                    .unwrap_or(false)
-                        });
-                    let active_css_path = data.custom_css.path.clone();
-                    needs_persist |= migrate_custom_css_history_at_load(
-                        &mut data.custom_css_history,
-                        active_css_path.as_deref(),
-                        current_unix_millis(),
-                    );
-                    // rgba로 깨진 noteBorderColor가 있으면 정규화 후 디스크에도 영속 (이슈 #73)
-                    if has_convertible_note_border_color(&data) {
-                        needs_persist = true;
+    let (state, needs_persist, repaired, seed_active_css_history) =
+        match serde_json::from_slice::<Value>(&content) {
+            Ok(mut value) => {
+                let seed_active_css_history = value.get("customCssHistory").is_none();
+                let sound_library_migrated = migrate_sound_library_enabled(&mut value);
+                match serde_json::from_value::<AppStoreData>(value.clone()) {
+                    Ok(mut data) => {
+                        let mut needs_persist = sound_library_migrated
+                            || data.font_settings.custom_fonts.iter().any(|font| {
+                                font.font_type == FontType::Local
+                                    && font
+                                        .css_content
+                                        .as_ref()
+                                        .map(|c| !c.trim().is_empty())
+                                        .unwrap_or(false)
+                            });
+                        // rgba로 깨진 noteBorderColor가 있으면 정규화 후 디스크에도 영속 (이슈 #73)
+                        if has_convertible_note_border_color(&data) {
+                            needs_persist = true;
+                        }
+                        if migrate_legacy_knob_sensitivity(&mut data) {
+                            needs_persist = true;
+                        }
+                        let editor_revision_repaired = repair_editor_revision(&mut data);
+                        needs_persist |= editor_revision_repaired;
+                        let semantic_repaired = repair_semantic_identities(&mut data);
+                        needs_persist |= semantic_repaired;
+                        let layout_repaired = repair_custom_tab_key_layout_pairs(
+                            &mut data,
+                            value.get("keys"),
+                            value.get("keyPositions"),
+                        );
+                        needs_persist |= layout_repaired;
+                        let (gradient_changed, gradient_pair_repaired) =
+                            canonicalize_gradient_pairs(&mut data);
+                        needs_persist |= gradient_changed;
+                        needs_persist |=
+                            key_position_lengths_mismatch(&data.keys, &data.key_positions);
+                        needs_persist |= !has_valid_selected_key_type(&data);
+                        let original_css_history = data.custom_css_history.clone();
+                        let data = normalize_state(data);
+                        needs_persist |= data.custom_css_history != original_css_history;
+                        (
+                            data,
+                            needs_persist,
+                            layout_repaired
+                                || semantic_repaired
+                                || editor_revision_repaired
+                                || gradient_pair_repaired,
+                            seed_active_css_history,
+                        )
                     }
-                    if migrate_legacy_knob_sensitivity(&mut data) {
-                        needs_persist = true;
+                    Err(err) => {
+                        log::warn!(
+                            "[Store] Falling back to field-level recovery for {}: {err}",
+                            path.display()
+                        );
+                        (
+                            repair_legacy_state(value),
+                            true,
+                            true,
+                            seed_active_css_history,
+                        )
                     }
-                    let editor_revision_repaired = repair_editor_revision(&mut data);
-                    needs_persist |= editor_revision_repaired;
-                    let semantic_repaired = repair_semantic_identities(&mut data);
-                    needs_persist |= semantic_repaired;
-                    let layout_repaired = repair_custom_tab_key_layout_pairs(
-                        &mut data,
-                        value.get("keys"),
-                        value.get("keyPositions"),
-                    );
-                    needs_persist |= layout_repaired;
-                    let (gradient_changed, gradient_pair_repaired) =
-                        canonicalize_gradient_pairs(&mut data);
-                    needs_persist |= gradient_changed;
-                    needs_persist |= key_position_lengths_mismatch(&data.keys, &data.key_positions);
-                    needs_persist |= !has_valid_selected_key_type(&data);
-                    (
-                        normalize_state(data),
-                        needs_persist,
-                        layout_repaired
-                            || semantic_repaired
-                            || editor_revision_repaired
-                            || gradient_pair_repaired,
-                    )
-                }
-                Err(err) => {
-                    log::warn!(
-                        "[Store] Falling back to field-level recovery for {}: {err}",
-                        path.display()
-                    );
-                    (repair_legacy_state(value), true, true)
                 }
             }
-        }
-        Err(err) => {
-            log::warn!(
-                "[Store] Falling back to default recovery for invalid JSON at {}: {err}",
-                path.display()
-            );
-            (repair_legacy_state(Value::Null), true, true)
-        }
-    };
+            Err(err) => {
+                log::warn!(
+                    "[Store] Falling back to default recovery for invalid JSON at {}: {err}",
+                    path.display()
+                );
+                (repair_legacy_state(Value::Null), true, true, false)
+            }
+        };
     // 로드 시점은 정의와 참조가 함께 확정되는 경계 — dangling groupId 정리
     // 정리가 발생하면 마이그레이션과 같은 경로로 디스크에도 영속
     let mut state = state;
     let mut needs_persist = needs_persist;
-    let active_css_path = state.custom_css.path.clone();
+    let active_css_path = seed_active_css_history
+        .then(|| {
+            state
+                .custom_css
+                .path
+                .as_deref()
+                .map(canonicalize_legacy_css_path)
+        })
+        .flatten();
+    if let Some(path) = active_css_path.as_ref() {
+        if state.custom_css.path.as_ref() != Some(path) {
+            state.custom_css.path = Some(path.clone());
+            needs_persist = true;
+        }
+    }
     needs_persist |= migrate_custom_css_history_at_load(
         &mut state.custom_css_history,
         active_css_path.as_deref(),
@@ -3074,7 +3097,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_css_history_migrates_loaded_at_and_seeds_active_path() {
+    fn custom_css_history_migrates_loaded_at_without_reseeding_active_path() {
         let path = std::env::temp_dir().join(format!(
             "dmnote-css-history-seed-test-{}.json",
             uuid::Uuid::new_v4()
@@ -3096,7 +3119,7 @@ mod tests {
         let _ = std::fs::remove_file(path);
 
         assert!(loaded.needs_persist);
-        assert_eq!(loaded.data.custom_css_history.len(), 2);
+        assert_eq!(loaded.data.custom_css_history.len(), 1);
         let existing = loaded
             .data
             .custom_css_history
@@ -3104,14 +3127,96 @@ mod tests {
             .find(|entry| entry.path == existing_path)
             .unwrap();
         assert_eq!(existing.loaded_at, 42);
-        let seeded = loaded
+        assert!(!loaded
             .data
             .custom_css_history
             .iter()
-            .find(|entry| entry.path == active_path)
-            .unwrap();
-        assert!(seeded.loaded_at >= 42);
-        assert_eq!(seeded.loaded_at, seeded.last_used_at);
+            .any(|entry| entry.path == active_path));
+    }
+
+    #[test]
+    fn custom_css_history_seeds_active_path_only_when_legacy_field_is_missing() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-css-history-legacy-seed-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let active_path = absolute_fixture_path("history-active.css");
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture.as_object_mut().unwrap().remove("customCssHistory");
+        fixture["customCss"] = json!({
+            "path": active_path,
+            "content": "body {}"
+        });
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(loaded.needs_persist);
+        assert_eq!(loaded.data.custom_css_history.len(), 1);
+        assert_eq!(loaded.data.custom_css_history[0].path, active_path);
+    }
+
+    #[test]
+    fn explicit_empty_custom_css_history_survives_repeated_loads() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-css-history-empty-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let active_path = absolute_fixture_path("history-active.css");
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture["customCss"] = json!({
+            "path": active_path,
+            "content": "body {}"
+        });
+        fixture["customCssHistory"] = json!([]);
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let first = load_store_from_path(&path).unwrap();
+        let second = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(first.data.custom_css_history.is_empty());
+        assert!(second.data.custom_css_history.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn legacy_symlink_active_css_is_seeded_with_its_canonical_path() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "dmnote-css-history-symlink-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("target.css");
+        let alias = root.join("alias.css");
+        let store_path = root.join("store.json");
+        std::fs::write(&target, "body {}").unwrap();
+        symlink(&target, &alias).unwrap();
+
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture.as_object_mut().unwrap().remove("customCssHistory");
+        fixture["customCss"] = json!({
+            "path": alias.to_string_lossy(),
+            "content": "body {}"
+        });
+        std::fs::write(&store_path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&store_path).unwrap();
+        let canonical = std::fs::canonicalize(&target)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        let _ = std::fs::remove_dir_all(root);
+
+        assert_eq!(
+            loaded.data.custom_css.path.as_deref(),
+            Some(canonical.as_str())
+        );
+        assert_eq!(loaded.data.custom_css_history.len(), 1);
+        assert_eq!(loaded.data.custom_css_history[0].path, canonical);
     }
 
     #[test]
