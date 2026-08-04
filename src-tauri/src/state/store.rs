@@ -1453,6 +1453,7 @@ impl AppStore {
         ))
     }
 
+    #[cfg(test)]
     pub(crate) fn commit_legacy_editor_transaction<T>(
         &self,
         origin: EditorCommitOrigin,
@@ -1467,11 +1468,36 @@ impl AppStore {
         )
     }
 
+    pub(crate) fn commit_legacy_editor_transaction_with_admission<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_editor_transaction_with_history_admission(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions::default(),
+            admission,
+            updater,
+        )
+    }
+
+    #[cfg(test)]
     pub(crate) fn commit_history_overlap_mutation<T>(
         &self,
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<AdmittedHistoryOverlapMutation<T>, EditorCommitError> {
         let admission = self.admit_editor_mutation()?;
+        self.commit_history_overlap_mutation_with_admission(admission, updater)
+    }
+
+    pub(crate) fn commit_history_overlap_mutation_with_admission<T>(
+        &self,
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedHistoryOverlapMutation<T>, EditorCommitError> {
         let mut guard = self
             .lock_for_update()
             .map_err(|error| EditorCommitError::io(error.to_string()))?;
@@ -1506,6 +1532,7 @@ impl AppStore {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn commit_preset_editor_transaction<T>(
         &self,
         origin: EditorCommitOrigin,
@@ -1525,6 +1552,28 @@ impl AppStore {
         )
     }
 
+    pub(crate) fn commit_preset_editor_transaction_with_admission<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        current_key_counters: KeyCounters,
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        self.commit_editor_transaction_with_history_admission(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions {
+                scope: Some(HistoryScope::PresetFull),
+                observed_epoch: None,
+                key_counters: Some(current_key_counters),
+            },
+            admission,
+            updater,
+        )
+    }
+
+    #[cfg(test)]
     pub(crate) fn commit_aux_editor_transaction<T>(
         &self,
         scope: HistoryScope,
@@ -1551,6 +1600,35 @@ impl AppStore {
         )
     }
 
+    pub(crate) fn commit_aux_editor_transaction_with_admission<T>(
+        &self,
+        scope: HistoryScope,
+        observed_history_epoch: Option<u64>,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
+        if !matches!(scope, HistoryScope::CustomTabs | HistoryScope::Mode) {
+            return Err(EditorCommitError::validation(
+                "INVALID_AUX_HISTORY_SCOPE",
+                "aux editor transaction requires a custom tabs or mode scope",
+            ));
+        }
+        self.commit_editor_transaction_with_history_admission(
+            origin,
+            touched_fields,
+            EditorTransactionHistoryOptions {
+                scope: Some(scope),
+                observed_epoch: observed_history_epoch,
+                key_counters: None,
+            },
+            admission,
+            updater,
+        )
+    }
+
+    #[cfg(test)]
     fn commit_editor_transaction_with_history<T>(
         &self,
         origin: EditorCommitOrigin,
@@ -1559,6 +1637,23 @@ impl AppStore {
         updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
     ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
         let admission = self.admit_editor_mutation()?;
+        self.commit_editor_transaction_with_history_admission(
+            origin,
+            touched_fields,
+            history_options,
+            admission,
+            updater,
+        )
+    }
+
+    fn commit_editor_transaction_with_history_admission<T>(
+        &self,
+        origin: EditorCommitOrigin,
+        touched_fields: &[EditorField],
+        history_options: EditorTransactionHistoryOptions,
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut AppStoreData) -> std::result::Result<T, EditorCommitError>,
+    ) -> std::result::Result<AdmittedEditorTransaction<T>, EditorCommitError> {
         let started = Instant::now();
         let origin_name = origin
             .event_name()
@@ -1945,18 +2040,28 @@ impl AppStore {
         Ok(guard.data.plugin_data.get(key).cloned())
     }
 
+    #[cfg(test)]
     pub(crate) fn set_plugin_data(
         &self,
         key: &str,
         value: Value,
     ) -> Result<AdmittedPluginStorageMutation<()>> {
-        if is_plugin_instances_storage_key(key) {
-            return Err(anyhow!("PLUGIN_INSTANCES_KEY_RESERVED"));
-        }
         let admission = self
             .history_gate
             .admit_mutation()
             .map_err(anyhow::Error::msg)?;
+        self.set_plugin_data_with_admission(key, value, admission)
+    }
+
+    pub(crate) fn set_plugin_data_with_admission(
+        &self,
+        key: &str,
+        value: Value,
+        admission: HistoryAdmissionLease,
+    ) -> Result<AdmittedPluginStorageMutation<()>> {
+        if is_plugin_instances_storage_key(key) {
+            return Err(anyhow!("PLUGIN_INSTANCES_KEY_RESERVED"));
+        }
         let mut guard = self.lock_for_update()?;
         admission
             .revalidate_for(&self.history_gate)
@@ -1980,17 +2085,26 @@ impl AppStore {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn remove_plugin_data(
         &self,
         key: &str,
     ) -> Result<AdmittedPluginStorageMutation<()>> {
-        if is_plugin_instances_storage_key(key) {
-            return Err(anyhow!("PLUGIN_INSTANCES_KEY_RESERVED"));
-        }
         let admission = self
             .history_gate
             .admit_mutation()
             .map_err(anyhow::Error::msg)?;
+        self.remove_plugin_data_with_admission(key, admission)
+    }
+
+    pub(crate) fn remove_plugin_data_with_admission(
+        &self,
+        key: &str,
+        admission: HistoryAdmissionLease,
+    ) -> Result<AdmittedPluginStorageMutation<()>> {
+        if is_plugin_instances_storage_key(key) {
+            return Err(anyhow!("PLUGIN_INSTANCES_KEY_RESERVED"));
+        }
         let mut guard = self.lock_for_update()?;
         admission
             .revalidate_for(&self.history_gate)
@@ -2014,11 +2128,19 @@ impl AppStore {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn clear_all_plugin_data(&self) -> Result<AdmittedPluginStorageMutation<()>> {
         let admission = self
             .history_gate
             .admit_mutation()
             .map_err(anyhow::Error::msg)?;
+        self.clear_all_plugin_data_with_admission(admission)
+    }
+
+    pub(crate) fn clear_all_plugin_data_with_admission(
+        &self,
+        admission: HistoryAdmissionLease,
+    ) -> Result<AdmittedPluginStorageMutation<()>> {
         let mut guard = self.lock_for_update()?;
         admission
             .revalidate_for(&self.history_gate)
@@ -2070,6 +2192,7 @@ impl AppStore {
         Ok(guard.data.plugin_data.keys().cloned().collect())
     }
 
+    #[cfg(test)]
     pub(crate) fn remove_plugin_data_by_prefix(
         &self,
         prefix: &str,
@@ -2078,6 +2201,14 @@ impl AppStore {
             .history_gate
             .admit_mutation()
             .map_err(anyhow::Error::msg)?;
+        self.remove_plugin_data_by_prefix_with_admission(prefix, admission)
+    }
+
+    pub(crate) fn remove_plugin_data_by_prefix_with_admission(
+        &self,
+        prefix: &str,
+        admission: HistoryAdmissionLease,
+    ) -> Result<AdmittedPluginStorageMutation<usize>> {
         let mut guard = self.lock_for_update()?;
         admission
             .revalidate_for(&self.history_gate)
@@ -3930,7 +4061,12 @@ mod tests {
     }
 
     impl KeyCounterEventEmitter for TestCounterEmitter {
-        fn emit_key_counters(&self, counters: &KeyCounters) -> anyhow::Result<()> {
+        fn emit_key_counters(
+            &self,
+            counters: &KeyCounters,
+            _session_id: &str,
+            _revision: u64,
+        ) -> anyhow::Result<()> {
             let count = counters[&self.mode][&self.key];
             self.events
                 .lock()
@@ -3945,7 +4081,14 @@ mod tests {
             Ok(())
         }
 
-        fn emit_key_counter(&self, _mode: &str, _key: &str, count: u32) -> anyhow::Result<()> {
+        fn emit_key_counter(
+            &self,
+            _mode: &str,
+            _key: &str,
+            count: u32,
+            _session_id: &str,
+            _revision: u64,
+        ) -> anyhow::Result<()> {
             self.events.lock().unwrap().push(format!("counter:{count}"));
             Ok(())
         }
@@ -8720,6 +8863,10 @@ mod tests {
         increment_handle.join().unwrap();
         assert_eq!(*events.lock().unwrap(), vec!["snapshot:0", "counter:1"]);
         assert_eq!(state.snapshot_key_counters()[&mode][&key], 1);
+        let bootstrap = state.bootstrap_payload();
+        assert_eq!(bootstrap.key_counters[&mode][&key], 1);
+        assert!(!bootstrap.key_counters_session_id.is_empty());
+        assert_eq!(bootstrap.key_counters_revision, 2);
 
         state.shutdown();
         drop(state);

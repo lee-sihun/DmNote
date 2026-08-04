@@ -3,6 +3,10 @@
  */
 
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
+import {
+  updateMappingsAndPositionsWithGesture,
+  updatePositionsWithGesture,
+} from '@api/modules/keysApi';
 
 /**
  * positions 변경을 로컬 스토어 + 백엔드에 반영
@@ -35,7 +39,7 @@ export function persistMappingsAndPositions(
   positions: KeyPositions,
   gestureId?: string,
 ): Promise<unknown> {
-  const persisted = window.api.keys.updateWithPositions(
+  const persisted = updateMappingsAndPositionsWithGesture(
     mappings,
     positions,
     gestureId,
@@ -53,7 +57,7 @@ export function persistPositions(
   positions: KeyPositions,
   gestureId?: string,
 ): Promise<unknown> {
-  const persisted = window.api.keys.updatePositions(positions, gestureId);
+  const persisted = updatePositionsWithGesture(positions, gestureId);
   persisted.catch((error) => {
     console.error('Failed to persist positions', error);
   });
@@ -71,7 +75,7 @@ export function persistPositionsWithFlag(
 ): Promise<unknown> {
   setLocalUpdateInProgress(true);
   setPositions(positions);
-  const persisted = window.api.keys.updatePositions(positions, gestureId);
+  const persisted = updatePositionsWithGesture(positions, gestureId);
   persisted
     .catch((error) => {
       console.error('Failed to persist positions', error);

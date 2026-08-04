@@ -2085,6 +2085,8 @@ pub struct BootstrapPayload {
     pub active_keys: Vec<String>,
     pub overlay: BootstrapOverlayState,
     pub key_counters: KeyCounters,
+    pub key_counters_session_id: String,
+    pub key_counters_revision: u64,
     pub layer_groups: LayerGroups,
     pub tab_note_overrides: TabNoteOverrides,
     pub tab_css_overrides: TabCssOverrides,

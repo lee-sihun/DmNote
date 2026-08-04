@@ -316,7 +316,13 @@ export type CustomTabDeleteResult = {
   selected: string;
   error?: string;
 };
-export type KeyCounterUpdate = { mode: string; key: string; count: number };
+export type KeyCounterUpdate = {
+  mode: string;
+  key: string;
+  count: number;
+  sessionId: string;
+  revision: number;
+};
 
 export type PresetOperationResult = { success: boolean; error?: string };
 
@@ -339,7 +345,7 @@ export type AppAutoUpdateResult = {
 export type BridgeMessage<T = unknown> = { type: string; data?: T };
 export type BridgeMessageListener<T = unknown> = (data: T) => void;
 export type BridgeAnyListener = (type: string, data: unknown) => void;
-export type WindowTarget = 'main' | 'overlay' | 'panel';
+export type WindowTarget = 'main' | 'overlay';
 
 // UI Plugin 컨텍스트 메뉴 types
 export type KeyMenuContext = {
@@ -914,13 +920,9 @@ export interface DMNoteAPI {
     updateWithPositions(
       mappings: KeyMappings,
       positions: KeyPositions,
-      gestureId?: string,
     ): Promise<{ keys: KeyMappings; positions: KeyPositions }>;
     getPositions(): Promise<KeyPositions>;
-    updatePositions(
-      positions: KeyPositions,
-      gestureId?: string,
-    ): Promise<KeyPositions>;
+    updatePositions(positions: KeyPositions): Promise<KeyPositions>;
     setMode(mode: string): Promise<KeysModeResponse>;
     resetAll(): Promise<KeysResetAllResponse>;
     resetMode(mode: string): Promise<KeysModeResponse>;

@@ -1,5 +1,5 @@
 use serde_json::Value;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
     commands::{
@@ -44,11 +44,15 @@ pub fn plugin_storage_get(state: State<'_, AppState>, key: String) -> CmdResult<
 pub fn plugin_storage_set(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     key: String,
     value: Value,
 ) -> CmdResult<()> {
     let storage_key = make_storage_key(&key);
-    let mutation = state.store.set_plugin_data(&storage_key, value)?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let mutation = state
+        .store
+        .set_plugin_data_with_admission(&storage_key, value, admission)?;
     if let Some(status) = mutation.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
     }
@@ -60,10 +64,14 @@ pub fn plugin_storage_set(
 pub fn plugin_storage_remove(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     key: String,
 ) -> CmdResult<()> {
     let storage_key = make_storage_key(&key);
-    let mutation = state.store.remove_plugin_data(&storage_key)?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let mutation = state
+        .store
+        .remove_plugin_data_with_admission(&storage_key, admission)?;
     if let Some(status) = mutation.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
     }
@@ -72,8 +80,15 @@ pub fn plugin_storage_remove(
 
 /// 모든 플러그인 데이터 삭제
 #[tauri::command]
-pub fn plugin_storage_clear(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
-    let mutation = state.store.clear_all_plugin_data()?;
+pub fn plugin_storage_clear(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<()> {
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let mutation = state
+        .store
+        .clear_all_plugin_data_with_admission(admission)?;
     publish_plugin_instances_deletions(&app, &mutation.plugin_instances_changes);
     if let Some(status) = mutation.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
@@ -113,10 +128,14 @@ pub fn plugin_storage_has_data(state: State<'_, AppState>, prefix: String) -> Cm
 pub fn plugin_storage_clear_by_prefix(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     prefix: String,
 ) -> CmdResult<usize> {
     let storage_prefix = format!("plugin_data_{}", prefix);
-    let mutation = state.store.remove_plugin_data_by_prefix(&storage_prefix)?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let mutation = state
+        .store
+        .remove_plugin_data_by_prefix_with_admission(&storage_prefix, admission)?;
     publish_plugin_instances_deletions(&app, &mutation.plugin_instances_changes);
     if let Some(status) = mutation.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);

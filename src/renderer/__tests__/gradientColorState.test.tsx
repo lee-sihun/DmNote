@@ -3,6 +3,7 @@ import React, { act, useEffect, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import type { ColorModeValue, ColorPair, GradientSpec } from '@src/types/color';
 
@@ -35,11 +36,18 @@ describe('useGradientColorState 편집 수명', () => {
   let stateCapture: { current: GradientState | null };
   let onCommit: ReturnType<typeof vi.fn<(value: ColorModeValue) => void>>;
 
-  const Harness = ({ pair }: { pair: ColorPair }) => {
+  const Harness = ({
+    pair,
+    canvasOpen = false,
+  }: {
+    pair: ColorPair;
+    canvasOpen?: boolean;
+  }) => {
     const state = useGradientColorState({
       pair,
       fallbackColor: '#ffffff',
       contextKey: 'key:4key:0:backgroundColor:idle',
+      canvasAnchor: canvasOpen ? { kind: 'key', index: 0 } : undefined,
       onCommit,
     });
     useEffect(() => {
@@ -76,6 +84,7 @@ describe('useGradientColorState 편집 수명', () => {
   afterEach(() => {
     act(() => {
       root.unmount();
+      useGradientEditStore.getState().setSession(null);
       useGridSelectionStore.getState().clearSelection();
     });
     host.remove();
@@ -180,5 +189,39 @@ describe('useGradientColorState 편집 수명', () => {
       selectedIndex: number;
     }>;
     expect(afterAdd.props.selectedIndex).toBe(2);
+  });
+
+  it('캔버스 피커를 닫으면 미커밋 preview를 폐기한다', () => {
+    const previewSpec: GradientSpec = { ...oldGradient, angle: 123 };
+    act(() => {
+      root.render(
+        <Harness
+          pair={{ color: '#ff0000', gradient: oldGradient }}
+          canvasOpen
+        />,
+      );
+    });
+
+    act(() => {
+      useGradientEditStore.getState().session?.apply(previewSpec, false);
+    });
+    expect(useGradientEditStore.getState().session?.spec).toEqual(previewSpec);
+
+    act(() => {
+      root.render(
+        <Harness pair={{ color: '#ff0000', gradient: oldGradient }} />,
+      );
+    });
+    expect(useGradientEditStore.getState().session).toBeNull();
+
+    act(() => {
+      root.render(
+        <Harness
+          pair={{ color: '#ff0000', gradient: oldGradient }}
+          canvasOpen
+        />,
+      );
+    });
+    expect(useGradientEditStore.getState().session?.spec).toEqual(oldGradient);
   });
 });

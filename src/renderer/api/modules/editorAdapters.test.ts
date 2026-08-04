@@ -9,7 +9,7 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   editorCoordinator: { commitPatch },
 }));
 
-import { keysApi } from './keysApi';
+import { keysApi, updatePositionsWithGesture } from './keysApi';
 import {
   graphItemsApi,
   knobItemsApi,
@@ -68,7 +68,7 @@ describe('editor API compatibility adapters', () => {
 
     commitPatch.mockClear();
     commitPatch.mockResolvedValue(structuredClone(document));
-    await keysApi.updatePositions(
+    await updatePositionsWithGesture(
       positions,
       '6f9c2f6a-0b1d-4e5f-8a3c-2d7e9b4c1a50',
     );
