@@ -229,7 +229,9 @@ const SoundPicker = ({
         searchPlaceholder={t('soundPicker.searchPlaceholder') || '검색'}
         filterOptions={filterOptions}
         filterValue={filterType}
-        onFilterChange={(value) => setFilterType(value as 'all' | 'local')}
+        onFilterChange={(value) =>
+          setFilterType(value as 'all' | 'local' | 'hidden')
+        }
         items={filteredSounds}
         renderItem={(item) => {
           const isSelected = item.soundPath === normalizedSelectedSound;
