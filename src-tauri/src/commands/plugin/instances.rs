@@ -140,7 +140,9 @@ pub fn plugin_instances_commit(
         rpc_request_id.as_deref(),
         window.label(),
     )?;
-    let admission = state.admit_frontend_history_mutation(source_window_label)?;
+    let admission = state
+        .admit_frontend_history_mutation(source_window_label)
+        .map_err(|_| "HISTORY_IN_PROGRESS".to_string())?;
     let mutation_id = request.mutation_id.clone();
     let committed = state
         .store
@@ -167,7 +169,9 @@ pub fn plugin_instances_reconcile(
     let authority = state
         .plugin_authority()
         .admit(request.authority_generation)?;
-    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let admission = state
+        .admit_frontend_history_mutation(window.label())
+        .map_err(|_| "HISTORY_IN_PROGRESS".to_string())?;
     let mutation_id = request.mutation_id.clone();
     let committed = state
         .store

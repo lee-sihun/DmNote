@@ -6,7 +6,7 @@ use std::{
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use rfd::FileDialog;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
@@ -213,7 +213,11 @@ fn resolve_full_preset_settings(
 }
 
 #[tauri::command]
-pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<PresetOperationResult> {
+pub fn preset_load(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<PresetOperationResult> {
     let picked = FileDialog::new()
         .add_filter("DM NOTE Preset", &["json"])
         .pick_file();
@@ -338,47 +342,51 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     let current_key_counters = counter_guard.clone();
     let css_operation_guard = state.lock_css_operation();
     let previous_css_state = state.store.snapshot();
-    let transaction = state.store.commit_preset_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
-        &[
-            EditorField::Keys,
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-            EditorField::KnobPositions,
-            EditorField::LayerGroups,
-        ],
-        current_key_counters,
-        move |store| {
-            let previous_tab_css_overrides = store.tab_css_overrides.clone();
-            let selected_key_type = choose_selected_key_type(
-                requested_selected_key_type,
-                &keys,
-                store.selected_key_type.clone(),
-            );
-            store.keys = keys;
-            store.key_positions = positions;
-            store.stat_positions = stat_positions;
-            store.graph_positions = graph_positions;
-            store.knob_positions = knob_positions;
-            store.custom_tabs = custom_tabs;
-            store.selected_key_type = selected_key_type;
-            store.tab_note_overrides = tab_note_overrides;
-            store.layer_groups = preset_layer_groups;
-            if let Some(tab_css_overrides) = preset_tab_css_overrides {
-                store.tab_css_overrides = tab_css_overrides;
-            }
-            crate::state::migration::clear_dangling_group_ids(store);
-            let diff = apply_patch_to_store(store, &settings_patch);
-            Ok((
-                diff,
-                previous_tab_css_overrides,
-                store.custom_tabs.clone(),
-                store.tab_note_overrides.clone(),
-                store.tab_css_overrides.clone(),
-            ))
-        },
-    )?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_preset_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
+            &[
+                EditorField::Keys,
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ],
+            current_key_counters,
+            admission,
+            move |store| {
+                let previous_tab_css_overrides = store.tab_css_overrides.clone();
+                let selected_key_type = choose_selected_key_type(
+                    requested_selected_key_type,
+                    &keys,
+                    store.selected_key_type.clone(),
+                );
+                store.keys = keys;
+                store.key_positions = positions;
+                store.stat_positions = stat_positions;
+                store.graph_positions = graph_positions;
+                store.knob_positions = knob_positions;
+                store.custom_tabs = custom_tabs;
+                store.selected_key_type = selected_key_type;
+                store.tab_note_overrides = tab_note_overrides;
+                store.layer_groups = preset_layer_groups;
+                if let Some(tab_css_overrides) = preset_tab_css_overrides {
+                    store.tab_css_overrides = tab_css_overrides;
+                }
+                crate::state::migration::clear_dangling_group_ids(store);
+                let diff = apply_patch_to_store(store, &settings_patch);
+                Ok((
+                    diff,
+                    previous_tab_css_overrides,
+                    store.custom_tabs.clone(),
+                    store.tab_note_overrides.clone(),
+                    store.tab_css_overrides.clone(),
+                ))
+            },
+        )?;
     if let Err(error) = state.apply_committed_editor_key_runtime_locked(
         &app,
         &mut counter_guard,
@@ -453,6 +461,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
 pub fn preset_load_tab(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
 ) -> CmdResult<PresetOperationResult> {
     let picked = FileDialog::new()
         .add_filter("DM NOTE Preset", &["json"])
@@ -582,74 +591,78 @@ pub fn preset_load_tab(
     let mut counter_guard = state.lock_key_counters_for_history();
     let current_key_counters = counter_guard.clone();
     let css_operation_guard = state.lock_css_operation();
-    let transaction = state.store.commit_preset_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("preset_load_tab".to_string()),
-        &[
-            EditorField::Keys,
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-            EditorField::KnobPositions,
-            EditorField::LayerGroups,
-        ],
-        current_key_counters,
-        move |store| {
-            let previous_tab_css_overrides = store.tab_css_overrides.clone();
-            merge_tab_preset_key_pair(store, &current_tab_id, src_keys, imported_key_positions);
-            if let Some(positions) = imported_stat_positions {
-                store
-                    .stat_positions
-                    .insert(current_tab_id.clone(), positions);
-            }
-            if let Some(positions) = imported_graph_positions {
-                store
-                    .graph_positions
-                    .insert(current_tab_id.clone(), positions);
-            }
-            if let Some(positions) = imported_knob_positions {
-                store
-                    .knob_positions
-                    .insert(current_tab_id.clone(), positions);
-            }
-            apply_tab_note_override(
-                store,
-                &current_tab_id,
-                has_tab_note_overrides,
-                imported_override,
-            );
-            if let Some(groups) = imported_groups {
-                store.layer_groups.insert(current_tab_id.clone(), groups);
-            }
-            if let Some(css) = imported_tab_css {
-                if let Some(css) = css {
-                    store.tab_css_overrides.insert(current_tab_id.clone(), css);
-                } else {
-                    store.tab_css_overrides.remove(&current_tab_id);
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_preset_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("preset_load_tab".to_string()),
+            &[
+                EditorField::Keys,
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ],
+            current_key_counters,
+            admission,
+            move |store| {
+                let previous_tab_css_overrides = store.tab_css_overrides.clone();
+                merge_tab_preset_key_pair(store, &current_tab_id, src_keys, imported_key_positions);
+                if let Some(positions) = imported_stat_positions {
+                    store
+                        .stat_positions
+                        .insert(current_tab_id.clone(), positions);
                 }
-            }
+                if let Some(positions) = imported_graph_positions {
+                    store
+                        .graph_positions
+                        .insert(current_tab_id.clone(), positions);
+                }
+                if let Some(positions) = imported_knob_positions {
+                    store
+                        .knob_positions
+                        .insert(current_tab_id.clone(), positions);
+                }
+                apply_tab_note_override(
+                    store,
+                    &current_tab_id,
+                    has_tab_note_overrides,
+                    imported_override,
+                );
+                if let Some(groups) = imported_groups {
+                    store.layer_groups.insert(current_tab_id.clone(), groups);
+                }
+                if let Some(css) = imported_tab_css {
+                    if let Some(css) = css {
+                        store.tab_css_overrides.insert(current_tab_id.clone(), css);
+                    } else {
+                        store.tab_css_overrides.remove(&current_tab_id);
+                    }
+                }
 
-            let settings_diff = prepared_font_settings
-                .and_then(|prepared| {
-                    merge_prepared_tab_preset_fonts(&store.font_settings, prepared)
-                })
-                .map(|font_settings| {
-                    apply_patch_to_store(
-                        store,
-                        &SettingsPatchInput {
-                            font_settings: Some(font_settings),
-                            ..SettingsPatchInput::default()
-                        },
-                    )
-                });
-            crate::state::migration::clear_dangling_group_ids(store);
-            Ok((
-                settings_diff,
-                previous_tab_css_overrides,
-                store.tab_note_overrides.clone(),
-                store.tab_css_overrides.clone(),
-            ))
-        },
-    )?;
+                let settings_diff = prepared_font_settings
+                    .and_then(|prepared| {
+                        merge_prepared_tab_preset_fonts(&store.font_settings, prepared)
+                    })
+                    .map(|font_settings| {
+                        apply_patch_to_store(
+                            store,
+                            &SettingsPatchInput {
+                                font_settings: Some(font_settings),
+                                ..SettingsPatchInput::default()
+                            },
+                        )
+                    });
+                crate::state::migration::clear_dangling_group_ids(store);
+                Ok((
+                    settings_diff,
+                    previous_tab_css_overrides,
+                    store.tab_note_overrides.clone(),
+                    store.tab_css_overrides.clone(),
+                ))
+            },
+        )?;
     if let Err(error) = state.apply_committed_editor_key_runtime_locked(
         &app,
         &mut counter_guard,

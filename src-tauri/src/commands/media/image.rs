@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, WebviewWindow};
 use uuid::Uuid;
 use webp_animation::{
     AnimParams, Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig,
@@ -35,7 +35,7 @@ pub struct ImageLoadResponse {
 /// GIF는 UX를 위해 즉시 원본 경로를 반환하고, 백그라운드에서 WebP 최적화를 수행한 뒤
 /// 스토어의 이미지 경로를 자동으로 치환합니다.
 #[tauri::command]
-pub fn image_load(app: tauri::AppHandle) -> CmdResult<ImageLoadResponse> {
+pub fn image_load(app: tauri::AppHandle, window: WebviewWindow) -> CmdResult<ImageLoadResponse> {
     let picked = FileDialog::new()
         .add_filter(
             "Images",
@@ -63,7 +63,12 @@ pub fn image_load(app: tauri::AppHandle) -> CmdResult<ImageLoadResponse> {
 
     // GIF는 즉시 원본을 보여주고, 백그라운드 최적화 완료 후 자동 치환
     if ext == "gif" {
-        schedule_gif_optimization(app.clone(), dest_path.clone(), images_dir.clone());
+        schedule_gif_optimization(
+            app.clone(),
+            window.label().to_string(),
+            dest_path.clone(),
+            images_dir.clone(),
+        );
     }
 
     Ok(ImageLoadResponse {
@@ -73,7 +78,12 @@ pub fn image_load(app: tauri::AppHandle) -> CmdResult<ImageLoadResponse> {
     })
 }
 
-fn schedule_gif_optimization(app: tauri::AppHandle, gif_path: PathBuf, images_dir: PathBuf) {
+fn schedule_gif_optimization(
+    app: tauri::AppHandle,
+    source_window_label: String,
+    gif_path: PathBuf,
+    images_dir: PathBuf,
+) {
     std::thread::spawn(move || {
         let optimized_path = match try_convert_gif_to_cached_webp(&gif_path, &images_dir) {
             Ok(Some(path)) => path,
@@ -88,7 +98,12 @@ fn schedule_gif_optimization(app: tauri::AppHandle, gif_path: PathBuf, images_di
             return;
         }
 
-        if let Err(error) = replace_store_image_path_references(&app, &gif_path, &optimized_path) {
+        if let Err(error) = replace_store_image_path_references(
+            &app,
+            &source_window_label,
+            &gif_path,
+            &optimized_path,
+        ) {
             log::warn!("[Image] 최적화 이미지 경로 치환 실패: {error}");
         }
     });
@@ -106,6 +121,7 @@ fn copy_image_to_app_data(
 
 fn replace_store_image_path_references(
     app: &tauri::AppHandle,
+    source_window_label: &str,
     from_path: &Path,
     to_path: &Path,
 ) -> CmdResult<()> {
@@ -144,16 +160,20 @@ fn replace_store_image_path_references(
         return Ok(());
     }
 
-    let transaction = state.store.commit_legacy_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("image_optimize".to_string()),
-        &[
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-            EditorField::KnobPositions,
-        ],
-        |store| Ok(replace_image_path_references(store, &from, &to)),
-    )?;
+    let admission = state.admit_frontend_history_mutation(source_window_label)?;
+    let transaction = state
+        .store
+        .commit_legacy_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("image_optimize".to_string()),
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ],
+            admission,
+            |store| Ok(replace_image_path_references(store, &from, &to)),
+        )?;
 
     if !transaction.value {
         // snapshot 이후 참조가 사라진 레이스 케이스

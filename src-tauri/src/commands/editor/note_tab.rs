@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, State, WebviewWindow};
 
 use crate::{
     commands::editor::state::emit_best_effort,
@@ -50,19 +50,24 @@ pub fn note_tab_get(state: State<'_, AppState>, tab_id: String) -> CmdResult<Tab
 pub fn note_tab_set(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
     settings: Option<TabNoteSettings>,
 ) -> CmdResult<TabNoteSetResponse> {
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        if let Some(ref note_settings) = settings {
-            store
-                .tab_note_overrides
-                .insert(tab_id.clone(), note_settings.clone());
-        } else {
-            store.tab_note_overrides.remove(&tab_id);
-        }
-        Ok(())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                if let Some(ref note_settings) = settings {
+                    store
+                        .tab_note_overrides
+                        .insert(tab_id.clone(), note_settings.clone());
+                } else {
+                    store.tab_note_overrides.remove(&tab_id);
+                }
+                Ok(())
+            })?;
 
     let response = TabNoteResponse {
         tab_id: tab_id.clone(),
@@ -86,12 +91,17 @@ pub fn note_tab_set(
 pub fn note_tab_clear(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
 ) -> CmdResult<TabNoteClearResponse> {
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        store.tab_note_overrides.remove(&tab_id);
-        Ok(())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                store.tab_note_overrides.remove(&tab_id);
+                Ok(())
+            })?;
 
     let response = TabNoteResponse {
         tab_id: tab_id.clone(),

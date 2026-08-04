@@ -29,7 +29,6 @@ use tokio::sync::oneshot;
 use super::{
     history::{
         HistoryAdmissionGate, HistoryAdmissionLease, HistoryBarrierLease, HistoryBarrierWaiter,
-        HISTORY_IN_PROGRESS,
     },
     plugin::{PluginAuthorityLease, PluginRpcRouter, PluginRuntimeAuthority},
     store::AppStore,
@@ -1484,12 +1483,15 @@ impl AppState {
     pub(crate) fn admit_frontend_history_mutation(
         &self,
         window_label: &str,
-    ) -> Result<HistoryAdmissionLease, String> {
+    ) -> std::result::Result<HistoryAdmissionLease, EditorCommitError> {
         let handshake = self.editor_flush_handshake.lock();
         if frontend_history_mutation_blocked(&handshake, window_label) {
-            return Err(HISTORY_IN_PROGRESS.to_string());
+            return Err(EditorCommitError::history_in_progress());
         }
-        self.store.history_gate().admit_mutation()
+        self.store
+            .history_gate()
+            .admit_mutation()
+            .map_err(|_| EditorCommitError::history_in_progress())
     }
 
     pub fn cancel_frontend_lifecycle(&self, app_handle: AppHandle, handshake_id: &str) {
@@ -3261,6 +3263,7 @@ impl AppState {
         }
     }
 
+    #[cfg(test)]
     fn update_key_counters_and_emit(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
@@ -3268,6 +3271,21 @@ impl AppState {
         updater: impl FnOnce(&mut KeyCounters),
     ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
         let admission = self.store.admit_editor_mutation()?;
+        self.update_key_counters_and_emit_with_admission(
+            emitter,
+            observed_history_epoch,
+            admission,
+            updater,
+        )
+    }
+
+    fn update_key_counters_and_emit_with_admission(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        observed_history_epoch: Option<u64>,
+        admission: HistoryAdmissionLease,
+        updater: impl FnOnce(&mut KeyCounters),
+    ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
         let mut guard = self.key_counters.write();
         let before = guard.clone();
         let mut scratch = before.clone();
@@ -3289,6 +3307,7 @@ impl AppState {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn reset_key_counters(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
@@ -3303,6 +3322,27 @@ impl AppState {
         })
     }
 
+    pub(crate) fn reset_key_counters_with_admission(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        observed_history_epoch: Option<u64>,
+        admission: HistoryAdmissionLease,
+    ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
+        self.update_key_counters_and_emit_with_admission(
+            emitter,
+            observed_history_epoch,
+            admission,
+            |counters| {
+                for mode_entry in counters.values_mut() {
+                    for value in mode_entry.values_mut() {
+                        *value = 0;
+                    }
+                }
+            },
+        )
+    }
+
+    #[cfg(test)]
     pub(crate) fn replace_key_counters(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
@@ -3314,35 +3354,64 @@ impl AppState {
         })
     }
 
-    pub(crate) fn reset_mode_counters(
+    pub(crate) fn replace_key_counters_with_admission(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        counters: KeyCounters,
+        observed_history_epoch: Option<u64>,
+        admission: HistoryAdmissionLease,
+    ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
+        self.update_key_counters_and_emit_with_admission(
+            emitter,
+            observed_history_epoch,
+            admission,
+            |scratch| {
+                *scratch = counters;
+            },
+        )
+    }
+
+    pub(crate) fn reset_mode_counters_with_admission(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
         mode: &str,
         observed_history_epoch: Option<u64>,
+        admission: HistoryAdmissionLease,
     ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
-        self.update_key_counters_and_emit(emitter, observed_history_epoch, |counters| {
-            if let Some(entry) = counters.get_mut(mode) {
-                for value in entry.values_mut() {
-                    *value = 0;
+        self.update_key_counters_and_emit_with_admission(
+            emitter,
+            observed_history_epoch,
+            admission,
+            |counters| {
+                if let Some(entry) = counters.get_mut(mode) {
+                    for value in entry.values_mut() {
+                        *value = 0;
+                    }
                 }
-            }
-        })
+            },
+        )
     }
 
-    pub(crate) fn reset_single_key_counter(
+    pub(crate) fn reset_single_key_counter_with_admission(
         &self,
         emitter: &dyn KeyCounterEventEmitter,
         mode: &str,
         key: &str,
         observed_history_epoch: Option<u64>,
+        admission: HistoryAdmissionLease,
     ) -> std::result::Result<AdmittedCounterMutation, EditorCommitError> {
-        self.update_key_counters_and_emit(emitter, observed_history_epoch, |counters| {
-            if let Some(entry) = counters.get_mut(mode) {
-                if let Some(value) = entry.get_mut(key) {
-                    *value = 0;
+        self.update_key_counters_and_emit_with_admission(
+            emitter,
+            observed_history_epoch,
+            admission,
+            |counters| {
+                if let Some(entry) = counters.get_mut(mode) {
+                    if let Some(value) = entry.get_mut(key) {
+                        *value = 0;
+                    }
                 }
-            }
-        })
+            },
+        )
     }
 
     pub fn clear_active_keys(&self) {

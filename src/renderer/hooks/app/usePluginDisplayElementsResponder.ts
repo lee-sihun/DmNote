@@ -49,7 +49,7 @@ export function usePluginDisplayElementsResponder() {
       () => {
         const { elements, definitions } =
           usePluginDisplayElementStore.getState();
-        schedulePluginPanelModelSync(elements, definitions);
+        schedulePluginPanelModelSync(elements, definitions, true);
       },
     );
     return unsubscribe;

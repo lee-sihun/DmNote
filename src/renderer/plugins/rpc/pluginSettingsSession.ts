@@ -217,7 +217,7 @@ export const openPluginSettingsSession = (
   };
   session = record;
 
-  if (usePanelWindowStore.getState().isDetached) {
+  if (usePanelWindowStore.getState().status === 'detached') {
     transferToPanel(record);
     return;
   }

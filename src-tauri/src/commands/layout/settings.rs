@@ -1,4 +1,4 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
     commands::editor::state::emit_best_effort,
@@ -16,6 +16,7 @@ pub fn settings_get(state: State<'_, AppState>) -> CmdResult<SettingsState> {
 pub fn settings_update(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     patch: SettingsPatchInput,
 ) -> CmdResult<SettingsState> {
     let css_changed = patch.use_custom_css.is_some() || patch.custom_css.is_some();
@@ -29,11 +30,15 @@ pub fn settings_update(
     } else {
         None
     };
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        Ok(crate::services::settings::apply_patch_to_store(
-            store, &patch,
-        ))
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                Ok(crate::services::settings::apply_patch_to_store(
+                    store, &patch,
+                ))
+            })?;
     if let Some(previous) = previous.as_ref() {
         state.resync_global_css_watcher(previous, &state.store.snapshot());
     }

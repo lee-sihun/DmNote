@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
     time::SystemTime,
 };
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, Manager, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::commands::editor::state::publish_editor_change;
@@ -437,6 +437,7 @@ pub fn sound_rename(
 pub fn sound_delete(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
+    window: WebviewWindow,
     sound_path: String,
 ) -> CmdResult<SoundDeleteResponse> {
     let sounds_dir = ensure_sounds_dir(&app)?;
@@ -484,16 +485,20 @@ pub fn sound_delete(
         .map_err(|error| CommandError::msg(format!("사운드 파일 삭제 준비 실패: {error:#}")))?;
 
     let transaction = commit_staged_sound_deletion(&staged, || {
-        Ok(state.store.commit_legacy_editor_transaction(
-            EditorCommitOrigin::LegacyAdapter("sound_delete".to_string()),
-            &[
-                EditorField::KeyPositions,
-                EditorField::StatPositions,
-                EditorField::GraphPositions,
-                EditorField::KnobPositions,
-            ],
-            |store| Ok(remove_sound_entry_and_references(store, &path_key)),
-        )?)
+        let admission = state.admit_frontend_history_mutation(window.label())?;
+        Ok(state
+            .store
+            .commit_legacy_editor_transaction_with_admission(
+                EditorCommitOrigin::LegacyAdapter("sound_delete".to_string()),
+                &[
+                    EditorField::KeyPositions,
+                    EditorField::StatPositions,
+                    EditorField::GraphPositions,
+                    EditorField::KnobPositions,
+                ],
+                admission,
+                |store| Ok(remove_sound_entry_and_references(store, &path_key)),
+            )?)
     })?;
 
     state.key_sound_invalidate_file_cache(&path_key);

@@ -24,6 +24,43 @@ import type {
   KeyCounters,
 } from '@src/types/key/keys';
 
+export const updateMappingsAndPositionsWithGesture = (
+  mappings: KeyMappings,
+  positions: KeyPositions,
+  gestureId?: string,
+) =>
+  enqueueEditorCompatibilityWrite(
+    () =>
+      editorCoordinator.commitPatch(
+        {
+          schemaVersion: 1,
+          keys: mappings,
+          keyPositions: positions,
+        },
+        gestureId ? { gestureId } : undefined,
+      ),
+    () => ({
+      keys: structuredClone(mappings),
+      positions: structuredClone(positions),
+    }),
+  );
+
+export const updatePositionsWithGesture = (
+  positions: KeyPositions,
+  gestureId?: string,
+) =>
+  enqueueEditorCompatibilityWrite(
+    () =>
+      editorCoordinator.commitPatch(
+        {
+          schemaVersion: 1,
+          keyPositions: positions,
+        },
+        gestureId ? { gestureId } : undefined,
+      ),
+    () => structuredClone(positions),
+  );
+
 export const keysApi = {
   get: () => invoke<KeyMappings>('keys_get'),
   getCounters: () => invoke<KeyCounters>('keys_get_counters'),
@@ -32,39 +69,11 @@ export const keysApi = {
       () => editorCoordinator.commitPatch({ schemaVersion: 1, keys: mappings }),
       () => structuredClone(mappings),
     ),
-  updateWithPositions: (
-    mappings: KeyMappings,
-    positions: KeyPositions,
-    gestureId?: string,
-  ) =>
-    enqueueEditorCompatibilityWrite(
-      () =>
-        editorCoordinator.commitPatch(
-          {
-            schemaVersion: 1,
-            keys: mappings,
-            keyPositions: positions,
-          },
-          gestureId ? { gestureId } : undefined,
-        ),
-      () => ({
-        keys: structuredClone(mappings),
-        positions: structuredClone(positions),
-      }),
-    ),
+  updateWithPositions: (mappings: KeyMappings, positions: KeyPositions) =>
+    updateMappingsAndPositionsWithGesture(mappings, positions),
   getPositions: () => invoke<KeyPositions>('positions_get'),
-  updatePositions: (positions: KeyPositions, gestureId?: string) =>
-    enqueueEditorCompatibilityWrite(
-      () =>
-        editorCoordinator.commitPatch(
-          {
-            schemaVersion: 1,
-            keyPositions: positions,
-          },
-          gestureId ? { gestureId } : undefined,
-        ),
-      () => structuredClone(positions),
-    ),
+  updatePositions: (positions: KeyPositions) =>
+    updatePositionsWithGesture(positions),
   setMode: (mode: string) =>
     invoke<KeysModeResponse>('keys_set_mode', { mode }),
   resetAll: () => invoke<KeysResetAllResponse>('keys_reset_all'),

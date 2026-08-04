@@ -12,6 +12,7 @@ import {
   safeEvaluateVisibility,
 } from '@plugins/runtime/settingsSections';
 import { usePanelWindowStore } from '@stores/grid/usePanelWindowStore';
+import type { PanelWindowStatus } from '@stores/grid/usePanelWindowStore';
 import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 import { getBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
 import { sendBridgeMessageBestEffort } from './bridgeMessages';
@@ -26,6 +27,12 @@ let pushSeq = 0;
 let syncScheduled = false;
 let pendingElements: PluginDisplayElementInternal[] | null = null;
 let pendingDefinitions: Map<string, PluginDefinitionInternal> | null = null;
+let pendingForce = false;
+
+export const shouldSendPanelModel = (
+  status: PanelWindowStatus,
+  force: boolean,
+): boolean => force || status === 'detached';
 
 // JSON 직렬화 보장 - 함수 값 필드 제거 (중첩 객체·배열 포함, 순환 참조는 절단)
 // seen은 현재 경로 기준 - 형제가 같은 객체를 공유하는 DAG는 그대로 직렬화
@@ -126,12 +133,15 @@ const buildDefinitionView = (
 const flushPanelModelSync = () => {
   const elements = pendingElements;
   const definitions = pendingDefinitions;
+  const force = pendingForce;
   pendingElements = null;
   pendingDefinitions = null;
+  pendingForce = false;
   if (!elements || !definitions) return;
 
   // 패널 창이 없으면 push 생략 - 재열림 시 request로 전체 스냅샷 복구
-  if (!usePanelWindowStore.getState().isDetached) return;
+  if (!shouldSendPanelModel(usePanelWindowStore.getState().status, force))
+    return;
 
   // 요소별 현재 settings 기준 visibility만 평가 - 스키마 본문 복제 없이 O(E×키 수) boolean
   const elementVisibility: PluginPanelModelSnapshot['elementVisibility'] = {};
@@ -180,9 +190,11 @@ export const flushPluginPanelModelSyncNow = (): void => {
 export const schedulePluginPanelModelSync = (
   elements: PluginDisplayElementInternal[],
   definitions: Map<string, PluginDefinitionInternal>,
+  force = false,
 ): void => {
   pendingElements = elements;
   pendingDefinitions = definitions;
+  pendingForce ||= force;
 
   if (syncScheduled) return;
   syncScheduled = true;
