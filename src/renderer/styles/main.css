@@ -285,8 +285,7 @@ body.dmn-custom-cursor * {
   inset: 0;
   display: flex;
   flex-direction: column;
-  transition:
-    opacity var(--ui-duration-page) var(--ui-ease-page),
+  transition: opacity var(--ui-duration-page) var(--ui-ease-page),
     transform var(--ui-duration-page) var(--ui-ease-page),
     filter var(--ui-duration-page) var(--ui-ease-page);
 }
