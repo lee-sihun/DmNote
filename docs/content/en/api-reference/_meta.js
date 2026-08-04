@@ -5,6 +5,7 @@ export default {
   knobs: "Knobs",
   settings: "Settings",
   overlay: "Overlay",
+  resources: "Resources",
   "css-js": "CSS/JS",
   sound: "Sound",
   presets: "Presets",
