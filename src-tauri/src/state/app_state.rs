@@ -2119,10 +2119,6 @@ impl AppState {
             .insert(path_identity_key(Path::new(path)));
     }
 
-    pub(crate) fn authorize_css_paths_from_store(&self, store: &AppStoreData) {
-        extend_authorized_css_paths(&mut self.authorized_css_paths.write(), store);
-    }
-
     pub(crate) fn is_css_path_authorized(&self, path: &str) -> bool {
         self.authorized_css_paths
             .read()
@@ -2209,10 +2205,6 @@ fn collect_authorized_css_paths(state: &AppStoreData) -> HashSet<String> {
         )
         .map(|path| path_identity_key(Path::new(path)))
         .collect()
-}
-
-fn extend_authorized_css_paths(authorized: &mut HashSet<String>, state: &AppStoreData) {
-    authorized.extend(collect_authorized_css_paths(state));
 }
 
 impl Drop for AppState {
@@ -2800,11 +2792,11 @@ struct OverlayPosition {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     use super::{
-        bootstrap_active_keys, collect_authorized_css_paths, extend_authorized_css_paths,
-        global_css_watch_path, should_create_overlay_on_startup,
+        bootstrap_active_keys, collect_authorized_css_paths, global_css_watch_path,
+        should_create_overlay_on_startup,
     };
     use crate::{
         keyboard::KeyboardManager,
@@ -2856,31 +2848,5 @@ mod tests {
         assert!(authorized.contains(&path_identity_key(Path::new("/tmp/global.css"))));
         assert!(authorized.contains(&path_identity_key(Path::new("/tmp/tab.css"))));
         assert_eq!(global_css_watch_path(&state), None);
-    }
-
-    #[test]
-    fn committed_preset_css_paths_extend_runtime_authorization() {
-        let mut authorized = HashSet::from([path_identity_key(Path::new("/tmp/existing.css"))]);
-        let mut imported = AppStoreData {
-            custom_css: CustomCss {
-                path: Some("/tmp/imported-global.css".to_string()),
-                content: String::new(),
-            },
-            ..AppStoreData::default()
-        };
-        imported.tab_css_overrides.insert(
-            "4key".to_string(),
-            TabCss {
-                path: Some("/tmp/imported-tab.css".to_string()),
-                content: String::new(),
-                enabled: true,
-            },
-        );
-
-        extend_authorized_css_paths(&mut authorized, &imported);
-
-        assert!(authorized.contains(&path_identity_key(Path::new("/tmp/existing.css"))));
-        assert!(authorized.contains(&path_identity_key(Path::new("/tmp/imported-global.css"))));
-        assert!(authorized.contains(&path_identity_key(Path::new("/tmp/imported-tab.css"))));
     }
 }

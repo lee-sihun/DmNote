@@ -105,9 +105,10 @@ pub(crate) fn validate_css_path(path: &Path) -> Result<ValidatedCssFile, CssPath
 }
 
 pub(crate) fn canonicalize_legacy_css_path(path: &str) -> String {
-    validate_css_path(Path::new(path))
-        .map(|loaded| loaded.canonical_path)
-        .unwrap_or_else(|_| path.to_string())
+    canonicalize_css_path(Path::new(path))
+        .ok()
+        .and_then(|canonical| canonical.into_os_string().into_string().ok())
+        .unwrap_or_else(|| path.to_string())
 }
 
 pub(crate) fn inspect_css_history_status(path: &Path) -> CustomCssHistoryStatus {
@@ -155,6 +156,15 @@ pub(crate) fn normalize_custom_css_history(history: &mut Vec<CustomCssHistoryEnt
     *history != original
 }
 
+pub(crate) fn migrate_custom_css_history_timestamps(history: &mut [CustomCssHistoryEntry]) -> bool {
+    let mut changed = false;
+    for entry in history.iter_mut().filter(|entry| entry.loaded_at == 0) {
+        entry.loaded_at = entry.last_used_at;
+        changed = true;
+    }
+    changed
+}
+
 pub(crate) fn record_custom_css_load(
     history: &mut Vec<CustomCssHistoryEntry>,
     path: String,
@@ -192,9 +202,7 @@ pub(crate) fn migrate_custom_css_history_at_load(
     timestamp: i64,
 ) -> bool {
     let original = history.clone();
-    for entry in history.iter_mut().filter(|entry| entry.loaded_at == 0) {
-        entry.loaded_at = entry.last_used_at;
-    }
+    migrate_custom_css_history_timestamps(history);
 
     if let Some(path) = active_path.filter(|path| {
         Path::new(path).is_absolute()
@@ -462,6 +470,44 @@ mod tests {
             validate_css_path(&alias).unwrap_err().code,
             CssHistoryErrorCode::InvalidExtension
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn legacy_symlink_canonicalization_does_not_require_valid_content() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_directory("legacy-symlink-canonical");
+        fs::create_dir_all(&root).unwrap();
+        let target = root.join("target.css");
+        let alias = root.join("alias.css");
+        fs::write(&target, vec![b'a'; MAX_CUSTOM_CSS_BYTES as usize + 1]).unwrap();
+        symlink(&target, &alias).unwrap();
+
+        let canonical = fs::canonicalize(&target)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        assert_eq!(
+            canonicalize_legacy_css_path(&alias.to_string_lossy()),
+            canonical
+        );
+        assert_eq!(
+            validate_css_path(&alias).unwrap_err().code,
+            CssHistoryErrorCode::TooLarge
+        );
+
+        fs::write(&target, b"body {}").unwrap();
+        assert_eq!(validate_css_path(&alias).unwrap().canonical_path, canonical);
+
+        let other_target = root.join("other.css");
+        fs::write(&other_target, b"html {}").unwrap();
+        fs::remove_file(&alias).unwrap();
+        symlink(&other_target, &alias).unwrap();
+        let retargeted = canonicalize_legacy_css_path(&alias.to_string_lossy());
+        assert!(!history_paths_match(&canonical, &retargeted));
         let _ = fs::remove_dir_all(root);
     }
 }

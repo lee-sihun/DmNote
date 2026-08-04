@@ -18,7 +18,7 @@ use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
 use crate::{
     custom_css::{
         canonicalize_legacy_css_path, migrate_custom_css_history_at_load,
-        normalize_custom_css_history,
+        migrate_custom_css_history_timestamps, normalize_custom_css_history,
     },
     defaults::{default_keys, default_positions},
     models::{
@@ -111,6 +111,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         needs_persist |=
                             key_position_lengths_mismatch(&data.keys, &data.key_positions);
                         needs_persist |= !has_valid_selected_key_type(&data);
+                        needs_persist |=
+                            migrate_custom_css_history_timestamps(&mut data.custom_css_history);
                         let original_css_history = data.custom_css_history.clone();
                         let data = normalize_state(data);
                         needs_persist |= data.custom_css_history != original_css_history;
@@ -1140,6 +1142,7 @@ fn repair_legacy_state(value: Value) -> AppStoreData {
         source_key_positions.as_ref(),
     );
     canonicalize_gradient_pairs(&mut data);
+    migrate_custom_css_history_timestamps(&mut data.custom_css_history);
     normalize_state(data)
 }
 
@@ -3132,6 +3135,34 @@ mod tests {
             .custom_css_history
             .iter()
             .any(|entry| entry.path == active_path));
+    }
+
+    #[test]
+    fn custom_css_history_keeps_latest_legacy_duplicate_before_timestamp_migration() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-css-history-legacy-duplicate-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let duplicate_path = absolute_fixture_path("history-duplicate.css");
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        fixture["customCssHistory"] = json!([
+            {
+                "path": duplicate_path,
+                "lastUsedAt": 1
+            },
+            {
+                "path": duplicate_path,
+                "lastUsedAt": 100
+            }
+        ]);
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert_eq!(loaded.data.custom_css_history.len(), 1);
+        assert_eq!(loaded.data.custom_css_history[0].loaded_at, 100);
+        assert_eq!(loaded.data.custom_css_history[0].last_used_at, 100);
     }
 
     #[test]
