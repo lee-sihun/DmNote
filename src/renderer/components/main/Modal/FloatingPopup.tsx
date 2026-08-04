@@ -9,6 +9,10 @@ import {
   autoUpdate,
   type Placement,
 } from '@floating-ui/react';
+import {
+  getFocusableElements,
+  isAvailableFocusTarget,
+} from '@utils/focusableElements';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
 
 interface FloatingPopupBaseProps {
@@ -44,23 +48,6 @@ interface FloatingMenuPopupProps extends FloatingPopupBaseProps {
 }
 
 type FloatingPopupProps = FloatingDialogPopupProps | FloatingMenuPopupProps;
-
-const FOCUSABLE_SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[contenteditable="true"]',
-  '[tabindex]:not([tabindex="-1"])',
-].join(',');
-
-const getFocusableElements = (root: HTMLElement) =>
-  Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) =>
-      !element.closest('[hidden], [aria-hidden="true"]') &&
-      element.getAttribute('aria-disabled') !== 'true',
-  );
 
 interface FloatingPopupSurfaceProps {
   setFloating: (node: HTMLDivElement | null) => void;
@@ -108,9 +95,11 @@ const FloatingPopupSurface = ({
     if (surface.contains(document.activeElement)) return;
     const initialTarget =
       role === 'menu'
-        ? surface.querySelector<HTMLElement>(
-            '[role^="menuitem"]:not(:disabled)',
-          ) ?? surface
+        ? Array.from(
+            surface.querySelectorAll<HTMLElement>(
+              '[role^="menuitem"]:not(:disabled)',
+            ),
+          ).find(isAvailableFocusTarget) ?? surface
         : getFocusableElements(surface)[0] ?? surface;
     initialTarget.focus();
   }, [focusOriginRef, role]);
