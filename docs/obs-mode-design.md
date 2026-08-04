@@ -147,7 +147,7 @@
 }
 ```
 > v4에서 기존 `key_event`, `settings_diff`, `counter_update` 전용 메시지를 `tauri_event`로 통합.
-> 백엔드 `register_event_forwarding()`이 22개 Tauri 이벤트를 자동 포워딩.
+> 백엔드 `register_event_forwarding()`이 24개 Tauri 이벤트를 자동 포워딩.
 
 ### 3.5 상태 일관성 ✅
 
@@ -201,7 +201,7 @@ pub type AssetFetcher = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + S
 - `broadcast_snapshot()` — 스냅샷 전송 ✅
 - `broadcast_tauri_event(event, data)` — 범용 Tauri 이벤트 포워딩 ✅
 - `update_snapshot(snapshot)` — 캐시 갱신 ✅
-- `register_event_forwarding(app)` — 22개 Tauri 이벤트 → WS 자동 포워딩 ✅
+- `register_event_forwarding(app)` — 24개 Tauri 이벤트 → WS 자동 포워딩 ✅
 - `set_app_handle(handle)` — invoke_request WS RPC용 AppHandle 설정 ✅
 - `status()` — 실행 상태 + 포트 + 클라이언트 수 조회 ✅
 
