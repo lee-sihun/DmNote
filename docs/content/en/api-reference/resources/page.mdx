@@ -1,0 +1,34 @@
+---
+title: Resource API
+description: Font, image, and sound resource APIs
+---
+
+# Resource API
+
+## Font
+
+### `dmn.font.load()`
+
+Opens the system file picker, imports a font, and returns its app-managed path.
+
+```typescript
+const result = await dmn.font.load();
+// { success: boolean, error?: string, fontPath?: string }
+```
+
+## Image
+
+### `dmn.image.load()`
+
+Opens the system file picker, imports an image, and returns its app-managed path.
+
+```typescript
+const result = await dmn.image.load();
+// { success: boolean, error?: string, imagePath?: string }
+```
+
+## Sound
+
+See the dedicated [Sound API reference](/docs/api-reference/sound) for sound library visibility, editing, and compatibility APIs.
+
+Paths returned by resource APIs must be treated as opaque app-managed identifiers.
