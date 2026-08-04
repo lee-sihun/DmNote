@@ -171,6 +171,13 @@ interface KeyPosition {
   activeShadow?: ElementShadowSpec;
 }
 
+interface KeyCounterSettings {
+  // ...placement, typography, stroke, and animation fields...
+  fill: { idle: string; active: string };
+  fillIdleGradient?: GradientSpec | null;
+  fillActiveGradient?: GradientSpec | null;
+}
+
 interface GradientSpec {
   angle: number; // 0 (inclusive) to 360 (exclusive) — 360 normalizes to 0; CSS semantics (0 = up, clockwise)
   stops: { color: string; pos: number }[]; // 2–8 stops, pos 0–1 ascending
@@ -189,6 +196,9 @@ When a gradient field is present it takes priority over the matching solid
 field, and the solid field is kept in sync with the first stop color on save.
 To return to a solid color, set the gradient field to `null` and update the
 solid field.
+
+The counter fill gradient fields likewise take priority over `counter.fill.idle`
+and `counter.fill.active`. Counter stroke remains solid-only.
 
 `shadow` and `activeShadow` control the idle and pressed shadows independently.
 When omitted, the built-in shadow remains unchanged. Store a spec with

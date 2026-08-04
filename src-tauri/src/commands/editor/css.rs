@@ -5,7 +5,7 @@ use std::{
 
 use rfd::FileDialog;
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
     commands::editor::state::emit_best_effort,
@@ -18,7 +18,10 @@ use crate::{
     defaults::default_keys,
     errors::CmdResult,
     models::{AppStoreData, CustomCss, CustomCssHistoryEntry, TabCss, TabCssOverrides},
-    state::{atomic_file::atomic_replace, store::AdmittedHistoryOverlapMutation, AppState},
+    state::{
+        atomic_file::atomic_replace, history::HistoryAdmissionLease,
+        store::AdmittedHistoryOverlapMutation, AppState,
+    },
 };
 
 /// OBS 브릿지에 CSS 설정 변경을 settings_diff로 전달 (전체 스냅샷 브로드캐스트 방지)
@@ -131,29 +134,32 @@ fn commit_loaded_css(
     state: &AppState,
     loaded: &ValidatedCssFile,
     touch_history: bool,
+    admission: HistoryAdmissionLease,
 ) -> CmdResult<AdmittedHistoryOverlapMutation<(CustomCss, bool)>> {
     let css = CustomCss {
         path: Some(loaded.canonical_path.clone()),
         content: loaded.content.clone(),
     };
     let timestamp = current_unix_millis();
-    Ok(state.store.commit_history_overlap_mutation(|store| {
-        store.custom_css = css.clone();
-        if touch_history {
-            record_custom_css_load(
-                &mut store.custom_css_history,
-                loaded.canonical_path.clone(),
-                timestamp,
-            );
-        } else {
-            touch_custom_css_history(
-                &mut store.custom_css_history,
-                &loaded.canonical_path,
-                timestamp,
-            );
-        }
-        Ok((css, store.use_custom_css))
-    })?)
+    Ok(state
+        .store
+        .commit_history_overlap_mutation_with_admission(admission, |store| {
+            store.custom_css = css.clone();
+            if touch_history {
+                record_custom_css_load(
+                    &mut store.custom_css_history,
+                    loaded.canonical_path.clone(),
+                    timestamp,
+                );
+            } else {
+                touch_custom_css_history(
+                    &mut store.custom_css_history,
+                    &loaded.canonical_path,
+                    timestamp,
+                );
+            }
+            Ok((css, store.use_custom_css))
+        })?)
 }
 
 // ========== 탭별 CSS 응답 타입 ==========
@@ -244,13 +250,18 @@ pub fn css_get_use(state: State<'_, AppState>) -> CmdResult<bool> {
 pub fn css_toggle(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     enabled: bool,
 ) -> CmdResult<CssToggleResponse> {
     let _operation_guard = state.lock_css_operation();
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        store.use_custom_css = enabled;
-        Ok(store.custom_css.clone())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                store.use_custom_css = enabled;
+                Ok(store.custom_css.clone())
+            })?;
     let css = &transaction.value;
     if enabled {
         state.unwatch_global_css();
@@ -273,13 +284,21 @@ pub fn css_toggle(
 }
 
 #[tauri::command]
-pub fn css_reset(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
+pub fn css_reset(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<()> {
     let _operation_guard = state.lock_css_operation();
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        store.use_custom_css = false;
-        store.custom_css = CustomCss::default();
-        Ok(())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                store.use_custom_css = false;
+                store.custom_css = CustomCss::default();
+                Ok(())
+            })?;
     state.unwatch_global_css();
 
     emit_history_status(&app, &transaction);
@@ -294,6 +313,7 @@ pub fn css_reset(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
 pub fn css_set_content(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     content: String,
 ) -> CmdResult<CssSetContentResponse> {
     let _operation_guard = state.lock_css_operation();
@@ -303,10 +323,14 @@ pub fn css_set_content(
             error: Some(CssHistoryErrorCode::TooLarge.as_str().to_string()),
         });
     }
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        store.custom_css.content = content;
-        Ok(store.custom_css.clone())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                store.custom_css.content = content;
+                Ok(store.custom_css.clone())
+            })?;
 
     emit_history_status(&app, &transaction);
     emit_best_effort(&app, "css:content", &transaction.value);
@@ -319,7 +343,11 @@ pub fn css_set_content(
 }
 
 #[tauri::command]
-pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<CssLoadResponse> {
+pub fn css_load(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<CssLoadResponse> {
     let picked = FileDialog::new().add_filter("CSS", &["css"]).pick_file();
 
     let Some(path) = picked else {
@@ -345,7 +373,8 @@ pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<CssLoad
             });
         }
     };
-    let transaction = commit_loaded_css(&state, &loaded, true)?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = commit_loaded_css(&state, &loaded, true, admission)?;
     let (css, use_custom_css) = &transaction.value;
     state.authorize_css_path(&loaded.canonical_path);
     state.unwatch_global_css();
@@ -375,6 +404,7 @@ pub fn css_history_get(state: State<'_, AppState>) -> CmdResult<Vec<CustomCssHis
 pub fn css_history_activate(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     path: String,
 ) -> CmdResult<CssActivateResponse> {
     let _operation_guard = state.lock_css_operation();
@@ -415,7 +445,8 @@ pub fn css_history_activate(
         ));
     }
 
-    let transaction = commit_loaded_css(&state, &loaded, false)?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = commit_loaded_css(&state, &loaded, false, admission)?;
     let (css, use_custom_css) = &transaction.value;
     state.authorize_css_path(&loaded.canonical_path);
     state.unwatch_global_css();
@@ -439,16 +470,21 @@ pub fn css_history_activate(
 #[tauri::command]
 pub fn css_history_remove(
     state: State<'_, AppState>,
+    window: WebviewWindow,
     path: String,
 ) -> CmdResult<Vec<CustomCssHistoryItem>> {
     let operation_guard = state.lock_css_operation();
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        store
-            .custom_css_history
-            .retain(|entry| !history_paths_match(&entry.path, &path));
-        normalize_custom_css_history(&mut store.custom_css_history);
-        Ok(store.custom_css_history.clone())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                store
+                    .custom_css_history
+                    .retain(|entry| !history_paths_match(&entry.path, &path));
+                normalize_custom_css_history(&mut store.custom_css_history);
+                Ok(store.custom_css_history.clone())
+            })?;
     drop(operation_guard);
     Ok(history_items(&transaction.value))
 }
@@ -474,6 +510,7 @@ pub fn css_tab_get(state: State<'_, AppState>, tab_id: String) -> CmdResult<TabC
 pub fn css_tab_load(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
 ) -> CmdResult<TabCssLoadResponse> {
     let picked = FileDialog::new().add_filter("CSS", &["css"]).pick_file();
@@ -506,10 +543,14 @@ pub fn css_tab_load(
         content: loaded.content,
         enabled: true,
     };
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
-        Ok(())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
+                Ok(())
+            })?;
     state.authorize_css_path(&loaded.canonical_path);
     state.unwatch_tab_css(&tab_id);
     if let Err(error) = state.watch_tab_css(&loaded.canonical_path, &tab_id) {
@@ -538,13 +579,18 @@ pub fn css_tab_load(
 pub fn css_tab_clear(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
 ) -> CmdResult<TabCssClearResponse> {
     let _operation_guard = state.lock_css_operation();
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        replace_tab_css_override(store, &tab_id, None);
-        Ok(())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                replace_tab_css_override(store, &tab_id, None);
+                Ok(())
+            })?;
     state.unwatch_tab_css(&tab_id);
 
     emit_history_status(&app, &transaction);
@@ -568,15 +614,20 @@ pub fn css_tab_clear(
 pub fn css_tab_set(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
     css: Option<TabCss>,
 ) -> CmdResult<TabCssSetResponse> {
     let _operation_guard = state.lock_css_operation();
     let css = css.map(|tab_css| prepare_tab_css_for_set(&state, tab_css));
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        replace_tab_css_override(store, &tab_id, css.clone());
-        Ok(())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                replace_tab_css_override(store, &tab_id, css.clone());
+                Ok(())
+            })?;
     state.unwatch_tab_css(&tab_id);
     if let Some(path) = css
         .as_ref()
@@ -610,28 +661,33 @@ pub fn css_tab_set(
 pub fn css_tab_toggle(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
     enabled: bool,
 ) -> CmdResult<TabCssToggleResponse> {
     let _operation_guard = state.lock_css_operation();
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        let updated_css = if let Some(tab_css) = store.tab_css_overrides.get_mut(&tab_id) {
-            tab_css.enabled = enabled;
-            tab_css.clone()
-        } else {
-            // 탭 CSS가 없으면 기본 설정으로 생성
-            let new_css = TabCss {
-                path: None,
-                content: String::new(),
-                enabled,
-            };
-            store
-                .tab_css_overrides
-                .insert(tab_id.clone(), new_css.clone());
-            new_css
-        };
-        Ok(updated_css)
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                let updated_css = if let Some(tab_css) = store.tab_css_overrides.get_mut(&tab_id) {
+                    tab_css.enabled = enabled;
+                    tab_css.clone()
+                } else {
+                    // 탭 CSS가 없으면 기본 설정으로 생성
+                    let new_css = TabCss {
+                        path: None,
+                        content: String::new(),
+                        enabled,
+                    };
+                    store
+                        .tab_css_overrides
+                        .insert(tab_id.clone(), new_css.clone());
+                    new_css
+                };
+                Ok(updated_css)
+            })?;
 
     state.unwatch_tab_css(&tab_id);
     if enabled {
@@ -717,6 +773,7 @@ fn tab_activate_failure(
 pub fn css_tab_activate_history(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
     path: String,
 ) -> CmdResult<TabCssActivateResponse> {
@@ -768,15 +825,19 @@ pub fn css_tab_activate_history(
         enabled: true,
     };
     let timestamp = current_unix_millis();
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
-        touch_custom_css_history(
-            &mut store.custom_css_history,
-            &loaded.canonical_path,
-            timestamp,
-        );
-        Ok(())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                replace_tab_css_override(store, &tab_id, Some(tab_css.clone()));
+                touch_custom_css_history(
+                    &mut store.custom_css_history,
+                    &loaded.canonical_path,
+                    timestamp,
+                );
+                Ok(())
+            })?;
     state.authorize_css_path(&loaded.canonical_path);
     state.unwatch_tab_css(&tab_id);
     if let Err(error) = state.watch_tab_css(&loaded.canonical_path, &tab_id) {

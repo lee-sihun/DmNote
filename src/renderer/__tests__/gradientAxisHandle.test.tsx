@@ -152,6 +152,34 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     expect(finalSpec.angle).not.toBe(90);
   });
 
+  it('드래그 중 오버레이가 언마운트되면 시작 spec으로 복원한다', () => {
+    act(() => {
+      strip().dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 10,
+          clientX: 260,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 10,
+          clientX: 260,
+          clientY: 90,
+        }),
+      );
+    });
+    expect(apply).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ angle: SPEC.angle }),
+      false,
+    );
+
+    act(() => root.render(null));
+
+    expect(apply).toHaveBeenLastCalledWith(SPEC, false);
+    expect(apply.mock.calls.some(([, commit]) => commit)).toBe(false);
+  });
+
   it('축 끝 앵커를 끌면 각도만 바뀐다', () => {
     // end 앵커 위치: 선 끝 (300, 150)
     act(() => {

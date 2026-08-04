@@ -1,8 +1,11 @@
 import type { WindowTarget } from '@src/types/plugin/api';
+import { emitTo } from '@tauri-apps/api/event';
+
+type InternalWindowTarget = WindowTarget | 'panel';
 
 const isMissingTargetWindow = (
   error: unknown,
-  target: WindowTarget,
+  target: InternalWindowTarget,
 ): boolean => {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes(`Window '${target}' not found`);
@@ -10,15 +13,21 @@ const isMissingTargetWindow = (
 
 /** 선택적 창이 닫혀 있어도 내부 동기화 Promise를 안전하게 종료 */
 export const sendBridgeMessageBestEffort = (
-  target: WindowTarget,
+  target: InternalWindowTarget,
   type: string,
   data?: unknown,
 ): void => {
   try {
-    const bridge = window.api?.bridge;
-    if (!bridge) return;
+    const pending =
+      target === 'panel'
+        ? emitTo('panel', 'plugin-bridge:message', {
+            type,
+            data: data ?? null,
+          })
+        : window.api?.bridge?.sendTo(target, type, data);
+    if (!pending) return;
 
-    void bridge.sendTo(target, type, data).catch((error: unknown) => {
+    void pending.catch((error: unknown) => {
       if (isMissingTargetWindow(error, target)) return;
       console.error(`[Bridge] Failed to send '${type}' to '${target}':`, error);
     });
