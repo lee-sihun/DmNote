@@ -256,7 +256,6 @@
     "resetKeyCounter": "[{{name}}] 키의 카운터를 초기화하시겠습니까?",
     "reset": "초기화",
     "removeKey": "[{{name}}] 키를 제거하시겠습니까?",
-
     "removeStat": "[{{name}}] 통계 항목을 제거하시겠습니까?",
     "removeGraph": "[{{name}}] 그래프를 제거하시겠습니까?",
     "removeKnob": "[{{name}}] 노브를 제거하시겠습니까?",
@@ -552,22 +551,28 @@
     "filterBuiltin": "내장 폰트",
     "filterLocal": "로컬 폰트",
     "filterWeb": "웹 폰트",
-    "noFonts": "폰트 없음"
+    "noFonts": "폰트 없음",
+    "addLocalFont": "로컬 폰트 추가",
+    "addWebFont": "웹폰트 추가",
+    "edit": "편집",
+    "rename": "이름 변경",
+    "delete": "삭제",
+    "enabledToggle": "활성화",
+    "saveFailed": "폰트 설정 저장에 실패했습니다.",
+    "deleteConfirm": "폰트를 삭제하시겠습니까? 이 폰트를 사용 중인 요소는 기본 폰트로 표시됩니다."
   },
   "soundPicker": {
     "searchPlaceholder": "검색",
     "filterAll": "전체",
     "filterLocal": "로컬 사운드",
-    "noSounds": "사운드 없음"
-  },
-  "soundManager": {
-    "title": "사운드",
-    "noSounds": "사운드가 없습니다",
-    "addSound": "추가",
+    "noSounds": "사운드 없음",
     "loadFailed": "사운드 목록 로드 실패",
-    "stateChangeFailed": "사운드 상태 변경 실패",
+    "edit": "편집",
+    "rename": "이름 변경",
+    "delete": "삭제",
     "deleteFailed": "사운드 삭제 실패",
-    "editSound": "편집"
+    "renameFailed": "사운드 이름 변경 실패",
+    "deleteConfirm": "사운드를 삭제하시겠습니까? 파일이 삭제되고 이 사운드를 사용하는 모든 요소에서 해제됩니다."
   },
   "soundTrimModal": {
     "defaultTitle": "사운드 추가",
@@ -590,15 +595,6 @@
     "loadOriginalError": "원본 오디오를 불러올 수 없습니다.",
     "saveErrorDefault": "편집된 사운드를 저장하지 못했습니다.",
     "saveErrorFailed": "편집된 사운드 저장에 실패했습니다."
-  },
-  "fontManager": {
-    "localTab": "로컬 폰트",
-    "webTab": "웹 폰트",
-    "noLocalFonts": "로컬 폰트가 없습니다",
-    "noWebFonts": "웹 폰트가 없습니다",
-    "removeFont": "폰트 삭제",
-    "adding": "추가 중...",
-    "addFont": "추가"
   },
   "webFontInput": {
     "cssLabel": "@font-face CSS",

@@ -10,7 +10,6 @@ import {
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
-import FontManagerModal from '@components/main/Modal/content/managers/FontManagerModal';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
 
 const SPACING_COMMIT_DEBOUNCE_MS = 80;
@@ -177,7 +176,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       }
     };
   }, []);
-  const [showFontManager, setShowFontManager] = useState(false);
   const fontButtonRef = useRef<HTMLButtonElement>(null);
   const soundButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -945,9 +943,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             handleBatchStyleChangeComplete('fontFamily', fontName);
           }}
           onClose={() => setShowFontPicker(false)}
-          onOpenManager={() => {
-            setShowFontManager(true);
-          }}
           interactiveRefs={[fontButtonRef]}
         />
       )}
@@ -975,15 +970,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               100,
             ).value
           }
-        />
-      )}
-
-      {/* FontManagerModal */}
-      {!hideFontControls && showFontManager && (
-        <FontManagerModal
-          isOpen={showFontManager}
-          onClose={() => setShowFontManager(false)}
-          t={t}
         />
       )}
     </>

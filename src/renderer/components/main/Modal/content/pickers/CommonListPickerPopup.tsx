@@ -42,8 +42,10 @@ interface CommonListPickerPopupProps<T> {
   loadingText?: string;
   errorText?: string;
   listHeightClass?: string;
-  onAdd: () => void;
+  onAdd: (event: React.MouseEvent<HTMLButtonElement>) => void;
   addButtonContent: React.ReactNode;
+  // + 버튼에 앵커된 메뉴가 열릴 때 외부 클릭 판정 제외용
+  addButtonRef?: React.RefObject<HTMLButtonElement>;
 }
 
 export default function CommonListPickerPopup<T>({
@@ -73,6 +75,7 @@ export default function CommonListPickerPopup<T>({
   listHeightClass = 'min-h-[120px] h-[120px]',
   onAdd,
   addButtonContent,
+  addButtonRef,
 }: CommonListPickerPopupProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
@@ -314,6 +317,7 @@ export default function CommonListPickerPopup<T>({
         <div className="h-[1px] bg-[#2A2A30] -mx-[8px]" />
 
         <button
+          ref={addButtonRef}
           type="button"
           className="w-full h-[23px] flex items-center justify-center rounded-[7px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] transition-colors"
           onClick={onAdd}

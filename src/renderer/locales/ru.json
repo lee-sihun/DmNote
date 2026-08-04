@@ -551,22 +551,28 @@
     "filterBuiltin": "Встроенные",
     "filterLocal": "Локальные",
     "filterWeb": "Веб",
-    "noFonts": "Нет шрифтов"
+    "noFonts": "Нет шрифтов",
+    "addLocalFont": "Добавить локальный шрифт",
+    "addWebFont": "Добавить веб-шрифт",
+    "edit": "Редактировать",
+    "rename": "Переименовать",
+    "delete": "Удалить",
+    "enabledToggle": "Включён",
+    "saveFailed": "Не удалось сохранить настройки шрифтов.",
+    "deleteConfirm": "Удалить шрифт? Элементы, использующие его, будут отображаться шрифтом по умолчанию."
   },
   "soundPicker": {
     "searchPlaceholder": "Поиск...",
     "filterAll": "Все",
     "filterLocal": "Локальные звуки",
-    "noSounds": "Звуков нет"
-  },
-  "soundManager": {
-    "title": "Звуки",
     "noSounds": "Звуков нет",
-    "addSound": "Добавить",
     "loadFailed": "Не удалось загрузить список звуков",
-    "stateChangeFailed": "Не удалось изменить состояние звука",
+    "edit": "Редактировать",
+    "rename": "Переименовать",
+    "delete": "Удалить",
     "deleteFailed": "Не удалось удалить звук",
-    "editSound": "Редактировать"
+    "renameFailed": "Не удалось переименовать звук",
+    "deleteConfirm": "Удалить звук? Файл будет удалён, и звук будет снят со всех элементов, где он используется."
   },
   "soundTrimModal": {
     "defaultTitle": "Добавить звук",
@@ -589,15 +595,6 @@
     "loadOriginalError": "Не удалось загрузить исходное аудио.",
     "saveErrorDefault": "Не удалось сохранить обработанный звук.",
     "saveErrorFailed": "Не удалось сохранить обработанный звук."
-  },
-  "fontManager": {
-    "localTab": "Локальные",
-    "webTab": "Веб-шрифты",
-    "noLocalFonts": "Нет локальных",
-    "noWebFonts": "Нет веб-шрифтов",
-    "removeFont": "Удалить шрифт",
-    "adding": "Добавление...",
-    "addFont": "Добавить"
   },
   "webFontInput": {
     "cssLabel": "@font-face CSS",

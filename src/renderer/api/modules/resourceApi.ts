@@ -16,11 +16,17 @@ export const soundApi = {
     invoke<import('@src/types/plugin/api').SoundLoadResult>('sound_load'),
   list: () =>
     invoke<import('@src/types/plugin/api').SoundListItem[]>('sound_list'),
+  /** @deprecated 사운드 피커는 활성 상태를 사용하지 않습니다. */
   setEnabled: (soundPath: string, enabled: boolean) =>
     invoke<import('@src/types/plugin/api').SoundSetEnabledResult>(
       'sound_set_enabled',
       { soundPath, enabled },
     ),
+  rename: (soundPath: string, displayName: string) =>
+    invoke<import('@src/types/plugin/api').SoundRenameResult>('sound_rename', {
+      soundPath,
+      displayName,
+    }),
   remove: (soundPath: string) =>
     invoke<import('@src/types/plugin/api').SoundDeleteResult>('sound_delete', {
       soundPath,

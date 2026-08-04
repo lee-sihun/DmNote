@@ -640,7 +640,7 @@ const SoundTrimModal = ({
     t,
   ]);
 
-  // initialFile 제공 시 처리 (SoundManagerModal 파일 선택기에서)
+  // initialFile 제공 시 처리 (SoundPicker 파일 선택기에서)
   useEffect(() => {
     if (!isOpen || !initialFile || isEditMode) return;
     const signal = { cancelled: false };

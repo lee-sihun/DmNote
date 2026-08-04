@@ -82,6 +82,13 @@ pub struct SoundDeleteResponse {
     pub success: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoundRenameResponse {
+    pub success: bool,
+    pub display_name: String,
+}
+
 /// 로컬 사운드 파일을 선택하고 appData/sounds 디렉토리로 복사한 뒤 경로 반환
 #[tauri::command]
 pub fn sound_load(
@@ -116,7 +123,6 @@ pub fn sound_load(
         s.sound_library.insert(
             dest_path_str.clone(),
             SoundLibraryEntry {
-                enabled: true,
                 source: SoundSource::Local,
                 ..Default::default()
             },
@@ -256,6 +262,53 @@ pub fn sound_set_enabled(
         success: true,
         sound_path: path_key,
         enabled,
+    })
+}
+
+#[tauri::command]
+pub fn sound_rename(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    sound_path: String,
+    display_name: String,
+) -> CmdResult<SoundRenameResponse> {
+    let sounds_dir = ensure_sounds_dir(&app)?;
+    let validated_path = validate_sound_path(&sounds_dir, &sound_path)?;
+    if !validated_path.exists() {
+        return Err(CommandError::msg("대상 사운드 파일이 존재하지 않습니다."));
+    }
+    let path_key = normalize_path_string(&validated_path);
+
+    let trimmed = display_name.trim();
+    if trimmed.is_empty() {
+        return Err(CommandError::msg("사운드 이름이 비어 있습니다."));
+    }
+
+    // 내장 사운드 이름 변경 차단 (재시딩 시 원복됨)
+    let is_builtin = state.store.with_state(|s| {
+        s.sound_library
+            .get(&path_key)
+            .map(|entry| entry.source == SoundSource::Builtin)
+    });
+    let Some(is_builtin) = is_builtin else {
+        return Err(CommandError::msg("대상 사운드가 존재하지 않습니다."));
+    };
+    if is_builtin {
+        return Err(CommandError::msg(
+            "내장 사운드는 이름을 변경할 수 없습니다.",
+        ));
+    }
+
+    let next_name = trimmed.to_string();
+    state.store.update(|s| {
+        if let Some(entry) = s.sound_library.get_mut(&path_key) {
+            entry.display_name = Some(next_name.clone());
+        }
+    })?;
+
+    Ok(SoundRenameResponse {
+        success: true,
+        display_name: next_name,
     })
 }
 

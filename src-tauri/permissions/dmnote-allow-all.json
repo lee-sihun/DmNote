@@ -105,6 +105,7 @@
           "sound_list",
           "sound_load",
           "sound_load_original",
+          "sound_rename",
           "sound_save_processed_wav",
           "sound_set_enabled",
           "sound_update_processed_wav",
