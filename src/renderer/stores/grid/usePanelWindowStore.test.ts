@@ -53,6 +53,7 @@ vi.mock('@src/renderer/editor/runtime/selectionSync', () => ({
 
 import {
   detachPropertiesPanel,
+  hasInlinePropertiesPanelLease,
   openPropertiesPanelForSelection,
   reattachPropertiesPanel,
   usePanelWindowStore,
@@ -68,7 +69,7 @@ describe('panel window transition flush', () => {
     mocks.drainPluginElements.mockReset().mockResolvedValue(true);
     mocks.drainPluginSettings.mockReset().mockResolvedValue(true);
     mocks.flushSelectionSync.mockReset().mockResolvedValue(true);
-    usePanelWindowStore.setState({ isDetached: false });
+    usePanelWindowStore.setState({ status: 'attached', statusRevision: 0 });
     usePropertiesPanelStore.setState({
       canvasPanelMode: 'layer',
       isCanvasPanelOpen: false,
@@ -79,8 +80,29 @@ describe('panel window transition flush', () => {
     document.body.replaceChildren();
   });
 
+  it('초기 상태 확인 전에는 렌더 lease를 어느 창에도 주지 않는다', () => {
+    usePanelWindowStore.setState({ status: 'unknown', statusRevision: 0 });
+
+    expect(usePanelWindowStore.getState().status).toBe('unknown');
+    expect(hasInlinePropertiesPanelLease('unknown')).toBe(false);
+    expect(hasInlinePropertiesPanelLease('detached')).toBe(false);
+    expect(hasInlinePropertiesPanelLease('attached')).toBe(true);
+  });
+
+  it('초기 조회 중 도착한 visibility 상태를 늦은 조회 응답이 덮지 않는다', () => {
+    usePanelWindowStore.setState({ status: 'unknown', statusRevision: 0 });
+    const expectedRevision = usePanelWindowStore.getState().statusRevision;
+
+    usePanelWindowStore.getState().setStatus('detached');
+    usePanelWindowStore
+      .getState()
+      .resolveInitialStatus('attached', expectedRevision);
+
+    expect(usePanelWindowStore.getState().status).toBe('detached');
+  });
+
   it('분리 중 더블클릭 편집 요청을 패널 창으로 전달한다', () => {
-    usePanelWindowStore.setState({ isDetached: true });
+    usePanelWindowStore.setState({ status: 'detached' });
 
     openPropertiesPanelForSelection();
 
@@ -144,7 +166,7 @@ describe('panel window transition flush', () => {
 
     expect(order).toEqual(['blur', 'commit', 'show']);
     expect(mocks.show).toHaveBeenCalledWith(viewState);
-    expect(usePanelWindowStore.getState().isDetached).toBe(true);
+    expect(usePanelWindowStore.getState().status).toBe('detached');
   });
 
   it('blur 뒤 pending commit이 실패하면 창 전환을 중단한다', async () => {
@@ -264,6 +286,6 @@ describe('panel window transition flush', () => {
 
     expect(mocks.capturePanelViewState).not.toHaveBeenCalled();
     expect(mocks.show).not.toHaveBeenCalled();
-    expect(usePanelWindowStore.getState().isDetached).toBe(false);
+    expect(usePanelWindowStore.getState().status).toBe('attached');
   });
 });

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
-import { toPluginPanelElementView } from './panelModelSync';
+import {
+  shouldSendPanelModel,
+  toPluginPanelElementView,
+} from './panelModelSync';
 
 const makeElement = (): PluginDisplayElementInternal => ({
   id: 'element-a',
@@ -58,5 +61,11 @@ describe('plugin panel element projection', () => {
     expect(view).not.toHaveProperty('style');
     expect(view).not.toHaveProperty('onClick');
     expect(view).not.toHaveProperty('contextMenu');
+  });
+
+  it('직접 snapshot 요청은 패널 상태가 아직 unknown이어도 응답한다', () => {
+    expect(shouldSendPanelModel('unknown', true)).toBe(true);
+    expect(shouldSendPanelModel('unknown', false)).toBe(false);
+    expect(shouldSendPanelModel('detached', false)).toBe(true);
   });
 });

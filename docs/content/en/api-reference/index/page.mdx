@@ -10,31 +10,33 @@ All plugins access DM Note features through the `dmn` global object.
 
 ## Namespace Structure
 
-| Namespace                                      | Description                      |
-| ---------------------------------------------- | -------------------------------- |
-| [`dmn.app`](/docs/api-reference/app)           | App boot, restart, external URL  |
-| [`dmn.window`](/docs/api-reference/app#window) | Window type, minimize, close     |
-| [`dmn.keys`](/docs/api-reference/keys)         | Key mapping, events, custom tabs |
-| [`dmn.editor`](/docs/api-reference/editor)     | Atomic editor state commits      |
-| [`dmn.knobItems`](/docs/api-reference/knobs)   | HID knob elements                |
-| [`dmn.settings`](/docs/api-reference/settings) | App settings get/set             |
-| [`dmn.overlay`](/docs/api-reference/overlay)   | Overlay control                  |
-| [`dmn.sound`](/docs/api-reference/sound)      | Key sound library                |
-| [`dmn.css`](/docs/api-reference/css-js#css)    | CSS custom code                  |
-| [`dmn.js`](/docs/api-reference/css-js#js)      | JS plugin management             |
-| [`dmn.presets`](/docs/api-reference/presets)   | Preset save/load                 |
-| [`dmn.bridge`](/docs/bridge)                   | Window communication             |
-| [`dmn.i18n`](/docs/api-reference/i18n)         | i18n                             |
-| [`dmn.plugin`](/docs/api-reference/plugin)     | Plugin API                       |
-| [`dmn.ui`](/docs/ui-api)                       | UI extensions                    |
+| Namespace                                          | Description                      |
+| -------------------------------------------------- | -------------------------------- |
+| [`dmn.app`](/docs/api-reference/app)               | App boot, restart, external URL  |
+| [`dmn.window`](/docs/api-reference/app#window)     | Window type, minimize, close     |
+| [`dmn.keys`](/docs/api-reference/keys)             | Key mapping, events, custom tabs |
+| [`dmn.editor`](/docs/api-reference/editor)         | Atomic editor state commits      |
+| [`dmn.knobItems`](/docs/api-reference/knobs)       | HID knob elements                |
+| [`dmn.settings`](/docs/api-reference/settings)     | App settings get/set             |
+| [`dmn.overlay`](/docs/api-reference/overlay)       | Overlay control                  |
+| [`dmn.font`](/docs/api-reference/resources#font)   | Font file import                 |
+| [`dmn.image`](/docs/api-reference/resources#image) | Image file import                |
+| [`dmn.sound`](/docs/api-reference/sound)           | Key sound library                |
+| [`dmn.css`](/docs/api-reference/css-js#css)        | CSS custom code                  |
+| [`dmn.js`](/docs/api-reference/css-js#js)          | JS plugin management             |
+| [`dmn.presets`](/docs/api-reference/presets)       | Preset save/load                 |
+| [`dmn.bridge`](/docs/bridge)                       | Window communication             |
+| [`dmn.i18n`](/docs/api-reference/i18n)             | i18n                             |
+| [`dmn.plugin`](/docs/api-reference/plugin)         | Plugin API                       |
+| [`dmn.ui`](/docs/ui-api)                           | UI extensions                    |
 
 ## Quick Start
 
 ```javascript
 // Get app bootstrap data
 const bootstrap = await dmn.app.bootstrap();
-console.log("Current mode:", bootstrap.selectedKeyType);
-console.log("Settings:", bootstrap.settings);
+console.log('Current mode:', bootstrap.selectedKeyType);
+console.log('Settings:', bootstrap.settings);
 
 // Subscribe to key events (overlay only)
 const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
@@ -43,7 +45,7 @@ const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
 
 // Watch settings changes
 dmn.settings.onChanged(({ changed, full }) => {
-  console.log("Settings changed:", changed);
+  console.log('Settings changed:', changed);
 });
 
 // Cleanup

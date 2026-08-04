@@ -6,7 +6,7 @@ use std::{
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use rfd::FileDialog;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
@@ -176,6 +176,11 @@ struct ResolvedFullPresetSettings {
     custom_js: CustomJs,
 }
 
+struct ImportedCssPaths {
+    global: Option<String>,
+    tabs: Vec<String>,
+}
+
 /// 과거 프리셋에 없던 전역 필드는 현재 값을 보존해 신규 설정을 지우지 않음
 fn resolve_full_preset_settings(
     preset: &mut PresetFile,
@@ -208,7 +213,11 @@ fn resolve_full_preset_settings(
 }
 
 #[tauri::command]
-pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<PresetOperationResult> {
+pub fn preset_load(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<PresetOperationResult> {
     let picked = FileDialog::new()
         .add_filter("DM NOTE Preset", &["json"])
         .pick_file();
@@ -221,6 +230,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     };
 
     let mut preset = read_preset_file(&path)?;
+    let has_imported_global_css = preset.custom_css.is_some();
     let current = state.store.snapshot();
     let resolved_settings = resolve_full_preset_settings(&mut preset, &current);
 
@@ -261,6 +271,19 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     let css_use = resolved_settings.use_custom_css;
     let mut custom_css = resolved_settings.custom_css;
     normalize_imported_custom_css(&mut custom_css, "preset_load");
+    let imported_css_paths = ImportedCssPaths {
+        global: if has_imported_global_css {
+            custom_css.path.clone()
+        } else {
+            None
+        },
+        tabs: preset_tab_css_overrides
+            .as_ref()
+            .into_iter()
+            .flat_map(|overrides| overrides.values())
+            .filter_map(|css| css.path.clone())
+            .collect(),
+    };
     let js_use = resolved_settings.use_custom_js;
     let custom_js = resolved_settings.custom_js;
     let has_font_settings = preset.font_settings.is_some();
@@ -319,47 +342,51 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     let current_key_counters = counter_guard.clone();
     let css_operation_guard = state.lock_css_operation();
     let previous_css_state = state.store.snapshot();
-    let transaction = state.store.commit_preset_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
-        &[
-            EditorField::Keys,
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-            EditorField::KnobPositions,
-            EditorField::LayerGroups,
-        ],
-        current_key_counters,
-        move |store| {
-            let previous_tab_css_overrides = store.tab_css_overrides.clone();
-            let selected_key_type = choose_selected_key_type(
-                requested_selected_key_type,
-                &keys,
-                store.selected_key_type.clone(),
-            );
-            store.keys = keys;
-            store.key_positions = positions;
-            store.stat_positions = stat_positions;
-            store.graph_positions = graph_positions;
-            store.knob_positions = knob_positions;
-            store.custom_tabs = custom_tabs;
-            store.selected_key_type = selected_key_type;
-            store.tab_note_overrides = tab_note_overrides;
-            store.layer_groups = preset_layer_groups;
-            if let Some(tab_css_overrides) = preset_tab_css_overrides {
-                store.tab_css_overrides = tab_css_overrides;
-            }
-            crate::state::migration::clear_dangling_group_ids(store);
-            let diff = apply_patch_to_store(store, &settings_patch);
-            Ok((
-                diff,
-                previous_tab_css_overrides,
-                store.custom_tabs.clone(),
-                store.tab_note_overrides.clone(),
-                store.tab_css_overrides.clone(),
-            ))
-        },
-    )?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_preset_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("preset_load".to_string()),
+            &[
+                EditorField::Keys,
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ],
+            current_key_counters,
+            admission,
+            move |store| {
+                let previous_tab_css_overrides = store.tab_css_overrides.clone();
+                let selected_key_type = choose_selected_key_type(
+                    requested_selected_key_type,
+                    &keys,
+                    store.selected_key_type.clone(),
+                );
+                store.keys = keys;
+                store.key_positions = positions;
+                store.stat_positions = stat_positions;
+                store.graph_positions = graph_positions;
+                store.knob_positions = knob_positions;
+                store.custom_tabs = custom_tabs;
+                store.selected_key_type = selected_key_type;
+                store.tab_note_overrides = tab_note_overrides;
+                store.layer_groups = preset_layer_groups;
+                if let Some(tab_css_overrides) = preset_tab_css_overrides {
+                    store.tab_css_overrides = tab_css_overrides;
+                }
+                crate::state::migration::clear_dangling_group_ids(store);
+                let diff = apply_patch_to_store(store, &settings_patch);
+                Ok((
+                    diff,
+                    previous_tab_css_overrides,
+                    store.custom_tabs.clone(),
+                    store.tab_note_overrides.clone(),
+                    store.tab_css_overrides.clone(),
+                ))
+            },
+        )?;
     if let Err(error) = state.apply_committed_editor_key_runtime_locked(
         &app,
         &mut counter_guard,
@@ -372,6 +399,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     }
     drop(counter_guard);
     let current_css_state = state.store.snapshot();
+    authorize_committed_preset_css_paths(state.inner(), &current_css_state, &imported_css_paths);
     state.resync_global_css_watcher(&previous_css_state, &current_css_state);
     sync_tab_css_runtime(
         state.inner(),
@@ -433,6 +461,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
 pub fn preset_load_tab(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
 ) -> CmdResult<PresetOperationResult> {
     let picked = FileDialog::new()
         .add_filter("DM NOTE Preset", &["json"])
@@ -540,6 +569,15 @@ pub fn preset_load_tab(
             css
         })
     });
+    let imported_css_paths = ImportedCssPaths {
+        global: None,
+        tabs: imported_tab_css
+            .as_ref()
+            .and_then(|css| css.as_ref())
+            .and_then(|css| css.path.clone())
+            .into_iter()
+            .collect(),
+    };
 
     // 프리셋에 담긴 폰트를 현재 폰트 목록에 병합 (탭 로드는 전역 설정을 덮지 않음)
     let prepared_font_settings = if let Some(imported_fonts) = font_settings {
@@ -553,74 +591,78 @@ pub fn preset_load_tab(
     let mut counter_guard = state.lock_key_counters_for_history();
     let current_key_counters = counter_guard.clone();
     let css_operation_guard = state.lock_css_operation();
-    let transaction = state.store.commit_preset_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("preset_load_tab".to_string()),
-        &[
-            EditorField::Keys,
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-            EditorField::KnobPositions,
-            EditorField::LayerGroups,
-        ],
-        current_key_counters,
-        move |store| {
-            let previous_tab_css_overrides = store.tab_css_overrides.clone();
-            merge_tab_preset_key_pair(store, &current_tab_id, src_keys, imported_key_positions);
-            if let Some(positions) = imported_stat_positions {
-                store
-                    .stat_positions
-                    .insert(current_tab_id.clone(), positions);
-            }
-            if let Some(positions) = imported_graph_positions {
-                store
-                    .graph_positions
-                    .insert(current_tab_id.clone(), positions);
-            }
-            if let Some(positions) = imported_knob_positions {
-                store
-                    .knob_positions
-                    .insert(current_tab_id.clone(), positions);
-            }
-            apply_tab_note_override(
-                store,
-                &current_tab_id,
-                has_tab_note_overrides,
-                imported_override,
-            );
-            if let Some(groups) = imported_groups {
-                store.layer_groups.insert(current_tab_id.clone(), groups);
-            }
-            if let Some(css) = imported_tab_css {
-                if let Some(css) = css {
-                    store.tab_css_overrides.insert(current_tab_id.clone(), css);
-                } else {
-                    store.tab_css_overrides.remove(&current_tab_id);
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_preset_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("preset_load_tab".to_string()),
+            &[
+                EditorField::Keys,
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ],
+            current_key_counters,
+            admission,
+            move |store| {
+                let previous_tab_css_overrides = store.tab_css_overrides.clone();
+                merge_tab_preset_key_pair(store, &current_tab_id, src_keys, imported_key_positions);
+                if let Some(positions) = imported_stat_positions {
+                    store
+                        .stat_positions
+                        .insert(current_tab_id.clone(), positions);
                 }
-            }
+                if let Some(positions) = imported_graph_positions {
+                    store
+                        .graph_positions
+                        .insert(current_tab_id.clone(), positions);
+                }
+                if let Some(positions) = imported_knob_positions {
+                    store
+                        .knob_positions
+                        .insert(current_tab_id.clone(), positions);
+                }
+                apply_tab_note_override(
+                    store,
+                    &current_tab_id,
+                    has_tab_note_overrides,
+                    imported_override,
+                );
+                if let Some(groups) = imported_groups {
+                    store.layer_groups.insert(current_tab_id.clone(), groups);
+                }
+                if let Some(css) = imported_tab_css {
+                    if let Some(css) = css {
+                        store.tab_css_overrides.insert(current_tab_id.clone(), css);
+                    } else {
+                        store.tab_css_overrides.remove(&current_tab_id);
+                    }
+                }
 
-            let settings_diff = prepared_font_settings
-                .and_then(|prepared| {
-                    merge_prepared_tab_preset_fonts(&store.font_settings, prepared)
-                })
-                .map(|font_settings| {
-                    apply_patch_to_store(
-                        store,
-                        &SettingsPatchInput {
-                            font_settings: Some(font_settings),
-                            ..SettingsPatchInput::default()
-                        },
-                    )
-                });
-            crate::state::migration::clear_dangling_group_ids(store);
-            Ok((
-                settings_diff,
-                previous_tab_css_overrides,
-                store.tab_note_overrides.clone(),
-                store.tab_css_overrides.clone(),
-            ))
-        },
-    )?;
+                let settings_diff = prepared_font_settings
+                    .and_then(|prepared| {
+                        merge_prepared_tab_preset_fonts(&store.font_settings, prepared)
+                    })
+                    .map(|font_settings| {
+                        apply_patch_to_store(
+                            store,
+                            &SettingsPatchInput {
+                                font_settings: Some(font_settings),
+                                ..SettingsPatchInput::default()
+                            },
+                        )
+                    });
+                crate::state::migration::clear_dangling_group_ids(store);
+                Ok((
+                    settings_diff,
+                    previous_tab_css_overrides,
+                    store.tab_note_overrides.clone(),
+                    store.tab_css_overrides.clone(),
+                ))
+            },
+        )?;
     if let Err(error) = state.apply_committed_editor_key_runtime_locked(
         &app,
         &mut counter_guard,
@@ -632,6 +674,11 @@ pub fn preset_load_tab(
         log::error!("[Preset] failed to publish committed key counters: {error:#}");
     }
     drop(counter_guard);
+    authorize_committed_preset_css_paths(
+        state.inner(),
+        &state.store.snapshot(),
+        &imported_css_paths,
+    );
     sync_tab_css_runtime(
         state.inner(),
         &app,
@@ -710,6 +757,40 @@ fn sync_tab_css_runtime(
             },
         );
     }
+}
+
+fn authorize_committed_preset_css_paths(
+    state: &AppState,
+    committed: &AppStoreData,
+    imported: &ImportedCssPaths,
+) {
+    for path in committed_preset_css_paths(committed, imported) {
+        state.authorize_css_path(&path);
+    }
+}
+
+fn committed_preset_css_paths(
+    committed: &AppStoreData,
+    imported: &ImportedCssPaths,
+) -> Vec<String> {
+    let mut paths = BTreeSet::new();
+    if let Some(path) = imported
+        .global
+        .as_ref()
+        .filter(|path| committed.custom_css.path.as_ref() == Some(path))
+    {
+        paths.insert(path.clone());
+    }
+    for path in &imported.tabs {
+        if committed
+            .tab_css_overrides
+            .values()
+            .any(|css| css.path.as_ref() == Some(path))
+        {
+            paths.insert(path.clone());
+        }
+    }
+    paths.into_iter().collect()
 }
 
 fn normalize_imported_custom_css(css: &mut CustomCss, operation: &str) {
@@ -1503,6 +1584,57 @@ mod tests {
         apply_patch_to_store(&mut store, &patch);
 
         assert_eq!(store.custom_css_history, history);
+    }
+
+    #[test]
+    fn committed_preset_css_paths_exclude_unrelated_store_paths() {
+        let mut committed = AppStoreData {
+            custom_css: CustomCss {
+                path: Some("/tmp/unrelated-global.css".to_string()),
+                content: String::new(),
+            },
+            ..AppStoreData::default()
+        };
+        committed.tab_css_overrides.insert(
+            "4key".to_string(),
+            TabCss {
+                path: Some("/tmp/imported-tab.css".to_string()),
+                content: String::new(),
+                enabled: true,
+            },
+        );
+        committed.tab_css_overrides.insert(
+            "7key".to_string(),
+            TabCss {
+                path: Some("/tmp/unrelated.css".to_string()),
+                content: String::new(),
+                enabled: true,
+            },
+        );
+        let imported = ImportedCssPaths {
+            global: None,
+            tabs: vec![
+                "/tmp/imported-tab.css".to_string(),
+                "/tmp/not-committed.css".to_string(),
+            ],
+        };
+
+        assert_eq!(
+            committed_preset_css_paths(&committed, &imported),
+            vec!["/tmp/imported-tab.css".to_string()]
+        );
+
+        let imported_with_global = ImportedCssPaths {
+            global: Some("/tmp/unrelated-global.css".to_string()),
+            tabs: imported.tabs,
+        };
+        assert_eq!(
+            committed_preset_css_paths(&committed, &imported_with_global),
+            vec![
+                "/tmp/imported-tab.css".to_string(),
+                "/tmp/unrelated-global.css".to_string(),
+            ]
+        );
     }
 
     #[test]

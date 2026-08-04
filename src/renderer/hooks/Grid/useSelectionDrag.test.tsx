@@ -11,7 +11,10 @@ import {
 } from 'vitest';
 import { useSelectionDrag } from './useSelectionDrag';
 import { releaseDragSession } from './dragSession';
-import { calculateGroupBounds } from '@utils/grid/smartGuides';
+import {
+  calculateGroupBounds,
+  type ElementBounds,
+} from '@utils/grid/smartGuides';
 
 const { clearGuides, setDraggingOrResizing } = vi.hoisted(() => ({
   clearGuides: vi.fn(),
@@ -131,6 +134,37 @@ const PluginPairHarness = () => {
   });
 
   return <div data-testid="plugin-drag" onPointerDown={handlePointerDown} />;
+};
+
+interface MovingPluginPairHarnessProps {
+  getOtherElements: () => ElementBounds[];
+  onMultiDrag: (dx: number, dy: number) => void;
+}
+
+const MovingPluginPairHarness = ({
+  getOtherElements,
+  onMultiDrag,
+}: MovingPluginPairHarnessProps) => {
+  const { handlePointerDown } = useSelectionDrag({
+    enabled: true,
+    zoom: 1,
+    startX: 0,
+    startY: 0,
+    elementId: 'plugin-a',
+    elementWidth: 100,
+    elementHeight: 100,
+    elementType: 'plugin',
+    selectedElements: [
+      { id: 'plugin-a', type: 'plugin' },
+      { id: 'plugin-b', type: 'plugin' },
+    ],
+    getOtherElements,
+    onMultiDrag,
+  });
+
+  return (
+    <div data-testid="moving-plugin-drag" onPointerDown={handlePointerDown} />
+  );
 };
 
 describe('useSelectionDrag', () => {
@@ -341,6 +375,64 @@ describe('useSelectionDrag', () => {
       'plugin-a',
       'plugin-b',
     ]);
+  });
+
+  it('keeps selected group bounds based on drag-start positions across frames', async () => {
+    let pluginBLeft = 200;
+    const getOtherElements = vi.fn(() => [
+      {
+        id: 'plugin-b',
+        left: pluginBLeft,
+        top: 0,
+        right: pluginBLeft + 100,
+        bottom: 100,
+        centerX: pluginBLeft + 50,
+        centerY: 50,
+        width: 100,
+        height: 100,
+      },
+    ]);
+    const updateStorePosition = vi.fn((dx: number) => {
+      pluginBLeft += dx;
+    });
+
+    await act(async () => {
+      root.render(
+        <MovingPluginPairHarness
+          getOtherElements={getOtherElements}
+          onMultiDrag={updateStorePosition}
+        />,
+      );
+    });
+    const element = host.querySelector<HTMLElement>(
+      '[data-testid="moving-plugin-drag"]',
+    )!;
+
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 5 }));
+      flushRaf();
+    });
+    const firstFrameBounds = vi
+      .mocked(calculateGroupBounds)
+      .mock.calls.at(-1)?.[0];
+    expect(
+      firstFrameBounds?.find((bounds) => bounds.id === 'plugin-b')?.left,
+    ).toBe(205);
+
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 10 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 10 }));
+    });
+    const secondFrameBounds = vi
+      .mocked(calculateGroupBounds)
+      .mock.calls.at(-1)?.[0];
+    expect(
+      secondFrameBounds?.find((bounds) => bounds.id === 'plugin-b')?.left,
+    ).toBe(210);
+    expect(updateStorePosition).toHaveBeenNthCalledWith(1, 5, 0);
+    expect(updateStorePosition).toHaveBeenNthCalledWith(2, 5, 0);
   });
 
   it('ignores non-primary pointers', async () => {

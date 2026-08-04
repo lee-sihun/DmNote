@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
@@ -101,6 +101,7 @@ pub fn counter_animation_create(
 pub fn counter_animation_update(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     request: CounterAnimationUpdateRequest,
 ) -> CmdResult<CounterAnimationUpsertResponse> {
     let target_id = request.id.trim().to_string();
@@ -135,30 +136,34 @@ pub fn counter_animation_update(
     }
 
     let next_preset = preset.clone();
-    let transaction = state.store.commit_legacy_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("counter_animation_update".to_string()),
-        &[
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-        ],
-        |store| {
-            if let Some(item) = store
-                .counter_animation_presets
-                .iter_mut()
-                .find(|item| item.id == target_id)
-            {
-                *item = next_preset.clone();
-            }
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_legacy_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("counter_animation_update".to_string()),
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+            ],
+            admission,
+            |store| {
+                if let Some(item) = store
+                    .counter_animation_presets
+                    .iter_mut()
+                    .find(|item| item.id == target_id)
+                {
+                    *item = next_preset.clone();
+                }
 
-            let affected_usage_count =
-                apply_preset_to_bound_counters(store, &target_id, &next_preset);
-            Ok((
-                store.counter_animation_presets.clone(),
-                affected_usage_count,
-            ))
-        },
-    )?;
+                let affected_usage_count =
+                    apply_preset_to_bound_counters(store, &target_id, &next_preset);
+                Ok((
+                    store.counter_animation_presets.clone(),
+                    affected_usage_count,
+                ))
+            },
+        )?;
     let (user_presets, affected_usage_count) = transaction.value;
 
     publish_editor_change(state.inner(), &app, &transaction.change, false);
@@ -175,6 +180,7 @@ pub fn counter_animation_update(
 pub fn counter_animation_delete(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     id: String,
 ) -> CmdResult<CounterAnimationDeleteResponse> {
     let target_id = id.trim().to_string();
@@ -200,26 +206,30 @@ pub fn counter_animation_delete(
 
     let fallback_target = fallback_preset.clone();
 
-    let transaction = state.store.commit_legacy_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("counter_animation_delete".to_string()),
-        &[
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-        ],
-        |store| {
-            store
-                .counter_animation_presets
-                .retain(|preset| preset.id != target_id);
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_legacy_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("counter_animation_delete".to_string()),
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+            ],
+            admission,
+            |store| {
+                store
+                    .counter_animation_presets
+                    .retain(|preset| preset.id != target_id);
 
-            let affected_usage_count =
-                apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
-            Ok((
-                store.counter_animation_presets.clone(),
-                affected_usage_count,
-            ))
-        },
-    )?;
+                let affected_usage_count =
+                    apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
+                Ok((
+                    store.counter_animation_presets.clone(),
+                    affected_usage_count,
+                ))
+            },
+        )?;
     let (user_presets, affected_usage_count) = transaction.value;
 
     publish_editor_change(state.inner(), &app, &transaction.change, false);

@@ -11,8 +11,35 @@ import {
 } from '@utils/plugin/panelModelSync';
 import type { PluginPanelModelSnapshot } from '@src/types/plugin/api';
 
-// 적용된 pushSeq - 순서 역전된 stale push 무시 (패널 창 수명 동안 단조)
-let appliedPushSeq = 0;
+export interface PanelModelCursor {
+  authorityGeneration: number;
+  pushSeq: number;
+}
+
+export const advancePanelModelCursor = (
+  current: PanelModelCursor,
+  authorityGeneration: number,
+  pushSeq: number,
+): PanelModelCursor | null => {
+  if (
+    !Number.isSafeInteger(authorityGeneration) ||
+    authorityGeneration < 0 ||
+    !Number.isSafeInteger(pushSeq) ||
+    pushSeq < 0 ||
+    authorityGeneration < current.authorityGeneration ||
+    (authorityGeneration === current.authorityGeneration &&
+      pushSeq <= current.pushSeq)
+  ) {
+    return null;
+  }
+  return { authorityGeneration, pushSeq };
+};
+
+// main renderer 재시작 시 generation이 전진하므로 낮아진 pushSeq도 새 세대에서 허용
+let appliedCursor: PanelModelCursor = {
+  authorityGeneration: 0,
+  pushSeq: 0,
+};
 
 // 분리 패널에서 main이 push하는 플러그인 read-model 스냅샷 수신
 // 패널은 플러그인 런타임을 실행하지 않으므로 스토어는 읽기 미러로만 사용
@@ -29,13 +56,15 @@ export function usePluginPanelModelMirror() {
         ) {
           return;
         }
-        if (typeof data.pushSeq !== 'number' || data.pushSeq <= appliedPushSeq)
-          return;
-        appliedPushSeq = data.pushSeq;
+        const nextCursor = advancePanelModelCursor(
+          appliedCursor,
+          data.authorityGeneration,
+          data.pushSeq,
+        );
+        if (!nextCursor) return;
+        appliedCursor = nextCursor;
         notePluginMirrorRevision(data.modelRevision);
-        if (typeof data.authorityGeneration === 'number') {
-          setPluginAuthorityGeneration(data.authorityGeneration);
-        }
+        setPluginAuthorityGeneration(data.authorityGeneration);
         usePluginDisplayElementStore
           .getState()
           .applyPanelModel(
@@ -50,6 +79,12 @@ export function usePluginPanelModelMirror() {
     const unsubscribeAuthority = pluginRpcApi.onAuthorityChanged(
       ({ authorityGeneration, modelRevision }) => {
         setPluginAuthorityGeneration(authorityGeneration);
+        if (
+          Number.isSafeInteger(authorityGeneration) &&
+          authorityGeneration > appliedCursor.authorityGeneration
+        ) {
+          appliedCursor = { authorityGeneration, pushSeq: 0 };
+        }
         if (typeof modelRevision === 'number') {
           notePluginMirrorRevision(modelRevision);
         }

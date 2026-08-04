@@ -10,6 +10,9 @@ describe('Modal focus contract', () => {
 
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    vi.spyOn(Element.prototype, 'getClientRects').mockReturnValue([
+      document.createElement('div').getBoundingClientRect(),
+    ] as unknown as DOMRectList);
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -19,6 +22,7 @@ describe('Modal focus contract', () => {
     await act(async () => root.unmount());
     host.remove();
     document.body.innerHTML = '';
+    vi.restoreAllMocks();
   });
 
   it('moves focus into the dialog and restores the opener on unmount', async () => {
@@ -73,6 +77,48 @@ describe('Modal focus contract', () => {
       }),
     );
     expect(document.activeElement).toBe(buttons[1]);
+  });
+
+  it('skips CSS-hidden fields when focusing and cycling', async () => {
+    await act(async () => {
+      root.render(
+        <Modal ariaLabel="Test dialog">
+          <button type="button" style={{ display: 'none' }}>
+            Hidden first
+          </button>
+          <button type="button">Visible first</button>
+          <button type="button">Visible last</button>
+          <button type="button" style={{ visibility: 'hidden' }}>
+            Hidden last
+          </button>
+        </Modal>,
+      );
+    });
+
+    const visibleButtons = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+    ).filter((button) => button.textContent?.startsWith('Visible'));
+    expect(document.activeElement).toBe(visibleButtons[0]);
+
+    visibleButtons[1].focus();
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Tab',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.activeElement).toBe(visibleButtons[0]);
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.activeElement).toBe(visibleButtons[1]);
   });
 
   it('does not replace a child autoFocus target', async () => {

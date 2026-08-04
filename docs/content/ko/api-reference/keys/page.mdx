@@ -82,6 +82,13 @@ interface KeyPosition {
   activeShadow?: ElementShadowSpec;
 }
 
+interface KeyCounterSettings {
+  // ...배치, 글자, stroke, 애니메이션 필드...
+  fill: { idle: string; active: string };
+  fillIdleGradient?: GradientSpec | null;
+  fillActiveGradient?: GradientSpec | null;
+}
+
 interface GradientSpec {
   angle: number; // 0 이상 360 미만 — 360은 0으로 정규화 (CSS 기준, 0 = 위·시계 방향)
   stops: { color: string; pos: number }[]; // 2–8개, pos는 0–1 오름차순
@@ -99,6 +106,9 @@ interface ElementShadowSpec {
 그라데이션 필드가 있으면 렌더에서 대응 단색 필드보다 우선하며, 저장 시
 대응 단색 필드는 첫 스톱 색으로 자동 동기화됩니다. 단색으로 되돌리려면
 그라데이션 필드를 `null`로 두고 단색 필드를 갱신하세요.
+
+카운터 fill 그라데이션도 각각 `counter.fill.idle`과 `counter.fill.active`보다
+우선합니다. 카운터 stroke는 단색만 지원합니다.
 
 `shadow`와 `activeShadow`는 대기·입력 그림자를 각각 제어합니다. 필드를
 생략하면 기존 기본 그림자가 유지되며, 그림자를 명시적으로 끄려면
