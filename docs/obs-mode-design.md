@@ -682,7 +682,7 @@ WS 브로드캐스트 메시지를 수신하면 Tauri 이벤트명으로 변환�
 
 | WS 메시지 타입 | → Tauri 이벤트 | 비고 |
 |---------------|---------------|------|
-| `tauri_event` | 이벤트명 그대로 | 범용 이벤트 포워딩 — 22개 이벤트 자동 디스패치 |
+| `tauri_event` | 이벤트명 그대로 | 범용 이벤트 포워딩 — 24개 이벤트 자동 디스패치 |
 | `snapshot` | `keys:changed`, `positions:changed`, `settings:changed` 등 | 다수 이벤트 일괄 디스패치 |
 | `invoke_response` | — | WS RPC 응답 (pendingRpc resolve/reject) |
 
@@ -980,7 +980,7 @@ function onWsMessage(envelope) {
 |---|------|------|------|
 | 1 | **프론트 IPC shim** — WS 연결 + invoke/listen + No-op + WS RPC | `api/ipcShim.ts` | ✅ `dac007a` |
 | 2 | **백엔드 WS RPC** — `invoke_request` → `webview.on_message()` 자동 디스패치 | `obs_bridge.rs` | ✅ `3893666` |
-| 3 | **백엔드 이벤트 포워딩** — 22개 Tauri 이벤트 → `tauri_event` WS 포워딩 | `obs_bridge.rs`, `app_state.rs` | ✅ `28adb94` |
+| 3 | **백엔드 이벤트 포워딩** — 24개 Tauri 이벤트 → `tauri_event` WS 포워딩 | `obs_bridge.rs`, `app_state.rs` | ✅ `28adb94` |
 | 4 | **snapshot 필드 보강** — `layerGroups`, `tabNoteOverrides`, `tabCssOverrides` | `app_state.rs`, `mod.rs`, `app.ts` | ✅ `f32faf4` |
 | 5 | **convertFileSrc 수정** — OBS HTTP `/media/` base64url 매핑 | `api/ipcShim.ts` | ✅ (Step 1에 포함) |
 | 6 | **obs/index.tsx 재작성** — shim → dmnoteApi → overlay/App | `windows/obs/index.tsx` | ✅ (기존 구현 검증) |
