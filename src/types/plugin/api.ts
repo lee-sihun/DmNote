@@ -101,6 +101,7 @@ export type SoundListItem = {
   fileName: string;
   sizeBytes: number;
   modifiedAtMs?: number;
+  enabled: boolean;
   source: 'local' | 'builtin';
   originalPath?: string;
   trimStartRatio?: number;
@@ -117,6 +118,12 @@ export type SoundSaveProcessedWavResult = {
 export type SoundRenameResult = {
   success: boolean;
   displayName: string;
+};
+
+export type SoundSetEnabledResult = {
+  success: boolean;
+  soundPath: string;
+  enabled: boolean;
 };
 
 export type SoundDeleteResult = {
@@ -879,6 +886,11 @@ export interface DMNoteAPI {
   sound: {
     load(): Promise<SoundLoadResult>;
     list(): Promise<SoundListItem[]>;
+    /** @deprecated 사운드 피커는 활성 상태를 사용하지 않습니다. */
+    setEnabled(
+      soundPath: string,
+      enabled: boolean,
+    ): Promise<SoundSetEnabledResult>;
     rename(soundPath: string, displayName: string): Promise<SoundRenameResult>;
     remove(soundPath: string): Promise<SoundDeleteResult>;
     saveProcessedWav(

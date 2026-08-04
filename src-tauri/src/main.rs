@@ -220,6 +220,7 @@ fn main() {
             commands::keys::key_sound::key_sound_get_output_state,
             commands::keys::sound::sound_load,
             commands::keys::sound::sound_list,
+            commands::keys::sound::sound_set_enabled,
             commands::keys::sound::sound_rename,
             commands::keys::sound::sound_delete,
             commands::keys::sound::sound_save_processed_wav,
