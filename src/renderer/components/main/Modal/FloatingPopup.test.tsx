@@ -9,6 +9,9 @@ describe('FloatingPopup focus contract', () => {
 
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    vi.spyOn(Element.prototype, 'getClientRects').mockReturnValue([
+      document.createElement('div').getBoundingClientRect(),
+    ] as unknown as DOMRectList);
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -18,6 +21,7 @@ describe('FloatingPopup focus contract', () => {
     await act(async () => root.unmount());
     host.remove();
     document.body.innerHTML = '';
+    vi.restoreAllMocks();
   });
 
   const renderPopup = async (open: boolean, children: React.ReactNode) => {
@@ -80,6 +84,49 @@ describe('FloatingPopup focus contract', () => {
     document.dispatchEvent(backward);
     expect(backward.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(buttons[1]);
+  });
+
+  it('skips CSS-hidden fields when focusing and cycling', async () => {
+    await renderPopup(
+      true,
+      <>
+        <button type="button" style={{ display: 'none' }}>
+          Hidden first
+        </button>
+        <button type="button">Visible first</button>
+        <button type="button">Visible last</button>
+        <button type="button" style={{ visibility: 'hidden' }}>
+          Hidden last
+        </button>
+      </>,
+    );
+
+    const visibleButtons = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(
+        '[role="dialog"][aria-modal="false"] button',
+      ),
+    ).filter((button) => button.textContent?.startsWith('Visible'));
+    expect(document.activeElement).toBe(visibleButtons[0]);
+
+    visibleButtons[1].focus();
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Tab',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.activeElement).toBe(visibleButtons[0]);
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.activeElement).toBe(visibleButtons[1]);
   });
 
   it('consumes Tab and retains the dialog when no child is focusable', async () => {

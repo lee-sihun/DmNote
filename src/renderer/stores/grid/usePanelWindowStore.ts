@@ -9,15 +9,34 @@ import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { drainPendingPluginElementWrites } from '@plugins/rpc/pluginElementActions';
 import { drainPendingPluginSettingsWrites } from '@plugins/rpc/pluginSettingsMirror';
 
+export type PanelWindowStatus = 'unknown' | 'attached' | 'detached';
+
+export const hasInlinePropertiesPanelLease = (
+  status: PanelWindowStatus,
+): boolean => status === 'attached';
+
 interface PanelWindowState {
-  isDetached: boolean;
-  setDetached: (value: boolean) => void;
+  status: PanelWindowStatus;
+  statusRevision: number;
+  setStatus: (status: PanelWindowStatus) => void;
+  resolveInitialStatus: (
+    status: Exclude<PanelWindowStatus, 'unknown'>,
+    expectedRevision: number,
+  ) => void;
 }
 
 // 분리 패널 창 존재 여부 projection - 메인 인라인 패널 gating(single render lease)
 export const usePanelWindowStore = create<PanelWindowState>((set) => ({
-  isDetached: false,
-  setDetached: (value) => set({ isDetached: value }),
+  status: 'unknown',
+  statusRevision: 0,
+  setStatus: (status) =>
+    set((state) => ({ status, statusRevision: state.statusRevision + 1 })),
+  resolveInitialStatus: (status, expectedRevision) =>
+    set((state) =>
+      state.status === 'unknown' && state.statusRevision === expectedRevision
+        ? { status, statusRevision: state.statusRevision + 1 }
+        : state,
+    ),
 }));
 
 // 렌더 반영을 기다리는 macrotask 양보 - 인라인 unmount가 패널 mount보다 선행하도록
@@ -67,7 +86,7 @@ export const openPropertiesPanelForSelection = (): void => {
   const panel = usePropertiesPanelStore.getState();
   panel.setCanvasPanelMode('property');
   panel.setCanvasPanelOpen(true);
-  if (usePanelWindowStore.getState().isDetached) {
+  if (usePanelWindowStore.getState().status === 'detached') {
     void panelWindowApi.requestPropertyMode().catch((error) => {
       console.error('분리 패널 속성 보기 요청 실패', error);
     });
@@ -88,12 +107,12 @@ export const detachPropertiesPanel = async (): Promise<void> => {
       return;
     }
     const viewState = capturePanelViewState();
-    usePanelWindowStore.getState().setDetached(true);
+    usePanelWindowStore.getState().setStatus('detached');
     await yieldToRender();
     try {
       await panelWindowApi.show(viewState);
     } catch (error) {
-      usePanelWindowStore.getState().setDetached(false);
+      usePanelWindowStore.getState().setStatus('attached');
       console.error('Failed to open detached panel', error);
     }
   } finally {

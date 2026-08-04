@@ -217,6 +217,10 @@ export function useGradientColorState({
         applySpecRef.current(spec, commit),
     });
     return () => {
+      // 피커가 닫혀 앵커가 사라진 경우 세션 소유권과 무관하게 로컬 초안 폐기
+      if (!canvasAnchorRef.current) {
+        setDraft(null);
+      }
       // 여전히 내 세션일 때만 해제 (다른 피커가 이미 교체했으면 유지)
       const store = useGradientEditStore.getState();
       if (store.session?.sessionKey === sessionKeyValue) {

@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 use log::info;
 use rfd::FileDialog;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
@@ -106,15 +106,20 @@ pub fn js_get_use(state: State<'_, AppState>) -> CmdResult<bool> {
 pub fn js_toggle(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     enabled: bool,
 ) -> CmdResult<JsToggleResponse> {
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        store.use_custom_js = enabled;
-        if enabled {
-            let _ = store.custom_js.normalize();
-        }
-        Ok(store.custom_js.clone())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                store.use_custom_js = enabled;
+                if enabled {
+                    let _ = store.custom_js.normalize();
+                }
+                Ok(store.custom_js.clone())
+            })?;
 
     emit_history_status(&app, &transaction);
     app.emit("js:use", &JsToggleResponse { enabled })?;
@@ -127,14 +132,22 @@ pub fn js_toggle(
 }
 
 #[tauri::command]
-pub fn js_reset(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
+pub fn js_reset(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<()> {
     let default = CustomJs::default();
 
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        store.use_custom_js = false;
-        store.custom_js = default.clone();
-        Ok(store.custom_js.clone())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                store.use_custom_js = false;
+                store.custom_js = default.clone();
+                Ok(store.custom_js.clone())
+            })?;
 
     emit_history_status(&app, &transaction);
     app.emit("js:use", &JsToggleResponse { enabled: false })?;
@@ -146,21 +159,27 @@ pub fn js_reset(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
 pub fn js_set_content(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     content: String,
 ) -> CmdResult<JsSetContentResponse> {
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        let script = &mut store.custom_js;
-        let _ = script.normalize();
-        if script.plugins.is_empty() {
-            script.content = content.clone();
-        } else if let Some(plugin) = script.plugins.iter_mut().find(|plugin| plugin.enabled) {
-            plugin.content = content.clone();
-        } else if let Some(plugin) = script.plugins.first_mut() {
-            plugin.content = content.clone();
-        }
-        let _ = script.normalize();
-        Ok(script.clone())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                let script = &mut store.custom_js;
+                let _ = script.normalize();
+                if script.plugins.is_empty() {
+                    script.content = content.clone();
+                } else if let Some(plugin) = script.plugins.iter_mut().find(|plugin| plugin.enabled)
+                {
+                    plugin.content = content.clone();
+                } else if let Some(plugin) = script.plugins.first_mut() {
+                    plugin.content = content.clone();
+                }
+                let _ = script.normalize();
+                Ok(script.clone())
+            })?;
     emit_history_status(&app, &transaction);
     emit_js_state(&app, &transaction.value)?;
 
@@ -187,7 +206,11 @@ fn make_plugin_from_path(path: &Path, content: String) -> JsPlugin {
 }
 
 #[tauri::command]
-pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsLoadResponse> {
+pub fn js_load(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<JsLoadResponse> {
     let Some(paths) = FileDialog::new()
         .add_filter("JavaScript", &["js", "mjs"])
         .pick_files()
@@ -224,15 +247,19 @@ pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsLoadRe
         });
     }
 
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        let script = &mut store.custom_js;
-        let _ = script.normalize();
-        script.plugins.extend(added.clone());
-        script.path = None;
-        script.content.clear();
-        let _ = script.normalize();
-        Ok(script.clone())
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                let script = &mut store.custom_js;
+                let _ = script.normalize();
+                script.plugins.extend(added.clone());
+                script.path = None;
+                script.content.clear();
+                let _ = script.normalize();
+                Ok(script.clone())
+            })?;
     emit_history_status(&app, &transaction);
     emit_js_state(&app, &transaction.value)?;
 
@@ -244,7 +271,11 @@ pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsLoadRe
 }
 
 #[tauri::command]
-pub fn js_reload(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsReloadResponse> {
+pub fn js_reload(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<JsReloadResponse> {
     let script = get_normalized_script(&state)?;
     let mut loaded_plugins = Vec::new();
     let mut errors = Vec::new();
@@ -259,23 +290,25 @@ pub fn js_reload(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsRelo
         }
     }
 
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        let script = &mut store.custom_js;
-        let _ = script.normalize();
-        let mut updated_plugins = Vec::new();
-        for (id, expected_path, content) in &loaded_plugins {
-            if let Some(plugin) = script
-                .plugins
-                .iter_mut()
-                .find(|plugin| plugin.id == *id && plugin.path.as_ref() == Some(expected_path))
-            {
-                plugin.content.clone_from(content);
-                updated_plugins.push(plugin.clone());
-            }
-        }
-        let _ = script.normalize();
-        Ok((script.clone(), updated_plugins))
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                let script = &mut store.custom_js;
+                let _ = script.normalize();
+                let mut updated_plugins = Vec::new();
+                for (id, expected_path, content) in &loaded_plugins {
+                    if let Some(plugin) = script.plugins.iter_mut().find(|plugin| {
+                        plugin.id == *id && plugin.path.as_ref() == Some(expected_path)
+                    }) {
+                        plugin.content.clone_from(content);
+                        updated_plugins.push(plugin.clone());
+                    }
+                }
+                let _ = script.normalize();
+                Ok((script.clone(), updated_plugins))
+            })?;
     emit_history_status(&app, &transaction);
     emit_js_state(&app, &transaction.value.0)?;
 
@@ -289,6 +322,7 @@ pub fn js_reload(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsRelo
 pub fn js_remove_plugin(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     id: String,
 ) -> CmdResult<JsRemoveResponse> {
     info!("js_remove_plugin: requested id={}", id);
@@ -302,15 +336,19 @@ pub fn js_remove_plugin(
             .collect::<Vec<_>>()
             .join(",")
     );
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        let script = &mut store.custom_js;
-        let _ = script.normalize();
-        let initial_len = script.plugins.len();
-        script.plugins.retain(|plugin| plugin.id != id);
-        let removed = script.plugins.len() != initial_len;
-        let _ = script.normalize();
-        Ok((script.clone(), removed))
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                let script = &mut store.custom_js;
+                let _ = script.normalize();
+                let initial_len = script.plugins.len();
+                script.plugins.retain(|plugin| plugin.id != id);
+                let removed = script.plugins.len() != initial_len;
+                let _ = script.normalize();
+                Ok((script.clone(), removed))
+            })?;
     emit_history_status(&app, &transaction);
     if !transaction.value.1 {
         info!("js_remove_plugin: id not found");
@@ -334,6 +372,7 @@ pub fn js_remove_plugin(
 pub fn js_set_plugin_enabled(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     id: String,
     enabled: bool,
 ) -> CmdResult<JsPluginUpdateResponse> {
@@ -349,18 +388,22 @@ pub fn js_set_plugin_enabled(
             .collect::<Vec<_>>()
             .join(",")
     );
-    let transaction = state.store.commit_history_overlap_mutation(|store| {
-        let script = &mut store.custom_js;
-        let _ = script.normalize();
-        let updated_plugin = script.plugins.iter_mut().find_map(|plugin| {
-            (plugin.id == id).then(|| {
-                plugin.enabled = enabled;
-                plugin.clone()
-            })
-        });
-        let _ = script.normalize();
-        Ok((script.clone(), updated_plugin))
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                let script = &mut store.custom_js;
+                let _ = script.normalize();
+                let updated_plugin = script.plugins.iter_mut().find_map(|plugin| {
+                    (plugin.id == id).then(|| {
+                        plugin.enabled = enabled;
+                        plugin.clone()
+                    })
+                });
+                let _ = script.normalize();
+                Ok((script.clone(), updated_plugin))
+            })?;
 
     emit_history_status(&app, &transaction);
     if transaction.value.1.is_none() {

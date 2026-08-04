@@ -589,12 +589,22 @@ export function useAppBootstrap() {
 
         // 분리 패널 창 존재 여부 초기 조회 (메인 인라인 gating)
         if (window.__dmn_window_type === 'main') {
-          panelWindowApi
-            .isOpen()
-            .then((open) => {
-              usePanelWindowStore.getState().setDetached(open);
-            })
-            .catch(() => {});
+          const expectedRevision =
+            usePanelWindowStore.getState().statusRevision;
+          try {
+            const open = await panelWindowApi.isOpen();
+            usePanelWindowStore
+              .getState()
+              .resolveInitialStatus(
+                open ? 'detached' : 'attached',
+                expectedRevision,
+              );
+          } catch (error) {
+            console.error('분리 패널 상태 초기화 실패', error);
+            usePanelWindowStore
+              .getState()
+              .resolveInitialStatus('attached', expectedRevision);
+          }
         }
 
         finalizeBootstrap();
@@ -650,9 +660,10 @@ export function useAppBootstrap() {
         if (window.__dmn_window_type === 'main') {
           notePanelVisibilityForSettingsSession(visible, reason);
           if (visible) {
-            usePanelWindowStore.getState().setDetached(true);
+            usePanelWindowStore.getState().setStatus('detached');
             return;
           }
+          usePanelWindowStore.getState().setStatus('unknown');
           void panelWindowApi
             .takeViewState()
             .then((viewState) => {
@@ -662,7 +673,7 @@ export function useAppBootstrap() {
               console.error('분리 패널 뷰 상태 복원 실패', error);
             })
             .finally(() => {
-              usePanelWindowStore.getState().setDetached(false);
+              usePanelWindowStore.getState().setStatus('attached');
             });
           return;
         }

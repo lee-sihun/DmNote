@@ -53,7 +53,7 @@ type KnobItemPositions = Record<string, KnobItemPosition[]>;
 
 - `backgroundColor` / `activeBackgroundColor` — 대기 / 회전 중 배경색
 - `borderColor` / `activeBorderColor` — 대기 / 회전 중 테두리 색상
-- `borderWidth` — 테두리 두께(px, 기본 1 — 0이면 테두리 없음)
+- `borderWidth` — 0보다 클 때만 단색 테두리 두께로 사용; 미지정 시 1px 폴백은 그라데이션 테두리에만 적용되고 0이면 두 형식 모두 비활성
 - `backgroundGradient` / `activeBackgroundGradient` — 배경 그라데이션(GradientSpec, 지정 시 단색보다 우선)
 - `borderGradient` / `activeBorderGradient` — 테두리 그라데이션(GradientSpec)
 - `shadow` / `activeShadow` — 대기 / 회전 중 그림자(ElementShadowSpec, color 알파값으로 농도 조절)

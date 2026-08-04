@@ -313,7 +313,10 @@ pub(crate) fn commit_css_reload(
     path: &str,
     loaded: &ValidatedCssFile,
 ) -> Result<AdmittedHistoryOverlapMutation<CssReloadChanges>, EditorCommitError> {
-    store.commit_history_overlap_mutation(|state| Ok(apply_reload_if_current(state, path, loaded)))
+    let admission = store.admit_editor_mutation()?;
+    store.commit_history_overlap_mutation_with_admission(admission, |state| {
+        Ok(apply_reload_if_current(state, path, loaded))
+    })
 }
 
 pub(crate) fn apply_reload_if_current(
