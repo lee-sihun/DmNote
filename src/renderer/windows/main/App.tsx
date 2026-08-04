@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import {
   usePanelWindowStore,
   detachPropertiesPanel,
+  hasInlinePropertiesPanelLease,
 } from '@stores/grid/usePanelWindowStore';
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
@@ -171,7 +172,7 @@ export default function App() {
   } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
-  const isPanelDetached = usePanelWindowStore((state) => state.isDetached);
+  const panelWindowStatus = usePanelWindowStore((state) => state.status);
   const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
     useState(false);
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
@@ -700,7 +701,7 @@ export default function App() {
               isNoteSettingOpen={isNoteSettingOpen}
               setIsNoteSettingOpen={setIsNoteSettingOpen}
             />
-            {!isPanelDetached && (
+            {hasInlinePropertiesPanelLease(panelWindowStatus) && (
               <PropertiesPanel
                 onPositionChange={handlePositionChange}
                 onKeyUpdate={(data) => {

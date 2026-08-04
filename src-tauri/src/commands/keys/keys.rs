@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
     commands::editor::state::{emit_best_effort, publish_editor_change},
@@ -259,15 +259,18 @@ pub fn keys_get_counters(state: State<'_, AppState>) -> CmdResult<KeyCounters> {
 pub fn keys_set_mode(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     mode: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<ModeResponse> {
     let requested = mode.clone();
-    let transaction = state.store.commit_aux_editor_transaction(
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state.store.commit_aux_editor_transaction_with_admission(
         HistoryScope::Mode,
         observed_history_epoch,
         EditorCommitOrigin::LegacyAdapter("keys_set_mode".to_string()),
         &[],
+        admission,
         move |store| Ok(select_mode_if_available(store, &requested)),
     )?;
     let (success, effective) = transaction.value.clone();
@@ -293,7 +296,11 @@ pub fn keys_set_mode(
 }
 
 #[tauri::command]
-pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<ResetAllResponse> {
+pub fn keys_reset_all(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+) -> CmdResult<ResetAllResponse> {
     let keys = default_keys().clone();
     let positions = default_positions().clone();
     let mut note_patch = NoteSettingsPatch::default();
@@ -326,23 +333,28 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
     };
     let css_operation_guard = state.lock_css_operation();
     let previous_css_state = state.store.snapshot();
-    let transaction = state.store.commit_legacy_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
-        &[
-            EditorField::Keys,
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-            EditorField::KnobPositions,
-            EditorField::LayerGroups,
-        ],
-        move |store| {
-            let cleared_tab_css_ids = store.tab_css_overrides.keys().cloned().collect::<Vec<_>>();
-            reset_all_editor_data(store, &keys, &positions);
-            let settings_diff = apply_patch_to_store(store, &settings_patch);
-            Ok((settings_diff, cleared_tab_css_ids))
-        },
-    )?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_legacy_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("keys_reset_all".to_string()),
+            &[
+                EditorField::Keys,
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ],
+            admission,
+            move |store| {
+                let cleared_tab_css_ids =
+                    store.tab_css_overrides.keys().cloned().collect::<Vec<_>>();
+                reset_all_editor_data(store, &keys, &positions);
+                let settings_diff = apply_patch_to_store(store, &settings_patch);
+                Ok((settings_diff, cleared_tab_css_ids))
+            },
+        )?;
     let current_css_state = state.store.snapshot();
     state.resync_global_css_watcher(&previous_css_state, &current_css_state);
     for tab_id in &transaction.value.1 {
@@ -420,27 +432,32 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
 pub fn keys_reset_mode(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     mode: String,
 ) -> CmdResult<ResetModeResponse> {
-    let transaction = state.store.commit_legacy_editor_transaction(
-        EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
-        &[
-            EditorField::Keys,
-            EditorField::KeyPositions,
-            EditorField::StatPositions,
-            EditorField::GraphPositions,
-            EditorField::KnobPositions,
-            EditorField::LayerGroups,
-        ],
-        |store| {
-            let Some(kind) = reset_mode_kind(store, &mode) else {
-                return Ok(None);
-            };
-            let cleared_tab_css = store.tab_css_overrides.contains_key(&mode);
-            reset_mode_data(store, &mode, kind);
-            Ok(Some((cleared_tab_css, store.tab_note_overrides.clone())))
-        },
-    )?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_legacy_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("keys_reset_mode".to_string()),
+            &[
+                EditorField::Keys,
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ],
+            admission,
+            |store| {
+                let Some(kind) = reset_mode_kind(store, &mode) else {
+                    return Ok(None);
+                };
+                let cleared_tab_css = store.tab_css_overrides.contains_key(&mode);
+                reset_mode_data(store, &mode, kind);
+                Ok(Some((cleared_tab_css, store.tab_note_overrides.clone())))
+            },
+        )?;
     let Some((cleared_tab_css, tab_note_overrides)) = transaction.value else {
         return Ok(ResetModeResponse {
             success: false,
@@ -514,6 +531,7 @@ pub fn custom_tabs_list(state: State<'_, AppState>) -> CmdResult<Vec<CustomTab>>
 pub fn custom_tabs_create(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     name: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabCreateResult> {
@@ -530,11 +548,13 @@ pub fn custom_tabs_create(
         id: id.clone(),
         name: trimmed,
     };
-    let transaction = state.store.commit_aux_editor_transaction(
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state.store.commit_aux_editor_transaction_with_admission(
         HistoryScope::CustomTabs,
         observed_history_epoch,
         EditorCommitOrigin::LegacyAdapter("custom_tabs_create".to_string()),
         &[EditorField::Keys, EditorField::KeyPositions],
+        admission,
         |store| {
             if store
                 .custom_tabs
@@ -595,10 +615,12 @@ pub fn custom_tabs_create(
 pub fn custom_tabs_delete(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     id: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabDeleteResult> {
-    let transaction = state.store.commit_aux_editor_transaction(
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state.store.commit_aux_editor_transaction_with_admission(
         HistoryScope::CustomTabs,
         observed_history_epoch,
         EditorCommitOrigin::LegacyAdapter("custom_tabs_delete".to_string()),
@@ -610,6 +632,7 @@ pub fn custom_tabs_delete(
             EditorField::KnobPositions,
             EditorField::LayerGroups,
         ],
+        admission,
         |store| {
             let Some(plan) = plan_custom_tab_delete(store, &id) else {
                 return Ok(Err(store.selected_key_type.clone()));
@@ -704,15 +727,18 @@ pub struct CustomTabSelectResult {
 pub fn custom_tabs_select(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     id: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<CustomTabSelectResult> {
     let requested = id;
-    let transaction = state.store.commit_aux_editor_transaction(
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state.store.commit_aux_editor_transaction_with_admission(
         HistoryScope::Mode,
         observed_history_epoch,
         EditorCommitOrigin::LegacyAdapter("custom_tabs_select".to_string()),
         &[],
+        admission,
         move |store| Ok(select_mode_if_available(store, &requested)),
     )?;
     let (success, selected) = transaction.value.clone();
@@ -744,15 +770,18 @@ pub fn custom_tabs_select(
 pub fn custom_tabs_restore(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     custom_tabs: Vec<CustomTab>,
     selected_key_type: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<()> {
-    let transaction = state.store.commit_aux_editor_transaction(
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state.store.commit_aux_editor_transaction_with_admission(
         HistoryScope::CustomTabs,
         observed_history_epoch,
         EditorCommitOrigin::LegacyAdapter("custom_tabs_restore".to_string()),
         &[],
+        admission,
         move |store| {
             validate_history_restore_metadata(
                 &EditorDocumentV1::from_store(store),
@@ -793,9 +822,12 @@ pub fn custom_tabs_restore(
 pub fn keys_reset_counters(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let mutation = state.reset_key_counters(&app, observed_history_epoch)?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let mutation =
+        state.reset_key_counters_with_admission(&app, observed_history_epoch, admission)?;
     state.obs_broadcast_counters();
     if let Some(status) = mutation.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
@@ -807,10 +839,13 @@ pub fn keys_reset_counters(
 pub fn keys_reset_counters_mode(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     mode: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let mutation = state.reset_mode_counters(&app, &mode, observed_history_epoch)?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let mutation =
+        state.reset_mode_counters_with_admission(&app, &mode, observed_history_epoch, admission)?;
     state.obs_broadcast_counters();
     if let Some(status) = mutation.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
@@ -822,11 +857,19 @@ pub fn keys_reset_counters_mode(
 pub fn keys_reset_single_counter(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     mode: String,
     key: String,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let mutation = state.reset_single_key_counter(&app, &mode, &key, observed_history_epoch)?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let mutation = state.reset_single_key_counter_with_admission(
+        &app,
+        &mode,
+        &key,
+        observed_history_epoch,
+        admission,
+    )?;
     state.obs_broadcast_counters();
     if let Some(status) = mutation.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);
@@ -838,10 +881,17 @@ pub fn keys_reset_single_counter(
 pub fn keys_set_counters(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     counters: KeyCounters,
     observed_history_epoch: Option<u64>,
 ) -> CmdResult<KeyCounters> {
-    let mutation = state.replace_key_counters(&app, counters, observed_history_epoch)?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let mutation = state.replace_key_counters_with_admission(
+        &app,
+        counters,
+        observed_history_epoch,
+        admission,
+    )?;
     state.obs_broadcast_counters();
     if let Some(status) = mutation.history_status.as_ref() {
         emit_best_effort(&app, "history:status", status);

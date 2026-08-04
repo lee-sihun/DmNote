@@ -29,7 +29,9 @@ pub fn plugin_rpc_send(
         return Err("AUTHORITY_UNAVAILABLE".to_string());
     }
 
-    let _history_admission = state.admit_frontend_history_mutation(window.label())?;
+    let _history_admission = state
+        .admit_frontend_history_mutation(window.label())
+        .map_err(|_| "HISTORY_IN_PROGRESS".to_string())?;
     let authority = state
         .plugin_authority()
         .admit(request.authority_generation)?;
