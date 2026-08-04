@@ -54,7 +54,7 @@ Commonly used inherited styling fields:
 
 - `backgroundColor` / `activeBackgroundColor` — idle / turning fill color
 - `borderColor` / `activeBorderColor` — idle / turning border color
-- `borderWidth` — border thickness in px (defaults to 1, 0 disables the border)
+- `borderWidth` — solid border thickness in px when explicitly greater than 0; an omitted width uses a 1 px fallback only for a gradient border, and 0 disables both border forms
 - `backgroundGradient` / `activeBackgroundGradient` — background gradient (GradientSpec, takes priority over the solid color)
 - `borderGradient` / `activeBorderGradient` — border gradient (GradientSpec)
 - `shadow` / `activeShadow` — idle / turning shadow (ElementShadowSpec; color alpha controls opacity)
