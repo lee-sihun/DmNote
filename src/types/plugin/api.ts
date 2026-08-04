@@ -316,7 +316,13 @@ export type CustomTabDeleteResult = {
   selected: string;
   error?: string;
 };
-export type KeyCounterUpdate = { mode: string; key: string; count: number };
+export type KeyCounterUpdate = {
+  mode: string;
+  key: string;
+  count: number;
+  sessionId: string;
+  revision: number;
+};
 
 export type PresetOperationResult = { success: boolean; error?: string };
 

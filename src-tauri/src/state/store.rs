@@ -4061,7 +4061,12 @@ mod tests {
     }
 
     impl KeyCounterEventEmitter for TestCounterEmitter {
-        fn emit_key_counters(&self, counters: &KeyCounters) -> anyhow::Result<()> {
+        fn emit_key_counters(
+            &self,
+            counters: &KeyCounters,
+            _session_id: &str,
+            _revision: u64,
+        ) -> anyhow::Result<()> {
             let count = counters[&self.mode][&self.key];
             self.events
                 .lock()
@@ -4076,7 +4081,14 @@ mod tests {
             Ok(())
         }
 
-        fn emit_key_counter(&self, _mode: &str, _key: &str, count: u32) -> anyhow::Result<()> {
+        fn emit_key_counter(
+            &self,
+            _mode: &str,
+            _key: &str,
+            count: u32,
+            _session_id: &str,
+            _revision: u64,
+        ) -> anyhow::Result<()> {
             self.events.lock().unwrap().push(format!("counter:{count}"));
             Ok(())
         }
@@ -8851,6 +8863,10 @@ mod tests {
         increment_handle.join().unwrap();
         assert_eq!(*events.lock().unwrap(), vec!["snapshot:0", "counter:1"]);
         assert_eq!(state.snapshot_key_counters()[&mode][&key], 1);
+        let bootstrap = state.bootstrap_payload();
+        assert_eq!(bootstrap.key_counters[&mode][&key], 1);
+        assert!(!bootstrap.key_counters_session_id.is_empty());
+        assert_eq!(bootstrap.key_counters_revision, 2);
 
         state.shutdown();
         drop(state);

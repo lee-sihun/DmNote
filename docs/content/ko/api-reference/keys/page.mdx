@@ -343,10 +343,18 @@ const unsub = dmn.keys.onModeChanged(({ mode }) => {
 개별 키 카운트 변경 이벤트를 구독합니다.
 
 ```javascript
-const unsub = dmn.keys.onCounterChanged(({ mode, key, count }) => {
-  console.log(`[${mode}] ${key}: ${count}`);
-});
+const unsub = dmn.keys.onCounterChanged(
+  ({ mode, key, count, sessionId, revision }) => {
+    console.log(
+      `[${mode}] ${key}: ${count} (${sessionId}, revision ${revision})`,
+    );
+  },
+);
 ```
+
+`revision`은 `sessionId` 안에서 런타임 카운터 변경의 단조 증가 순서입니다.
+bootstrap 스냅샷과 실시간 이벤트를 조정할 때 `dmn.app.bootstrap()`의
+`keyCountersSessionId`/`keyCountersRevision`과 함께 비교할 수 있습니다.
 
 ### onCountersChanged(listener)
 

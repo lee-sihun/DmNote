@@ -32,6 +32,8 @@ export interface BootstrapPayload {
     anchor: string;
   };
   keyCounters: KeyCounters;
+  keyCountersSessionId: string;
+  keyCountersRevision: number;
   layerGroups: LayerGroups;
   tabNoteOverrides: TabNoteOverrides;
   tabCssOverrides: TabCssOverrides;

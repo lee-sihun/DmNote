@@ -25,8 +25,15 @@ const bootstrap = await dmn.app.bootstrap();
 console.log(bootstrap.selectedKeyType); // 'keyboard' | 'mouse'
 console.log(bootstrap.settings); // app settings object
 console.log(bootstrap.keys.keyboard); // key mapping
-console.log(bootstrap.keys.counter); // counter state
+console.log(bootstrap.keyCounters); // counter state
+console.log(bootstrap.keyCountersSessionId); // counter stream session
+console.log(bootstrap.keyCountersRevision); // counter snapshot revision
 ```
+
+`keyCountersRevision` is a read-only, monotonically increasing watermark for
+the returned `keyCounters` snapshot. It is intended for ordering bootstrap
+snapshots against live counter updates within the same
+`keyCountersSessionId`. A changed session ID starts a new revision sequence.
 
 ### `dmn.app.restart(): Promise<void>`
 

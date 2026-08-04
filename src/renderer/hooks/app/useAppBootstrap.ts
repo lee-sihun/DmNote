@@ -52,7 +52,7 @@ import {
   resetHistoryEditorFlushLock,
 } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import type { BootstrapPayload } from '@src/types/app';
-import type { CustomTab } from '@src/types/key/keys';
+import type { CustomTab, KeyCounters } from '@src/types/key/keys';
 import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/editorCoordinator';
 import {
   mergeNoteSettings,
@@ -151,23 +151,44 @@ export function useAppBootstrap() {
     let lastShownPermanentEditorError: unknown = null;
     // 키 표시 딜레이와 동기화를 위한 카운터 업데이트 지연
     type CounterDelayTimerHandle = ReturnType<typeof setTimeout>;
+    interface DelayedCounterUpdate {
+      apply: () => void;
+      mode: string;
+      key: string;
+      count: number;
+      sessionId: string;
+      revision: number;
+    }
     const counterDelayTimers = new Map<
       string,
-      Map<CounterDelayTimerHandle, () => void>
+      Map<CounterDelayTimerHandle, DelayedCounterUpdate>
     >();
     const pendingCounterDelayTimers = new Map<
       CounterDelayTimerHandle,
-      () => void
+      DelayedCounterUpdate
     >();
 
     const composeCounterKey = (mode?: string, key?: string) =>
       `${mode || '__unknown_mode__'}::${key || '__unknown_key__'}`;
 
+    const getLatestPendingCounterUpdate = (composedKey: string) => {
+      const timers = counterDelayTimers.get(composedKey);
+      if (!timers) return null;
+
+      let latest: DelayedCounterUpdate | null = null;
+      timers.forEach((update) => {
+        if (latest === null || update.revision > latest.revision) {
+          latest = update;
+        }
+      });
+      return latest;
+    };
+
     const clearCounterDelayTimers = (composedKey?: string) => {
       if (composedKey) {
         const timers = counterDelayTimers.get(composedKey);
         if (timers) {
-          timers.forEach((_apply, timer) => {
+          timers.forEach((_update, timer) => {
             clearTimeout(timer);
             pendingCounterDelayTimers.delete(timer);
           });
@@ -176,10 +197,28 @@ export function useAppBootstrap() {
         return;
       }
 
-      pendingCounterDelayTimers.forEach((_apply, timer) => clearTimeout(timer));
+      pendingCounterDelayTimers.forEach((_update, timer) =>
+        clearTimeout(timer),
+      );
       pendingCounterDelayTimers.clear();
       counterDelayTimers.forEach((timers) => timers.clear());
       counterDelayTimers.clear();
+    };
+
+    const discardCounterDelayTimers = (
+      shouldDiscard: (update: DelayedCounterUpdate) => boolean,
+    ) => {
+      counterDelayTimers.forEach((timers, composedKey) => {
+        timers.forEach((update, timer) => {
+          if (!shouldDiscard(update)) return;
+          clearTimeout(timer);
+          timers.delete(timer);
+          pendingCounterDelayTimers.delete(timer);
+        });
+        if (timers.size === 0) {
+          counterDelayTimers.delete(composedKey);
+        }
+      });
     };
 
     const flushCounterDelayTimers = () => {
@@ -188,9 +227,9 @@ export function useAppBootstrap() {
       counterDelayTimers.forEach((timers) => timers.clear());
       counterDelayTimers.clear();
 
-      pending.forEach(([timer, apply]) => {
+      pending.forEach(([timer, update]) => {
         clearTimeout(timer);
-        apply();
+        update.apply();
       });
     };
 
@@ -235,6 +274,8 @@ export function useAppBootstrap() {
       mode: string,
       key: string,
       count: number,
+      sessionId: string,
+      revision: number,
     ) => {
       const delayMs = getCounterDelayMs();
       const composedKey = composeCounterKey(mode, key);
@@ -249,9 +290,17 @@ export function useAppBootstrap() {
         if (disposed) return;
         setKeyCounter(mode, key, count);
       };
+      const update: DelayedCounterUpdate = {
+        apply,
+        mode,
+        key,
+        count,
+        sessionId,
+        revision,
+      };
       const timer = setTimeout(() => {
-        const pendingApply = pendingCounterDelayTimers.get(timer);
-        if (!pendingApply) return;
+        const pendingUpdate = pendingCounterDelayTimers.get(timer);
+        if (!pendingUpdate) return;
 
         pendingCounterDelayTimers.delete(timer);
         const timers = counterDelayTimers.get(composedKey);
@@ -259,16 +308,16 @@ export function useAppBootstrap() {
         if (timers?.size === 0) {
           counterDelayTimers.delete(composedKey);
         }
-        pendingApply();
+        pendingUpdate.apply();
       }, delayMs);
 
       const existing = counterDelayTimers.get(composedKey);
       if (existing) {
-        existing.set(timer, apply);
+        existing.set(timer, update);
       } else {
-        counterDelayTimers.set(composedKey, new Map([[timer, apply]]));
+        counterDelayTimers.set(composedKey, new Map([[timer, update]]));
       }
-      pendingCounterDelayTimers.set(timer, apply);
+      pendingCounterDelayTimers.set(timer, update);
     };
 
     const { setAll, merge } = useSettingsStore.getState();
@@ -432,12 +481,124 @@ export function useAppBootstrap() {
     let initialApplied = false;
     let resyncInFlight = false;
     let resyncQueued = false;
+    let latestCounterSessionId: string | null = null;
+    let latestCounterRevision = 0;
+    interface CounterResyncContext {
+      latestUpdates: Map<
+        string,
+        {
+          mode: string;
+          key: string;
+          count: number;
+          sessionId: string;
+          revision: number;
+        }
+      >;
+      latestSnapshot: { sessionId: string; revision: number } | null;
+    }
+    let counterResyncContext: CounterResyncContext | null = null;
+
+    const adoptCounterSession = (sessionId: string) => {
+      if (latestCounterSessionId === sessionId) return;
+
+      latestCounterSessionId = sessionId;
+      latestCounterRevision = 0;
+      clearCounterDelayTimers();
+      if (counterResyncContext) {
+        counterResyncContext.latestUpdates.clear();
+        counterResyncContext.latestSnapshot = null;
+      }
+    };
+
+    const reconcileResyncCounters = (
+      counters: KeyCounters,
+      sessionId: string,
+      revision: number,
+      context: CounterResyncContext,
+    ) => {
+      const reconciled = Object.fromEntries(
+        Object.entries(counters).map(([mode, entries]) => [
+          mode,
+          { ...entries },
+        ]),
+      ) as KeyCounters;
+
+      context.latestUpdates.forEach(
+        ({
+          mode,
+          key,
+          count,
+          sessionId: eventSessionId,
+          revision: eventRevision,
+        }) => {
+          if (eventSessionId !== sessionId || eventRevision <= revision) return;
+          const modeCounters = (reconciled[mode] ??= {});
+          modeCounters[key] = count;
+        },
+      );
+      return reconciled;
+    };
+
+    const applyResyncCounters = (
+      counters: KeyCounters,
+      sessionId: string,
+      revision: number,
+      context: CounterResyncContext,
+    ) => {
+      adoptCounterSession(sessionId);
+      // bootstrap 캡처 뒤 도착한 전체 스냅샷(reset/undo 등)이 이미 더 최신이면
+      // 카운터 슬라이스만 되돌리지 않음
+      if (
+        context.latestSnapshot?.sessionId === sessionId &&
+        context.latestSnapshot.revision > revision
+      ) {
+        return;
+      }
+
+      const reconciled = reconcileResyncCounters(
+        counters,
+        sessionId,
+        revision,
+        context,
+      );
+      discardCounterDelayTimers(
+        (pending) =>
+          pending.sessionId !== sessionId || pending.revision <= revision,
+      );
+
+      applyCounterCacheSnapshot(reconciled);
+      if (isOverlayWindow) {
+        applyCounterSnapshot(reconciled, (composed) => {
+          const pending = getLatestPendingCounterUpdate(composed);
+          if (pending?.sessionId === sessionId && pending.revision > revision) {
+            return true;
+          }
+          const update = context.latestUpdates.get(composed);
+          return Boolean(
+            update?.sessionId === sessionId && update.revision > revision,
+          );
+        });
+      }
+      latestCounterRevision = Math.max(latestCounterRevision, revision);
+    };
 
     // EditorDocument 밖의 슬라이스를 "변경 시에만" 적용 — 동일 데이터 재적용으로 인한 참조
     // 변경이 overlay 키 이벤트 effect 재실행(키 하이라이트 리셋) 등 시각적
     // 부작용을 유발하는 것을 방지
-    const applyResyncSnapshot = (bootstrap: BootstrapPayload) => {
+    const applyResyncSnapshot = (
+      bootstrap: BootstrapPayload,
+      counterContext: CounterResyncContext,
+    ) => {
       initDefaults(bootstrap.defaults);
+
+      // 설정/모드 적용은 구독자를 통해 대기 카운터를 flush할 수 있으므로,
+      // 카운터의 인과 순서를 먼저 확정한 뒤 나머지 스냅샷을 적용
+      applyResyncCounters(
+        bootstrap.keyCounters,
+        bootstrap.keyCountersSessionId,
+        bootstrap.keyCountersRevision,
+        counterContext,
+      );
 
       // 설정: tabNoteOverrides는 payload 내장값으로 원자 적용
       // (초기 경로의 "{} → getAll" 2단계를 반복하면 한 프레임 깜빡임 발생)
@@ -484,16 +645,6 @@ export function useAppBootstrap() {
         useKeyStore.setState((state) => ({ ...state, ...keyChanges }));
       }
 
-      // 카운터: 캐시는 무조건(순수 데이터), 시그널은 동일 값 무통지라 안전.
-      // 딜레이 타이머로 대기 중인 키는 스킵 — 타이머가 스냅샷보다 최신
-      // 이벤트 값을 들고 있어, 스냅샷으로 덮으면 과거 값이 깜빡임
-      applyCounterCacheSnapshot(bootstrap.keyCounters);
-      if (isOverlayWindow) {
-        applyCounterSnapshot(bootstrap.keyCounters, (composed) =>
-          counterDelayTimers.has(composed),
-        );
-      }
-
       finalizeBootstrap();
     };
 
@@ -507,23 +658,49 @@ export function useAppBootstrap() {
       resyncInFlight = true;
       do {
         resyncQueued = false;
+        const counterContext: CounterResyncContext = {
+          latestUpdates: new Map(),
+          latestSnapshot: null,
+        };
+        counterResyncContext = counterContext;
         try {
           const bootstrap = await window.api.app.bootstrap();
           if (disposed) return;
-          applyResyncSnapshot(bootstrap);
+          applyResyncSnapshot(bootstrap, counterContext);
+          if (counterResyncContext === counterContext) {
+            counterResyncContext = null;
+          }
           await editorCoordinator.sync();
         } catch (error) {
           console.error('OBS 재동기화 실패', error);
+        } finally {
+          if (counterResyncContext === counterContext) {
+            counterResyncContext = null;
+          }
         }
       } while (resyncQueued && !disposed);
       resyncInFlight = false;
     };
 
+    const initialCounterContext: CounterResyncContext = {
+      latestUpdates: new Map(),
+      latestSnapshot: null,
+    };
+    counterResyncContext = initialCounterContext;
     (async () => {
       try {
         const bootstrap = await window.api.app.bootstrap();
         if (disposed) return;
         initDefaults(bootstrap.defaults);
+        applyResyncCounters(
+          bootstrap.keyCounters,
+          bootstrap.keyCountersSessionId,
+          bootstrap.keyCountersRevision,
+          initialCounterContext,
+        );
+        if (counterResyncContext === initialCounterContext) {
+          counterResyncContext = null;
+        }
         setAll(buildSettingsSnapshot(bootstrap, {}));
         useFontStore.setState({
           customFonts: bootstrap.settings.fontSettings.customFonts.map(
@@ -554,10 +731,6 @@ export function useAppBootstrap() {
         useLayerGroupStore
           .getState()
           .setLayerGroups(bootstrap.layerGroups ?? {});
-        applyCounterCacheSnapshot(bootstrap.keyCounters);
-        if (isOverlayWindow) {
-          applyCounterSnapshot(bootstrap.keyCounters);
-        }
 
         // 탭별 노트 트랙 설정 오버라이드 로드
         window.api.noteTab
@@ -612,6 +785,9 @@ export function useAppBootstrap() {
       } catch (error) {
         console.error('초기 부트스트랩 실패', error);
       } finally {
+        if (counterResyncContext === initialCounterContext) {
+          counterResyncContext = null;
+        }
         // 초기 성공/실패와 무관하게 재동기화 게이트를 연다 — 초기 실패
         // 시에도 다음 obs:resync가 전체 상태를 복구할 수 있어야 함
         initialApplied = true;
@@ -737,12 +913,61 @@ export function useAppBootstrap() {
           resetSelectionForModeChange();
         }
       }),
-      window.api.keys.onCountersChanged((snapshot) => {
+      subscribe<{
+        sessionId: string;
+        revision: number;
+        counters: KeyCounters;
+      }>('keys:counters-state', (event) => {
+        adoptCounterSession(event.sessionId);
+        if (event.revision <= latestCounterRevision) return;
+        latestCounterRevision = event.revision;
+
+        const context = counterResyncContext;
+        if (context) {
+          if (
+            context.latestSnapshot?.sessionId !== event.sessionId ||
+            event.revision > context.latestSnapshot.revision
+          ) {
+            context.latestSnapshot = {
+              sessionId: event.sessionId,
+              revision: event.revision,
+            };
+          }
+          context.latestUpdates.forEach((update, composed) => {
+            if (
+              update.sessionId !== event.sessionId ||
+              update.revision <= event.revision
+            ) {
+              context.latestUpdates.delete(composed);
+            }
+          });
+        }
         clearCounterDelayTimers();
-        applyCounterCacheSnapshot(snapshot);
+        applyCounterCacheSnapshot(event.counters);
         if (getUndoRedoInProgress()) return;
         if (isOverlayWindow) {
-          applyCounterSnapshot(snapshot);
+          applyCounterSnapshot(event.counters);
+        }
+      }),
+      window.api.keys.onCounterChanged((event) => {
+        adoptCounterSession(event.sessionId);
+        if (event.revision <= latestCounterRevision) return;
+        latestCounterRevision = event.revision;
+
+        setCachedKeyCounter(event.mode, event.key, event.count);
+        const composed = composeCounterKey(event.mode, event.key);
+        const previous = counterResyncContext?.latestUpdates.get(composed);
+        if (!previous || event.revision > previous.revision) {
+          counterResyncContext?.latestUpdates.set(composed, event);
+        }
+        if (isOverlayWindow) {
+          scheduleCounterUpdate(
+            event.mode,
+            event.key,
+            event.count,
+            event.sessionId,
+            event.revision,
+          );
         }
       }),
       window.api.keys.customTabs.onChanged(
@@ -837,20 +1062,6 @@ export function useAppBootstrap() {
     ];
 
     handleEditorCoordinatorState(editorCoordinator.getState());
-
-    if (isOverlayWindow) {
-      unsubscribers.push(
-        window.api.keys.onCounterChanged(({ mode, key, count }) => {
-          scheduleCounterUpdate(mode, key, count);
-        }),
-      );
-    } else {
-      unsubscribers.push(
-        window.api.keys.onCounterChanged(({ mode, key, count }) => {
-          setCachedKeyCounter(mode, key, count);
-        }),
-      );
-    }
 
     const handleWindowFocus = () => {
       refreshCursorSettings().catch(() => {});

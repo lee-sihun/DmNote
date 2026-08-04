@@ -591,23 +591,57 @@ pub(crate) struct AdmittedCounterMutation {
 /// 카운터 write lock 내부 전용 이벤트 송신 경계
 /// 동기 Rust listener에서 AppState 카운터 API 재진입 금지
 pub(crate) trait KeyCounterEventEmitter {
-    fn emit_key_counters(&self, counters: &KeyCounters) -> Result<()>;
-    fn emit_key_counter(&self, mode: &str, key: &str, count: u32) -> Result<()>;
+    fn emit_key_counters(
+        &self,
+        counters: &KeyCounters,
+        session_id: &str,
+        revision: u64,
+    ) -> Result<()>;
+    fn emit_key_counter(
+        &self,
+        mode: &str,
+        key: &str,
+        count: u32,
+        session_id: &str,
+        revision: u64,
+    ) -> Result<()>;
 }
 
 impl KeyCounterEventEmitter for AppHandle {
-    fn emit_key_counters(&self, counters: &KeyCounters) -> Result<()> {
+    fn emit_key_counters(
+        &self,
+        counters: &KeyCounters,
+        session_id: &str,
+        revision: u64,
+    ) -> Result<()> {
         self.emit("keys:counters", counters)?;
+        self.emit(
+            "keys:counters-state",
+            &json!({
+                "sessionId": session_id,
+                "revision": revision,
+                "counters": counters,
+            }),
+        )?;
         Ok(())
     }
 
-    fn emit_key_counter(&self, mode: &str, key: &str, count: u32) -> Result<()> {
+    fn emit_key_counter(
+        &self,
+        mode: &str,
+        key: &str,
+        count: u32,
+        session_id: &str,
+        revision: u64,
+    ) -> Result<()> {
         self.emit(
             "keys:counter",
             &json!({
                 "mode": mode,
                 "key": key,
                 "count": count,
+                "sessionId": session_id,
+                "revision": revision,
             }),
         )?;
         Ok(())
@@ -869,6 +903,8 @@ pub struct AppState {
     keyboard_task: RwLock<Option<KeyboardDaemonTask>>,
     keyboard_task_generation: AtomicU64,
     key_counters: Arc<RwLock<KeyCounters>>,
+    key_counters_session_id: String,
+    key_counters_revision: AtomicU64,
     counter_history_barrier: Mutex<CounterHistoryBarrierState>,
     counter_history_ready: Condvar,
     runtime_publication: Mutex<RuntimePublicationState>,
@@ -945,6 +981,8 @@ impl AppState {
             keyboard_task: RwLock::new(None),
             keyboard_task_generation: AtomicU64::new(0),
             key_counters,
+            key_counters_session_id: uuid::Uuid::new_v4().simple().to_string(),
+            key_counters_revision: AtomicU64::new(0),
             counter_history_barrier: Mutex::new(CounterHistoryBarrierState::default()),
             counter_history_ready: Condvar::new(),
             runtime_publication: Mutex::new(RuntimePublicationState::default()),
@@ -1119,6 +1157,13 @@ impl AppState {
         let mut custom_js = state.custom_js.clone();
         let _ = custom_js.normalize();
         let (current_mode, active_keys) = bootstrap_keyboard_state(&self.keyboard);
+        let (key_counters, key_counters_revision) = {
+            let counters = self.key_counters.read();
+            (
+                counters.clone(),
+                self.key_counters_revision.load(Ordering::Relaxed),
+            )
+        };
         BootstrapPayload {
             defaults: DefaultsPayload {
                 settings: SettingsState::default(),
@@ -1162,7 +1207,9 @@ impl AppState {
                 locked: state.overlay_locked,
                 anchor: state.overlay_resize_anchor.as_str().to_string(),
             },
-            key_counters: self.key_counters.read().clone(),
+            key_counters,
+            key_counters_session_id: self.key_counters_session_id.clone(),
+            key_counters_revision,
             layer_groups: state.layer_groups.clone(),
             tab_note_overrides: state.tab_note_overrides.clone(),
             tab_css_overrides: state.tab_css_overrides.clone(),
@@ -3406,7 +3453,9 @@ impl AppState {
             key,
             count
         );
-        let emit_result = emitter.emit_key_counter(mode, key, count);
+        let revision = self.next_key_counters_revision();
+        let emit_result =
+            emitter.emit_key_counter(mode, key, count, &self.key_counters_session_id, revision);
         drop(counters);
         if let Err(err) = emit_result {
             error!("failed to emit keys:counter event: {err}");
@@ -3421,6 +3470,13 @@ impl AppState {
 
     pub fn snapshot_key_counters(&self) -> KeyCounters {
         self.key_counters.read().clone()
+    }
+
+    /// key_counters write lock 보유 중에만 호출 — 스냅샷과 이벤트 revision의 인과 순서 보장
+    fn next_key_counters_revision(&self) -> u64 {
+        self.key_counters_revision
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1)
     }
 
     pub(crate) fn begin_counter_history_barrier(&self) {
@@ -3480,7 +3536,10 @@ impl AppState {
                 publication.counters_generation.max(publication_generation);
         }
         if counters_restored || queued_count != 0 {
-            if let Err(error) = emitter.emit_key_counters(&counters) {
+            let revision = self.next_key_counters_revision();
+            if let Err(error) =
+                emitter.emit_key_counters(&counters, &self.key_counters_session_id, revision)
+            {
                 log::error!("failed to emit restored key counters: {error:#}");
             }
         }
@@ -3519,7 +3578,9 @@ impl AppState {
         let mut publication = self.runtime_publication.lock();
         if publication_generation > publication.counters_generation {
             *guard = persisted.clone();
-            let emit_result = emitter.emit_key_counters(&guard);
+            let revision = self.next_key_counters_revision();
+            let emit_result =
+                emitter.emit_key_counters(&guard, &self.key_counters_session_id, revision);
             publication.counters_generation = publication_generation;
             emit_result.map_err(|error| EditorCommitError::io(error.to_string()))?;
         }
@@ -3687,7 +3748,9 @@ impl AppState {
             return Ok(());
         }
         *counter_guard = counters.clone();
-        let emit_result = emitter.emit_key_counters(counter_guard);
+        let revision = self.next_key_counters_revision();
+        let emit_result =
+            emitter.emit_key_counters(counter_guard, &self.key_counters_session_id, revision);
         publication.counters_generation = generation;
         emit_result
     }

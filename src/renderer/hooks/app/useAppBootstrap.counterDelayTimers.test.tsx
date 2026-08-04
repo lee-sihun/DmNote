@@ -6,6 +6,8 @@ import {
   setKeyCounter,
 } from '@stores/signals/keyCounterSignals';
 import { useSettingsStore } from '@stores/useSettingsStore';
+import type { BootstrapPayload } from '@src/types/app';
+import type { KeyCounters } from '@src/types/key/keys';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -23,7 +25,11 @@ type MockKeyStoreListener = (
 const mocks = vi.hoisted(() => ({
   counterChangedListener: null as null | ((payload: unknown) => void),
   countersChangedListener: null as null | ((payload: unknown) => void),
+  counterStateListener: null as null | ((payload: unknown) => void),
+  counterSessionId: 'session-a',
+  counterRevision: 0,
   modeChangedListener: null as null | ((payload: unknown) => void),
+  resyncListener: null as null | (() => void),
   bootstrap: vi.fn(),
   keyState: {
     selectedKeyType: '4key',
@@ -61,16 +67,30 @@ vi.mock('@stores/data/useKeyStore', () => ({
   },
 }));
 vi.mock('@stores/data/useStatItemStore', () => ({
-  useStatItemStore: { getState: vi.fn(() => ({ positions: {} })) },
+  useStatItemStore: {
+    getState: vi.fn(() => ({ positions: {} })),
+    setState: vi.fn(),
+  },
 }));
 vi.mock('@stores/data/useGraphItemStore', () => ({
-  useGraphItemStore: { getState: vi.fn(() => ({ positions: {} })) },
+  useGraphItemStore: {
+    getState: vi.fn(() => ({ positions: {} })),
+    setState: vi.fn(),
+  },
 }));
 vi.mock('@stores/data/useKnobItemStore', () => ({
-  useKnobItemStore: { getState: vi.fn(() => ({ positions: {} })) },
+  useKnobItemStore: {
+    getState: vi.fn(() => ({ positions: {} })),
+    setState: vi.fn(),
+  },
 }));
 vi.mock('@stores/data/useLayerGroupStore', () => ({
-  useLayerGroupStore: { getState: vi.fn(() => ({ layerGroups: {} })) },
+  useLayerGroupStore: {
+    getState: vi.fn(() => ({
+      layerGroups: {},
+      setLayerGroups: vi.fn(),
+    })),
+  },
 }));
 vi.mock('@stores/useFontStore', () => ({
   useFontStore: { getState: vi.fn(() => ({})), setState: vi.fn() },
@@ -80,11 +100,21 @@ vi.mock('@api/pluginDisplayElements', () => ({
   getUndoRedoInProgress: vi.fn(() => false),
 }));
 vi.mock('@api/modules/obsApi', () => ({
-  obsApi: { onResync: vi.fn(() => vi.fn()) },
+  obsApi: {
+    onResync: vi.fn((listener: () => void) => {
+      mocks.resyncListener = listener;
+      return vi.fn();
+    }),
+  },
 }));
 vi.mock('@api/modules/shared', () => ({
   notifyLocaleChanged: vi.fn(),
-  subscribe: vi.fn(() => vi.fn()),
+  subscribe: vi.fn((event: string, listener: (payload: unknown) => void) => {
+    if (event === 'keys:counters-state') {
+      mocks.counterStateListener = listener;
+    }
+    return vi.fn();
+  }),
 }));
 vi.mock('@api/modules/appApi', () => ({
   acknowledgeLifecycleAfterEditorFlush: vi.fn(),
@@ -167,7 +197,7 @@ vi.mock('@src/renderer/defaults', () => ({
   getDefaultShortcuts: vi.fn(() => ({})),
 }));
 vi.mock('@utils/grid/cursorUtils', () => ({
-  initializeCursorSystem: vi.fn(),
+  initializeCursorSystem: vi.fn(() => Promise.resolve()),
   refreshCursorSettings: vi.fn(() => Promise.resolve()),
 }));
 
@@ -176,6 +206,67 @@ import { useAppBootstrap } from './useAppBootstrap';
 const Harness = () => {
   useAppBootstrap();
   return null;
+};
+
+const makeBootstrap = (
+  keyCounters: KeyCounters = {
+    '4key': { KeyK: 0 },
+    '8key': { KeyL: 0 },
+  },
+  keyDisplayDelayMs = 30000,
+  keyCountersRevision = mocks.counterRevision,
+  keyCountersSessionId = mocks.counterSessionId,
+) => {
+  const state = useSettingsStore.getState();
+  const settings = {
+    hardwareAcceleration: state.hardwareAcceleration,
+    alwaysOnTop: state.alwaysOnTop,
+    overlayLocked: state.overlayLocked,
+    angleMode: state.angleMode,
+    noteEffect: state.noteEffect,
+    noteSettings: { ...state.noteSettings, keyDisplayDelayMs },
+    fontSettings: state.fontSettings,
+    useCustomCSS: state.useCustomCSS,
+    customCSS: {
+      content: state.customCSSContent,
+      path: state.customCSSPath,
+    },
+    useCustomJS: state.useCustomJS,
+    customJS: { path: null, content: '', plugins: state.jsPlugins },
+    backgroundColor: state.backgroundColor,
+    language: state.language,
+    laboratoryEnabled: state.laboratoryEnabled,
+    developerModeEnabled: state.developerModeEnabled,
+    trayEnabled: state.trayEnabled,
+    autoUpdateEnabled: state.autoUpdateEnabled,
+    overlayResizeAnchor: state.overlayResizeAnchor,
+    keyCounterEnabled: state.keyCounterEnabled,
+    gridSettings: state.gridSettings,
+    shortcuts: state.shortcuts,
+    obsModeEnabled: state.obsModeEnabled,
+  };
+
+  return {
+    settings,
+    defaults: { settings, counterSettings: {} },
+    keys: {},
+    positions: {},
+    statPositions: {},
+    graphPositions: {},
+    knobPositions: {},
+    customTabs: [],
+    selectedKeyType: '4key',
+    currentMode: '4key',
+    activeKeys: [],
+    overlay: { visible: true, locked: false, anchor: 'top-left' },
+    keyCounters,
+    keyCountersSessionId,
+    keyCountersRevision,
+    layerGroups: {},
+    tabNoteOverrides: {},
+    tabCssOverrides: {},
+    editorRevision: 0,
+  } as unknown as BootstrapPayload;
 };
 
 const makeApiMock = () =>
@@ -198,6 +289,7 @@ const makeApiMock = () =>
       customTabs: { onChanged: vi.fn(() => vi.fn()) },
     },
     noteTab: {
+      getAll: vi.fn().mockResolvedValue({}),
       onChanged: vi.fn(() => vi.fn()),
       onChangedAll: vi.fn(() => vi.fn()),
     },
@@ -223,12 +315,44 @@ describe('카운터 지연 타이머', () => {
   let originalApi: Window['api'];
   let originalWindowType: typeof window.__dmn_window_type;
 
-  const emitCounter = (count: number, mode = '4key', key = 'KeyK') => {
+  const emitCounter = (
+    count: number,
+    mode = '4key',
+    key = 'KeyK',
+    revision = mocks.counterRevision + 1,
+    sessionId = mocks.counterSessionId,
+  ) => {
     act(() => {
+      if (mocks.counterSessionId !== sessionId) {
+        mocks.counterRevision = 0;
+      }
+      mocks.counterSessionId = sessionId;
+      mocks.counterRevision = Math.max(mocks.counterRevision, revision);
       mocks.counterChangedListener?.({
         mode,
         key,
         count,
+        sessionId,
+        revision,
+      });
+    });
+  };
+
+  const emitCounterSnapshot = (
+    counters: Record<string, Record<string, number>>,
+    revision = mocks.counterRevision + 1,
+    sessionId = mocks.counterSessionId,
+  ) => {
+    act(() => {
+      if (mocks.counterSessionId !== sessionId) {
+        mocks.counterRevision = 0;
+      }
+      mocks.counterSessionId = sessionId;
+      mocks.counterRevision = Math.max(mocks.counterRevision, revision);
+      mocks.counterStateListener?.({
+        sessionId,
+        revision,
+        counters,
       });
     });
   };
@@ -240,13 +364,16 @@ describe('카운터 지연 타이머', () => {
     window.__dmn_window_type = 'overlay';
     window.api = makeApiMock();
     mocks.bootstrap.mockReset();
-    mocks.bootstrap.mockReturnValue(new Promise(() => {}));
     mocks.counterChangedListener = null;
     mocks.countersChangedListener = null;
+    mocks.counterStateListener = null;
+    mocks.counterSessionId = 'session-a';
+    mocks.counterRevision = 0;
     mocks.modeChangedListener = null;
+    mocks.resyncListener = null;
     mocks.keyState = {
       selectedKeyType: '4key',
-      isBootstrapped: true,
+      isBootstrapped: false,
       customTabs: [],
     };
     mocks.keyStoreListeners.clear();
@@ -259,6 +386,7 @@ describe('카운터 지연 타이머', () => {
       },
       tabNoteOverrides: {},
     }));
+    mocks.bootstrap.mockResolvedValue(makeBootstrap());
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -267,6 +395,8 @@ describe('카운터 지연 타이머', () => {
     await act(async () => {
       root.render(<Harness />);
     });
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(1);
+    expect(mocks.keyState.isBootstrapped).toBe(true);
   });
 
   afterEach(() => {
@@ -399,15 +529,158 @@ describe('카운터 지연 타이머', () => {
     emitCounter(4);
     expect(vi.getTimerCount()).toBe(1);
 
-    act(() => {
-      mocks.countersChangedListener?.({ '4key': { KeyK: 0 } });
-    });
+    emitCounterSnapshot({ '4key': { KeyK: 0 } });
 
     expect(vi.getTimerCount()).toBe(0);
     expect(transitions).not.toContain(4);
     vi.advanceTimersByTime(30000);
     expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(0);
     unsubscribe();
+  });
+
+  it('OBS 재동기화 응답보다 최신인 대기 카운터를 보존한다', async () => {
+    const transitions: number[] = [];
+    const unsubscribe = getKeyCounterSignal('4key', 'KeyK').subscribe(
+      (value) => {
+        transitions.push(value);
+      },
+    );
+    transitions.length = 0;
+    mocks.bootstrap.mockResolvedValueOnce(
+      makeBootstrap({ '4key': { KeyK: 4 } }, 10000, 10),
+    );
+
+    await act(async () => {
+      mocks.resyncListener?.();
+      emitCounter(5, '4key', 'KeyK', 11);
+      await Promise.resolve();
+    });
+
+    expect(transitions).toEqual([5]);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(5);
+    expect(vi.getTimerCount()).toBe(0);
+    unsubscribe();
+  });
+
+  it('reset이 포함된 OBS 스냅샷이 요청 전 대기 타이머보다 최신이면 타이머를 폐기한다', async () => {
+    const transitions: number[] = [];
+    const unsubscribe = getKeyCounterSignal('4key', 'KeyK').subscribe(
+      (value) => {
+        transitions.push(value);
+      },
+    );
+    transitions.length = 0;
+
+    emitCounter(9, '4key', 'KeyK', 9);
+    expect(vi.getTimerCount()).toBe(1);
+    mocks.bootstrap.mockResolvedValueOnce(
+      makeBootstrap({ '4key': { KeyK: 0 } }, 10000, 10),
+    );
+
+    await act(async () => {
+      mocks.resyncListener?.();
+      await Promise.resolve();
+    });
+
+    expect(transitions).toEqual([]);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(30000);
+    expect(transitions).toEqual([]);
+    unsubscribe();
+  });
+
+  it('요청 후 먼저 도착한 delta보다 revision이 높은 OBS reset 스냅샷을 적용한다', async () => {
+    mocks.bootstrap.mockResolvedValueOnce(
+      makeBootstrap({ '4key': { KeyK: 0 } }, 10000, 12),
+    );
+
+    await act(async () => {
+      mocks.resyncListener?.();
+      emitCounter(5, '4key', 'KeyK', 11);
+      await Promise.resolve();
+    });
+
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('같은 키의 bootstrap 이전 타이머만 제거하고 이후 타이머는 보존한다', async () => {
+    const transitions: number[] = [];
+    const unsubscribe = getKeyCounterSignal('4key', 'KeyK').subscribe(
+      (value) => {
+        transitions.push(value);
+      },
+    );
+    transitions.length = 0;
+
+    emitCounter(9, '4key', 'KeyK', 9);
+    mocks.bootstrap.mockResolvedValueOnce(
+      makeBootstrap({ '4key': { KeyK: 0 } }, 30000, 10),
+    );
+
+    await act(async () => {
+      mocks.resyncListener?.();
+      emitCounter(1, '4key', 'KeyK', 11);
+      await Promise.resolve();
+    });
+
+    expect(transitions).toEqual([]);
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(30000);
+    expect(transitions).toEqual([1]);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(1);
+    unsubscribe();
+  });
+
+  it('OBS bootstrap보다 최신인 전체 카운터 이벤트를 보존한다', async () => {
+    mocks.bootstrap.mockResolvedValueOnce(
+      makeBootstrap({ '4key': { KeyK: 5 } }, 30000, 10),
+    );
+
+    await act(async () => {
+      mocks.resyncListener?.();
+      emitCounterSnapshot({ '4key': { KeyK: 0 } }, 11);
+      await Promise.resolve();
+    });
+
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(0);
+  });
+
+  it('OBS bootstrap이 먼저 도착한 전체 카운터 이벤트보다 최신이면 bootstrap을 적용한다', async () => {
+    mocks.bootstrap.mockResolvedValueOnce(
+      makeBootstrap({ '4key': { KeyK: 2 } }, 30000, 12),
+    );
+
+    await act(async () => {
+      mocks.resyncListener?.();
+      emitCounterSnapshot({ '4key': { KeyK: 0 } }, 11);
+      await Promise.resolve();
+    });
+
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(2);
+  });
+
+  it('backend 재시작으로 카운터 세션이 바뀌면 낮아진 revision을 새 stream으로 수용한다', async () => {
+    emitCounter(9, '4key', 'KeyK', 9, 'session-a');
+    expect(vi.getTimerCount()).toBe(1);
+    mocks.bootstrap.mockResolvedValueOnce(
+      makeBootstrap({ '4key': { KeyK: 0 } }, 10000, 0, 'session-b'),
+    );
+
+    await act(async () => {
+      mocks.resyncListener?.();
+      await Promise.resolve();
+    });
+
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+
+    emitCounter(1, '4key', 'KeyK', 1, 'session-b');
+    vi.advanceTimersByTime(9999);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(getKeyCounterSignal('4key', 'KeyK').value).toBe(1);
   });
 
   it('unmount 시 모든 카운터 타이머를 취소한다', () => {

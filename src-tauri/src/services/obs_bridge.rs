@@ -374,6 +374,7 @@ impl ObsBridgeService {
             "keys:changed",
             "keys:counters",
             "keys:counter",
+            "keys:counters-state",
             "keys:mode-changed",
             "positions:changed",
             "statPositions:changed",
