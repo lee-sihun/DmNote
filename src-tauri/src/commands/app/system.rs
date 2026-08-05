@@ -1,10 +1,8 @@
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
 use crate::errors::CmdResult;
-use crate::state::AppState;
-
-const TRAY_ICON_ID: &str = "background-tray";
+use crate::state::{AppState, PANEL_LABEL};
 
 #[tauri::command]
 pub fn window_minimize(app: AppHandle) -> CmdResult<()> {
@@ -31,31 +29,41 @@ pub fn app_open_external(_app: AppHandle, url: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
-pub fn app_restart(app: AppHandle) -> CmdResult<()> {
-    app.request_restart();
+pub fn app_restart(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    state.request_frontend_restart(app);
     Ok(())
 }
 
 #[tauri::command]
 pub fn window_show_main(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.unminimize();
-        main.show()?;
-        let _ = main.set_focus();
-    }
-
-    if app.tray_by_id(TRAY_ICON_ID).is_some() {
-        let _ = app.remove_tray_by_id(TRAY_ICON_ID);
-    }
-
-    state.set_main_window_hidden(false)?;
-
+    state.show_main_window(&app)?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn app_quit(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
-    state.request_shutdown(app);
+    state.request_frontend_shutdown(app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn app_quit_after_editor_flush(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    handshake_id: String,
+) -> CmdResult<()> {
+    state.acknowledge_frontend_lifecycle(app, &handshake_id, window.label());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn app_cancel_editor_flush(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    handshake_id: String,
+) -> CmdResult<()> {
+    state.cancel_frontend_lifecycle(app, &handshake_id);
     Ok(())
 }
 
@@ -68,6 +76,10 @@ pub fn window_open_devtools_all(app: AppHandle) -> CmdResult<()> {
     if let Some(overlay) = app.get_webview_window("overlay") {
         overlay.open_devtools();
         let _ = overlay.show();
+    }
+    if let Some(panel) = app.get_webview_window(PANEL_LABEL) {
+        panel.open_devtools();
+        let _ = panel.show();
     }
     Ok(())
 }

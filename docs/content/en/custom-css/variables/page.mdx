@@ -11,32 +11,39 @@ This page lists all CSS variables available for styling in DM Note.
 
 CSS variables applied to key elements. Use with `[data-state="inactive"]` or `[data-state="active"]` selectors.
 
-| Variable           | Description              | Type       | Example                  |
-| ------------------ | ------------------------ | ---------- | ------------------------ |
-| `--key-radius`     | Corner roundness         | `<length>` | `8px`, `50%`             |
-| `--key-bg`         | Background color         | `<color>`  | `#ff2b80`                |
-| `--key-border`     | Border style             | `<border>` | `2px solid #fff`, `none` |
-| `--key-text-color` | Text color               | `<color>`  | `#ffffff`                |
-| `--key-offset-x`   | X offset in active state | `<length>` | `0px`, `2px`             |
-| `--key-offset-y`   | Y offset in active state | `<length>` | `4px`                    |
+| Variable              | Description                            | Type       | Example                              |
+| --------------------- | -------------------------------------- | ---------- | ------------------------------------ |
+| `--key-radius`        | Corner roundness                       | `<length>` | `8px`, `50%`                         |
+| `--key-bg`            | Background color and saved-image reset | `<color>`  | `#ff2b80`                            |
+| `--key-bg-image`      | Background image                       | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--key-border`        | Border and saved border-ring reset     | `<border>` | `2px solid #fff`, `none`             |
+| `--key-border-image`  | Replacement image for a saved ring     | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--key-padding`       | Inner padding                          | `<length>` | `0px`, `3px`                         |
+| `--key-text-color`    | Text color                             | `<color>`  | `#ffffff`                            |
+| `--key-shadow`        | Idle and shared fallback shadow        | `<shadow>` | `0 4px 10px rgba(0,0,0,.28)`, `none` |
+| `--key-active-shadow` | Active shadow                          | `<shadow>` | `0 3px 8px rgba(0,0,0,.32)`, `none`  |
+| `--key-offset-x`      | X offset in active state               | `<length>` | `0px`, `2px`                         |
+| `--key-offset-y`      | Y offset in active state               | `<length>` | `4px`                                |
 
 <Callout type="info">
-  `--key-bg` is applied as `background-color`. To use gradients, specify
-  `background` or `background-image` directly and set `--key-bg: transparent;`
-  if needed.
+  With **Inline Styles Priority** disabled, property-panel colors, gradients,
+  borders, typography, and shadows are low-priority defaults only. Setting
+  `--key-bg` automatically removes a saved background gradient. Setting
+  `--key-border` removes the saved gradient border ring and its spacing. Use
+  `--key-bg-image` or the standard `background` property for a custom gradient.
 </Callout>
 
 ### Usage Example
 
 ```css
-[data-state="inactive"] {
+[data-state='inactive'] {
   --key-radius: 8px;
   --key-bg: #2a2a2a;
   --key-border: 2px solid #444;
   --key-text-color: #888;
 }
 
-[data-state="active"] {
+[data-state='active'] {
   --key-radius: 8px;
   --key-bg: #ff2b80;
   --key-border: 2px solid #ff2b80;
@@ -50,22 +57,36 @@ CSS variables applied to key elements. Use with `[data-state="inactive"]` or `[d
 
 CSS variables applied to counter elements. Use with `.counter[data-counter-state="..."]` selectors.
 
-| Variable                 | Description            | Type       | Example                  |
-| ------------------------ | ---------------------- | ---------- | ------------------------ |
-| `--counter-color`        | Counter text color     | `<color>`  | `#ffffff`                |
-| `--counter-stroke-color` | Text outline color     | `<color>`  | `#000000`, `transparent` |
-| `--counter-stroke-width` | Text outline thickness | `<length>` | `1px`, `2px`             |
+| Variable                    | Description                     | Type       | Example                              |
+| --------------------------- | ------------------------------- | ---------- | ------------------------------------ |
+| `--counter-color`           | Text color and saved-fill reset | `<color>`  | `#ffffff`                            |
+| `--counter-fill-image`      | Text fill image                 | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--counter-fill-clip`       | Fill clipping area              | `<box>`    | `text`, `border-box`                 |
+| `--counter-text-fill-color` | WebKit text fill color          | `<color>`  | `transparent`, `currentcolor`        |
+| `--counter-stroke-color`    | Text outline color              | `<color>`  | `#000000`, `transparent`             |
+| `--counter-stroke-width`    | Text outline thickness          | `<length>` | `1px`, `2px`                         |
+
+Setting only `--counter-color` also disables a counter fill gradient saved in
+the app. To create a CSS fill gradient, set all three fill variables:
+
+```css
+.counter {
+  --counter-fill-image: linear-gradient(90deg, #f0f, #0ff);
+  --counter-fill-clip: text;
+  --counter-text-fill-color: transparent;
+}
+```
 
 ### Usage Example
 
 ```css
-.counter[data-counter-state="inactive"] {
+.counter[data-counter-state='inactive'] {
   --counter-color: #666;
   --counter-stroke-color: transparent;
   --counter-stroke-width: 0px;
 }
 
-.counter[data-counter-state="active"] {
+.counter[data-counter-state='active'] {
   --counter-color: #ff2b80;
   --counter-stroke-color: #fff;
   --counter-stroke-width: 1px;
@@ -77,12 +98,14 @@ CSS variables applied to counter elements. Use with `.counter[data-counter-state
 CSS variables available for graph elements.
 Disable **Inline Styles Priority** on the graph to control these via CSS.
 
-| Variable         | Description            | Type       | Example                  |
-| ---------------- | ---------------------- | ---------- | ------------------------ |
-| `--graph-bg`     | Graph background       | `<color>`  | `rgba(17, 17, 20, 0.85)` |
-| `--graph-border` | Graph border           | `<border>` | `1px solid #7dd3fc`      |
-| `--graph-radius` | Graph corner radius    | `<length>` | `10px`                   |
-| `--graph-color`  | Line/bar drawing color | `<color>`  | `#86efac`                |
+| Variable               | Description                        | Type       | Example                              |
+| ---------------------- | ---------------------------------- | ---------- | ------------------------------------ |
+| `--graph-bg`           | Graph background                   | `<color>`  | `rgba(17, 17, 20, 0.85)`             |
+| `--graph-border`       | Border and saved border-ring reset | `<border>` | `1px solid #7dd3fc`, `none`          |
+| `--graph-border-image` | Replacement image for a saved ring | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--graph-padding`      | Graph inner padding                | `<length>` | `0px`, `3px`                         |
+| `--graph-radius`       | Graph corner radius                | `<length>` | `10px`                               |
+| `--graph-color`        | Line/bar drawing color             | `<color>`  | `#86efac`                            |
 
 ### Usage Example
 
@@ -92,6 +115,31 @@ Disable **Inline Styles Priority** on the graph to control these via CSS.
   --graph-border: 1px solid rgba(125, 211, 252, 0.55);
   --graph-radius: 12px;
   --graph-color: #7dd3fc;
+}
+```
+
+## Knob Style Variables
+
+Disable **Inline Styles Priority** on a knob to use these variables. The custom
+class is on the position wrapper, so target `.knob-class [data-knob-element]`
+when applying standard properties directly to the visible surface.
+
+| Variable               | Description                        | Type       | Example                              |
+| ---------------------- | ---------------------------------- | ---------- | ------------------------------------ |
+| `--knob-bg`            | Knob background                    | `<color>`  | `#222`                               |
+| `--knob-border`        | Border and saved border-ring reset | `<border>` | `2px solid #fff`, `none`             |
+| `--knob-border-image`  | Replacement image for a saved ring | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--knob-padding`       | Knob inner padding                 | `<length>` | `0px`, `3px`                         |
+| `--knob-radius`        | Corner radius                      | `<length>` | `50%`, `8px`                         |
+| `--knob-shadow`        | Knob shadow                        | `<shadow>` | `0 4px 10px rgba(0,0,0,.3)`          |
+| `--knob-active-shadow` | Turning-state shadow               | `<shadow>` | `0 3px 8px rgba(0,0,0,.32)`          |
+| `--knob-indicator`     | Center rotation indicator color    | `<color>`  | `#fff`                               |
+
+```css
+.volume-knob {
+  --knob-bg: #17171b;
+  --knob-border: none;
+  --knob-indicator: #ff2b80;
 }
 ```
 
@@ -117,21 +165,33 @@ Disable **Inline Styles Priority** on the graph to control these via CSS.
 
 ### Graph Selectors
 
-| Selector                  | Description                                      |
-| ------------------------- | ------------------------------------------------ |
-| `.graphClassName`         | Style a specific graph container                 |
-| `.graphClassName svg`     | Style line graph SVG (stroke/fill)               |
-| `.graphClassName > div`   | Style the inner plot area (line/bar shared)      |
-| `.graphClassName > div > div` | Style individual bars in bar mode            |
+| Selector                      | Description                                 |
+| ----------------------------- | ------------------------------------------- |
+| `.graphClassName`             | Style a specific graph container            |
+| `.graphClassName svg`         | Style line graph SVG (stroke/fill)          |
+| `.graphClassName > div`       | Style the inner plot area (line/bar shared) |
+| `.graphClassName > div > div` | Style individual bars in bar mode           |
+
+### Knob Selectors
+
+| Selector                         | Description                     |
+| -------------------------------- | ------------------------------- |
+| `[data-knob-element]`            | Every visible knob surface      |
+| `[data-knob-state="inactive"]`   | Idle knob surfaces              |
+| `[data-knob-state="active"]`     | Active knob surfaces            |
+| `.knobClass [data-knob-element]` | A specific class's knob surface |
+| `[data-knob-indicator]`          | Center rotation indicator       |
 
 ## Standard CSS Properties
 
-In addition to CSS variables, you can freely use the following standard CSS properties:
+With **Inline Styles Priority** disabled, you can directly use standard visual
+properties such as the following. Element positioning remains app-managed; use
+`--key-offset-x`/`--key-offset-y` to move keys, graphs, and knobs.
 
 ### Commonly Used Properties
 
 ```css
-[data-state="active"] {
+[data-state='active'] {
   /* Shadow effect */
   box-shadow: 0px 0px 8px #ff2b80;
 
@@ -144,10 +204,7 @@ In addition to CSS variables, you can freely use the following standard CSS prop
   /* Font style */
   font-size: 24px;
   font-weight: 700;
-  font-family: "Roboto", sans-serif;
-
-  /* Transform */
-  transform: scale(1.05);
+  font-family: 'Roboto', sans-serif;
 
   /* Filter */
   filter: brightness(1.2);
@@ -158,18 +215,22 @@ In addition to CSS variables, you can freely use the following standard CSS prop
 
 ### Using !important
 
-Use `!important` if some styles are not being applied:
+Normal declarations lose to inline values only when **Inline Styles Priority**
+is enabled. In that mode, override the rendered CSS property itself with
+`!important`; adding it to a fallback custom property cannot beat an inline
+property declaration:
 
 ```css
-[data-state="active"] {
-  --key-bg: #ff2b80 !important;
+[data-state='active'] {
+  background: #ff2b80 !important;
   box-shadow: 0px 0px 8px #ff2b80 !important;
 }
 ```
 
 ### Browser Compatibility
 
-DM Note runs on Chromium-based WebView2, supporting most modern CSS features:
+DM Note uses WebView2 on Windows and WKWebView on macOS. You can use modern CSS
+features supported by the WebView on the current operating system:
 
 - CSS Variables (Custom Properties) ✅
 - CSS Grid / Flexbox ✅
@@ -190,17 +251,17 @@ DM Note runs on Chromium-based WebView2, supporting most modern CSS features:
 
 ```css
 /* Priority: 1 (lowest) */
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: red;
 }
 
 /* Priority: 2 */
-.blue[data-state="active"] {
+.blue[data-state='active'] {
   --key-bg: blue;
 }
 
 /* Priority: 3 (highest) */
-.blue.special[data-state="active"] {
+.blue.special[data-state='active'] {
   --key-bg: purple;
 }
 ```

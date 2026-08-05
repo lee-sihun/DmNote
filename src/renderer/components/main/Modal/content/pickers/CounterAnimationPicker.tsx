@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type {
   KeyCounterAnimationSettings,
   KeyCounterSettings,
@@ -13,43 +13,26 @@ import {
   normalizeCounterAnimationLibrary,
 } from '@src/types/key/counterAnimation';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
-import CommonListPickerPopup from './CommonListPickerPopup';
+import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
+import CommonListPickerPage from './CommonListPickerPage';
+import {
+  pickerRowClass,
+  pickerMoreButtonClass,
+  pickerMoreButtonVisibleClass,
+  pickerMoreButtonHiddenClass,
+} from './pickerRowClass';
 import CounterAnimationEditorModal from '../editors/CounterAnimationEditorModal';
-import PlusIcon from '@assets/svgs/plus2.svg';
+import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
 
 interface CounterAnimationPickerProps {
   open: boolean;
-  referenceRef: React.RefObject<HTMLElement>;
-  panelElement?: HTMLElement | null;
   animation: KeyCounterAnimationSettings;
   counterSettings?: KeyCounterSettings;
-  keyVisual?: {
-    width?: number;
-    height?: number;
-    backgroundColor?: string;
-    borderColor?: string;
-    borderWidth?: number;
-    borderRadius?: number;
-    fontColor?: string;
-    fontSize?: number;
-    fontWeight?: number;
-    fontFamily?: string;
-    fontItalic?: boolean;
-    fontUnderline?: boolean;
-    fontStrikethrough?: boolean;
-    displayText?: string;
-    displayName?: string;
-    className?: string;
-    activeBackgroundColor?: string;
-    activeBorderColor?: string;
-    activeFontColor?: string;
-    useInlineStyles?: boolean;
-    isStat?: boolean;
-  };
+  keyVisual?: CounterAnimationKeyVisual;
   onAnimationChange: (next: KeyCounterAnimationSettings) => void;
-  onClose: () => void;
   t: (key: string) => string;
-  interactiveRefs?: Array<React.RefObject<HTMLElement>>;
+  pageTitle: string;
+  onBack: () => void;
 }
 
 type FilterType = 'all' | 'builtin' | 'user';
@@ -76,60 +59,76 @@ const EMPTY_LIBRARY: CounterAnimationListResponse = {
   userPresets: [],
 };
 
+let counterAnimationLibraryCache: CounterAnimationListResponse | null = null;
+
 const CounterAnimationPicker = ({
   open,
-  referenceRef,
-  panelElement = null,
   animation,
   counterSettings,
   keyVisual,
   onAnimationChange,
-  onClose,
   t,
-  interactiveRefs = [],
+  pageTitle,
+  onBack,
 }: CounterAnimationPickerProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
-  const [library, setLibrary] =
-    useState<CounterAnimationListResponse>(EMPTY_LIBRARY);
+  const [library, setLibrary] = useState<CounterAnimationListResponse>(
+    () => counterAnimationLibraryCache ?? EMPTY_LIBRARY,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [editorState, setEditorState] = useState<EditorState | null>(null);
-  const [actionMenuPresetId, setActionMenuPresetId] = useState<string | null>(
-    null,
-  );
-  const [actionMenuPosition, setActionMenuPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+  const loadRequestRef = useRef(0);
+  const isOpenRef = useRef(open);
+  const menu = usePickerItemMenu<string>();
 
   const loadLibrary = async () => {
-    setIsLoading(true);
+    const requestId = ++loadRequestRef.current;
+    const cachedLibrary = counterAnimationLibraryCache;
+    if (cachedLibrary) {
+      setLibrary(cachedLibrary);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
     setErrorText('');
     try {
       const response = await window.api.counterAnimation.list();
-      setLibrary(normalizeCounterAnimationLibrary(response));
+      const nextLibrary = normalizeCounterAnimationLibrary(response);
+      if (requestId !== loadRequestRef.current) return;
+      counterAnimationLibraryCache = nextLibrary;
+      if (!isOpenRef.current) return;
+      setLibrary(nextLibrary);
     } catch (error) {
+      if (requestId !== loadRequestRef.current || !isOpenRef.current) return;
       console.error('Failed to load counter animation presets', error);
       setErrorText(
         t('counterSetting.loadAnimationFailed') ||
           '애니메이션 목록을 불러오지 못했습니다.',
       );
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current && isOpenRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
+    isOpenRef.current = open;
     if (!open) return;
     void loadLibrary();
+
+    return () => {
+      isOpenRef.current = false;
+      loadRequestRef.current += 1;
+    };
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open) return;
-    setActionMenuPresetId(null);
-    setActionMenuPosition(null);
-  }, [open]);
+    menu.close();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allPresets = [...library.builtinPresets, ...library.userPresets];
 
@@ -172,7 +171,7 @@ const CounterAnimationPicker = ({
   })();
 
   const handlePresetSelect = (preset: CounterAnimationPreset) => {
-    setActionMenuPresetId(null);
+    menu.close();
     onAnimationChange(applyPresetToAnimation(animation, preset));
   };
 
@@ -206,8 +205,7 @@ const CounterAnimationPicker = ({
   };
 
   const openEditModal = (preset: CounterAnimationPreset) => {
-    setActionMenuPresetId(null);
-    setActionMenuPosition(null);
+    menu.close();
     setEditorState({ mode: 'edit', preset });
   };
 
@@ -240,22 +238,12 @@ const CounterAnimationPicker = ({
     }
   };
 
-  const handlePickerClose = () => {
-    if (actionMenuPresetId !== null) return;
-    onClose();
-  };
-
   return (
     <>
-      <CommonListPickerPopup<CounterAnimationPreset>
+      <CommonListPickerPage<CounterAnimationPreset>
         open={open}
-        referenceRef={referenceRef}
-        panelElement={panelElement}
-        interactiveRefs={interactiveRefs}
-        onClose={handlePickerClose}
-        widthClass="w-[156px]"
-        estimatedWidth={164}
-        estimatedHeight={276}
+        pageTitle={pageTitle}
+        onBack={onBack}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         searchPlaceholder={
@@ -265,7 +253,6 @@ const CounterAnimationPicker = ({
         filterValue={filterType}
         onFilterChange={(value) => setFilterType(value as FilterType)}
         items={filteredItems}
-        getItemKey={(item) => item.id}
         renderItem={(preset) => {
           const isSelected = selectedPresetId === preset.id;
           const isUserPreset = preset.source === 'user';
@@ -281,15 +268,16 @@ const CounterAnimationPicker = ({
               tabIndex={0}
               onClick={() => handlePresetSelect(preset)}
               onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
                   handlePresetSelect(preset);
                 }
               }}
-              className={`w-full h-[24px] px-[8px] rounded-[7px] text-style-4 transition-colors flex items-center gap-[4px] cursor-pointer group ${
+              className={`${pickerRowClass} cursor-pointer ${
                 isSelected
-                  ? 'bg-[#2E2D33] text-[#FFFFFF]'
-                  : 'text-[#DBDEE8] hover:bg-[#26262C]'
+                  ? 'bg-surface-active text-fg'
+                  : 'text-fg hover:bg-surface-hover'
               }`}
               title={displayName}
             >
@@ -300,32 +288,22 @@ const CounterAnimationPicker = ({
               {isUserPreset ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] rounded-[5px] transition-all flex items-center justify-center shrink-0 ${
-                    isSelected || actionMenuPresetId === preset.id
-                      ? 'opacity-100'
-                      : 'opacity-0 group-hover:opacity-100'
+                  className={`${pickerMoreButtonClass} ${
+                    isSelected || menu.menuKey === preset.id
+                      ? pickerMoreButtonVisibleClass
+                      : pickerMoreButtonHiddenClass
                   } ${
                     isSelected
-                      ? 'text-[#D9DCE6] hover:text-[#FFFFFF] hover:bg-[#3A3943]'
-                      : 'text-[#8A8D99] hover:text-[#DBDEE8] hover:bg-[#2A2A30]'
+                      ? 'text-fg hover:text-fg'
+                      : 'text-fg-muted hover:text-fg'
                   }`}
                   title={moreMenuLabel}
                   aria-label={moreMenuLabel}
-                  onClick={(event) => {
-                    event.preventDefault();
+                  onPointerDown={(event) => {
                     event.stopPropagation();
-                    if (actionMenuPresetId === preset.id) {
-                      setActionMenuPresetId(null);
-                      setActionMenuPosition(null);
-                      return;
-                    }
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setActionMenuPosition({
-                      x: rect.right + 4,
-                      y: rect.top - 2,
-                    });
-                    setActionMenuPresetId(preset.id);
+                    menu.capturePressState(preset.id);
                   }}
+                  onClick={(event) => menu.openFromButton(event, preset.id)}
                 >
                   <MoreVerticalIcon />
                 </button>
@@ -340,31 +318,26 @@ const CounterAnimationPicker = ({
         loadingText={t('propertiesPanel.loading') || '로딩...'}
         errorText={errorText}
         onAdd={openCreateModal}
-        addButtonContent={<PlusIcon />}
+        addLabel={t('counterSetting.addAnimation') || '애니메이션 추가'}
       />
 
-      {actionMenuPresetId !== null && (
+      {menu.menuKey !== null && (
         <ListPopup
           open
-          position={actionMenuPosition ?? undefined}
-          onClose={() => {
-            setActionMenuPresetId(null);
-            setActionMenuPosition(null);
-          }}
-          textAlign="center"
+          ariaLabel={t('common.more')}
+          position={menu.menuPosition ?? undefined}
+          onClose={menu.close}
           items={menuItems}
           onSelect={(id) => {
-            const preset = allPresets.find((p) => p.id === actionMenuPresetId);
+            const preset = allPresets.find((p) => p.id === menu.menuKey);
             if (!preset) return;
             if (id === 'edit') {
               openEditModal(preset);
             } else if (id === 'delete') {
               void handleDeletePreset(preset);
             }
-            setActionMenuPresetId(null);
-            setActionMenuPosition(null);
+            menu.close();
           }}
-          className="z-[60]"
           offsetX={0}
           offsetY={0}
         />

@@ -1,10 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
@@ -19,6 +18,14 @@ import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { ElementBounds } from '@utils/grid/smartGuides';
+import {
+  beginPluginInstancesEditSession,
+  endPluginInstancesEditSession,
+} from '@plugins/runtime/displayElement/instancesCommitQueue';
+import {
+  beginMixedGestureTransaction,
+  cancelUncommittedMixedGestureTransaction,
+} from '@plugins/runtime/displayElement/gestureTransaction';
 
 interface ResizeHandle {
   id: string;
@@ -49,7 +56,7 @@ interface GroupResizeResult {
 interface UseGridResizeOptions {
   selectedElements: SelectedElement[];
   selectedKeyType: string;
-  onResizeEnd?: () => void;
+  onResizeEnd?: (gestureId?: string) => void;
   getOtherElements?: (excludeId: string) => ElementBounds[];
 }
 
@@ -65,6 +72,8 @@ export function useGridResize({
   getOtherElements,
 }: UseGridResizeOptions) {
   const resizeStartRef = useRef(false);
+  const pluginResizeTokensRef = useRef(new Map<string, string>());
+  const resizeGestureIdRef = useRef<string | null>(null);
   // 드래그 중 프리뷰 bounds (드래그 중일 때만 값이 있음)
   const [previewBounds, setPreviewBounds] = useState<ResizeBounds | null>(null);
   // 최종 적용할 bounds를 저장 (드래그 종료 시 사용)
@@ -81,30 +90,66 @@ export function useGridResize({
     elementBounds: GroupElementBounds[];
   } | null>(null);
 
-  // 리사이즈 시작 시 히스토리 저장
+  const beginPluginResizeSessions = (gestureId: string) => {
+    const pluginElementIds = new Set(
+      selectedElements
+        .filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
+    usePluginDisplayElementStore
+      .getState()
+      .elements.filter((element) => pluginElementIds.has(element.fullId))
+      .forEach((element) => {
+        if (!pluginResizeTokensRef.current.has(element.pluginId)) {
+          pluginResizeTokensRef.current.set(
+            element.pluginId,
+            beginPluginInstancesEditSession(element.pluginId, gestureId),
+          );
+        }
+      });
+  };
+
+  const endPluginResizeSessions = () => {
+    const tokens = pluginResizeTokensRef.current;
+    pluginResizeTokensRef.current = new Map();
+    tokens.forEach((token, pluginId) => {
+      endPluginInstancesEditSession(pluginId, token);
+    });
+    // 완료 경로가 혼합 커밋을 타지 않은 경우의 staged 잔존 정산
+    const gestureId = resizeGestureIdRef.current;
+    if (gestureId) cancelUncommittedMixedGestureTransaction(gestureId);
+    resizeGestureIdRef.current = null;
+  };
+
+  useEffect(
+    () => () => {
+      const gestureId = resizeGestureIdRef.current;
+      endPluginResizeSessions();
+      if (gestureId) cancelUncommittedMixedGestureTransaction(gestureId);
+    },
+    [],
+  );
+
   const handleResizeStart = (_handle?: ResizeHandle) => {
     if (resizeStartRef.current) return;
     resizeStartRef.current = true;
+    const gestureId = crypto.randomUUID();
+    resizeGestureIdRef.current = gestureId;
+    beginPluginResizeSessions(gestureId);
+    if (
+      pluginResizeTokensRef.current.size > 0 &&
+      selectedElements.some((element) => element.type !== 'plugin')
+    ) {
+      beginMixedGestureTransaction(gestureId, [
+        ...pluginResizeTokensRef.current.keys(),
+      ]);
+    }
 
     // 기존 스마트 가이드 클리어
     useSmartGuidesStore.getState().clearGuides();
 
     // 리사이즈 시작 시 애니메이션 비활성화
     useGridSelectionStore.getState().setDraggingOrResizing(true);
-
-    const currentPositions = useKeyStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const currentStatPositions = useStatItemStore.getState().positions;
-    const currentGraphPositions = useGraphItemStore.getState().positions;
-    const { keyMappings } = useKeyStore.getState();
-    useHistoryStore.getState().pushState({
-      keyMappings,
-      positions: currentPositions,
-      statPositions: currentStatPositions,
-      graphPositions: currentGraphPositions,
-      pluginElements: currentPluginElements,
-    });
   };
 
   // 공용 리사이즈 프리뷰 처리 (스마트 가이드 포함)
@@ -805,8 +850,8 @@ export function useGridResize({
       const element = selectedElements[0];
 
       if (element.type === 'key' && element.index !== undefined) {
-        // 키 요소에 최종 크기 적용
-        const positions = useKeyStore.getState().positions;
+        // 키 요소에 최종 크기 적용 - 커밋 base는 canonical
+        const positions = useKeyStore.getState().canonicalPositions;
         const setPositions = useKeyStore.getState().setPositions;
         const current = positions[selectedKeyType] || [];
         const nextPositions: KeyPositions = {
@@ -895,13 +940,6 @@ export function useGridResize({
         window.api.knobItems.updatePositions(nextPositions).catch((error) => {
           console.error('Failed to update knob positions after resize', error);
         });
-        try {
-          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-            positions: nextPositions,
-          });
-        } catch {
-          // 무시
-        }
       } else if (element.type === 'plugin') {
         // 플러그인 요소에 최종 크기 적용
         const pluginStore = usePluginDisplayElementStore.getState();
@@ -919,7 +957,11 @@ export function useGridResize({
     setPreviewBounds(null);
     finalBoundsRef.current = null;
 
-    onResizeEnd?.();
+    try {
+      onResizeEnd?.(resizeGestureIdRef.current ?? undefined);
+    } finally {
+      endPluginResizeSessions();
+    }
   };
 
   // 그룹 리사이즈 핸들러 - 프리뷰 모드
@@ -944,7 +986,8 @@ export function useGridResize({
 
     const finalData = finalGroupBoundsRef.current;
     if (finalData && finalData.elementBounds.length > 0) {
-      const positions = useKeyStore.getState().positions;
+      // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
+      const positions = useKeyStore.getState().canonicalPositions;
       const setPositions = useKeyStore.getState().setPositions;
       const current = positions[selectedKeyType] || [];
       const pluginStore = usePluginDisplayElementStore.getState();
@@ -957,7 +1000,6 @@ export function useGridResize({
       const knobStore = useKnobItemStore.getState();
       const knobPositions = knobStore.positions;
       const currentKnobs = knobPositions[selectedKeyType] || [];
-
       // 프리뷰 값을 그대로 사용 (스냅은 이미 드래그 중에 적용됨)
       // 추가 스냅 적용 시 프리뷰와 최종 위치가 달라지는 문제 발생
 
@@ -986,14 +1028,6 @@ export function useGridResize({
           }),
         };
         setPositions(nextPositions);
-
-        // 백엔드에 저장
-        window.api.keys.updatePositions(nextPositions).catch((error) => {
-          console.error(
-            'Failed to update key positions after group resize',
-            error,
-          );
-        });
       }
 
       // 통계 요소들 업데이트
@@ -1022,14 +1056,6 @@ export function useGridResize({
         };
 
         statStore.setPositions(nextStatPositions);
-        window.api.statItems
-          .updatePositions(nextStatPositions)
-          .catch((error) => {
-            console.error(
-              'Failed to update stat positions after group resize',
-              error,
-            );
-          });
       }
 
       // 그래프 요소들 업데이트
@@ -1059,14 +1085,6 @@ export function useGridResize({
         };
 
         graphStore.setPositions(nextGraphPositions);
-        window.api.graphItems
-          .updatePositions(nextGraphPositions)
-          .catch((error) => {
-            console.error(
-              'Failed to update graph positions after group resize',
-              error,
-            );
-          });
       }
 
       // 노브 요소들 업데이트
@@ -1095,21 +1113,6 @@ export function useGridResize({
         };
 
         knobStore.setPositions(nextKnobPositions);
-        window.api.knobItems
-          .updatePositions(nextKnobPositions)
-          .catch((error) => {
-            console.error(
-              'Failed to update knob positions after group resize',
-              error,
-            );
-          });
-        try {
-          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-            positions: nextKnobPositions,
-          });
-        } catch {
-          // 무시
-        }
       }
 
       // 플러그인 요소들 업데이트
@@ -1133,7 +1136,11 @@ export function useGridResize({
     setPreviewElementBounds(null);
     finalGroupBoundsRef.current = null;
 
-    onResizeEnd?.();
+    try {
+      onResizeEnd?.(resizeGestureIdRef.current ?? undefined);
+    } finally {
+      endPluginResizeSessions();
+    }
   };
 
   return {

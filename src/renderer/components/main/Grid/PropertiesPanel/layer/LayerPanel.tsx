@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { SidebarToggleIcon, ModeToggleIcon } from '../PropertyInputs';
+import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import { LAYER_PANEL_TABS, type LayerPanelTabType } from '../types';
 import LayerTabContent from './LayerTabContent';
 import GridTabContent from '../GridTabContent';
@@ -12,9 +12,7 @@ import GridTabContent from '../GridTabContent';
 // ============================================================================
 
 interface LayerPanelProps {
-  onClose: () => void;
   onSwitchToProperty?: () => void;
-  hasSelection?: boolean;
   onSelectionFromPanel?: () => void;
 }
 
@@ -35,10 +33,8 @@ const LayerPanelTabButton: React.FC<LayerPanelTabButtonProps> = ({
 }) => (
   <button
     onClick={onClick}
-    className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-      active
-        ? 'bg-[#3A3943] text-white'
-        : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
+    className={`relative z-10 w-full h-full rounded-[8px] text-body transition-colors duration-base ${
+      active ? 'text-fg' : 'text-fg-muted hover:text-fg'
     }`}
   >
     {children}
@@ -59,31 +55,41 @@ const LayerPanelTabs: React.FC<LayerPanelTabsProps> = ({
   activeTab,
   onTabChange,
   t,
-}) => (
-  <div className="flex w-full h-[30px] bg-[#26262C] rounded-[7px] items-center p-[3px] gap-[5px]">
-    <LayerPanelTabButton
-      active={activeTab === LAYER_PANEL_TABS.LAYER}
-      onClick={() => onTabChange(LAYER_PANEL_TABS.LAYER)}
-    >
-      {t('propertiesPanel.tabLayer') || '레이어'}
-    </LayerPanelTabButton>
-    <LayerPanelTabButton
-      active={activeTab === LAYER_PANEL_TABS.GRID}
-      onClick={() => onTabChange(LAYER_PANEL_TABS.GRID)}
-    >
-      {t('propertiesPanel.tabGrid') || '그리드'}
-    </LayerPanelTabButton>
-  </div>
-);
+}) => {
+  const activeIndex = activeTab === LAYER_PANEL_TABS.GRID ? 1 : 0;
+
+  return (
+    <div className="relative flex w-full h-[30px] bg-inset rounded-surface items-center p-[2px]">
+      <div
+        aria-hidden
+        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
+        style={{
+          width: 'calc((100% - 4px) / 2)',
+          transform: `translateX(${activeIndex * 100}%)`,
+        }}
+      />
+      <LayerPanelTabButton
+        active={activeTab === LAYER_PANEL_TABS.LAYER}
+        onClick={() => onTabChange(LAYER_PANEL_TABS.LAYER)}
+      >
+        {t('propertiesPanel.tabLayer') || '레이어'}
+      </LayerPanelTabButton>
+      <LayerPanelTabButton
+        active={activeTab === LAYER_PANEL_TABS.GRID}
+        onClick={() => onTabChange(LAYER_PANEL_TABS.GRID)}
+      >
+        {t('propertiesPanel.tabGrid') || '그리드'}
+      </LayerPanelTabButton>
+    </div>
+  );
+};
 
 // ============================================================================
 // 레이어 패널 컴포넌트
 // ============================================================================
 
 const LayerPanel: React.FC<LayerPanelProps> = ({
-  onClose,
   onSwitchToProperty,
-  hasSelection = false,
   onSelectionFromPanel,
 }) => {
   const { t } = useTranslation();
@@ -108,42 +114,14 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
   };
 
   return (
-    <div
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
-      onMouseDown={handleHeaderEmptyClick}
-    >
+    <div className={PANEL_ROOT_CLASS} onMouseDown={handleHeaderEmptyClick}>
       {/* 헤더 + 탭 영역 */}
-      <div className="flex-shrink-0 border-b border-[#3A3943]">
+      <div className="flex-shrink-0">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
-          <span className="text-[#DBDEE8] text-style-2">
+        <div className={PANEL_HEADER_CLASS}>
+          <span className="text-fg text-label leading-none">
             {t('propertiesPanel.canvas') || 'Canvas'}
           </span>
-          <div className="flex items-center gap-[4px]">
-            {/* 모드 토글 버튼 - hasSelection에 따라 활성/비활성 */}
-            <button
-              disabled={!hasSelection}
-              onClick={hasSelection ? onSwitchToProperty : undefined}
-              className={`w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors ${
-                hasSelection
-                  ? 'hover:bg-[#2A2A30] cursor-pointer'
-                  : 'cursor-not-allowed opacity-70'
-              }`}
-              title={
-                t('propertiesPanel.switchToProperty') || 'Switch to Property'
-              }
-            >
-              <ModeToggleIcon mode="property" disabled={!hasSelection} />
-            </button>
-            {/* 패널 닫기 버튼 */}
-            <button
-              onClick={onClose}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t('propertiesPanel.closePanel') || 'Close Panel'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
-          </div>
         </div>
 
         {/* 탭 */}

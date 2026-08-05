@@ -14,8 +14,8 @@ const TabTool = () => {
   const isCustomSelected = !keyTypes.includes(selectedKeyType);
 
   return (
-    <div className="flex gap-[10px]">
-      <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
+    <div className="flex gap-[8px]">
+      <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[4px]">
         {keyTypes.map((keyType) => {
           const num = keyType.replace('key', '');
           const label = t(`mode.button${num}`);
@@ -35,7 +35,7 @@ const TabTool = () => {
       </div>
       <button
         ref={gridButtonRef}
-        className="flex items-center justify-center w-[40px] h-[40px] bg-button-primary rounded-[7px]"
+        className="flex items-center justify-center w-[40px] h-[40px] p-[5px] bg-fill rounded-surface"
         onClick={() => {
           if (!isBootstrapped) return;
           setIsPopupOpen((prev) => !prev);
@@ -43,22 +43,24 @@ const TabTool = () => {
         disabled={!isBootstrapped}
       >
         <div
-          className={`w-[30px] h-[30px] flex items-center justify-center rounded-[7px] transition-colors ${
+          className={`w-[30px] h-[30px] flex items-center justify-center rounded-md transition-colors duration-fast ${
             isCustomSelected
-              ? 'bg-button-active'
-              : 'hover:bg-button-hover active:bg-button-active'
-          } ${!isBootstrapped ? 'opacity-50' : ''}`}
+              ? 'bg-surface-active text-fg'
+              : 'text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover'
+          } ${!isBootstrapped ? 'opacity-40' : ''}`}
         >
           <GridIcon />
         </div>
       </button>
       <FloatingPopup
         open={isPopupOpen && isBootstrapped}
+        ariaLabel={t('tabs.title')}
         referenceRef={gridButtonRef}
         placement="bottom"
+        initialFocus="surface"
         onClose={() => setIsPopupOpen(false)}
       >
-        <TabList onClose={() => setIsPopupOpen(false)} />
+        <TabList />
       </FloatingPopup>
     </div>
   );
@@ -80,15 +82,15 @@ const Button = ({
   return (
     <button
       type="button"
-      className={`flex items-center h-[30px] px-[8px] rounded-[7px] transition-colors ${
+      className={`flex items-center h-[30px] px-[10px] rounded-md transition-colors duration-fast ${
         isSelected
-          ? 'bg-button-active'
-          : 'bg-button-primary hover:bg-button-hover'
-      } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          ? 'bg-surface-active text-fg'
+          : 'text-fg-muted hover:bg-fill hover:text-fg'
+      } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
       onClick={onClick}
       disabled={disabled}
     >
-      <span className="text-style-4 text-[#DBDEE8]">{text}</span>
+      <span className="text-label">{text}</span>
     </button>
   );
 };

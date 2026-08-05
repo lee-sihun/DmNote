@@ -1,7 +1,0 @@
-{
-  "profiles": {
-    "GameBarOverlay": {
-      "commandName": "MsixPackage"
-    }
-  }
-}

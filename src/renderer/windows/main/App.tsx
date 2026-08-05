@@ -1,4 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
+import {
+  usePanelWindowStore,
+  detachPropertiesPanel,
+  hasInlinePropertiesPanelLease,
+} from '@stores/grid/usePanelWindowStore';
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
@@ -28,6 +33,7 @@ import {
 } from '@hooks/app/useUpdateCheck';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 
 import { useUIStore } from '@stores/useUIStore';
 
@@ -58,7 +64,7 @@ export default function App() {
   const setGridAreaHovered = useUIStore((state) => state.setGridAreaHovered);
   const { selectedKeyType, setSelectedKeyType, isBootstrapped } = useKeyStore();
   useCustomCssInjection();
-  useCustomJsInjection();
+  useCustomJsInjection(isBootstrapped);
   useAppBootstrap();
   usePluginDisplayElementsResponder();
   useBlockBrowserShortcuts();
@@ -144,7 +150,6 @@ export default function App() {
     handleKeyMappingChange,
     handleNoteColorUpdate,
     handleNoteColorPreview,
-    handleCounterSettingsUpdate,
     handleCounterSettingsPreview,
     handleAddKeyAt,
     handleDuplicateKey,
@@ -156,8 +161,6 @@ export default function App() {
     handleResetCurrentMode,
     handleUndo,
     handleRedo,
-    canUndo,
-    canRedo,
   } = useKeyManager();
   const { color, palette, setPalette, handleColorChange, handlePaletteClose } =
     usePalette();
@@ -169,6 +172,7 @@ export default function App() {
   } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
+  const panelWindowStatus = usePanelWindowStore((state) => state.status);
   const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
     useState(false);
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
@@ -226,6 +230,8 @@ export default function App() {
     isOpen: false,
     message: '',
     confirmText: t('common.confirm'),
+    cancelText: undefined as string | undefined,
+    danger: false,
     type: 'alert' as 'alert' | 'confirm' | 'custom',
   }));
 
@@ -240,12 +246,14 @@ export default function App() {
     confirmText?: string;
     cancelText?: string;
     showCancel?: boolean;
+    onContentMount?: (element: HTMLElement) => void | (() => void);
   }>({
     isOpen: false,
     html: '',
     confirmText: undefined,
     cancelText: undefined,
     showCancel: false,
+    onContentMount: undefined,
   });
 
   // Global Color Picker 상태
@@ -270,7 +278,10 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
       if (!matchesShortcut(e, shortcuts?.switchKeyMode)) return;
+      // 캔버스 전용 단축키, 설정 화면에서는 기본 Tab 탐색 유지
+      if (isSettingsOpen) return;
       const active = document.activeElement as HTMLElement | null;
       if (active) {
         const tag = (active.tagName || '').toLowerCase();
@@ -300,11 +311,13 @@ export default function App() {
     selectedKeyType,
     setSelectedKeyType,
     isBootstrapped,
+    isSettingsOpen,
     shortcuts?.switchKeyMode,
   ]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
       if (!matchesShortcut(e, shortcuts?.toggleSettingsPanel)) return;
       // 캔버스(그리드) 화면에서만 동작
       if (isSettingsOpen) return;
@@ -334,12 +347,30 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler, true);
   }, [shortcuts?.toggleSettingsPanel, isSettingsOpen]);
 
-  const showAlert = (message: string, confirmText?: string) => {
+  // 새 요청이 기존 alert/confirm을 대체할 때 이전 콜백을 settle해 Promise 유실 방지
+  const settlePendingDialog = () => {
+    const cancel = cancelCallbackRef.current;
+    confirmCallbackRef.current = null;
+    cancelCallbackRef.current = null;
+    cancel?.();
+  };
+
+  const showAlert = (
+    message: string,
+    confirmText?: string,
+    onDismiss?: () => void,
+  ) => {
+    settlePendingDialog();
+    // alert는 확인·배경 클릭 어느 경로로 닫혀도 동일하게 settle
+    confirmCallbackRef.current = onDismiss ?? null;
+    cancelCallbackRef.current = onDismiss ?? null;
     setAlertState({
       isOpen: true,
       message,
       type: 'alert',
       confirmText: confirmText || t('common.confirm'),
+      cancelText: undefined,
+      danger: false,
     });
   };
 
@@ -379,14 +410,26 @@ export default function App() {
   const showConfirm = (
     message: string,
     onConfirm: () => void,
-    onCancel?: () => void,
-    confirmText = t('common.confirm'),
+    options?: {
+      onCancel?: () => void;
+      confirmText?: string;
+      cancelText?: string;
+      danger?: boolean;
+    },
   ) => {
+    settlePendingDialog();
     confirmCallbackRef.current =
       typeof onConfirm === 'function' ? onConfirm : null;
     cancelCallbackRef.current =
-      typeof onCancel === 'function' ? onCancel : null;
-    setAlertState({ isOpen: true, message, confirmText, type: 'confirm' });
+      typeof options?.onCancel === 'function' ? options.onCancel : null;
+    setAlertState({
+      isOpen: true,
+      message,
+      confirmText: options?.confirmText || t('common.confirm'),
+      cancelText: options?.cancelText,
+      danger: options?.danger ?? false,
+      type: 'confirm',
+    });
   };
 
   const closeAlert = () => {
@@ -394,25 +437,37 @@ export default function App() {
       isOpen: false,
       message: '',
       confirmText: t('common.confirm'),
+      cancelText: undefined,
+      danger: false,
       type: 'alert',
     });
     confirmCallbackRef.current = null;
     cancelCallbackRef.current = null;
   };
 
+  // 닫은 뒤 콜백 실행 — 콜백이 동기적으로 새 다이얼로그를 열어도 닫히지 않게
   const handleAlertConfirm = () => {
-    if (confirmCallbackRef.current) {
-      confirmCallbackRef.current();
-    }
+    const callback = confirmCallbackRef.current;
     closeAlert();
+    callback?.();
   };
 
   const handleAlertCancel = () => {
-    if (cancelCallbackRef.current) {
-      cancelCallbackRef.current();
-    }
+    const callback = cancelCallbackRef.current;
     closeAlert();
+    callback?.();
   };
+
+  // 언마운트 시 대기 중 다이얼로그 Promise settle (HMR·루트 교체 대비)
+  useEffect(
+    () => () => {
+      const cancel = cancelCallbackRef.current;
+      confirmCallbackRef.current = null;
+      cancelCallbackRef.current = null;
+      cancel?.();
+    },
+    [],
+  );
 
   // Custom Dialog 핸들러
   const showCustomDialog = (
@@ -423,6 +478,7 @@ export default function App() {
       confirmText?: string;
       cancelText?: string;
       showCancel?: boolean;
+      onContentMount?: (element: HTMLElement) => void | (() => void);
     },
   ) => {
     customDialogCallbackRef.current = {
@@ -435,16 +491,25 @@ export default function App() {
       confirmText: options?.confirmText,
       cancelText: options?.cancelText,
       showCancel: options?.showCancel ?? false,
+      onContentMount: options?.onContentMount,
     });
   };
 
   const closeCustomDialog = () => {
+    // 다이얼로그 내부 앵커에 붙은 전역 피커는 다이얼로그와 함께 정리
+    if (
+      colorPickerState.isOpen &&
+      colorPickerState.referenceElement?.closest('[data-plugin-dialog-content]')
+    ) {
+      closeColorPicker();
+    }
     setCustomDialogState({
       isOpen: false,
       html: '',
       confirmText: undefined,
       cancelText: undefined,
       showCancel: false,
+      onContentMount: undefined,
     });
     customDialogCallbackRef.current = {};
   };
@@ -590,9 +655,9 @@ export default function App() {
   });
 
   return (
-    <div className="bg-[#111012] w-full h-full flex flex-col overflow-hidden rounded-[7px] border border-[rgba(255,255,255,0.1)]">
+    <div className="bg-app w-full h-full flex flex-col overflow-hidden rounded-[8px]">
       <TitleBar />
-      <div className="flex-1 bg-[#2A2A31] overflow-hidden flex">
+      <div className="flex-1 bg-panel overflow-hidden flex">
         {isSettingsOpen ? (
           <div className="h-full w-full overflow-y-auto">
             <SettingTab showAlert={showAlert} showConfirm={showConfirm} />
@@ -613,7 +678,6 @@ export default function App() {
               onKeyPreview={handleKeyPreview}
               onNoteColorUpdate={handleNoteColorUpdate}
               onNoteColorPreview={handleNoteColorPreview}
-              onCounterUpdate={handleCounterSettingsUpdate}
               onCounterPreview={handleCounterSettingsPreview}
               onKeyDelete={handleDeleteKey}
               onAddKeyAt={handleAddKeyAt}
@@ -632,24 +696,26 @@ export default function App() {
               }
               onUndo={handleUndo}
               onRedo={handleRedo}
-              canUndo={canUndo}
-              canRedo={canRedo}
               toolbarAddRequest={toolbarAddRequest}
               onToolbarAddConsumed={() => setToolbarAddRequest(null)}
               isNoteSettingOpen={isNoteSettingOpen}
               setIsNoteSettingOpen={setIsNoteSettingOpen}
             />
-            <PropertiesPanel
-              onPositionChange={handlePositionChange}
-              onKeyUpdate={(data) => {
-                const { index, ...updates } = data;
-                handleKeyStyleUpdate(index, updates);
-              }}
-              onKeyBatchUpdate={handleKeyBatchStyleUpdate}
-              onKeyPreview={handleKeyPreview}
-              onKeyBatchPreview={handleKeyBatchPreview}
-              onKeyMappingChange={handleKeyMappingChange}
-            />
+            {hasInlinePropertiesPanelLease(panelWindowStatus) && (
+              <PropertiesPanel
+                onPositionChange={handlePositionChange}
+                onKeyUpdate={(data) => {
+                  const { index, ...updates } = data;
+                  handleKeyStyleUpdate(index, updates);
+                }}
+                onKeyBatchUpdate={handleKeyBatchStyleUpdate}
+                onKeyPreview={handleKeyPreview}
+                onKeyBatchPreview={handleKeyBatchPreview}
+                onKeyMappingChange={handleKeyMappingChange}
+                detachAction="detach"
+                onDetachAction={() => void detachPropertiesPanel()}
+              />
+            )}
           </div>
         )}
       </div>
@@ -668,8 +734,7 @@ export default function App() {
             async () => {
               await handleResetCurrentMode();
             },
-            undefined,
-            t('confirm.reset'),
+            { confirmText: t('confirm.reset') },
           )
         }
         onResetCounters={() =>
@@ -678,8 +743,7 @@ export default function App() {
             async () => {
               await window.api.keys.resetCountersMode(selectedKeyType);
             },
-            undefined,
-            t('confirm.reset'),
+            { confirmText: t('confirm.reset') },
           )
         }
         activeTool={activeTool}
@@ -703,6 +767,7 @@ export default function App() {
       {palette && (
         <FloatingPopup
           open={palette}
+          ariaLabel={t('tooltip.palette')}
           referenceRef={primaryButtonRef}
           placement="top"
           offset={25}
@@ -731,7 +796,8 @@ export default function App() {
         message={alertState.message}
         type={alertState.type}
         confirmText={alertState.confirmText}
-        cancelText={undefined}
+        cancelText={alertState.cancelText}
+        danger={alertState.danger}
         showCancel={undefined}
         onConfirm={handleAlertConfirm}
         onCancel={handleAlertCancel}
@@ -743,6 +809,7 @@ export default function App() {
         confirmText={customDialogState.confirmText}
         cancelText={customDialogState.cancelText}
         showCancel={customDialogState.showCancel}
+        onCustomContentMount={customDialogState.onContentMount}
         onConfirm={handleCustomDialogConfirm}
         onCancel={handleCustomDialogCancel}
       />
@@ -762,6 +829,8 @@ export default function App() {
           offsetY={colorPickerState.referenceElement ? 10 : -80}
           placement="right"
           solidOnly={true}
+          portalToBody={true}
+          closeOnScroll={true}
         />
       )}
       {(updateAvailable || isLatestVersion) && updateInfo && (

@@ -108,7 +108,7 @@ src-tauri/src/
 ### OBS 모드 (WebSocket 브릿지)
 
 - **이벤트 포워딩**: 새 Tauri 이벤트(`app.emit(...)`)를 추가할 때, OBS 오버레이에도 전달되어야 하면 `src-tauri/src/services/obs_bridge.rs`의 `register_event_forwarding()` 이벤트 목록에 등록
-- **deny 리스트**: OBS 클라이언트에서 실행 불가능한 커맨드는 `obs_bridge.rs`의 `DENIED_WS_COMMANDS`에 등록 (백엔드가 유일한 source of truth)
+- **allowlist**: OBS 클라이언트에서 실행 가능한 커맨드만 `obs_bridge.rs`의 `ALLOWED_WS_COMMANDS`에 등록 (정확 일치, fail-closed — 목록에 없으면 차단, 백엔드가 유일한 source of truth). 신규 커맨드를 OBS에 노출하려면 검토 후 명시적으로 추가
 - **IPC shim**: `src/renderer/api/ipcShim.ts`는 generic 설계 — 커맨드/이벤트별 분기 없음. 이벤트나 커맨드 추가 시 수정 불필요
 
 ### 주석
@@ -130,6 +130,15 @@ src-tauri/src/
 - `useMemo` / `useCallback` 의존성 배열에서 배열/객체는 개별 요소 비교 고려
 - 린트 자동 수정이 의도적 패턴을 덮어쓸 수 있으므로 필요시 `eslint-disable` 주석 사용
 
+## store 자산·복구 안전 규칙
+
+- **파일 자산 종류를 새로 추가할 때** (appData에 파일을 두고 store가 경로를 참조): `store.rs`의 orphan sweep 보호 집합(`collect_local_*_path_keys`)에 참조 수집을 추가하고, 크래시 직후·손상 복구 직후 시나리오와의 교차 테스트 필수
+- **sweep 불변식**: 자산 정리는 즉시 삭제가 아니라 `trash/<세션>/` 30일 격리 — 이를 우회하는 직접 `remove_file` 정리 경로 추가 금지. store 복구가 발생한 세션은 sweep이 자동 스킵됨(`skip_asset_sweep`)
+- **store에 사용자 생성 컬렉션 필드를 추가할 때**: `migration.rs`의 `recover_collection_field`에 항목 단위 복구 등록 검토 (범용 헬퍼 재사용, 한 줄). 미등록 시 그 필드만 "손상 시 통째 초기화"로 폴백
+- **`keys[mode][i]` ↔ `keyPositions[mode][i]`는 인덱스 결합** — 복구·마이그레이션에서 배열 요소 제거 금지, 제자리 대체(`""` / default)만 허용
+- **편집 결합 컬렉션을 추가할 때**: 전용 세분 저장 커맨드를 새로 만들지 말고 `EditorDocumentV1` 필드와 `editor_commit` patch·검증·이벤트에 함께 추가
+- **editor_commit 오류 코드를 추가할 때**: 백엔드 오류 정의와 프론트 `EDITOR_ERROR_CODES`(`src/types/editor.ts`)에 반드시 함께 추가 — 프론트 목록에 없는 코드는 `retryable` 값과 무관하게 "이름표 없는 오류"로 취급되어 미저장 편집이 즉시 폐기됨
+
 ## API 문서 동기화
 
 - 프론트엔드 플러그인 API(`dmn.*`) 또는 Tauri 커맨드에 변경이 있으면 `docs/content/` 하위 관련 MDX 문서를 업데이트
@@ -150,4 +159,3 @@ src-tauri/src/
 2. **린트**: `cd src-tauri && cargo clippy`
 3. **포맷팅**: `cd src-tauri && cargo fmt`
 4. **permissions 확인**: 커맨드 추가/삭제 시 빌드 후 `permissions/dmnote-allow-all.json` 자동 갱신 확인
-

@@ -47,45 +47,40 @@ const ToolBar = ({
 
   return (
     <div
-      className={`flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-primary border-t border-t-1 border-t-[#2A2A30] justify-between`}
+      className={`flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-app border-t border-line justify-between`}
     >
       {isSettingsOpen ? (
         <TooltipGroup>
-          <div className="flex gap-[10px]">
-            <FloatingTooltip content={t('tooltip.github')}>
-              <button
-                onClick={() =>
-                  handleClick('https://github.com/lee-sihun/DmNote')
-                }
-                className="flex items-center justify-center w-[40px] h-[40px] p-[5px] bg-[#000000] rounded-[7px]"
-              >
-                <div className="flex h-full w-full items-center justify-center rounded-[7px] hover:bg-button-hover active:bg-button-active">
+          <div className="flex gap-[8px]">
+            <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[4px]">
+              <FloatingTooltip content={t('tooltip.github')}>
+                <button
+                  onClick={() =>
+                    handleClick('https://github.com/DmNote-App/DmNote')
+                  }
+                  className="flex items-center justify-center w-[30px] h-[30px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
+                >
                   <Github className="flex-shrink-0 mb-[3px]" />
-                </div>
-              </button>
-            </FloatingTooltip>
-            <FloatingTooltip content={t('tooltip.issue')}>
-              <button
-                onClick={() =>
-                  handleClick('https://github.com/lee-sihun/DmNote/issues')
-                }
-                className="flex items-center justify-center w-[127px] h-[40px] p-[5px] bg-[#000000] rounded-[7px]"
-              >
-                <div className="flex h-full w-full items-center justify-center gap-[8px] rounded-[7px] hover:bg-button-hover active:bg-button-active">
+                </button>
+              </FloatingTooltip>
+              <FloatingTooltip content={t('tooltip.issue')}>
+                <button
+                  onClick={() =>
+                    handleClick('https://github.com/DmNote-App/DmNote/issues')
+                  }
+                  className="flex items-center justify-center gap-[8px] h-[30px] px-[12px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
+                >
                   <Bug className="flex-shrink-0" />
-                  <p className="text-style-3 text-[#DBDEE8] truncate">
-                    {/* {t("tooltip.issue")} */}
-                    Report
-                  </p>
-                </div>
-              </button>
-            </FloatingTooltip>
+                  <p className="text-label truncate">Report</p>
+                </button>
+              </FloatingTooltip>
+            </div>
           </div>
         </TooltipGroup>
       ) : (
         <TabTool />
       )}
-      <div className="flex gap-[10px]">
+      <div className="flex gap-[8px]">
         {!isSettingsOpen && (
           <CanvasTool
             onAddItem={onAddItem}
@@ -126,12 +121,12 @@ const TrackSettingButton = ({
 
   return (
     <TooltipGroup>
-      <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px]">
+      <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface">
         <FloatingTooltip content={t('tooltip.trackSettings') || '트랙 설정'}>
           <button
             type="button"
             onClick={onOpenNoteSetting}
-            className="flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors bg-button-primary hover:bg-button-hover active:bg-button-active"
+            className="flex items-center justify-center h-[30px] w-[30px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
           >
             <NoteIcon />
           </button>

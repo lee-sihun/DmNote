@@ -6,8 +6,8 @@
  * overlay/App.tsx가 코드 변경 없이 동작.
  *
  * 설계 원칙 (§12.4):
- * - 커맨드별 분기 없음. 3단계만: plugin:event → deny → WS RPC
- * - deny 리스트는 hello_ack에서 수신 (백엔드가 유일한 source of truth)
+ * - 커맨드별 분기 없음. 3단계만: plugin:event → allow → WS RPC
+ * - allow 리스트는 hello_ack에서 수신 (백엔드가 유일한 source of truth)
  */
 
 import { OBS_PROTOCOL_VERSION } from '@src/types/obs';
@@ -24,8 +24,10 @@ let connHost = '127.0.0.1';
 let connPort = '34891';
 let connToken = '';
 
-// deny 리스트 — hello_ack에서 수신 (백엔드가 유일한 source of truth)
-let denyList: string[] = [];
+// allow 리스트 — hello_ack에서 수신 (백엔드가 유일한 source of truth)
+let allowList: string[] = [];
+// hello_ack 수신 전에는 백엔드 이중 검사에 위임 (fail-open은 프론트 한정, 경계는 백엔드)
+let allowListReceived = false;
 
 // 콜백 레지스트리 (transformCallback/runCallback)
 const callbacks = new Map<number, (data: unknown) => void>();
@@ -48,13 +50,12 @@ const pendingRpc = new Map<
 // snapshot 수신 여부 (initIpcShim에서 연결 준비 확인용)
 let _snapshotReceived = false;
 
-// ── deny 체크 ──
+// ── allow 체크 ──
 
-/** "|"로 끝나면 prefix 매칭, 아니면 exact 매칭 */
-function isDenied(cmd: string): boolean {
-  return denyList.some((entry) =>
-    entry.endsWith('|') ? cmd.startsWith(entry) : cmd === entry,
-  );
+/** allowlist 정확 일치 — hello_ack 수신 전에는 백엔드 이중 검사에 위임 */
+function isAllowed(cmd: string): boolean {
+  if (!allowListReceived) return true;
+  return allowList.includes(cmd);
 }
 
 // ── 콜백 관리 (transformCallback / runCallback) ──
@@ -221,8 +222,8 @@ async function shimInvoke(
     return;
   }
 
-  // 2. deny 체크 (hello_ack에서 수신한 리스트)
-  if (isDenied(cmd)) {
+  // 2. allow 체크 (hello_ack에서 수신한 리스트)
+  if (!isAllowed(cmd)) {
     return;
   }
 
@@ -264,7 +265,7 @@ function shimConvertFileSrc(filePath: string, _protocol = 'asset'): string {
 // ── 공개 API ──
 
 /**
- * IPC shim 초기화. WS 연결 → hello_ack(denyList 수신) → snapshot 수신 → 글로벌 설치.
+ * IPC shim 초기화. WS 연결 → hello_ack(allowList 수신) → snapshot 수신 → 글로벌 설치.
  * 반드시 dmnoteApi import 전에 호출.
  */
 export function initIpcShim(wsUrl: string, token: string): Promise<void> {
@@ -308,10 +309,11 @@ export function initIpcShim(wsUrl: string, token: string): Promise<void> {
         }
 
         if (envelope.type === 'hello_ack') {
-          // deny 리스트 수신 (없으면 기본값 유지)
+          // allow 리스트 수신 (없으면 기본값 유지)
           const payload = envelope.payload as HelloAckPayload;
-          if (payload.denyList) {
-            denyList = payload.denyList;
+          if (payload.allowedList) {
+            allowList = payload.allowedList;
+            allowListReceived = true;
           }
           return;
         }
@@ -428,6 +430,7 @@ export function disposeIpcShim() {
   callbacks.clear();
   eventListeners.clear();
   eventListenersByName.clear();
-  denyList = [];
+  allowList = [];
+  allowListReceived = false;
   _snapshotReceived = false;
 }

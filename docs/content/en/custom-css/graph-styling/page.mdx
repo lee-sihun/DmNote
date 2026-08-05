@@ -27,19 +27,22 @@ When **Inline Styles Priority** is enabled, property panel values take precedenc
 For graphs, **Inline Styles Priority is disabled by default**, so CSS-variable-based control works immediately.
 
 <Callout type="info">
-  Recommended: use class selectors to style specific graphs instead of broad global selectors.
+  Recommended: use class selectors to style specific graphs instead of broad
+  global selectors.
 </Callout>
 
 ## Graph CSS Variables
 
 Available graph variables:
 
-| Variable         | Description            | Type       | Example                  |
-| ---------------- | ---------------------- | ---------- | ------------------------ |
-| `--graph-bg`     | Graph background       | `<color>`  | `rgba(17, 17, 20, 0.85)` |
-| `--graph-border` | Graph border           | `<border>` | `1px solid #7dd3fc`      |
-| `--graph-radius` | Graph corner radius    | `<length>` | `10px`                   |
-| `--graph-color`  | Line/bar drawing color | `<color>`  | `#86efac`                |
+| Variable               | Description                        | Type       | Example                              |
+| ---------------------- | ---------------------------------- | ---------- | ------------------------------------ |
+| `--graph-bg`           | Graph background                   | `<color>`  | `rgba(17, 17, 20, 0.85)`             |
+| `--graph-border`       | Border and saved border-ring reset | `<border>` | `1px solid #7dd3fc`, `none`          |
+| `--graph-border-image` | Replacement image for a saved ring | `<image>`  | `linear-gradient(90deg, #f0f, #0ff)` |
+| `--graph-padding`      | Graph inner padding                | `<length>` | `0px`, `3px`                         |
+| `--graph-radius`       | Graph corner radius                | `<length>` | `10px`                               |
+| `--graph-color`        | Line/bar drawing color             | `<color>`  | `#86efac`                            |
 
 ### Example
 
@@ -81,4 +84,5 @@ Available graph variables:
 ## Notes
 
 - Graph position offsets use the same variables as keys: `--key-offset-x`, `--key-offset-y`.
-- To completely hide the border, use `--graph-border: none;` or set border width to `0` in the properties panel.
+- `--graph-border: none;` removes the solid border, a gradient border ring
+  saved in the properties panel, and its image inset together.

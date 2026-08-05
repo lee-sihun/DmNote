@@ -1,28 +1,55 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
-import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
+import {
+  STAT_BASE_OPTIONS,
+  STAT_KPS_OPTIONS,
+  type StatItemPosition,
+  type StatItemType,
+} from '@src/types/key/statItems';
 import type {
   GraphItemPosition,
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import {
+  getActivePairPreservation,
+  gradientPairPatch,
+  gradientToCss,
+  type ColorModeValue,
+  type GradientSpec,
+} from '@src/types/color';
+import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { axisEventBus } from '@utils/core/axisEventBus';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_HAIRLINE,
+  DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+} from '@utils/core/elementDefaults';
+import { resolveElementShadow } from '@src/types/key/shadows';
 import type {
   PluginSettingSchema,
   PluginMessages,
   PluginDefinitionInternal,
-  PluginDisplayElementInternal,
+  PluginPanelElementView,
 } from '@src/types/plugin/api';
 import type { KeyInfo } from '@utils/core/KeyMaps';
+import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
+import {
+  hasRenderableSettings,
+  type SettingsNormalizationErrorKind,
+} from '@plugins/runtime/settingsSections';
 import {
   PropertyRow,
   NumberInput,
   TextInput,
   ColorInput,
-  SectionDivider,
-  SidebarToggleIcon,
-  ModeToggleIcon,
+  PropertySection,
   Tabs,
   StyleTabContent,
   NoteTabContent,
@@ -34,6 +61,8 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import ShadowControls from '../ShadowControls';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -81,12 +110,9 @@ const RenameIcon: React.FC = () => (
 interface PluginSelectionPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
   pluginTitle: string;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   setPluginScrollRef: (node: HTMLDivElement | null) => void;
-  setPluginThumbRef: (node: HTMLDivElement | null) => void;
   isPluginResizable: boolean;
-  selectedPluginElement: PluginDisplayElementInternal | null;
+  selectedPluginElement: PluginPanelElementView | null;
   pluginDisplaySize: { width: number; height: number };
   handlePluginPositionXChange: (value: number) => void;
   handlePluginPositionYChange: (value: number) => void;
@@ -99,10 +125,16 @@ interface PluginSelectionPanelProps {
     schema: Record<string, PluginSettingSchema> | undefined,
     values: Record<string, unknown>,
     messages: PluginMessages | undefined,
+    pluginId: string,
     colorIdPrefix: string,
     onChange: (key: string, value: unknown) => void,
-    options?: { wrap?: boolean },
   ) => React.ReactNode;
+  reportNormalizationError: (
+    pluginId: string,
+    key: string,
+    error: unknown,
+    kind: SettingsNormalizationErrorKind,
+  ) => void;
   selectedPluginDefinition: PluginDefinitionInternal | null;
   resolvedPluginSettings: Record<string, unknown>;
   handlePluginSettingChange: (key: string, value: unknown) => void;
@@ -112,10 +144,7 @@ interface PluginSelectionPanelProps {
 export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   setPanelElement,
   pluginTitle,
-  handleToggleMode,
-  handleTogglePanel,
   setPluginScrollRef,
-  setPluginThumbRef,
   isPluginResizable,
   selectedPluginElement,
   pluginDisplaySize,
@@ -127,45 +156,66 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   showModalHint,
   showSettings,
   renderPluginSettingsForm,
+  reportNormalizationError,
   selectedPluginDefinition,
   resolvedPluginSettings,
   handlePluginSettingChange,
   t,
 }) => {
+  // 위치 섹션도 설정 폼도 없을 때는 안내 문구만 남음 — 패널 세로 중앙에 배치
+  // notice-only로 단락돼도 visibility 예외가 기록되도록 폼과 같은 리포터 전달
+  const settingsRenderable =
+    showSettings &&
+    hasRenderableSettings(
+      selectedPluginDefinition?.settings,
+      resolvedPluginSettings,
+      (key, error, kind) =>
+        reportNormalizationError(
+          selectedPluginDefinition?.pluginId ?? 'unknown',
+          key,
+          error,
+          kind,
+        ),
+    );
+  const noticeOnly = !isPluginResizable && !settingsRenderable;
+  const noticeText = !hasSinglePluginSelection
+    ? t('propertiesPanel.pluginMultiSelection') ||
+      '플러그인 요소는 한 번에 하나만 편집할 수 있습니다.'
+    : showModalHint
+    ? t('propertiesPanel.pluginModalHint') ||
+      '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'
+    : t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.';
+
+  if (noticeOnly) {
+    return (
+      <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
+        <div className={PANEL_HEADER_CLASS}>
+          <span className="text-fg text-label leading-none truncate max-w-[120px]">
+            {pluginTitle}
+          </span>
+        </div>
+        <div className="flex-1 flex items-center justify-center px-[24px] pb-[48px]">
+          <p className="text-fg-faint text-body text-center">{noticeText}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
-    >
-      <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
-        <span className="text-[#DBDEE8] text-style-2 truncate max-w-[120px]">
+    <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
+      <div className={PANEL_HEADER_CLASS}>
+        <span className="text-fg text-label leading-none truncate max-w-[120px]">
           {pluginTitle}
         </span>
-        <div className="flex items-center gap-[4px]">
-          <button
-            onClick={handleToggleMode}
-            className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-            title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-          >
-            <ModeToggleIcon mode="layer" />
-          </button>
-          <button
-            onClick={handleTogglePanel}
-            className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-            title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-          >
-            <SidebarToggleIcon isOpen={true} />
-          </button>
-        </div>
       </div>
       <div className="flex-1 properties-panel-overlay-scroll">
         <div
           ref={setPluginScrollRef}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             {isPluginResizable && (
-              <>
+              <PropertySection>
                 <PropertyRow label={t('propertiesPanel.position') || '위치'}>
                   <NumberInput
                     value={selectedPluginElement?.position.x ?? 0}
@@ -206,17 +256,16 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                     decimalScale={1}
                   />
                 </PropertyRow>
-                <SectionDivider />
-              </>
+              </PropertySection>
             )}
             {!hasSinglePluginSelection && (
-              <p className="text-[#6B6D75] text-style-4 text-center">
+              <p className="text-fg-faint text-body text-center">
                 {t('propertiesPanel.pluginMultiSelection') ||
                   '플러그인 요소는 한 번에 하나만 편집할 수 있습니다.'}
               </p>
             )}
             {hasSinglePluginSelection && showModalHint && (
-              <p className="text-[#6B6D75] text-style-4 text-center">
+              <p className="text-fg-faint text-body text-center">
                 {t('propertiesPanel.pluginModalHint') ||
                   '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'}
               </p>
@@ -226,17 +275,10 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                 selectedPluginDefinition?.settings,
                 resolvedPluginSettings,
                 selectedPluginDefinition?.messages,
+                selectedPluginDefinition?.pluginId ?? 'unknown',
                 `plugin-element-${selectedPluginElement?.fullId ?? 'unknown'}`,
                 handlePluginSettingChange,
-                { wrap: false },
               )}
-          </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={setPluginThumbRef}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
           </div>
         </div>
       </div>
@@ -261,13 +303,10 @@ interface SingleGraphPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   handleGraphUpdate: (
     data: Partial<GraphItemPosition> & { index: number },
   ) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
   setShowGraphImagePicker: (value: boolean) => void;
   graphImageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -291,11 +330,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   handleGraphUpdate,
   singleScrollRefFor,
-  singleThumbRefFor,
   showGraphImagePicker,
   setShowGraphImagePicker,
   graphImageButtonRef,
@@ -316,16 +352,13 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   const graphTitle = singleGraphPosition.layerName || graphDefaultTitle;
 
   return (
-    <div
-      ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
-    >
-      <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
+    <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
+      <div className={PANEL_HEADER_CLASS}>
         {isRenaming ? (
           <input
             ref={renameInputRef}
             type="text"
-            className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => {
@@ -347,7 +380,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
         ) : (
           <div className="flex items-center gap-[4px] min-w-0">
             <span
-              className="text-[#DBDEE8] text-style-2 truncate max-w-[100px] cursor-default"
+              className="text-fg text-label truncate max-w-[100px] cursor-default"
               onDoubleClick={handleRenameStart}
               title={graphTitle}
             >
@@ -355,274 +388,279 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             </span>
             <button
               onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
               <RenameIcon />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-[4px]">
-          <button
-            onClick={handleToggleMode}
-            className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-            title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-          >
-            <ModeToggleIcon mode="layer" />
-          </button>
-          <button
-            onClick={handleTogglePanel}
-            className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-            title={t('propertiesPanel.closePanel') || 'Close'}
-          >
-            <SidebarToggleIcon isOpen={true} />
-          </button>
-        </div>
       </div>
       <div className="flex-1 properties-panel-overlay-scroll">
         <div
           ref={singleScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
-            <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
-              <NumberInput
-                value={Math.round(singleGraphPosition.dx || 0)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    dx: value,
-                  })
-                }
-                prefix="X"
-                min={-9999}
-                max={9999}
-              />
-              <NumberInput
-                value={Math.round(singleGraphPosition.dy || 0)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    dy: value,
-                  })
-                }
-                prefix="Y"
-                min={-9999}
-                max={9999}
-              />
-            </PropertyRow>
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+            <PropertySection>
+              <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
+                <NumberInput
+                  value={Math.round(singleGraphPosition.dx || 0)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      dx: value,
+                    })
+                  }
+                  prefix="X"
+                  min={-9999}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleGraphPosition.dy || 0)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      dy: value,
+                    })
+                  }
+                  prefix="Y"
+                  min={-9999}
+                  max={9999}
+                />
+              </PropertyRow>
 
-            <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
-              <NumberInput
-                value={Math.round(singleGraphPosition.width || 200)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    width: Math.max(20, value),
-                  })
-                }
-                prefix="W"
-                min={20}
-                max={9999}
-              />
-              <NumberInput
-                value={Math.round(singleGraphPosition.height || 100)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    height: Math.max(20, value),
-                  })
-                }
-                prefix="H"
-                min={20}
-                max={9999}
-              />
-            </PropertyRow>
+              <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
+                <NumberInput
+                  value={Math.round(singleGraphPosition.width || 200)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      width: Math.max(20, value),
+                    })
+                  }
+                  prefix="W"
+                  min={20}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleGraphPosition.height || 100)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      height: Math.max(20, value),
+                    })
+                  }
+                  prefix="H"
+                  min={20}
+                  max={9999}
+                />
+              </PropertyRow>
+            </PropertySection>
 
-            <SectionDivider />
+            <PropertySection>
+              <PropertyRow
+                label={t('propertiesPanel.graphShape') || 'Graph Shape'}
+              >
+                <Dropdown
+                  options={graphShapeOptions}
+                  value={singleGraphPosition.graphType || 'line'}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      graphType: value as GraphItemType,
+                    })
+                  }
+                />
+              </PropertyRow>
 
-            <PropertyRow
-              label={t('propertiesPanel.graphShape') || 'Graph Shape'}
-            >
-              <Dropdown
-                options={graphShapeOptions}
-                value={singleGraphPosition.graphType || 'line'}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    graphType: value as GraphItemType,
-                  })
-                }
-              />
-            </PropertyRow>
+              {(singleGraphPosition.graphType || 'line') === 'line' && (
+                <div className="flex justify-between items-center w-full min-h-[32px]">
+                  <p className="text-fg-muted text-label">
+                    {t('propertiesPanel.graphShowAverageLine') ||
+                      'Show Average Line'}
+                  </p>
+                  <Checkbox
+                    checked={singleGraphPosition.showAvgLine ?? true}
+                    onChange={() =>
+                      handleGraphUpdate({
+                        index: singleGraphIndex,
+                        showAvgLine: !(singleGraphPosition.showAvgLine ?? true),
+                      })
+                    }
+                  />
+                </div>
+              )}
 
-            {(singleGraphPosition.graphType || 'line') === 'line' && (
-              <div className="flex justify-between items-center w-full h-[23px]">
-                <p className="text-white text-style-2">
-                  {t('propertiesPanel.graphShowAverageLine') ||
-                    'Show Average Line'}
+              <PropertyRow
+                label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.graphSpeed || 1000)}
+                  width="62px"
+                  onChange={(value) => {
+                    const clamped = Math.max(500, Math.min(5000, value));
+                    const snapped = Math.round(clamped / 100) * 100;
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      graphSpeed: snapped,
+                    });
+                  }}
+                  min={500}
+                  max={5000}
+                  suffix="ms"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.graphColor') || 'Graph Color'}
+              >
+                <ColorInput
+                  value={singleGraphPosition.graphColor || '#86EFAC'}
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      graphColor: value,
+                    })
+                  }
+                  colorId={`graph-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <div className="flex justify-between items-center w-full min-h-[32px]">
+                <p className="text-fg-muted text-label">
+                  {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
                 </p>
                 <Checkbox
-                  checked={singleGraphPosition.showAvgLine ?? true}
+                  checked={singleGraphPosition.graphAnimationEnabled ?? true}
                   onChange={() =>
                     handleGraphUpdate({
                       index: singleGraphIndex,
-                      showAvgLine: !(singleGraphPosition.showAvgLine ?? true),
+                      graphAnimationEnabled: !(
+                        singleGraphPosition.graphAnimationEnabled ?? true
+                      ),
                     })
                   }
                 />
               </div>
-            )}
+            </PropertySection>
 
-            <PropertyRow
-              label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
-            >
-              <NumberInput
-                value={Math.round(singleGraphPosition.graphSpeed || 1000)}
-                width="62px"
-                onChange={(value) => {
-                  const clamped = Math.max(500, Math.min(5000, value));
-                  const snapped = Math.round(clamped / 100) * 100;
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    graphSpeed: snapped,
-                  });
-                }}
-                min={500}
-                max={5000}
-                suffix="ms"
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.graphColor') || 'Graph Color'}
-            >
-              <ColorInput
-                value={singleGraphPosition.graphColor || '#86EFAC'}
-                onChange={() => {}}
-                onChangeComplete={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    graphColor: value,
-                  })
+            <PropertySection>
+              <PropertyRow
+                label={
+                  t('propertiesPanel.backgroundColor') || 'Background Color'
                 }
-                colorId={`graph-color-${selectedKeyType}-${singleGraphIndex}`}
-                panelElement={panelElement}
-              />
-            </PropertyRow>
-
-            <div className="flex justify-between items-center w-full h-[23px]">
-              <p className="text-white text-style-2">
-                {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
-              </p>
-              <Checkbox
-                checked={singleGraphPosition.graphAnimationEnabled ?? true}
-                onChange={() =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    graphAnimationEnabled: !(
-                      singleGraphPosition.graphAnimationEnabled ?? true
-                    ),
-                  })
-                }
-              />
-            </div>
-
-            <SectionDivider />
-
-            <PropertyRow
-              label={t('propertiesPanel.backgroundColor') || 'Background Color'}
-            >
-              <ColorInput
-                value={
-                  singleGraphPosition.backgroundColor || 'rgba(17, 17, 20, 0.9)'
-                }
-                onChange={() => {}}
-                onChangeComplete={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    backgroundColor: value,
-                  })
-                }
-                colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
-                panelElement={panelElement}
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.borderColor') || 'Border Color'}
-            >
-              <ColorInput
-                value={
-                  singleGraphPosition.borderColor || 'rgba(255, 255, 255, 0.1)'
-                }
-                onChange={() => {}}
-                onChangeComplete={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    borderColor: value,
-                  })
-                }
-                colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
-                panelElement={panelElement}
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.borderWidth') || 'Border Width'}
-            >
-              <NumberInput
-                value={Math.round(singleGraphPosition.borderWidth ?? 3)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    borderWidth: Math.max(0, Math.min(20, value)),
-                  })
-                }
-                min={0}
-                max={20}
-                suffix="px"
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.borderRadius') || 'Border Radius'}
-            >
-              <NumberInput
-                value={Math.round(singleGraphPosition.borderRadius ?? 8)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    borderRadius: Math.max(0, Math.min(100, value)),
-                  })
-                }
-                min={0}
-                max={100}
-                suffix="px"
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.customImage') || 'Custom Image'}
-            >
-              <button
-                ref={graphImageButtonRef}
-                type="button"
-                className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                  showGraphImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-                } text-[#DBDEE8] text-style-4`}
-                onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
               >
-                {t('propertiesPanel.configure') || 'Configure'}
-              </button>
-            </PropertyRow>
+                <ColorInput
+                  value={
+                    singleGraphPosition.backgroundColor || DEFAULT_ELEMENT_BG
+                  }
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      backgroundColor: value,
+                    })
+                  }
+                  gradientValue={singleGraphPosition.backgroundGradient ?? null}
+                  canvasAnchor={{ kind: 'graph', index: singleGraphIndex }}
+                  onModeCommit={(_state, modeValue) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      ...gradientPairPatch('backgroundColor', modeValue),
+                    })
+                  }
+                  colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.borderColor') || 'Border Color'}
+              >
+                <ColorInput
+                  value={
+                    singleGraphPosition.borderColor || DEFAULT_ELEMENT_HAIRLINE
+                  }
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      borderColor: value,
+                    })
+                  }
+                  gradientValue={singleGraphPosition.borderGradient ?? null}
+                  canvasAnchor={{ kind: 'graph', index: singleGraphIndex }}
+                  onModeCommit={(_state, modeValue) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      ...gradientPairPatch('borderColor', modeValue),
+                    })
+                  }
+                  colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
+                  gradientSurface="border"
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.borderWidth') || 'Border Width'}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.borderWidth ?? 1)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      borderWidth: Math.max(0, Math.min(20, value)),
+                    })
+                  }
+                  min={0}
+                  max={20}
+                  suffix="px"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.borderRadius') || 'Border Radius'}
+              >
+                <NumberInput
+                  value={Math.round(
+                    singleGraphPosition.borderRadius ?? DEFAULT_ELEMENT_RADIUS,
+                  )}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      borderRadius: Math.max(0, Math.min(100, value)),
+                    })
+                  }
+                  min={0}
+                  max={100}
+                  suffix="px"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.customImage') || 'Custom Image'}
+              >
+                <button
+                  ref={graphImageButtonRef}
+                  type="button"
+                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                    showGraphImagePicker ? 'shadow-focus-ring' : ''
+                  } text-fg text-body`}
+                  onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
+                >
+                  {t('propertiesPanel.configure') || 'Configure'}
+                </button>
+              </PropertyRow>
+            </PropertySection>
 
             {useCustomCSS && (
-              <>
-                <SectionDivider />
-
-                <div className="flex justify-between items-center w-full h-[23px]">
-                  <p className="text-white text-style-2">
+              <PropertySection>
+                <div className="flex justify-between items-center w-full min-h-[32px]">
+                  <p className="text-fg-muted text-label">
                     {t('propertiesPanel.useInlineStyles') ||
                       '인라인 스타일 우선'}
                   </p>
@@ -643,25 +681,18 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   <TextInput
                     value={graphClassNameDraft}
                     onChange={setGraphClassNameDraft}
-                    onBlur={() =>
+                    onBlur={(value) =>
                       handleGraphUpdate({
                         index: singleGraphIndex,
-                        className: graphClassNameDraft || '',
+                        className: value,
                       })
                     }
                     placeholder="className"
                     width="90px"
                   />
                 </PropertyRow>
-              </>
+              </PropertySection>
             )}
-          </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={singleThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
           </div>
         </div>
       </div>
@@ -671,6 +702,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
           open={showGraphImagePicker}
           referenceRef={graphImageButtonRef}
           panelElement={panelElement}
+          showActiveState={false}
           idleImage={singleGraphPosition.inactiveImage || ''}
           activeImage={singleGraphPosition.activeImage || ''}
           idleTransparent={false}
@@ -760,10 +792,7 @@ interface SingleKnobPanelProps {
   handleKnobUpdate: (
     data: Partial<KnobItemPosition> & { index: number },
   ) => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
   t: (key: string) => string;
@@ -783,10 +812,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   handleRenameCancel,
   handleRenameStart,
   handleKnobUpdate,
-  handleToggleMode,
-  handleTogglePanel,
   singleScrollRefFor,
-  singleThumbRefFor,
   panelElement,
   useCustomCSS,
   t,
@@ -837,10 +863,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     : t('propertiesPanel.knobAxisUnset') || '미지정';
 
   // 대기/입력 색상 (키 패널과 동일한 기본값/전환 로직)
-  const DEFAULT_KNOB_BACKGROUND_COLOR = 'rgba(46, 46, 47, 0.9)';
-  const DEFAULT_KNOB_BORDER_COLOR = 'rgba(113, 113, 113, 0.9)';
-  const DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
-  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
+  const DEFAULT_KNOB_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
+  const DEFAULT_KNOB_BORDER_COLOR = DEFAULT_ELEMENT_FONT;
+  const DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
+  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
 
   type KnobColorTarget = 'backgroundColor' | 'borderColor';
   type KnobColorProperty =
@@ -924,29 +950,100 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
   };
 
-  const handleColorChangeComplete = (
-    target: KnobColorTarget,
-    color: string,
-  ) => {
-    const prop = resolveColorProperty(target);
-    setLocalColors((prev) => ({ ...prev, [prop]: color }));
+  // ── 그라데이션 배선 (키 패널과 동일 패턴) — 단색 커밋도 이 경로로 통합 ──
 
-    const updates: Partial<KnobItemPosition> = {
-      [prop]: color,
-    } as Partial<KnobItemPosition>;
+  const storedGradientOf = (prop: KnobColorProperty): GradientSpec | null => {
+    switch (prop) {
+      case 'backgroundColor':
+        return singleKnobPosition.backgroundGradient ?? null;
+      case 'activeBackgroundColor':
+        return singleKnobPosition.activeBackgroundGradient ?? null;
+      case 'borderColor':
+        return singleKnobPosition.borderGradient ?? null;
+      case 'activeBorderColor':
+        return singleKnobPosition.activeBorderGradient ?? null;
+      default:
+        return null;
+    }
+  };
 
-    // idle 변경 시 active 값이 비어 있으면 현재 표시되던 active 값을 함께 저장
-    // (active가 idle로 덮이는 현상 방지 — 키 패널과 동일)
+  const gradientSpecFor = (target: KnobColorTarget): GradientSpec | null => {
+    const idleGradient = storedGradientOf(target);
+    if (colorState !== 'active') return idleGradient;
+    const activeProp = activeColorPropertyFor(target);
+    const activeGradient = storedGradientOf(activeProp);
+    const activeHasValue =
+      isNonEmptyString(singleKnobPosition[activeProp]) ||
+      activeGradient != null;
+    return activeHasValue ? activeGradient : idleGradient;
+  };
+
+  const handleGradientCommit = (value: ColorModeValue) => {
+    if (!pickerFor) return;
+    const prop = resolveColorProperty(pickerFor);
+    const patch = gradientPairPatch(
+      prop as Parameters<typeof gradientPairPatch>[0],
+      value,
+    ) as Partial<KnobItemPosition>;
+
+    const baseColor = patch[prop];
+    if (typeof baseColor === 'string') {
+      setLocalColors((prev) => ({ ...prev, [prop]: baseColor }));
+    }
+
+    const updates: Partial<KnobItemPosition> = { ...patch };
+
+    // idle 편집 전 사용자 저장값 기준 active 쌍 보존
     if (colorState !== 'active') {
-      const activeProp = activeColorPropertyFor(target);
-      const currentActive = singleKnobPosition[activeProp];
-      if (!isNonEmptyString(currentActive)) {
-        updates[activeProp] = localColors[activeProp];
+      const activeProp = activeColorPropertyFor(pickerFor);
+      const preservation = getActivePairPreservation(
+        {
+          color: singleKnobPosition[pickerFor],
+          gradient: storedGradientOf(pickerFor),
+        },
+        {
+          color: singleKnobPosition[activeProp],
+          gradient: storedGradientOf(activeProp),
+        },
+      );
+      if (preservation?.color !== undefined) {
+        updates[activeProp] = preservation.color;
+      }
+      if (preservation?.gradient !== undefined) {
+        const activeSibling =
+          pickerFor === 'backgroundColor'
+            ? 'activeBackgroundGradient'
+            : 'activeBorderGradient';
+        updates[activeSibling] = preservation.gradient;
       }
     }
 
     handleKnobUpdate({ index: singleKnobIndex, ...updates });
   };
+
+  const knobGradientState = useGradientColorState({
+    pair: pickerFor
+      ? {
+          color: colorValueFor(pickerFor),
+          gradient: gradientSpecFor(pickerFor),
+        }
+      : {},
+    fallbackColor: '#ffffff',
+    contextKey: `knob:${selectedKeyType}:${singleKnobIndex}:${
+      pickerFor ?? 'none'
+    }:${colorState}`,
+    canvasAnchor: pickerFor
+      ? { kind: 'knob', index: singleKnobIndex }
+      : undefined,
+    canvasSurface: pickerFor === 'borderColor' ? 'border' : 'background',
+    canvasState: colorState,
+    onPreview: (value) => {
+      if (value.mode === 'solid' && pickerFor) {
+        handleColorChange(pickerFor, value.color);
+      }
+    },
+    onCommit: handleGradientCommit,
+  });
 
   const handlePickerToggle = (target: KnobColorTarget) => {
     setPickerFor((prev) => (prev === target ? null : target));
@@ -961,18 +1058,43 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         singleKnobPosition.height || 60,
       ) / 2,
     );
+  const knobHasIdleImage = Boolean(singleKnobPosition.inactiveImage?.trim());
+  const knobHasActiveImage = Boolean(
+    singleKnobPosition.activeImage?.trim() ||
+      singleKnobPosition.inactiveImage?.trim(),
+  );
+  const suppressKnobDefaultShadow = (singleKnobPosition.borderWidth ?? 0) > 0;
+  const knobIdleShadow = resolveElementShadow({
+    active: false,
+    shadow: singleKnobPosition.shadow,
+    activeShadow: singleKnobPosition.activeShadow,
+    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+    suppressDefault:
+      knobHasIdleImage ||
+      singleKnobPosition.idleTransparent === true ||
+      suppressKnobDefaultShadow,
+  });
+  const knobActiveShadow = resolveElementShadow({
+    active: true,
+    shadow: singleKnobPosition.shadow,
+    activeShadow: singleKnobPosition.activeShadow,
+    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+    suppressDefault:
+      knobHasActiveImage ||
+      singleKnobPosition.activeTransparent === true ||
+      suppressKnobDefaultShadow,
+  });
 
   return (
-    <div
-      ref={setRef}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
-    >
-      <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
+    <div ref={setRef} className={PANEL_ROOT_CLASS}>
+      <div className={PANEL_HEADER_CLASS}>
         {isRenaming ? (
           <input
             ref={renameInputRef}
             type="text"
-            className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => {
@@ -994,7 +1116,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         ) : (
           <div className="flex items-center gap-[4px] min-w-0">
             <span
-              className="text-[#DBDEE8] text-style-2 truncate max-w-[100px] cursor-default"
+              className="text-fg text-label truncate max-w-[100px] cursor-default"
               onDoubleClick={handleRenameStart}
               title={knobTitle}
             >
@@ -1002,29 +1124,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             </span>
             <button
               onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
               <RenameIcon />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-[4px]">
-          <button
-            onClick={handleToggleMode}
-            className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-            title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-          >
-            <ModeToggleIcon mode="layer" />
-          </button>
-          <button
-            onClick={handleTogglePanel}
-            className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-            title={t('propertiesPanel.closePanel') || 'Close'}
-          >
-            <SidebarToggleIcon isOpen={true} />
-          </button>
-        </div>
       </div>
 
       <div className="flex-1 properties-panel-overlay-scroll">
@@ -1032,223 +1138,264 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
           ref={singleScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             {/* 노브 매핑 (키 매핑과 동일한 라벨/버튼 구조) */}
-            <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
-              <button
-                type="button"
-                onClick={() => setCapturing((v) => !v)}
-                className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                  capturing ? 'border-[#459BF8]' : 'border-[#3A3943]'
-                } text-[#DBDEE8] text-style-2`}
-                title={singleKnobPosition.axisId || ''}
-              >
-                <span className="truncate max-w-[120px]">
-                  {capturing
-                    ? t('propertiesPanel.knobCapturing') || '감지 중…'
-                    : singleKnobPosition.axisId
-                    ? axisLabel
-                    : t('propertiesPanel.knobCapture') || '노브 돌려서 감지'}
-                </span>
-              </button>
-            </PropertyRow>
+            <PropertySection>
+              <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
+                <button
+                  type="button"
+                  onClick={() => setCapturing((v) => !v)}
+                  className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
+                    capturing ? 'shadow-focus-ring' : ''
+                  } text-fg text-label`}
+                  title={singleKnobPosition.axisId || ''}
+                >
+                  <span className="truncate max-w-[120px]">
+                    {capturing
+                      ? t('propertiesPanel.knobCapturing') || '감지 중…'
+                      : singleKnobPosition.axisId
+                      ? axisLabel
+                      : t('propertiesPanel.knobCapture') || '노브 돌려서 감지'}
+                  </span>
+                </button>
+              </PropertyRow>
+            </PropertySection>
 
-            <SectionDivider />
-
-            <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
-              <NumberInput
-                value={Math.round(singleKnobPosition.dx || 0)}
-                onChange={(value) =>
-                  handleKnobUpdate({ index: singleKnobIndex, dx: value })
-                }
-                prefix="X"
-                min={-9999}
-                max={9999}
-              />
-              <NumberInput
-                value={Math.round(singleKnobPosition.dy || 0)}
-                onChange={(value) =>
-                  handleKnobUpdate({ index: singleKnobIndex, dy: value })
-                }
-                prefix="Y"
-                min={-9999}
-                max={9999}
-              />
-            </PropertyRow>
-
-            <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
-              <NumberInput
-                value={Math.round(singleKnobPosition.width || 60)}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    width: Math.max(20, value),
-                  })
-                }
-                prefix="W"
-                min={20}
-                max={9999}
-              />
-              <NumberInput
-                value={Math.round(singleKnobPosition.height || 60)}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    height: Math.max(20, value),
-                  })
-                }
-                prefix="H"
-                min={20}
-                max={9999}
-              />
-            </PropertyRow>
-
-            <SectionDivider />
-
-            {/* 회전 배율: 1 = 물리 1회전당 화면 1회전 (축 해상도 무관) */}
-            <PropertyRow
-              label={t('propertiesPanel.knobSensitivity') || '민감도'}
-            >
-              <NumberInput
-                value={Number(singleKnobPosition.sensitivity ?? 1)}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    sensitivity: Math.max(0, value),
-                  })
-                }
-                suffix="×"
-                min={0}
-                max={100}
-                allowDecimal
-                decimalScale={2}
-              />
-            </PropertyRow>
-
-            <div className="flex justify-between items-center w-full h-[23px]">
-              <p className="text-white text-style-2">
-                {t('propertiesPanel.knobReverse') || '방향 반전'}
-              </p>
-              <Checkbox
-                checked={singleKnobPosition.reverse ?? false}
-                onChange={() =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    reverse: !(singleKnobPosition.reverse ?? false),
-                  })
-                }
-              />
-            </div>
-
-            <SectionDivider />
-
-            {/* 배경색 (대기/입력 상태 전환은 피커 내부 토글) */}
-            <PropertyRow
-              label={t('propertiesPanel.backgroundColor') || '배경색'}
-            >
-              <button
-                ref={bgColorBtnRef}
-                type="button"
-                onClick={() => handlePickerToggle('backgroundColor')}
-                className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-                  pickerFor === 'backgroundColor'
-                    ? 'border-[#459BF8]'
-                    : 'border-[#3A3943] hover:border-[#505058]'
-                }`}
-                style={{ backgroundColor: colorValueFor('backgroundColor') }}
-              />
-            </PropertyRow>
-
-            {/* 테두리 색상 */}
-            <PropertyRow
-              label={t('propertiesPanel.borderColor') || '테두리 색상'}
-            >
-              <button
-                ref={borderColorBtnRef}
-                type="button"
-                onClick={() => handlePickerToggle('borderColor')}
-                className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-                  pickerFor === 'borderColor'
-                    ? 'border-[#459BF8]'
-                    : 'border-[#3A3943] hover:border-[#505058]'
-                }`}
-                style={{ backgroundColor: colorValueFor('borderColor') }}
-              />
-            </PropertyRow>
-
-            {/* 테두리 두께 */}
-            <PropertyRow
-              label={t('propertiesPanel.borderWidth') || '테두리 두께'}
-            >
-              <NumberInput
-                value={singleKnobPosition.borderWidth ?? 3}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    borderWidth: value,
-                  })
-                }
-                suffix="px"
-                min={0}
-                max={20}
-              />
-            </PropertyRow>
-
-            {/* 모서리 반경 (미지정 시 원형) */}
-            <PropertyRow
-              label={t('propertiesPanel.borderRadius') || '모서리 반경'}
-            >
-              <NumberInput
-                value={effectiveBorderRadius}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    borderRadius: value,
-                  })
-                }
-                suffix="px"
-                min={0}
-                max={999}
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.customImage') || 'Custom Image'}
-            >
-              <button
-                ref={imageButtonRef}
-                type="button"
-                className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                  showImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-                } text-[#DBDEE8] text-style-4`}
-                onClick={() => setShowImagePicker(!showImagePicker)}
-              >
-                {t('propertiesPanel.configure') || 'Configure'}
-              </button>
-            </PropertyRow>
-
-            {useCustomCSS && (
-              <PropertyRow label={t('propertiesPanel.className') || '클래스'}>
-                <TextInput
-                  value={classNameDraft}
-                  onChange={setClassNameDraft}
-                  onBlur={() =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      className: classNameDraft || '',
-                    })
+            <PropertySection>
+              <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
+                <NumberInput
+                  value={Math.round(singleKnobPosition.dx || 0)}
+                  onChange={(value) =>
+                    handleKnobUpdate({ index: singleKnobIndex, dx: value })
                   }
-                  placeholder="className"
-                  width="90px"
+                  prefix="X"
+                  min={-9999}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleKnobPosition.dy || 0)}
+                  onChange={(value) =>
+                    handleKnobUpdate({ index: singleKnobIndex, dy: value })
+                  }
+                  prefix="Y"
+                  min={-9999}
+                  max={9999}
                 />
               </PropertyRow>
-            )}
-          </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={singleThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
+
+              <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
+                <NumberInput
+                  value={Math.round(singleKnobPosition.width || 60)}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      width: Math.max(20, value),
+                    })
+                  }
+                  prefix="W"
+                  min={20}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleKnobPosition.height || 60)}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      height: Math.max(20, value),
+                    })
+                  }
+                  prefix="H"
+                  min={20}
+                  max={9999}
+                />
+              </PropertyRow>
+            </PropertySection>
+
+            <PropertySection>
+              {/* 회전 배율: 1 = 물리 1회전당 화면 1회전 (축 해상도 무관) */}
+              <PropertyRow
+                label={t('propertiesPanel.knobSensitivity') || '민감도'}
+              >
+                <NumberInput
+                  value={Number(singleKnobPosition.sensitivity ?? 1)}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      sensitivity: Math.max(0, value),
+                    })
+                  }
+                  suffix="×"
+                  min={0}
+                  max={100}
+                  allowDecimal
+                  decimalScale={2}
+                />
+              </PropertyRow>
+
+              <div className="flex justify-between items-center w-full min-h-[32px]">
+                <p className="text-fg-muted text-label">
+                  {t('propertiesPanel.knobReverse') || '방향 반전'}
+                </p>
+                <Checkbox
+                  checked={singleKnobPosition.reverse ?? false}
+                  onChange={() =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      reverse: !(singleKnobPosition.reverse ?? false),
+                    })
+                  }
+                />
+              </div>
+            </PropertySection>
+
+            <PropertySection>
+              {/* 배경색 (대기/입력 상태 전환은 피커 내부 토글) */}
+              <PropertyRow
+                label={t('propertiesPanel.backgroundColor') || '배경색'}
+              >
+                <ColorSwatchButton
+                  ref={bgColorBtnRef}
+                  type="button"
+                  onClick={() => handlePickerToggle('backgroundColor')}
+                  open={pickerFor === 'backgroundColor'}
+                  className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+                  surfaceClassName="rounded-md"
+                  color={colorValueFor('backgroundColor')}
+                  image={(() => {
+                    const spec = gradientSpecFor('backgroundColor');
+                    return spec ? gradientToCss(spec) : undefined;
+                  })()}
+                />
+              </PropertyRow>
+
+              {/* 테두리 색상 */}
+              <PropertyRow
+                label={t('propertiesPanel.borderColor') || '테두리 색상'}
+              >
+                <ColorSwatchButton
+                  ref={borderColorBtnRef}
+                  type="button"
+                  onClick={() => handlePickerToggle('borderColor')}
+                  open={pickerFor === 'borderColor'}
+                  className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+                  surfaceClassName="rounded-md"
+                  color={colorValueFor('borderColor')}
+                  image={(() => {
+                    const spec = gradientSpecFor('borderColor');
+                    return spec ? gradientToCss(spec) : undefined;
+                  })()}
+                />
+              </PropertyRow>
+
+              {/* 테두리 두께 */}
+              <PropertyRow
+                label={t('propertiesPanel.borderWidth') || '테두리 두께'}
+              >
+                <NumberInput
+                  value={singleKnobPosition.borderWidth ?? 0}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      borderWidth: value,
+                    })
+                  }
+                  suffix="px"
+                  min={0}
+                  max={20}
+                />
+              </PropertyRow>
+
+              {/* 모서리 반경 (미지정 시 원형) */}
+              <PropertyRow
+                label={t('propertiesPanel.borderRadius') || '모서리 반경'}
+              >
+                <NumberInput
+                  value={effectiveBorderRadius}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      borderRadius: value,
+                    })
+                  }
+                  suffix="px"
+                  min={0}
+                  max={999}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.customImage') || 'Custom Image'}
+              >
+                <button
+                  ref={imageButtonRef}
+                  type="button"
+                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                    showImagePicker ? 'shadow-focus-ring' : ''
+                  } text-fg text-body`}
+                  onClick={() => setShowImagePicker(!showImagePicker)}
+                >
+                  {t('propertiesPanel.configure') || 'Configure'}
+                </button>
+              </PropertyRow>
+
+              {useCustomCSS && (
+                <>
+                  <div className="flex justify-between items-center w-full min-h-[32px]">
+                    <p className="text-fg-muted text-label">
+                      {t('propertiesPanel.useInlineStyles') ||
+                        '인라인 스타일 우선'}
+                    </p>
+                    <Checkbox
+                      checked={singleKnobPosition.useInlineStyles ?? false}
+                      onChange={() =>
+                        handleKnobUpdate({
+                          index: singleKnobIndex,
+                          useInlineStyles: !(
+                            singleKnobPosition.useInlineStyles ?? false
+                          ),
+                        })
+                      }
+                    />
+                  </div>
+
+                  <PropertyRow
+                    label={t('propertiesPanel.className') || '클래스'}
+                  >
+                    <TextInput
+                      value={classNameDraft}
+                      onChange={setClassNameDraft}
+                      onBlur={(value) =>
+                        handleKnobUpdate({
+                          index: singleKnobIndex,
+                          className: value,
+                        })
+                      }
+                      placeholder="className"
+                      width="90px"
+                    />
+                  </PropertyRow>
+                </>
+              )}
+            </PropertySection>
+
+            <ShadowControls
+              idleShadow={knobIdleShadow}
+              activeShadow={knobActiveShadow}
+              onChange={(state, shadow) =>
+                handleKnobUpdate({
+                  index: singleKnobIndex,
+                  [state === 'active' ? 'activeShadow' : 'shadow']: shadow,
+                })
+              }
+              onEnabledChange={(enabled) =>
+                handleKnobUpdate({
+                  index: singleKnobIndex,
+                  shadow: { ...knobIdleShadow, enabled },
+                  activeShadow: { ...knobActiveShadow, enabled },
+                })
+              }
+              panelElement={panelElement}
+              t={t}
             />
           </div>
         </div>
@@ -1321,16 +1468,22 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             pickerFor === 'backgroundColor' ? bgColorBtnRef : borderColorBtnRef
           }
           panelElement={panelElement}
-          color={colorValueFor(pickerFor)}
-          onColorChange={(c: string) => handleColorChange(pickerFor, c)}
+          color={knobGradientState.pickerColor}
+          onColorChange={(c: string) =>
+            knobGradientState.handlePickerColorChange(c, false)
+          }
           onColorChangeComplete={(c: string) =>
-            handleColorChangeComplete(pickerFor, c)
+            knobGradientState.handlePickerColorChange(c, true)
           }
           onClose={() => setPickerFor(null)}
           solidOnly={true}
           stateMode={colorState}
           onStateModeChange={setColorState}
           interactiveRefs={[bgColorBtnRef, borderColorBtnRef]}
+          headerSlot={knobGradientState.headerSlot}
+          footerSlot={knobGradientState.footerSlot}
+          gradientSpec={knobGradientState.paletteGradientSpec}
+          onGradientSpecSelect={knobGradientState.handleGradientSpecSelect}
         />
       )}
     </div>
@@ -1360,8 +1513,6 @@ interface SingleKeyStatPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   onPositionChange: (index: number, dx: number, dy: number) => void;
@@ -1388,7 +1539,6 @@ interface SingleKeyStatPanelProps {
   panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   t: (key: string) => string | undefined;
 }
 
@@ -1411,8 +1561,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   activeTab,
   setActiveTab,
   onPositionChange,
@@ -1432,23 +1580,11 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   panelElement,
   useCustomCSS,
   singleScrollRefFor,
-  singleThumbRefFor,
   t,
 }) => {
   const availableTabs = isSingleStat
     ? [TABS.STYLE, TABS.COUNTER]
     : [TABS.STYLE, TABS.NOTE, TABS.COUNTER];
-
-  const statBaseOptions = [
-    { label: 'KPS', value: 'kps' },
-    { label: 'Total', value: 'total' },
-  ];
-
-  const statKpsOptions = [
-    { label: 'KPS', value: 'kps' },
-    { label: 'AVG', value: 'kpsAvg' },
-    { label: 'MAX', value: 'kpsMax' },
-  ];
 
   const resolvedStatType =
     (singleStatPosition?.statType as StatItemType) || 'kps';
@@ -1493,7 +1629,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
     <>
       <PropertyRow label={t('propertiesPanel.statType') || 'Stat Type'}>
         <Dropdown
-          options={statBaseOptions}
+          options={STAT_BASE_OPTIONS}
           value={statBaseValue}
           onChange={(value) => {
             if (value === 'total') {
@@ -1513,7 +1649,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
       {statBaseValue === 'kps' ? (
         <PropertyRow label={t('propertiesPanel.statKpsType') || 'KPS Type'}>
           <Dropdown
-            options={statKpsOptions}
+            options={STAT_KPS_OPTIONS}
             value={resolvedStatType}
             onChange={(value) =>
               handleStatUpdate({
@@ -1528,19 +1664,16 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   ) : undefined;
 
   return (
-    <div
-      ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
-    >
+    <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       {/* 헤더 + 탭 영역 */}
-      <div className="flex-shrink-0 border-b border-[#3A3943]">
+      <div className="flex-shrink-0">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+        <div className={PANEL_HEADER_CLASS}>
           {isRenaming ? (
             <input
               ref={renameInputRef}
               type="text"
-              className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+              className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onBlur={() => {
@@ -1562,7 +1695,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
           ) : (
             <div className="flex items-center gap-[4px] min-w-0">
               <span
-                className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
                 onDoubleClick={handleRenameStart}
                 title={keyLikeTitle}
               >
@@ -1570,32 +1703,13 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               </span>
               <button
                 onClick={handleRenameStart}
-                className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                 title={t('contextMenu.rename') || 'Rename'}
               >
                 <RenameIcon />
               </button>
             </div>
           )}
-
-          <div className="flex items-center gap-[4px]">
-            {/* 레이어 모드로 전환 버튼 */}
-            <button
-              onClick={handleToggleMode}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-            >
-              <ModeToggleIcon mode="layer" />
-            </button>
-            {/* 패널 닫기 버튼 */}
-            <button
-              onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
-          </div>
         </div>
 
         {/* 탭 */}
@@ -1618,7 +1732,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             activeTab === TABS.STYLE ? '' : 'hidden'
           }`}
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             <StyleTabContent
               keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}
@@ -1627,6 +1741,10 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onPositionChange={handleKeyLikePositionChange}
               onKeyUpdate={handleKeyLikeUpdate}
               onKeyPreview={handleKeyLikePreview}
+              canvasAnchor={{
+                kind: isSingleStat ? 'stat' : 'key',
+                index: keyLikeIndex,
+              }}
               onKeyMappingChange={isSingleStat ? undefined : onKeyMappingChange}
               isListening={isListening}
               onKeyListen={isSingleStat ? undefined : handleKeyListen}
@@ -1637,6 +1755,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
                   : undefined
               }
               showSoundControls={!isSingleStat}
+              shadowActiveState={!isSingleStat}
               showImagePicker={showImagePicker}
               onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
               imageButtonRef={imageButtonRef}
@@ -1662,13 +1781,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onSizeBlur={handleSizeBlur}
             />
           </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={singleThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
-          </div>
         </div>
 
         {/* NOTE 탭 viewport */}
@@ -1679,7 +1791,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               activeTab === TABS.NOTE ? '' : 'hidden'
             }`}
           >
-            <div className="p-[12px] flex flex-col gap-[12px]">
+            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
               <NoteTabContent
                 keyIndex={singleKeyIndex!}
                 keyPosition={singleKeyPosition!}
@@ -1687,13 +1799,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
                 onKeyPreview={onKeyPreview}
                 panelElement={panelElement}
                 t={t}
-              />
-            </div>
-            <div className="properties-panel-overlay-bar">
-              <div
-                ref={singleThumbRefFor(TABS.NOTE)}
-                className="properties-panel-overlay-thumb"
-                style={{ display: 'none' }}
               />
             </div>
           </div>
@@ -1706,7 +1811,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             activeTab === TABS.COUNTER ? '' : 'hidden'
           }`}
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             <CounterTabContent
               keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}
@@ -1715,13 +1820,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onKeyUpdate={handleKeyLikeUpdate}
               panelElement={panelElement}
               t={t}
-            />
-          </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={singleThumbRefFor(TABS.COUNTER)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
             />
           </div>
         </div>

@@ -6,6 +6,13 @@ import {
   NoteBuffer,
   TrackLayoutInput,
 } from '@stores/signals/noteBuffer';
+import {
+  computeNoteLengthMs,
+  createNoteLengthPolicy,
+  toEffectiveMinLengthPx,
+  toMinLengthMs,
+  type NoteLengthPolicy,
+} from '@utils/core/noteLengthPolicy';
 
 interface Note {
   id: string;
@@ -28,24 +35,42 @@ type NoteSubscriber = (event: NoteEvent) => void;
 interface NoteState {
   useDelay: boolean;
   downTime?: number;
+  // 판정 폴백용 비클램프 보정 시각 - 표시용 downTime과 분리
+  physDownTime?: number;
   releaseTime: number | null;
+  physReleaseTime?: number;
+  // 데몬이 캡처 시점에 측정한 물리 hold (UP payload, 검증 통과 값만)
+  holdDurationMs?: number;
   startTime: number | null;
   startTimer: ReturnType<typeof setTimeout> | null;
   finalizeTimer: ReturnType<typeof setTimeout> | null;
   noteId: string | null;
   created: boolean;
   released: boolean;
-  delayMs?: number;
-  releasedBeforeStart?: boolean;
+  // press 시작 시점 길이 정책 스냅샷
+  lengthPolicy?: NoteLengthPolicy;
+}
+
+// 키 이벤트 시각 정보. displayTime은 클램프 보정(표시 위치 전용),
+// physTime은 비클램프 보정(hold 폴백 전용)
+export interface NoteKeyTiming {
+  displayTime?: number;
+  physTime?: number;
+  holdDurationMs?: number;
 }
 
 interface NoteSettings {
   speed?: number;
   trackHeight?: number;
+  frameLimit?: number;
   delayedNoteEnabled?: boolean;
   shortNoteThresholdMs?: number;
   shortNoteMinLengthPx?: number;
 }
+
+// 셰이더는 travel ≥ trackHeight 시점에 노트를 컬하지만, 프레임 제한 시 uTime(stableTime)이
+// wall clock보다 최대 limiter interval만큼 늦으므로 그만큼만 여유를 두고 정리
+const NOTE_CLEANUP_SLACK_MS = 50;
 
 interface UseNoteSystemOptions {
   noteEffect: boolean;
@@ -55,9 +80,10 @@ interface UseNoteSystemOptions {
 interface UseNoteSystemReturn {
   notesRef: React.MutableRefObject<Record<string, Note[]>>;
   subscribe: (callback: NoteSubscriber) => () => void;
-  handleKeyDown: (keyName: string, eventTime?: number) => void;
-  handleKeyUp: (keyName: string, eventTime?: number) => void;
+  handleKeyDown: (keyName: string, timing?: NoteKeyTiming) => void;
+  handleKeyUp: (keyName: string, timing?: NoteKeyTiming) => void;
   finalizeAllActive: () => void;
+  reconcileActiveNotes: (activeKeys: ReadonlySet<string>) => void;
   noteBuffer: NoteBuffer;
   updateTrackLayouts: (layouts: TrackLayoutInput[]) => void;
 }
@@ -116,6 +142,9 @@ export function useNoteSystem({
   const activeNotes = useRef<Map<string, NoteState[]>>(new Map());
   const flowSpeedRef = useRef<number>(DEFAULT_NOTE_SETTINGS.speed);
   const trackHeightRef = useRef<number>(DEFAULT_NOTE_SETTINGS.trackHeight);
+  const frameLimitRef = useRef<number>(0);
+  // 수명 계산에 쓰이는 스칼라만 추적 — 설정 객체 identity 변경만으로 재스케줄 방지
+  const prevCleanupScalarsRef = useRef<string>('');
   // 딜레이 기반 단노트 분리용 설정
   const delayEnabledRef = useRef<boolean>(false);
   const delayMsRef = useRef<number>(0);
@@ -141,12 +170,23 @@ export function useNoteSystem({
     return () => subscribers.current.delete(callback);
   };
 
+  // 프레임 제한이 낮을수록 uTime 지연이 커지므로 슬랙을 limiter interval까지 확장
+  const cleanupSlackPx = (flowSpeed: number): number => {
+    const frameLimit = frameLimitRef.current;
+    const slackMs = Math.max(
+      NOTE_CLEANUP_SLACK_MS,
+      frameLimit > 0 ? 1000 / frameLimit : 0,
+    );
+    return (flowSpeed * slackMs) / 1000;
+  };
+
   // In-place 클린업 함수
   const runCleanup = (): void => {
     const currentTime = performance.now();
     const flowSpeed = flowSpeedRef.current;
     const trackHeight =
       trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
+    const keepDistancePx = trackHeight + cleanupSlackPx(flowSpeed);
     const currentNotes = notesRef.current;
     const removedNoteIds: string[] = [];
     const removedNotes: Note[] = [];
@@ -171,7 +211,7 @@ export function useNoteSystem({
           // 완료된 노트가 화면 밖으로 나갔는지 확인
           const timeSinceCompletion = currentTime - (note.endTime as number);
           const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
-          shouldKeep = yPosition < trackHeight + 200;
+          shouldKeep = yPosition < keepDistancePx;
 
           if (!shouldKeep) {
             const removedId = note.id;
@@ -237,7 +277,7 @@ export function useNoteSystem({
       for (const note of keyNotes) {
         if (!note.isActive && note.endTime != null) {
           // 이 노트가 화면 밖으로 나갈 시간 계산
-          const travelTimeMs = ((trackHeight + 200) * 1000) / flowSpeed;
+          const travelTimeMs = (keepDistancePx * 1000) / flowSpeed;
           const cleanupTime = note.endTime + travelTimeMs;
           if (cleanupTime < earliestCleanupTime) {
             earliestCleanupTime = cleanupTime;
@@ -263,7 +303,8 @@ export function useNoteSystem({
       trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
 
     // 이 노트가 화면 밖으로 완전히 사라질 시간 계산
-    const travelTimeMs = ((trackHeight + 200) * 1000) / flowSpeed;
+    const travelTimeMs =
+      ((trackHeight + cleanupSlackPx(flowSpeed)) * 1000) / flowSpeed;
     const newCleanupTime = finalizedNote.endTime + travelTimeMs;
 
     // 현재 예약된 것보다 더 빨리 실행해야 하는 경우에만 재스케줄
@@ -290,7 +331,20 @@ export function useNoteSystem({
     // 단노트 최소 픽셀 길이
     shortNoteMinLengthPxRef.current =
       Number(settings?.shortNoteMinLengthPx) || 0;
-  }, [noteSettings]);
+    frameLimitRef.current = Number(settings?.frameLimit) || 0;
+    // speed/trackHeight/frameLimit 실제 변경 시에만 기존 타이머를 새 수명 기준으로 재계산
+    const cleanupScalars = `${flowSpeedRef.current}/${trackHeightRef.current}/${frameLimitRef.current}`;
+    if (
+      prevCleanupScalarsRef.current !== cleanupScalars &&
+      cleanupTimerRef.current !== null
+    ) {
+      clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+      nextCleanupTimeRef.current = Infinity;
+      runCleanup();
+    }
+    prevCleanupScalarsRef.current = cleanupScalars;
+  }, [noteSettings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     noteEffectEnabled.current = !!noteEffect;
@@ -409,39 +463,44 @@ export function useNoteSystem({
   };
 
   const computeMinLengthMs = (): number => {
-    const minPx = shortNoteMinLengthPxRef.current || 0;
-    const flowSpeed = flowSpeedRef.current || DEFAULT_NOTE_SETTINGS.speed;
-    if (minPx <= 0 || flowSpeed <= 0) return 0;
-    return Math.round((minPx * 1000) / flowSpeed);
+    const minLengthPx = shortNoteMinLengthPxRef.current || 0;
+    const trackHeight =
+      trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
+    return toMinLengthMs(
+      toEffectiveMinLengthPx(minLengthPx, trackHeight),
+      flowSpeedRef.current || DEFAULT_NOTE_SETTINGS.speed,
+    );
   };
 
   const scheduleNoteFinalization = (
     keyName: string,
     state: NoteState,
-    options: { forceMinLength?: boolean } = {},
   ): void => {
-    const { forceMinLength = false } = options;
-    if (!state?.noteId || state.startTime == null) return;
+    if (!state?.noteId || state.startTime == null || !state.lengthPolicy) {
+      return;
+    }
 
     const releaseTime = state.releaseTime ?? performance.now();
-    const noteRef = state.noteId
-      ? noteLookupRef.current.get(state.noteId)
-      : null;
-    const baselineStart =
-      noteRef?.startTime ?? state.startTime ?? state.downTime ?? releaseTime;
-    const clampedStart = Math.min(releaseTime, baselineStart);
-    const holdDurationFromStart = Math.max(0, releaseTime - clampedStart);
-    // delayed mode: 시작 표시가 threshold만큼 지연되므로 실제 입력 유지 시간 기준으로 길이 계산 (종료도 동일하게 지연)
-    const physicalHoldMs =
-      state.useDelay && state.downTime != null
-        ? Math.max(0, releaseTime - state.downTime)
-        : holdDurationFromStart;
-    const minLengthMs = computeMinLengthMs();
-    const desiredDuration = forceMinLength
-      ? minLengthMs
-      : Math.max(minLengthMs, physicalHoldMs);
-    const safeDuration = Math.max(desiredDuration, 1);
-    const targetEndTime = state.startTime + safeDuration;
+    // 판정용 물리 hold: 데몬 authoritative 값 우선, 없으면 비클램프 보정 시각 차 폴백
+    const physDown = state.physDownTime ?? state.downTime;
+    const physRelease = state.physReleaseTime ?? releaseTime;
+    const fallbackHold =
+      physDown != null ? Math.max(0, physRelease - physDown) : 0;
+    const holdMs = state.holdDurationMs ?? fallbackHold;
+    // 데몬 hold와 press 시점 정책으로만 길이 결정
+    const computedNoteLengthMs = computeNoteLengthMs(
+      holdMs,
+      state.lengthPolicy,
+    );
+    // 잘못된 입력에서만 노트 소실 방지
+    const noteLengthMs =
+      Number.isFinite(computedNoteLengthMs) && computedNoteLengthMs > 0
+        ? computedNoteLengthMs
+        : 1;
+    const targetEndTime = Math.max(
+      state.startTime + noteLengthMs,
+      performance.now(),
+    );
 
     if (state.finalizeTimer) {
       clearTimeout(state.finalizeTimer);
@@ -449,6 +508,10 @@ export function useNoteSystem({
       state.finalizeTimer = null;
     }
 
+    // 타이머가 늦게 실행돼 targetEndTime이 과거가 돼도 실행 시점으로 다시 밀지 않는다.
+    // 셰이더에서 머리 위치는 startTime에만 의존해 완료 전후가 동일하고, 꼬리만
+    // 원래 떨어졌어야 할 자리로 이동한다. 다시 클램프하면 꼬리를 제자리에 묶어
+    // 롱노트 길이만 늘어난다
     const finalizeState = (): void => {
       finalizeTimersRef.current.delete(state.noteId!);
       state.finalizeTimer = null;
@@ -467,8 +530,8 @@ export function useNoteSystem({
     finalizeTimersRef.current.set(state.noteId, timer);
   };
 
-  // 노트 생성/완료. eventTime: 실제 입력 시각(performance.now 기준 보정값)
-  const handleKeyDown = (keyName: string, eventTime?: number): void => {
+  // 노트 생성/완료. timing.displayTime: 표시용 보정 시각, timing.physTime: 판정 폴백용
+  const handleKeyDown = (keyName: string, timing?: NoteKeyTiming): void => {
     if (!noteEffectEnabled.current) return;
 
     const useDelay = delayEnabledRef.current && delayMsRef.current > 0;
@@ -483,11 +546,16 @@ export function useNoteSystem({
     }
 
     if (useDelay) {
-      const delayMs = delayMsRef.current;
-      const downTime = eventTime ?? performance.now();
+      const thresholdMs = delayMsRef.current;
+      const lengthPolicy = createNoteLengthPolicy(
+        computeMinLengthMs(),
+        thresholdMs,
+      );
+      const downTime = timing?.displayTime ?? performance.now();
       const state: NoteState = {
         useDelay: true,
         downTime,
+        physDownTime: timing?.physTime ?? downTime,
         releaseTime: null,
         startTime: null,
         startTimer: null,
@@ -495,38 +563,43 @@ export function useNoteSystem({
         noteId: null,
         created: false,
         released: false,
-        delayMs,
-        releasedBeforeStart: false,
+        lengthPolicy,
       };
 
-      const startTimer = setTimeout(() => {
+      const createDelayedNote = (): void => {
         state.startTimer = null;
         if (!noteEffectEnabled.current) {
           removeState(keyName, state);
           return;
         }
 
-        const overrideStart = state.downTime! + state.delayMs!;
+        const overrideStart =
+          state.downTime! + state.lengthPolicy!.displayDelayMs;
         const noteId = createNote(keyName, overrideStart);
         state.noteId = noteId;
         state.created = true;
         state.startTime = overrideStart;
 
+        // 생성 전에 UP이 먼저 도착한 press - 단/롱은 finalize 계산이 hold로 판정
         if (state.released) {
-          const forceMinLength = !!state.releasedBeforeStart;
-          scheduleNoteFinalization(keyName, state, { forceMinLength });
-          state.releasedBeforeStart = false;
+          scheduleNoteFinalization(keyName, state);
         }
-        // 실제 입력 시각 기준으로 노트 등장 시점을 맞춤. 입력 시각이 과거면
-        // 남은 대기를 0으로 clamp해 타이머가 음수가 되지 않도록 함
-      }, Math.max(0, downTime + delayMs - performance.now()));
+      };
 
-      state.startTimer = startTimer;
       stateList.push(state);
+      // 실제 입력 시각 기준으로 노트 등장 시점을 맞춤
+      const remainingDelay =
+        downTime + lengthPolicy.displayDelayMs - performance.now();
+      if (remainingDelay <= 0) {
+        createDelayedNote();
+        return;
+      }
+
+      state.startTimer = setTimeout(createDelayedNote, remainingDelay);
       return;
     }
 
-    const noteId = createNote(keyName, eventTime);
+    const noteId = createNote(keyName, timing?.displayTime);
     const createdNote = noteLookupRef.current.get(noteId);
     const noteStartTime = createdNote?.startTime ?? performance.now();
     stateList.push({
@@ -541,7 +614,7 @@ export function useNoteSystem({
     });
   };
 
-  const handleKeyUp = (keyName: string, eventTime?: number): void => {
+  const handleKeyUp = (keyName: string, timing?: NoteKeyTiming): void => {
     if (!noteEffectEnabled.current) return;
 
     const stateList = activeNotes.current.get(keyName);
@@ -557,9 +630,16 @@ export function useNoteSystem({
 
     if (!state) return;
 
-    const now = eventTime ?? performance.now();
+    const now = timing?.displayTime ?? performance.now();
     state.released = true;
     state.releaseTime = now;
+    state.physReleaseTime = timing?.physTime ?? now;
+    // NaN·음수 방어: 검증 실패 값은 폴백 계산으로 강등
+    const rawHold = timing?.holdDurationMs;
+    state.holdDurationMs =
+      typeof rawHold === 'number' && Number.isFinite(rawHold) && rawHold >= 0
+        ? rawHold
+        : undefined;
 
     if (!state.useDelay) {
       if (state.created && state.noteId) {
@@ -570,7 +650,6 @@ export function useNoteSystem({
     }
 
     if (state.startTimer) {
-      state.releasedBeforeStart = true;
       // 아직 노트가 생성되지 않았으므로 타이머가 실행되면 finalize를 스케줄링한다
       return;
     }
@@ -658,12 +737,47 @@ export function useNoteSystem({
   };
   const finalizeAllActive = (): void => finalizeAllActiveRef.current();
 
+  // UP 유실 복구: 스냅샷 기준 실제로 눌려 있지 않은 키의 활성 press를 종료.
+  // 유실된 release의 실제 시각은 복원 불가하므로 현재 시각 finalize로
+  // 성장만 정지시킨다 (실패 복구 경로이지 정상 판정이 아님)
+  const reconcileActiveNotes = (activeKeys: ReadonlySet<string>): void => {
+    const now = performance.now();
+    for (const [keyName, stateList] of activeNotes.current.entries()) {
+      if (activeKeys.has(keyName)) continue;
+      if (!Array.isArray(stateList)) continue;
+      // removeState가 배열을 변형하므로 사본 순회
+      for (const state of [...stateList]) {
+        if (!state || state.released) continue;
+        state.released = true;
+        state.releaseTime = now;
+        state.physReleaseTime = now;
+        if (state.startTimer) {
+          // 노트 생성 전이면 표시된 것이 없으므로 조용히 취소
+          clearTimeout(state.startTimer);
+          state.startTimer = null;
+          removeState(keyName, state);
+          continue;
+        }
+        // 성장 즉시 정지 - schedule 경유 시 delay 모드는 threshold만큼 더 자람
+        if (state.created && state.noteId) {
+          finalizeNote(
+            keyName,
+            state.noteId,
+            Math.max(now, state.startTime ?? 0),
+          );
+        }
+        removeState(keyName, state);
+      }
+    }
+  };
+
   return {
     notesRef,
     subscribe,
     handleKeyDown: effectiveHandleKeyDown,
     handleKeyUp: effectiveHandleKeyUp,
     finalizeAllActive,
+    reconcileActiveNotes,
     noteBuffer: noteBufferRef.current,
     updateTrackLayouts: (layouts: TrackLayoutInput[]) =>
       noteBufferRef.current.updateTrackLayouts(layouts),

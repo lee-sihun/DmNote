@@ -3,6 +3,14 @@ import { toRgbHexColor } from '@utils/color/colorUtils';
 
 const MAX_NOTES = 2048;
 
+// GPU 시각은 Float32라 절대값이 커질수록 간격이 벌어진다. 노트 길이보다 간격이
+// 넓어지면 시작·종료가 같은 값으로 뭉개져 길이가 0이 되므로 epoch를 주기적으로 옮긴다.
+// 최소 노트 길이는 1px / 9999px/s ≈ 0.10001ms 이고 2^19ms 구간의 간격은 0.0625ms라,
+// 이 한도에서는 설정 범위 전체가 안전하다. 한도를 올리면 정밀도 테스트가 깨진다
+const EPOCH_REBASE_LIMIT_MS = 524_288;
+// 셰이더 sentinel(startTime 0.0 = 빈 슬롯, endTime 0.0 = 활성)과의 우연 충돌 방지
+const EPOCH_ZERO_NUDGE = 1e-4;
+
 const SRGB_TO_LINEAR = new Float32Array(256);
 for (let i = 0; i < 256; i += 1) {
   const c = i / 255;
@@ -106,6 +114,14 @@ type ResolvedTrackLayout = TrackLayoutInput & {
 const clampPercentToUnit = (value: number) =>
   Math.min(Math.max(value / 100, 0), 1);
 
+// 트랙의 실효 글로우 크기 — 캔버스 crop bounds 계산에서도 동일 규칙 사용
+export const resolvedGlowSize = (
+  layout: Pick<TrackLayoutInput, 'noteGlowEnabled' | 'noteGlowSize'>,
+): number => {
+  if (!(layout.noteGlowEnabled ?? false)) return 0;
+  return Math.min(Math.max(layout.noteGlowSize ?? 20, 0), 50);
+};
+
 const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
   const baseOpacityPercent =
     layout.noteOpacity != null && Number.isFinite(layout.noteOpacity)
@@ -122,8 +138,7 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
       : baseOpacityPercent;
 
   const glowEnabled = layout.noteGlowEnabled ?? false;
-  const rawGlowSize = layout.noteGlowSize ?? 20;
-  const glowSize = glowEnabled ? Math.min(Math.max(rawGlowSize, 0), 50) : 0;
+  const glowSize = resolvedGlowSize(layout);
 
   const baseGlowOpacityPercent =
     layout.noteGlowOpacity != null && Number.isFinite(layout.noteGlowOpacity)
@@ -205,6 +220,8 @@ export class NoteBuffer {
   private trackLayouts: Map<string, ResolvedTrackLayout>;
   // allocate() 시프트 후 Map이 오래된 첫 인덱스. Infinity = Map 최신 상태
   private dirtyIndexStart: number;
+  // noteInfo 시각의 기준점 - GPU에는 (원시 시각 - epoch)만 전달
+  private epoch: number;
 
   activeCount: number;
   version: number;
@@ -230,6 +247,42 @@ export class NoteBuffer {
     this.activeCount = 0;
     this.version = 0;
     this.dirtyIndexStart = Infinity;
+    this.epoch = 0;
+  }
+
+  get timeEpoch(): number {
+    return this.epoch;
+  }
+
+  // 원시 시각(performance.now 기준) → GPU 저장 시각
+  private toGpuTime(t: number): number {
+    const v = t - this.epoch;
+    return v === 0 ? EPOCH_ZERO_NUDGE : v;
+  }
+
+  // 한도 초과 시 epoch를 nowMs로 이동하고 저장된 시각을 재기준화.
+  // true 반환 시 호출자가 noteInfo 전체 재업로드를 예약해야 함
+  maybeRebaseEpoch(nowMs: number): boolean {
+    const delta = nowMs - this.epoch;
+    if (delta <= EPOCH_REBASE_LIMIT_MS) return false;
+    for (let i = 0; i < this.activeCount; i += 1) {
+      const infoOffset = i * 3;
+      if (this.noteInfo[infoOffset] !== 0) {
+        this.noteInfo[infoOffset] -= delta;
+        if (this.noteInfo[infoOffset] === 0) {
+          this.noteInfo[infoOffset] = -EPOCH_ZERO_NUDGE;
+        }
+      }
+      if (this.noteInfo[infoOffset + 1] !== 0) {
+        this.noteInfo[infoOffset + 1] -= delta;
+        if (this.noteInfo[infoOffset + 1] === 0) {
+          this.noteInfo[infoOffset + 1] = -EPOCH_ZERO_NUDGE;
+        }
+      }
+    }
+    this.epoch = nowMs;
+    this.version += 1;
+    return true;
   }
 
   // allocate() 시프트로 오염된 Map 항목을 한 번에 재구축
@@ -270,6 +323,8 @@ export class NoteBuffer {
     if (this.activeCount >= MAX_NOTES) {
       return -1;
     }
+    // 'add' 이벤트가 전 속성 업로드를 예약하므로 여기서의 재기준화는 별도 예약 불필요
+    this.maybeRebaseEpoch(startTime);
     const {
       opacityTop,
       opacityBottom,
@@ -367,7 +422,7 @@ export class NoteBuffer {
     this.activeCount += 1;
 
     const infoOffset = insertIndex * 3;
-    this.noteInfo[infoOffset] = startTime;
+    this.noteInfo[infoOffset] = this.toGpuTime(startTime);
     this.noteInfo[infoOffset + 1] = 0;
     this.noteInfo[infoOffset + 2] = layout.position.dx;
 
@@ -420,7 +475,7 @@ export class NoteBuffer {
     if (index === undefined) {
       return -1;
     }
-    this.noteInfo[index * 3 + 1] = endTime;
+    this.noteInfo[index * 3 + 1] = this.toGpuTime(endTime);
     this.version += 1;
     return index;
   }

@@ -12,32 +12,46 @@ interface TabSwitchProps {
   className?: string;
 }
 
+// 세그먼트 컨트롤 — 활성 인디케이터가 transform으로 슬라이딩
 const TabSwitch = ({
   tabs,
   activeTab,
   onTabChange,
   className,
-}: TabSwitchProps) => (
-  <div
-    className={`flex w-full h-[30px] bg-[#26262C] rounded-[7px] items-center p-[3px] gap-[5px] ${
-      className ?? ''
-    }`}
-  >
-    {tabs.map((tab) => (
-      <button
-        key={tab.id}
-        type="button"
-        onClick={() => onTabChange(tab.id)}
-        className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-          activeTab === tab.id
-            ? 'bg-[#3A3943] text-white'
-            : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
-        }`}
-      >
-        {tab.label}
-      </button>
-    ))}
-  </div>
-);
+}: TabSwitchProps) => {
+  const activeIndex = Math.max(
+    0,
+    tabs.findIndex((tab) => tab.id === activeTab),
+  );
+
+  return (
+    <div
+      className={`relative flex w-full h-[30px] bg-inset rounded-surface items-center p-[2px] ${
+        className ?? ''
+      }`}
+    >
+      <div
+        aria-hidden
+        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
+        style={{
+          width: `calc((100% - 4px) / ${tabs.length})`,
+          transform: `translateX(${activeIndex * 100}%)`,
+        }}
+      />
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onTabChange(tab.id)}
+          className={`relative z-10 w-full h-full rounded-[8px] text-body transition-colors duration-base ${
+            activeTab === tab.id ? 'text-fg' : 'text-fg-muted hover:text-fg'
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+};
 
 export default TabSwitch;

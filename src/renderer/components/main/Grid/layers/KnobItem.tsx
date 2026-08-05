@@ -1,15 +1,31 @@
-import React, { useRef } from 'react';
+import React from 'react';
+import {
+  gradientToCss,
+  gradientRingStyle,
+  resolveStatePair,
+  type GradientSpec,
+} from '@src/types/color';
 import { isMac } from '@utils/core/platform';
 import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
-import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
+import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import {
-  calculateBounds,
-  calculateSnapPoints,
-  calculateGroupBounds,
-} from '@utils/grid/smartGuides';
+import { useGradientPreviewSession } from '@stores/grid/useGradientEditStore';
 import { resolveImageSource } from '@utils/core/imageSource';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+} from '@utils/core/elementDefaults';
+import {
+  elementShadowToCss,
+  resolveElementShadow,
+  type ElementShadowSpec,
+} from '@src/types/key/shadows';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -19,13 +35,25 @@ interface KnobPosition {
   height?: number;
   className?: string;
   backgroundColor?: string;
+  activeBackgroundColor?: string;
   borderColor?: string;
+  activeBorderColor?: string;
+  backgroundGradient?: GradientSpec | null;
+  activeBackgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
+  activeBorderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
+  shadow?: ElementShadowSpec;
+  activeShadow?: ElementShadowSpec;
   inactiveImage?: string;
   activeImage?: string;
   idleImageFit?: string;
+  activeImageFit?: string;
   imageFit?: string;
+  idleTransparent?: boolean;
+  activeTransparent?: boolean;
+  useInlineStyles?: boolean;
   zIndex?: number;
 }
 
@@ -41,12 +69,13 @@ interface KnobItemProps {
   position: KnobPosition;
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onClick?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
   onShiftClick?: (e: React.MouseEvent) => void;
   isSelected?: boolean;
   selectedElements?: SelectedElement[];
   onMultiDrag?: (dx: number, dy: number) => void;
-  onMultiDragStart?: () => void;
+  onMultiDragStart?: () => void | (() => void);
   onMultiDragEnd?: () => void;
   activeTool?: string;
   onEraserClick?: () => void;
@@ -65,6 +94,7 @@ const KnobItem = ({
   position,
   onPositionChange,
   onClick,
+  onDoubleClick,
   onCtrlClick,
   onShiftClick,
   isSelected = false,
@@ -90,15 +120,66 @@ const KnobItem = ({
     height = 60,
     className,
     backgroundColor,
+    activeBackgroundColor,
     borderColor,
+    activeBorderColor,
+    backgroundGradient,
+    activeBackgroundGradient,
+    borderGradient,
+    activeBorderGradient,
     borderWidth,
     borderRadius,
+    shadow,
+    activeShadow,
     inactiveImage,
     activeImage,
     idleImageFit,
+    activeImageFit,
     imageFit,
+    idleTransparent,
+    activeTransparent,
+    useInlineStyles,
   } = position ?? ({} as Partial<KnobPosition>);
+  const useInline = useInlineStyles === true;
 
+  // 편집 세션 일시 페인트 — 대상 spec과 대기/입력 상태를 한 묶음으로 렌더
+  const previewSession = useGradientPreviewSession('knob', index, isSelected);
+  const previewActive = previewSession?.stateMode === 'active';
+  const bgPair = resolveStatePair(
+    previewActive,
+    { color: backgroundColor, gradient: backgroundGradient },
+    { color: activeBackgroundColor, gradient: activeBackgroundGradient },
+  );
+  const borderPair = resolveStatePair(
+    previewActive,
+    { color: borderColor, gradient: borderGradient },
+    { color: activeBorderColor, gradient: activeBorderGradient },
+  );
+  const effectiveBgGradient =
+    previewSession?.surface === 'background'
+      ? previewSession.spec
+      : bgPair.gradient;
+  const effectiveBorderGradient =
+    previewSession?.surface === 'border'
+      ? previewSession.spec
+      : borderPair.gradient;
+  const stateBackgroundColor =
+    bgPair.color ||
+    (previewActive ? DEFAULT_ELEMENT_ACTIVE_BG : DEFAULT_ELEMENT_BG);
+  const stateBorderColor =
+    borderPair.color ||
+    (previewActive ? DEFAULT_ELEMENT_ACTIVE_FONT : DEFAULT_ELEMENT_FONT);
+
+  // 키·그래프와 동일 규칙 — 두께 미지정이면 기본 두께 링, 0은 명시적 비활성
+  const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
+  const showBorderRing =
+    Boolean(effectiveBorderGradient) &&
+    (borderWidth != null ? borderWidth > 0 : true);
+  const resolvedRadius = borderRadius != null ? `${borderRadius}px` : '50%';
+  const resolvedBorder =
+    !effectiveBorderGradient && borderWidth && borderWidth > 0
+      ? `${borderWidth}px solid ${stateBorderColor}`
+      : 'none';
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
     (state: { gridSettings?: { gridSnapSize?: number } }) =>
@@ -109,22 +190,35 @@ const KnobItem = ({
   );
 
   const isSelectionMode = isSelected;
-  const multiDragRef = useRef<{
-    isDragging: boolean;
-    startX: number;
-    startY: number;
-    lastSnappedDeltaX?: number;
-    lastSnappedDeltaY?: number;
-  }>({ isDragging: false, startX: 0, startY: 0 });
   const effectiveElementId = elementId || `knob-${index}`;
 
+  const inactiveImageSrc = resolveImageSource(inactiveImage);
+  const activeImageSrc = resolveImageSource(activeImage);
   const imageSrc =
-    resolveImageSource(inactiveImage) ||
-    resolveImageSource(activeImage) ||
-    null;
-  const resolvedFit = (idleImageFit ||
-    imageFit ||
-    'cover') as React.CSSProperties['objectFit'];
+    (previewActive && activeImageSrc
+      ? activeImageSrc
+      : inactiveImageSrc || activeImageSrc) || null;
+  // 투명 노브의 기본 그림자 억제 — 오버레이(OverlayKnobItem)와 동일 규칙
+  const isTransparent = previewActive
+    ? activeTransparent === true
+    : idleTransparent === true;
+  const resolvedShadow = elementShadowToCss(
+    resolveElementShadow({
+      active: previewActive,
+      shadow,
+      activeShadow,
+      defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+      defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+      suppressDefault: Boolean(
+        isTransparent || imageSrc || (borderWidth && borderWidth > 0),
+      ),
+    }),
+  );
+  const resolvedFit = (
+    previewActive && activeImageSrc
+      ? activeImageFit || imageFit || 'cover'
+      : idleImageFit || imageFit || 'cover'
+  ) as React.CSSProperties['objectFit'];
 
   const draggable = useDraggable({
     gridSize: gridSnapSize,
@@ -145,223 +239,32 @@ const KnobItem = ({
     disabled: isSelectionMode,
   });
 
+  const {
+    handlePointerDown: handleSelectionDragPointerDown,
+    movedDuringPressRef,
+  } = useSelectionDrag({
+    enabled: isSelectionMode,
+    zoom,
+    startX: dx,
+    startY: dy,
+    elementId: effectiveElementId,
+    elementWidth: width || 60,
+    elementHeight: height || 60,
+    elementType: 'knob',
+    elementIndex: index,
+    selectedElements,
+    getOtherElements,
+    onMultiDragStart,
+    onMultiDrag,
+    onMultiDragEnd,
+  });
+
   if (position?.hidden) return null;
 
-  const handleSelectionDragMouseDown = (e: React.MouseEvent) => {
-    if (!isSelectionMode || e.button !== 0) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    useSmartGuidesStore.getState().clearGuides();
-    useGridSelectionStore.getState().setDraggingOrResizing(true);
-
-    onMultiDragStart?.();
-
-    const startDx = dx;
-    const startDy = dy;
-    const currentWidth = width || 60;
-    const currentHeight = height || 60;
-    const currentElementId = effectiveElementId;
-
-    multiDragRef.current = {
-      isDragging: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      lastSnappedDeltaX: 0,
-      lastSnappedDeltaY: 0,
-    };
-
-    let rafId: number | null = null;
-    let dragEnded = false;
-    const smartGuidesStore = useSmartGuidesStore.getState();
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!multiDragRef.current.isDragging || dragEnded) return;
-      if (rafId) return;
-
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (dragEnded) return;
-
-        const currentZoom = zoom;
-        const rawDeltaX =
-          (moveEvent.clientX - multiDragRef.current.startX) / currentZoom;
-        const rawDeltaY =
-          (moveEvent.clientY - multiDragRef.current.startY) / currentZoom;
-
-        const newX = startDx + rawDeltaX;
-        const newY = startDy + rawDeltaY;
-
-        const gridSettings = useSettingsStore.getState().gridSettings;
-        const alignmentGuidesEnabled = gridSettings?.alignmentGuides !== false;
-        const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
-
-        const otherElements = getOtherElements(currentElementId);
-        const nonSelectedElements = otherElements.filter(
-          (el: { id: string }) =>
-            !selectedElements.some((sel) => sel.id === el.id),
-        );
-
-        const draggedBounds = calculateBounds(
-          newX,
-          newY,
-          currentWidth,
-          currentHeight,
-          currentElementId,
-        );
-
-        let groupBounds: ReturnType<typeof calculateGroupBounds> | null = null;
-        if (selectedElements.length > 1) {
-          const selectedBoundsArray = selectedElements
-            .map((sel) => {
-              if (
-                sel.id === currentElementId ||
-                (sel.type === 'knob' && sel.index === index)
-              ) {
-                return draggedBounds;
-              }
-
-              const found = otherElements.find(
-                (el: { id: string }) => el.id === sel.id,
-              );
-              if (!found) return null;
-
-              return calculateBounds(
-                found.left + rawDeltaX,
-                found.top + rawDeltaY,
-                found.width,
-                found.height,
-                found.id,
-              );
-            })
-            .filter(Boolean);
-          groupBounds = calculateGroupBounds(selectedBoundsArray);
-        }
-
-        const snapTargetBounds =
-          selectedElements.length > 1 && groupBounds
-            ? groupBounds
-            : draggedBounds;
-
-        const snapResult = alignmentGuidesEnabled
-          ? calculateSnapPoints(
-              snapTargetBounds,
-              nonSelectedElements,
-              undefined,
-              {
-                groupBounds,
-                disableSpacing: !spacingGuidesEnabled,
-              },
-            )
-          : null;
-
-        let finalX: number;
-        let finalY: number;
-
-        if (snapResult?.didSnapX) {
-          if (selectedElements.length > 1 && groupBounds) {
-            const groupSnapDeltaX = snapResult.snappedX - groupBounds.left;
-            finalX = newX + groupSnapDeltaX;
-          } else {
-            finalX = snapResult.snappedX;
-          }
-        } else {
-          const snapSize = gridSettings?.gridSnapSize || 5;
-          finalX = Math.round(newX / snapSize) * snapSize;
-        }
-
-        if (snapResult?.didSnapY) {
-          if (selectedElements.length > 1 && groupBounds) {
-            const groupSnapDeltaY = snapResult.snappedY - groupBounds.top;
-            finalY = newY + groupSnapDeltaY;
-          } else {
-            finalY = snapResult.snappedY;
-          }
-        } else {
-          const snapSize = gridSettings?.gridSnapSize || 5;
-          finalY = Math.round(newY / snapSize) * snapSize;
-        }
-
-        const snappedDeltaX = Math.round(finalX - startDx);
-        const snappedDeltaY = Math.round(finalY - startDy);
-
-        if (snapResult && (snapResult.didSnapX || snapResult.didSnapY)) {
-          const displayBounds =
-            selectedElements.length > 1 && groupBounds
-              ? calculateBounds(
-                  groupBounds.left +
-                    (snapResult.didSnapX
-                      ? snapResult.snappedX - groupBounds.left
-                      : 0),
-                  groupBounds.top +
-                    (snapResult.didSnapY
-                      ? snapResult.snappedY - groupBounds.top
-                      : 0),
-                  groupBounds.width,
-                  groupBounds.height,
-                  'group',
-                )
-              : calculateBounds(
-                  finalX,
-                  finalY,
-                  currentWidth,
-                  currentHeight,
-                  currentElementId,
-                );
-
-          smartGuidesStore.setDraggedBounds(displayBounds);
-          smartGuidesStore.setActiveGuides(snapResult.guides);
-
-          if (
-            spacingGuidesEnabled &&
-            snapResult.spacingGuides &&
-            snapResult.spacingGuides.length > 0
-          ) {
-            smartGuidesStore.setSpacingGuides(snapResult.spacingGuides);
-          } else {
-            smartGuidesStore.setSpacingGuides([]);
-          }
-        } else {
-          smartGuidesStore.clearGuides();
-        }
-
-        const moveDeltaX =
-          snappedDeltaX - (multiDragRef.current.lastSnappedDeltaX ?? 0);
-        const moveDeltaY =
-          snappedDeltaY - (multiDragRef.current.lastSnappedDeltaY ?? 0);
-
-        if (moveDeltaX !== 0 || moveDeltaY !== 0) {
-          multiDragRef.current.lastSnappedDeltaX = snappedDeltaX;
-          multiDragRef.current.lastSnappedDeltaY = snappedDeltaY;
-          onMultiDrag?.(moveDeltaX, moveDeltaY);
-        }
-      });
-    };
-
-    const handleMouseUp = () => {
-      dragEnded = true;
-      multiDragRef.current.isDragging = false;
-
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('blur', handleMouseUp);
-      useSmartGuidesStore.getState().clearGuides();
-      useGridSelectionStore.getState().setDraggingOrResizing(false);
-      onMultiDragEnd?.();
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('blur', handleMouseUp);
-  };
-
   const handleClick = (e: React.MouseEvent) => {
+    // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
+    // 이 클릭이 선택·패널 오픈으로 이어져 방금 연 메뉴를 닫는 것을 차단
+    if (macOS && e.ctrlKey) return;
     const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
 
@@ -396,6 +299,19 @@ const KnobItem = ({
     }
   };
 
+  // 더블클릭 편집 진입 — 순수 더블클릭만 통과 (드래그·수식키·지우개·뷰포트 변환 제외)
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (!onDoubleClick) return;
+    if (macOS && e.ctrlKey) return;
+    if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+    if (activeTool === 'eraser') return;
+    if (isViewportTransforming) return;
+    if (draggable.recentPressMovedRef.current || movedDuringPressRef.current)
+      return;
+    e.stopPropagation();
+    onDoubleClick(e);
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -416,41 +332,75 @@ const KnobItem = ({
   return (
     <div
       ref={attachRef}
-      className={`absolute select-none ${className || ''}`}
+      className={`absolute select-none dmn-grabbable ${className || ''}`}
       style={{
         width: `${width}px`,
         height: `${height}px`,
         transform,
         zIndex: position.zIndex ?? zIndex,
-        cursor: 'pointer',
         willChange:
           isDraggingOrResizing || isViewportTransforming ? 'transform' : 'auto',
-        contain: 'layout style paint',
+        contain: 'layout style',
       }}
       data-editing={isDraggingOrResizing ? 'true' : undefined}
       onClick={handleClick}
-      onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
+      onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}
+      onPointerDown={
+        isSelectionMode ? handleSelectionDragPointerDown : undefined
+      }
       onContextMenu={handleContextMenu}
       onDragStart={(e: React.DragEvent) => e.preventDefault()}
     >
       <div
-        style={{
-          width: '100%',
-          height: '100%',
-          // 모서리 반경 미지정 시 원형 유지 (px 지정 시 키와 동일한 px 단위)
-          borderRadius: borderRadius != null ? `${borderRadius}px` : '50%',
-          overflow: 'hidden',
-          position: 'relative',
-          background: backgroundColor || 'rgba(46, 46, 47, 0.9)',
-          border:
-            borderWidth && borderWidth > 0
-              ? `${borderWidth}px solid ${
-                  borderColor || 'rgba(113, 113, 113, 0.9)'
-                }`
-              : `1px solid ${borderColor || 'rgba(113, 113, 113, 0.9)'}`,
-          boxSizing: 'border-box',
-        }}
+        style={
+          {
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            position: 'relative',
+            ...(useInline
+              ? {
+                  borderRadius: resolvedRadius,
+                  background: effectiveBgGradient
+                    ? gradientToCss(effectiveBgGradient)
+                    : stateBackgroundColor,
+                  backgroundClip: 'padding-box',
+                  border: resolvedBorder,
+                  padding: showBorderRing
+                    ? `${gradientRingWidth}px`
+                    : undefined,
+                  boxShadow: resolvedShadow,
+                }
+              : {
+                  '--dmn-knob-bg-default': effectiveBgGradient
+                    ? gradientToCss(effectiveBgGradient)
+                    : stateBackgroundColor,
+                  '--dmn-knob-border-default': resolvedBorder,
+                  '--dmn-knob-radius-default': resolvedRadius,
+                  '--dmn-knob-padding-default': showBorderRing
+                    ? `${gradientRingWidth}px`
+                    : '0px',
+                  '--dmn-knob-shadow-default': resolvedShadow,
+                  '--dmn-knob-indicator-default': stateBorderColor,
+                }),
+            boxSizing: 'border-box',
+          } as React.CSSProperties
+        }
+        data-knob-element="true"
+        data-knob-state={previewActive ? 'active' : 'inactive'}
       >
+        {showBorderRing && effectiveBorderGradient && (
+          <span
+            aria-hidden="true"
+            data-gradient-border-ring="true"
+            style={{
+              ...gradientRingStyle(effectiveBorderGradient, gradientRingWidth),
+              ...(useInline
+                ? { background: gradientToCss(effectiveBorderGradient) }
+                : {}),
+            }}
+          />
+        )}
         {imageSrc ? (
           <img
             src={imageSrc}
@@ -473,9 +423,10 @@ const KnobItem = ({
               width: '8%',
               height: '76%',
               transform: 'translateX(-50%)',
-              background: borderColor || 'rgba(113, 113, 113, 0.9)',
+              background: useInline ? stateBorderColor : undefined,
               borderRadius: '4px',
             }}
+            data-knob-indicator="true"
           />
         )}
       </div>

@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -6,12 +12,21 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
+import {
+  getDefaultSettings,
+  normalizeSettingsSections,
+  omitLayoutSettingValues,
+  type SettingsNormalizationErrorKind,
+} from '@plugins/runtime/settingsSections';
+import { updatePluginElement } from '@plugins/rpc/pluginElementActions';
 import {
   toRgbHexColor,
   parseAlphaPercent,
@@ -24,6 +39,7 @@ import type { KnobItemPosition } from '@src/types/key/knobs';
 import type {
   PluginSettingSchema,
   PluginMessages,
+  PluginDefinitionInternal,
   RawInputPayload,
 } from '@src/types/plugin/api';
 import {
@@ -31,17 +47,22 @@ import {
   normalizeCounterSettings,
 } from '@src/types/key/keys';
 import { useLenis } from '@hooks/useLenis';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import {
+  composePreviewPositions,
+  getPreviewOverlayVersion,
+  subscribePreviewOverlay,
+} from '@src/renderer/editor/runtime/previewOverlay';
 
 // 분리된 컴포넌트들 및 훅
 import {
   TABS,
-  TabType,
   PropertyRow,
+  PropertySection,
   NumberInput,
   ColorInput,
   TextInput,
-  SectionDivider,
-  SidebarToggleIcon,
   LayerPanel,
   PluginSelectionPanel,
   SingleGraphPanel,
@@ -54,6 +75,13 @@ import {
   useBatchHandlers,
   usePanelScroll,
 } from './PropertiesPanel/index';
+import {
+  SIDE_PANEL_FRAME_CLASS,
+  WINDOW_PANEL_FRAME_CLASS,
+} from './PropertiesPanel/panelChrome';
+import { PanelNavProvider } from './PropertiesPanel/PanelNavContext';
+import PanelHeaderActions from './PropertiesPanel/PanelHeaderActions';
+import PanelToggleButton from './PropertiesPanel/PanelToggleButton';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
@@ -72,6 +100,25 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
   }
 };
 
+const shouldNormalizePropertyTabToStyle = (
+  elements: Array<{ type: string }>,
+  activeTab: (typeof TABS)[keyof typeof TABS],
+): boolean => {
+  if (activeTab === TABS.STYLE) return false;
+  const hasKey = elements.some((element) => element.type === 'key');
+  const hasStat = elements.some((element) => element.type === 'stat');
+  const hasGraph = elements.some((element) => element.type === 'graph');
+  const hasPlugin = elements.some((element) => element.type === 'plugin');
+
+  if (activeTab === TABS.NOTE && hasStat && !hasKey && !hasPlugin) {
+    return true;
+  }
+  return hasGraph && !hasKey && !hasStat && !hasPlugin;
+};
+
+// 서브 페이지 exit 전환 시간 — --ui-duration-page와 동기
+const PAGE_EXIT_MS = 250;
+
 // ============================================================================
 // 메인 컴포넌트 Props
 // ============================================================================
@@ -81,13 +128,20 @@ interface PropertiesPanelProps {
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyBatchUpdate?: (
     updates: Array<{ index: number } & Partial<KeyPosition>>,
-    options?: { skipHistory?: boolean },
+    options?: { deferSave?: boolean },
   ) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   onKeyBatchPreview?: (
     updates: Array<{ index: number } & Partial<KeyPosition>>,
   ) => void;
   onKeyMappingChange?: (index: number, newKey: string) => void;
+  // 분리 창 전환 액션 - 메인은 detach, 분리 창은 reattach
+  detachAction?: 'detach' | 'reattach';
+  onDetachAction?: () => void;
+  // 분리 창에서는 인셋 채움 프레임 사용
+  frameVariant?: 'inline' | 'window';
+  // 분리 창의 authoritative 선택 동기화 완료 여부
+  selectionSyncReady?: boolean;
 }
 
 // ============================================================================
@@ -97,6 +151,10 @@ interface PropertiesPanelProps {
 const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onPositionChange,
   onKeyUpdate,
+  detachAction,
+  onDetachAction,
+  frameVariant = 'inline',
+  selectionSyncReady = true,
   onKeyBatchUpdate,
   onKeyPreview,
   onKeyBatchPreview,
@@ -106,21 +164,41 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedElements = useGridSelectionStore(
     (state) => state.selectedElements,
   );
-  const pushHistoryState = useHistoryStore((state) => state.pushState);
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const positions = useKeyStore((state) => state.positions);
   const keyMappings = useKeyStore((state) => state.keyMappings);
-  const statItemPositions = useStatItemStore((state) => state.positions);
-  const graphItemPositions = useGraphItemStore((state) => state.positions);
+  const canonicalStatItemPositions = useStatItemStore(
+    (state) => state.positions,
+  );
+  const canonicalGraphItemPositions = useGraphItemStore(
+    (state) => state.positions,
+  );
+  const canonicalKnobItemPositions = useKnobItemStore(
+    (state) => state.positions,
+  );
+  useSyncExternalStore(
+    subscribePreviewOverlay,
+    getPreviewOverlayVersion,
+    getPreviewOverlayVersion,
+  );
+  const statItemPositions = composePreviewPositions(
+    'statPosition',
+    canonicalStatItemPositions,
+  );
+  const graphItemPositions = composePreviewPositions(
+    'graphPosition',
+    canonicalGraphItemPositions,
+  );
+  const knobItemPositions = composePreviewPositions(
+    'knobPosition',
+    canonicalKnobItemPositions,
+  );
   const { useCustomCSS } = useSettingsStore();
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements,
+    selectPropertyPanelPluginElements,
   );
   const pluginDefinitions = usePluginDisplayElementStore(
     (state) => state.definitions,
-  );
-  const updatePluginElement = usePluginDisplayElementStore(
-    (state) => state.updateElement,
   );
   const pluginSettingsPanel = usePropertiesPanelStore(
     (state) => state.pluginSettingsPanel,
@@ -128,9 +206,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const closePluginSettingsPanel = usePropertiesPanelStore(
     (state) => state.closePluginSettingsPanel,
   );
-  const isPanelVisible = usePropertiesPanelStore(
+  const isPanelVisibleStore = usePropertiesPanelStore(
     (state) => state.isCanvasPanelOpen,
   );
+  // 분리 창은 창 자체가 패널 - 가시성 개념이 없어 항상 열림으로 취급해야
+  // 선택 도착·해제가 모드를 property로 강제하거나 내용을 숨기지 않음
+  const isPanelVisible = frameVariant === 'window' || isPanelVisibleStore;
   const setIsPanelVisible = usePropertiesPanelStore(
     (state) => state.setCanvasPanelOpen,
   );
@@ -174,9 +255,43 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   })();
 
+  const pluginDefinitionViews = usePluginDisplayElementStore(
+    (state) => state.definitionViews,
+  );
+  const pluginElementVisibilityViews = usePluginDisplayElementStore(
+    (state) => state.elementVisibilityViews,
+  );
+
   const selectedPluginDefinition = (() => {
     if (!selectedPluginElement?.definitionId) return null;
-    return pluginDefinitions.get(selectedPluginElement.definitionId) || null;
+    const local = pluginDefinitions.get(selectedPluginElement.definitionId);
+    if (local) return local;
+    // 분리 패널 창 - main이 push한 definition 투영으로 폴백
+    // visibility는 main이 요소별 현재 settings로 평가한 오버레이를 병합
+    const view = pluginDefinitionViews.get(selectedPluginElement.definitionId);
+    if (!view) return null;
+    const visibilityOverlay = pluginElementVisibilityViews.get(
+      selectedPluginElement.fullId,
+    );
+    const settings = visibilityOverlay
+      ? Object.fromEntries(
+          Object.entries(view.resolvedSettingsSchema).map(([key, schema]) => [
+            key,
+            { ...schema, visible: visibilityOverlay[key] ?? schema.visible },
+          ]),
+        )
+      : view.resolvedSettingsSchema;
+    return {
+      id: view.definitionId,
+      pluginId: selectedPluginElement.pluginId,
+      name: view.name,
+      resizable: view.resizable,
+      preserveAxis: view.preserveAxis,
+      resizeAnchor: view.resizeAnchor,
+      settingsUI: view.settingsUI,
+      settings,
+      messages: view.messages,
+    } as unknown as PluginDefinitionInternal;
   })();
 
   const pluginSettingsUI = selectedPluginDefinition?.settingsUI ?? 'panel';
@@ -225,7 +340,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleGraphIndex !== null
       ? graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null
       : null;
-  const knobItemPositions = useKnobItemStore((state) => state.positions);
   const singleKnobIndex =
     selectedKnobElements.length === 1 ? selectedKnobElements[0].index : null;
   const singleKnobPosition: KnobItemPosition | null =
@@ -293,13 +407,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [localState, setLocalState] = useState<
     Partial<KeyPosition> & { dx?: number; dy?: number }
   >({});
-  const pluginSettingsHistoryRef = useRef<string | null>(null);
-  const pluginTransformHistoryRef = useRef<string | null>(null);
-
-  // preview가 store를 직접 변경하므로, commit이 아닌 preview 시작 시 히스토리 저장
-  const statPreviewHistorySavedRef = useRef(false);
-  const graphPreviewHistorySavedRef = useRef(false);
-  const knobPreviewHistorySavedRef = useRef(false);
+  const pluginVisibilityErrorsRef = useRef(new Set<string>());
   const [pluginPanelSettings, setPluginPanelSettings] = useState<
     Record<string, unknown>
   >({});
@@ -341,8 +449,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 패널 ref (컬러픽커/이미지픽커 위치 기준)
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
 
-  // 패널 모드 상태 (layer: 레이어 패널, property: 속성 패널)
-  const [panelMode, setPanelMode] = useState<'layer' | 'property'>('property');
+  // 패널 모드 (layer: 레이어 패널, property: 속성 패널)
+  // 설정 왕복으로 리마운트돼도 열림 상태와 함께 보존되도록 store에 유지
+  const panelMode = usePropertiesPanelStore((state) => state.canvasPanelMode);
+  const setPanelMode = usePropertiesPanelStore(
+    (state) => state.setCanvasPanelMode,
+  );
 
   // panelMode를 ref로도 유지 (useEffect에서 최신 값 참조용)
   const panelModeRef = useRef(panelMode);
@@ -371,44 +483,144 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   }, [selectedKeyType]);
 
-  // 탭 상태
-  const [activeTab, setActiveTab] = useState<TabType>(TABS.STYLE);
+  const activeTab = usePropertiesPanelStore(
+    (state) => state.propertyPanelActiveTab,
+  );
+  const setActiveTab = usePropertiesPanelStore(
+    (state) => state.setPropertyPanelActiveTab,
+  );
 
-  // 통계 요소 선택 시 NOTE 탭 숨김 처리
+  // 인-패널 내비게이션 — 피커 서브 페이지 (키는 트리거 사이트별 유니크)
+  // activePageKey는 애니메이션 상태, renderPageKey는 마운트 상태 —
+  // exit 전환이 끝날 때까지 콘텐츠를 유지해 빈 페이지 슬라이드 방지
+  const [activePageKey, setActivePageKey] = useState<string | null>(null);
+  const [renderPageKey, setRenderPageKey] = useState<string | null>(null);
+  const [pageHost, setPageHost] = useState<HTMLDivElement | null>(null);
+  const pageExitTimerRef = useRef<number | null>(null);
+
+  const openPage = useCallback((key: string) => {
+    if (pageExitTimerRef.current !== null) {
+      window.clearTimeout(pageExitTimerRef.current);
+      pageExitTimerRef.current = null;
+    }
+    setActivePageKey(key);
+    setRenderPageKey(key);
+  }, []);
+
+  const closePage = useCallback(() => {
+    setActivePageKey(null);
+    if (pageExitTimerRef.current !== null) {
+      window.clearTimeout(pageExitTimerRef.current);
+    }
+    pageExitTimerRef.current = window.setTimeout(() => {
+      pageExitTimerRef.current = null;
+      setRenderPageKey(null);
+    }, PAGE_EXIT_MS);
+  }, []);
+
   useEffect(() => {
-    if (
-      selectedKeyLikeElements.length === 0 ||
-      selectedPluginElements.length > 0
-    ) {
-      return;
-    }
-    const shouldHideNote =
-      selectedStatElements.length > 0 && selectedKeyElements.length === 0;
-    if (shouldHideNote && activeTab === TABS.NOTE) {
-      setActiveTab(TABS.STYLE);
-    }
-  }, [
-    activeTab,
-    selectedKeyLikeElements.length,
-    selectedPluginElements.length,
-    selectedStatElements.length,
+    return () => {
+      if (pageExitTimerRef.current !== null) {
+        window.clearTimeout(pageExitTimerRef.current);
+      }
+    };
+  }, []);
+
+  // 탭/모드/패널 표시 전환 시 서브 페이지 닫기
+  useEffect(() => {
+    closePage();
+  }, [activeTab, panelMode, isPanelVisible, selectedKeyType, closePage]);
+
+  // 패널 본문 종류(단일/배치/플러그인 등)가 바뀌면 트리거 사이트가 함께
+  // 사라지므로 서브 페이지 무효화 — 선택 이펙트의 early return 경로 보완
+  const panelScopeKey = [
+    pluginSettingsPanel ? 'plugin-settings' : 'grid',
     selectedKeyElements.length,
-  ]);
-
-  // 그래프만 선택된 상태에서는 STYLE 탭만 사용
+    selectedElements.length,
+    selectedPluginElements.length,
+    selectedGraphElements.length,
+    selectedKnobElements.length,
+  ].join('|');
   useEffect(() => {
-    const graphOnlySelection =
-      selectedGraphElements.length > 0 &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedPluginElements.length === 0;
-    if (graphOnlySelection && activeTab !== TABS.STYLE) {
+    closePage();
+  }, [panelScopeKey, closePage]);
+
+  // Escape로 서브 페이지 닫기 — 입력 필드 편집·상위 레이어와 경합 방지
+  useEffect(() => {
+    if (!activePageKey) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      // 모달·포털 메뉴 등 상위 레이어가 열려 있으면 그쪽이 Escape를 소유
+      if (
+        document.querySelector(
+          '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
+        )
+      ) {
+        return;
+      }
+      // 이 레이어가 소비 — 그리드의 선택 해제까지 내려가지 않게
+      event.preventDefault();
+      event.stopPropagation();
+      closePage();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [activePageKey, closePage]);
+
+  // Escape로 플러그인 설정 세션 취소 - 서브 페이지·모달이 없을 때만
+  useEffect(() => {
+    if (!pluginSettingsPanel || activePageKey) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (isHistoryEditorFlushLocked()) return;
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (
+        document.querySelector(
+          '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      handlePluginSettingsPanelCancelImpl.current();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [pluginSettingsPanel, activePageKey]);
+
+  // 선택 동기화 중 이전 렌더의 effect가 최신 탭을 덮지 않도록 커밋 직전 재확인
+  useEffect(() => {
+    if (frameVariant === 'window' && !selectionSyncReady) return;
+    const latestTab = usePropertiesPanelStore.getState().propertyPanelActiveTab;
+    const latestSelection = useGridSelectionStore.getState().selectedElements;
+    if (shouldNormalizePropertyTabToStyle(latestSelection, latestTab)) {
       setActiveTab(TABS.STYLE);
     }
   }, [
+    frameVariant,
+    selectionSyncReady,
     activeTab,
-    selectedGraphElements.length,
-    selectedKeyLikeElements.length,
-    selectedPluginElements.length,
+    selectedElements,
+    setActiveTab,
   ]);
 
   // 레이어 이름 변경: 현재 선택된 요소의 layerName 가져오기
@@ -447,20 +659,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       (group) => group.id === groupId,
     );
     if (!currentGroup || currentGroup.name === trimmed) return;
-
-    const { keyMappings: km, positions: pos } = useKeyStore.getState();
-    const statPos = useStatItemStore.getState().positions;
-    const graphPos = useGraphItemStore.getState().positions;
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-
-    useHistoryStore.getState().pushState({
-      keyMappings: km,
-      positions: pos,
-      statPositions: statPos,
-      graphPositions: graphPos,
-      pluginElements: pluginEls,
-      layerGroups: currentGroups,
-    });
 
     const updated = {
       ...currentGroups,
@@ -558,9 +756,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         useKnobItemStore.getState().setPositions(nextPositions);
         try {
           await window.api.knobItems.updatePositions(nextPositions);
-          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-            positions: nextPositions,
-          });
         } finally {
           useKnobItemStore.getState().setLocalUpdateInProgress(false);
         }
@@ -597,6 +792,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleStatPosition,
     singleGraphPosition,
     singleKnobPosition,
+    setPanelMode,
   ]);
 
   // 선택이 변경되면 rename 모드 해제
@@ -605,69 +801,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }, [selectedElements]);
 
   // 스크롤 훅 사용
-  const {
-    batchScrollRefFor,
-    batchThumbRefFor,
-    singleScrollRefFor,
-    singleThumbRefFor,
-  } = usePanelScroll(activeTab, selectedElements.length);
+  const { batchScrollRefFor, singleScrollRefFor } = usePanelScroll();
 
   // 플러그인 패널 스크롤
-  const pluginScrollElementRef = useRef<HTMLDivElement | null>(null);
-  const pluginThumbRef = useRef<HTMLDivElement | null>(null);
-
-  const calculatePluginThumb = (el: HTMLDivElement) => {
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const canScroll = scrollHeight > clientHeight + 1;
-    if (!canScroll) return { top: 0, height: 0, visible: false };
-
-    const minThumbHeight = 16;
-    const height = Math.max(
-      minThumbHeight,
-      (clientHeight / scrollHeight) * clientHeight,
-    );
-    const maxTop = clientHeight - height;
-    const top =
-      maxTop <= 0 ? 0 : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
-
-    return { top, height, visible: true };
-  };
-
-  const updatePluginThumbDOM = () => {
-    if (!pluginThumbRef.current || !pluginScrollElementRef.current) return;
-    const thumb = calculatePluginThumb(pluginScrollElementRef.current);
-    pluginThumbRef.current.style.top = `${thumb.top}px`;
-    pluginThumbRef.current.style.height = `${thumb.height}px`;
-    pluginThumbRef.current.style.display = thumb.visible ? 'block' : 'none';
-  };
-
-  const { scrollContainerRef: pluginLenisRef } = useLenis({
-    onScroll: updatePluginThumbDOM,
-  });
-
-  const setPluginScrollRef = (node: HTMLDivElement | null) => {
-    pluginScrollElementRef.current = node;
-    pluginLenisRef(node);
-  };
-
-  const setPluginThumbRef = (node: HTMLDivElement | null) => {
-    pluginThumbRef.current = node;
-  };
-
-  useEffect(() => {
-    const hasPluginPanel =
-      !!pluginSettingsPanel ||
-      (selectedPluginElements.length > 0 &&
-        selectedKeyLikeElements.length === 0 &&
-        selectedGraphElements.length === 0);
-
-    if (!hasPluginPanel) return;
-
-    const raf = requestAnimationFrame(() => {
-      updatePluginThumbDOM();
-    });
-    return () => cancelAnimationFrame(raf);
-  });
+  const { scrollContainerRef: setPluginScrollRef } = useLenis();
 
   // 배치 편집용 로컬 ColorPicker 상태
   type BatchPickerTarget =
@@ -681,6 +818,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [batchCounterColorState, setBatchCounterColorState] = useState<
     'idle' | 'active'
   >('idle');
+  const effectiveBatchCounterColorState =
+    selectedKeyElements.length > 0 ? batchCounterColorState : 'idle';
+
+  useEffect(() => {
+    if (selectedKeyElements.length === 0) {
+      setBatchCounterColorState('idle');
+      setBatchPickerFor((current) =>
+        current === 'fill' || current === 'stroke' ? null : current,
+      );
+    }
+  }, [selectedKeyElements.length]);
 
   const [batchLocalColors, setBatchLocalColors] = useState<{
     noteColor: NoteColor;
@@ -735,11 +883,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   }, [pluginSettingsPanel]);
 
-  useEffect(() => {
-    pluginSettingsHistoryRef.current = null;
-    pluginTransformHistoryRef.current = null;
-  }, [selectedPluginElement?.fullId]);
-
   // 선택된 키가 변경될 때 패널 열기/닫기
   useEffect(() => {
     const hasSelection =
@@ -757,28 +900,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     if (hasSelection) {
+      // 열린 패널의 페이지는 sticky — 레이어 목록 표시 중 캔버스 클릭은 선택만 바꾸고
+      // 편집(property) 진입은 더블클릭·목록 더블클릭·헤더 토글만 수행한다 (포토샵식)
       if (!hadSelection) {
         manuallyClosedRef.current = false;
         if (!isPanelVisible) {
           setPanelMode('property');
           setIsPanelVisible(true);
-        } else if (
-          panelModeRef.current === 'layer' &&
-          !selectionFromLayerPanelRef.current &&
-          !skipFromKeyboard
-        ) {
-          setPanelMode('property');
         }
       } else if (!isPanelVisible && !manuallyClosedRef.current) {
         setPanelMode('property');
         setIsPanelVisible(true);
-      } else if (
-        panelModeRef.current === 'layer' &&
-        !selectionFromLayerPanelRef.current &&
-        !skipFromKeyboard &&
-        isPanelVisible
-      ) {
-        setPanelMode('property');
       }
     } else if (hadSelection) {
       if (keyTypeChangedRef.current && isPanelVisible) {
@@ -803,6 +935,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setShowGraphImagePicker(false);
     setShowBatchImagePicker(false);
     setIsListening(false);
+    closePage();
   }, [
     singleKeyIndex,
     selectedKeyElements.length,
@@ -810,6 +943,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     isPanelVisible,
     pluginSettingsPanel,
     setIsPanelVisible,
+    setPanelMode,
+    closePage,
   ]);
 
   // 언마운트 시 키보드 플래그 오염 방지
@@ -818,6 +953,33 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
     };
   }, []);
+
+  // 빈 선택 폴백으로 레이어 목록이 표시되는 동안 내부 모드도 layer로 정규화 —
+  // property로 남아 있으면 다음 캔버스 클릭이 목록을 건너뛰고 편집으로 점프함
+  // (플러그인 설정 패널 종료·설정 왕복 리마운트 경로 포함)
+  useEffect(() => {
+    // 분리 창의 초기 동기화 전 빈 선택은 아직 원격 상태 미도착 - 정규화 보류
+    // (600ms 폴백 마운트 시 핸드오프의 property가 layer로 덮이는 경합 방지)
+    if (frameVariant === 'window' && !selectionSyncReady) return;
+    if (
+      isPanelVisible &&
+      !pluginSettingsPanel &&
+      panelMode === 'property' &&
+      selectedKeyElements.length === 0 &&
+      selectedElements.length === 0
+    ) {
+      setPanelMode('layer');
+    }
+  }, [
+    frameVariant,
+    selectionSyncReady,
+    isPanelVisible,
+    pluginSettingsPanel,
+    panelMode,
+    selectedKeyElements.length,
+    selectedElements,
+    setPanelMode,
+  ]);
 
   // 다중 선택 시 패널 자동 열기
   useEffect(() => {
@@ -829,7 +991,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setPanelMode('property');
       setIsPanelVisible(true);
     }
-  }, [selectedBatchStyleElements.length, isPanelVisible, setIsPanelVisible]);
+  }, [
+    selectedBatchStyleElements.length,
+    isPanelVisible,
+    setIsPanelVisible,
+    setPanelMode,
+  ]);
 
   useEffect(() => {
     if (pluginSettingsPanel) {
@@ -837,13 +1004,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setPanelMode('property');
       setIsPanelVisible(true);
     }
-  }, [pluginSettingsPanel, setIsPanelVisible]);
+  }, [pluginSettingsPanel, setIsPanelVisible, setPanelMode]);
 
-  // 레이어 패널이 열려있고 선택이 없는 상태에서 그리드 빈 공간 클릭 시 패널 닫기
+  // 레이어 뷰가 표시된 상태(선택 없음)에서 그리드 빈 공간 클릭 시 패널 닫기
+  // panelMode가 property로 남아 있어도 선택이 없으면 레이어 뷰가 표시되므로 동일하게 닫음
   useEffect(() => {
     const hasSelection =
       selectedKeyElements.length > 0 || selectedElements.length > 0;
-    if (panelMode !== 'layer' || !isPanelVisible || hasSelection) {
+    if (!isPanelVisible || hasSelection) {
       return undefined;
     }
 
@@ -882,7 +1050,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedKeyElements.length,
     selectedKeyLikeElements.length,
     selectedElements.length,
-    panelMode,
     setIsPanelVisible,
   ]);
 
@@ -926,6 +1093,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (!isListening) return undefined;
 
     const blockKeyboardEvents = (e: KeyboardEvent) => {
+      if (
+        e.key === 'Escape' &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.shiftKey
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsListening(false);
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
     };
@@ -964,6 +1143,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     const unsubscribe = window.api.keys.onRawInput(
       (payload: RawInputPayload) => {
+        if (isHistoryEditorFlushLocked()) return;
         if (!payload || payload.state !== 'DOWN') return;
         const targetLabel =
           payload.label ||
@@ -971,6 +1151,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         if (!targetLabel) return;
 
         const info = getKeyInfoByGlobalKey(targetLabel);
+
+        if (info.globalKey === 'ESCAPE') {
+          setIsListening(false);
+          return;
+        }
 
         justAssignedRef.current = true;
         setTimeout(() => {
@@ -1022,116 +1207,57 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   const handleToggleMode = () => {
-    setPanelMode((prev) => (prev === 'layer' ? 'property' : 'layer'));
+    setPanelMode(panelMode === 'layer' ? 'property' : 'layer');
   };
 
-  const pluginDefaultSettings = (() => {
-    const defaults: Record<string, unknown> = {};
-    if (selectedPluginDefinition?.settings) {
-      Object.entries(selectedPluginDefinition.settings).forEach(
-        ([key, schema]) => {
-          const schemaValue = schema as PluginSettingSchema;
-          if (schemaValue.type === 'divider') return;
-          defaults[key] = schemaValue.default;
-        },
-      );
-    }
-    return defaults;
-  })();
+  // 분리 창은 접힘 없음 - 창 자체가 패널이므로 항상 표시
+  const showFrame =
+    frameVariant === 'window' || isPanelVisible || !!pluginSettingsPanel;
+
+  const pluginDefaultSettings = getDefaultSettings(
+    selectedPluginDefinition?.settings,
+  );
 
   const resolvedPluginSettings = {
     ...pluginDefaultSettings,
-    ...(selectedPluginElement?.settings || {}),
-  };
-
-  const ensurePluginSettingsHistory = () => {
-    if (!selectedPluginElement) return;
-    if (pluginSettingsHistoryRef.current === selectedPluginElement.fullId) {
-      return;
-    }
-    pushHistoryState({
-      keyMappings,
-      positions,
-      statPositions: statItemPositions,
-      graphPositions: graphItemPositions,
-      pluginElements,
-    });
-    pluginSettingsHistoryRef.current = selectedPluginElement.fullId;
-  };
-
-  const ensurePluginTransformHistory = () => {
-    if (!selectedPluginElement) return;
-    if (pluginTransformHistoryRef.current === selectedPluginElement.fullId) {
-      return;
-    }
-    pushHistoryState({
-      keyMappings,
-      positions,
-      statPositions: statItemPositions,
-      graphPositions: graphItemPositions,
-      pluginElements,
-    });
-    pluginTransformHistoryRef.current = selectedPluginElement.fullId;
+    ...omitLayoutSettingValues(
+      selectedPluginDefinition?.settings,
+      selectedPluginElement?.settings || {},
+    ),
   };
 
   const handlePluginPositionXChange = (value: number) => {
     if (!selectedPluginElement) return;
-    ensurePluginTransformHistory();
     updatePluginElement(selectedPluginElement.fullId, {
-      position: {
-        x: value,
-        y: selectedPluginElement.position.y,
-      },
+      position: { x: value },
     });
   };
 
   const handlePluginPositionYChange = (value: number) => {
     if (!selectedPluginElement) return;
-    ensurePluginTransformHistory();
     updatePluginElement(selectedPluginElement.fullId, {
-      position: {
-        x: selectedPluginElement.position.x,
-        y: value,
-      },
+      position: { y: value },
     });
   };
 
   const handlePluginWidthChange = (value: number) => {
     if (!selectedPluginElement) return;
-    ensurePluginTransformHistory();
-    const baseHeight =
-      selectedPluginElement.measuredSize?.height ??
-      selectedPluginElement.estimatedSize?.height ??
-      150;
     updatePluginElement(selectedPluginElement.fullId, {
-      measuredSize: {
-        width: value,
-        height: baseHeight,
-      },
+      measuredSize: { width: value },
     });
   };
 
   const handlePluginHeightChange = (value: number) => {
     if (!selectedPluginElement) return;
-    ensurePluginTransformHistory();
-    const baseWidth =
-      selectedPluginElement.measuredSize?.width ??
-      selectedPluginElement.estimatedSize?.width ??
-      200;
     updatePluginElement(selectedPluginElement.fullId, {
-      measuredSize: {
-        width: baseWidth,
-        height: value,
-      },
+      measuredSize: { height: value },
     });
   };
 
   const handlePluginSettingChange = (key: string, value: unknown) => {
     if (!selectedPluginElement) return;
-    ensurePluginSettingsHistory();
     updatePluginElement(selectedPluginElement.fullId, {
       settings: {
-        ...resolvedPluginSettings,
         [key]: value,
       },
     });
@@ -1205,21 +1331,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    if (!statPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-    }
-    statPreviewHistorySavedRef.current = false;
-
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
     );
@@ -1227,21 +1338,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setPositions(nextPositions);
-    window.api.statItems
-      .updatePositions(nextPositions)
+    const persisted = window.api.statItems.updatePositions(nextPositions);
+    editGestureController.settleCommit(persisted);
+    void persisted
       .catch((error) => {
         console.error('Failed to update stat item', error);
       })
       .finally(() => {
         useStatItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleStatPreview = (
@@ -1253,24 +1358,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
-    if (!statPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      statPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-    useStatItemStore.getState().setPositions(nextPositions);
+    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
+      domain: 'statPosition',
+    });
   };
 
   const handleStatBatchPreview = (
@@ -1283,38 +1373,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (list.length === 0) return;
 
-    const updateMap = new Map<number, Partial<StatItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
-    if (!statPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      statPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
+    const entries = updates.flatMap(({ index, ...patch }) =>
+      list[index] ? [{ index, patch: { ...patch } }] : [],
+    );
+    editGestureController.preview(mode, entries, {
+      domain: 'statPosition',
     });
-    const nextPositions = { ...current, [mode]: nextList };
-    useStatItemStore.getState().setPositions(nextPositions);
   };
 
   const handleStatBatchUpdate = (
     updates: Array<{ index: number } & Partial<StatItemPosition>>,
-    options?: { skipHistory?: boolean },
+    options?: { deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -1331,26 +1400,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
     if (updateMap.size === 0) return;
 
-    if (!options?.skipHistory && !statPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-    }
-    statPreviewHistorySavedRef.current = false;
-
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
       return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
     });
     const nextPositions = { ...current, [mode]: nextList };
+
+    if (options?.deferSave) {
+      useStatItemStore.getState().setPositions(nextPositions);
+      return;
+    }
 
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setPositions(nextPositions);
@@ -1362,13 +1421,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useStatItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleGraphUpdate = (
@@ -1379,21 +1431,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const current = useGraphItemStore.getState().positions;
     const list = current[mode] || [];
     if (!list[index]) return;
-
-    if (!graphPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: currentPluginElements,
-      });
-    }
-    graphPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
@@ -1410,13 +1447,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleKnobUpdate = (
@@ -1427,21 +1457,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const current = useKnobItemStore.getState().positions;
     const list = current[mode] || [];
     if (!list[index]) return;
-
-    if (!knobPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-    }
-    knobPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as KnobItemPosition) : pos,
@@ -1458,13 +1473,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useKnobItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleKnobPreview = (
@@ -1476,23 +1484,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    if (!knobPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      knobPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as KnobItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-    useKnobItemStore.getState().setPositions(nextPositions);
+    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
+      domain: 'knobPosition',
+    });
   };
 
   const handleKnobBatchPreview = (
@@ -1505,37 +1499,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (list.length === 0) return;
 
-    const updateMap = new Map<number, Partial<KnobItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    if (!knobPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      knobPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as KnobItemPosition) : pos;
+    const entries = updates.flatMap(({ index, ...patch }) =>
+      list[index] ? [{ index, patch: { ...patch } }] : [],
+    );
+    editGestureController.preview(mode, entries, {
+      domain: 'knobPosition',
     });
-    const nextPositions = { ...current, [mode]: nextList };
-    useKnobItemStore.getState().setPositions(nextPositions);
   };
 
   const handleKnobBatchUpdate = (
     updates: Array<{ index: number } & Partial<KnobItemPosition>>,
-    options?: { skipHistory?: boolean },
+    options?: { deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -1552,26 +1526,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
     if (updateMap.size === 0) return;
 
-    if (!options?.skipHistory && !knobPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-    }
-    knobPreviewHistorySavedRef.current = false;
-
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
       return update ? ({ ...pos, ...update } as KnobItemPosition) : pos;
     });
     const nextPositions = { ...current, [mode]: nextList };
+
+    if (options?.deferSave) {
+      useKnobItemStore.getState().setPositions(nextPositions);
+      return;
+    }
 
     useKnobItemStore.getState().setLocalUpdateInProgress(true);
     useKnobItemStore.getState().setPositions(nextPositions);
@@ -1583,13 +1547,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useKnobItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleGraphPreview = (
@@ -1601,24 +1558,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
-    if (!graphPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      graphPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-    useGraphItemStore.getState().setPositions(nextPositions);
+    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
+      domain: 'graphPosition',
+    });
   };
 
   const handleGraphBatchPreview = (
@@ -1631,38 +1573,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (list.length === 0) return;
 
-    const updateMap = new Map<number, Partial<GraphItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
-    if (!graphPreviewHistorySavedRef.current) {
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: useKeyStore.getState().positions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: usePluginDisplayElementStore.getState().elements,
-      });
-      graphPreviewHistorySavedRef.current = true;
-    }
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
+    const entries = updates.flatMap(({ index, ...patch }) =>
+      list[index] ? [{ index, patch: { ...patch } }] : [],
+    );
+    editGestureController.preview(mode, entries, {
+      domain: 'graphPosition',
     });
-    const nextPositions = { ...current, [mode]: nextList };
-    useGraphItemStore.getState().setPositions(nextPositions);
   };
 
   const handleGraphBatchUpdate = (
     updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-    options?: { skipHistory?: boolean },
+    options?: { deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -1679,26 +1600,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
     if (updateMap.size === 0) return;
 
-    if (!options?.skipHistory && !graphPreviewHistorySavedRef.current) {
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState({
-        keyMappings: km,
-        positions: currentPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: currentPluginElements,
-      });
-    }
-    graphPreviewHistorySavedRef.current = false;
-
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
       return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
     });
     const nextPositions = { ...current, [mode]: nextList };
+
+    if (options?.deferSave) {
+      useGraphItemStore.getState().setPositions(nextPositions);
+      return;
+    }
 
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setPositions(nextPositions);
@@ -1710,13 +1621,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   // 크기 변경 완료 (blur 시 저장)
@@ -1919,7 +1823,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const {
     handleBatchStyleChange,
     handleBatchStyleChangeComplete,
+    handleBatchShadowChangeComplete,
+    handleBatchShadowEnabledChange,
     handleKeyOnlyStyleChangeComplete,
+    handleActiveCapableStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
     handleBatchSpacing,
@@ -1932,6 +1839,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchNoteColorChangeComplete,
     handleBatchGlowColorChange,
     handleBatchGlowColorChangeComplete,
+    handleBatchGradientCommit,
   } = useBatchHandlers({
     selectedKeyLikeElements: selectedBatchStyleElements as {
       type: 'key' | 'stat' | 'graph' | 'knob';
@@ -1970,6 +1878,36 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return position ? { index, position } : null;
       })
       .filter((v): v is { index: number; position: KeyPosition } => v !== null);
+  };
+
+  // 눌림 가능(키·노브) 집계 — active 상태 표시가 통계만 제외하고 노브는 포함
+  const getSelectedActiveCapablePositions = (): KeyPosition[] => {
+    const keyData = getSelectedKeyOnlyPositions().map(
+      ({ position }) => position,
+    );
+    const knobData = selectedKnobElements
+      .map((el) => knobItemPositions?.[selectedKeyType]?.[el.index ?? -1])
+      .filter((v): v is KnobItemPosition => v != null);
+    return [...keyData, ...knobData];
+  };
+
+  const getMixedValueActiveCapable = <T,>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const data = getSelectedActiveCapablePositions();
+    if (data.length === 0) return { isMixed: false, value: defaultValue };
+
+    const firstValue = getter(data[0]) ?? defaultValue;
+    const isMixed = data.some((position) => {
+      const val = getter(position) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
+
+    return { isMixed, value: firstValue };
   };
 
   const getMixedValueKeysOnly = <T,>(
@@ -2089,17 +2027,41 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleKnobBatchUpdate(batchUpdates);
   };
 
+  // 정규화 진단 리포터 — 플러그인·키당 1회만 기록, empty-state 단락 경로의
+  // hasRenderableSettings에도 동일 리포터를 전달해 로깅 누락 방지
+  const reportPluginNormalizationError = (
+    pluginId: string,
+    key: string,
+    error: unknown,
+    kind: SettingsNormalizationErrorKind,
+  ) => {
+    const errorKey = `${pluginId}:${key}`;
+    if (pluginVisibilityErrorsRef.current.has(errorKey)) return;
+    pluginVisibilityErrorsRef.current.add(errorKey);
+    const message =
+      kind === 'unsupported-type'
+        ? `Unsupported setting type for "${key}"`
+        : `Failed to evaluate visibility for setting "${key}"`;
+    console.error(`[Plugin ${pluginId}] ${message}:`, error);
+  };
+
   const renderPluginSettingsForm = (
     schema: Record<string, PluginSettingSchema> | undefined,
     values: Record<string, unknown>,
     messages: PluginMessages | undefined,
+    pluginId: string,
     colorIdPrefix: string,
     onChange: (key: string, value: unknown) => void,
-    options?: { wrap?: boolean },
   ) => {
-    if (!schema || Object.keys(schema).length === 0) {
+    const sections = normalizeSettingsSections(
+      schema,
+      values,
+      (key, error, kind) =>
+        reportPluginNormalizationError(pluginId, key, error, kind),
+    );
+    if (!sections.some((section) => section.renderVisible)) {
       return (
-        <p className="text-[#6B6D75] text-style-4 text-center">
+        <p className="text-fg-faint text-body text-center">
           {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
         </p>
       );
@@ -2128,21 +2090,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       return '200px';
     };
 
-    const wrap = options?.wrap !== false;
-    const rows = Object.entries(schema).map(([key, setting]) => {
-      const schemaValue = setting as PluginSettingSchema;
-
-      if (schemaValue.visible !== undefined) {
-        const vis =
-          typeof schemaValue.visible === 'function'
-            ? schemaValue.visible(values)
-            : schemaValue.visible;
-        if (!vis) return null;
-      }
-
-      if (schemaValue.type === 'divider') {
-        return <SectionDivider key={`divider-${key}`} />;
-      }
+    const renderEntry = (
+      key: string,
+      schemaValue: Exclude<PluginSettingSchema, { type: 'section' }>,
+      renderVisible: boolean,
+    ) => {
+      if (!renderVisible) return null;
       const rawValue =
         values[key] !== undefined ? values[key] : schemaValue.default;
       const labelText = translate(schemaValue.label, schemaValue.label);
@@ -2247,9 +2200,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return (
           <div
             key={key}
-            className="flex justify-between items-center w-full h-[23px]"
+            className="flex justify-between items-center w-full min-h-[32px]"
           >
-            <p className="text-white text-style-2">{labelText}</p>
+            <p className="text-fg-muted text-label">{labelText}</p>
             <div className="flex items-center gap-[10.5px]">{control}</div>
           </div>
         );
@@ -2260,15 +2213,33 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {control}
         </PropertyRow>
       );
-    });
+    };
 
-    const filtered = rows.filter(Boolean);
-
-    if (!wrap) {
-      return <>{filtered}</>;
-    }
-
-    return <div className="flex flex-col gap-[12px]">{filtered}</div>;
+    return (
+      <div className="flex flex-col gap-[12px]">
+        {sections.map((section) => {
+          if (!section.renderVisible) return null;
+          const sectionLabel = translate(section.label, section.label);
+          return (
+            <div
+              key={section.key ?? 'implicit'}
+              className="flex flex-col gap-[6px]"
+            >
+              {section.label && (
+                <p className="text-fg-faint text-body text-left px-[2px]">
+                  {sectionLabel}
+                </p>
+              )}
+              <PropertySection>
+                {section.entries.map((entry) =>
+                  renderEntry(entry.key, entry.schema, entry.renderVisible),
+                )}
+              </PropertySection>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   // 배치 편집용 interactiveRefs
@@ -2289,8 +2260,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         target === 'noteColor' ||
         target === 'glowColor' ||
         target === 'borderColor';
+      const isCounterPicker = target === 'fill' || target === 'stroke';
       const firstPos =
-        isNoteTabPicker && keyOnly.length > 0
+        (isNoteTabPicker || isCounterPicker) && keyOnly.length > 0
           ? keyOnly[0].position
           : keysData[0]?.position;
       if (firstPos) {
@@ -2354,11 +2326,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           batchLocalColors.borderOpacity,
         );
       case 'fill':
-        return batchCounterColorState === 'active'
+        return effectiveBatchCounterColorState === 'active'
           ? batchLocalColors.fillActive
           : batchLocalColors.fillIdle;
       case 'stroke':
-        return batchCounterColorState === 'active'
+        return effectiveBatchCounterColorState === 'active'
           ? batchLocalColors.strokeActive
           : batchLocalColors.strokeIdle;
       default:
@@ -2401,7 +2373,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     } else if (batchPickerFor === 'fill') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const key =
-        batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+        effectiveBatchCounterColorState === 'active'
+          ? 'fillActive'
+          : 'fillIdle';
       setBatchLocalColors((prev) => ({
         ...prev,
         [key]: solidColor,
@@ -2409,7 +2383,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     } else if (batchPickerFor === 'stroke') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const key =
-        batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
+        effectiveBatchCounterColorState === 'active'
+          ? 'strokeActive'
+          : 'strokeIdle';
       setBatchLocalColors((prev) => ({
         ...prev,
         [key]: solidColor,
@@ -2473,7 +2449,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     } else if (batchPickerFor === 'fill') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const key =
-        batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+        effectiveBatchCounterColorState === 'active'
+          ? 'fillActive'
+          : 'fillIdle';
       setBatchLocalColors((prev) => ({
         ...prev,
         [key]: solidColor,
@@ -2481,7 +2459,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     } else if (batchPickerFor === 'stroke') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const key =
-        batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
+        effectiveBatchCounterColorState === 'active'
+          ? 'strokeActive'
+          : 'strokeIdle';
       setBatchLocalColors((prev) => ({
         ...prev,
         [key]: solidColor,
@@ -2489,8 +2469,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     const keysData = getSelectedKeysData();
-    const firstCounter = keysData[0]?.position
-      ? normalizeCounterSettings(keysData[0].position.counter)
+    const keyOnlyPositions = getSelectedKeyOnlyPositions();
+    const firstCounterPosition =
+      effectiveBatchCounterColorState === 'active'
+        ? keyOnlyPositions[0]?.position
+        : keysData[0]?.position;
+    const firstCounter = firstCounterPosition
+      ? normalizeCounterSettings(firstCounterPosition.counter)
       : createDefaultCounterSettings();
 
     if (batchPickerFor === 'noteColor') {
@@ -2519,25 +2504,37 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     } else if (batchPickerFor === 'fill') {
       const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      if (batchCounterColorState === 'active') {
-        handleBatchCounterUpdate({
-          fill: { ...firstCounter.fill, active: fillColor },
-        });
+      if (effectiveBatchCounterColorState === 'active') {
+        handleBatchCounterUpdate(
+          {
+            fill: { ...firstCounter.fill, active: fillColor },
+          },
+          { activeStateOnly: true, colorState: 'active' },
+        );
       } else {
-        handleBatchCounterUpdate({
-          fill: { ...firstCounter.fill, idle: fillColor },
-        });
+        handleBatchCounterUpdate(
+          {
+            fill: { ...firstCounter.fill, idle: fillColor },
+          },
+          { colorState: 'idle' },
+        );
       }
     } else if (batchPickerFor === 'stroke') {
       const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      if (batchCounterColorState === 'active') {
-        handleBatchCounterUpdate({
-          stroke: { ...firstCounter.stroke, active: strokeColor },
-        });
+      if (effectiveBatchCounterColorState === 'active') {
+        handleBatchCounterUpdate(
+          {
+            stroke: { ...firstCounter.stroke, active: strokeColor },
+          },
+          { activeStateOnly: true, colorState: 'active' },
+        );
       } else {
-        handleBatchCounterUpdate({
-          stroke: { ...firstCounter.stroke, idle: strokeColor },
-        });
+        handleBatchCounterUpdate(
+          {
+            stroke: { ...firstCounter.stroke, idle: strokeColor },
+          },
+          { colorState: 'idle' },
+        );
       }
     }
   };
@@ -2546,83 +2543,375 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 렌더링
   // ============================================================================
 
-  // 패널이 닫혀있을 때는 토글 버튼만 표시
-  if (!isPanelVisible && !pluginSettingsPanel) {
-    return (
-      <div className="absolute right-0 top-0 z-30">
-        <button
-          onClick={handleTogglePanel}
-          className="m-[8px] w-[32px] h-[32px] bg-[#1F1F24] border border-[#3A3943] rounded-[7px] flex items-center justify-center hover:bg-[#2A2A30] hover:border-[#505058] transition-colors shadow-lg"
-          title={t('propertiesPanel.openPanel') || '속성 패널 열기'}
-        >
-          <SidebarToggleIcon isOpen={false} />
-        </button>
-      </div>
-    );
-  }
+  // 선택 상태별 구상 패널 — 프레임(글래스) 안의 루트 페이지 콘텐츠
+  const renderPanelBody = () => {
+    if (pluginSettingsPanel) {
+      return (
+        <PluginSettingsPanelView
+          setPanelElement={setPanelElement}
+          pluginSettingsPanel={pluginSettingsPanel}
+          pluginPanelSettings={pluginPanelSettings}
+          handlePluginSettingsPanelChange={handlePluginSettingsPanelChange}
+          handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
+          setPluginScrollRef={setPluginScrollRef}
+          renderPluginSettingsForm={renderPluginSettingsForm}
+          reportNormalizationError={reportPluginNormalizationError}
+          t={t}
+        />
+      );
+    }
 
-  if (pluginSettingsPanel) {
+    // 레이어 모드일 때는 선택 여부와 관계없이 레이어 패널 표시
+    if (panelMode === 'layer') {
+      return (
+        <LayerPanel
+          onSwitchToProperty={handleToggleMode}
+          onSelectionFromPanel={() => {
+            selectionFromLayerPanelRef.current = true;
+          }}
+        />
+      );
+    }
+
+    // 선택된 키 요소가 없으면 레이어 패널 표시
+    if (selectedKeyElements.length === 0 && selectedElements.length === 0) {
+      return (
+        <LayerPanel
+          onSwitchToProperty={handleToggleMode}
+          onSelectionFromPanel={() => {
+            selectionFromLayerPanelRef.current = true;
+          }}
+        />
+      );
+    }
+
+    // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
+    if (
+      selectedBatchStyleElements.length > 1 &&
+      selectedPluginElements.length === 0 &&
+      (selectedKeyLikeElements.length > 0 ||
+        (selectedGraphElements.length > 0 && selectedKnobElements.length > 0))
+    ) {
+      return (
+        <BatchKeyLikePanel
+          setPanelElement={setPanelElement}
+          selectedBatchStyleElements={selectedBatchStyleElements}
+          selectedKeyElements={selectedKeyElements}
+          selectedStatElements={selectedStatElements}
+          selectedGraphElements={selectedGraphElements}
+          selectedKnobElements={selectedKnobElements}
+          selectedKeyLikeElements={selectedKeyLikeElements}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          handleBatchAlign={handleBatchAlign}
+          handleBatchDistribute={handleBatchDistribute}
+          handleBatchSpacing={handleBatchSpacing}
+          handleBatchSpacingPreview={handleBatchSpacingPreview}
+          handleBatchSpacingCommit={handleBatchSpacingCommit}
+          getBatchSpacingValue={getBatchSpacingValue}
+          handleBatchResize={handleBatchResize}
+          handleBatchStyleChange={handleBatchStyleChange}
+          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
+          handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
+          handleBatchGradientCommit={handleBatchGradientCommit}
+          handleKeyOnlyStyleChangeComplete={handleKeyOnlyStyleChangeComplete}
+          handleBatchCounterUpdate={handleBatchCounterUpdate}
+          handleBatchNoteColorChange={handleBatchNoteColorChange}
+          handleBatchNoteColorChangeComplete={
+            handleBatchNoteColorChangeComplete
+          }
+          handleBatchGlowColorChange={handleBatchGlowColorChange}
+          handleBatchGlowColorChangeComplete={
+            handleBatchGlowColorChangeComplete
+          }
+          handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
+          getMixedValue={getMixedValue}
+          getMixedValueBatch={getMixedValueBatch}
+          getMixedValueGraphs={getMixedValueGraphs}
+          getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
+          getMixedValueKeysOnly={getMixedValueKeysOnly}
+          getMixedValueActiveCapable={getMixedValueActiveCapable}
+          handleActiveCapableStyleChangeComplete={
+            handleActiveCapableStyleChangeComplete
+          }
+          getSelectedKeysData={getSelectedKeysData}
+          getSelectedGraphsData={getSelectedGraphsData}
+          getSelectedBatchStyleData={getSelectedBatchStyleData}
+          getSelectedKeyOnlyPositions={getSelectedKeyOnlyPositions}
+          handleBatchKeyOnlyStyleChangeComplete={
+            handleBatchKeyOnlyStyleChangeComplete
+          }
+          handleBatchNoteColorChangeKeysOnly={
+            handleBatchNoteColorChangeKeysOnly
+          }
+          handleBatchNoteColorChangeCompleteKeysOnly={
+            handleBatchNoteColorChangeCompleteKeysOnly
+          }
+          handleBatchGlowColorChangeKeysOnly={
+            handleBatchGlowColorChangeKeysOnly
+          }
+          handleBatchGlowColorChangeCompleteKeysOnly={
+            handleBatchGlowColorChangeCompleteKeysOnly
+          }
+          batchScrollRefFor={batchScrollRefFor}
+          batchNoteColorButtonRef={batchNoteColorButtonRef}
+          batchGlowColorButtonRef={batchGlowColorButtonRef}
+          batchBorderColorButtonRef={batchBorderColorButtonRef}
+          batchCounterFillButtonRef={batchCounterFillButtonRef}
+          batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
+          batchImageButtonRef={batchImageButtonRef}
+          showBatchImagePicker={showBatchImagePicker}
+          setShowBatchImagePicker={setShowBatchImagePicker}
+          batchPickerFor={batchPickerFor}
+          setBatchPickerFor={setBatchPickerFor}
+          batchCounterColorState={effectiveBatchCounterColorState}
+          setBatchCounterColorState={setBatchCounterColorState}
+          batchLocalColors={batchLocalColors}
+          setBatchLocalColors={setBatchLocalColors}
+          batchLocalOpacities={batchLocalOpacities}
+          setBatchLocalOpacities={setBatchLocalOpacities}
+          handleBatchPickerToggle={handleBatchPickerToggle}
+          handleBatchPickerColorChange={handleBatchPickerColorChange}
+          handleBatchPickerColorChangeComplete={
+            handleBatchPickerColorChangeComplete
+          }
+          getBatchPickerColor={getBatchPickerColor}
+          getBatchPickerRef={getBatchPickerRef}
+          batchColorPickerInteractiveRefs={batchColorPickerInteractiveRefs}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          selectedKeyType={selectedKeyType}
+          t={t}
+        />
+      );
+    }
+
+    // 다중 선택인 경우 (노브 요소만)
+    if (
+      selectedKnobElements.length > 1 &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedGraphElements.length === 0 &&
+      selectedPluginElements.length === 0
+    ) {
+      return (
+        <BatchKnobOnlyPanel
+          setPanelElement={setPanelElement}
+          selectedKnobElements={selectedKnobElements}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleBatchAlign={handleBatchAlign}
+          handleBatchDistribute={handleBatchDistribute}
+          handleBatchSpacing={handleBatchSpacing}
+          handleBatchSpacingPreview={handleBatchSpacingPreview}
+          handleBatchSpacingCommit={handleBatchSpacingCommit}
+          getBatchSpacingValue={getBatchSpacingValue}
+          handleBatchResize={handleBatchResize}
+          handleBatchStyleChange={handleBatchStyleChange}
+          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
+          handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
+          handleBatchGradientCommit={handleBatchGradientCommit}
+          handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
+          getMixedValueKnobs={getMixedValueKnobs}
+          getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
+          getSelectedKnobsData={getSelectedKnobsData}
+          batchScrollRefFor={batchScrollRefFor}
+          batchImageButtonRef={batchImageButtonRef}
+          showBatchImagePicker={showBatchImagePicker}
+          setShowBatchImagePicker={setShowBatchImagePicker}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          selectedKeyType={selectedKeyType}
+          t={t}
+        />
+      );
+    }
+
+    // 다중 선택인 경우 (그래프 요소만)
+    if (
+      selectedGraphElements.length > 1 &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedKnobElements.length === 0 &&
+      selectedPluginElements.length === 0
+    ) {
+      return (
+        <BatchGraphOnlyPanel
+          setPanelElement={setPanelElement}
+          selectedGraphElements={selectedGraphElements}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleBatchAlign={handleBatchAlign}
+          handleBatchDistribute={handleBatchDistribute}
+          handleBatchSpacing={handleBatchSpacing}
+          handleBatchSpacingPreview={handleBatchSpacingPreview}
+          handleBatchSpacingCommit={handleBatchSpacingCommit}
+          getBatchSpacingValue={getBatchSpacingValue}
+          handleBatchResize={handleBatchResize}
+          handleBatchStyleChange={handleBatchStyleChange}
+          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleBatchGradientCommit={handleBatchGradientCommit}
+          handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
+          getMixedValueGraphs={getMixedValueGraphs}
+          getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
+          getSelectedGraphsData={getSelectedGraphsData}
+          batchScrollRefFor={batchScrollRefFor}
+          batchImageButtonRef={batchImageButtonRef}
+          showBatchImagePicker={showBatchImagePicker}
+          setShowBatchImagePicker={setShowBatchImagePicker}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          selectedKeyType={selectedKeyType}
+          t={t}
+        />
+      );
+    }
+
+    // 플러그인 요소가 선택된 경우
+    if (
+      selectedPluginElements.length > 0 &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedGraphElements.length === 0
+    ) {
+      const pluginTitle =
+        selectedPluginDefinition?.name ||
+        selectedPluginElement?.definitionId ||
+        t('propertiesPanel.pluginElement') ||
+        'Plugin';
+
+      return (
+        <PluginSelectionPanel
+          setPanelElement={setPanelElement}
+          pluginTitle={pluginTitle}
+          setPluginScrollRef={setPluginScrollRef}
+          isPluginResizable={isPluginResizable}
+          selectedPluginElement={selectedPluginElement}
+          pluginDisplaySize={pluginDisplaySize}
+          handlePluginPositionXChange={handlePluginPositionXChange}
+          handlePluginPositionYChange={handlePluginPositionYChange}
+          handlePluginWidthChange={handlePluginWidthChange}
+          handlePluginHeightChange={handlePluginHeightChange}
+          hasSinglePluginSelection={hasSinglePluginSelection}
+          showModalHint={showModalHint}
+          showSettings={showSettings}
+          renderPluginSettingsForm={renderPluginSettingsForm}
+          reportNormalizationError={reportPluginNormalizationError}
+          selectedPluginDefinition={selectedPluginDefinition}
+          resolvedPluginSettings={resolvedPluginSettings}
+          handlePluginSettingChange={handlePluginSettingChange}
+          t={t}
+        />
+      );
+    }
+
+    // 단일 노브 요소 선택인 경우
+    if (
+      selectedKnobElements.length === 1 &&
+      !!singleKnobPosition &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedGraphElements.length === 0 &&
+      selectedPluginElements.length === 0
+    ) {
+      return (
+        <SingleKnobPanel
+          setPanelElement={setPanelElement}
+          singleKnobPosition={singleKnobPosition}
+          singleKnobIndex={singleKnobIndex!}
+          selectedKeyType={selectedKeyType}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleKnobUpdate={handleKnobUpdate}
+          singleScrollRefFor={singleScrollRefFor}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          t={t}
+        />
+      );
+    }
+
+    // 단일 그래프 요소 선택인 경우
+    if (
+      selectedGraphElements.length === 1 &&
+      !!singleGraphPosition &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedPluginElements.length === 0
+    ) {
+      return (
+        <SingleGraphPanel
+          setPanelElement={setPanelElement}
+          singleGraphPosition={singleGraphPosition}
+          singleGraphIndex={singleGraphIndex!}
+          selectedKeyType={selectedKeyType}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleGraphUpdate={handleGraphUpdate}
+          singleScrollRefFor={singleScrollRefFor}
+          showGraphImagePicker={showGraphImagePicker}
+          setShowGraphImagePicker={setShowGraphImagePicker}
+          graphImageButtonRef={graphImageButtonRef}
+          graphClassNameDraft={graphClassNameDraft}
+          setGraphClassNameDraft={setGraphClassNameDraft}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          t={t}
+        />
+      );
+    }
+
+    // 단일 키/통계 요소 선택인 경우
+    const isSingleStat = !singleKeyPosition && !!singleStatPosition;
+    const isSingleKey = !!singleKeyPosition;
+    if (!isSingleKey && !isSingleStat) {
+      return null;
+    }
+
     return (
-      <PluginSettingsPanelView
+      <SingleKeyStatPanel
         setPanelElement={setPanelElement}
-        pluginSettingsPanel={pluginSettingsPanel}
-        pluginPanelSettings={pluginPanelSettings}
-        handlePluginSettingsPanelChange={handlePluginSettingsPanelChange}
-        handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
-        handlePluginSettingsPanelCancel={handlePluginSettingsPanelCancel}
-        setPluginScrollRef={setPluginScrollRef}
-        setPluginThumbRef={setPluginThumbRef}
-        renderPluginSettingsForm={renderPluginSettingsForm}
-        t={t}
-      />
-    );
-  }
-
-  // 레이어 모드일 때는 선택 여부와 관계없이 레이어 패널 표시
-  if (panelMode === 'layer') {
-    const hasAnySelection =
-      selectedKeyElements.length > 0 || selectedElements.length > 0;
-    return (
-      <LayerPanel
-        onClose={handleTogglePanel}
-        onSwitchToProperty={handleToggleMode}
-        hasSelection={hasAnySelection}
-        onSelectionFromPanel={() => {
-          selectionFromLayerPanelRef.current = true;
-        }}
-      />
-    );
-  }
-
-  // 선택된 키 요소가 없으면 레이어 패널 표시
-  if (selectedKeyElements.length === 0 && selectedElements.length === 0) {
-    return (
-      <LayerPanel
-        onClose={handleTogglePanel}
-        onSwitchToProperty={handleToggleMode}
-        onSelectionFromPanel={() => {
-          selectionFromLayerPanelRef.current = true;
-        }}
-      />
-    );
-  }
-
-  // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
-  if (
-    selectedBatchStyleElements.length > 1 &&
-    selectedPluginElements.length === 0 &&
-    (selectedKeyLikeElements.length > 0 ||
-      (selectedGraphElements.length > 0 && selectedKnobElements.length > 0))
-  ) {
-    return (
-      <BatchKeyLikePanel
-        setPanelElement={setPanelElement}
-        selectedBatchStyleElements={selectedBatchStyleElements}
-        selectedKeyElements={selectedKeyElements}
-        selectedStatElements={selectedStatElements}
-        selectedGraphElements={selectedGraphElements}
-        selectedKeyLikeElements={selectedKeyLikeElements}
-        selectedGroupInfo={selectedGroupInfo}
+        isSingleStat={isSingleStat}
+        isSingleKey={isSingleKey}
+        singleKeyIndex={singleKeyIndex}
+        singleStatIndex={singleStatIndex}
+        singleKeyPosition={singleKeyPosition}
+        singleStatPosition={singleStatPosition}
+        singleKeyCode={singleKeyCode}
+        singleKeyInfo={singleKeyInfo}
+        selectedKeyType={selectedKeyType}
         isRenaming={isRenaming}
         renameInputRef={renameInputRef}
         renameValue={renameValue}
@@ -2631,338 +2920,104 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleRenameCommit={handleRenameCommit}
         handleRenameCancel={handleRenameCancel}
         handleRenameStart={handleRenameStart}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        handleBatchAlign={handleBatchAlign}
-        handleBatchDistribute={handleBatchDistribute}
-        handleBatchSpacing={handleBatchSpacing}
-        handleBatchSpacingPreview={handleBatchSpacingPreview}
-        handleBatchSpacingCommit={handleBatchSpacingCommit}
-        getBatchSpacingValue={getBatchSpacingValue}
-        handleBatchResize={handleBatchResize}
-        handleBatchStyleChange={handleBatchStyleChange}
-        handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-        handleKeyOnlyStyleChangeComplete={handleKeyOnlyStyleChangeComplete}
-        handleBatchCounterUpdate={handleBatchCounterUpdate}
-        handleBatchNoteColorChange={handleBatchNoteColorChange}
-        handleBatchNoteColorChangeComplete={handleBatchNoteColorChangeComplete}
-        handleBatchGlowColorChange={handleBatchGlowColorChange}
-        handleBatchGlowColorChangeComplete={handleBatchGlowColorChangeComplete}
-        handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
-        getMixedValue={getMixedValue}
-        getMixedValueBatch={getMixedValueBatch}
-        getMixedValueGraphs={getMixedValueGraphs}
-        getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
-        getMixedValueKeysOnly={getMixedValueKeysOnly}
-        getSelectedKeysData={getSelectedKeysData}
-        getSelectedGraphsData={getSelectedGraphsData}
-        getSelectedBatchStyleData={getSelectedBatchStyleData}
-        getSelectedKeyOnlyPositions={getSelectedKeyOnlyPositions}
-        handleBatchKeyOnlyStyleChangeComplete={
-          handleBatchKeyOnlyStyleChangeComplete
-        }
-        handleBatchNoteColorChangeKeysOnly={handleBatchNoteColorChangeKeysOnly}
-        handleBatchNoteColorChangeCompleteKeysOnly={
-          handleBatchNoteColorChangeCompleteKeysOnly
-        }
-        handleBatchGlowColorChangeKeysOnly={handleBatchGlowColorChangeKeysOnly}
-        handleBatchGlowColorChangeCompleteKeysOnly={
-          handleBatchGlowColorChangeCompleteKeysOnly
-        }
-        batchScrollRefFor={batchScrollRefFor}
-        batchThumbRefFor={batchThumbRefFor}
-        batchNoteColorButtonRef={batchNoteColorButtonRef}
-        batchGlowColorButtonRef={batchGlowColorButtonRef}
-        batchBorderColorButtonRef={batchBorderColorButtonRef}
-        batchCounterFillButtonRef={batchCounterFillButtonRef}
-        batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
-        batchImageButtonRef={batchImageButtonRef}
-        showBatchImagePicker={showBatchImagePicker}
-        setShowBatchImagePicker={setShowBatchImagePicker}
-        batchPickerFor={batchPickerFor}
-        setBatchPickerFor={setBatchPickerFor}
-        batchCounterColorState={batchCounterColorState}
-        setBatchCounterColorState={setBatchCounterColorState}
-        batchLocalColors={batchLocalColors}
-        setBatchLocalColors={setBatchLocalColors}
-        batchLocalOpacities={batchLocalOpacities}
-        setBatchLocalOpacities={setBatchLocalOpacities}
-        handleBatchPickerToggle={handleBatchPickerToggle}
-        handleBatchPickerColorChange={handleBatchPickerColorChange}
-        handleBatchPickerColorChangeComplete={
-          handleBatchPickerColorChangeComplete
-        }
-        getBatchPickerColor={getBatchPickerColor}
-        getBatchPickerRef={getBatchPickerRef}
-        batchColorPickerInteractiveRefs={batchColorPickerInteractiveRefs}
+        onPositionChange={onPositionChange}
+        onKeyUpdate={onKeyUpdate}
+        onKeyPreview={onKeyPreview}
+        onKeyMappingChange={onKeyMappingChange}
+        handleStatUpdate={handleStatUpdate}
+        handleStatPreview={handleStatPreview}
+        isListening={isListening}
+        handleKeyListen={handleKeyListen}
+        localState={localState}
+        setLocalState={setLocalState}
+        handleSizeBlur={handleSizeBlur}
+        showImagePicker={showImagePicker}
+        setShowImagePicker={setShowImagePicker}
+        imageButtonRef={imageButtonRef}
         panelElement={panelElement}
         useCustomCSS={useCustomCSS}
-        selectedKeyType={selectedKeyType}
-        t={t}
-      />
-    );
-  }
-
-  // 다중 선택인 경우 (노브 요소만)
-  if (
-    selectedKnobElements.length > 1 &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedGraphElements.length === 0 &&
-    selectedPluginElements.length === 0
-  ) {
-    return (
-      <BatchKnobOnlyPanel
-        setPanelElement={setPanelElement}
-        selectedKnobElements={selectedKnobElements}
-        selectedGroupInfo={selectedGroupInfo}
-        isRenaming={isRenaming}
-        renameInputRef={renameInputRef}
-        renameValue={renameValue}
-        setRenameValue={setRenameValue}
-        renameCancelledRef={renameCancelledRef}
-        handleRenameCommit={handleRenameCommit}
-        handleRenameCancel={handleRenameCancel}
-        handleRenameStart={handleRenameStart}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
-        handleBatchAlign={handleBatchAlign}
-        handleBatchDistribute={handleBatchDistribute}
-        handleBatchSpacing={handleBatchSpacing}
-        handleBatchSpacingPreview={handleBatchSpacingPreview}
-        handleBatchSpacingCommit={handleBatchSpacingCommit}
-        getBatchSpacingValue={getBatchSpacingValue}
-        handleBatchResize={handleBatchResize}
-        handleBatchStyleChange={handleBatchStyleChange}
-        handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-        handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
-        getMixedValueKnobs={getMixedValueKnobs}
-        getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
-        getSelectedKnobsData={getSelectedKnobsData}
-        batchScrollRefFor={batchScrollRefFor}
-        batchThumbRefFor={batchThumbRefFor}
-        batchImageButtonRef={batchImageButtonRef}
-        showBatchImagePicker={showBatchImagePicker}
-        setShowBatchImagePicker={setShowBatchImagePicker}
-        panelElement={panelElement}
-        useCustomCSS={useCustomCSS}
-        selectedKeyType={selectedKeyType}
-        t={t}
-      />
-    );
-  }
-
-  // 다중 선택인 경우 (그래프 요소만)
-  if (
-    selectedGraphElements.length > 1 &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedKnobElements.length === 0 &&
-    selectedPluginElements.length === 0
-  ) {
-    return (
-      <BatchGraphOnlyPanel
-        setPanelElement={setPanelElement}
-        selectedGraphElements={selectedGraphElements}
-        selectedGroupInfo={selectedGroupInfo}
-        isRenaming={isRenaming}
-        renameInputRef={renameInputRef}
-        renameValue={renameValue}
-        setRenameValue={setRenameValue}
-        renameCancelledRef={renameCancelledRef}
-        handleRenameCommit={handleRenameCommit}
-        handleRenameCancel={handleRenameCancel}
-        handleRenameStart={handleRenameStart}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
-        handleBatchAlign={handleBatchAlign}
-        handleBatchDistribute={handleBatchDistribute}
-        handleBatchSpacing={handleBatchSpacing}
-        handleBatchSpacingPreview={handleBatchSpacingPreview}
-        handleBatchSpacingCommit={handleBatchSpacingCommit}
-        getBatchSpacingValue={getBatchSpacingValue}
-        handleBatchResize={handleBatchResize}
-        handleBatchStyleChange={handleBatchStyleChange}
-        handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-        handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
-        getMixedValueGraphs={getMixedValueGraphs}
-        getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
-        getSelectedGraphsData={getSelectedGraphsData}
-        batchScrollRefFor={batchScrollRefFor}
-        batchThumbRefFor={batchThumbRefFor}
-        batchImageButtonRef={batchImageButtonRef}
-        showBatchImagePicker={showBatchImagePicker}
-        setShowBatchImagePicker={setShowBatchImagePicker}
-        panelElement={panelElement}
-        useCustomCSS={useCustomCSS}
-        selectedKeyType={selectedKeyType}
-        t={t}
-      />
-    );
-  }
-
-  // 플러그인 요소가 선택된 경우
-  if (
-    selectedPluginElements.length > 0 &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedGraphElements.length === 0
-  ) {
-    const pluginTitle =
-      selectedPluginDefinition?.name ||
-      selectedPluginElement?.definitionId ||
-      t('propertiesPanel.pluginElement') ||
-      'Plugin';
-
-    return (
-      <PluginSelectionPanel
-        setPanelElement={setPanelElement}
-        pluginTitle={pluginTitle}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
-        setPluginScrollRef={setPluginScrollRef}
-        setPluginThumbRef={setPluginThumbRef}
-        isPluginResizable={isPluginResizable}
-        selectedPluginElement={selectedPluginElement}
-        pluginDisplaySize={pluginDisplaySize}
-        handlePluginPositionXChange={handlePluginPositionXChange}
-        handlePluginPositionYChange={handlePluginPositionYChange}
-        handlePluginWidthChange={handlePluginWidthChange}
-        handlePluginHeightChange={handlePluginHeightChange}
-        hasSinglePluginSelection={hasSinglePluginSelection}
-        showModalHint={showModalHint}
-        showSettings={showSettings}
-        renderPluginSettingsForm={renderPluginSettingsForm}
-        selectedPluginDefinition={selectedPluginDefinition}
-        resolvedPluginSettings={resolvedPluginSettings}
-        handlePluginSettingChange={handlePluginSettingChange}
-        t={t}
-      />
-    );
-  }
-
-  // 단일 노브 요소 선택인 경우
-  if (
-    selectedKnobElements.length === 1 &&
-    !!singleKnobPosition &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedGraphElements.length === 0 &&
-    selectedPluginElements.length === 0
-  ) {
-    return (
-      <SingleKnobPanel
-        setPanelElement={setPanelElement}
-        singleKnobPosition={singleKnobPosition}
-        singleKnobIndex={singleKnobIndex!}
-        selectedKeyType={selectedKeyType}
-        isRenaming={isRenaming}
-        renameInputRef={renameInputRef}
-        renameValue={renameValue}
-        setRenameValue={setRenameValue}
-        renameCancelledRef={renameCancelledRef}
-        handleRenameCommit={handleRenameCommit}
-        handleRenameCancel={handleRenameCancel}
-        handleRenameStart={handleRenameStart}
-        handleKnobUpdate={handleKnobUpdate}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
         singleScrollRefFor={singleScrollRefFor}
-        singleThumbRefFor={singleThumbRefFor}
-        panelElement={panelElement}
-        useCustomCSS={useCustomCSS}
         t={t}
       />
     );
-  }
+  };
 
-  // 단일 그래프 요소 선택인 경우
-  if (
-    selectedGraphElements.length === 1 &&
-    !!singleGraphPosition &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedPluginElements.length === 0
-  ) {
-    return (
-      <SingleGraphPanel
-        setPanelElement={setPanelElement}
-        singleGraphPosition={singleGraphPosition}
-        singleGraphIndex={singleGraphIndex!}
-        selectedKeyType={selectedKeyType}
-        isRenaming={isRenaming}
-        renameInputRef={renameInputRef}
-        renameValue={renameValue}
-        setRenameValue={setRenameValue}
-        renameCancelledRef={renameCancelledRef}
-        handleRenameCommit={handleRenameCommit}
-        handleRenameCancel={handleRenameCancel}
-        handleRenameStart={handleRenameStart}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
-        handleGraphUpdate={handleGraphUpdate}
-        singleScrollRefFor={singleScrollRefFor}
-        singleThumbRefFor={singleThumbRefFor}
-        showGraphImagePicker={showGraphImagePicker}
-        setShowGraphImagePicker={setShowGraphImagePicker}
-        graphImageButtonRef={graphImageButtonRef}
-        graphClassNameDraft={graphClassNameDraft}
-        setGraphClassNameDraft={setGraphClassNameDraft}
-        panelElement={panelElement}
-        useCustomCSS={useCustomCSS}
-        t={t}
-      />
-    );
-  }
-
-  // 단일 키/통계 요소 선택인 경우
-  const isSingleStat = !singleKeyPosition && !!singleStatPosition;
-  const isSingleKey = !!singleKeyPosition;
-  if (!isSingleKey && !isSingleStat) {
-    return null;
-  }
-
-  return (
-    <SingleKeyStatPanel
-      setPanelElement={setPanelElement}
-      isSingleStat={isSingleStat}
-      isSingleKey={isSingleKey}
-      singleKeyIndex={singleKeyIndex}
-      singleStatIndex={singleStatIndex}
-      singleKeyPosition={singleKeyPosition}
-      singleStatPosition={singleStatPosition}
-      singleKeyCode={singleKeyCode}
-      singleKeyInfo={singleKeyInfo}
-      selectedKeyType={selectedKeyType}
-      isRenaming={isRenaming}
-      renameInputRef={renameInputRef}
-      renameValue={renameValue}
-      setRenameValue={setRenameValue}
-      renameCancelledRef={renameCancelledRef}
-      handleRenameCommit={handleRenameCommit}
-      handleRenameCancel={handleRenameCancel}
-      handleRenameStart={handleRenameStart}
-      handleToggleMode={handleToggleMode}
-      handleTogglePanel={handleTogglePanel}
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      onPositionChange={onPositionChange}
-      onKeyUpdate={onKeyUpdate}
-      onKeyPreview={onKeyPreview}
-      onKeyMappingChange={onKeyMappingChange}
-      handleStatUpdate={handleStatUpdate}
-      handleStatPreview={handleStatPreview}
-      isListening={isListening}
-      handleKeyListen={handleKeyListen}
-      localState={localState}
-      setLocalState={setLocalState}
-      handleSizeBlur={handleSizeBlur}
-      showImagePicker={showImagePicker}
-      setShowImagePicker={setShowImagePicker}
-      imageButtonRef={imageButtonRef}
-      panelElement={panelElement}
-      useCustomCSS={useCustomCSS}
-      singleScrollRefFor={singleScrollRefFor}
-      singleThumbRefFor={singleThumbRefFor}
-      t={t}
+  // 열림/닫힘과 무관하게 항상 렌더되는 지속 토글 — 리마운트 없이 모프 전환
+  const toggleButton = (
+    <PanelToggleButton
+      open={showFrame}
+      onClick={
+        pluginSettingsPanel
+          ? handlePluginSettingsPanelCancel
+          : handleTogglePanel
+      }
     />
+  );
+
+  const panelBody = showFrame ? renderPanelBody() : null;
+
+  // 헤더 액션 기준 모드 — panelMode가 property여도 선택이 없으면 레이어 뷰가 표시됨
+  const hasAnySelection =
+    selectedKeyElements.length > 0 || selectedElements.length > 0;
+  const displayedPanelMode =
+    panelMode === 'layer' || !hasAnySelection ? 'layer' : 'property';
+
+  // 프레임이 글래스를 소유하고, 루트/서브 페이지가 그 안에서 슬라이드 전환.
+  // 열림/닫힘 모두 같은 프래그먼트 구조 유지 — 토글 버튼이 리마운트되면
+  // 호버 상태가 끊겨 아이콘이 깜빡임
+  return (
+    <>
+      {showFrame && panelBody && (
+        <PanelNavProvider
+          value={{
+            activePageKey,
+            renderPageKey,
+            openPage,
+            closePage,
+            pageHost,
+          }}
+        >
+          <div
+            className={
+              frameVariant === 'window'
+                ? WINDOW_PANEL_FRAME_CLASS
+                : SIDE_PANEL_FRAME_CLASS
+            }
+          >
+            {/* inert — 슬라이드 아웃된 레이어를 키보드 탭 순회·접근성 트리에서 제외 */}
+            <div
+              className="dmn-panel-page"
+              data-page-depth="root"
+              data-active={activePageKey ? 'false' : 'true'}
+              inert={activePageKey ? true : undefined}
+            >
+              {panelBody}
+              <PanelHeaderActions
+                mode={displayedPanelMode}
+                modeToggleHidden={!!pluginSettingsPanel}
+                modeToggleDisabled={
+                  displayedPanelMode === 'layer' && !hasAnySelection
+                }
+                onToggleMode={handleToggleMode}
+                detachAction={detachAction}
+                onDetachAction={onDetachAction}
+                edgeAligned={frameVariant === 'window'}
+              />
+            </div>
+            <div
+              ref={setPageHost}
+              className="dmn-panel-page"
+              data-page-depth="sub"
+              data-active={activePageKey ? 'true' : 'false'}
+              inert={activePageKey ? undefined : true}
+            />
+          </div>
+        </PanelNavProvider>
+      )}
+      {frameVariant !== 'window' && toggleButton}
+    </>
   );
 };
 

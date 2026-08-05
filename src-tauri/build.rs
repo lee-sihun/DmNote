@@ -6,7 +6,22 @@ fn main() {
     maybe_embed_webview2_fixed_runtime();
     #[cfg(target_os = "macos")]
     maybe_build_macos_dock_helper();
+    delay_load_comctl32_for_windows();
     build_tauri();
+}
+
+// Windows 테스트 exe는 tauri-build 매니페스트가 없어 로드 시점에 구버전 comctl32가 붙음
+// (rfd의 TaskDialogIndirect가 v6 전용 — 없으면 STATUS_ENTRYPOINT_NOT_FOUND)
+// comctl32를 지연 로드로 바꿔 로드 시점 바인딩 자체를 제거 — 본체는 첫 호출 때 매니페스트로 v6 해석
+// rustc-link-arg-tests는 통합 테스트 타깃 전용이라 유닛 테스트 크레이트에선 빌드가 깨짐 (Windows 실측)
+fn delay_load_comctl32_for_windows() {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS");
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV");
+    if target_os.as_deref() != Ok("windows") || target_env.as_deref() != Ok("msvc") {
+        return;
+    }
+    println!("cargo:rustc-link-arg=/DELAYLOAD:comctl32.dll");
+    println!("cargo:rustc-link-arg=delayimp.lib");
 }
 
 /// commands/ 디렉토리의 `#[tauri::command]` 함수명을 스캔하여
@@ -112,10 +127,8 @@ fn generate_permissions() {
 fn extract_fn_name(line: &str) -> Option<String> {
     let rest = if let Some(r) = line.strip_prefix("pub async fn ") {
         r
-    } else if let Some(r) = line.strip_prefix("pub fn ") {
-        r
     } else {
-        return None;
+        line.strip_prefix("pub fn ")?
     };
     rest.split('(').next().map(|s| s.trim().to_string())
 }
@@ -159,6 +172,8 @@ fn maybe_build_macos_dock_helper() {
     let helper_macos = helper_contents.join("MacOS");
     let helper_resources = helper_contents.join("Resources");
     let helper_exec = helper_macos.join("DMNoteDockHelper");
+    let helper_arm64_exec = helper_macos.join("DMNoteDockHelper.arm64");
+    let helper_x86_64_exec = helper_macos.join("DMNoteDockHelper.x86_64");
     let helper_bundle_info = helper_contents.join("Info.plist");
     let helper_icon = helper_resources.join("icon.icns");
     let source_icon = PathBuf::from("icons/icon.icns");
@@ -170,6 +185,9 @@ fn maybe_build_macos_dock_helper() {
     if legacy_helper_bundle.exists() {
         let _ = fs::remove_dir_all(&legacy_helper_bundle);
     }
+    if helper_bundle.exists() {
+        let _ = fs::remove_dir_all(&helper_bundle);
+    }
 
     if let Err(err) = fs::create_dir_all(&helper_macos) {
         println!("cargo:warning=failed to create helper MacOS dir: {err}");
@@ -180,21 +198,66 @@ fn maybe_build_macos_dock_helper() {
         return;
     }
 
-    let status = Command::new("xcrun")
-        .args(["--sdk", "macosx", "swiftc"])
-        .arg(&helper_src)
-        .args(["-O", "-framework", "AppKit", "-o"])
+    let helper_slices = [
+        (
+            "arm64",
+            "arm64-apple-macos11.0",
+            helper_arm64_exec.as_path(),
+        ),
+        (
+            "x86_64",
+            "x86_64-apple-macos11.0",
+            helper_x86_64_exec.as_path(),
+        ),
+    ];
+
+    for (arch, target, output) in helper_slices {
+        let status = Command::new("xcrun")
+            .args(["--sdk", "macosx", "swiftc"])
+            .arg(&helper_src)
+            .args(["-target", target, "-O", "-framework", "AppKit", "-o"])
+            .arg(output)
+            .status();
+
+        match status {
+            Ok(s) if s.success() => {}
+            Ok(s) => {
+                println!("cargo:warning=swiftc helper {arch} build failed with status {s}");
+                let _ = fs::remove_file(&helper_arm64_exec);
+                let _ = fs::remove_file(&helper_x86_64_exec);
+                return;
+            }
+            Err(err) => {
+                println!("cargo:warning=failed to invoke swiftc for helper {arch} build: {err}");
+                let _ = fs::remove_file(&helper_arm64_exec);
+                let _ = fs::remove_file(&helper_x86_64_exec);
+                return;
+            }
+        }
+    }
+
+    let lipo_status = Command::new("xcrun")
+        .arg("lipo")
+        .arg("-create")
+        .arg(&helper_arm64_exec)
+        .arg(&helper_x86_64_exec)
+        .arg("-output")
         .arg(&helper_exec)
         .status();
 
-    match status {
+    let _ = fs::remove_file(&helper_arm64_exec);
+    let _ = fs::remove_file(&helper_x86_64_exec);
+
+    match lipo_status {
         Ok(s) if s.success() => {}
         Ok(s) => {
-            println!("cargo:warning=swiftc helper build failed with status {s}");
+            println!("cargo:warning=lipo helper build failed with status {s}");
+            let _ = fs::remove_file(&helper_exec);
             return;
         }
         Err(err) => {
-            println!("cargo:warning=failed to invoke swiftc for helper build: {err}");
+            println!("cargo:warning=failed to invoke lipo for helper build: {err}");
+            let _ = fs::remove_file(&helper_exec);
             return;
         }
     }
@@ -210,7 +273,6 @@ fn maybe_build_macos_dock_helper() {
 
     if let Err(err) = fs::copy(&source_icon, &helper_icon) {
         println!("cargo:warning=failed to copy helper icon: {err}");
-        return;
     }
 }
 

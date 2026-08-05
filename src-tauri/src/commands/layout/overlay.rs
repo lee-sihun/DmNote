@@ -28,7 +28,7 @@ pub fn overlay_get(state: State<'_, AppState>) -> CmdResult<BootstrapOverlayStat
 }
 
 #[tauri::command]
-pub fn overlay_set_visible(
+pub async fn overlay_set_visible(
     state: State<'_, AppState>,
     app: AppHandle,
     visible: bool,

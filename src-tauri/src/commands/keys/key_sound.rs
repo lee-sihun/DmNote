@@ -64,7 +64,7 @@ pub fn key_sound_set_output_backend(
     state: State<'_, AppState>,
     backend: KeySoundOutputBackend,
 ) -> CmdResult<KeySoundOutputState> {
-    Ok(state.key_sound_set_output_backend(backend))
+    Ok(state.key_sound_set_output_backend(backend)?)
 }
 
 #[tauri::command]

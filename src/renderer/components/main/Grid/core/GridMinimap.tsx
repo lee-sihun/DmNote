@@ -38,6 +38,40 @@ const MINIMAP_WIDTH = 120;
 const MINIMAP_HEIGHT = 80;
 const MINIMAP_PADDING = 10;
 
+interface ZoomButtonProps {
+  onClick: () => void;
+  title: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}
+
+// 줌 컨트롤 공통 버튼
+const ZoomButton = ({ onClick, title, style, children }: ZoomButtonProps) => (
+  <div
+    role="button"
+    tabIndex={0}
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick();
+    }}
+    className="flex-1 flex items-center justify-center h-full text-white/45 hover:text-white/90 cursor-pointer"
+    style={{
+      backgroundColor: 'transparent',
+      transition: 'background-color 150ms, color 150ms',
+      ...style,
+    }}
+    onMouseEnter={(e) =>
+      (e.currentTarget.style.backgroundColor = 'var(--ui-fill-active)')
+    }
+    onMouseLeave={(e) =>
+      (e.currentTarget.style.backgroundColor = 'transparent')
+    }
+    title={title}
+  >
+    {children}
+  </div>
+);
+
 const GridMinimap = ({
   positions,
   statPositions = [],
@@ -315,11 +349,39 @@ const GridMinimap = ({
   // 미니맵이 보여야 하는 조건: 그리드 호버 중이거나, 미니맵 자체 호버 중이거나, 드래그 중
   const shouldShow = visible || isHovering || isDragging;
 
+  // 요소 rect 공통 렌더링 — 그룹별 기본 크기·투명도·라운드만 다름
+  const renderElementRects = (
+    prefix: string,
+    items: Position[],
+    { opacity = 0.38, defaultW = 60, defaultH = 60, round = false } = {},
+  ) =>
+    items.map((pos, index) => {
+      if (pos.hidden) return null;
+      const x = ((pos.dx || 0) - bounds.minX) * minimapScale + offsetX;
+      const y = ((pos.dy || 0) - bounds.minY) * minimapScale + offsetY;
+      const w = (pos.width || defaultW) * minimapScale;
+      const h = (pos.height || defaultH) * minimapScale;
+
+      return (
+        <rect
+          key={`${prefix}-${index}`}
+          x={x}
+          y={y}
+          width={Math.max(w, 2)}
+          height={Math.max(h, 2)}
+          fill="var(--ui-fg)"
+          fillOpacity={opacity}
+          rx={round ? Math.max(w, h) / 2 : 1}
+        />
+      );
+    });
+
   return (
     <div
       ref={minimapRef}
-      className="absolute bottom-2 left-2 flex flex-col gap-[2px] select-none"
+      className="absolute bottom-2 left-2 z-30 select-none bg-glass-dim-solid rounded-[8px] shadow-elevation-chrome overflow-hidden"
       style={{
+        width: MINIMAP_WIDTH,
         opacity: shouldShow ? 1 : 0,
         transition: 'opacity 200ms ease-out',
         pointerEvents: shouldShow ? 'auto' : 'none',
@@ -331,37 +393,17 @@ const GridMinimap = ({
       <div
         className="flex items-center cursor-default"
         style={{
-          width: MINIMAP_WIDTH,
+          width: '100%',
           height: 23,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          borderRadius: 4,
-          border: '1px solid rgba(255, 255, 255, 0.2)',
+          borderBottom: '0.5px solid var(--ui-line)',
           boxSizing: 'border-box',
-          overflow: 'hidden',
         }}
       >
         {/* 초기화 버튼 */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            onResetZoom();
-          }}
-          className="flex-1 flex items-center justify-center h-full text-white/70 hover:text-white cursor-pointer"
-          style={{
-            borderTopLeftRadius: 3,
-            borderBottomLeftRadius: 3,
-            backgroundColor: 'transparent',
-            transition: 'background-color 150ms, color 150ms',
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)')
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.backgroundColor = 'transparent')
-          }
+        <ZoomButton
+          onClick={onResetZoom}
           title="Reset zoom (Ctrl+0)"
+          style={{ borderTopLeftRadius: 3, borderBottomLeftRadius: 3 }}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             {/* 좌상단 ㄱ */}
@@ -397,28 +439,9 @@ const GridMinimap = ({
               strokeLinejoin="round"
             />
           </svg>
-        </div>
+        </ZoomButton>
         {/* 확대 버튼 */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            onZoomIn();
-          }}
-          className="flex-1 flex items-center justify-center h-full text-white/70 hover:text-white cursor-pointer"
-          style={{
-            backgroundColor: 'transparent',
-            transition: 'background-color 150ms, color 150ms',
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)')
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.backgroundColor = 'transparent')
-          }
-          title="Zoom in (Ctrl++)"
-        >
+        <ZoomButton onClick={onZoomIn} title="Zoom in (Ctrl++)">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path
               d="M6 3V9M3 6H9"
@@ -427,28 +450,9 @@ const GridMinimap = ({
               strokeLinecap="round"
             />
           </svg>
-        </div>
+        </ZoomButton>
         {/* 축소 버튼 */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            onZoomOut();
-          }}
-          className="flex-1 flex items-center justify-center h-full text-white/70 hover:text-white cursor-pointer"
-          style={{
-            backgroundColor: 'transparent',
-            transition: 'background-color 150ms, color 150ms',
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)')
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.backgroundColor = 'transparent')
-          }
-          title="Zoom out (Ctrl+-)"
-        >
+        <ZoomButton onClick={onZoomOut} title="Zoom out (Ctrl+-)">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path
               d="M3 6H9"
@@ -457,10 +461,10 @@ const GridMinimap = ({
               strokeLinecap="round"
             />
           </svg>
-        </div>
+        </ZoomButton>
         {/* 현재 배율 */}
         <span
-          className="w-[42px] h-full flex items-center justify-center text-white/70 text-xs"
+          className="w-[42px] h-full flex items-center justify-center text-white/60 text-xs"
           style={{ borderTopRightRadius: 4, borderBottomRightRadius: 4 }}
         >
           {Math.round(zoom * 100)}%
@@ -468,12 +472,10 @@ const GridMinimap = ({
       </div>
       {/* 미니맵 */}
       <div
-        className="relative bg-black/60 rounded cursor-pointer"
+        className="relative cursor-pointer"
         style={{
-          width: MINIMAP_WIDTH,
+          width: '100%',
           height: MINIMAP_HEIGHT,
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          boxSizing: 'border-box',
         }}
         onClick={handleMinimapClick}
         onMouseDown={handleMouseDown}
@@ -485,112 +487,35 @@ const GridMinimap = ({
           className="absolute top-0 left-0"
         >
           {/* 키 표시 */}
-          {positions.map((pos, index) => {
-            if (pos.hidden) return null;
-            const x = ((pos.dx || 0) - bounds.minX) * minimapScale + offsetX;
-            const y = ((pos.dy || 0) - bounds.minY) * minimapScale + offsetY;
-            const w = (pos.width || 60) * minimapScale;
-            const h = (pos.height || 60) * minimapScale;
-
-            return (
-              <rect
-                key={`key-${index}`}
-                x={x}
-                y={y}
-                width={Math.max(w, 2)}
-                height={Math.max(h, 2)}
-                fill="rgba(255, 255, 255, 0.6)"
-                rx={1}
-              />
-            );
-          })}
+          {renderElementRects('key', positions, { opacity: 0.55 })}
           {/* 통계 요소 표시 */}
-          {statPositions.map((pos, index) => {
-            if (pos.hidden) return null;
-            const x = ((pos.dx || 0) - bounds.minX) * minimapScale + offsetX;
-            const y = ((pos.dy || 0) - bounds.minY) * minimapScale + offsetY;
-            const w = (pos.width || 60) * minimapScale;
-            const h = (pos.height || 60) * minimapScale;
-
-            return (
-              <rect
-                key={`stat-${index}`}
-                x={x}
-                y={y}
-                width={Math.max(w, 2)}
-                height={Math.max(h, 2)}
-                fill="rgba(34, 211, 238, 0.65)"
-                rx={1}
-              />
-            );
-          })}
+          {renderElementRects('stat', statPositions)}
           {/* 그래프 요소 표시 */}
-          {graphPositions.map((pos, index) => {
-            if (pos.hidden) return null;
-            const x = ((pos.dx || 0) - bounds.minX) * minimapScale + offsetX;
-            const y = ((pos.dy || 0) - bounds.minY) * minimapScale + offsetY;
-            const w = (pos.width || 200) * minimapScale;
-            const h = (pos.height || 100) * minimapScale;
-
-            return (
-              <rect
-                key={`graph-${index}`}
-                x={x}
-                y={y}
-                width={Math.max(w, 2)}
-                height={Math.max(h, 2)}
-                fill="rgba(134, 239, 172, 0.65)"
-                rx={1}
-              />
-            );
+          {renderElementRects('graph', graphPositions, {
+            defaultW: 200,
+            defaultH: 100,
           })}
           {/* 노브 요소 표시 */}
-          {knobPositions.map((pos, index) => {
-            if (pos.hidden) return null;
-            const x = ((pos.dx || 0) - bounds.minX) * minimapScale + offsetX;
-            const y = ((pos.dy || 0) - bounds.minY) * minimapScale + offsetY;
-            const w = (pos.width || 60) * minimapScale;
-            const h = (pos.height || 60) * minimapScale;
-
-            return (
-              <rect
-                key={`knob-${index}`}
-                x={x}
-                y={y}
-                width={Math.max(w, 2)}
-                height={Math.max(h, 2)}
-                fill="rgba(180, 200, 255, 0.65)"
-                rx={Math.max(w, h) / 2}
-              />
-            );
-          })}
-          {/* 플러그인 요소 표시 (다른 색상으로 구분) */}
-          {pluginPositions.map((pos, index) => {
-            const x = (pos.x - bounds.minX) * minimapScale + offsetX;
-            const y = (pos.y - bounds.minY) * minimapScale + offsetY;
-            const w = pos.width * minimapScale;
-            const h = pos.height * minimapScale;
-
-            return (
-              <rect
-                key={`plugin-${index}`}
-                x={x}
-                y={y}
-                width={Math.max(w, 2)}
-                height={Math.max(h, 2)}
-                fill="rgba(168, 85, 247, 0.6)"
-                rx={1}
-              />
-            );
-          })}
+          {renderElementRects('knob', knobPositions, { round: true })}
+          {/* 플러그인 요소 표시 */}
+          {renderElementRects(
+            'plugin',
+            pluginPositions.map((pos) => ({
+              dx: pos.x,
+              dy: pos.y,
+              width: pos.width,
+              height: pos.height,
+            })),
+          )}
           {/* 현재 뷰포트 표시 */}
           <rect
             x={viewport.x}
             y={viewport.y}
             width={viewport.width}
             height={viewport.height}
-            fill="rgba(59, 130, 246, 0.2)"
-            stroke="rgba(59, 130, 246, 0.8)"
+            fill="var(--ui-accent-muted)"
+            stroke="var(--ui-accent)"
+            strokeOpacity={0.8}
             strokeWidth={1}
             rx={2}
           />

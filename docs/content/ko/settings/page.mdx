@@ -22,6 +22,10 @@ description: defineSettings를 사용한 플러그인 설정 관리
 
 const pluginSettings = dmn.plugin.defineSettings({
   settings: {
+    connectionSection: {
+      type: "section",
+      label: "연결",
+    },
     apiKey: {
       type: "string",
       default: "",
@@ -36,27 +40,26 @@ const pluginSettings = dmn.plugin.defineSettings({
       default: "dark",
       label: "테마",
     },
-    sectionDivider: {
-      type: "divider",
+    behaviorSection: {
+      type: "section",
+      label: "동작",
     },
     enabled: {
       type: "boolean",
       default: true,
       label: "활성화",
     },
+    // 조건부 표시 — 정적 boolean 또는 함수, enabled가 true일 때만 표시
+    advancedOption: {
+      type: "number",
+      default: 5,
+      label: "고급 옵션",
+      visible: (settings) => settings.enabled,
+    },
   },
 });
 
-`type: "divider"`는 설정 패널/모달에 구분선만 추가합니다.
-
-// 조건부 표시 — visible 속성으로 다른 설정값에 따라 동적으로 항목 표시/숨김
-// 정적 boolean 또는 함수 모두 지원
-advancedOption: {
-  type: "number",
-  default: 5,
-  label: "고급 옵션",
-  visible: (settings) => settings.enabled,  // enabled가 true일 때만 표시
-},
+// section은 새 카드를 시작합니다. (과거의 divider 타입은 제거됨 — 기존 플러그인의 divider는 무시)
 
 // 설정값 조회
 const current = pluginSettings.get();
@@ -71,6 +74,13 @@ if (confirmed) {
   console.log("설정 저장됨!");
 }
 ```
+
+`defineSettings`는 `defineElement`와 같은 section 계약을 사용합니다. section은 새 카드를
+시작하고 선택적 label은 카드 위에 표시되며, section 키는 저장값·기본값·콜백에서
+제외됩니다. `section.visible`은 그룹 전체를 제어합니다. 렌더 가능한 값 설정이 없는
+section은 카드째 숨겨지고, 전체에 렌더 가능한 값 설정이 하나도 없을 때만 표준 빈
+상태를 표시합니다. 패널과 모달은 visibility 예외의 fail-closed 처리까지 같은 의미로
+동작합니다.
 
 ## API 레퍼런스
 
@@ -115,7 +125,7 @@ interface PluginSettingsDefinition {
 
 ```javascript
 const settings = dmn.plugin.defineSettings({
-  settings: { apiKey: { type: "string", default: "" } },
+  settings: { apiKey: { type: "string", default: "", label: "API Key" } },
 
   // onChange: 항상 실행 (해제 불가)
   onChange: (newSettings, oldSettings) => {
@@ -205,7 +215,6 @@ dmn.plugin.defineElement({
   // 인스턴스별 설정
   settings: {
     showGraph: { type: "boolean", default: true, label: "그래프 표시" },
-    graphDivider: { type: "divider", visible: (s) => s.showGraph },
     graphColor: {
       type: "color",
       default: "#86EFAC",
@@ -314,6 +323,7 @@ function startFetching() {
 // 설정 변경 시 인터벌 재시작
 fetcherSettings.subscribe((newSettings, oldSettings) => {
   if (
+    newSettings.apiEndpoint !== oldSettings.apiEndpoint ||
     newSettings.refreshInterval !== oldSettings.refreshInterval ||
     newSettings.autoRefresh !== oldSettings.autoRefresh
   ) {

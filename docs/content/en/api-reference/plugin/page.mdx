@@ -9,7 +9,7 @@ Core plugin registration and management API.
 
 ## Element Definition
 
-### `dmn.plugin.defineElement(options): void`
+### `dmn.plugin.defineElement(definition): void`
 
 Defines a draggable overlay element. See [Declarative API](/docs/declarative-api) for details.
 
@@ -44,17 +44,200 @@ dmn.plugin.defineElement({
 
 ---
 
+## PluginDefinition
+
+The definition object passed to `defineElement`.
+
+```typescript
+interface PluginDefinition {
+  /** Plugin name (shown in the context menu) */
+  name: string;
+
+  /** Maximum instance count (0 = unlimited, default) */
+  maxInstances?: number;
+
+  /**
+   * Whether the element can be resized in the grid
+   * @default false
+   */
+  resizable?: boolean;
+
+  /**
+   * Which size axis to preserve when settings change
+   * Only applies when resizable is true
+   * - 'width': preserve width, height follows content
+   * - 'height': preserve height, width follows content
+   * - 'both': preserve both (default)
+   * - 'none': both follow content
+   * @default 'both'
+   */
+  preserveAxis?: "width" | "height" | "both" | "none";
+
+  /**
+   * Resize anchor (fixed point when the size changes)
+   * @default "top-left"
+   */
+  resizeAnchor?: ElementResizeAnchor;
+
+  /** Context menu setup */
+  contextMenu?: {
+    create?: string; // Create menu label
+    delete?: string; // Delete menu label
+    items?: PluginDefinitionContextMenuItem[];
+  };
+
+  /**
+   * Overlay state keys mirrored to the main window for menu predicates
+   * (opt-in, low-frequency). Only declared keys are sent on setState changes
+   */
+  contextMenuStateKeys?: string[];
+
+  /**
+   * Settings UI mode
+   * @default "panel"
+   */
+  settingsUI?: "panel" | "modal";
+
+  /** Settings schema */
+  settings?: Record<string, PluginSettingSchema>;
+
+  /** i18n messages (nested objects allowed — PluginMessages) */
+  messages?: Record<string, Record<string, unknown>>;
+
+  /** Preview state (for the main window) */
+  previewState?: Record<string, any>;
+
+  /** Template function */
+  template: (
+    state: Record<string, any>,
+    settings: Record<string, any>,
+    helpers: DisplayElementTemplateHelpers
+  ) => DisplayElementTemplateResult | string;
+
+  /** Mount logic (runs only in the overlay) */
+  onMount?: (context: PluginDefinitionHookContext) => void | (() => void);
+}
+```
+
+## ElementResizeAnchor
+
+The type that specifies the fixed point when an element's size changes.
+
+```typescript
+type ElementResizeAnchor =
+  | "top-left" // Top-left (default)
+  | "top-center" // Top center
+  | "top-right" // Top-right
+  | "center-left" // Center-left
+  | "center" // Center
+  | "center-right" // Center-right
+  | "bottom-left" // Bottom-left
+  | "bottom-center" // Bottom center
+  | "bottom-right"; // Bottom-right
+```
+
+### Anchor Behavior
+
+When the size changes, the specified anchor position stays fixed and the element
+expands or shrinks in the other directions.
+
+| Anchor         | Behavior                             |
+| -------------- | ------------------------------------ |
+| `top-left`     | Expands/shrinks right and down       |
+| `center`       | Expands/shrinks evenly in all directions |
+| `bottom-right` | Expands/shrinks left and up          |
+
+## PluginDefinitionHookContext
+
+The context object passed to the `onMount` callback.
+
+```typescript
+interface PluginDefinitionHookContext {
+  /** Update state */
+  setState: (updates: Record<string, any>) => void;
+
+  /** Get current settings */
+  getSettings: () => Record<string, any>;
+
+  /** Set the resize anchor */
+  setAnchor: (anchor: ElementResizeAnchor) => void;
+
+  /** Get the current resize anchor */
+  getAnchor: () => ElementResizeAnchor;
+
+  /**
+   * Register event hooks
+   * - "key": mapped key events
+   * - "rawKey": all raw input events
+   */
+  onHook: (event: "key" | "rawKey", callback: (...args: any[]) => void) => void;
+
+  /** Expose functions for the context menu */
+  expose: (actions: Record<string, (...args: any[]) => any>) => void;
+
+  /** Current locale code */
+  locale: string;
+
+  /** Translation function */
+  t: PluginTranslateFn;
+
+  /** Subscribe to locale changes */
+  onLocaleChange: (listener: (locale: string) => void) => Unsubscribe;
+
+  /** Subscribe to settings changes */
+  onSettingsChange: (
+    listener: (
+      newSettings: Record<string, any>,
+      oldSettings: Record<string, any>
+    ) => void
+  ) => void;
+}
+```
+
+### setAnchor / getAnchor
+
+Dynamically change or read the resize anchor per instance.
+
+```javascript fragment=object-members
+onMount: ({ setAnchor, getAnchor, getSettings }) => {
+  // Check the current anchor
+  console.log("Current anchor:", getAnchor()); // "top-left" (default)
+
+  // Change the anchor to center
+  setAnchor("center");
+
+  // Change the anchor based on settings
+  const settings = getSettings();
+  if (settings.expandFromCenter) {
+    setAnchor("center");
+  }
+},
+```
+
+**Anchor priority:**
+
+1. Per-instance anchor set via `setAnchor()`
+2. `PluginDefinition.resizeAnchor` (definition default)
+3. `"top-left"` (system default)
+
+---
+
 ## Settings Definition
 
-### `dmn.plugin.defineSettings(options): void`
+### `dmn.plugin.defineSettings(definition): PluginSettingsInstance`
 
-Defines plugin settings UI in the main window settings panel. See [Settings System](/docs/settings) for details.
+Defines **plugin-global settings** independent of elements (`defineElement`). The
+returned instance exposes `get`/`set`/`open`/`reset`/`subscribe`. See
+[Settings System](/docs/settings) for details.
+
+```typescript fragment=signature
+dmn.plugin.defineSettings(
+  definition: PluginSettingsDefinition
+): PluginSettingsInstance
+```
 
 ```javascript
-dmn.plugin.defineSettings({
-  id: "my-settings",
-  title: "My Plugin Settings",
-
+const pluginSettings = dmn.plugin.defineSettings({
   settings: {
     enabled: { type: "boolean", default: true, label: "Enable" },
     theme: {
@@ -69,6 +252,38 @@ dmn.plugin.defineSettings({
   },
 });
 ```
+
+### PluginSettingSchema
+
+Settings use a discriminated union of value settings and sections. Layout entries
+never appear in stored settings, defaults, getters, or change callbacks.
+
+```typescript
+type PluginSettingSchema =
+  | {
+      type: "boolean" | "color" | "number" | "string" | "select";
+      default: string | number | boolean;
+      label: string;
+      min?: number;
+      max?: number;
+      step?: number;
+      options?: { label: string; value: string | number | boolean }[];
+      placeholder?: string;
+      visible?: boolean | ((settings: Record<string, unknown>) => boolean);
+    }
+  | {
+      type: "section";
+      label?: string; // optional caption above the card
+      visible?: boolean | ((settings: Record<string, unknown>) => boolean);
+    };
+```
+
+A section starts a card and controls the whole group through `visible`. Its key is
+a layout identifier and never appears in stored values, defaults, getters, or
+change callbacks. Panel and modal settings UIs follow the same rules, and
+visibility exceptions hide the affected item or group (fail-closed). The legacy
+`divider` type was removed — divider entries in existing plugins are ignored as
+an unsupported type.
 
 ---
 
@@ -100,6 +315,16 @@ dmn.plugin.registerCleanup(() => {
 
 Plugin-specific persistent storage. See [Storage API](/docs/storage) for details.
 
+```typescript fragment=signature
+dmn.plugin.storage.get<T = any>(key: string): Promise<T | null>
+dmn.plugin.storage.set(key: string, value: any): Promise<void>
+dmn.plugin.storage.remove(key: string): Promise<void>
+dmn.plugin.storage.clear(): Promise<void>
+dmn.plugin.storage.keys(): Promise<string[]>
+dmn.plugin.storage.hasData(prefix: string): Promise<boolean>
+dmn.plugin.storage.clearByPrefix(prefix: string): Promise<number>
+```
+
 ```javascript
 // Save
 await dmn.plugin.storage.set("myKey", { value: 42 });
@@ -116,37 +341,98 @@ const keys = await dmn.plugin.storage.keys();
 
 ---
 
-## Plugin Info
+## Example Usage
 
-### `dmn.plugin.id: string`
-
-Returns current plugin ID (from `// @id` comment).
+### Basic Plugin
 
 ```javascript
-// @id my-plugin
-console.log(dmn.plugin.id); // 'my-plugin'
-```
+// @id simple-counter
 
-### `dmn.plugin.list(): Promise<PluginInfo[]>`
+dmn.plugin.defineElement({
+  name: "Simple Counter",
+  maxInstances: 3,
+  resizeAnchor: "top-left",
 
-Returns list of all loaded plugins.
+  settings: {
+    textColor: {
+      type: "color",
+      default: "#FFFFFF",
+      label: "Text Color",
+    },
+  },
 
-```typescript
-interface PluginInfo {
-  id: string;
-  name: string;
-  instances: number;
-}
+  previewState: {
+    count: 42,
+  },
 
-const plugins = await dmn.plugin.list();
-plugins.forEach((p) => {
-  console.log(`${p.name} (${p.id}): ${p.instances} instances`);
+  template: (state, settings, { html }) => html`
+    <div style="color: ${settings.textColor}; padding: 16px;">
+      Count: ${state.count ?? 0}
+    </div>
+  `,
+
+  onMount: ({ setState, onHook }) => {
+    let count = 0;
+
+    onHook("key", ({ state }) => {
+      if (state === "DOWN") {
+        count++;
+        setState({ count });
+      }
+    });
+  },
 });
 ```
 
----
+### Dynamic Anchor Change
 
-## Example Usage
+```javascript
+// @id dynamic-anchor-panel
+
+dmn.plugin.defineElement({
+  name: "Dynamic Anchor Panel",
+  resizeAnchor: "top-left", // Default anchor
+
+  settings: {
+    expandFromCenter: {
+      type: "boolean",
+      default: false,
+      label: "Expand From Center",
+    },
+  },
+
+  template: (state, settings, { html }) => html`
+    <div style="padding: 16px; background: rgba(0,0,0,0.8);">
+      Anchor: ${state.currentAnchor ?? "top-left"}
+    </div>
+  `,
+
+  onMount: ({
+    setState,
+    getSettings,
+    setAnchor,
+    getAnchor,
+    onSettingsChange,
+  }) => {
+    // Set the initial anchor
+    const settings = getSettings();
+    const anchor = settings.expandFromCenter ? "center" : "top-left";
+    setAnchor(anchor);
+    setState({ currentAnchor: anchor });
+
+    // Update the anchor when settings change
+    onSettingsChange((newSettings, oldSettings) => {
+      if (newSettings.expandFromCenter !== oldSettings.expandFromCenter) {
+        const newAnchor = newSettings.expandFromCenter ? "center" : "top-left";
+        setAnchor(newAnchor);
+        setState({ currentAnchor: newAnchor });
+      }
+    });
+  },
+});
+```
+
+### Stats Tracker
 
 ```javascript
 // @id stats-tracker

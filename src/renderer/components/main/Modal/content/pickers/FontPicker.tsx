@@ -1,24 +1,37 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  startTransition,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/settings/fonts';
+import {
+  DEFAULT_FONT_FAMILY,
+  buildDraftPreviewCss,
+} from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import PlusIcon from '@assets/svgs/plus2.svg';
-import Modal from '@components/main/Modal/Modal';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
-import CommonListPickerPopup from './CommonListPickerPopup';
+import CommonListPickerPage from './CommonListPickerPage';
+import {
+  pickerRowClass,
+  pickerMoreButtonClass,
+  pickerMoreButtonVisibleClass,
+  pickerMoreButtonHiddenClass,
+} from './pickerRowClass';
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { useFontLibrary } from '@hooks/useFontLibrary';
 
 interface FontPickerProps {
   open: boolean;
-  referenceRef: React.RefObject<HTMLElement>;
-  panelElement?: HTMLElement | null;
   selectedFont: string | null;
   onFontSelect: (fontName: string | null) => void;
-  onClose: () => void;
-  interactiveRefs?: Array<React.RefObject<HTMLElement>>;
+  pageTitle: string;
+  onBack: () => void;
 }
 
 type FilterType = 'all' | 'builtin' | 'local' | 'web';
@@ -75,11 +88,10 @@ const buildPreviewCSS = (font: CustomFont): string | null => {
   }
 
   if (font.type === 'web' && font.cssContent) {
-    // 웹폰트 CSS에서 font-family를 preview 이름으로 교체
-    return font.cssContent.replace(
-      /font-family:\s*['"]?([^'";]+)['"]?\s*;/i,
-      `font-family: '${previewFontFamily}';`,
-    );
+    // @font-face 블록만 추출해 미리보기 이름으로 치환 — 원문 전체를 주입하면
+    // 블록 밖 전역 규칙(body{display:none} 등)과 다른 face까지 앱에 새어든다.
+    // 저장 경로(useFontLibrary)의 validator와 동일한 추출기를 재사용
+    return buildDraftPreviewCss(font.cssContent, previewFontFamily) || null;
   }
 
   return null;
@@ -87,12 +99,10 @@ const buildPreviewCSS = (font: CustomFont): string | null => {
 
 const FontPicker = ({
   open,
-  referenceRef,
-  panelElement = null,
   selectedFont,
   onFontSelect,
-  onClose,
-  interactiveRefs = [],
+  pageTitle,
+  onBack,
 }: FontPickerProps) => {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -164,12 +174,7 @@ const FontPicker = ({
   // 피커가 열려 있는 동안 WebFontInputModal 코드를 미리 로드
   useEffect(() => {
     if (!open) return;
-
-    const timer = window.setTimeout(() => {
-      void preloadWebFontInputModal();
-    }, 120);
-
-    return () => window.clearTimeout(timer);
+    void preloadWebFontInputModal();
   }, [open]);
 
   // 필터링된 폰트 목록 (비활성 폰트도 노출 — 행에서 흐리게 표시)
@@ -282,7 +287,9 @@ const FontPicker = ({
 
   const openWebFontModal = (editingId: string | null) => {
     void preloadWebFontInputModal();
-    setWebFontModal({ editingId });
+    startTransition(() => {
+      setWebFontModal({ editingId });
+    });
   };
 
   const handleWebFontSubmit = (css: string, displayName: string) => {
@@ -294,22 +301,12 @@ const FontPicker = ({
     if (ok) setWebFontModal(null);
   };
 
-  const handlePickerClose = () => {
-    if (menu.menuKey !== null || addMenuPosition !== null) return;
-    onClose();
-  };
-
   return (
     <>
-      <CommonListPickerPopup<CustomFont>
+      <CommonListPickerPage<CustomFont>
         open={open}
-        referenceRef={referenceRef}
-        panelElement={panelElement}
-        interactiveRefs={interactiveRefs}
-        onClose={handlePickerClose}
-        widthClass="w-[156px]"
-        estimatedWidth={164}
-        estimatedHeight={280}
+        pageTitle={pageTitle}
+        onBack={onBack}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         searchPlaceholder={t('fontPicker.searchPlaceholder') || '검색...'}
@@ -317,11 +314,10 @@ const FontPicker = ({
         filterValue={filterType}
         onFilterChange={(value) => setFilterType(value as FilterType)}
         items={filteredFonts}
-        getItemKey={(font) => font.id}
         renderItem={(font) => {
           const isSelected = effectiveSelectedFont
             ? effectiveSelectedFont === font.name
-            : font.name === 'SUIT-Regular';
+            : font.name === DEFAULT_FONT_FAMILY;
           const isCustom = font.type !== 'builtin';
           const isDisabled = !font.enabled;
           const fontFamily = isDisabled
@@ -348,12 +344,12 @@ const FontPicker = ({
                   ? (event) => menu.openFromContextMenu(event, font.id)
                   : undefined
               }
-              className={`w-full h-[24px] px-[8px] rounded-[7px] text-style-4 transition-colors flex items-center gap-[4px] group ${
+              className={`${pickerRowClass} ${
                 isSelected
-                  ? 'bg-[#2E2D33] text-[#FFFFFF] cursor-pointer'
+                  ? 'bg-surface-active text-fg cursor-pointer'
                   : isDisabled
-                  ? 'text-[#6F6E7A] hover:bg-[#26262C] cursor-default'
-                  : 'text-[#DBDEE8] hover:bg-[#26262C] cursor-pointer'
+                  ? 'text-fg-faint hover:bg-surface-hover cursor-default'
+                  : 'text-fg hover:bg-surface-hover cursor-pointer'
               }`}
               title={font.displayName}
             >
@@ -361,7 +357,7 @@ const FontPicker = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-[#FFFFFF] caret-[#3B82F6]"
+                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-label text-fg caret-accent"
                   value={renameValue}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBlur={() => {
@@ -394,14 +390,14 @@ const FontPicker = ({
               {isCustom ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] rounded-[5px] transition-all flex items-center justify-center shrink-0 ${
+                  className={`${pickerMoreButtonClass} ${
                     isSelected || menu.menuKey === font.id
-                      ? 'opacity-100'
-                      : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                      ? pickerMoreButtonVisibleClass
+                      : pickerMoreButtonHiddenClass
                   } ${
                     isSelected
-                      ? 'text-[#D9DCE6] hover:text-[#FFFFFF]'
-                      : 'text-[#8A8D99] hover:text-[#DBDEE8]'
+                      ? 'text-fg hover:text-fg'
+                      : 'text-fg-muted hover:text-fg'
                   }`}
                   title={moreMenuLabel}
                   aria-label={moreMenuLabel}
@@ -426,17 +422,17 @@ const FontPicker = ({
           const rect = event.currentTarget.getBoundingClientRect();
           setAddMenuPosition({ x: rect.right + 4, y: rect.top - 2 });
         }}
-        addButtonContent={<PlusIcon />}
+        addLabel={t('fontPicker.add')}
         addButtonRef={addButtonRef}
       />
 
       {addMenuPosition !== null && (
         <ListPopup
           open
+          ariaLabel={t('fontPicker.add')}
           referenceRef={addButtonRef}
           position={addMenuPosition}
           onClose={() => setAddMenuPosition(null)}
-          textAlign="center"
           items={addMenuItems}
           onSelect={(id) => {
             setAddMenuPosition(null);
@@ -446,7 +442,6 @@ const FontPicker = ({
               openWebFontModal(null);
             }
           }}
-          className="z-[60]"
           offsetX={0}
           offsetY={0}
         />
@@ -455,9 +450,9 @@ const FontPicker = ({
       {menu.menuKey !== null && (
         <ListPopup
           open
+          ariaLabel={t('common.more')}
           position={menu.menuPosition ?? undefined}
           onClose={menu.close}
-          textAlign="center"
           items={menuItems}
           onSelect={(id) => {
             const font = menuTargetFont;
@@ -475,33 +470,19 @@ const FontPicker = ({
               void handleDelete(font);
             }
           }}
-          className="z-[60]"
           offsetX={0}
           offsetY={0}
         />
       )}
 
-      {/* 웹폰트 CSS 입력 모달 */}
-      {webFontModal ? (
-        <Suspense
-          fallback={
-            <Modal onClick={() => setWebFontModal(null)}>
-              <div
-                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-[#1A191E] rounded-[10px] border border-[#2A2A30]"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <p className="text-[12px] leading-[16px] text-[#8A8D99]">
-                  로딩 중...
-                </p>
-              </div>
-            </Modal>
-          }
-        >
+      <Suspense fallback={null}>
+        {webFontModal ? (
           <LazyWebFontInputModal
             isOpen
             onClose={() => setWebFontModal(null)}
             onSubmit={handleWebFontSubmit}
             initialCss={editingWebFont?.cssContent || ''}
+            mode={editingWebFont ? 'edit' : 'add'}
             isDuplicateFontFamily={(fontFamily) =>
               fontLibrary.isDuplicateFontFamily(fontFamily, {
                 excludeId: webFontModal.editingId,
@@ -509,8 +490,8 @@ const FontPicker = ({
             }
             t={t}
           />
-        </Suspense>
-      ) : null}
+        ) : null}
+      </Suspense>
     </>
   );
 };

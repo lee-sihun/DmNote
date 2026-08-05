@@ -1,4 +1,9 @@
 import type { KeyPosition } from '@src/types/key/keys';
+import type { ColorModeValue, GradientSpec } from '@src/types/color';
+import type {
+  GradientCanvasAnchor,
+  GradientPreviewSurface,
+} from '@stores/grid/useGradientEditStore';
 
 // ============================================================================
 // 탭 상수
@@ -41,6 +46,10 @@ export interface NumberInputProps {
   value: number | string;
   onChange: (value: number) => void;
   onBlur?: () => void;
+  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
+  onPreview?: (value: number) => void;
+  /** Escape 원복 시 호출 (게스처 취소 연동) */
+  onCancel?: () => void;
   min?: number;
   max?: number;
   prefix?: string;
@@ -56,6 +65,10 @@ export interface OptionalNumberInputProps {
   value?: number;
   onChange: (value?: number) => void;
   onBlur?: () => void;
+  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
+  onPreview?: (value?: number) => void;
+  /** Escape 원복 시 호출 (게스처 취소 연동) */
+  onCancel?: () => void;
   min?: number;
   max?: number;
   prefix?: string;
@@ -85,12 +98,15 @@ export interface ColorInputProps {
   // 외부에서 열림 상태를 제어할 때 사용
   isOpen?: boolean;
   onToggle?: () => void;
-}
-
-export interface SelectInputProps {
-  value: string;
-  options: { value: string; label: string }[];
-  onChange: (value: string) => void;
+  /** gradient 편집 지원 — 저장된 상태별 스펙. onModeCommit이 있으면 활성화 */
+  gradientValue?: GradientSpec | null;
+  activeGradientValue?: GradientSpec | null;
+  /** gradient 지원 커밋 경로 — 단색/그라데이션 확정을 한 콜백으로 수신 */
+  onModeCommit?: (state: 'idle' | 'active', value: ColorModeValue) => void;
+  /** 온캔버스 각도 핸들 앵커 */
+  canvasAnchor?: GradientCanvasAnchor;
+  /** 편집 표면 — 캔버스 일시 페인트 대상 필드 (기본 background) */
+  gradientSurface?: GradientPreviewSurface;
 }
 
 export interface ToggleSwitchProps {
@@ -101,7 +117,11 @@ export interface ToggleSwitchProps {
 export interface TextInputProps {
   value: string;
   onChange: (value: string) => void;
-  onBlur?: () => void;
+  onBlur?: (value: string) => void;
+  /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
+  onPreview?: (value: string) => void;
+  /** Escape 원복 시 호출 (게스처 취소 연동) */
+  onCancel?: () => void;
   placeholder?: string;
   width?: string;
   isMixed?: boolean;
@@ -173,6 +193,8 @@ export interface SingleKeyContentProps {
 // ============================================================================
 
 export interface StyleTabContentProps {
+  /** 온캔버스 각도 핸들 앵커 (단일 키/통계) */
+  canvasAnchor?: GradientCanvasAnchor;
   keyIndex: number;
   keyPosition: KeyPosition;
   keyCode: string | null;
@@ -191,6 +213,8 @@ export interface StyleTabContentProps {
   // 표시 텍스트 입력 숨김 (통계 요소는 statType이 displayText 역할)
   hideDisplayText?: boolean;
   showSoundControls?: boolean;
+  // 눌림 상태가 없는 요소(통계)는 상태별 편집 표면에서 대기만 편집
+  shadowActiveState?: boolean;
   showImagePicker?: boolean;
   onToggleImagePicker?: () => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;

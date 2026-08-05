@@ -9,10 +9,14 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import {
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
 import { isMac } from '@utils/core/platform';
 import { useLenis } from '@hooks/useLenis';
 import ListPopup from '@components/main/Modal/ListPopup';
+import IconSwap from '@components/main/common/IconSwap';
 import CloseEyeIcon from '@assets/svgs/close_eye.svg';
 import OpenEyeIcon from '@assets/svgs/open_eye.svg';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
@@ -63,7 +67,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const graphPositions = useGraphItemStore((state) => state.positions);
   const knobPositions = useKnobItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements,
+    selectPropertyPanelPluginElements,
   );
 
   const selectedElements = useGridSelectionStore(
@@ -101,47 +105,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     return () => clearPendingDeselect();
   });
 
-  // 스크롤 상태
+  // 스크롤 상태 — scrollElementRef는 DnD 훅의 오토스크롤 계산용
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
-  const thumbRef = useRef<HTMLDivElement | null>(null);
 
-  const calculateThumb = (el: HTMLDivElement) => {
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const canScroll = scrollHeight > clientHeight + 1;
-    if (!canScroll) return { top: 0, height: 0, visible: false };
-
-    const minThumbHeight = 16;
-    const height = Math.max(
-      minThumbHeight,
-      (clientHeight / scrollHeight) * clientHeight,
-    );
-    const maxTop = clientHeight - height;
-    const top =
-      maxTop <= 0 ? 0 : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
-
-    return { top, height, visible: true };
-  };
-
-  const updateThumbDOM = () => {
-    if (!thumbRef.current || !scrollElementRef.current) return;
-    const thumb = calculateThumb(scrollElementRef.current);
-    thumbRef.current.style.top = `${thumb.top}px`;
-    thumbRef.current.style.height = `${thumb.height}px`;
-    thumbRef.current.style.display = thumb.visible ? 'block' : 'none';
-  };
-
-  const { scrollContainerRef: lenisRef, lenisInstance } = useLenis({
-    onScroll: updateThumbDOM,
-  });
+  const { scrollContainerRef: lenisRef, lenisInstance } = useLenis();
 
   const setScrollRef = (node: HTMLDivElement | null) => {
     scrollElementRef.current = node;
     lenisRef(node);
   };
-
-  useEffect(() => {
-    updateThumbDOM();
-  });
 
   // 레이어 아이템 목록
   const layerItems = buildLayerItems({
@@ -180,7 +152,6 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   useEffect(() => {
     const rafId = requestAnimationFrame(() => {
       lenisInstance.current?.resize();
-      updateThumbDOM();
     });
     return () => cancelAnimationFrame(rafId);
   });
@@ -273,6 +244,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     if (dnd.getIsDraggingRef()) return;
 
     onSelectionFromPanel?.();
+
+    // macOS ctrl+클릭은 우클릭 제스처 — contextmenu 뒤에 따라오는 click 무시
+    if (isMac() && e.ctrlKey) return;
 
     const isPrimaryModifierPressed = isMac() ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
@@ -414,6 +388,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     }
     if (dnd.getIsDraggingRef()) return;
 
+    // macOS ctrl+클릭은 우클릭 제스처 — contextmenu 뒤에 따라오는 click 무시
+    if (isMac() && e.ctrlKey) return;
+
     const isPrimaryModifierPressed = isMac() ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
 
@@ -521,7 +498,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       >
         {layerItems.length === 0 ? (
           <div className="flex items-center justify-center h-full p-[16px]">
-            <p className="text-[#6B6D75] text-style-4 text-center">
+            <p className="text-fg-faint text-body text-center">
               {t('propertiesPanel.noLayers') || 'No layers'}
             </p>
           </div>
@@ -553,27 +530,27 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       ${isBeingDragged ? 'opacity-30' : ''}
                       ${
                         isSelected
-                          ? 'bg-[#3B82F6]/20 text-[#DBDEE8]'
+                          ? 'bg-accent-muted text-fg'
                           : dnd.isDragging
-                          ? 'text-[#9B9DA5]'
-                          : 'hover:bg-[#2A2A30] text-[#9B9DA5]'
+                          ? 'text-fg-muted'
+                          : 'hover:bg-surface-hover text-fg-muted'
                       }
                     `}
                   >
                     {/* 아이템 드래그 드롭 인디케이터 */}
                     {dnd.draggedItemId &&
                       dnd.dragOverItemDisplayIndex === displayIndex && (
-                        <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
+                        <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
                       )}
                     {dnd.draggedItemId &&
                       dnd.dragOverHeaderBottomGroupId === gh.groupId && (
-                        <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
+                        <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent z-10" />
                       )}
                     {/* 그룹 드래그 드롭 인디케이터 */}
                     {dnd.draggedGroupId &&
                       dnd.dragOverDisplayIndex === displayIndex &&
                       dnd.draggedGroupId !== gh.groupId && (
-                        <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
+                        <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
                       )}
                     {/* 접기/펼치기 토글 */}
                     <div
@@ -598,7 +575,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       <input
                         ref={actions.renameInputRef}
                         type="text"
-                        className="flex-1 text-[12px] bg-transparent border-none p-0 outline-none text-[#DBDEE8] min-w-0 caret-[#3B82F6]"
+                        className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-accent"
                         value={actions.renameValue}
                         onChange={(e) => actions.setRenameValue(e.target.value)}
                         onBlur={() => {
@@ -625,7 +602,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         onDoubleClick={(e) => e.stopPropagation()}
                       />
                     ) : (
-                      <span className="flex-1 text-[12px] truncate font-medium">
+                      <span className="flex-1 text-body truncate font-medium">
                         {gh.groupName}
                       </span>
                     )}
@@ -645,25 +622,29 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         e.stopPropagation();
                         actions.handleToggleGroupVisibility(e, gh.groupId);
                       }}
-                      className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer ${
+                      className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-md cursor-pointer ${
                         gh.allHidden
                           ? ''
                           : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
                       }`}
                     >
-                      {gh.allHidden ? (
-                        <CloseEyeIcon
-                          width={14}
-                          height={14}
-                          fill="currentColor"
-                        />
-                      ) : (
-                        <OpenEyeIcon
-                          width={14}
-                          height={14}
-                          fill="currentColor"
-                        />
-                      )}
+                      <IconSwap
+                        active={gh.allHidden}
+                        activeIcon={
+                          <CloseEyeIcon
+                            width={14}
+                            height={14}
+                            fill="currentColor"
+                          />
+                        }
+                        inactiveIcon={
+                          <OpenEyeIcon
+                            width={14}
+                            height={14}
+                            fill="currentColor"
+                          />
+                        }
+                      />
                     </button>
                   </div>
                 );
@@ -695,10 +676,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     ${isInDraggedGroup ? 'opacity-30' : ''}
                     ${
                       isItemSelected(item)
-                        ? 'bg-[#3B82F6]/20 text-[#DBDEE8]'
+                        ? 'bg-accent-muted text-fg'
                         : dnd.isDragging
-                        ? 'text-[#8B8D95]'
-                        : 'hover:bg-[#2A2A30] text-[#8B8D95]'
+                        ? 'text-fg-muted'
+                        : 'hover:bg-surface-hover text-fg-muted'
                     }
                   `}
                 >
@@ -706,12 +687,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   {dnd.draggedItemId &&
                     dnd.dragOverItemDisplayIndex === displayIndex &&
                     !dnd.draggedItemIdsRef.current.includes(item.id) && (
-                      <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
+                      <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
                     )}
                   {dnd.draggedGroupId &&
                     dnd.dragOverDisplayIndex === displayIndex &&
                     item.groupId !== dnd.draggedGroupId && (
-                      <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
+                      <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
                     )}
 
                   {/* 아이콘 */}
@@ -734,7 +715,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     <input
                       ref={actions.renameInputRef}
                       type="text"
-                      className="flex-1 text-[12px] bg-transparent border-none p-0 outline-none text-[#DBDEE8] min-w-0 caret-[#3B82F6]"
+                      className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-accent"
                       value={actions.renameValue}
                       onChange={(e) => actions.setRenameValue(e.target.value)}
                       onBlur={() => {
@@ -761,7 +742,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       onDoubleClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <span className="flex-1 text-[12px] truncate">
+                    <span className="flex-1 text-body truncate">
                       {item.name}
                     </span>
                   )}
@@ -783,21 +764,29 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         ? t('propertiesPanel.showLayer') || 'Show'
                         : t('propertiesPanel.hideLayer') || 'Hide'
                     }
-                    className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer ${
+                    className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-md cursor-pointer ${
                       item.hidden
                         ? ''
                         : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
                     }`}
                   >
-                    {item.hidden ? (
-                      <CloseEyeIcon
-                        width={14}
-                        height={14}
-                        fill="currentColor"
-                      />
-                    ) : (
-                      <OpenEyeIcon width={14} height={14} fill="currentColor" />
-                    )}
+                    <IconSwap
+                      active={item.hidden}
+                      activeIcon={
+                        <CloseEyeIcon
+                          width={14}
+                          height={14}
+                          fill="currentColor"
+                        />
+                      }
+                      inactiveIcon={
+                        <OpenEyeIcon
+                          width={14}
+                          height={14}
+                          fill="currentColor"
+                        />
+                      }
+                    />
                   </button>
                 </div>
               );
@@ -806,23 +795,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             {/* 마지막 아이템 뒤 드롭 인디케이터 */}
             {dnd.draggedItemId &&
               dnd.dragOverItemDisplayIndex === displayItems.length && (
-                <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
+                <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent z-10" />
               )}
             {dnd.draggedGroupId &&
               dnd.dragOverDisplayIndex === displayItems.length && (
-                <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
+                <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent z-10" />
               )}
           </div>
         )}
-
-        {/* 커스텀 스크롤바 */}
-        <div className="properties-panel-overlay-bar">
-          <div
-            ref={thumbRef}
-            className="properties-panel-overlay-thumb"
-            style={{ display: 'none' }}
-          />
-        </div>
       </div>
 
       {/* 컨텍스트 메뉴 */}
@@ -830,6 +810,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         createPortal(
           <ListPopup
             open={actions.contextMenuOpen}
+            ariaLabel={t('common.more')}
             position={actions.contextMenuPosition}
             onClose={() => {
               actions.setContextMenuOpen(false);
@@ -837,7 +818,6 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             }}
             items={actions.contextMenuItems}
             onSelect={actions.handleContextMenuSelect}
-            className="!z-[10000]"
           />,
           document.body,
         )}

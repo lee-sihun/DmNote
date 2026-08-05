@@ -1,4 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
 declare global {
   interface Window {
@@ -26,6 +31,8 @@ import GridBackground from './GridBackground';
 import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
 import MarqueeSelectionOverlay from '../overlays/MarqueeSelectionOverlay';
 import ResizeHandles from '../handles/ResizeHandles';
+import GradientAxisOverlay from '../handles/GradientAxisHandle';
+import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import GroupResizeHandles from '../handles/GroupResizeHandles';
 import { isElementResizable } from '../handles/groupResizeUtils';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
@@ -36,7 +43,7 @@ import {
   useGridSelectionStore,
   isElementInMarquee,
 } from '@stores/grid/useGridSelectionStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
 import { useUIStore } from '@stores/useUIStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -65,9 +72,37 @@ import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_HAIRLINE,
+  DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+} from '@utils/core/elementDefaults';
+import {
+  elementShadowToCss,
+  resolveElementShadow,
+} from '@src/types/key/shadows';
+import {
   groupSelectedElements,
   ungroupSelectedElements,
 } from '@utils/grid/groupActions';
+import {
+  composePreviewPositions,
+  getPreviewOverlayVersion,
+  subscribePreviewOverlay,
+} from '@src/renderer/editor/runtime/previewOverlay';
+import {
+  beginPluginInstancesEditSession,
+  endPluginInstancesEditSession,
+  rotatePluginInstancesEditSession,
+} from '@plugins/runtime/displayElement/instancesCommitQueue';
+import {
+  beginMixedGestureTransaction,
+  cancelUncommittedMixedGestureTransaction,
+} from '@plugins/runtime/displayElement/gestureTransaction';
 
 type ToolbarAddRequest = {
   id: number;
@@ -109,8 +144,12 @@ interface GridProps {
   showConfirm: (
     message: string,
     onConfirm: () => void,
-    onCancelOrConfirmText?: (() => void) | string,
-    confirmText?: string,
+    options?: {
+      onCancel?: () => void;
+      confirmText?: string;
+      cancelText?: string;
+      danger?: boolean;
+    },
   ) => void;
   showAlert: (message: string, confirmText?: string) => void;
   selectedKey: SelectedKeyInfo | null;
@@ -142,7 +181,6 @@ interface GridProps {
     noteAutoYCorrection: boolean,
     noteEffectEnabled: boolean,
   ) => void;
-  onCounterUpdate: (index: number, payload: KeyCounterSettings) => void;
   onCounterPreview: (index: number, payload: KeyCounterSettings) => void;
   onKeyDelete: (index: number) => void;
   onAddKeyAt: (dx: number, dy: number) => void;
@@ -157,8 +195,6 @@ interface GridProps {
   onModalAnimationConsumed: (() => void) | undefined;
   onUndo: () => void;
   onRedo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
   toolbarAddRequest: ToolbarAddRequest;
   onToolbarAddConsumed: (() => void) | undefined;
   isNoteSettingOpen: boolean;
@@ -185,7 +221,6 @@ const Grid = ({
   onKeyPreview,
   onNoteColorUpdate: _onNoteColorUpdate,
   onNoteColorPreview,
-  onCounterUpdate,
   onCounterPreview,
   onKeyDelete,
   onAddKeyAt,
@@ -200,8 +235,6 @@ const Grid = ({
   onModalAnimationConsumed,
   onUndo,
   onRedo,
-  canUndo,
-  canRedo,
   toolbarAddRequest,
   onToolbarAddConsumed,
   isNoteSettingOpen,
@@ -267,6 +300,10 @@ const Grid = ({
   });
 
   // 선택 상태 관리
+  // 온캔버스 그라데이션 편집 중 여부 — 리사이즈 핸들을 잠시 숨김
+  const hasGradientEditSession = useGradientEditStore(
+    (state) => state.session !== null,
+  );
   const selectedElements = useGridSelectionStore(
     (state) => state.selectedElements,
   );
@@ -291,11 +328,86 @@ const Grid = ({
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
+  const selectedDragGestureIdRef = useRef<string | null>(null);
+
+  const rotatePluginElementSessions = (fullIds: string[]) => {
+    const selectedPluginIds = new Set(fullIds);
+    const pluginIds = new Set(
+      usePluginDisplayElementStore
+        .getState()
+        .elements.filter((element) => selectedPluginIds.has(element.fullId))
+        .map((element) => element.pluginId),
+    );
+    pluginIds.forEach((pluginId) => {
+      rotatePluginInstancesEditSession(pluginId);
+    });
+  };
+
+  const beginSelectedPluginInstancesDrag = () => {
+    const gestureId = crypto.randomUUID();
+    selectedDragGestureIdRef.current = gestureId;
+    const selectedPluginElementIds = new Set(
+      useGridSelectionStore
+        .getState()
+        .selectedElements.filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
+    const tokens = new Map<string, string>();
+    usePluginDisplayElementStore
+      .getState()
+      .elements.filter((element) =>
+        selectedPluginElementIds.has(element.fullId),
+      )
+      .forEach((element) => {
+        if (!tokens.has(element.pluginId)) {
+          tokens.set(
+            element.pluginId,
+            beginPluginInstancesEditSession(element.pluginId, gestureId),
+          );
+        }
+      });
+    if (
+      tokens.size > 0 &&
+      useGridSelectionStore
+        .getState()
+        .selectedElements.some((element) => element.type !== 'plugin')
+    ) {
+      beginMixedGestureTransaction(gestureId, [...tokens.keys()]);
+    }
+    return () => {
+      tokens.forEach((token, pluginId) => {
+        endPluginInstancesEditSession(pluginId, token);
+      });
+      // 종료 경로가 혼합 커밋을 타지 않은 경우 staged 잔존으로 barrier가
+      // 영구 대기하지 않도록 미커밋 staged만 정산
+      cancelUncommittedMixedGestureTransaction(gestureId);
+      if (selectedDragGestureIdRef.current === gestureId) {
+        selectedDragGestureIdRef.current = null;
+      }
+    };
+  };
 
   // 내장 통계 요소(Stat Items) 위치 정보
-  const statPositions = useStatItemStore((state) => state.positions);
-  const graphPositions = useGraphItemStore((state) => state.positions);
-  const knobPositions = useKnobItemStore((state) => state.positions);
+  const canonicalStatPositions = useStatItemStore((state) => state.positions);
+  const canonicalGraphPositions = useGraphItemStore((state) => state.positions);
+  const canonicalKnobPositions = useKnobItemStore((state) => state.positions);
+  useSyncExternalStore(
+    subscribePreviewOverlay,
+    getPreviewOverlayVersion,
+    getPreviewOverlayVersion,
+  );
+  const statPositions = composePreviewPositions(
+    'statPosition',
+    canonicalStatPositions,
+  );
+  const graphPositions = composePreviewPositions(
+    'graphPosition',
+    canonicalGraphPositions,
+  );
+  const knobPositions = composePreviewPositions(
+    'knobPosition',
+    canonicalKnobPositions,
+  );
 
   // 선택 관련 로직 훅 사용
   const {
@@ -310,6 +422,11 @@ const Grid = ({
     keyMappings,
     positions,
   });
+  const commitSelectedElementsDrag = () => {
+    syncSelectedElementsToOverlay(
+      selectedDragGestureIdRef.current ?? undefined,
+    );
+  };
 
   // 마퀴 선택 훅 사용
   const { isMarqueeSelecting: _isMarqueeSelecting, startMarqueeSelection } =
@@ -353,6 +470,7 @@ const Grid = ({
     } else if (selected.type === 'stat') {
       await moveStatForward(selected.index);
     } else if (selected.type === 'plugin') {
+      rotatePluginElementSessions([selected.id]);
       usePluginDisplayElementStore.getState().bringForward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphForward(selected.index);
@@ -370,6 +488,7 @@ const Grid = ({
     } else if (selected.type === 'stat') {
       await moveStatBackward(selected.index);
     } else if (selected.type === 'plugin') {
+      rotatePluginElementSessions([selected.id]);
       usePluginDisplayElementStore.getState().sendBackward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphBackward(selected.index);
@@ -387,8 +506,6 @@ const Grid = ({
     clearSelection,
     copySelectedElements,
     pasteElements,
-    canUndo,
-    canRedo,
     onUndo,
     onRedo,
     onMoveForward: handleSelectedMoveForward,
@@ -562,6 +679,12 @@ const Grid = ({
   const moveSelectedToFront = async () => {
     if (selectedElements.length === 0) return;
 
+    rotatePluginElementSessions(
+      selectedElements
+        .filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
+
     for (const el of selectedElements) {
       if (el.type === 'key' && el.index !== undefined) {
         if (typeof onMoveToFront === 'function') {
@@ -583,6 +706,12 @@ const Grid = ({
 
   const moveSelectedToBack = async () => {
     if (selectedElements.length === 0) return;
+
+    rotatePluginElementSessions(
+      selectedElements
+        .filter((element) => element.type === 'plugin')
+        .map((element) => element.id),
+    );
 
     for (const el of selectedElements) {
       if (el.type === 'key' && el.index !== undefined) {
@@ -766,19 +895,21 @@ const Grid = ({
     }
   };
 
-  // 드래그 시작 시 히스토리 저장
-  const pushDragHistory = () => {
-    const currentPositions = useKeyStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const { keyMappings: km } = useKeyStore.getState();
-    useHistoryStore.getState().pushState({
-      keyMappings: km,
-      positions: currentPositions,
-      statPositions: useStatItemStore.getState().positions,
-      graphPositions: useGraphItemStore.getState().positions,
-      pluginElements: currentPluginElements,
-    });
+  // 더블클릭 편집 진입 — 대상이 다중 선택의 멤버면 선택을 보존해 배치 편집으로,
+  // 아니면 해당 요소(+그룹)만 선택해 단일 편집으로 property 페이지를 연다
+  const openElementEditor = (
+    type: 'key' | 'stat' | 'graph' | 'knob',
+    index: number,
+  ) => {
+    const { selectedElements: currentSelection } =
+      useGridSelectionStore.getState();
+    const isMultiMember =
+      currentSelection.length > 1 &&
+      currentSelection.some((el) => el.id === `${type}-${index}`);
+    if (!isMultiMember) {
+      selectElementWithGroup(type, index);
+    }
+    openPropertiesPanelForSelection();
   };
 
   // 요소 컨텍스트 메뉴 열기
@@ -830,6 +961,7 @@ const Grid = ({
               });
             }
           }}
+          onDoubleClick={() => openElementEditor('key', index)}
           onCtrlClick={() => {
             // 다중 선택: 기존 선택 유지하면서 추가/제거
             toggleSelection({ type: 'key', id: `key-${index}`, index });
@@ -990,10 +1122,10 @@ const Grid = ({
           )}
           selectedElements={selectedElements}
           onMultiDrag={(deltaX, deltaY) =>
-            moveSelectedElements(deltaX, deltaY, false, false)
+            moveSelectedElements(deltaX, deltaY, undefined, false)
           }
-          onMultiDragEnd={syncSelectedElementsToOverlay}
-          onMultiDragStart={pushDragHistory}
+          onMultiDragStart={beginSelectedPluginInstancesDrag}
+          onMultiDragEnd={commitSelectedElementsDrag}
           activeTool={activeTool}
           onEraserClick={() => {
             const globalKey = keyMappings[selectedKeyType]?.[index] || '';
@@ -1002,7 +1134,7 @@ const Grid = ({
             showConfirm(
               t('confirm.removeKey', { name: displayName }),
               () => onKeyDelete(index),
-              t('confirm.remove'),
+              { confirmText: t('confirm.remove') },
             );
           }}
           onContextMenu={(e) => {
@@ -1043,19 +1175,6 @@ const Grid = ({
       if (!prev) return;
       if (prev.dx === dx && prev.dy === dy) return;
 
-      // 히스토리 저장 (키/플러그인과 동일한 스냅샷 기준)
-      const currentKeyPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      useHistoryStore.getState().pushState({
-        keyMappings: km,
-        positions: currentKeyPositions,
-        statPositions: current,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-
       const nextTabPositions = tabPositions.map((pos, i) =>
         i === index ? { ...pos, dx, dy } : pos,
       );
@@ -1065,13 +1184,6 @@ const Grid = ({
       window.api.statItems.updatePositions(nextPositions).catch((error) => {
         console.error('Failed to update stat item positions', error);
       });
-      try {
-        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
-      }
     };
 
     return items.map((position: StatItemPosition, index: number) => (
@@ -1086,6 +1198,7 @@ const Grid = ({
         onClick={() => {
           selectElementWithGroup('stat', index);
         }}
+        onDoubleClick={() => openElementEditor('stat', index)}
         onCtrlClick={() => {
           toggleSelection({ type: 'stat', id: `stat-${index}`, index });
         }}
@@ -1098,17 +1211,17 @@ const Grid = ({
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
-          moveSelectedElements(deltaX, deltaY, false, false)
+          moveSelectedElements(deltaX, deltaY, undefined, false)
         }
-        onMultiDragEnd={syncSelectedElementsToOverlay}
-        onMultiDragStart={pushDragHistory}
+        onMultiDragStart={beginSelectedPluginInstancesDrag}
+        onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
           showConfirm(
             t('confirm.removeStat', { name: displayName }),
             () => deleteStatAtIndex(index),
-            t('confirm.remove'),
+            { confirmText: t('confirm.remove') },
           );
         }}
         onContextMenu={(e) => {
@@ -1148,18 +1261,6 @@ const Grid = ({
       if (!prev) return;
       if (prev.dx === dx && prev.dy === dy) return;
 
-      const currentKeyPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      useHistoryStore.getState().pushState({
-        keyMappings: km,
-        positions: currentKeyPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: current,
-        pluginElements: currentPluginElements,
-      });
-
       const nextTabPositions = tabPositions.map((pos, i) =>
         i === index ? { ...pos, dx, dy } : pos,
       );
@@ -1169,13 +1270,6 @@ const Grid = ({
       window.api.graphItems.updatePositions(nextPositions).catch((error) => {
         console.error('Failed to update graph item positions', error);
       });
-      try {
-        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
-      }
     };
 
     return items.map((position, index) => (
@@ -1189,6 +1283,7 @@ const Grid = ({
         onClick={() => {
           selectElementWithGroup('graph', index);
         }}
+        onDoubleClick={() => openElementEditor('graph', index)}
         onCtrlClick={() => {
           toggleSelection({ type: 'graph', id: `graph-${index}`, index });
         }}
@@ -1200,17 +1295,17 @@ const Grid = ({
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
-          moveSelectedElements(deltaX, deltaY, false, false)
+          moveSelectedElements(deltaX, deltaY, undefined, false)
         }
-        onMultiDragEnd={syncSelectedElementsToOverlay}
-        onMultiDragStart={pushDragHistory}
+        onMultiDragStart={beginSelectedPluginInstancesDrag}
+        onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
           showConfirm(
             t('confirm.removeGraph', { name: displayName }),
             () => deleteGraphAtIndex(index),
-            t('confirm.remove'),
+            { confirmText: t('confirm.remove') },
           );
         }}
         onContextMenu={(e) => {
@@ -1248,18 +1343,6 @@ const Grid = ({
       if (!prev) return;
       if (prev.dx === dx && prev.dy === dy) return;
 
-      const currentKeyPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      useHistoryStore.getState().pushState({
-        keyMappings: km,
-        positions: currentKeyPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        pluginElements: currentPluginElements,
-      });
-
       const nextTabPositions = tabPositions.map((pos, i) =>
         i === index ? { ...pos, dx, dy } : pos,
       );
@@ -1269,13 +1352,6 @@ const Grid = ({
       window.api.knobItems.updatePositions(nextPositions).catch((error) => {
         console.error('Failed to update knob item positions', error);
       });
-      try {
-        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
-      }
     };
 
     return items.map((position, index) => (
@@ -1289,6 +1365,7 @@ const Grid = ({
         onClick={() => {
           selectElementWithGroup('knob', index);
         }}
+        onDoubleClick={() => openElementEditor('knob', index)}
         onCtrlClick={() => {
           toggleSelection({ type: 'knob', id: `knob-${index}`, index });
         }}
@@ -1300,16 +1377,16 @@ const Grid = ({
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
-          moveSelectedElements(deltaX, deltaY, false, false)
+          moveSelectedElements(deltaX, deltaY, undefined, false)
         }
-        onMultiDragEnd={syncSelectedElementsToOverlay}
-        onMultiDragStart={pushDragHistory}
+        onMultiDragStart={beginSelectedPluginInstancesDrag}
+        onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
           showConfirm(
             t('confirm.removeKnob', { name: 'Knob' }),
             () => deleteKnobAtIndex(index),
-            t('confirm.remove'),
+            { confirmText: t('confirm.remove') },
           );
         }}
         onContextMenu={(e) => {
@@ -1347,9 +1424,9 @@ const Grid = ({
             width: `${width}px`,
             height: `${height}px`,
             transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
-            background: 'rgba(17, 17, 20, 0.9)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
+            background: DEFAULT_ELEMENT_BG,
+            border: `1px solid ${DEFAULT_ELEMENT_HAIRLINE}`,
+            borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
             opacity: 0.5,
             zIndex: 1000,
           }}
@@ -1364,6 +1441,8 @@ const Grid = ({
         inactiveImage,
         activeImage,
         className,
+        shadow,
+        activeShadow,
       },
       keyName,
     } = duplicateState;
@@ -1371,10 +1450,17 @@ const Grid = ({
       resolveImageSource(inactiveImage) ||
       resolveImageSource(activeImage) ||
       '';
-    const backgroundColor = previewImage
-      ? 'transparent'
-      : 'rgba(46, 46, 47, 0.9)';
-    const borderStyle = '3px solid rgba(113, 113, 113, 0.9)';
+    const backgroundColor = previewImage ? 'transparent' : DEFAULT_ELEMENT_BG;
+    const previewShadow = elementShadowToCss(
+      resolveElementShadow({
+        active: false,
+        shadow,
+        activeShadow,
+        defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+        defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+        suppressDefault: Boolean(previewImage),
+      }),
+    );
     const displayName =
       getKeyInfoByGlobalKey(keyName)?.displayName || keyName || '';
 
@@ -1392,8 +1478,9 @@ const Grid = ({
           height: `${height}px`,
           transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
           backgroundColor,
-          borderRadius: '10px',
-          border: borderStyle,
+          borderRadius: `${DEFAULT_ELEMENT_RADIUS}px`,
+          border: `${DEFAULT_ELEMENT_BORDER_WIDTH}px solid ${DEFAULT_ELEMENT_BORDER}`,
+          boxShadow: previewShadow,
           overflow: 'hidden',
           opacity: 0.5,
           zIndex: 1000,
@@ -1417,7 +1504,7 @@ const Grid = ({
           <div
             className="flex items-center justify-center h-full font-bold leading-none text-safe-inline"
             style={{
-              color: 'var(--key-text-color, rgba(121, 121, 121, 0.9))',
+              color: `var(--key-text-color, ${DEFAULT_ELEMENT_FONT})`,
               willChange: 'auto',
               contain: 'layout style paint',
             }}
@@ -1464,8 +1551,8 @@ const Grid = ({
         gridContainerRef.current = node;
       }}
       data-grid-container
-      className="relative w-full h-full bg-[#3A3943] rounded-[0px] overflow-hidden"
-      style={{ backgroundColor: color === 'transparent' ? '#3A3943' : color }}
+      className="relative w-full h-full bg-panel rounded-[0px] overflow-hidden"
+      style={color === 'transparent' ? undefined : { backgroundColor: color }}
       onContextMenu={(e) => {
         if (duplicateState) {
           setDuplicateState(null);
@@ -1543,7 +1630,6 @@ const Grid = ({
         zoom={zoom}
         panX={panX}
         panY={panY}
-        color={color === 'transparent' ? '#3A3943' : color}
       />
       {/* 줌/팬이 적용되는 콘텐츠 영역 */}
       <div
@@ -1565,9 +1651,13 @@ const Grid = ({
           <KeyCounterPreviewLayer
             positions={positions[selectedKeyType]}
             previewValue={0}
+            selectedElements={selectedElements}
           />
         )}
-        <StatCounterLayer positions={statPositions?.[selectedKeyType] || []} />
+        <StatCounterLayer
+          positions={statPositions?.[selectedKeyType] || []}
+          selectedElements={selectedElements}
+        />
         {renderDuplicateGhost()}
         <PluginElementsRenderer
           windowType="main"
@@ -1595,23 +1685,10 @@ const Grid = ({
             return true;
           }}
           onMultiDrag={(deltaX, deltaY) =>
-            moveSelectedElements(deltaX, deltaY, false, false)
+            moveSelectedElements(deltaX, deltaY, undefined, false)
           }
-          onMultiDragEnd={syncSelectedElementsToOverlay}
-          onMultiDragStart={() => {
-            // 드래그 시작 시 히스토리 저장
-            const currentPositions = useKeyStore.getState().positions;
-            const currentPluginElements =
-              usePluginDisplayElementStore.getState().elements;
-            const { keyMappings: km } = useKeyStore.getState();
-            useHistoryStore.getState().pushState({
-              keyMappings: km,
-              positions: currentPositions,
-              statPositions: useStatItemStore.getState().positions,
-              graphPositions: useGraphItemStore.getState().positions,
-              pluginElements: currentPluginElements,
-            });
-          }}
+          onMultiDragStart={beginSelectedPluginInstancesDrag}
+          onMultiDragEnd={commitSelectedElementsDrag}
         />
       </div>
       {/* 스마트 가이드 오버레이 */}
@@ -1620,6 +1697,8 @@ const Grid = ({
       <MarqueeSelectionOverlay zoom={zoom} panX={panX} panY={panY} />
       {/* 선택된 요소 표시 - 그룹 리사이즈 중에는 개별 테두리 숨김 (흔들림 방지) */}
       {selectedElements.map((el, _idx) => {
+        // 온캔버스 그라데이션 편집 중에는 선택 테두리 숨김 (축·스톱만 표시)
+        if (hasGradientEditSession) return null;
         // 그룹 리사이즈 중에는 개별 요소 테두리 숨김 (스냅으로 인한 흔들림 방지)
         if (selectedElements.length > 1 && previewElementBounds) {
           return null;
@@ -1710,7 +1789,7 @@ const Grid = ({
               top: displayBounds.y * zoom + panY - 2,
               width: displayBounds.width * zoom + 4,
               height: displayBounds.height * zoom + 4,
-              border: '2px solid rgba(59, 130, 246, 0.8)',
+              border: '2px solid var(--ui-selection-border)',
               borderRadius: '4px',
               pointerEvents: 'none',
               zIndex: 20,
@@ -1798,6 +1877,8 @@ const Grid = ({
 
           if (!bounds || !elementId) return null;
 
+          if (hasGradientEditSession) return null;
+
           return (
             <ResizeHandles
               bounds={bounds}
@@ -1814,7 +1895,7 @@ const Grid = ({
           );
         })()}
       {/* 다중 선택 시 그룹 리사이즈 핸들 표시 */}
-      {selectedElements.length > 1 && (
+      {selectedElements.length > 1 && !hasGradientEditSession && (
         <GroupResizeHandles
           selectedElements={selectedElements}
           positions={positions}
@@ -1833,10 +1914,23 @@ const Grid = ({
           getOtherElements={getOtherElements}
         />
       )}
+      {/* 온캔버스 그라데이션 각도 핸들 — 피커가 그라데이션 형식일 때만 표시 */}
+      <GradientAxisOverlay
+        positions={positions}
+        statPositions={statPositions}
+        graphPositions={graphPositions}
+        knobPositions={knobPositions}
+        selectedElements={selectedElements}
+        selectedKeyType={selectedKeyType}
+        zoom={zoom}
+        panX={panX}
+        panY={panY}
+      />
       {/* 우클릭 리스트 팝업 */}
       <div className="relative">
         <ListPopup
           open={isContextOpen}
+          ariaLabel={t('common.more')}
           referenceRef={contextRef}
           position={contextPosition || undefined}
           onClose={() => {
@@ -1895,7 +1989,7 @@ const Grid = ({
                 showConfirm(
                   t('confirm.removeStat', { name: displayName }),
                   () => deleteStatAtIndex(contextIndex),
-                  t('confirm.remove'),
+                  { confirmText: t('confirm.remove') },
                 );
               } else if (id === 'duplicate') {
                 beginDuplicateStat(contextIndex);
@@ -1921,7 +2015,7 @@ const Grid = ({
                 showConfirm(
                   t('confirm.removeGraph', { name: displayName }),
                   () => deleteGraphAtIndex(contextIndex),
-                  t('confirm.remove'),
+                  { confirmText: t('confirm.remove') },
                 );
               } else if (id === 'duplicate') {
                 beginDuplicateGraph(contextIndex);
@@ -1941,7 +2035,7 @@ const Grid = ({
                 showConfirm(
                   t('confirm.removeKnob', { name: 'Knob' }),
                   () => deleteKnobAtIndex(contextIndex),
-                  t('confirm.remove'),
+                  { confirmText: t('confirm.remove') },
                 );
               } else if (id === 'duplicate') {
                 beginDuplicateKnob(contextIndex);
@@ -2002,7 +2096,7 @@ const Grid = ({
               showConfirm(
                 t('confirm.removeKey', { name: displayName }),
                 () => onKeyDelete(contextIndex),
-                t('confirm.remove'),
+                { confirmText: t('confirm.remove') },
               );
             } else if (id === 'duplicate') {
               const keyCode =
@@ -2070,7 +2164,7 @@ const Grid = ({
                     console.error('Failed to reset key counter', error);
                   }
                 },
-                t('confirm.reset'),
+                { confirmText: t('confirm.reset') },
               );
             } else if (id === 'bringToFront') {
               if (typeof onMoveToFront === 'function') {
@@ -2098,6 +2192,7 @@ const Grid = ({
       <div className="relative">
         <ListPopup
           open={isGridContextOpen}
+          ariaLabel={t('common.more')}
           position={gridContextClientPos || undefined}
           onClose={() => {
             setIsGridContextOpen(false);
@@ -2185,7 +2280,6 @@ const Grid = ({
         onKeyUpdate={onKeyUpdate}
         onKeyPreview={onKeyPreview}
         onNoteColorPreview={onNoteColorPreview}
-        onCounterUpdate={onCounterUpdate}
         onCounterPreview={onCounterPreview}
         shouldSkipModalAnimation={shouldSkipModalAnimation}
         onModalAnimationConsumed={onModalAnimationConsumed}

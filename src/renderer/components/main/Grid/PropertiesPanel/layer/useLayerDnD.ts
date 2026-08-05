@@ -3,16 +3,16 @@
  * 아이템/그룹 드래그, 드롭 타깃 계산, 순서 재배치
  */
 
+import { setPluginElementZIndexes } from '@plugins/rpc/pluginElementActions';
 import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import type { LayerItem, DisplayItem } from '../types';
 
 // ============================================================================
@@ -25,54 +25,6 @@ interface UseLayerDnDParams {
   displayItemsRef: React.MutableRefObject<DisplayItem[]>;
   scrollElementRef: React.MutableRefObject<HTMLDivElement | null>;
   clearPendingDeselect: () => void;
-}
-
-// ============================================================================
-// 오버레이 동기화 헬퍼
-// ============================================================================
-
-function syncOverlayPositions(
-  keyPositions: ReturnType<typeof useKeyStore.getState>['positions'],
-  statPositions: ReturnType<typeof useStatItemStore.getState>['positions'],
-  graphPositions: ReturnType<typeof useGraphItemStore.getState>['positions'],
-  knobPositions: ReturnType<typeof useKnobItemStore.getState>['positions'],
-) {
-  try {
-    window.api.bridge.sendTo('overlay', 'positions:sync', {
-      positions: keyPositions,
-    });
-  } catch {
-    // ignore
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-      positions: statPositions,
-    });
-  } catch {
-    // ignore
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-      positions: graphPositions,
-    });
-  } catch {
-    // ignore
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-      positions: knobPositions,
-    });
-  } catch {
-    // ignore
-  }
-  try {
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-    window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-      elements: pluginEls,
-    });
-  } catch {
-    // ignore
-  }
 }
 
 // ============================================================================
@@ -452,23 +404,12 @@ export function useLayerDnD({
     );
     if (!orderChanged && !groupChanged) return;
 
-    // 히스토리 저장
-    const currentPositions = useKeyStore.getState().positions;
+    // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
+    const currentPositions = useKeyStore.getState().canonicalPositions;
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
     const currentKnobPositions = useKnobItemStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
     const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-    const { keyMappings: km } = useKeyStore.getState();
-    useHistoryStore.getState().pushState({
-      keyMappings: km,
-      positions: currentPositions,
-      statPositions: currentStatPositions,
-      graphPositions: currentGraphPositions,
-      pluginElements: currentPluginElements,
-      layerGroups: currentLayerGroups,
-    });
 
     // z-index 재계산 및 적용
     const maxZIndex = newItems.length - 1;
@@ -488,6 +429,7 @@ export function useLayerDnD({
       ...(updatedKnobPositions[selectedKeyType] || []),
     ];
 
+    const pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }> = [];
     newItems.forEach((item, idx) => {
       const newZIndex = maxZIndex - idx;
       const isDraggedItem = draggedIdSet.has(item.id);
@@ -533,9 +475,7 @@ export function useLayerDnD({
           };
         }
       } else if (item.type === 'plugin') {
-        usePluginDisplayElementStore.getState().updateElement(item.id, {
-          zIndex: newZIndex,
-        });
+        pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
       }
     });
 
@@ -557,38 +497,23 @@ export function useLayerDnD({
     useKeyStore.getState().setPositions(normalized.keyPositions);
     useStatItemStore.getState().setPositions(normalized.statPositions);
     useKnobItemStore.getState().setPositions(normalized.knobPositions);
+    setPluginElementZIndexes(pluginZIndexUpdates);
     if (normalized.groupsChanged) {
       useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
     }
 
-    // 백엔드/오버레이 동기화
-    useKeyStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
     try {
-      await window.api.keys.updatePositions(normalized.keyPositions);
-      await window.api.statItems.updatePositions(normalized.statPositions);
-      await window.api.graphItems.updatePositions(normalized.graphPositions);
-      await window.api.knobItems.updatePositions(normalized.knobPositions);
-      if (normalized.groupsChanged) {
-        await window.api.layerGroups.update(normalized.layerGroups);
-      }
+      await editorCoordinator.commitPatch({
+        schemaVersion: 1,
+        keyPositions: normalized.keyPositions,
+        statPositions: normalized.statPositions,
+        graphPositions: normalized.graphPositions,
+        knobPositions: normalized.knobPositions,
+        layerGroups: normalized.layerGroups,
+      });
     } catch (error) {
       console.error('Failed to reorder layers', error);
-    } finally {
-      useKeyStore.getState().setLocalUpdateInProgress(false);
-      useStatItemStore.getState().setLocalUpdateInProgress(false);
-      useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      useKnobItemStore.getState().setLocalUpdateInProgress(false);
     }
-
-    syncOverlayPositions(
-      normalized.keyPositions,
-      normalized.statPositions,
-      normalized.graphPositions,
-      normalized.knobPositions,
-    );
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -653,27 +578,10 @@ export function useLayerDnD({
     );
     if (!orderChanged) return;
 
-    // 히스토리 저장
-    const currentPositions = useKeyStore.getState().positions;
-    const currentStatPositions = useStatItemStore.getState().positions;
-    const currentGraphPositions = useGraphItemStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-    const { keyMappings: km } = useKeyStore.getState();
-    useHistoryStore.getState().pushState({
-      keyMappings: km,
-      positions: currentPositions,
-      statPositions: currentStatPositions,
-      graphPositions: currentGraphPositions,
-      pluginElements: currentPluginElements,
-      layerGroups: currentLayerGroups,
-    });
-
     // z-index 재계산
     const maxZIndex = newItems.length - 1;
 
-    const updatedPositions = { ...useKeyStore.getState().positions };
+    const updatedPositions = { ...useKeyStore.getState().canonicalPositions };
     const currentModePositions = [...(updatedPositions[selectedKeyType] || [])];
     const updatedStatPositions = {
       ...useStatItemStore.getState().positions,
@@ -694,6 +602,7 @@ export function useLayerDnD({
       ...(updatedKnobPositions[selectedKeyType] || []),
     ];
 
+    const pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }> = [];
     newItems.forEach((item, idx) => {
       const newZIndex = maxZIndex - idx;
       if (item.type === 'key' && item.index !== undefined) {
@@ -725,9 +634,7 @@ export function useLayerDnD({
           };
         }
       } else if (item.type === 'plugin') {
-        usePluginDisplayElementStore.getState().updateElement(item.id, {
-          zIndex: newZIndex,
-        });
+        pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
       }
     });
 
@@ -739,32 +646,19 @@ export function useLayerDnD({
     useGraphItemStore.getState().setPositions(updatedGraphPositions);
     updatedKnobPositions[selectedKeyType] = currentKnobModePositions;
     useKnobItemStore.getState().setPositions(updatedKnobPositions);
+    setPluginElementZIndexes(pluginZIndexUpdates);
 
-    // 백엔드 동기화
-    useKeyStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
     try {
-      await window.api.keys.updatePositions(updatedPositions);
-      await window.api.statItems.updatePositions(updatedStatPositions);
-      await window.api.graphItems.updatePositions(updatedGraphPositions);
-      await window.api.knobItems.updatePositions(updatedKnobPositions);
+      await editorCoordinator.commitPatch({
+        schemaVersion: 1,
+        keyPositions: updatedPositions,
+        statPositions: updatedStatPositions,
+        graphPositions: updatedGraphPositions,
+        knobPositions: updatedKnobPositions,
+      });
     } catch (error) {
       console.error('Failed to reorder group', error);
-    } finally {
-      useKeyStore.getState().setLocalUpdateInProgress(false);
-      useStatItemStore.getState().setLocalUpdateInProgress(false);
-      useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      useKnobItemStore.getState().setLocalUpdateInProgress(false);
     }
-
-    syncOverlayPositions(
-      updatedPositions,
-      updatedStatPositions,
-      updatedGraphPositions,
-      updatedKnobPositions,
-    );
   };
 
   // ──────────────────────────────────────────────────────────────────────────

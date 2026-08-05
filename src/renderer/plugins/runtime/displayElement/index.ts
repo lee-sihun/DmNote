@@ -15,7 +15,6 @@ export {
   getDisplayElementInstance,
 } from './instanceRegistry';
 export {
-  saveToHistory,
   setUndoRedoInProgress,
   setInitialLoading,
   getUndoRedoInProgress,

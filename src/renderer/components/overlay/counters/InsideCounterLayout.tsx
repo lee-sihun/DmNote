@@ -13,6 +13,7 @@ interface InsideCounterLayoutProps {
   textStyle: React.CSSProperties;
   active: boolean;
   counterSettings: KeyCounterSettings;
+  useInlineStyles?: boolean;
 }
 
 const InsideCounterLayout = ({
@@ -21,22 +22,27 @@ const InsideCounterLayout = ({
   textStyle,
   active,
   counterSettings,
+  useInlineStyles = false,
 }: InsideCounterLayoutProps) => {
   const fillColor = active
     ? counterSettings.fill.active
     : counterSettings.fill.idle;
+  const fillGradient = active
+    ? counterSettings.fillActiveGradient
+    : counterSettings.fillIdleGradient;
   const strokeColor = active
     ? counterSettings.stroke.active
     : counterSettings.stroke.idle;
   const contentGap = Number.isFinite(counterSettings.gap)
     ? counterSettings.gap
-    : 6;
+    : 4;
 
   const counterElement = (
     <CountDisplay
       key="counter"
       count={count}
       fillColor={fillColor}
+      fillGradient={fillGradient}
       strokeColor={strokeColor}
       active={active}
       fontSize={counterSettings.fontSize}
@@ -49,6 +55,7 @@ const InsideCounterLayout = ({
       animationBezier={counterSettings.animation.bezier}
       animationScale={counterSettings.animation.scale}
       animationDurationMs={counterSettings.animation.durationMs}
+      useInlineStyles={useInlineStyles}
     />
   );
 

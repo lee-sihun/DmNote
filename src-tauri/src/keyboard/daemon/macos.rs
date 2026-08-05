@@ -1,9 +1,21 @@
-use std::io::Write;
-
 use anyhow::{anyhow, Result};
 
 use crate::ipc::{DaemonCommand, HookKeyState, HookMessage, InputDeviceKind};
 use crate::models::ShortcutBinding;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum MacPhysicalInputId {
+    Keyboard(rdev::Key),
+    MouseButton(rdev::Button),
+}
+
+fn mac_keyboard_physical_id(key: rdev::Key) -> MacPhysicalInputId {
+    MacPhysicalInputId::Keyboard(key)
+}
+
+fn mac_mouse_physical_id(button: rdev::Button) -> MacPhysicalInputId {
+    MacPhysicalInputId::MouseButton(button)
+}
 
 struct MacHotkeyState {
     ctrl_left: bool,
@@ -316,6 +328,8 @@ pub(super) fn run_macos() -> Result<()> {
         }
     }
 
+    let output = super::start_output_writer(Box::new(std::io::stdout()))?;
+
     // rdev::listen — 접근성 + 입력 모니터링 권한 필수
     // 권한 부여 직후 CGEventTap 생성 실패 가능 — 재시도 처리
     let max_retries = 5;
@@ -329,7 +343,7 @@ pub(super) fn run_macos() -> Result<()> {
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
 
-        let result = run_macos_listen();
+        let result = run_macos_listen(output.clone());
         match result {
             Ok(_) => return Ok(()),
             Err(err) => {
@@ -344,89 +358,110 @@ pub(super) fn run_macos() -> Result<()> {
 }
 
 /// rdev::listen 실행 내부 함수. 매 재시도마다 새로운 콜백/상태 생성
-fn run_macos_listen() -> Result<()> {
+fn run_macos_listen(output: super::OutputSender) -> Result<()> {
     use rdev::{listen, EventType};
 
-    let mut sink: Box<dyn Write + Send> = Box::new(std::io::stdout());
     let hotkeys = super::load_hotkeys_from_env();
     let mut hotkey_state = MacHotkeyState::new(
         hotkeys.toggle_overlay,
         hotkeys.toggle_overlay_lock,
         hotkeys.toggle_always_on_top,
     );
+    let mut hold_tracker = super::HoldTracker::<MacPhysicalInputId>::default();
 
-    let callback = move |event: rdev::Event| match event.event_type {
-        EventType::KeyPress(key) => {
-            let key_name = format!("{:?}", key).to_ascii_lowercase();
-            if let Some(command) = hotkey_state.update(&key_name, true) {
-                let _ = super::write_command(&mut sink, &command);
+    let callback = move |event: rdev::Event| {
+        let captured = super::InputCapture::now();
+        match event.event_type {
+            EventType::KeyPress(key) => {
+                let key_name = format!("{:?}", key).to_ascii_lowercase();
+                if let Some(command) = hotkey_state.update(&key_name, true) {
+                    output.send(super::DaemonOutput::Command(command));
+                }
+
+                let labels = mac_key_labels(key, event.name.as_deref());
+                if labels.is_empty() {
+                    return;
+                }
+                let labels =
+                    hold_tracker.press(mac_keyboard_physical_id(key), captured.instant, labels);
+
+                let message = HookMessage {
+                    device: InputDeviceKind::Keyboard,
+                    labels,
+                    state: HookKeyState::Down,
+                    vk_code: None,
+                    scan_code: None,
+                    flags: None,
+                    hold_duration_ms: None,
+                    input_ts_ms: captured.input_ts_ms,
+                };
+                output.send(super::DaemonOutput::Hook(message));
             }
+            EventType::KeyRelease(key) => {
+                let key_name = format!("{:?}", key).to_ascii_lowercase();
+                let _ = hotkey_state.update(&key_name, false);
 
-            let labels = mac_key_labels(key, event.name.as_deref());
-            if labels.is_empty() {
-                return;
+                let release = hold_tracker.release(
+                    mac_keyboard_physical_id(key),
+                    captured.instant,
+                    mac_key_labels(key, event.name.as_deref()),
+                );
+                if release.labels.is_empty() {
+                    return;
+                }
+
+                let message = HookMessage {
+                    device: InputDeviceKind::Keyboard,
+                    labels: release.labels,
+                    state: HookKeyState::Up,
+                    vk_code: None,
+                    scan_code: None,
+                    flags: None,
+                    hold_duration_ms: release.hold_duration_ms,
+                    input_ts_ms: captured.input_ts_ms,
+                };
+                output.send(super::DaemonOutput::Hook(message));
             }
-
-            let message = HookMessage {
-                device: InputDeviceKind::Keyboard,
-                labels,
-                state: HookKeyState::Down,
-                vk_code: None,
-                scan_code: None,
-                flags: None,
-            };
-            let _ = super::write_message(&mut sink, &message);
-        }
-        EventType::KeyRelease(key) => {
-            let key_name = format!("{:?}", key).to_ascii_lowercase();
-            let _ = hotkey_state.update(&key_name, false);
-
-            let labels = mac_key_labels(key, event.name.as_deref());
-            if labels.is_empty() {
-                return;
-            }
-
-            let message = HookMessage {
-                device: InputDeviceKind::Keyboard,
-                labels,
-                state: HookKeyState::Up,
-                vk_code: None,
-                scan_code: None,
-                flags: None,
-            };
-            let _ = super::write_message(&mut sink, &message);
-        }
-        EventType::ButtonPress(button) => {
-            if let Some(label) = mac_mouse_label(button) {
-                let _ = super::write_message(
-                    &mut sink,
-                    &HookMessage {
+            EventType::ButtonPress(button) => {
+                if let Some(label) = mac_mouse_label(button) {
+                    let labels = hold_tracker.press(
+                        mac_mouse_physical_id(button),
+                        captured.instant,
+                        vec![label],
+                    );
+                    output.send(super::DaemonOutput::Hook(HookMessage {
                         device: InputDeviceKind::Mouse,
-                        labels: vec![label],
+                        labels,
                         state: HookKeyState::Down,
                         vk_code: None,
                         scan_code: None,
                         flags: None,
-                    },
-                );
+                        hold_duration_ms: None,
+                        input_ts_ms: captured.input_ts_ms,
+                    }));
+                }
             }
-        }
-        EventType::ButtonRelease(button) => {
-            if let Some(label) = mac_mouse_label(button) {
-                let _ = super::write_message(
-                    &mut sink,
-                    &HookMessage {
+            EventType::ButtonRelease(button) => {
+                if let Some(label) = mac_mouse_label(button) {
+                    let release = hold_tracker.release(
+                        mac_mouse_physical_id(button),
+                        captured.instant,
+                        vec![label],
+                    );
+                    output.send(super::DaemonOutput::Hook(HookMessage {
                         device: InputDeviceKind::Mouse,
-                        labels: vec![label],
+                        labels: release.labels,
                         state: HookKeyState::Up,
                         vk_code: None,
                         scan_code: None,
                         flags: None,
-                    },
-                );
+                        hold_duration_ms: release.hold_duration_ms,
+                        input_ts_ms: captured.input_ts_ms,
+                    }));
+                }
             }
+            _ => {}
         }
-        _ => {}
     };
 
     listen(callback).map_err(|err| anyhow!("macOS input listener failed: {err:?}"))?;
@@ -441,4 +476,33 @@ fn check_accessibility_permission() -> bool {
         fn AXIsProcessTrusted() -> bool;
     }
     unsafe { AXIsProcessTrusted() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{mac_keyboard_physical_id, mac_mouse_physical_id, MacPhysicalInputId};
+
+    #[test]
+    fn mac_keyboard_id_uses_rdev_key_variant() {
+        assert_eq!(
+            mac_keyboard_physical_id(rdev::Key::Unknown(42)),
+            MacPhysicalInputId::Keyboard(rdev::Key::Unknown(42))
+        );
+        assert_ne!(
+            mac_keyboard_physical_id(rdev::Key::KeyA),
+            mac_keyboard_physical_id(rdev::Key::KeyB)
+        );
+    }
+
+    #[test]
+    fn mac_mouse_id_includes_button_kind() {
+        assert_eq!(
+            mac_mouse_physical_id(rdev::Button::Left),
+            MacPhysicalInputId::MouseButton(rdev::Button::Left)
+        );
+        assert_ne!(
+            mac_mouse_physical_id(rdev::Button::Left),
+            mac_mouse_physical_id(rdev::Button::Right)
+        );
+    }
 }

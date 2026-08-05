@@ -1,0 +1,566 @@
+/*
+ * 메인 윈도우 전용 스타일
+ * 오버레이/OBS 윈도우에는 로드되지 않음 — 공유 스타일은 global.css에
+ */
+
+/* 기본 텍스트 색 — currentColor 아이콘의 폴백 */
+body {
+  color: var(--ui-fg);
+}
+
+/* 플러그인 색상 스와치 */
+.dmn-color-swatch-button {
+  position: relative;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+}
+
+.dmn-color-swatch-surface {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  background: var(--ui-checker-pattern) center / var(--ui-checker-size-sm)
+    var(--ui-checker-size-sm) repeat;
+}
+
+.dmn-color-swatch-color,
+.dmn-color-swatch-ring {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.dmn-color-swatch-color {
+  background-color: var(--dmn-color-swatch-color, transparent);
+}
+
+.dmn-color-swatch-ring {
+  box-shadow: inset 0 0 0 1px var(--ui-line);
+}
+
+/* 커스텀 커서 미리보기 */
+body.dmn-custom-cursor,
+body.dmn-custom-cursor * {
+  cursor: none !important;
+}
+
+/* 캔버스 아이템 드래그 커서 — 호버 무변화, 잡는 동안만 grabbing (전 요소 동일 정책) */
+.dmn-grabbable {
+  cursor: default;
+}
+
+.dmn-grabbable:active {
+  cursor: -webkit-grabbing;
+  cursor: grabbing;
+}
+
+/* ===== 글래스 백드롭 ===== */
+
+/* 글래스 백드롭 — 블러에 밝기·채도 클램프를 결합.
+   비용 지배 요인은 반경이 아니라 표면 수·면적·아래 damage(재필터 트리거) —
+   Skia가 큰 반경을 저해상도 다운샘플로 처리해 반경 비용은 평탄화됨.
+   글래스는 일시 표면(모달·팝업) 전용 유지, 표면 자체에 transform 애니메이션 금지 */
+.backdrop-glass {
+  -webkit-backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
+    saturate(var(--ui-glass-backdrop-sat));
+  backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
+    saturate(var(--ui-glass-backdrop-sat));
+}
+
+.backdrop-glass-popup {
+  -webkit-backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
+    saturate(var(--ui-glass-backdrop-sat));
+  backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
+    saturate(var(--ui-glass-backdrop-sat));
+}
+
+/* 스크림 프로스트 — 검은 딤 + 은은한 전화면 블러 (디자인 개편 전 레시피 복원).
+   틴트는 유틸리티가 아니라 여기서 소유 — 딤·블러 레시피 단일 소스.
+   전화면 재필터라 반경은 최소 유지, 블러 키프레임 보간 금지가 최적화의 핵심 —
+   블러는 첫 프레임부터 상수, 틴트만 페이드. Windows에서 모달 연 채
+   키 연타 프레임 실측이 유지 조건 */
+.backdrop-glass-scrim {
+  background: rgba(0, 0, 0, 0.75);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+/* 포지셔닝 보정 — 이미 fixed/absolute인 표면은 :where(0 특이도)라 그대로 유지 */
+:where(.backdrop-glass, .backdrop-glass-popup) {
+  position: relative;
+}
+
+/* 루미노시티 캡 — 틴트·백드롭 합성 결과의 휘도만 어두운 쪽으로 당김 (색조 유지)
+   backdrop-filter가 만드는 스태킹 컨텍스트 안에 격리되어 콘텐츠에는 영향 없음 */
+.backdrop-glass::after,
+.backdrop-glass-popup::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--ui-glass-backdrop-lum-tint);
+  mix-blend-mode: luminosity;
+  opacity: var(--ui-glass-backdrop-lum);
+  pointer-events: none;
+}
+
+/* 투명도 축소 설정 존중 — 남는 라이브 글래스(모달 카드·팝오버)를 고알파 솔리드로 강등
+   틴트 토큰만 요소 스코프에서 승격해 라운딩·인셋 링 재질은 그대로 유지 */
+@media (prefers-reduced-transparency: reduce) {
+  .backdrop-glass,
+  .backdrop-glass-popup {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    --ui-glass: rgba(14, 14, 17, 0.96);
+    --ui-glass-heavy: rgba(14, 14, 17, 0.96);
+    --ui-glass-dim: rgba(12, 12, 14, 0.94);
+  }
+
+  /* 스크림은 블러만 끄고 알파 딤으로 폴백 */
+  .backdrop-glass-scrim {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /* 루미노시티 캡은 블러 없는 표면에서 무의미 — 블렌드 패스도 함께 제거 */
+  .backdrop-glass::after,
+  .backdrop-glass-popup::after {
+    content: none;
+  }
+
+  /* backdrop 클래스 없는 글래스 틴트 사용처(패널 토글 칩)도 동일 승격 */
+  .bg-glass-panel {
+    --ui-glass-panel: rgba(14, 14, 17, 0.96);
+  }
+}
+
+/* ===== 스크롤바 ===== */
+
+.listpopup-scroll {
+  overscroll-behavior: contain;
+}
+
+.modal-content-scroll {
+  overscroll-behavior: contain;
+  /* 네이티브 동작 유지 */
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
+  contain: paint;
+}
+
+.settings-content-scroll {
+  overscroll-behavior: contain;
+}
+
+/* 스크롤바 전역 숨김 — 위치 단서는 스크롤 엣지 페이드 마스크가 대신함 */
+* {
+  scrollbar-width: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* PropertiesPanel 오버레이 스크롤바 (레이아웃 수축 방지) */
+.properties-panel-overlay-scroll {
+  position: relative;
+  overflow: hidden;
+}
+
+.properties-panel-overlay-viewport {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+/* 스크롤 엣지 페이드 — 스크롤 위치에 반응하는 마스크.
+   scroll-driven animations 지원 엔진(WebView2, Safari 26+)에서만 켜지고
+   미지원 엔진은 마스크 없이 정상 렌더 (폴백 없음, 의도된 열화) */
+@property --dmn-fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --dmn-fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@supports (animation-timeline: scroll(self)) {
+  .properties-panel-overlay-viewport,
+  .dmn-scroll-fade {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--dmn-fade-top, 0px),
+      black calc(100% - var(--dmn-fade-bottom, 0px)),
+      transparent
+    );
+    animation: dmn-scroll-fade linear both;
+    animation-timeline: scroll(self);
+  }
+
+  @keyframes dmn-scroll-fade {
+    0% {
+      --dmn-fade-top: 0px;
+    }
+    /* 위쪽은 정적 거터(12px)가 분리를 담당하므로 클리핑 라인만 살짝 소프트닝 */
+    10%,
+    100% {
+      --dmn-fade-top: 10px;
+    }
+    0%,
+    90% {
+      --dmn-fade-bottom: 20px;
+    }
+    100% {
+      --dmn-fade-bottom: 0px;
+    }
+  }
+}
+
+/* 패딩이 마스크가 되는 스크롤 - 상하 패딩(8px)을 콘텐츠가 소유하고
+   뷰포트는 같은 깊이의 상수 마스크로 콘텐츠를 패딩 아래로 흘려보냄.
+   정지 상태에선 패딩만 마스크에 걸려 손실이 없고, 잘린 행은 또렷이 보임.
+   8px: 설정 카드(py-8)와 동일 - 두 표면의 수직 리듬을 수치까지 일치 */
+.dmn-scroll-mask-inset {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 8px,
+    black calc(100% - 8px),
+    transparent
+  );
+}
+
+/* ===== 등장 모션 ===== */
+
+/* 패널 페이지 전환 — side-by-side push. 두 페이지가 absolute로 겹치고
+   활성 페이지만 보임. 루트는 왼쪽으로, 서브 페이지는 오른쪽으로 exit */
+.dmn-panel-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  transition: opacity var(--ui-duration-page) var(--ui-ease-page),
+    transform var(--ui-duration-page) var(--ui-ease-page),
+    filter var(--ui-duration-page) var(--ui-ease-page);
+}
+
+/* 퇴장 완료 후 페인트 제외 — visibility만 duration만큼 지연 플립.
+   숨김 확정 뒤엔 페인트 대상이 아니라 상주 blur가 프레임 비용으로 남지 않음.
+   입장은 베이스 transition에 visibility가 없어 즉시 visible */
+.dmn-panel-page[data-active='false'] {
+  opacity: 0;
+  pointer-events: none;
+  filter: blur(var(--ui-page-blur));
+  visibility: hidden;
+  transition: opacity var(--ui-duration-page) var(--ui-ease-page),
+    transform var(--ui-duration-page) var(--ui-ease-page),
+    filter var(--ui-duration-page) var(--ui-ease-page),
+    visibility 0s linear var(--ui-duration-page);
+}
+
+.dmn-panel-page[data-page-depth='root'][data-active='false'] {
+  transform: translateX(calc(var(--ui-page-slide-distance) * -1));
+}
+
+.dmn-panel-page[data-page-depth='sub'][data-active='false'] {
+  transform: translateX(var(--ui-page-slide-distance));
+}
+
+.dmn-panel-page[data-active='true'] {
+  opacity: 1;
+  transform: translateX(0);
+  filter: blur(0);
+}
+
+/* 아이콘 스왑 — 토글 버튼의 두 SVG를 겹쳐두고 크로스페이드.
+   나가는 아이콘은 줄며 블러 아웃, 들어오는 아이콘은 커지며 선명해짐.
+   will-change는 의도적으로 생략 — 레이어 리스트처럼 수십 개 깔리는 곳에서
+   컴포지터 레이어 남발 방지 */
+.dmn-icon-swap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.dmn-icon-swap > [data-icon] {
+  grid-area: 1 / 1;
+  display: flex;
+  /* 보이는 상태를 명시 — filter: none에서 시작하면 WKWebView가 보간을 못 함 */
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+  transition: opacity var(--ui-icon-swap-duration) var(--ui-icon-swap-ease),
+    filter var(--ui-icon-swap-duration) var(--ui-icon-swap-ease),
+    transform var(--ui-icon-swap-duration) var(--ui-icon-swap-ease);
+}
+
+.dmn-icon-swap[data-state='on'] > [data-icon='off'],
+.dmn-icon-swap[data-state='off'] > [data-icon='on'] {
+  opacity: 0;
+  filter: blur(var(--ui-icon-swap-blur));
+  transform: scale(var(--ui-icon-swap-scale));
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-icon-swap > [data-icon] {
+    transition: none;
+  }
+}
+
+/* 직접 클릭이 아닌 외부 상태 변경은 즉시 전환 —
+   usePressGatedSwap이 변경 프레임 동안만 부여. dmn- 접두사는
+   같은 DOM에 들어오는 플러그인 마크업과의 속성 충돌 방지 */
+[data-dmn-instant],
+[data-dmn-instant] * {
+  transition: none !important;
+}
+
+/* 눈 토글의 사선 드로우 모션은 EyeToggleIcon.tsx에서 WAAPI로 처리 —
+   드로우·이레이즈 모두 좌상→우하 한 방향 관통 스와이프 */
+
+/* 패널 토글 — 하나의 지속 버튼이 닫힘(글래스 칩) ↔ 열림(베어 아이콘)으로 모프.
+   칩 opacity 페이드는 PanelToggleButton.tsx에서 WAAPI로 처리.
+   아이콘 구분선은 슬라이드, 디테일 라인은 페이드 */
+.dmn-panel-toggle-divider {
+  /* 닫힘: 구분선이 x=12 위치 */
+  transform: translateX(2px);
+  transition: transform var(--ui-duration-base) var(--ui-ease-out);
+}
+
+.dmn-panel-toggle[data-open='true'] .dmn-panel-toggle-divider {
+  transform: translateX(0);
+}
+
+.dmn-panel-toggle-lines {
+  opacity: 0;
+  transform: translateX(-1.5px);
+  transition: opacity var(--ui-duration-base) var(--ui-ease-out),
+    transform var(--ui-duration-base) var(--ui-ease-out);
+}
+
+.dmn-panel-toggle[data-open='true'] .dmn-panel-toggle-lines {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-panel-toggle-divider,
+  .dmn-panel-toggle-lines {
+    transition: none;
+  }
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tooltip-fade-in {
+  animation: tooltipFadeIn var(--ui-duration-fast) var(--ui-ease-out);
+}
+
+/* 종료 상태는 클래스 자연값 — to 블록 생략 */
+@keyframes modalScale {
+  from {
+    transform: scale(0.97);
+    opacity: 0;
+  }
+}
+
+/* 래퍼가 아닌 콘텐츠 루트가 직접 애니메이션 — opacity가 1 미만인 조상은
+   backdrop root가 되어 글래스 블러가 죽었다가 애니메이션이 끝나는 순간 튐.
+   블러 소유 엘리먼트 자신의 페이드는 블러를 살린 채 진행됨 (Dropdown 참고) */
+.animate-modal-scale > * {
+  animation: modalScale var(--ui-duration-base) var(--ui-ease-out) both;
+}
+
+/* FloatingPopup 래퍼용 — 같은 원리로 페이드를 래퍼가 아닌 콘텐츠 루트(글래스 노드)에 적용 */
+.animate-popup-fade > * {
+  animation: tooltipFadeIn var(--ui-duration-fast) var(--ui-ease-out);
+}
+
+/* 스크림 틴트만 보간 — 종료 상태는 클래스 자연값
+   backdrop-filter 보간 금지: 애니메이션 내내 풀스크린 재필터 (Windows 렉) */
+@keyframes modalScrim {
+  from {
+    background-color: transparent;
+  }
+}
+
+.animate-modal-scrim {
+  animation: modalScrim var(--ui-duration-fast) var(--ui-ease-out) both;
+}
+
+/* 스테이지 콘텐츠 등장 — 비동기 준비(파형 디코드 등)를 마친 콘텐츠의 한 박자 페이드 */
+@keyframes stageContentIn {
+  from {
+    opacity: 0;
+  }
+}
+
+.animate-stage-in {
+  animation: stageContentIn var(--ui-duration-fast) var(--ui-ease-out) both;
+}
+
+/* ===== 코드 에디터 ===== */
+
+.webfont-cm-editor {
+  height: 100%;
+}
+
+/* 크롬 색은 사이드 패널과 같은 토큰 — 웰(bg-inset)이 배경을 소유, 에디터는 투명 */
+.webfont-cm-editor .cm-editor {
+  height: 100%;
+  background: transparent;
+  color: var(--ui-fg);
+}
+
+.webfont-cm-editor .cm-scroller,
+.webfont-cm-editor .cm-content,
+.webfont-cm-editor .cm-line {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.webfont-cm-editor .cm-scroller,
+.webfont-cm-editor .cm-content,
+.webfont-cm-editor .cm-gutterElement {
+  font-family: 'SF Mono', Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+}
+
+.webfont-cm-editor .cm-gutterElement {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.webfont-cm-editor .cm-scroller {
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.webfont-cm-editor .cm-content {
+  min-height: 100%;
+  padding: 8px 12px 8px 14px;
+  tab-size: 2;
+  caret-color: var(--ui-fg);
+}
+
+/* relative — 여러 줄 예시 placeholder를 절대배치로 줄 흐름에서 분리,
+   줄 박스가 부풀지 않아 캐럿·거터 높이가 정상 유지됨 */
+.webfont-cm-editor .cm-line {
+  padding: 0;
+  position: relative;
+}
+
+/* 웰보다 한 톤 어두운 솔리드 스트립 — 기존 인셋 겹침(검정 30%)과 같은 톤이지만
+   불투명이라 가로 스크롤 시 밑을 지나는 텍스트가 비치지 않음 */
+.webfont-cm-editor .cm-gutters {
+  background: color-mix(in srgb, var(--ui-bg-inset-solid) 70%, black);
+  color: var(--ui-fg-faint);
+  border: none;
+}
+
+.webfont-cm-editor .cm-lineNumbers .cm-gutterElement {
+  width: 52px;
+  min-width: 52px;
+  box-sizing: border-box;
+  padding: 0 12px 0 0;
+  text-align: right;
+}
+
+.webfont-cm-editor .cm-content ::selection {
+  background: color-mix(in srgb, var(--ui-accent) 35%, transparent);
+}
+
+.webfont-cm-editor .cm-content ::-moz-selection {
+  background: color-mix(in srgb, var(--ui-accent) 35%, transparent);
+}
+
+.webfont-cm-editor .cm-cursor,
+.webfont-cm-editor .cm-dropCursor {
+  border-left-color: var(--ui-fg);
+}
+
+.webfont-cm-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.webfont-cm-editor .cm-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--ui-fg-faint);
+  white-space: pre;
+  pointer-events: none;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 2px;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+/* 모션 축소 설정 존중 — 이동은 제거, 표시 자체는 유지 */
+@media (prefers-reduced-motion: reduce) {
+  .tooltip-fade-in,
+  .animate-modal-scale > *,
+  .animate-modal-scrim,
+  .animate-stage-in,
+  .animate-pulse {
+    animation: none;
+  }
+
+  /* 비활성 상태 셀렉터가 자체 transition을 가지므로 같은 특이도로 함께 무효화 */
+  .dmn-panel-page,
+  .dmn-panel-page[data-active='false'] {
+    transition: none;
+  }
+
+  .dmn-panel-page[data-active='false'] {
+    transform: none;
+    filter: none;
+  }
+}

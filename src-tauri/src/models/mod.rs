@@ -1,7 +1,14 @@
+pub mod editor;
+pub mod gesture;
 pub mod obs;
+pub mod plugin;
+
+pub use editor::*;
+pub use gesture::*;
+pub use plugin::*;
 
 use serde::de::Error as DeError;
-use serde::ser::SerializeMap;
+use serde::ser::{Error as SerError, SerializeMap};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::path::Path;
@@ -13,6 +20,117 @@ pub type KeyCounters = HashMap<String, HashMap<String, u32>>;
 pub type StatPositions = HashMap<String, Vec<StatPosition>>;
 pub type GraphPositions = HashMap<String, Vec<GraphPosition>>;
 pub type KnobPositions = HashMap<String, Vec<KnobPosition>>;
+
+const DEFAULT_GRADIENT_ANGLE: f64 = 90.0;
+const MAX_GRADIENT_STOPS: usize = 8;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GradientStop {
+    pub color: String,
+    pub pos: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct GradientSpec {
+    pub angle: f64,
+    pub stops: Vec<GradientStop>,
+    normalized_on_read: bool,
+}
+
+impl PartialEq for GradientSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.angle == other.angle && self.stops == other.stops
+    }
+}
+
+impl GradientSpec {
+    fn normalize(&mut self) -> bool {
+        let previous_angle = self.angle;
+        let previous_stops = self.stops.clone();
+
+        self.angle = self.angle.rem_euclid(360.0);
+        if self.angle == 0.0 {
+            self.angle = 0.0;
+        }
+        for stop in &mut self.stops {
+            stop.pos = stop.pos.clamp(0.0, 1.0);
+            if stop.pos == 0.0 {
+                stop.pos = 0.0;
+            }
+        }
+        self.stops
+            .sort_by(|left, right| left.pos.total_cmp(&right.pos));
+        self.stops.truncate(MAX_GRADIENT_STOPS);
+
+        self.angle != previous_angle || self.stops != previous_stops
+    }
+
+    fn canonicalize(&mut self) -> bool {
+        let normalized_on_read = std::mem::take(&mut self.normalized_on_read);
+        self.normalize() | normalized_on_read
+    }
+}
+
+impl Serialize for GradientSpec {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if self.stops.len() < 2 {
+            return Err(S::Error::custom("gradient must contain at least two stops"));
+        }
+        if !self.angle.is_finite() || self.stops.iter().any(|stop| !stop.pos.is_finite()) {
+            return Err(S::Error::custom("gradient values must be finite"));
+        }
+
+        let mut canonical = self.clone();
+        canonical.normalize();
+        let mut map = serializer.serialize_map(Some(2))?;
+        map.serialize_entry("angle", &canonical.angle)?;
+        map.serialize_entry("stops", &canonical.stops)?;
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for GradientSpec {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let serde_json::Value::Object(mut input) = value else {
+            return Err(D::Error::custom("gradient must be an object"));
+        };
+        let angle_value = input.remove("angle");
+        let angle = match angle_value.as_ref() {
+            Some(value) => serde_json::from_value::<f64>(value.clone())
+                .map_err(|error| D::Error::custom(format!("invalid gradient angle: {error}")))?,
+            None => DEFAULT_GRADIENT_ANGLE,
+        };
+        let stops = input
+            .remove("stops")
+            .ok_or_else(|| D::Error::custom("gradient stops are required"))
+            .and_then(|value| {
+                serde_json::from_value::<Vec<GradientStop>>(value)
+                    .map_err(|error| D::Error::custom(format!("invalid gradient stops: {error}")))
+            })?;
+        if stops.len() < 2 {
+            return Err(D::Error::custom("gradient must contain at least two stops"));
+        }
+        if !angle.is_finite() || stops.iter().any(|stop| !stop.pos.is_finite()) {
+            return Err(D::Error::custom("gradient values must be finite"));
+        }
+
+        let mut gradient = Self {
+            angle,
+            stops,
+            normalized_on_read: angle_value.is_none() || !input.is_empty(),
+        };
+        gradient.normalized_on_read |= gradient.normalize();
+        Ok(gradient)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NoteColor {
@@ -62,15 +180,11 @@ fn default_sound_source() -> SoundSource {
     SoundSource::Local
 }
 
-fn default_sound_enabled() -> bool {
-    true
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SoundLibraryEntry {
-    #[serde(default = "default_sound_enabled")]
-    pub enabled: bool,
+    #[serde(default)]
+    pub hidden: bool,
     #[serde(default = "default_sound_source")]
     pub source: SoundSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -86,7 +200,7 @@ pub struct SoundLibraryEntry {
 impl Default for SoundLibraryEntry {
     fn default() -> Self {
         Self {
-            enabled: true,
+            hidden: false,
             source: SoundSource::Local,
             original_path: None,
             trim_start_ratio: None,
@@ -94,6 +208,13 @@ impl Default for SoundLibraryEntry {
             display_name: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingProcessedWavReplacement {
+    pub sound_path: String,
+    pub had_original: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -176,12 +297,29 @@ pub enum NoteAlignment {
     Right,
 }
 
+// 그림자 범위 계약 — 프론트 zod(ELEMENT_SHADOW_CONSTRAINTS)와 동기 유지
+pub const SHADOW_OFFSET_MIN: f64 = -100.0;
+pub const SHADOW_OFFSET_MAX: f64 = 100.0;
+pub const SHADOW_BLUR_MIN: f64 = 0.0;
+pub const SHADOW_BLUR_MAX: f64 = 100.0;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementShadowSpec {
+    pub enabled: bool,
+    pub color: String,
+    pub offset_x: f64,
+    pub offset_y: f64,
+    pub blur: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyPosition {
     pub dx: f64,
     pub dy: f64,
     pub width: f64,
+    #[serde(default = "default_key_height")]
     pub height: f64,
     /// 레이어 표시 여부 (true면 숨김)
     #[serde(default)]
@@ -204,8 +342,14 @@ pub struct KeyPosition {
     #[serde(default)]
     pub idle_transparent: bool,
     pub count: u32,
+    #[serde(default = "default_key_note_color")]
     pub note_color: NoteColor,
+    #[serde(default = "default_key_note_opacity")]
     pub note_opacity: u32,
+    #[serde(default)]
+    pub note_opacity_top: Option<u32>,
+    #[serde(default)]
+    pub note_opacity_bottom: Option<u32>,
     #[serde(default)]
     pub note_border_radius: Option<f64>,
     /// 노트 넓이(px). None이면 키 width를 사용(자동).
@@ -222,6 +366,10 @@ pub struct KeyPosition {
     pub note_glow_size: f64,
     #[serde(default = "default_note_glow_opacity")]
     pub note_glow_opacity: u32,
+    #[serde(default)]
+    pub note_glow_opacity_top: Option<u32>,
+    #[serde(default)]
+    pub note_glow_opacity_bottom: Option<u32>,
     #[serde(default)]
     pub note_glow_color: Option<NoteColor>,
     #[serde(default = "default_note_auto_y_correction")]
@@ -253,16 +401,28 @@ pub struct KeyPosition {
     // 스타일 관련 속성들
     #[serde(default)]
     pub background_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub active_background_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_background_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub border_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub border_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub active_border_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_border_gradient: Option<GradientSpec>,
     #[serde(default)]
     pub border_width: Option<f64>,
     #[serde(default)]
     pub border_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shadow: Option<ElementShadowSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_shadow: Option<ElementShadowSpec>,
     #[serde(default)]
     pub font_size: Option<f64>,
     #[serde(default)]
@@ -307,10 +467,84 @@ pub struct KeyPosition {
     pub group_id: Option<String>,
 }
 
+impl Default for KeyPosition {
+    fn default() -> Self {
+        Self {
+            dx: 0.0,
+            dy: 0.0,
+            width: 60.0,
+            height: default_key_height(),
+            hidden: false,
+            active_image: None,
+            inactive_image: None,
+            sound_enabled: None,
+            sound_path: None,
+            sound_volume: None,
+            active_transparent: false,
+            idle_transparent: false,
+            count: 0,
+            note_color: default_key_note_color(),
+            note_opacity: default_key_note_opacity(),
+            note_opacity_top: None,
+            note_opacity_bottom: None,
+            note_border_radius: None,
+            note_width: None,
+            note_alignment: NoteAlignment::default(),
+            note_effect_enabled: default_note_effect_enabled(),
+            note_glow_enabled: default_note_glow_enabled(),
+            note_glow_size: default_note_glow_size(),
+            note_glow_opacity: default_note_glow_opacity(),
+            note_glow_opacity_top: None,
+            note_glow_opacity_bottom: None,
+            note_glow_color: None,
+            note_auto_y_correction: default_note_auto_y_correction(),
+            note_offset_x: None,
+            note_offset_y: None,
+            note_border_width: None,
+            note_border_color: None,
+            note_border_opacity: default_note_border_opacity(),
+            note_border_side: None,
+            class_name: None,
+            z_index: None,
+            counter: KeyCounterSettings::default(),
+            background_color: None,
+            background_gradient: None,
+            active_background_color: None,
+            active_background_gradient: None,
+            border_color: None,
+            border_gradient: None,
+            active_border_color: None,
+            active_border_gradient: None,
+            border_width: None,
+            border_radius: None,
+            shadow: None,
+            active_shadow: None,
+            font_size: None,
+            font_color: None,
+            active_font_color: None,
+            graph_animation_enabled: None,
+            font_family: None,
+            image_fit: None,
+            idle_image_fit: None,
+            active_image_fit: None,
+            use_inline_styles: None,
+            display_text: None,
+            font_weight: None,
+            font_italic: None,
+            font_underline: None,
+            font_strikethrough: None,
+            layer_name: None,
+            group_id: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum StatType {
     Kps,
+    KpsAvg,
+    KpsMax,
     Total,
 }
 
@@ -387,8 +621,9 @@ pub enum KeyCounterPlacement {
 #[serde(rename_all = "kebab-case")]
 #[derive(Default)]
 pub enum KeyCounterAlign {
-    #[default]
     Top,
+    // align 필드 부재 시에도 새 기본 배치와 일치하도록 serde 기본값 겸용
+    #[default]
     Bottom,
     Left,
     Right,
@@ -413,9 +648,9 @@ pub struct KeyCounterColor {
 impl Default for KeyCounterColor {
     fn default() -> Self {
         Self {
-            // 렌더러 기본값과 일치 (src/types/keys.ts)
-            idle: "rgba(121, 121, 121, 0.9)".to_string(),
-            active: "#FFFFFF".to_string(),
+            // 렌더러 기본 키 텍스트 색과 일치 (utils/core/elementDefaults.ts)
+            idle: "rgba(237, 238, 242, 0.78)".to_string(),
+            active: "rgba(20, 20, 24, 0.9)".to_string(),
         }
     }
 }
@@ -580,7 +815,7 @@ pub fn normalize_user_counter_animation_presets(
         })
         .collect();
 
-    normalized.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    normalized.sort_by_key(|a| a.name.to_lowercase());
     normalized
 }
 
@@ -667,6 +902,10 @@ pub struct KeyCounterSettings {
     pub align_mode: KeyCounterAlignMode,
     #[serde(default)]
     pub fill: KeyCounterColor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_idle_gradient: Option<GradientSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_active_gradient: Option<GradientSpec>,
     #[serde(default = "default_stroke_color")]
     pub stroke: KeyCounterColor,
     #[serde(default = "default_gap")]
@@ -701,9 +940,11 @@ impl Default for KeyCounterSettings {
         Self {
             enabled: true,
             placement: KeyCounterPlacement::Inside,
-            align: KeyCounterAlign::Top,
+            align: KeyCounterAlign::Bottom,
             align_mode: KeyCounterAlignMode::Center,
             fill: KeyCounterColor::default(),
+            fill_idle_gradient: None,
+            fill_active_gradient: None,
             stroke: default_stroke_color(),
             gap: default_gap(),
             font_size: default_counter_font_size(),
@@ -726,29 +967,237 @@ impl KeyCounterSettings {
     /// This keeps existing user customizations intact, while fixing the old default
     /// active fill/stroke values (black text / outlined) that diverged from the renderer.
     pub fn migrate_legacy_defaults(&mut self) -> bool {
+        if self.fill_idle_gradient.is_some() || self.fill_active_gradient.is_some() {
+            self.normalize();
+            return false;
+        }
+
+        // 당시 직렬화되던 스냅샷 값 고정 — 현재 기본값 함수와 결합 금지
         let looks_like_legacy_default = self.fill.idle == "#FFFFFF"
             && self.fill.active == "#000000"
             && self.stroke.idle == "#000000"
             && self.stroke.active == "#FFFFFF"
-            && self.gap == default_gap()
-            && self.font_size == default_counter_font_size()
+            && matches!(self.placement, KeyCounterPlacement::Inside)
+            && matches!(self.align, KeyCounterAlign::Top)
+            && matches!(self.align_mode, KeyCounterAlignMode::Center)
+            && self.gap == 6
+            && self.font_size == 16
             && self.font_weight == 400
             && self.font_family.is_none()
             && !self.font_italic
             && !self.font_underline
             && !self.font_strikethrough;
 
-        if !looks_like_legacy_default {
+        if looks_like_legacy_default {
+            self.fill = KeyCounterColor::default();
+            self.stroke = default_stroke_color();
+            self.align = KeyCounterAlign::Bottom;
+            self.gap = default_gap();
+            self.font_size = default_counter_font_size();
+            self.font_weight = default_counter_font_weight();
+            self.animation = KeyCounterAnimationSettings::default();
             self.normalize();
-            return false;
+            return true;
         }
 
-        self.fill = KeyCounterColor::default();
-        self.stroke = default_stroke_color();
-        self.font_weight = default_counter_font_weight();
-        self.animation = KeyCounterAnimationSettings::default();
+        // 직전 기본값 스냅샷(회색 카운터·16px·700·상단 배치) → 글래스 기본 디자인으로 승격
+        // 전 필드 일치일 때만 — 하나라도 다르면 사용자 커스텀으로 보고 유지
+        let looks_like_previous_default = self.fill.idle == "rgba(121, 121, 121, 0.9)"
+            && self.fill.active == "#FFFFFF"
+            && self.stroke.idle == "transparent"
+            && self.stroke.active == "transparent"
+            && matches!(self.placement, KeyCounterPlacement::Inside)
+            && matches!(self.align, KeyCounterAlign::Top)
+            && matches!(self.align_mode, KeyCounterAlignMode::Center)
+            && self.gap == 6
+            && self.font_size == 16
+            && self.font_weight == 700
+            && self.font_family.is_none()
+            && !self.font_italic
+            && !self.font_underline
+            && !self.font_strikethrough;
+
+        if looks_like_previous_default {
+            self.fill = KeyCounterColor::default();
+            self.align = KeyCounterAlign::Bottom;
+            self.gap = default_gap();
+            self.font_size = default_counter_font_size();
+            self.font_weight = default_counter_font_weight();
+            self.normalize();
+            return true;
+        }
+
         self.normalize();
-        true
+        false
+    }
+
+    pub(crate) fn canonicalize_gradient_pairs(&mut self) -> (bool, bool) {
+        let mut changed = false;
+        let mut pair_repaired = false;
+
+        let (idle_changed, idle_pair_repaired) =
+            canonicalize_counter_gradient_pair(&mut self.fill.idle, &mut self.fill_idle_gradient);
+        changed |= idle_changed;
+        pair_repaired |= idle_pair_repaired;
+
+        let (active_changed, active_pair_repaired) = canonicalize_counter_gradient_pair(
+            &mut self.fill.active,
+            &mut self.fill_active_gradient,
+        );
+        changed |= active_changed;
+        pair_repaired |= active_pair_repaired;
+
+        (changed, pair_repaired)
+    }
+}
+
+impl KeyPosition {
+    pub(crate) fn canonicalize_gradient_pairs(&mut self) -> (bool, bool) {
+        let mut changed = false;
+        let mut pair_repaired = false;
+
+        for (base, gradient) in [
+            (&mut self.background_color, &mut self.background_gradient),
+            (
+                &mut self.active_background_color,
+                &mut self.active_background_gradient,
+            ),
+            (&mut self.border_color, &mut self.border_gradient),
+            (
+                &mut self.active_border_color,
+                &mut self.active_border_gradient,
+            ),
+        ] {
+            let (pair_changed, base_repaired) = canonicalize_optional_gradient_pair(base, gradient);
+            changed |= pair_changed;
+            pair_repaired |= base_repaired;
+        }
+
+        let (counter_changed, counter_pair_repaired) = self.counter.canonicalize_gradient_pairs();
+        changed |= counter_changed;
+        pair_repaired |= counter_pair_repaired;
+
+        (changed, pair_repaired)
+    }
+}
+
+fn canonicalize_optional_gradient_pair(
+    base: &mut Option<String>,
+    gradient: &mut Option<GradientSpec>,
+) -> (bool, bool) {
+    let Some(gradient) = gradient else {
+        return (false, false);
+    };
+
+    let mut changed = gradient.canonicalize();
+    let representative = gradient
+        .stops
+        .first()
+        .expect("a deserialized gradient always has at least two stops")
+        .color
+        .clone();
+    let pair_repaired = base.as_deref() != Some(representative.as_str());
+    if pair_repaired {
+        *base = Some(representative);
+        changed = true;
+    }
+    (changed, pair_repaired)
+}
+
+fn canonicalize_counter_gradient_pair(
+    base: &mut String,
+    gradient: &mut Option<GradientSpec>,
+) -> (bool, bool) {
+    let Some(gradient) = gradient else {
+        return (false, false);
+    };
+
+    let mut changed = gradient.canonicalize();
+    let representative = compact_canonical_rgba(
+        &gradient
+            .stops
+            .first()
+            .expect("a deserialized gradient always has at least two stops")
+            .color,
+    );
+    let pair_repaired = *base != representative;
+    if pair_repaired {
+        *base = representative;
+        changed = true;
+    }
+    (changed, pair_repaired)
+}
+
+fn compact_canonical_rgba(color: &str) -> String {
+    let trimmed = color.trim();
+    if let Some(hex) = trimmed.strip_prefix('#') {
+        if matches!(hex.len(), 3 | 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            let expanded;
+            let hex = if hex.len() == 3 {
+                expanded = hex
+                    .chars()
+                    .flat_map(|character| [character, character])
+                    .collect::<String>();
+                expanded.as_str()
+            } else {
+                hex
+            };
+            let red = u8::from_str_radix(&hex[0..2], 16).expect("validated hex channel");
+            let green = u8::from_str_radix(&hex[2..4], 16).expect("validated hex channel");
+            let blue = u8::from_str_radix(&hex[4..6], 16).expect("validated hex channel");
+            let alpha = if hex.len() == 8 {
+                f64::from(u8::from_str_radix(&hex[6..8], 16).expect("validated alpha channel"))
+                    / 255.0
+            } else {
+                1.0
+            };
+            return format!("rgba({red},{green},{blue},{})", format_compact_alpha(alpha));
+        }
+    }
+
+    let functional = trimmed
+        .strip_prefix("rgba(")
+        .or_else(|| trimmed.strip_prefix("rgb("));
+    if let Some(body) = functional {
+        if let Some(body) = body.strip_suffix(')') {
+            let channels = body.split(',').map(str::trim).collect::<Vec<_>>();
+            if matches!(channels.len(), 3 | 4)
+                && channels.iter().all(|channel| {
+                    !channel.is_empty()
+                        && channel
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+                })
+            {
+                let parsed = channels
+                    .iter()
+                    .map(|channel| channel.parse::<f64>())
+                    .collect::<Result<Vec<_>, _>>();
+                if let Ok(parsed) = parsed {
+                    let alpha = parsed.get(3).copied().unwrap_or(1.0);
+                    return format!(
+                        "rgba({},{},{},{})",
+                        parsed[0].round() as i64,
+                        parsed[1].round() as i64,
+                        parsed[2].round() as i64,
+                        format_compact_alpha(alpha)
+                    );
+                }
+            }
+        }
+    }
+
+    trimmed.to_string()
+}
+
+fn format_compact_alpha(alpha: f64) -> String {
+    let rounded = (alpha.clamp(0.0, 1.0) * 10_000.0).round() / 10_000.0;
+    let formatted = format!("{rounded:.4}");
+    let compact = formatted.trim_end_matches('0').trim_end_matches('.');
+    if compact.is_empty() {
+        "0".to_string()
+    } else {
+        compact.to_string()
     }
 }
 
@@ -769,13 +1218,13 @@ fn default_counter_animation_duration_ms() -> u32 {
 }
 
 fn default_gap() -> u32 {
-    6
+    4
 }
 fn default_counter_font_size() -> u32 {
-    16
+    11
 }
 fn default_counter_font_weight() -> u32 {
-    700
+    500
 }
 
 fn default_counter_enabled() -> bool {
@@ -783,6 +1232,15 @@ fn default_counter_enabled() -> bool {
 }
 fn default_note_effect_enabled() -> bool {
     true
+}
+fn default_key_height() -> f64 {
+    60.0
+}
+fn default_key_note_color() -> NoteColor {
+    NoteColor::Solid("#FFFFFF".to_string())
+}
+fn default_key_note_opacity() -> u32 {
+    90
 }
 fn default_note_glow_enabled() -> bool {
     false
@@ -813,7 +1271,7 @@ fn default_reverse_fade_bottom_px() -> u32 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct NoteSettings {
     // Legacy: 전역 노트 라운딩 (개별 키 noteBorderRadius로 마이그레이션됨)
     #[serde(default, skip_serializing)]
@@ -866,8 +1324,8 @@ impl Default for NoteSettings {
         Self {
             border_radius: None,
             frame_limit: default_note_frame_limit(),
-            speed: 180,
-            track_height: 150,
+            speed: 400,
+            track_height: 300,
             reverse: false,
             fade_position: FadePosition::Auto,
             fade_top_px: 50,
@@ -985,6 +1443,15 @@ impl TabNoteSettings {
 pub struct CustomCss {
     pub path: Option<String>,
     pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomCssHistoryEntry {
+    pub path: String,
+    #[serde(default)]
+    pub loaded_at: i64,
+    pub last_used_at: i64,
 }
 
 /// 탭별 CSS 설정
@@ -1197,6 +1664,14 @@ pub struct OverlayBounds {
     pub width: f64,
     pub height: f64,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelBounds {
+    pub x: f64,
+    pub y: f64,
+    pub height: f64,
+}
 impl OverlayResizeAnchor {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -1263,6 +1738,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub main_window_hidden: bool,
     #[serde(default)]
+    pub editor_revision: u64,
+    #[serde(default)]
     pub keys: KeyMappings,
     #[serde(default)]
     pub key_positions: KeyPositions,
@@ -1281,6 +1758,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub custom_css: CustomCss,
     #[serde(default)]
+    pub custom_css_history: Vec<CustomCssHistoryEntry>,
+    #[serde(default)]
     pub font_settings: FontSettings,
     #[serde(default)]
     pub counter_animation_presets: Vec<CounterAnimationPreset>,
@@ -1296,6 +1775,8 @@ pub struct AppStoreData {
     pub custom_js: CustomJs,
     pub overlay_resize_anchor: OverlayResizeAnchor,
     pub overlay_bounds: Option<OverlayBounds>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_bounds: Option<PanelBounds>,
     pub overlay_last_content_top_offset: Option<f64>,
     #[serde(default)]
     pub overlay_bounds_are_logical: bool,
@@ -1310,6 +1791,9 @@ pub struct AppStoreData {
     /// 사운드 라이브러리 메타데이터 (키: 절대 경로, 값: 메타데이터)
     #[serde(default)]
     pub sound_library: HashMap<String, SoundLibraryEntry>,
+    /// WAV 파일과 메타데이터 커밋 사이의 크래시 복구 저널
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_processed_wav_replacement: Option<PendingProcessedWavReplacement>,
     #[serde(default)]
     pub key_sound_output_backend: Option<KeySoundOutputBackendPersist>,
     /// OBS 모드 활성화 여부
@@ -1348,6 +1832,7 @@ impl Default for AppStoreData {
             tray_enabled: false,
             auto_update_enabled: default_auto_update_enabled(),
             main_window_hidden: false,
+            editor_revision: 0,
             keys: KeyMappings::new(),
             key_positions: KeyPositions::new(),
             stat_positions: StatPositions::new(),
@@ -1358,6 +1843,7 @@ impl Default for AppStoreData {
             background_color: "transparent".to_string(),
             use_custom_css: false,
             custom_css: CustomCss::default(),
+            custom_css_history: Vec::new(),
             font_settings: FontSettings::default(),
             counter_animation_presets: Vec::new(),
             tab_css_overrides: TabCssOverrides::new(),
@@ -1366,12 +1852,14 @@ impl Default for AppStoreData {
             custom_js: CustomJs::default(),
             overlay_resize_anchor: OverlayResizeAnchor::TopLeft,
             overlay_bounds: None,
+            panel_bounds: None,
             overlay_last_content_top_offset: None,
             overlay_bounds_are_logical: false,
             key_counter_enabled: false,
             grid_settings: GridSettings::default(),
             shortcuts: ShortcutsState::default(),
             sound_library: HashMap::new(),
+            pending_processed_wav_replacement: None,
             key_sound_output_backend: None,
             obs_mode_enabled: false,
             obs_port: default_obs_port(),
@@ -1594,11 +2082,15 @@ pub struct BootstrapPayload {
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
     pub current_mode: String,
+    pub active_keys: Vec<String>,
     pub overlay: BootstrapOverlayState,
     pub key_counters: KeyCounters,
+    pub key_counters_session_id: String,
+    pub key_counters_revision: u64,
     pub layer_groups: LayerGroups,
     pub tab_note_overrides: TabNoteOverrides,
     pub tab_css_overrides: TabCssOverrides,
+    pub editor_revision: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1850,7 +2342,28 @@ pub struct SettingsPatch {
 
 #[cfg(test)]
 mod tests {
-    use super::KeyPosition;
+    use super::{
+        compact_canonical_rgba, FadePosition, GradientSpec, KeyCounterAlign, KeyCounterAlignMode,
+        KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyPosition, NoteColor,
+        NoteSettings, StatType,
+    };
+    use serde::Deserialize;
+
+    #[test]
+    fn stat_type_wire_values_round_trip() {
+        for (stat_type, wire_value) in [
+            (StatType::Kps, "kps"),
+            (StatType::KpsAvg, "kpsAvg"),
+            (StatType::KpsMax, "kpsMax"),
+            (StatType::Total, "total"),
+        ] {
+            let serialized = serde_json::to_value(&stat_type).unwrap();
+            assert_eq!(serialized, wire_value);
+
+            let restored: StatType = serde_json::from_value(serialized).unwrap();
+            assert_eq!(restored, stat_type);
+        }
+    }
 
     // 필수 필드만 채운 최소 KeyPosition JSON. 시각 px 필드는 호출부에서 주입
     fn key_position_json(visual_px: &str) -> String {
@@ -1893,5 +2406,352 @@ mod tests {
         let pos: KeyPosition = serde_json::from_str(&json).unwrap();
         assert_eq!(pos.note_glow_size, 20.0);
         assert_eq!(pos.note_width, None);
+    }
+
+    #[test]
+    fn gradient_opacity_fields_survive_serde_round_trip() {
+        let json = key_position_json(
+            r#""noteOpacityTop": 91, "noteOpacityBottom": 37,
+                "noteGlowOpacityTop": 64, "noteGlowOpacityBottom": 18"#,
+        );
+        let position: KeyPosition = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(position.note_opacity_top, Some(91));
+        assert_eq!(position.note_opacity_bottom, Some(37));
+        assert_eq!(position.note_glow_opacity_top, Some(64));
+        assert_eq!(position.note_glow_opacity_bottom, Some(18));
+
+        let serialized = serde_json::to_value(&position).unwrap();
+        assert_eq!(serialized["noteOpacityTop"], 91);
+        assert_eq!(serialized["noteOpacityBottom"], 37);
+        assert_eq!(serialized["noteGlowOpacityTop"], 64);
+        assert_eq!(serialized["noteGlowOpacityBottom"], 18);
+
+        let restored: KeyPosition = serde_json::from_value(serialized).unwrap();
+        assert_eq!(restored, position);
+    }
+
+    #[test]
+    fn note_settings_1_3_format_still_preserves_every_field() {
+        // 1.3 시절 noteSettings 전체 필드 실형식
+        let fixture = r#"{
+            "borderRadius": 9,
+            "speed": 456,
+            "trackHeight": 222,
+            "reverse": true,
+            "fadePosition": "bottom",
+            "delayedNoteEnabled": true,
+            "shortNoteThresholdMs": 73,
+            "shortNoteMinLengthPx": 41
+        }"#;
+        let settings: NoteSettings = serde_json::from_str(fixture).unwrap();
+
+        assert_eq!(settings.border_radius, Some(9));
+        assert_eq!(settings.speed, 456);
+        assert_eq!(settings.track_height, 222);
+        assert!(settings.reverse);
+        assert_eq!(settings.fade_position, FadePosition::Bottom);
+        assert!(settings.delayed_note_enabled);
+        assert_eq!(settings.short_note_threshold_ms, 73);
+        assert_eq!(settings.short_note_min_length_px, 41);
+    }
+
+    #[test]
+    fn key_position_1_0_missing_visual_fields_uses_legacy_defaults() {
+        let position: KeyPosition =
+            serde_json::from_str(r#"{"dx":777,"dy":12,"width":60,"count":42}"#).unwrap();
+
+        assert_eq!(position.dx, 777.0);
+        assert_eq!(position.count, 42);
+        assert_eq!(position.height, 60.0);
+        assert_eq!(position.note_color, NoteColor::Solid("#FFFFFF".to_string()));
+        assert_eq!(position.note_opacity, 90);
+        assert_eq!(position.shadow, None);
+        assert_eq!(position.active_shadow, None);
+    }
+
+    #[test]
+    fn key_position_visual_effects_round_trip_without_rewriting_missing_defaults() {
+        let fixture = serde_json::json!({
+            "dx": 0,
+            "dy": 0,
+            "width": 60,
+            "count": 0,
+            "shadow": {
+                "enabled": true,
+                "color": "rgba(10, 20, 30, 0.45)",
+                "offsetX": -2.0,
+                "offsetY": 7.0,
+                "blur": 18.0
+            },
+            "activeShadow": {
+                "enabled": false,
+                "color": "rgba(0, 0, 0, 0.32)",
+                "offsetX": 0.0,
+                "offsetY": 3.0,
+                "blur": 8.0
+            }
+        });
+
+        let position: KeyPosition = serde_json::from_value(fixture.clone()).unwrap();
+        let serialized = serde_json::to_value(position).unwrap();
+
+        assert_eq!(serialized.get("shadow"), fixture.get("shadow"));
+        assert_eq!(serialized.get("activeShadow"), fixture.get("activeShadow"));
+    }
+
+    #[test]
+    fn gradient_spec_tolerates_legacy_shape_and_serializes_canonically() {
+        let gradient: GradientSpec = serde_json::from_value(serde_json::json!({
+            "type": "linear",
+            "stops": [
+                { "color": "c9", "pos": 1.4 },
+                { "color": "c8", "pos": 0.8 },
+                { "color": "c7", "pos": 0.7 },
+                { "color": "c6", "pos": 0.6 },
+                { "color": "c5", "pos": 0.5 },
+                { "color": "c4", "pos": 0.4 },
+                { "color": "c3", "pos": 0.3 },
+                { "color": "c2", "pos": 0.2 },
+                { "color": "c1", "pos": 0.1 },
+                { "color": "c0", "pos": -0.2 }
+            ]
+        }))
+        .unwrap();
+
+        assert_eq!(gradient.angle, 90.0);
+        assert_eq!(gradient.stops.len(), 8);
+        assert_eq!(gradient.stops.first().unwrap().color, "c0");
+        assert_eq!(gradient.stops.first().unwrap().pos, 0.0);
+        assert_eq!(gradient.stops.last().unwrap().color, "c7");
+
+        let canonical = serde_json::to_value(&gradient).unwrap();
+        assert_eq!(canonical["angle"], 90.0);
+        assert_eq!(canonical["stops"].as_array().unwrap().len(), 8);
+        assert!(canonical.get("type").is_none());
+
+        let restored: GradientSpec = serde_json::from_value(canonical.clone()).unwrap();
+        assert_eq!(serde_json::to_value(restored).unwrap(), canonical);
+    }
+
+    #[test]
+    fn gradient_spec_rejects_fewer_than_two_stops() {
+        let error = serde_json::from_value::<GradientSpec>(serde_json::json!({
+            "angle": 90,
+            "stops": [{ "color": "#FFFFFF", "pos": 0 }]
+        }))
+        .unwrap_err();
+
+        assert!(error.to_string().contains("at least two stops"));
+    }
+
+    #[test]
+    fn gradient_spec_rejects_null_angle_but_preserves_stop_alpha_strings() {
+        let error = serde_json::from_value::<GradientSpec>(serde_json::json!({
+            "angle": null,
+            "stops": [
+                { "color": "rgba(1,2,3,0)", "pos": 0 },
+                { "color": "rgba(1,2,3,1)", "pos": 1 }
+            ]
+        }))
+        .unwrap_err();
+        assert!(error.to_string().contains("invalid gradient angle"));
+
+        let gradient: GradientSpec = serde_json::from_value(serde_json::json!({
+            "stops": [
+                { "color": "rgba(1,2,3,0)", "pos": 0 },
+                { "color": "rgba(1,2,3,0.5)", "pos": 0.5 },
+                { "color": "rgba(1,2,3,1)", "pos": 1 }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(
+            gradient
+                .stops
+                .iter()
+                .map(|stop| stop.color.as_str())
+                .collect::<Vec<_>>(),
+            ["rgba(1,2,3,0)", "rgba(1,2,3,0.5)", "rgba(1,2,3,1)"]
+        );
+    }
+
+    #[test]
+    fn counter_gradient_escape_differs_from_every_legacy_snapshot_literal() {
+        let legacy_literals = [
+            "#FFFFFF",
+            "#000000",
+            "rgba(121, 121, 121, 0.9)",
+            "transparent",
+        ];
+        let visual_pairs = [
+            ("#FFFFFF", "rgba(255,255,255,1)"),
+            ("#000000", "rgba(0,0,0,1)"),
+            ("rgba(121, 121, 121, 0.9)", "rgba(121,121,121,0.9)"),
+        ];
+
+        for (input, expected) in visual_pairs {
+            let escaped = compact_canonical_rgba(input);
+            assert_eq!(escaped, expected);
+            assert!(legacy_literals.iter().all(|literal| escaped != *literal));
+        }
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PreFeatureKeyPosition {
+        background_color: Option<String>,
+        counter: PreFeatureCounterSettings,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PreFeatureCounterSettings {
+        fill: KeyCounterColor,
+        stroke: KeyCounterColor,
+        placement: KeyCounterPlacement,
+        align: KeyCounterAlign,
+        align_mode: KeyCounterAlignMode,
+        gap: u32,
+        font_size: u32,
+        font_weight: u32,
+        font_family: Option<String>,
+        font_italic: bool,
+        font_underline: bool,
+        font_strikethrough: bool,
+    }
+
+    impl PreFeatureCounterSettings {
+        fn matches_legacy_migration_snapshot(&self) -> bool {
+            let shared = matches!(self.placement, KeyCounterPlacement::Inside)
+                && matches!(self.align, KeyCounterAlign::Top)
+                && matches!(self.align_mode, KeyCounterAlignMode::Center)
+                && self.gap == 6
+                && self.font_size == 16
+                && self.font_family.is_none()
+                && !self.font_italic
+                && !self.font_underline
+                && !self.font_strikethrough;
+            let oldest = self.fill.idle == "#FFFFFF"
+                && self.fill.active == "#000000"
+                && self.stroke.idle == "#000000"
+                && self.stroke.active == "#FFFFFF"
+                && self.font_weight == 400;
+            let previous = self.fill.idle == "rgba(121, 121, 121, 0.9)"
+                && self.fill.active == "#FFFFFF"
+                && self.stroke.idle == "transparent"
+                && self.stroke.active == "transparent"
+                && self.font_weight == 700;
+            shared && (oldest || previous)
+        }
+    }
+
+    #[test]
+    fn pre_feature_shadow_downgrade_ignores_gradients_without_triggering_migration() {
+        for (legacy_fill, first_stop, expected_escape) in [
+            ("#FFFFFF", "#FFFFFF", "rgba(255,255,255,1)"),
+            (
+                "rgba(121, 121, 121, 0.9)",
+                "rgba(121, 121, 121, 0.9)",
+                "rgba(121,121,121,0.9)",
+            ),
+        ] {
+            let mut position: KeyPosition = serde_json::from_value(serde_json::json!({
+                "dx": 0,
+                "dy": 0,
+                "width": 60,
+                "count": 0,
+                "backgroundColor": "#102030",
+                "backgroundGradient": {
+                    "angle": 90,
+                    "stops": [
+                        { "color": "#102030", "pos": 0 },
+                        { "color": "#405060", "pos": 1 }
+                    ]
+                },
+                "counter": {
+                    "enabled": true,
+                    "placement": "inside",
+                    "align": "top",
+                    "alignMode": "center",
+                    "fill": {
+                        "idle": legacy_fill,
+                        "active": if legacy_fill == "#FFFFFF" { "#000000" } else { "#FFFFFF" }
+                    },
+                    "fillIdleGradient": {
+                        "angle": 90,
+                        "stops": [
+                            { "color": first_stop, "pos": 0 },
+                            { "color": "#654321", "pos": 1 }
+                        ]
+                    },
+                    "stroke": if legacy_fill == "#FFFFFF" {
+                        serde_json::json!({ "idle": "#000000", "active": "#FFFFFF" })
+                    } else {
+                        serde_json::json!({ "idle": "transparent", "active": "transparent" })
+                    },
+                    "gap": 6,
+                    "fontSize": 16,
+                    "fontWeight": if legacy_fill == "#FFFFFF" { 400 } else { 700 },
+                    "fontFamily": null,
+                    "fontItalic": false,
+                    "fontUnderline": false,
+                    "fontStrikethrough": false
+                }
+            }))
+            .unwrap();
+
+            let (_, pair_repaired) = position.canonicalize_gradient_pairs();
+            assert!(pair_repaired);
+            assert_eq!(position.counter.fill.idle, expected_escape);
+            assert!(!position.counter.migrate_legacy_defaults());
+
+            let serialized = serde_json::to_value(&position).unwrap();
+            let shadow: PreFeatureKeyPosition = serde_json::from_value(serialized).unwrap();
+            assert_eq!(shadow.background_color.as_deref(), Some("#102030"));
+            assert_eq!(shadow.counter.fill.idle, expected_escape);
+            assert!(!shadow.counter.matches_legacy_migration_snapshot());
+        }
+    }
+
+    #[test]
+    fn counter_migration_without_gradients_preserves_both_legacy_upgrade_branches() {
+        for snapshot in [
+            serde_json::json!({
+                "placement": "inside",
+                "align": "top",
+                "alignMode": "center",
+                "fill": { "idle": "#FFFFFF", "active": "#000000" },
+                "stroke": { "idle": "#000000", "active": "#FFFFFF" },
+                "gap": 6,
+                "fontSize": 16,
+                "fontWeight": 400,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false
+            }),
+            serde_json::json!({
+                "placement": "inside",
+                "align": "top",
+                "alignMode": "center",
+                "fill": {
+                    "idle": "rgba(121, 121, 121, 0.9)",
+                    "active": "#FFFFFF"
+                },
+                "stroke": { "idle": "transparent", "active": "transparent" },
+                "gap": 6,
+                "fontSize": 16,
+                "fontWeight": 700,
+                "fontFamily": null,
+                "fontItalic": false,
+                "fontUnderline": false,
+                "fontStrikethrough": false
+            }),
+        ] {
+            let mut counter: KeyCounterSettings = serde_json::from_value(snapshot).unwrap();
+
+            assert!(counter.migrate_legacy_defaults());
+            assert_eq!(counter, KeyCounterSettings::default());
+        }
     }
 }

@@ -31,6 +31,7 @@ const StatItem = React.memo(
 
     const {
       keyStyle,
+      borderRingStyle,
       imageStyle,
       textStyle,
       inactiveImageSrc,
@@ -64,7 +65,16 @@ const StatItem = React.memo(
         className={`absolute ${position.className || ''}`}
         style={keyStyle}
         data-state={active ? 'active' : 'inactive'}
+        data-key-element="true"
+        data-key-image={hasCurrentImage ? 'true' : undefined}
       >
+        {borderRingStyle && (
+          <span
+            aria-hidden="true"
+            data-gradient-border-ring="true"
+            style={borderRingStyle}
+          />
+        )}
         {hasCurrentImage ? (
           <img
             src={currentImageSrc!}
@@ -79,6 +89,7 @@ const StatItem = React.memo(
             textStyle={textStyle}
             active={active}
             counterSettings={counterSettings}
+            useInlineStyles={position.useInlineStyles === true}
           />
         ) : (
           <div

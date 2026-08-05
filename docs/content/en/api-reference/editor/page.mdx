@@ -1,0 +1,254 @@
+---
+title: Editor API
+description: Atomic editor document reads, commits, and change events
+---
+
+# Editor API
+
+<Callout type="warning">
+  OBS is read-only. Native Tauri main and overlay windows can write through the
+  revision coordinator; OBS can only read and subscribe to the canonical
+  document.
+</Callout>
+
+`dmn.editor` reads and updates the six collections that make up the editor
+layout as one revisioned document. Use it when one user action changes more
+than one collection, or when a consumer needs a single ordered change stream.
+
+## Document Types
+
+```typescript
+type EditorField =
+  | 'keys'
+  | 'keyPositions'
+  | 'statPositions'
+  | 'graphPositions'
+  | 'knobPositions'
+  | 'layerGroups';
+
+interface EditorDocumentV1 {
+  schemaVersion: 1;
+  keys: KeyMappings;
+  keyPositions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
+  layerGroups: LayerGroups;
+}
+
+type EditorPatchV1 = {
+  schemaVersion: 1;
+} & Partial<Pick<EditorDocumentV1, EditorField>>;
+```
+
+Each field included in an `EditorPatchV1` is the complete canonical value of
+that top-level collection. It is not an item-level diff.
+
+## Read the Current Document
+
+### `dmn.editor.get(): Promise<EditorGetResult>`
+
+Returns the current revision and its matching full document in one snapshot.
+
+```typescript
+interface EditorGetResult {
+  revision: number;
+  document: EditorDocumentV1;
+}
+
+const { revision, document } = await dmn.editor.get();
+console.log(revision, document.keyPositions);
+```
+
+Keep the returned `revision`. A later commit uses it as `baseRevision` so that
+an older snapshot cannot silently overwrite a newer edit.
+
+## Commit Changes Atomically
+
+### `dmn.editor.commit(request): Promise<EditorCommitResult>`
+
+Merges `changes` into the document at `baseRevision`, validates the completed
+document, and persists all included collections in one atomic replacement. A
+rejected commit does not partially apply its changes. DM Note requests the
+strongest file and directory durability barriers available on each supported
+platform, while no application can guarantee recovery from hardware or
+firmware that violates those barriers.
+
+<Callout type="info">
+  The app's Undo/Redo path also restores the six editor collections, custom-tab
+  metadata, selected mode, counters, preset settings, and per-tab note settings
+  in one backend store transaction. This internal command is intentionally not
+  part of the public plugin API.
+</Callout>
+
+```typescript
+interface EditorCommitRequest {
+  baseRevision: number;
+  mutationId: string;
+  gestureId?: string;
+  gestureIds?: string[];
+  changes: EditorPatchV1;
+}
+
+interface EditorCommitResult {
+  revision: number;
+  changedFields: EditorField[];
+}
+
+const snapshot = await dmn.editor.get();
+const result = await dmn.editor.commit({
+  baseRevision: snapshot.revision,
+  mutationId: crypto.randomUUID(),
+  changes: {
+    schemaVersion: 1,
+    statPositions: nextStatPositions,
+    layerGroups: nextLayerGroups,
+  },
+});
+
+console.log('Committed revision:', result.revision);
+```
+
+`mutationId` must be a UUID string no longer than 64 bytes. A recent request
+retried with the same ID in the current app process is deduplicated. This is
+intended for immediate IPC retries; the in-memory deduplication window does not
+survive an app restart. Reusing a retained ID for a different request is
+rejected.
+
+`gestureId` is the representative history gesture. `gestureIds` carries every
+preview session coalesced into the request so the committed event can echo the
+complete set. Both fields are optional and accept UUIDs only. The `gestureIds`
+array can contain at most 32 entries, and the combined unique set across both
+fields is also limited to 32 IDs.
+
+If the submitted values are already current, the result keeps the current
+revision, returns an empty `changedFields`, and emits no canonical committed
+event. Compatibility wrappers may still project their legacy per-field refresh
+event once; retrying the same `mutationId` does not project it again.
+
+### Paired key structure changes
+
+`keys[mode][i]` and `keyPositions[mode][i]` describe the same item by index.
+When an edit adds or removes a mode, or changes an array length, submit both
+collections in the same commit. Their mode sets and lengths must match.
+
+```typescript
+await dmn.editor.commit({
+  baseRevision,
+  mutationId: crypto.randomUUID(),
+  changes: {
+    schemaVersion: 1,
+    keys: nextKeys,
+    keyPositions: nextKeyPositions,
+  },
+});
+```
+
+A same-shape edit, such as changing a key label or a position property, may
+update only its own collection. A shape-changing `keys`-only or
+`keyPositions`-only request is rejected with `PAIRED_UPDATE_REQUIRED`.
+
+When using the compatibility `dmn.keys` API, call
+`dmn.keys.updateWithPositions(keys, keyPositions)` for these structural
+changes. Do not split them across `update()` and `updatePositions()`.
+
+## Commit Errors
+
+`commit()` rejects with this structured error. Branch on `errorCode`, not on
+the human-readable `message`.
+
+```typescript
+type EditorCommitErrorCode =
+  | 'REVISION_CONFLICT'
+  | 'VALIDATION_FAILED'
+  | 'TOO_MANY_GESTURE_IDS'
+  | 'INVALID_GESTURE_ID'
+  | 'PAIRED_UPDATE_REQUIRED'
+  | 'MUTATION_ID_REUSED'
+  | 'IO_ERROR';
+
+interface EditorCommitError {
+  errorCode: EditorCommitErrorCode;
+  message: string;
+  details?: {
+    currentRevision?: number;
+    validationCode?: string;
+    field?: string;
+  };
+  retryable: boolean;
+}
+```
+
+| Code                     | Meaning                                                                   | `retryable` |
+| ------------------------ | ------------------------------------------------------------------------- | ----------- |
+| `REVISION_CONFLICT`      | `baseRevision` is stale; read, reconcile, and commit again                | `true`      |
+| `VALIDATION_FAILED`      | The completed document violates an editor validation rule                 | `false`     |
+| `TOO_MANY_GESTURE_IDS`   | `gestureIds` exceeds 32 entries or the combined unique set exceeds 32 IDs | `false`     |
+| `INVALID_GESTURE_ID`     | A gesture ID is not a UUID within the 64-byte limit                       | `false`     |
+| `PAIRED_UPDATE_REQUIRED` | A structural key change omitted its paired collection                     | `false`     |
+| `MUTATION_ID_REUSED`     | The same mutation ID was used for a different request                     | `false`     |
+| `IO_ERROR`               | The document could not be persisted                                       | `true`      |
+
+`details.currentRevision`, `details.validationCode`, or `details.field` is
+included when it applies to the error.
+
+## Subscribe to Committed Changes
+
+### `dmn.editor.onCommitted(callback): ReadyUnsubscribe`
+
+Subscribes to the canonical `editor:committed` stream. One event represents
+one successful atomic editor commit.
+
+```typescript
+interface EditorCommittedV1 {
+  schemaVersion: 1;
+  revision: number;
+  mutationId: string;
+  gestureId?: string | null;
+  gestureIds?: string[];
+  origin?: string;
+  changedFields: EditorField[];
+  patch: EditorPatchV1;
+}
+
+const unsubscribe = dmn.editor.onCommitted((event) => {
+  console.log(event.revision, event.changedFields);
+  applyEditorPatch(event.patch);
+});
+
+await unsubscribe.ready;
+
+dmn.plugin.registerCleanup(() => {
+  unsubscribe();
+});
+```
+
+The returned unsubscribe function has a `ready: Promise<void>` property. Await
+it when no event may be missed before taking a snapshot.
+
+Events can arrive before the matching `commit()` promise resolves. Use
+`mutationId` and `revision` to avoid applying the same change twice. If an
+observed revision skips one or more values, call `dmn.editor.get()` and replace
+the local snapshot. Ignore unknown `origin` values and future unknown fields.
+
+## Legacy Change Events
+
+<Callout type="warning">
+  The per-collection events below remain available with their existing payloads
+  for plugin compatibility, but they are deprecated for new editor state
+  synchronization. Use `dmn.editor.onCommitted()` so one multi-collection edit
+  is observed as one ordered change.
+</Callout>
+
+| Compatibility event                   | Replacement                |
+| ------------------------------------- | -------------------------- |
+| `dmn.keys.onChanged()`                | `dmn.editor.onCommitted()` |
+| `dmn.keys.onPositionsChanged()`       | `dmn.editor.onCommitted()` |
+| `dmn.statItems.onPositionsChanged()`  | `dmn.editor.onCommitted()` |
+| `dmn.graphItems.onPositionsChanged()` | `dmn.editor.onCommitted()` |
+| `dmn.knobItems.onPositionsChanged()`  | `dmn.editor.onCommitted()` |
+| `dmn.layerGroups.onChanged()`         | `dmn.editor.onCommitted()` |
+
+Existing plugins do not need to migrate immediately. New synchronization code
+should subscribe to only the canonical event stream instead of applying both
+the canonical and compatibility events.

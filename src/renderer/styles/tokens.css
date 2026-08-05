@@ -1,0 +1,152 @@
+/*
+ * 디자인 토큰 — 모든 윈도우에서 로드됨
+ * UI 색·모션·그림자의 단일 소스. 컴포넌트에서 hex 직접 사용 금지
+ */
+:root {
+  /* 배경 — 어두운 순서: app < panel < surface. 다크에서 고도는 밝기로 표현되므로 단계 폭이 구분감을 결정 */
+  --ui-bg-app: #0b0b0d;
+  --ui-bg-panel: #17171b;
+  --ui-bg-surface: #222228;
+  --ui-bg-surface-hover: #2a2a31;
+  --ui-bg-surface-active: #313139;
+  --ui-bg-elevated: #24242b;
+  /* 컨트롤 필 — 반투명 화이트라 어느 표면 위서든 한 단계 밝게 뜸
+     근흑 배경에선 어두운 홈이 배경과 구분되지 않아 인풋·트랙은 밝은 필이 기준
+     fill(0.08)보다 한 단계 아래 유지 — 정적 홈과 인터랙티브 필의 밝기 구분 */
+  --ui-bg-inset: rgba(255, 255, 255, 0.05);
+  /* 불투명 웰 — 코드 에디터처럼 배경이 흔들리면 안 되는 표면 전용 */
+  --ui-bg-inset-solid: #101013;
+
+  /* 글래스 표면 — 스모크 재질. 팝업·패널 0.72, 캔버스 크롬 0.6
+     알파 ↓ = 배경 투과 ↑ (글래스 체감의 1차 다이얼). 분리는 그림자 토큰의 인셋 링+상단 하이라이트가 담당, 보더 금지 */
+  --ui-glass: rgba(14, 14, 17, 0.72);
+  /* 모달·시트·피커용 — 중앙 모달은 스크림(.backdrop-glass-scrim 딤+블러)이 뒤에 겹쳐
+     실효 밀도는 스크림×틴트. 스크림 알파와 함께 조절할 것 */
+  --ui-glass-heavy: rgba(14, 14, 17, 0.45);
+  /* 캔버스 상주 크롬용 — 배경보다 한 톤 어두운 스모크 */
+  --ui-glass-dim: rgba(12, 12, 14, 0.6);
+  /* 사이드 패널용 */
+  --ui-glass-panel: rgba(14, 14, 17, 0.72);
+  /* 상주 크롬 솔리드 — 사이드 패널·미니맵처럼 상시 떠 있는 표면은 라이브 블러 대신
+     고알파 틴트로 근사 (Windows에서 backdrop-filter가 매 프레임 면적 비례 재필터)
+     알파가 유일한 다이얼: 낮출수록 배경 투과 ↑, 글래스 질감은 인셋 링+하이라이트가 유지 */
+  --ui-glass-panel-solid: rgba(14, 14, 17, 0.96);
+  --ui-glass-dim-solid: rgba(12, 12, 14, 0.94);
+  /* 글래스 백드롭 클램프 — 틴트 전에 배경 밝기를 누르고, 죽은 채도는 보상
+     dim ↓ = 밝은 배경 투과 억제. 과하게 누르면 투과 변화 자체가 죽어 글래스가 안 읽힘 / sat = 색기운 유지량 */
+  --ui-glass-backdrop-dim: 0.8;
+  --ui-glass-backdrop-sat: 1.5;
+  /* 루미노시티 캡 — 투과 결과의 휘도를 어두운 쪽으로 강제 (색조는 유지)
+     0 = 끔, 1 = 완전 캡. 필터와 독립 동작하는 2차 안전망 */
+  --ui-glass-backdrop-lum: 0.1;
+  /* 캡의 기준 휘도 — 글래스 틴트와 같은 근흑색 */
+  --ui-glass-backdrop-lum-tint: #0e0e11;
+
+  /* 경계선 — 장식용 금지, 기능적 구획(바/플로팅 크롬/폼 컨트롤)에만 사용 */
+  --ui-line: rgba(255, 255, 255, 0.1);
+  --ui-line-strong: rgba(255, 255, 255, 0.14);
+  /* 캔버스/스테이지 보조 격자선 — 메이저(--ui-line)보다 한 톤 흐림 */
+  --ui-line-faint: rgba(255, 255, 255, 0.06);
+
+  /* 투명 색상 체커 */
+  --ui-checker-pattern: conic-gradient(
+    #666 0.25turn,
+    #999 0.25turn 0.5turn,
+    #666 0.5turn 0.75turn,
+    #999 0.75turn
+  );
+  --ui-checker-size: 8px;
+  /* 소형 스와치(11~23px)용 — 8px 타일은 2×2칸이라 깨진 텍스처로 읽힘 */
+  --ui-checker-size-sm: 4px;
+
+  /* 크롬 필 — 반투명 화이트 오버레이 상태 래더 (idle → hover → active) */
+  --ui-fill: rgba(255, 255, 255, 0.08);
+  --ui-fill-hover: rgba(255, 255, 255, 0.11);
+  --ui-fill-active: rgba(255, 255, 255, 0.13);
+  /* 정적 그룹 컨테이너용 — 인터랙션 없는 은은한 면 */
+  --ui-fill-faint: rgba(255, 255, 255, 0.06);
+
+  /* 텍스트 위계 — faint는 가장 밝은 표면(웰) 위에서도 4.5:1 유지가 기준 */
+  --ui-fg: #edeef2;
+  --ui-fg-muted: #a6a8b2;
+  --ui-fg-faint: #8b8d97;
+  --ui-fg-disabled: #5c5e66;
+
+  /* 액센트 — 브랜드 퍼플. 인디케이터·포커스 등 작은 지점용 */
+  --ui-accent: #8b5cf6;
+  --ui-accent-hover: #9d74f8;
+  --ui-accent-active: #7a4be0;
+  --ui-accent-muted: rgba(139, 92, 246, 0.16);
+  --ui-accent-fg: #ffffff;
+  /* 큰 면적 CTA용 — 면적이 클수록 휘도·채도를 내림 (다크에서 눈부심 방지) */
+  --ui-accent-deep: #6b4ad0;
+  --ui-accent-deep-hover: #7857d8;
+  --ui-accent-deep-active: #5f40bd;
+
+  /* 캔버스 선택 크롬 — 셀렉션은 의미 지점이므로 브랜드 바이올렛 */
+  --ui-selection: #8b5cf6;
+  --ui-selection-border: rgba(139, 92, 246, 0.8);
+  --ui-selection-border-strong: rgba(139, 92, 246, 0.9);
+  --ui-selection-fill: rgba(139, 92, 246, 0.15);
+  --ui-selection-glow: rgba(139, 92, 246, 0.5);
+
+  /* 시맨틱 */
+  --ui-danger: #e5484d;
+  --ui-danger-hover: #ec5d62;
+  --ui-danger-active: #d93b40;
+  --ui-danger-muted: rgba(229, 72, 77, 0.14);
+  --ui-danger-muted-hover: rgba(229, 72, 77, 0.2);
+  --ui-danger-muted-active: rgba(229, 72, 77, 0.26);
+  --ui-danger-fg: #ff9599;
+  --ui-success: #3dbe7b;
+  --ui-success-muted: rgba(61, 190, 123, 0.14);
+  --ui-warning: #f0b429;
+  --ui-warning-muted: rgba(240, 180, 41, 0.14);
+
+  /* 라운딩 — 4단: 표면 안 요소 6 < 1차 표면 10 < 팝업 셸 14 < 모달 셸 16 */
+  /* 동심 규칙은 코너 밀착 중첩에만 적용 (팝업 14 = 6 + p-8), 컨트롤은 고정 티어 */
+  /* 모달 셸은 창보다 둥글지 않게 유지 */
+  --ui-radius-inner: 6px;
+  --ui-radius-surface: 10px;
+  --ui-radius-popup: 14px;
+  --ui-radius-modal: 16px;
+
+  /* 모션 */
+  --ui-duration-fast: 120ms;
+  --ui-duration-base: 180ms;
+  --ui-duration-slow: 240ms;
+  --ui-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ui-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* 패널 페이지 전환 — 사이드 패널 인-패널 내비게이션 다이얼 */
+  --ui-duration-page: 250ms;
+  --ui-ease-page: cubic-bezier(0.22, 1, 0.36, 1);
+  --ui-page-slide-distance: 8px;
+  --ui-page-blur: 3px;
+
+  /* 아이콘 스왑 — 토글 버튼의 SVG 교체 크로스페이드 다이얼 */
+  --ui-icon-swap-duration: var(--ui-duration-base);
+  --ui-icon-swap-ease: ease-in-out;
+  --ui-icon-swap-blur: 2px;
+  --ui-icon-swap-scale: 0.25;
+
+  /* 그림자 — 보더 없는 표면 분리의 핵심. 2/3은 인셋 링+상단 하이라이트로 재질 립 포함 */
+  --ui-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --ui-shadow-2: inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 8px 24px rgba(0, 0, 0, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+  --ui-shadow-3: inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 24px 64px rgba(0, 0, 0, 0.6),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+
+  /* 사이드 패널 — 도킹 경계인 좌측 엣지만 헤어라인, 좌측 방향성 드롭으로 캔버스와 분리 */
+  --ui-shadow-panel: inset 1px 0 0 0 rgba(255, 255, 255, 0.08),
+    -12px 0 32px rgba(0, 0, 0, 0.35);
+
+  /* 상주 크롬 — 인셋 링 + 상단 하이라이트가 보더·재질 담당, 드롭섀도는 흔적만 */
+  --ui-shadow-chrome: inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 1px 3px rgba(0, 0, 0, 0.2);
+
+  /* 포커스 링 — 보더 대신 그림자 링 */
+  --ui-focus-ring: 0 0 0 1.5px rgba(139, 92, 246, 0.55);
+}

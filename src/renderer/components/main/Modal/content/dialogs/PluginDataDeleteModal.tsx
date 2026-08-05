@@ -21,44 +21,38 @@ export function PluginDataDeleteModal({
   if (!isOpen) return null;
 
   return (
-    <Modal onClick={onClose}>
+    <Modal onClick={onClose} ariaLabel={t('settings.pluginDataDeleteTitle')}>
       <div
-        className="flex flex-col w-[380px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] gap-[16px]"
+        className="flex flex-col w-[380px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px] gap-[12px]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex flex-col gap-[8px]">
-          {/* <span className="text-style-3 text-[#FFFFFF]">
-            {t("settings.pluginDataDeleteTitle")}
-          </span> */}
-          <span className="text-style-3 text-[#FFFFFF] !leading-[1.5]">
-            {t('settings.pluginDataDeleteMessage', { name: pluginName })}
-          </span>
-        </div>
+        <span className="text-label text-fg !leading-[1.5]">
+          {t('settings.pluginDataDeleteMessage', { name: pluginName })}
+        </span>
 
-        <div className="flex flex-col gap-[8px] p-[12px] bg-[#141318] border-[1px] border-[#2F2E36] rounded-[8px]">
-          <div className="flex items-start gap-[8px]">
-            <span className="text-style-3 text-[#FCD34D] mt-[6px]">⚠️</span>
-            <span className="text-style-2 text-[#D1D5DB] !leading-[1.2]">
-              {t('settings.pluginDataDeleteWarning')}
-            </span>
-          </div>
+        {/* 경고 카드 */}
+        <div className="flex items-start gap-[8px] p-[12px] bg-fill-faint rounded-surface">
+          <span className="text-label text-warning mt-[6px]">⚠️</span>
+          <span className="text-label text-fg !leading-[1.2]">
+            {t('settings.pluginDataDeleteWarning')}
+          </span>
         </div>
 
         <div className="flex items-center gap-[8px]">
           <button
-            className="flex-1 h-[30px] bg-[#DC2626] border-[1px] border-[#991B1B] rounded-[7px] text-style-3 text-[#FFFFFF] hover:bg-[#B91C1C] transition-colors"
+            className="flex-1 h-[30px] bg-danger border-[1px] border-danger-active rounded-surface text-label text-fg hover:bg-danger-active transition-colors duration-fast"
             onClick={onDeleteWithData}
           >
             {t('settings.deleteWithData')}
           </button>
           <button
-            className="flex-1 h-[30px] bg-[#2A2A31] rounded-[7px] text-style-3 text-[#DBDEE8] hover:bg-[#34343c] transition-colors"
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onDeletePluginOnly}
           >
             {t('settings.deletePluginOnly')}
           </button>
           <button
-            className="h-[30px] px-[12px] bg-[#2A2A31] rounded-[7px] text-style-3 text-[#DBDEE8] hover:bg-[#34343c] transition-colors"
+            className="h-[30px] px-[12px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onClose}
           >
             {t('common.cancel')}

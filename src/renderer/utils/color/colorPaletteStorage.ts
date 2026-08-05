@@ -3,17 +3,74 @@
  * 최근 사용한 색상을 localStorage에 저장/관리하는 유틸리티
  */
 
+import {
+  canonicalGradientOrNull,
+  toCanonicalGradient,
+  type GradientSpec,
+  type GradientStop,
+} from '@src/types/color';
+
 type PaletteType = 'solid' | 'gradient';
 type GradientColor = { type: 'gradient'; top: string; bottom: string };
+/** 각도·스톱 위치까지 담는 신형 그라데이션 항목 — 구형(top/bottom)과 같은 팔레트에 공존 */
+export type GradientSpecColor = {
+  type: 'gradient-spec';
+  angle: number;
+  stops: GradientStop[];
+};
 type SolidColor = string;
-type PaletteColor = SolidColor | GradientColor;
+type PaletteColor = SolidColor | GradientColor | GradientSpecColor;
+
+export const isGradientSpecColor = (
+  value: unknown,
+): value is GradientSpecColor =>
+  !!value &&
+  typeof value === 'object' &&
+  (value as GradientSpecColor).type === 'gradient-spec' &&
+  Array.isArray((value as GradientSpecColor).stops);
+
+export const gradientSpecPaletteEntry = (
+  spec: GradientSpec,
+): GradientSpecColor => {
+  const canonical = toCanonicalGradient(spec);
+  return {
+    type: 'gradient-spec',
+    angle: canonical.angle,
+    stops: canonical.stops,
+  };
+};
 
 const STORAGE_KEYS: Record<PaletteType, string> = {
   solid: 'dmnote-color-palette-solid',
   gradient: 'dmnote-color-palette-gradient',
 };
 
-const MAX_PALETTE_SIZE = 5;
+const MAX_PALETTE_SIZE = 7;
+
+// 로드 경계 파서 — localStorage는 외부 입력이므로 항목 단위로 검증하고,
+// spec 항목은 canonical로 고쳐서 반환 (손상 항목은 개별 제거)
+const parsePaletteEntry = (
+  type: PaletteType,
+  entry: unknown,
+): PaletteColor | null => {
+  if (type === 'solid') {
+    return typeof entry === 'string' && entry.length > 0 ? entry : null;
+  }
+  if (!entry || typeof entry !== 'object') return null;
+  const record = entry as Record<string, unknown>;
+  if (
+    record.type === 'gradient' &&
+    typeof record.top === 'string' &&
+    typeof record.bottom === 'string'
+  ) {
+    return { type: 'gradient', top: record.top, bottom: record.bottom };
+  }
+  if (record.type === 'gradient-spec') {
+    const canonical = canonicalGradientOrNull(record);
+    return canonical ? { type: 'gradient-spec', ...canonical } : null;
+  }
+  return null;
+};
 
 export const loadPalette = (type: PaletteType): PaletteColor[] => {
   try {
@@ -21,7 +78,11 @@ export const loadPalette = (type: PaletteType): PaletteColor[] => {
     const stored = localStorage.getItem(key);
     if (!stored) return [];
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => parsePaletteEntry(type, entry))
+      .filter((entry): entry is PaletteColor => entry !== null)
+      .slice(0, MAX_PALETTE_SIZE);
   } catch {
     return [];
   }
@@ -39,6 +100,13 @@ export const addToPalette = (type: PaletteType, color: PaletteColor): void => {
       return (
         normalizeForComparison(a as string) ===
         normalizeForComparison(b as string)
+      );
+    }
+    // gradient-spec 비교 — canonical 직렬화 일치
+    if (isGradientSpecColor(a) && isGradientSpecColor(b)) {
+      return (
+        JSON.stringify(toCanonicalGradient(a)) ===
+        JSON.stringify(toCanonicalGradient(b))
       );
     }
     // gradient 비교

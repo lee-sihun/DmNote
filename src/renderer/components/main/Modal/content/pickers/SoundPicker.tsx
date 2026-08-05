@@ -1,42 +1,49 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/plugin/api';
-import PlusIcon from '@assets/svgs/plus2.svg';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
-import CommonListPickerPopup from './CommonListPickerPopup';
+import CommonListPickerPage from './CommonListPickerPage';
+import {
+  pickerRowClass,
+  pickerMoreButtonClass,
+  pickerMoreButtonVisibleClass,
+  pickerMoreButtonHiddenClass,
+} from './pickerRowClass';
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import SoundTrimModal from '../managers/SoundTrimModal';
 
 interface SoundPickerProps {
   open: boolean;
-  referenceRef: React.RefObject<HTMLElement>;
-  panelElement?: HTMLElement | null;
   selectedSound: string | null;
   onSoundSelect: (soundPath: string | null) => void;
-  onClose: () => void;
-  interactiveRefs?: Array<React.RefObject<HTMLElement>>;
+  pageTitle: string;
+  onBack: () => void;
   previewVolume?: number;
 }
 
 type TrimState =
-  | { mode: 'create'; file: File }
+  | { mode: 'create'; file: File | null }
   | { mode: 'edit'; item: SoundListItem };
+
+let soundListCache: SoundListItem[] | null = null;
 
 const SoundPicker = ({
   open,
-  referenceRef,
-  panelElement = null,
   selectedSound,
   onSoundSelect,
-  onClose,
-  interactiveRefs = [],
+  pageTitle,
+  onBack,
   previewVolume,
 }: SoundPickerProps) => {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'local'>('all');
-  const [sounds, setSounds] = useState<SoundListItem[]>([]);
+  const [filterType, setFilterType] = useState<'all' | 'local' | 'hidden'>(
+    'all',
+  );
+  const [sounds, setSounds] = useState<SoundListItem[]>(
+    () => soundListCache ?? [],
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [trimState, setTrimState] = useState<TrimState | null>(null);
@@ -45,27 +52,48 @@ const SoundPicker = ({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameCancelledRef = useRef(false);
   const addFileInputRef = useRef<HTMLInputElement>(null);
+  const loadRequestRef = useRef(0);
+  const isOpenRef = useRef(open);
   const menu = usePickerItemMenu<string>();
 
   const normalizedSelectedSound = (selectedSound || '').trim();
 
   const loadSounds = async () => {
-    setIsLoading(true);
+    const requestId = ++loadRequestRef.current;
+    const cachedSounds = soundListCache;
+    if (cachedSounds) {
+      setSounds(cachedSounds);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
     setLoadError('');
     try {
       const nextSounds = await window.api.sound.list();
+      if (requestId !== loadRequestRef.current) return;
+      soundListCache = nextSounds;
+      if (!isOpenRef.current) return;
       setSounds(nextSounds);
     } catch (error) {
+      if (requestId !== loadRequestRef.current || !isOpenRef.current) return;
       console.error('Failed to load sound list', error);
       setLoadError(t('soundPicker.loadFailed') || '사운드 목록 로드 실패');
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current && isOpenRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
+    isOpenRef.current = open;
     if (!open) return;
     void loadSounds();
+
+    return () => {
+      isOpenRef.current = false;
+      loadRequestRef.current += 1;
+    };
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -83,14 +111,18 @@ const SoundPicker = ({
   const filterOptions = [
     { value: 'all', label: t('soundPicker.filterAll') || '전체' },
     { value: 'local', label: t('soundPicker.filterLocal') || '로컬 사운드' },
+    { value: 'hidden', label: t('soundPicker.filterHidden') || '숨긴 사운드' },
   ];
 
   const filteredSounds = (() => {
     const query = searchQuery.trim().toLowerCase();
 
     return sounds.filter((item) => {
-      if (filterType === 'local' && item.source !== 'local') {
-        return false;
+      if (filterType === 'hidden') {
+        if (!item.hidden) return false;
+      } else {
+        if (item.hidden) return false;
+        if (filterType === 'local' && item.source !== 'local') return false;
       }
       if (!query) return true;
       return (
@@ -105,21 +137,37 @@ const SoundPicker = ({
       ? sounds.find((item) => item.soundPath === menu.menuKey) ?? null
       : null;
 
-  const menuItems: ListItem[] = [
-    {
-      id: 'edit',
-      label: t('soundPicker.edit') || '편집',
-      disabled: !menuTargetItem?.originalPath,
-    },
-    {
-      id: 'rename',
-      label: t('soundPicker.rename') || '이름 변경',
-    },
-    {
-      id: 'delete',
-      label: t('soundPicker.delete') || '삭제',
-    },
-  ];
+  const menuItems: ListItem[] = menuTargetItem
+    ? [
+        ...(menuTargetItem.source === 'local'
+          ? [
+              {
+                id: 'edit',
+                label: t('soundPicker.edit') || '편집',
+                disabled: !menuTargetItem.originalPath,
+              },
+              {
+                id: 'rename',
+                label: t('soundPicker.rename') || '이름 변경',
+              },
+            ]
+          : []),
+        {
+          id: 'toggle-hidden',
+          label: menuTargetItem.hidden
+            ? t('soundPicker.unhide') || '숨김 해제'
+            : t('soundPicker.hide') || '숨기기',
+        },
+        ...(menuTargetItem.source === 'local'
+          ? [
+              {
+                id: 'delete',
+                label: t('soundPicker.delete') || '삭제',
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   const moreMenuLabel = (() => {
     const translated = t('common.more');
@@ -177,39 +225,41 @@ const SoundPicker = ({
     }
   };
 
+  const handleToggleHidden = async (item: SoundListItem) => {
+    try {
+      await window.api.sound.setHidden(item.soundPath, !item.hidden);
+      await loadSounds();
+    } catch (error) {
+      console.error('Failed to toggle sound hidden', error);
+      // loadSounds가 loadError를 초기화하므로 reload 후에 실패 메시지 설정
+      await loadSounds();
+      setLoadError(t('soundPicker.hideFailed') || '사운드 숨김 변경 실패');
+    }
+  };
+
   const handleTrimSaved = (soundPath: string) => {
     onSoundSelect(soundPath);
     setTrimState(null);
     void loadSounds();
   };
 
-  const handlePickerClose = () => {
-    if (menu.menuKey !== null) return;
-    onClose();
-  };
-
   return (
     <>
-      <CommonListPickerPopup<SoundListItem>
+      <CommonListPickerPage<SoundListItem>
         open={open}
-        referenceRef={referenceRef}
-        panelElement={panelElement}
-        interactiveRefs={interactiveRefs}
-        onClose={handlePickerClose}
-        widthClass="w-[156px]"
-        estimatedWidth={164}
-        estimatedHeight={276}
+        pageTitle={pageTitle}
+        onBack={onBack}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         searchPlaceholder={t('soundPicker.searchPlaceholder') || '검색'}
         filterOptions={filterOptions}
         filterValue={filterType}
-        onFilterChange={(value) => setFilterType(value as 'all' | 'local')}
+        onFilterChange={(value) =>
+          setFilterType(value as 'all' | 'local' | 'hidden')
+        }
         items={filteredSounds}
-        getItemKey={(item) => item.soundPath}
         renderItem={(item) => {
           const isSelected = item.soundPath === normalizedSelectedSound;
-          const isLocal = item.source === 'local';
           const displayName = item.displayName || item.fileName;
 
           return (
@@ -217,23 +267,21 @@ const SoundPicker = ({
               key={item.soundPath}
               role="button"
               tabIndex={0}
-              onClick={() => onSoundSelect(item.soundPath)}
+              onClick={() => onSoundSelect(isSelected ? '' : item.soundPath)}
               onKeyDown={(event) => {
                 if (event.target !== event.currentTarget) return;
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
-                  onSoundSelect(item.soundPath);
+                  onSoundSelect(isSelected ? '' : item.soundPath);
                 }
               }}
-              onContextMenu={
-                isLocal
-                  ? (event) => menu.openFromContextMenu(event, item.soundPath)
-                  : undefined
+              onContextMenu={(event) =>
+                menu.openFromContextMenu(event, item.soundPath)
               }
-              className={`w-full h-[24px] px-[8px] rounded-[7px] text-style-4 transition-colors flex items-center gap-[4px] cursor-pointer group ${
+              className={`${pickerRowClass} cursor-pointer ${
                 isSelected
-                  ? 'bg-[#2E2D33] text-[#FFFFFF]'
-                  : 'text-[#DBDEE8] hover:bg-[#26262C]'
+                  ? 'bg-surface-active text-fg'
+                  : 'text-fg hover:bg-surface-hover'
               }`}
               title={displayName}
             >
@@ -241,7 +289,7 @@ const SoundPicker = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-[#FFFFFF] caret-[#3B82F6]"
+                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-label text-fg caret-accent"
                   value={renameValue}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBlur={() => {
@@ -268,31 +316,27 @@ const SoundPicker = ({
                 </span>
               )}
 
-              {isLocal ? (
-                <button
-                  type="button"
-                  className={`w-[18px] h-[18px] rounded-[5px] transition-all flex items-center justify-center shrink-0 ${
-                    isSelected || menu.menuKey === item.soundPath
-                      ? 'opacity-100'
-                      : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
-                  } ${
-                    isSelected
-                      ? 'text-[#D9DCE6] hover:text-[#FFFFFF]'
-                      : 'text-[#8A8D99] hover:text-[#DBDEE8]'
-                  }`}
-                  title={moreMenuLabel}
-                  aria-label={moreMenuLabel}
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    menu.capturePressState(item.soundPath);
-                  }}
-                  onClick={(event) =>
-                    menu.openFromButton(event, item.soundPath)
-                  }
-                >
-                  <MoreVerticalIcon />
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className={`${pickerMoreButtonClass} ${
+                  isSelected || menu.menuKey === item.soundPath
+                    ? pickerMoreButtonVisibleClass
+                    : pickerMoreButtonHiddenClass
+                } ${
+                  isSelected
+                    ? 'text-fg hover:text-fg'
+                    : 'text-fg-muted hover:text-fg'
+                }`}
+                title={moreMenuLabel}
+                aria-label={moreMenuLabel}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  menu.capturePressState(item.soundPath);
+                }}
+                onClick={(event) => menu.openFromButton(event, item.soundPath)}
+              >
+                <MoreVerticalIcon />
+              </button>
             </div>
           );
         }}
@@ -300,8 +344,12 @@ const SoundPicker = ({
         isLoading={isLoading}
         loadingText={t('propertiesPanel.loading') || '로딩...'}
         errorText={loadError}
-        onAdd={() => addFileInputRef.current?.click()}
-        addButtonContent={<PlusIcon />}
+        onAdd={() => {
+          // 시트를 먼저 띄우고 대화상자를 열어 닫힘 순간 캔버스 노출 방지
+          setTrimState({ mode: 'create', file: null });
+          addFileInputRef.current?.click();
+        }}
+        addLabel={t('soundPicker.add') || '사운드 추가'}
       />
 
       <input
@@ -315,9 +363,9 @@ const SoundPicker = ({
       {menu.menuKey !== null && (
         <ListPopup
           open
+          ariaLabel={t('common.more')}
           position={menu.menuPosition ?? undefined}
           onClose={menu.close}
-          textAlign="center"
           items={menuItems}
           onSelect={(id) => {
             const item = menuTargetItem;
@@ -325,6 +373,8 @@ const SoundPicker = ({
             if (!item) return;
             if (id === 'edit') {
               setTrimState({ mode: 'edit', item });
+            } else if (id === 'toggle-hidden') {
+              void handleToggleHidden(item);
             } else if (id === 'rename') {
               renameCancelledRef.current = false;
               setRenameValue(item.displayName || item.fileName);
@@ -333,7 +383,6 @@ const SoundPicker = ({
               void handleDelete(item);
             }
           }}
-          className="z-[60]"
           offsetX={0}
           offsetY={0}
         />

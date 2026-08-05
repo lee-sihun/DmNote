@@ -1,19 +1,51 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { StyleTabContentProps } from '../types';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
+  PropertySection,
   NumberInput,
   TextInput,
   FontStyleToggle,
-  SectionDivider,
 } from '../PropertyInputs';
+import { usePanelNav } from '../PanelNavContext';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
+import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
+import ShadowControls from '../ShadowControls';
+import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import {
+  getActivePairPreservation,
+  gradientPairPatch,
+  gradientToCss,
+  type ColorModeValue,
+  type GradientSpec,
+} from '@src/types/color';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_BORDER,
+  DEFAULT_ELEMENT_ACTIVE_BORDER,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
+  DEFAULT_ELEMENT_RADIUS,
+  DEFAULT_ELEMENT_FONT_WEIGHT,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+} from '@utils/core/elementDefaults';
+import { resolveElementShadow } from '@src/types/key/shadows';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+
+// 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
+const FONT_PAGE_KEY = 'single-style:font';
+const SOUND_PAGE_KEY = 'single-style:sound';
 
 // 피커 타겟 타입
 type PickerTarget =
@@ -21,11 +53,11 @@ type PickerTarget =
   | 'borderColor'
   | 'fontColor'
   | 'image'
-  | 'font'
   | null;
 
 type ColorState = 'idle' | 'active';
 type StyleColorTarget = 'backgroundColor' | 'borderColor' | 'fontColor';
+type GradientColorTarget = 'backgroundColor' | 'borderColor';
 type ActiveStyleColorProperty =
   | 'activeBackgroundColor'
   | 'activeBorderColor'
@@ -65,11 +97,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   mappingLabel,
   hideDisplayText = false,
   showSoundControls = true,
+  shadowActiveState = true,
   showImagePicker = false,
   onToggleImagePicker,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
+  canvasAnchor,
   t,
   // 로컬 상태
   localDx,
@@ -82,29 +116,59 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onLocalHeightChange,
   onSizeBlur,
 }) => {
-  const DEFAULT_KEY_BACKGROUND_COLOR = 'rgba(46, 46, 47, 0.9)';
-  const DEFAULT_KEY_BORDER_COLOR = 'rgba(113, 113, 113, 0.9)';
-  const DEFAULT_KEY_FONT_COLOR = 'rgba(121, 121, 121, 0.9)';
-  const DEFAULT_KEY_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
-  const DEFAULT_KEY_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
-  const DEFAULT_KEY_ACTIVE_FONT_COLOR = '#FFFFFF';
+  const DEFAULT_KEY_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
+  const DEFAULT_KEY_BORDER_COLOR = DEFAULT_ELEMENT_BORDER;
+  const DEFAULT_KEY_FONT_COLOR = DEFAULT_ELEMENT_FONT;
+  const DEFAULT_KEY_ACTIVE_BACKGROUND_COLOR = DEFAULT_ELEMENT_ACTIVE_BG;
+  const DEFAULT_KEY_ACTIVE_BORDER_COLOR = DEFAULT_ELEMENT_ACTIVE_BORDER;
+  const DEFAULT_KEY_ACTIVE_FONT_COLOR = DEFAULT_ELEMENT_ACTIVE_FONT;
 
   // 개별 편집 모드인지 확인 (로컬 상태 핸들러가 없으면 개별 편집 모드)
   const isIndividualMode = !onLocalDxChange;
+  const hasIdleImage = Boolean(keyPosition.inactiveImage?.trim());
+  const hasActiveImage = Boolean(
+    keyPosition.activeImage?.trim() || keyPosition.inactiveImage?.trim(),
+  );
+  const idleShadow = resolveElementShadow({
+    active: false,
+    shadow: keyPosition.shadow,
+    activeShadow: keyPosition.activeShadow,
+    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+    suppressDefault: hasIdleImage,
+  });
+  const activeShadow = resolveElementShadow({
+    active: true,
+    shadow: keyPosition.shadow,
+    activeShadow: keyPosition.activeShadow,
+    defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+    defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+    suppressDefault: hasActiveImage,
+  });
 
   // 통합 피커 상태
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const [colorState, setColorState] = useState<ColorState>('idle');
+  const effectiveColorState = shadowActiveState ? colorState : 'idle';
+  const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
+
+  useEffect(() => {
+    if (!shadowActiveState) {
+      setColorState('idle');
+      setPickerFor(null);
+    }
+  }, [shadowActiveState]);
 
   // 컬러 버튼 refs
   const bgColorBtnRef = useRef<HTMLButtonElement>(null);
   // 폰트 버튼 ref
-  const fontButtonRef = useRef<HTMLButtonElement>(null);
-  const soundButtonRef = useRef<HTMLButtonElement>(null);
-  const [showSoundPicker, setShowSoundPicker] = useState(false);
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
   const internalImageButtonRef = useRef<HTMLButtonElement>(null);
+
+  // 인-패널 내비게이션 (사운드/폰트 서브 페이지)
+  const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
+    usePanelNav();
 
   // 로컬 색상 상태 (드래그 중 UI 업데이트용)
   const [localColors, setLocalColors] = useState<
@@ -199,7 +263,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const resolveColorProperty = (
     target: StyleColorTarget,
   ): StyleColorProperty => {
-    if (colorState !== 'active') return target;
+    if (effectiveColorState !== 'active') return target;
     switch (target) {
       case 'backgroundColor':
         return 'activeBackgroundColor';
@@ -222,6 +286,22 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         return 'activeBorderColor';
       case 'fontColor':
         return 'activeFontColor';
+    }
+  };
+
+  // 상태별 저장된 gradient 형제 값
+  const storedGradientOf = (prop: StyleColorProperty): GradientSpec | null => {
+    switch (prop) {
+      case 'backgroundColor':
+        return keyPosition.backgroundGradient ?? null;
+      case 'activeBackgroundColor':
+        return keyPosition.activeBackgroundGradient ?? null;
+      case 'borderColor':
+        return keyPosition.borderGradient ?? null;
+      case 'activeBorderColor':
+        return keyPosition.activeBorderGradient ?? null;
+      default:
+        return null;
     }
   };
 
@@ -251,18 +331,121 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       [prop]: color,
     } as Partial<KeyPosition>;
 
-    // "idle" 상태에서만 변경했을 때 active 값이 비어 있으면,
-    // 현재 표시되던 active 값을 함께 저장해(active가 idle로 덮이는 현상 방지)
-    if (colorState !== 'active') {
+    // idle 편집 전 사용자 저장값 기준 active 모습 보존
+    if (shadowActiveState && effectiveColorState !== 'active') {
       const activeProp = activeColorPropertyFor(target);
-      const currentActive = keyPosition[activeProp];
-      if (!isNonEmptyString(currentActive)) {
-        updates[activeProp] = localColors[activeProp];
+      const preservation = getActivePairPreservation(
+        {
+          color: keyPosition[target],
+          gradient: storedGradientOf(target),
+        },
+        {
+          color: keyPosition[activeProp],
+          gradient: storedGradientOf(activeProp),
+        },
+      );
+      if (preservation?.color !== undefined) {
+        updates[activeProp] = preservation.color;
+      }
+      if (target !== 'fontColor' && preservation?.gradient !== undefined) {
+        const activeSibling =
+          target === 'backgroundColor'
+            ? 'activeBackgroundGradient'
+            : 'activeBorderGradient';
+        updates[activeSibling] = preservation.gradient;
       }
     }
 
     onKeyUpdate({ index: keyIndex, ...updates });
   };
+
+  // ── 그라데이션 배선 (배경·테두리 전용, 글꼴 색상은 단색 유지) ──
+
+  const gradientTarget: GradientColorTarget | null =
+    pickerFor === 'backgroundColor' || pickerFor === 'borderColor'
+      ? pickerFor
+      : null;
+
+  const gradientSpecFor = (
+    target: GradientColorTarget,
+  ): GradientSpec | null => {
+    const idleGradient = storedGradientOf(target);
+    if (effectiveColorState !== 'active') return idleGradient;
+    const activeProp = activeColorPropertyFor(target);
+    const activeGradient = storedGradientOf(activeProp);
+    const activeHasValue =
+      isNonEmptyString(keyPosition[activeProp]) || activeGradient != null;
+    return activeHasValue ? activeGradient : idleGradient;
+  };
+
+  const handleGradientPreview = (value: ColorModeValue) => {
+    if (!gradientTarget) return;
+    if (value.mode === 'solid') handleColorChange(gradientTarget, value.color);
+  };
+
+  const handleGradientCommit = (value: ColorModeValue) => {
+    if (!gradientTarget) return;
+    const prop = resolveColorProperty(gradientTarget);
+    const patch = gradientPairPatch(
+      prop as Parameters<typeof gradientPairPatch>[0],
+      value,
+    ) as Partial<KeyPosition>;
+
+    const baseColor = patch[prop];
+    if (typeof baseColor === 'string') {
+      setLocalColors((prev) => ({ ...prev, [prop]: baseColor }));
+    }
+
+    const updates: Partial<KeyPosition> = { ...patch };
+
+    // idle 편집 전 사용자 저장값 기준 active 쌍 보존
+    if (shadowActiveState && effectiveColorState !== 'active') {
+      const activeProp = activeColorPropertyFor(gradientTarget);
+      const preservation = getActivePairPreservation(
+        {
+          color: keyPosition[gradientTarget],
+          gradient: storedGradientOf(gradientTarget),
+        },
+        {
+          color: keyPosition[activeProp],
+          gradient: storedGradientOf(activeProp),
+        },
+      );
+      if (preservation?.color !== undefined) {
+        updates[activeProp] = preservation.color;
+      }
+      if (preservation?.gradient !== undefined) {
+        const activeSibling =
+          gradientTarget === 'backgroundColor'
+            ? 'activeBackgroundGradient'
+            : 'activeBorderGradient';
+        updates[activeSibling] = preservation.gradient;
+      }
+    }
+
+    onKeyUpdate({ index: keyIndex, ...updates });
+  };
+
+  const gradientState = useGradientColorState({
+    pair: gradientTarget
+      ? {
+          color: colorValueFor(gradientTarget),
+          gradient: gradientSpecFor(gradientTarget),
+        }
+      : {},
+    fallbackColor: '#ffffff',
+    // 요소 종류·키 모드 포함 — 형식 왕복 기억이 다른 대상과 교차하지 않게
+    contextKey: `${
+      canvasAnchor?.kind ?? 'key'
+    }:${selectedKeyType}:${keyIndex}:${
+      pickerFor ?? 'none'
+    }:${effectiveColorState}`,
+    canvasAnchor: gradientTarget ? canvasAnchor : undefined,
+    canvasSurface: gradientTarget === 'borderColor' ? 'border' : 'background',
+    canvasState: effectiveColorState,
+    onPreview: handleGradientPreview,
+    onCommit: handleGradientCommit,
+  });
 
   // 위치 변경 핸들러
   const handlePositionXChange = (value: number) => {
@@ -298,8 +481,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     }
   };
 
-  // 스타일 변경 핸들러
-  const _handleStyleChange = (
+  // 타이핑 중 스타일 프리뷰
+  const handleStylePreview = (
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => {
@@ -359,10 +542,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     onKeyPreview?.(keyIndex, { displayText: value });
   };
 
-  const handleDisplayTextBlur = () => {
+  const handleDisplayTextBlur = (value: string) => {
     onKeyUpdate({
       index: keyIndex,
-      displayText: keyPosition.displayText || '',
+      displayText: value,
     });
   };
 
@@ -371,8 +554,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     onKeyPreview?.(keyIndex, { className: value });
   };
 
-  const handleClassNameBlur = () => {
-    onKeyUpdate({ index: keyIndex, className: keyPosition.className || '' });
+  const handleClassNameBlur = (value: string) => {
+    onKeyUpdate({ index: keyIndex, className: value });
   };
 
   // 이미지 피커 열림 상태 (외부 또는 내부)
@@ -392,27 +575,23 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     <>
       {/* 키 매핑(또는 통계 종류 등 대체 컨트롤) - 단일 선택 모드에서만 표시 */}
       {mappingControlLayout ? (
-        <>
-          {mappingControlLayout}
-          <SectionDivider />
-        </>
+        <PropertySection>{mappingControlLayout}</PropertySection>
       ) : mappingControl ? (
-        <>
+        <PropertySection>
           <PropertyRow
             label={mappingLabel || t('propertiesPanel.keyMapping') || '키 매핑'}
           >
             {mappingControl}
           </PropertyRow>
-          <SectionDivider />
-        </>
+        </PropertySection>
       ) : onKeyListen ? (
-        <>
+        <PropertySection>
           <PropertyRow label={t('propertiesPanel.keyMapping') || '키 매핑'}>
             <button
               onClick={onKeyListen}
-              className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                isListening ? 'border-[#459BF8]' : 'border-[#3A3943]'
-              } text-[#DBDEE8] text-style-2`}
+              className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
+                isListening ? 'shadow-focus-ring' : ''
+              } text-fg text-label`}
             >
               {isListening
                 ? t('propertiesPanel.pressAnyKey') || 'Press any key'
@@ -421,233 +600,282 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                   'Click to set'}
             </button>
           </PropertyRow>
-          <SectionDivider />
-        </>
+        </PropertySection>
       ) : null}
 
-      {/* 위치 */}
-      <PropertyRow label={t('propertiesPanel.position') || '위치'}>
-        <NumberInput
-          value={isIndividualMode ? keyPosition.dx : localDx ?? keyPosition.dx}
-          onChange={handlePositionXChange}
-          prefix="X"
-          min={-9999}
-          max={9999}
-          allowDecimal
-          decimalScale={1}
-        />
-        <NumberInput
-          value={isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy}
-          onChange={handlePositionYChange}
-          prefix="Y"
-          min={-9999}
-          max={9999}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
+      {/* 위치·크기 */}
+      <PropertySection>
+        <PropertyRow label={t('propertiesPanel.position') || '위치'}>
+          <NumberInput
+            value={
+              isIndividualMode ? keyPosition.dx : localDx ?? keyPosition.dx
+            }
+            onChange={handlePositionXChange}
+            onPreview={(value) => handleStylePreview('dx', value)}
+            onCancel={() => editGestureController.cancel()}
+            prefix="X"
+            min={-9999}
+            max={9999}
+            allowDecimal
+            decimalScale={1}
+          />
+          <NumberInput
+            value={
+              isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy
+            }
+            onChange={handlePositionYChange}
+            onPreview={(value) => handleStylePreview('dy', value)}
+            onCancel={() => editGestureController.cancel()}
+            prefix="Y"
+            min={-9999}
+            max={9999}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
 
-      {/* 크기 */}
-      <PropertyRow label={t('propertiesPanel.size') || '크기'}>
-        <NumberInput
-          value={
-            isIndividualMode
-              ? keyPosition.width ?? 60
-              : localWidth ?? keyPosition.width ?? 60
-          }
-          onChange={handleWidthChange}
-          onBlur={onSizeBlur}
-          prefix="W"
-          min={1}
-          max={999}
-          allowDecimal
-          decimalScale={1}
-        />
-        <NumberInput
-          value={
-            isIndividualMode
-              ? keyPosition.height ?? 60
-              : localHeight ?? keyPosition.height ?? 60
-          }
-          onChange={handleHeightChange}
-          onBlur={onSizeBlur}
-          prefix="H"
-          min={1}
-          max={999}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
+        {/* 크기 */}
+        <PropertyRow label={t('propertiesPanel.size') || '크기'}>
+          <NumberInput
+            value={
+              isIndividualMode
+                ? keyPosition.width ?? 60
+                : localWidth ?? keyPosition.width ?? 60
+            }
+            onChange={handleWidthChange}
+            onBlur={onSizeBlur}
+            onCancel={() => editGestureController.cancel()}
+            prefix="W"
+            min={1}
+            max={999}
+            allowDecimal
+            decimalScale={1}
+          />
+          <NumberInput
+            value={
+              isIndividualMode
+                ? keyPosition.height ?? 60
+                : localHeight ?? keyPosition.height ?? 60
+            }
+            onChange={handleHeightChange}
+            onBlur={onSizeBlur}
+            onCancel={() => editGestureController.cancel()}
+            prefix="H"
+            min={1}
+            max={999}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+      </PropertySection>
 
-      <SectionDivider />
-
-      {/* 배경색 */}
-      <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
-        <button
-          ref={bgColorBtnRef}
-          type="button"
-          onClick={() => handlePickerToggle('backgroundColor')}
-          className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'backgroundColor'
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] hover:border-[#505058]'
-          }`}
-          style={{
-            backgroundColor: getDisplayColor(colorValueFor('backgroundColor')),
-          }}
-        />
-      </PropertyRow>
-
-      {/* 테두리 색상 */}
-      <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
-        <button
-          ref={borderColorBtnRef}
-          type="button"
-          onClick={() => handlePickerToggle('borderColor')}
-          className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'borderColor'
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] hover:border-[#505058]'
-          }`}
-          style={{
-            backgroundColor: getDisplayColor(colorValueFor('borderColor')),
-          }}
-        />
-      </PropertyRow>
-
-      {/* 테두리 두께 */}
-      <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
-        <NumberInput
-          value={keyPosition.borderWidth ?? 3}
-          onChange={(value) => handleStyleChangeComplete('borderWidth', value)}
-          suffix="px"
-          min={0}
-          max={20}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
-
-      {/* 모서리 반경 */}
-      <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
-        <NumberInput
-          value={keyPosition.borderRadius ?? 10}
-          onChange={(value) => handleStyleChangeComplete('borderRadius', value)}
-          suffix="px"
-          min={0}
-          max={100}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
-
-      {/* 커스텀 이미지 - 단일 선택 모드에서만 표시 */}
-      {onToggleImagePicker && imageButtonRef && (
-        <PropertyRow
-          label={t('propertiesPanel.customImage') || '커스텀 이미지'}
-        >
-          <button
-            ref={imageButtonRef}
+      {/* 외형 */}
+      <PropertySection>
+        {/* 배경색 */}
+        <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
+          <ColorSwatchButton
+            ref={bgColorBtnRef}
             type="button"
-            className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-              showImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-            } text-[#DBDEE8] text-style-4`}
-            onClick={onToggleImagePicker}
+            onClick={() => handlePickerToggle('backgroundColor')}
+            open={pickerFor === 'backgroundColor'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(colorValueFor('backgroundColor'))}
+            image={(() => {
+              const spec = gradientSpecFor('backgroundColor');
+              return spec ? gradientToCss(spec) : undefined;
+            })()}
+          />
+        </PropertyRow>
+
+        {/* 테두리 색상 */}
+        <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
+          <ColorSwatchButton
+            ref={borderColorBtnRef}
+            type="button"
+            onClick={() => handlePickerToggle('borderColor')}
+            open={pickerFor === 'borderColor'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(colorValueFor('borderColor'))}
+            image={(() => {
+              const spec = gradientSpecFor('borderColor');
+              return spec ? gradientToCss(spec) : undefined;
+            })()}
+          />
+        </PropertyRow>
+
+        {/* 테두리 두께 */}
+        <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
+          <NumberInput
+            value={keyPosition.borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH}
+            onChange={(value) =>
+              handleStyleChangeComplete('borderWidth', value)
+            }
+            onPreview={(value) => handleStylePreview('borderWidth', value)}
+            onCancel={() => editGestureController.cancel()}
+            suffix="px"
+            min={0}
+            max={20}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+
+        {/* 모서리 반경 */}
+        <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
+          <NumberInput
+            value={keyPosition.borderRadius ?? DEFAULT_ELEMENT_RADIUS}
+            onChange={(value) =>
+              handleStyleChangeComplete('borderRadius', value)
+            }
+            onPreview={(value) => handleStylePreview('borderRadius', value)}
+            onCancel={() => editGestureController.cancel()}
+            suffix="px"
+            min={0}
+            max={100}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+
+        {/* 커스텀 이미지 - 단일 선택 모드에서만 표시 */}
+        {onToggleImagePicker && imageButtonRef && (
+          <PropertyRow
+            label={t('propertiesPanel.customImage') || '커스텀 이미지'}
+          >
+            <button
+              ref={imageButtonRef}
+              type="button"
+              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                showImagePicker ? 'shadow-focus-ring' : ''
+              } text-fg text-body`}
+              onClick={onToggleImagePicker}
+            >
+              {t('propertiesPanel.configure') || '설정하기'}
+            </button>
+          </PropertyRow>
+        )}
+      </PropertySection>
+
+      <ShadowControls
+        idleShadow={idleShadow}
+        activeShadow={activeShadow}
+        showActiveState={shadowActiveState}
+        onChange={(state, shadow) =>
+          onKeyUpdate({
+            index: keyIndex,
+            [state === 'active' ? 'activeShadow' : 'shadow']: shadow,
+          })
+        }
+        onEnabledChange={(enabled) =>
+          onKeyUpdate({
+            index: keyIndex,
+            shadow: { ...idleShadow, enabled },
+            // 눌림 상태가 없는 요소는 activeShadow를 기록하지 않음
+            ...(shadowActiveState
+              ? { activeShadow: { ...activeShadow, enabled } }
+              : {}),
+          })
+        }
+        panelElement={panelElement}
+        t={t}
+      />
+
+      {/* 텍스트·폰트 */}
+      <PropertySection>
+        {/* 표시 텍스트 */}
+        {!hideDisplayText && (
+          <PropertyRow
+            label={t('propertiesPanel.displayText') || '표시 텍스트'}
+          >
+            <TextInput
+              value={keyPosition.displayText || ''}
+              onChange={handleDisplayTextChange}
+              onBlur={handleDisplayTextBlur}
+              onCancel={() => editGestureController.cancel()}
+              placeholder={keyInfo?.displayName || ''}
+              width="54px"
+            />
+          </PropertyRow>
+        )}
+
+        {/* 폰트 */}
+        <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
+          <button
+            type="button"
+            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
+            } text-fg text-body`}
+            onClick={() => {
+              setPickerFor(null);
+              if (activePageKey === FONT_PAGE_KEY) closePage();
+              else openPage(FONT_PAGE_KEY);
+            }}
           >
             {t('propertiesPanel.configure') || '설정하기'}
           </button>
         </PropertyRow>
-      )}
 
-      <SectionDivider />
-
-      {/* 표시 텍스트 */}
-      {!hideDisplayText && (
-        <PropertyRow label={t('propertiesPanel.displayText') || '표시 텍스트'}>
-          <TextInput
-            value={keyPosition.displayText || ''}
-            onChange={handleDisplayTextChange}
-            onBlur={handleDisplayTextBlur}
-            placeholder={keyInfo?.displayName || ''}
-            width="54px"
+        {/* 글꼴 크기 */}
+        <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
+          <NumberInput
+            value={keyPosition.fontSize ?? 14}
+            onChange={(value) => handleStyleChangeComplete('fontSize', value)}
+            onPreview={(value) => handleStylePreview('fontSize', value)}
+            onCancel={() => editGestureController.cancel()}
+            suffix="px"
+            min={8}
+            max={72}
+            allowDecimal
+            decimalScale={1}
           />
         </PropertyRow>
-      )}
 
-      {/* 폰트 */}
-      <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
-        <button
-          ref={fontButtonRef}
-          type="button"
-          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-            pickerFor === 'font' ? 'border-[#459BF8]' : 'border-[#3A3943]'
-          } text-[#DBDEE8] text-style-4`}
-          onClick={() => handlePickerToggle('font')}
-        >
-          {t('propertiesPanel.configure') || '설정하기'}
-        </button>
-      </PropertyRow>
+        {/* 글꼴 색상 */}
+        <PropertyRow label={t('propertiesPanel.fontColor') || '글꼴 색상'}>
+          <ColorSwatchButton
+            ref={fontColorBtnRef}
+            type="button"
+            onClick={() => handlePickerToggle('fontColor')}
+            open={pickerFor === 'fontColor'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(colorValueFor('fontColor'))}
+          />
+        </PropertyRow>
 
-      {/* 글꼴 크기 */}
-      <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
-        <NumberInput
-          value={keyPosition.fontSize ?? 14}
-          onChange={(value) => handleStyleChangeComplete('fontSize', value)}
-          suffix="px"
-          min={8}
-          max={72}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
-
-      {/* 글꼴 색상 */}
-      <PropertyRow label={t('propertiesPanel.fontColor') || '글꼴 색상'}>
-        <button
-          ref={fontColorBtnRef}
-          type="button"
-          onClick={() => handlePickerToggle('fontColor')}
-          className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'fontColor'
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] hover:border-[#505058]'
-          }`}
-          style={{
-            backgroundColor: getDisplayColor(colorValueFor('fontColor')),
-          }}
-        />
-      </PropertyRow>
-
-      {/* 글꼴 스타일 */}
-      <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
-        <FontStyleToggle
-          isBold={(keyPosition.fontWeight ?? 700) >= 700}
-          isItalic={keyPosition.fontItalic ?? false}
-          isUnderline={keyPosition.fontUnderline ?? false}
-          isStrikethrough={keyPosition.fontStrikethrough ?? false}
-          onBoldChange={(value) =>
-            handleStyleChangeComplete('fontWeight', value ? 700 : 400)
-          }
-          onItalicChange={(value) =>
-            handleStyleChangeComplete('fontItalic', value)
-          }
-          onUnderlineChange={(value) =>
-            handleStyleChangeComplete('fontUnderline', value)
-          }
-          onStrikethroughChange={(value) =>
-            handleStyleChangeComplete('fontStrikethrough', value)
-          }
-        />
-      </PropertyRow>
+        {/* 글꼴 스타일 */}
+        <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
+          <FontStyleToggle
+            isBold={
+              (keyPosition.fontWeight ?? DEFAULT_ELEMENT_FONT_WEIGHT) >= 700
+            }
+            isItalic={keyPosition.fontItalic ?? false}
+            isUnderline={keyPosition.fontUnderline ?? false}
+            isStrikethrough={keyPosition.fontStrikethrough ?? false}
+            onBoldChange={(value) =>
+              handleStyleChangeComplete('fontWeight', value ? 700 : 400)
+            }
+            onItalicChange={(value) =>
+              handleStyleChangeComplete('fontItalic', value)
+            }
+            onUnderlineChange={(value) =>
+              handleStyleChangeComplete('fontUnderline', value)
+            }
+            onStrikethroughChange={(value) =>
+              handleStyleChangeComplete('fontStrikethrough', value)
+            }
+          />
+        </PropertyRow>
+      </PropertySection>
 
       {/* 커스텀 CSS 활성화 시에만 클래스명 및 CSS 우선순위 표시 */}
       {useCustomCSS && (
-        <>
-          <SectionDivider />
-
+        <PropertySection>
           {/* CSS 우선순위 토글 */}
-          <div className="flex justify-between items-center w-full h-[23px]">
-            <p className="text-white text-style-2">
+          <div className="flex justify-between items-center w-full min-h-[32px]">
+            <p className="text-fg-muted text-label">
               {t('propertiesPanel.useInlineStyles') || '인라인 스타일 우선'}
             </p>
             <Checkbox
@@ -667,17 +895,16 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               value={keyPosition.className || ''}
               onChange={handleClassNameChange}
               onBlur={handleClassNameBlur}
+              onCancel={() => editGestureController.cancel()}
               placeholder="className"
               width="90px"
             />
           </PropertyRow>
-        </>
+        </PropertySection>
       )}
 
       {showSoundControls && (
-        <>
-          <SectionDivider />
-
+        <PropertySection>
           <PropertyRow
             label={t('propertiesPanel.keySoundEnabled') || '키 사운드 활성화'}
           >
@@ -693,14 +920,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
           <PropertyRow label={t('propertiesPanel.keySound') || '키 사운드'}>
             <button
-              ref={soundButtonRef}
               type="button"
-              className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                showSoundPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-              } text-[#DBDEE8] text-style-4`}
+              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                activePageKey === SOUND_PAGE_KEY ? 'shadow-focus-ring' : ''
+              } text-fg text-body`}
               onClick={() => {
                 setPickerFor(null);
-                setShowSoundPicker((prev) => !prev);
+                if (activePageKey === SOUND_PAGE_KEY) closePage();
+                else openPage(SOUND_PAGE_KEY);
               }}
             >
               {t('propertiesPanel.configure') || '설정하기'}
@@ -718,12 +945,19 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                   Math.max(0, Math.min(200, value)),
                 )
               }
+              onPreview={(value) =>
+                handleStylePreview(
+                  'soundVolume',
+                  Math.max(0, Math.min(200, value)),
+                )
+              }
+              onCancel={() => editGestureController.cancel()}
               suffix="%"
               min={0}
               max={200}
             />
           </PropertyRow>
-        </>
+        </PropertySection>
       )}
 
       {/* 이미지 픽커 팝업 - 단일 선택 모드에서만 */}
@@ -751,11 +985,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           onIdleImageReset={handleIdleImageReset}
           onActiveImageReset={handleActiveImageReset}
           onClose={() => onToggleImagePicker()}
+          showActiveState={shadowActiveState}
         />
       )}
 
       {/* 통합 ColorPicker - 단일 인스턴스로 깜빡임 없이 전환 */}
-      {pickerFor && pickerFor !== 'image' && pickerFor !== 'font' && (
+      {pickerFor && pickerFor !== 'image' && (
         <ColorPicker
           open={!!pickerFor}
           referenceRef={
@@ -766,53 +1001,72 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               : fontColorBtnRef
           }
           panelElement={panelElement}
-          color={colorValueFor(pickerFor as StyleColorTarget)}
+          color={
+            gradientTarget
+              ? gradientState.pickerColor
+              : colorValueFor(pickerFor as StyleColorTarget)
+          }
           onColorChange={(c: string) =>
-            handleColorChange(pickerFor as StyleColorTarget, c)
+            gradientTarget
+              ? gradientState.handlePickerColorChange(c, false)
+              : handleColorChange(pickerFor as StyleColorTarget, c)
           }
           onColorChangeComplete={(c: string) =>
-            handleColorChangeComplete(pickerFor as StyleColorTarget, c)
+            gradientTarget
+              ? gradientState.handlePickerColorChange(c, true)
+              : handleColorChangeComplete(pickerFor as StyleColorTarget, c)
           }
           onClose={() => setPickerFor(null)}
           solidOnly={true}
-          stateMode={colorState}
-          onStateModeChange={setColorState}
+          stateMode={shadowActiveState ? effectiveColorState : undefined}
+          onStateModeChange={shadowActiveState ? setColorState : undefined}
           interactiveRefs={colorPickerInteractiveRefs}
+          headerSlot={gradientTarget ? gradientState.headerSlot : undefined}
+          footerSlot={gradientTarget ? gradientState.footerSlot : undefined}
+          gradientSpec={
+            gradientTarget ? gradientState.paletteGradientSpec : undefined
+          }
+          onGradientSpecSelect={
+            gradientTarget ? gradientState.handleGradientSpecSelect : undefined
+          }
         />
       )}
 
-      {/* FontPicker */}
-      {pickerFor === 'font' && (
-        <FontPicker
-          open={true}
-          referenceRef={fontButtonRef}
-          panelElement={panelElement}
-          selectedFont={keyPosition.fontFamily || null}
-          onFontSelect={(fontName) => {
-            handleStyleChangeComplete('fontFamily', fontName);
-          }}
-          onClose={() => setPickerFor(null)}
-          interactiveRefs={[fontButtonRef]}
-        />
-      )}
+      {/* FontPicker — 패널 서브 페이지 */}
+      {renderPageKey === FONT_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <FontPicker
+            open
+            selectedFont={keyPosition.fontFamily || null}
+            onFontSelect={(fontName) => {
+              handleStyleChangeComplete('fontFamily', fontName);
+            }}
+            pageTitle={t('propertiesPanel.font') || '폰트'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
 
-      {/* SoundPicker */}
-      {showSoundControls && showSoundPicker && (
-        <SoundPicker
-          open={true}
-          referenceRef={soundButtonRef}
-          panelElement={panelElement}
-          selectedSound={keyPosition.soundPath || null}
-          onSoundSelect={(soundPath) => {
-            const nextPath = soundPath || '';
-            onKeyPreview?.(keyIndex, { soundPath: nextPath });
-            onKeyUpdate({ index: keyIndex, soundPath: nextPath });
-          }}
-          onClose={() => setShowSoundPicker(false)}
-          interactiveRefs={[soundButtonRef]}
-          previewVolume={keyPosition.soundVolume ?? 100}
-        />
-      )}
+      {/* SoundPicker — 패널 서브 페이지 */}
+      {showSoundControls &&
+        renderPageKey === SOUND_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <SoundPicker
+            open
+            selectedSound={keyPosition.soundPath || null}
+            onSoundSelect={(soundPath) => {
+              const nextPath = soundPath || '';
+              onKeyPreview?.(keyIndex, { soundPath: nextPath });
+              onKeyUpdate({ index: keyIndex, soundPath: nextPath });
+            }}
+            previewVolume={keyPosition.soundVolume ?? 100}
+            pageTitle={t('propertiesPanel.keySound') || '키 사운드'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
     </>
   );
 };

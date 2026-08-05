@@ -12,6 +12,8 @@ interface KeyPosition {
   height?: number;
   hidden?: boolean;
   counter?: unknown;
+  className?: string;
+  useInlineStyles?: boolean;
 }
 
 interface KeyCounterProps {

@@ -12,11 +12,11 @@ DM Note는 **htm** 라이브러리를 사용하여 템플릿을 React Element로
 
 ### 값 보간
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html }) => html`
   <div>현재 값: ${state.value}</div>
   <div style="color: ${settings.color};">색상 텍스트</div>
-`;
+`,
 ```
 
 <Callout type="warning">
@@ -110,7 +110,7 @@ html`
 
 ### 인라인 스타일
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html }) => html`
   <div
     style="
@@ -122,12 +122,12 @@ template: (state, settings, { html }) => html`
   >
     ${state.value}
   </div>
-`;
+`,
 ```
 
 ### `<style>` 태그
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html }) => html`
   <style>
     .panel {
@@ -150,14 +150,14 @@ template: (state, settings, { html }) => html`
     <div class="panel__value">${state.value}</div>
     <div class="panel__label">KPS</div>
   </div>
-`;
+`,
 ```
 
 ## 실전 예제
 
 ### 통계 패널
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html }) => html`
   <style>
     .stats-panel {
@@ -214,19 +214,19 @@ template: (state, settings, { html }) => html`
         `
       : ""}
   </div>
-`;
+`,
 ```
 
 ### 다국어 패널
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html, t, locale }) => html`
   <div class="panel" data-locale="${locale}">
     <h3>${t("title")}</h3>
     <p>${t("description")}</p>
     <div class="value">${t("count")}: ${state.count}</div>
   </div>
-`;
+`,
 ```
 
 ## 주의사항

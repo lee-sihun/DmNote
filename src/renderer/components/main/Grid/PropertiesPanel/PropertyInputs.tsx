@@ -1,19 +1,28 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type {
   PropertyRowProps,
   NumberInputProps,
   OptionalNumberInputProps,
   TextInputProps,
   ColorInputProps,
-  SelectInputProps,
   ToggleSwitchProps,
   TabButtonProps,
   TabsProps,
   FontStyleToggleProps,
 } from './types';
 import { TABS } from './types';
+import {
+  SECTION_CARD_CLASS,
+  FORM_ROW_CLASS,
+  FORM_LABEL_CLASS,
+} from '@utils/cardRecipes';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import { gradientToCss } from '@src/types/color';
+import { useTranslation } from '@contexts/useTranslation';
+import { registerEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
 
 // ============================================================================
 // 속성 행
@@ -23,9 +32,19 @@ export const PropertyRow: React.FC<PropertyRowProps> = ({
   label,
   children,
 }) => (
-  <div className="flex justify-between items-center w-full min-h-[23px]">
-    <p className="text-white text-style-2">{label}</p>
-    <div className="flex items-center gap-[10.5px]">{children}</div>
+  <div className={FORM_ROW_CLASS}>
+    <p className={FORM_LABEL_CLASS}>{label}</p>
+    <div className="flex items-center gap-[8px]">{children}</div>
+  </div>
+);
+
+// 그룹 카드 — 관련 속성 행을 하나의 면으로 묶는 섹션 컨테이너.
+// data 표식은 분리 창 피커가 좌우 정렬·폭을 맞추는 기준
+export const PropertySection: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => (
+  <div data-dmn-section="true" className={SECTION_CARD_CLASS}>
+    {children}
   </div>
 );
 
@@ -37,8 +56,11 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   value,
   onChange,
   onBlur,
-  min = 0,
-  max = 9999,
+  onPreview,
+  onCancel,
+  // 미지정 방향은 무제한 — 플러그인 설정 스키마의 optional min/max 계약과 동일
+  min = Number.NEGATIVE_INFINITY,
+  max = Number.POSITIVE_INFINITY,
   prefix,
   suffix,
   width = '54px',
@@ -117,6 +139,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   );
   const [isFocused, setIsFocused] = useState(false);
   const [hasUserInput, setHasUserInput] = useState(false);
+  // Escape로 blur된 경우 확정 없이 원복
+  const escapedRef = useRef(false);
 
   useEffect(() => {
     if (!isFocused) {
@@ -128,6 +152,22 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   // 숫자, 마이너스, 소수점(옵션), 백스페이스, Delete, 화살표, Tab, Enter만 허용
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter는 blur를 통해 확정, Escape는 확정 없이 원복
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
+      return;
+    }
+    if (e.key === 'Escape') {
+      // cancel 경로가 없는 입력은 기존 동작대로 무시 (비키 스토어 원복 불가)
+      if (onCancel) {
+        escapedRef.current = true;
+        e.currentTarget.blur();
+      } else {
+        e.preventDefault();
+      }
+      return;
+    }
+
     const allowedKeys = [
       'Backspace',
       'Delete',
@@ -136,7 +176,6 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       'ArrowUp',
       'ArrowDown',
       'Tab',
-      'Enter',
       'Home',
       'End',
     ];
@@ -183,13 +222,15 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
     const clamped = parseAndClamp(newValue);
     if (clamped !== null) {
-      onChange(clamped);
+      // 게스처 모드에서는 타이핑이 preview로만 흐름
+      (onPreview ?? onChange)(clamped);
     }
   };
 
   const handleFocus = () => {
     setIsFocused(true);
     setHasUserInput(false);
+    escapedRef.current = false;
     if (!isMixed) {
       const numericValue =
         typeof value === 'number'
@@ -203,6 +244,17 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   const handleBlur = () => {
     setIsFocused(false);
+
+    // Escape는 확정 없이 표시값 원복
+    if (escapedRef.current) {
+      escapedRef.current = false;
+      setLocalValue(isMixed ? '' : getDisplayValue(value, false));
+      setHasUserInput(false);
+      // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
+      onCancel?.();
+      return;
+    }
+
     const numericValue = sanitizeNumericInput(localValue);
 
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
@@ -238,12 +290,12 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
-        className={`text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
-        } text-style-4 ${
+        className={`text-center h-[23px] bg-inset rounded-md ${
+          isFocused ? 'shadow-focus-ring' : ''
+        } text-body tabular-nums ${
           showMixedPlaceholder
-            ? 'text-[#6B6D75] italic placeholder:text-[#6B6D75] placeholder:italic'
-            : 'text-[#DBDEE8]'
+            ? 'text-fg-faint italic placeholder:text-fg-faint placeholder:italic'
+            : 'text-fg'
         }`}
         style={{ width }}
       />
@@ -252,13 +304,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   return (
     <div
-      className={`relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-        isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+      className={`relative h-[23px] bg-inset rounded-md ${
+        isFocused ? 'shadow-focus-ring' : ''
       }`}
       style={{ width }}
     >
       {prefix && !showMixedPlaceholder && (
-        <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
+        <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
           {prefix}
         </span>
       )}
@@ -273,12 +325,12 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
         className={`absolute ${
           prefix && !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
-        } top-[-1px] h-[23px] ${
+        } top-0 h-[23px] ${
           prefix && !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
-        } bg-transparent text-style-4 ${
+        } bg-transparent text-body tabular-nums ${
           showMixedPlaceholder
-            ? 'text-[#6B6D75] italic placeholder:text-[#6B6D75] placeholder:italic'
-            : 'text-[#DBDEE8]'
+            ? 'text-fg-faint italic placeholder:text-fg-faint placeholder:italic'
+            : 'text-fg'
         } text-center`}
       />
     </div>
@@ -293,6 +345,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   value,
   onChange,
   onBlur,
+  onPreview,
+  onCancel,
   min = 0,
   max = 9999,
   prefix,
@@ -363,6 +417,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   });
   const [isFocused, setIsFocused] = useState(false);
   const [hasUserInput, setHasUserInput] = useState(false);
+  // Escape로 blur된 경우 확정 없이 원복
+  const escapedRef = useRef(false);
 
   useEffect(() => {
     if (!isFocused) {
@@ -377,6 +433,22 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   }, [value, isFocused, isMixed]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter는 blur를 통해 확정, Escape는 확정 없이 원복
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
+      return;
+    }
+    if (e.key === 'Escape') {
+      // cancel 경로가 없는 입력은 기존 동작대로 무시 (비키 스토어 원복 불가)
+      if (onCancel) {
+        escapedRef.current = true;
+        e.currentTarget.blur();
+      } else {
+        e.preventDefault();
+      }
+      return;
+    }
+
     const allowedKeys = [
       'Backspace',
       'Delete',
@@ -385,7 +457,6 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       'ArrowUp',
       'ArrowDown',
       'Tab',
-      'Enter',
       'Home',
       'End',
     ];
@@ -404,9 +475,10 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     setLocalValue(newValue);
     setHasUserInput(true);
 
+    const emit = onPreview ?? onChange;
     // 빈 값만 unset, 부호·소수점만 남은 중간 상태는 commit하지 않고 입력 유지
     if (newValue === '') {
-      onChange(undefined);
+      emit(undefined);
       return;
     }
     if (newValue === '-' || newValue === '.' || newValue === '-.') {
@@ -417,12 +489,13 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     if (!Number.isFinite(numValue)) return;
 
     const clamped = Math.min(Math.max(numValue, min), max);
-    onChange(normalizePrecision(clamped));
+    emit(normalizePrecision(clamped));
   };
 
   const handleFocus = () => {
     setIsFocused(true);
     setHasUserInput(false);
+    escapedRef.current = false;
     if (!isMixed && value != null) {
       setLocalValue(String(value));
     } else {
@@ -432,6 +505,21 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 
   const handleBlur = () => {
     setIsFocused(false);
+
+    // Escape는 확정 없이 표시값 원복
+    if (escapedRef.current) {
+      escapedRef.current = false;
+      if (isMixed || value == null) {
+        setLocalValue('');
+      } else {
+        setLocalValue(getDisplayValue(value, false));
+      }
+      setHasUserInput(false);
+      // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
+      onCancel?.();
+      return;
+    }
+
     const cleaned = sanitizeInput(localValue);
 
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
@@ -470,22 +558,20 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     : placeholder;
 
   const placeholderClass = effectivePlaceholder
-    ? 'placeholder:text-[#6B6D75] placeholder:italic'
+    ? 'placeholder:text-fg-faint placeholder:italic'
     : '';
-  const textClass = showMixedPlaceholder
-    ? 'text-[#6B6D75] italic'
-    : 'text-[#DBDEE8]';
+  const textClass = showMixedPlaceholder ? 'text-fg-faint italic' : 'text-fg';
 
   if (prefix) {
     return (
       <div
-        className={`relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+        className={`relative h-[23px] bg-inset rounded-md ${
+          isFocused ? 'shadow-focus-ring' : ''
         }`}
         style={{ width }}
       >
         {!showMixedPlaceholder && (
-          <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
+          <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
             {prefix}
           </span>
         )}
@@ -500,9 +586,9 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
           placeholder={effectivePlaceholder}
           className={`absolute ${
             !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
-          } top-[-1px] h-[23px] ${
+          } top-0 h-[23px] ${
             !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
-          } bg-transparent text-style-4 ${textClass} ${placeholderClass} text-center`}
+          } bg-transparent text-body tabular-nums ${textClass} ${placeholderClass} text-center`}
         />
       </div>
     );
@@ -519,9 +605,9 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={effectivePlaceholder}
-        className={`text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
-        } text-style-4 ${textClass} ${placeholderClass}`}
+        className={`text-center h-[23px] bg-inset rounded-md ${
+          isFocused ? 'shadow-focus-ring' : ''
+        } text-body tabular-nums ${textClass} ${placeholderClass}`}
         style={{ width }}
       />
     );
@@ -537,9 +623,9 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       onFocus={handleFocus}
       onBlur={handleBlur}
       placeholder={effectivePlaceholder}
-      className={`text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-        isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
-      } text-style-4 ${textClass} ${placeholderClass}`}
+      className={`text-center h-[23px] bg-inset rounded-md ${
+        isFocused ? 'shadow-focus-ring' : ''
+      } text-body tabular-nums ${textClass} ${placeholderClass}`}
       style={{ width }}
     />
   );
@@ -553,12 +639,21 @@ export const TextInput: React.FC<TextInputProps> = ({
   value,
   onChange,
   onBlur,
+  onPreview,
+  onCancel,
   placeholder,
   width = '90px',
   isMixed = false,
 }) => {
   const [localValue, setLocalValue] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
+  // Escape로 blur된 경우 확정 없이 원복
+  const escapedRef = useRef(false);
+  const previewedRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const sessionActiveRef = useRef(false);
+  const unregisterLifecycleRef = useRef<(() => void) | null>(null);
+  const finalizeRef = useRef<(finalValue: string) => void>(() => undefined);
 
   useEffect(() => {
     if (!isFocused) {
@@ -568,28 +663,95 @@ export const TextInput: React.FC<TextInputProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalValue(e.target.value);
-    onChange(e.target.value);
+    // 게스처 모드에서는 타이핑이 preview로만 흐름
+    if (onPreview) previewedRef.current = true;
+    (onPreview ?? onChange)(e.target.value);
   };
 
-  const handleBlur = () => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter는 blur를 통해 확정, Escape는 확정 없이 원복
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
+    } else if (e.key === 'Escape') {
+      // cancel 경로가 없는 입력은 기존 동작대로 무시
+      if (onCancel) {
+        escapedRef.current = true;
+        e.currentTarget.blur();
+      } else {
+        e.preventDefault();
+      }
+    }
+  };
+
+  const clearLifecycleRegistration = () => {
+    unregisterLifecycleRef.current?.();
+    unregisterLifecycleRef.current = null;
+  };
+
+  const finalize = (finalValue: string) => {
+    if (!sessionActiveRef.current) return;
+    sessionActiveRef.current = false;
+    clearLifecycleRegistration();
     setIsFocused(false);
-    onBlur?.();
+    if (escapedRef.current) {
+      escapedRef.current = false;
+      previewedRef.current = false;
+      setLocalValue(value);
+      // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
+      onCancel?.();
+      return;
+    }
+    // 확정은 입력 컴포넌트의 최종값 기준 (부모 store 재조회 금지)
+    if (onPreview && previewedRef.current) {
+      onChange(finalValue);
+    }
+    previewedRef.current = false;
+    onBlur?.(finalValue);
+  };
+
+  useLayoutEffect(() => {
+    finalizeRef.current = finalize;
+  });
+
+  useEffect(
+    () => () => {
+      sessionActiveRef.current = false;
+      clearLifecycleRegistration();
+    },
+    [],
+  );
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    escapedRef.current = false;
+    previewedRef.current = false;
+    sessionActiveRef.current = true;
+    clearLifecycleRegistration();
+    unregisterLifecycleRef.current = registerEditorDraftForLifecycle(() => {
+      finalizeRef.current(inputRef.current?.value ?? value);
+    });
+  };
+
+  const handleBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+    finalize(event.currentTarget.value);
   };
 
   return (
     <input
+      ref={inputRef}
       type="text"
       value={localValue}
       onChange={handleChange}
-      onFocus={() => setIsFocused(true)}
+      onKeyDown={handleKeyDown}
+      onFocus={handleFocus}
       onBlur={handleBlur}
       placeholder={placeholder}
-      className={`text-center h-[23px] p-[6px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-        isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
-      } text-style-4 ${
+      className={`text-center h-[23px] p-[6px] bg-inset rounded-md ${
+        isFocused ? 'shadow-focus-ring' : ''
+      } text-body tabular-nums ${
         isMixed
-          ? 'text-[#DBDEE8] placeholder:text-[#6B6D75] placeholder:italic'
-          : 'text-[#DBDEE8]'
+          ? 'text-fg placeholder:text-fg-faint placeholder:italic'
+          : 'text-fg'
       }`}
       style={{ width }}
     />
@@ -615,7 +777,13 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   panelElement,
   isOpen: externalIsOpen,
   onToggle: externalOnToggle,
+  gradientValue,
+  activeGradientValue,
+  onModeCommit,
+  canvasAnchor,
+  gradientSurface = 'background',
 }) => {
+  const { t } = useTranslation();
   // 외부 제어 모드인지 확인
   const isControlled =
     externalIsOpen !== undefined && externalOnToggle !== undefined;
@@ -634,6 +802,13 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       : showStateTabs
       ? internalStateMode
       : 'idle';
+
+  useEffect(() => {
+    if (!showStateTabs) {
+      setInternalStateMode('idle');
+      if (!isControlled) setInternalOpen(false);
+    }
+  }, [showStateTabs, isControlled]);
 
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -713,21 +888,67 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     return '#ffffff';
   };
 
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        onClick={handleToggle}
-        className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-          open ? 'border-[#459BF8]' : 'border-[#3A3943] hover:border-[#505058]'
-        }`}
-        style={{
-          backgroundColor: getDisplayColor(
+  // ── gradient 배선 — onModeCommit이 주어진 경우에만 활성화 ──
+  const supportsGradient = onModeCommit !== undefined;
+  const showDetachedGradientHint =
+    supportsGradient &&
+    typeof window !== 'undefined' &&
+    window.__dmn_window_type === 'panel';
+  const storedGradient =
+    stateMode === 'active'
+      ? activeGradientValue ?? null
+      : gradientValue ?? null;
+
+  const gradientState = useGradientColorState({
+    pair: supportsGradient
+      ? {
+          color:
             showStateTabs && stateMode === 'active'
               ? localActiveColor
               : localColor,
-          ),
-        }}
+          gradient: storedGradient,
+        }
+      : {},
+    fallbackColor: '#ffffff',
+    contextKey: `${_stableId}:${stateMode}`,
+    // 분리 창에서는 온캔버스 그라디언트 핸들 비활성 - 캔버스는 메인 창에 있고
+    // 편집 세션 콜백이 창 경계를 넘을 수 없음 (Phase E 계약 E5)
+    canvasAnchor:
+      open && window.__dmn_window_type !== 'panel' ? canvasAnchor : undefined,
+    canvasSurface: gradientSurface,
+    canvasState: stateMode,
+    onPreview: (modeValue) => {
+      if (modeValue.mode === 'solid') handleColorChange(modeValue.color);
+    },
+    onCommit: (modeValue) => {
+      const base =
+        modeValue.mode === 'solid'
+          ? modeValue.color
+          : modeValue.spec.stops[0]?.color ?? '#ffffff';
+      if (showStateTabs && stateMode === 'active') setLocalActiveColor(base);
+      else setLocalColor(base);
+      onModeCommit?.(stateMode, modeValue);
+    },
+  });
+
+  return (
+    <>
+      <ColorSwatchButton
+        ref={buttonRef}
+        onClick={handleToggle}
+        open={open}
+        className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+        surfaceClassName="rounded-md"
+        color={getDisplayColor(
+          showStateTabs && stateMode === 'active'
+            ? localActiveColor
+            : localColor,
+        )}
+        image={
+          supportsGradient && storedGradient
+            ? gradientToCss(storedGradient)
+            : undefined
+        }
       />
       {open && (
         <ColorPicker
@@ -735,86 +956,51 @@ export const ColorInput: React.FC<ColorInputProps> = ({
           referenceRef={buttonRef}
           panelElement={panelElement}
           color={
-            showStateTabs && stateMode === 'active'
+            supportsGradient
+              ? gradientState.pickerColor
+              : showStateTabs && stateMode === 'active'
               ? localActiveColor
               : localColor
           }
-          onColorChange={handleColorChange}
-          onColorChangeComplete={handleColorChangeComplete}
+          onColorChange={
+            supportsGradient
+              ? (c: string) => gradientState.handlePickerColorChange(c, false)
+              : handleColorChange
+          }
+          onColorChangeComplete={
+            supportsGradient
+              ? (c: string) => gradientState.handlePickerColorChange(c, true)
+              : handleColorChangeComplete
+          }
           onClose={handleClose}
           interactiveRefs={interactiveRefs}
           solidOnly={solidOnly}
           stateMode={showStateTabs ? stateMode : undefined}
           onStateModeChange={showStateTabs ? handleStateModeChange : undefined}
+          headerSlot={supportsGradient ? gradientState.headerSlot : undefined}
+          footerSlot={
+            supportsGradient ? (
+              <>
+                {gradientState.footerSlot}
+                {showDetachedGradientHint && (
+                  <p className="mt-[8px] max-w-[210px] text-caption leading-[1.35] text-fg-muted">
+                    {t('propertiesPanel.detachedGradientHint')}
+                  </p>
+                )}
+              </>
+            ) : undefined
+          }
+          gradientSpec={
+            supportsGradient ? gradientState.paletteGradientSpec : undefined
+          }
+          onGradientSpecSelect={
+            supportsGradient
+              ? gradientState.handleGradientSpecSelect
+              : undefined
+          }
         />
       )}
     </>
-  );
-};
-
-// ============================================================================
-// 선택 입력
-// ============================================================================
-
-export const SelectInput: React.FC<SelectInputProps> = ({
-  value,
-  options,
-  onChange,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`h-[23px] min-w-[70px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isOpen ? 'border-[#459BF8]' : 'border-[#3A3943]'
-        } px-[8px] flex items-center justify-between gap-[4px] hover:border-[#505058] transition-colors`}
-      >
-        <span className="text-style-4 text-[#DBDEE8]">
-          {options.find((opt) => opt.value === value)?.label || value}
-        </span>
-        <svg
-          width="8"
-          height="5"
-          viewBox="0 0 8 5"
-          fill="none"
-          className="flex-shrink-0"
-        >
-          <path
-            d="M1 1L4 4L7 1"
-            stroke="#6B6D75"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
-      {isOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-10"
-            onClick={() => setIsOpen(false)}
-          />
-          <div className="absolute top-[27px] left-0 right-0 bg-[#2A2A30] border border-[#3A3943] rounded-[7px] z-20 overflow-hidden shadow-lg min-w-[70px]">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  onChange(opt.value);
-                  setIsOpen(false);
-                }}
-                className={`w-full px-[8px] py-[6px] text-left text-style-4 hover:bg-[#32323A] transition-colors ${
-                  value === opt.value ? 'text-[#459BF8]' : 'text-[#DBDEE8]'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
   );
 };
 
@@ -830,7 +1016,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
     <button
       onClick={() => onChange(!checked)}
       className={`w-[32px] h-[18px] rounded-full transition-colors relative flex-shrink-0 ${
-        checked ? 'bg-[#459BF8]' : 'bg-[#3A3943]'
+        checked ? 'bg-accent' : 'bg-line-strong'
       }`}
     >
       <div
@@ -841,14 +1027,6 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
     </button>
   );
 };
-
-// ============================================================================
-// 섹션 구분선
-// ============================================================================
-
-export const SectionDivider: React.FC = () => (
-  <div className="w-full h-[1px] bg-[#3A3943]" />
-);
 
 // ============================================================================
 // 글꼴 스타일 아이콘
@@ -964,14 +1142,14 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
   onStrikethroughChange,
 }) => {
   const buttonClass = (active: boolean) =>
-    `w-[24px] h-[21px] flex items-center justify-center transition-colors ${
+    `w-[24px] h-[21px] flex items-center justify-center transition-colors duration-fast ${
       active
-        ? 'bg-[#493C1D] text-[#FFB400]'
-        : 'bg-[#2A2A30] text-[#6B6D75] hover:bg-[#32323A] hover:text-[#97999E]'
+        ? 'bg-fill-active text-fg'
+        : 'text-fg-faint hover:bg-surface-hover hover:text-fg-muted'
     }`;
 
   return (
-    <div className="flex items-center h-[23px] bg-[#2A2A30] rounded-[7px] border border-[#3A3943] overflow-hidden">
+    <div className="flex items-center h-[23px] bg-inset rounded-md overflow-hidden">
       <button
         onClick={() => onBoldChange(!isBold)}
         className={buttonClass(isBold)}
@@ -1011,10 +1189,8 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
 const TabButton: React.FC<TabButtonProps> = ({ active, onClick, children }) => (
   <button
     onClick={onClick}
-    className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-      active
-        ? 'bg-[#3A3943] text-white'
-        : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
+    className={`relative z-10 w-full h-full rounded-[8px] text-body transition-colors duration-base ${
+      active ? 'text-fg' : 'text-fg-muted hover:text-fg'
     }`}
   >
     {children}
@@ -1031,32 +1207,33 @@ export const Tabs: React.FC<TabsProps> = ({
     ? availableTabs
     : [TABS.STYLE, TABS.NOTE, TABS.COUNTER];
 
+  const labels: Record<string, string> = {
+    [TABS.STYLE]: t('propertiesPanel.tabStyle') || '키',
+    [TABS.NOTE]: t('propertiesPanel.tabNote') || '노트',
+    [TABS.COUNTER]: t('propertiesPanel.tabCounter') || '카운터',
+  };
+
+  const activeIndex = Math.max(0, tabs.indexOf(activeTab));
+
   return (
-    <div className="flex w-full h-[30px] bg-[#26262C] rounded-[7px] items-center p-[3px] gap-[5px]">
-      {tabs.includes(TABS.STYLE) && (
+    <div className="relative flex w-full h-[30px] bg-inset rounded-surface items-center p-[2px]">
+      <div
+        aria-hidden
+        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
+        style={{
+          width: `calc((100% - 4px) / ${tabs.length})`,
+          transform: `translateX(${activeIndex * 100}%)`,
+        }}
+      />
+      {tabs.map((tab) => (
         <TabButton
-          active={activeTab === TABS.STYLE}
-          onClick={() => onTabChange(TABS.STYLE)}
+          key={tab}
+          active={activeTab === tab}
+          onClick={() => onTabChange(tab)}
         >
-          {t('propertiesPanel.tabStyle') || '키'}
+          {labels[tab]}
         </TabButton>
-      )}
-      {tabs.includes(TABS.NOTE) && (
-        <TabButton
-          active={activeTab === TABS.NOTE}
-          onClick={() => onTabChange(TABS.NOTE)}
-        >
-          {t('propertiesPanel.tabNote') || '노트'}
-        </TabButton>
-      )}
-      {tabs.includes(TABS.COUNTER) && (
-        <TabButton
-          active={activeTab === TABS.COUNTER}
-          onClick={() => onTabChange(TABS.COUNTER)}
-        >
-          {t('propertiesPanel.tabCounter') || '카운터'}
-        </TabButton>
-      )}
+      ))}
     </div>
   );
 };
@@ -1069,66 +1246,10 @@ export const CloseIcon: React.FC = () => (
   <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
     <path
       d="M1 1L9 9M9 1L1 9"
-      stroke="#6B6D75"
+      stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"
     />
-  </svg>
-);
-
-export const SidebarToggleIcon: React.FC<{ isOpen: boolean }> = ({
-  isOpen,
-}) => (
-  <svg width="16" height="14" viewBox="0 0 16 14" fill="none">
-    <rect
-      x="0.75"
-      y="0.75"
-      width="14.5"
-      height="12.5"
-      rx="2"
-      stroke="#6B6D75"
-      strokeWidth="1.5"
-      fill="none"
-    />
-    <line
-      x1={isOpen ? '10' : '12'}
-      y1="1"
-      x2={isOpen ? '10' : '12'}
-      y2="13"
-      stroke="#6B6D75"
-      strokeWidth="1.5"
-    />
-    {isOpen && (
-      <>
-        <line
-          x1="12"
-          y1="4"
-          x2="13.5"
-          y2="4"
-          stroke="#6B6D75"
-          strokeWidth="1"
-          strokeLinecap="round"
-        />
-        <line
-          x1="12"
-          y1="7"
-          x2="13.5"
-          y2="7"
-          stroke="#6B6D75"
-          strokeWidth="1"
-          strokeLinecap="round"
-        />
-        <line
-          x1="12"
-          y1="10"
-          x2="13.5"
-          y2="10"
-          stroke="#6B6D75"
-          strokeWidth="1"
-          strokeLinecap="round"
-        />
-      </>
-    )}
   </svg>
 );
 
@@ -1137,13 +1258,20 @@ export const ModeToggleIcon: React.FC<{
   mode: 'layer' | 'property';
   disabled?: boolean;
 }> = ({ mode, disabled = false }) => {
-  const strokeColor = disabled ? '#4A4A50' : '#6B6D75';
-  const fillColor = disabled ? '#4A4A50' : '#6B6D75';
+  const strokeColor = 'currentColor';
+  const fillColor = 'currentColor';
+  const disabledClass = disabled ? 'text-fg-disabled' : undefined;
 
   if (mode === 'layer') {
     // 레이어 아이콘 (쌓인 레이어)
     return (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 16 16"
+        fill="none"
+        className={disabledClass}
+      >
         <path
           d="M8 2L14 5.5L8 9L2 5.5L8 2Z"
           stroke={strokeColor}
@@ -1171,7 +1299,13 @@ export const ModeToggleIcon: React.FC<{
 
   // 속성 아이콘 (슬라이더/설정)
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      className={disabledClass}
+    >
       <line
         x1="2"
         y1="4"

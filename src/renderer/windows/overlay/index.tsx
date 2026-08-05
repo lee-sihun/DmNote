@@ -1,14 +1,18 @@
-import '@api/dmnoteApi';
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import { I18nProvider } from '@contexts/I18nContext';
+import '@styles/tokens.css';
 import '@styles/global.css';
 
 window.__dmn_window_type = 'overlay';
+window.__dmn_runtime = 'tauri';
 
 async function bootstrap() {
   try {
-    const { default: App } = await import('./App');
+    await import('@api/dmnoteApi');
+    const [{ createRoot }, { I18nProvider }, { default: App }] =
+      await Promise.all([
+        import('react-dom/client'),
+        import('@contexts/I18nContext'),
+        import('./App'),
+      ]);
     const container = document.getElementById('root')!;
     const root = createRoot(container);
     root.render(
@@ -23,4 +27,4 @@ async function bootstrap() {
   }
 }
 
-bootstrap();
+void bootstrap();

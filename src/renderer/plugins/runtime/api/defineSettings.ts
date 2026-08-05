@@ -4,9 +4,26 @@
  */
 
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import {
+  openPluginSettingsSession,
+  cancelPluginSettingsSessionForPlugin,
+} from '@plugins/rpc/pluginSettingsSession';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
+import {
+  SECTION_WRAPPER_CLASS,
+  SECTION_LABEL_CLASS,
+  SECTION_CARD_CLASS,
+  FORM_ROW_CLASS,
+  FORM_LABEL_CLASS,
+} from '@utils/cardRecipes';
 import { handlerRegistry } from '../handlers';
+import {
+  coerceSettingValue,
+  getDefaultSettings,
+  normalizeSettingsSections,
+  omitLayoutSettingValues,
+} from '../settingsSections';
 import type { NamespacedStorage } from '../context';
 import type {
   PluginSettingsDefinition,
@@ -25,19 +42,15 @@ interface DefineSettingsDependencies {
  */
 export const createDefineSettings = (deps: DefineSettingsDependencies) => {
   const { pluginId, namespacedStorage, registerCleanup } = deps;
+  const visibilityErrorKeys = new Set<string>();
 
   return (definition: PluginSettingsDefinition): PluginSettingsInstance => {
     const SETTINGS_KEY = '__plugin_settings__';
 
     // 기본값 계산
-    const defaultSettings: Record<string, unknown> = {};
-    if (definition.settings) {
-      for (const [key, schema] of Object.entries(definition.settings)) {
-        if (schema.type !== 'divider') {
-          defaultSettings[key] = schema.default;
-        }
-      }
-    }
+    const defaultSettings: Record<string, unknown> = getDefaultSettings(
+      definition.settings,
+    );
 
     // 현재 설정값 (메모리 캐시)
     let currentSettings: Record<string, unknown> = { ...defaultSettings };
@@ -91,7 +104,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
           // JSON 직렬화/역직렬화로 순수 데이터만 복사 (순환 참조 및 특수 객체 제거)
           const safeSettings = JSON.parse(JSON.stringify(newSettings));
 
-          window.api?.bridge?.sendTo('overlay', 'plugin:settings:changed', {
+          sendBridgeMessageBestEffort('overlay', 'plugin:settings:changed', {
             pluginId,
             settings: safeSettings,
           });
@@ -122,10 +135,10 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       try {
         const saved = await namespacedStorage.get(SETTINGS_KEY);
         if (saved && typeof saved === 'object') {
-          currentSettings = {
+          currentSettings = omitLayoutSettingValues(definition.settings, {
             ...defaultSettings,
             ...(saved as Record<string, unknown>),
-          };
+          });
         }
         isInitialized = true;
       } catch (err) {
@@ -159,55 +172,100 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
         notifyOverlay(currentSettings);
       };
 
-      // ── 조건부 visibility 헬퍼 ──
-      const _evalVisible = (
-        visible:
-          | boolean
-          | ((settings: Record<string, unknown>) => boolean)
-          | undefined,
-        settings: Record<string, unknown>,
-      ): boolean => {
-        if (visible === undefined) return true;
-        return typeof visible === 'function' ? visible(settings) : visible;
+      const reportNormalizationError = (
+        key: string,
+        error: unknown,
+        kind: 'visibility' | 'unsupported-type',
+      ) => {
+        if (visibilityErrorKeys.has(key)) return;
+        visibilityErrorKeys.add(key);
+        const message =
+          kind === 'unsupported-type'
+            ? `Unsupported setting type for "${key}"`
+            : `Failed to evaluate visibility for setting "${key}"`;
+        console.error(`[Plugin ${pluginId}] ${message}:`, error);
       };
-
-      const _updateVisibility = () => {
-        if (!definition.settings) return;
-        for (const [k, s] of Object.entries(definition.settings)) {
-          if (s.visible === undefined) continue;
-          const el = document.querySelector(
-            `[data-setting-key="${k}"]`,
-          ) as HTMLElement | null;
-          if (el)
-            el.style.display = _evalVisible(
-              s.visible as
-                | boolean
-                | ((settings: Record<string, unknown>) => boolean)
-                | undefined,
-              dialogSettings,
-            )
-              ? ''
-              : 'none';
+      const getNormalizedSections = () =>
+        normalizeSettingsSections(
+          definition.settings,
+          dialogSettings,
+          reportNormalizationError,
+        );
+      const modalScope = `plugin-settings-${encodeURIComponent(pluginId)}`;
+      const findModalElement = (attribute: string, value: string) =>
+        Array.from(
+          document.querySelectorAll<HTMLElement>(`[${attribute}]`),
+        ).find((element) => element.getAttribute(attribute) === value);
+      const updateVisibility = () => {
+        const sections = getNormalizedSections();
+        sections.forEach((section, sectionIndex) => {
+          const sectionElement = findModalElement(
+            'data-settings-section',
+            `${modalScope}-${sectionIndex}`,
+          );
+          if (sectionElement) {
+            sectionElement.style.display = section.renderVisible ? '' : 'none';
+          }
+          section.entries.forEach((entry, entryIndex) => {
+            const entryElement = findModalElement(
+              'data-settings-entry',
+              `${modalScope}-${sectionIndex}-${entryIndex}`,
+            );
+            if (entryElement) {
+              entryElement.style.display = entry.renderVisible ? '' : 'none';
+            }
+          });
+        });
+        const emptyElement = findModalElement(
+          'data-settings-empty',
+          modalScope,
+        );
+        if (emptyElement) {
+          emptyElement.style.display = sections.some(
+            (section) => section.renderVisible,
+          )
+            ? 'none'
+            : '';
         }
       };
 
-      let htmlContent =
-        '<div class="flex flex-col gap-[19px] w-full text-left">';
+      const commitSettingValue = (key: string, newValue: unknown) => {
+        const prev = window.__dmn_current_plugin_id;
+        window.__dmn_current_plugin_id = pluginId;
+        try {
+          dialogSettings[key] = newValue;
+          applyPreview(dialogSettings);
+          updateVisibility();
+        } finally {
+          window.__dmn_current_plugin_id = prev;
+        }
+      };
 
-      if (definition.settings && Object.keys(definition.settings).length > 0) {
-        for (const [key, schema] of Object.entries(definition.settings)) {
-          const _vis = _evalVisible(
-            schema.visible as
-              | boolean
-              | ((settings: Record<string, unknown>) => boolean)
-              | undefined,
-            dialogSettings,
+      const normalizedSections = getNormalizedSections();
+      // 패널(renderPluginSettingsForm)과 동일한 섹션 카드 구조·토큰 — section이
+      // 없어도 암시적 카드 하나로 렌더 (모달-패널 외형 통합, 2026-07-12 결정)
+      let htmlContent =
+        '<div class="flex flex-col gap-[12px] w-full text-left">';
+
+      for (const [sectionIndex, section] of normalizedSections.entries()) {
+        htmlContent += `<div data-settings-section="${modalScope}-${sectionIndex}" style="${
+          section.renderVisible ? '' : 'display:none'
+        }" class="${SECTION_WRAPPER_CLASS}">`;
+        if (section.label) {
+          const sectionLabel = translate(
+            section.label,
+            undefined,
+            section.label,
           );
-          if (schema.type === 'divider') {
-            htmlContent += `<div data-setting-key="${key}" style="${
-              _vis ? '' : 'display:none'
-            }" class="w-full h-[1px] bg-[#3A3943]"></div>`;
-          } else {
+          htmlContent += `<p class="${SECTION_LABEL_CLASS}">${sectionLabel}</p>`;
+        }
+        htmlContent += `<div class="${SECTION_CARD_CLASS}">`;
+        for (const [entryIndex, entry] of section.entries.entries()) {
+          const { key, schema } = entry;
+          const entryAttributes = `data-settings-entry="${modalScope}-${sectionIndex}-${entryIndex}" style="${
+            entry.renderVisible ? '' : 'display:none'
+          }"`;
+          {
             const value =
               dialogSettings[key] !== undefined
                 ? dialogSettings[key]
@@ -220,17 +278,10 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
                 : schema.placeholder;
 
             const handleChange = (newValue: unknown) => {
-              // 플러그인 컨텍스트 설정
-              const prev = window.__dmn_current_plugin_id;
-              window.__dmn_current_plugin_id = pluginId;
-              try {
-                dialogSettings[key] = newValue;
-                // 실시간 미리보기 적용
-                applyPreview(dialogSettings);
-                _updateVisibility();
-              } finally {
-                window.__dmn_current_plugin_id = prev;
-              }
+              // DOM 문자열을 스키마 타입으로 복원, 복원 불가면 커밋 스킵
+              const coerced = coerceSettingValue(schema, newValue);
+              if (coerced === null) return;
+              commitSettingValue(key, coerced);
             };
 
             if (schema.type === 'boolean') {
@@ -261,26 +312,24 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
                   }
                 }
 
-                target.classList.remove('border-[#3A3943]');
-                target.classList.add('border-[#459BF8]');
+                target.classList.add('shadow-focus-ring');
 
                 window.api.ui.pickColor({
                   initialColor: String(dialogSettings[key] ?? ''),
                   id: pickerId,
                   referenceElement: target as HTMLElement,
                   onColorChange: (newColor) => {
-                    // 컬러피커 프리뷰만 업데이트 (버튼 내 색상 미리보기)
-                    const preview = target.querySelector('div');
-                    if (preview) preview.style.backgroundColor = newColor;
+                    // 스와치(버튼 자체) 미리보기 업데이트
+                    target.style.setProperty(
+                      '--dmn-color-swatch-color',
+                      newColor,
+                    );
                   },
                   onColorChangeComplete: (newColor) => {
-                    // 마우스를 떼었을 때 실제 적용
-                    dialogSettings[key] = newColor;
-                    applyPreview(dialogSettings);
+                    commitSettingValue(key, newColor);
                   },
                   onClose: () => {
-                    target.classList.remove('border-[#459BF8]');
-                    target.classList.add('border-[#3A3943]');
+                    target.classList.remove('shadow-focus-ring');
                   },
                 });
               };
@@ -290,13 +339,17 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
                 handleColorClick,
               );
 
+              // 패널 ColorInput과 동일한 스와치 단독 버튼
               componentHtml = `
-              <button type="button" 
-                class="relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-2"
+              <button type="button"
+                class="dmn-color-swatch-button w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+                style="--dmn-color-swatch-color: ${value}"
                 data-plugin-handler="${handlerId}"
               >
-                <div class="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]" style="background-color: ${value}"></div>
-                <span class="ml-[16px] text-left truncate w-[50px]">Linear</span>
+                <span class="dmn-color-swatch-surface">
+                  <span class="dmn-color-swatch-color"></span>
+                  <span class="dmn-color-swatch-ring"></span>
+                </span>
               </button>
             `;
             } else if (schema.type === 'string' || schema.type === 'number') {
@@ -341,27 +394,30 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
             }
 
             htmlContent += `
-            <div data-setting-key="${key}" style="${
-              _vis ? '' : 'display:none'
-            }" class="flex justify-between w-full items-center">
-              <p class="text-white text-style-2">${labelText}</p>
+            <div ${entryAttributes} class="${FORM_ROW_CLASS}">
+              <p class="${FORM_LABEL_CLASS}">${labelText}</p>
               ${componentHtml}
             </div>
           `;
           }
         }
-      } else {
-        const noSettingsText = await window.api.settings
-          .get()
-          .then((s) => {
-            const locale = s.language || 'ko';
-            return locale === 'en'
-              ? 'No settings available.'
-              : '설정할 항목이 없습니다.';
-          })
-          .catch(() => '설정할 항목이 없습니다.');
-        htmlContent += `<div class="text-gray-400 text-center">${noSettingsText}</div>`;
+        htmlContent += '</div></div>';
       }
+
+      const noSettingsText = await window.api.settings
+        .get()
+        .then((s) => {
+          const locale = s.language || 'ko';
+          return locale === 'en'
+            ? 'No settings available.'
+            : '설정할 항목이 없습니다.';
+        })
+        .catch(() => '설정할 항목이 없습니다.');
+      htmlContent += `<div data-settings-empty="${modalScope}" style="${
+        normalizedSections.some((section) => section.renderVisible)
+          ? 'display:none'
+          : ''
+      }" class="text-fg-faint text-body text-center">${noSettingsText}</div>`;
 
       htmlContent += '</div>';
 
@@ -425,7 +481,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       };
 
       return new Promise((resolve) => {
-        usePropertiesPanelStore.getState().openPluginSettingsPanel({
+        openPluginSettingsSession({
           pluginId,
           definition,
           settings: panelSettings,
@@ -492,7 +548,10 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
         (data: { pluginId: string; settings: Record<string, unknown> }) => {
           if (data.pluginId === pluginId) {
             const oldSettings = { ...currentSettings };
-            currentSettings = { ...defaultSettings, ...data.settings };
+            currentSettings = omitLayoutSettingValues(definition.settings, {
+              ...defaultSettings,
+              ...data.settings,
+            });
 
             // onChange 콜백 호출
             if (definition.onChange) {
@@ -520,6 +579,11 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       }
     }
 
+    // plugin unload·runtime reload 시 열려 있는 설정 세션 settle(false)
+    if (window.__dmn_window_type === 'main') {
+      registerCleanup(() => cancelPluginSettingsSessionForPlugin(pluginId));
+    }
+
     // 초기 설정 로드 (비동기)
     loadSettings();
 
@@ -530,7 +594,10 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       },
       set: async (updates: Record<string, unknown>) => {
         const oldSettings = { ...currentSettings };
-        currentSettings = { ...currentSettings, ...updates };
+        currentSettings = omitLayoutSettingValues(definition.settings, {
+          ...currentSettings,
+          ...updates,
+        });
         await saveSettings();
 
         // onChange 콜백 호출

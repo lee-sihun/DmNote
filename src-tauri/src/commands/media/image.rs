@@ -6,14 +6,16 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, WebviewWindow};
 use uuid::Uuid;
 use webp_animation::{
     AnimParams, Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig,
 };
 
 use crate::{
+    commands::editor::state::{emit_best_effort, publish_editor_change},
     errors::{CmdResult, CommandError},
+    models::{AppStoreData, CommittedEditorChange, EditorCommitOrigin, EditorField, KeyPosition},
     state::AppState,
 };
 
@@ -33,7 +35,7 @@ pub struct ImageLoadResponse {
 /// GIF는 UX를 위해 즉시 원본 경로를 반환하고, 백그라운드에서 WebP 최적화를 수행한 뒤
 /// 스토어의 이미지 경로를 자동으로 치환합니다.
 #[tauri::command]
-pub fn image_load(app: tauri::AppHandle) -> CmdResult<ImageLoadResponse> {
+pub fn image_load(app: tauri::AppHandle, window: WebviewWindow) -> CmdResult<ImageLoadResponse> {
     let picked = FileDialog::new()
         .add_filter(
             "Images",
@@ -61,7 +63,12 @@ pub fn image_load(app: tauri::AppHandle) -> CmdResult<ImageLoadResponse> {
 
     // GIF는 즉시 원본을 보여주고, 백그라운드 최적화 완료 후 자동 치환
     if ext == "gif" {
-        schedule_gif_optimization(app.clone(), dest_path.clone(), images_dir.clone());
+        schedule_gif_optimization(
+            app.clone(),
+            window.label().to_string(),
+            dest_path.clone(),
+            images_dir.clone(),
+        );
     }
 
     Ok(ImageLoadResponse {
@@ -71,7 +78,12 @@ pub fn image_load(app: tauri::AppHandle) -> CmdResult<ImageLoadResponse> {
     })
 }
 
-fn schedule_gif_optimization(app: tauri::AppHandle, gif_path: PathBuf, images_dir: PathBuf) {
+fn schedule_gif_optimization(
+    app: tauri::AppHandle,
+    source_window_label: String,
+    gif_path: PathBuf,
+    images_dir: PathBuf,
+) {
     std::thread::spawn(move || {
         let optimized_path = match try_convert_gif_to_cached_webp(&gif_path, &images_dir) {
             Ok(Some(path)) => path,
@@ -86,7 +98,12 @@ fn schedule_gif_optimization(app: tauri::AppHandle, gif_path: PathBuf, images_di
             return;
         }
 
-        if let Err(error) = replace_store_image_path_references(&app, &gif_path, &optimized_path) {
+        if let Err(error) = replace_store_image_path_references(
+            &app,
+            &source_window_label,
+            &gif_path,
+            &optimized_path,
+        ) {
             log::warn!("[Image] 최적화 이미지 경로 치환 실패: {error}");
         }
     });
@@ -104,6 +121,7 @@ fn copy_image_to_app_data(
 
 fn replace_store_image_path_references(
     app: &tauri::AppHandle,
+    source_window_label: &str,
     from_path: &Path,
     to_path: &Path,
 ) -> CmdResult<()> {
@@ -116,20 +134,21 @@ fn replace_store_image_path_references(
     let state = app.state::<AppState>();
     let snapshot = state.store.snapshot();
     let has_reference = snapshot.key_positions.values().any(|positions| {
-        positions.iter().any(|position| {
-            position.active_image.as_deref() == Some(from.as_str())
-                || position.inactive_image.as_deref() == Some(from.as_str())
-        })
+        positions
+            .iter()
+            .any(|position| position_references_image(position, &from))
     }) || snapshot.stat_positions.values().any(|positions| {
-        positions.iter().any(|stat_position| {
-            stat_position.position.active_image.as_deref() == Some(from.as_str())
-                || stat_position.position.inactive_image.as_deref() == Some(from.as_str())
-        })
+        positions
+            .iter()
+            .any(|stat_position| position_references_image(&stat_position.position, &from))
     }) || snapshot.graph_positions.values().any(|positions| {
-        positions.iter().any(|graph_position| {
-            graph_position.position.active_image.as_deref() == Some(from.as_str())
-                || graph_position.position.inactive_image.as_deref() == Some(from.as_str())
-        })
+        positions
+            .iter()
+            .any(|graph_position| position_references_image(&graph_position.position, &from))
+    }) || snapshot.knob_positions.values().any(|positions| {
+        positions
+            .iter()
+            .any(|knob_position| position_references_image(&knob_position.position, &from))
     });
 
     if !has_reference {
@@ -141,50 +160,22 @@ fn replace_store_image_path_references(
         return Ok(());
     }
 
-    let mut changed = false;
+    let admission = state.admit_frontend_history_mutation(source_window_label)?;
+    let transaction = state
+        .store
+        .commit_legacy_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("image_optimize".to_string()),
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ],
+            admission,
+            |store| Ok(replace_image_path_references(store, &from, &to)),
+        )?;
 
-    let updated = state.store.update(|store| {
-        for positions in store.key_positions.values_mut() {
-            for position in positions.iter_mut() {
-                if position.active_image.as_deref() == Some(from.as_str()) {
-                    position.active_image = Some(to.clone());
-                    changed = true;
-                }
-                if position.inactive_image.as_deref() == Some(from.as_str()) {
-                    position.inactive_image = Some(to.clone());
-                    changed = true;
-                }
-            }
-        }
-
-        for positions in store.stat_positions.values_mut() {
-            for stat_position in positions.iter_mut() {
-                if stat_position.position.active_image.as_deref() == Some(from.as_str()) {
-                    stat_position.position.active_image = Some(to.clone());
-                    changed = true;
-                }
-                if stat_position.position.inactive_image.as_deref() == Some(from.as_str()) {
-                    stat_position.position.inactive_image = Some(to.clone());
-                    changed = true;
-                }
-            }
-        }
-
-        for positions in store.graph_positions.values_mut() {
-            for graph_position in positions.iter_mut() {
-                if graph_position.position.active_image.as_deref() == Some(from.as_str()) {
-                    graph_position.position.active_image = Some(to.clone());
-                    changed = true;
-                }
-                if graph_position.position.inactive_image.as_deref() == Some(from.as_str()) {
-                    graph_position.position.inactive_image = Some(to.clone());
-                    changed = true;
-                }
-            }
-        }
-    })?;
-
-    if !changed {
+    if !transaction.value {
         // snapshot 이후 참조가 사라진 레이스 케이스
         let _ = app.emit(
             "image:optimized",
@@ -193,15 +184,91 @@ fn replace_store_image_path_references(
         return Ok(());
     }
 
-    app.emit("positions:changed", &updated.key_positions)?;
-    app.emit("statPositions:changed", &updated.stat_positions)?;
-    app.emit("graphPositions:changed", &updated.graph_positions)?;
+    publish_editor_change(state.inner(), app, &transaction.change, false);
+    emit_image_position_changes(app, &transaction.change);
     let _ = app.emit(
         "image:optimized",
         serde_json::json!({ "fromPath": from, "toPath": to }),
     );
 
     Ok(())
+}
+
+fn position_references_image(position: &KeyPosition, path: &str) -> bool {
+    position.active_image.as_deref() == Some(path)
+        || position.inactive_image.as_deref() == Some(path)
+}
+
+fn replace_position_image_paths(position: &mut KeyPosition, from: &str, to: &str) -> bool {
+    let mut changed = false;
+    if position.active_image.as_deref() == Some(from) {
+        position.active_image = Some(to.to_string());
+        changed = true;
+    }
+    if position.inactive_image.as_deref() == Some(from) {
+        position.inactive_image = Some(to.to_string());
+        changed = true;
+    }
+    changed
+}
+
+fn replace_image_path_references(store: &mut AppStoreData, from: &str, to: &str) -> bool {
+    let mut changed = false;
+
+    for positions in store.key_positions.values_mut() {
+        for position in positions {
+            changed |= replace_position_image_paths(position, from, to);
+        }
+    }
+    for positions in store.stat_positions.values_mut() {
+        for position in positions {
+            changed |= replace_position_image_paths(&mut position.position, from, to);
+        }
+    }
+    for positions in store.graph_positions.values_mut() {
+        for position in positions {
+            changed |= replace_position_image_paths(&mut position.position, from, to);
+        }
+    }
+    for positions in store.knob_positions.values_mut() {
+        for position in positions {
+            changed |= replace_position_image_paths(&mut position.position, from, to);
+        }
+    }
+
+    changed
+}
+
+fn emit_image_position_changes(app: &tauri::AppHandle, change: &CommittedEditorChange) {
+    for field in &change.result.changed_fields {
+        match field {
+            EditorField::KeyPositions => {
+                emit_best_effort(app, "positions:changed", &change.document.key_positions);
+            }
+            EditorField::StatPositions => {
+                emit_best_effort(
+                    app,
+                    "statPositions:changed",
+                    &change.document.stat_positions,
+                );
+            }
+            EditorField::GraphPositions => {
+                emit_best_effort(
+                    app,
+                    "graphPositions:changed",
+                    &change.document.graph_positions,
+                );
+            }
+            EditorField::KnobPositions => {
+                emit_best_effort(
+                    app,
+                    "knobPositions:changed",
+                    &change.document.knob_positions,
+                );
+            }
+            _ => {}
+        }
+    }
 }
 
 fn try_convert_gif_to_cached_webp(
@@ -337,5 +404,46 @@ fn normalize_image_extension(extension: Option<&str>) -> String {
         "avif" => "avif".to_string(),
         "png" => "png".to_string(),
         _ => "png".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::replace_image_path_references;
+    use crate::models::{AppStoreData, EditorDocumentV1, EditorField, KeyPosition, KnobPosition};
+
+    #[test]
+    fn optimizer_replaces_knob_active_and_inactive_image_references() {
+        let from = "/images/source.gif";
+        let to = "/images/optimized.webp";
+        let mut position = KeyPosition {
+            active_image: Some(from.to_string()),
+            inactive_image: Some(from.to_string()),
+            ..Default::default()
+        };
+        position.sound_path = Some("/sounds/unchanged.wav".to_string());
+
+        let mut store = AppStoreData::default();
+        store.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position,
+            }],
+        );
+        let before = EditorDocumentV1::from_store(&store);
+
+        assert!(replace_image_path_references(&mut store, from, to));
+
+        let knob = &store.knob_positions["4key"][0].position;
+        assert_eq!(knob.active_image.as_deref(), Some(to));
+        assert_eq!(knob.inactive_image.as_deref(), Some(to));
+        assert_eq!(knob.sound_path.as_deref(), Some("/sounds/unchanged.wav"));
+        assert_eq!(
+            before.changed_fields(&EditorDocumentV1::from_store(&store)),
+            vec![EditorField::KnobPositions]
+        );
     }
 }

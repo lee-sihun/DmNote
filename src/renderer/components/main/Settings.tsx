@@ -3,13 +3,25 @@ import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import Checkbox from '@components/main/common/Checkbox';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import Dropdown from '@components/main/common/Dropdown';
+import {
+  SettingCard,
+  SettingRow,
+  SettingToggleRow,
+} from '@components/main/common/SettingRow';
 import FlaskIcon from '@assets/svgs/flask.svg';
 import ResetIcon from '@assets/svgs/reset.svg';
-import { PluginManagerModal } from '@components/main/Modal/content/managers/PluginManagerModal';
 import { PluginDataDeleteModal } from '@components/main/Modal/content/dialogs/PluginDataDeleteModal';
-import ShortcutSettingsModal from '@components/main/Modal/content/settings/ShortcutSettingsModal';
+import SettingsSidePanel from '@components/main/SettingsPanel/SettingsSidePanel';
+import type { SettingsPanelKey } from '@components/main/SettingsPanel/SettingsSidePanel';
+import ShortcutsPanelContent from '@components/main/SettingsPanel/ShortcutsPanelContent';
+import PluginsPanelContent from '@components/main/SettingsPanel/PluginsPanelContent';
+import CssPanelContent from '@components/main/SettingsPanel/CssPanelContent';
+import {
+  FILL_DISABLED_CLASS,
+  FILL_INTERACTIVE_CLASS,
+} from '@components/main/SettingsPanel/panelChrome';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { isMac } from '@utils/core/platform';
@@ -18,7 +30,6 @@ import type { OverlayResizeAnchor } from '@src/types/settings/settings';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { SupportedLocale } from '@contexts/I18nContextDef';
 import type {
-  CssLoadResult,
   JsLoadResult,
   JsReloadResult,
   JsRemoveResult,
@@ -39,21 +50,21 @@ import { DEFAULT_OBS_PORT } from '@src/types/obs';
 // 설정 미리보기 영상
 const PREVIEW_SOURCES: Record<string, string> = {
   overlayLock:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/overlay-lock.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/overlay-lock.webm',
   alwaysOnTop:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/alwaysontop.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/alwaysontop.webm',
   noteEffect:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/noteeffect.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/noteeffect.webm',
   keyCounter:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/counter.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/counter.webm',
   customCSS:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/css.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/css.webm',
   customJS:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/plugin.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/plugin.webm',
   resizeAnchor:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/resize.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/resize.webm',
   obsMode:
-    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/obs.webm',
+    'https://raw.githubusercontent.com/DmNote-App/DmNote/master/docs/assets/webm/obs.webm',
 };
 
 // ASIO 버퍼 크기 선택지(프레임). 게임 설정값과 맞춰야 ASIO 공존 가능.
@@ -79,8 +90,12 @@ interface SettingsProps {
   showConfirm: (
     msg: string,
     onConfirm: () => void,
-    onCancel?: () => void,
-    confirmText?: string,
+    options?: {
+      onCancel?: () => void;
+      confirmText?: string;
+      cancelText?: string;
+      danger?: boolean;
+    },
   ) => void;
 }
 
@@ -112,8 +127,6 @@ const Settings = ({
     setAngleMode,
     noteEffect,
     setNoteEffect,
-    laboratoryEnabled,
-    setLaboratoryEnabled,
     trayEnabled,
     setTrayEnabled,
     autoUpdateEnabled,
@@ -122,9 +135,7 @@ const Settings = ({
     setDeveloperModeEnabled,
     useCustomCSS,
     setUseCustomCSS,
-    setCustomCSSContent,
     customCSSPath,
-    setCustomCSSPath,
     useCustomJS,
     setUseCustomJS,
     jsPlugins,
@@ -141,11 +152,12 @@ const Settings = ({
   const { checkForUpdates, isChecking } = useUpdateCheck();
 
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-  const [isScrollHovered, setIsScrollHovered] = useState<boolean>(false);
-  const [isPluginModalOpen, setPluginModalOpen] = useState<boolean>(false);
+  const [activeSettingsPanel, setActiveSettingsPanel] =
+    useState<SettingsPanelKey | null>(null);
+  // CSS 패널 헤더 개수 배지용 (패널 콘텐츠가 보고)
+  const [cssHistoryCount, setCssHistoryCount] = useState<number>(0);
   const [isDataDeleteModalOpen, setDataDeleteModalOpen] =
     useState<boolean>(false);
-  const [isShortcutModalOpen, setShortcutModalOpen] = useState<boolean>(false);
   const [pluginToDelete, setPluginToDelete] = useState<PluginToDelete | null>(
     null,
   );
@@ -353,26 +365,6 @@ const Settings = ({
     }
   };
 
-  const handleLoadCustomCSS = async (): Promise<void> => {
-    if (!useCustomCSS) return;
-    try {
-      const result: CssLoadResult = await window.api.css.load();
-      if (result.success) {
-        if (result.content) setCustomCSSContent(result.content);
-        if (result.path) setCustomCSSPath(result.path);
-        showAlert?.(t('settings.cssLoaded'));
-      } else {
-        const message: string = result.error
-          ? `${t('settings.cssLoadFailed')}${result.error}`
-          : t('settings.cssLoadFailed');
-        showAlert?.(message);
-      }
-    } catch (error) {
-      console.error('Failed to load custom CSS', error);
-      showAlert?.(`${t('settings.cssLoadFailed')}${error}`);
-    }
-  };
-
   const handleToggleCustomJS = async (): Promise<void> => {
     const next: boolean = !useCustomJS;
     setUseCustomJS(next);
@@ -433,14 +425,6 @@ const Settings = ({
         setIsReloadingPlugins(false);
       }
     }
-  };
-
-  const handleOpenPluginModal = (): void => {
-    setPluginModalOpen(true);
-  };
-
-  const handleClosePluginModal = (): void => {
-    setPluginModalOpen(false);
   };
 
   const handleAddPlugins = async (): Promise<void> => {
@@ -590,10 +574,14 @@ const Settings = ({
   };
 
   const actionButtonClass = (enabled: boolean): string =>
-    'py-[4px] px-[8px] border-[1px] rounded-[7px] text-style-2 transition-colors ' +
-    (enabled
-      ? 'bg-[#2A2A31] border-[#3A3944] text-[#DBDEE8] hover:bg-[#34343c]'
-      : 'bg-[#222228] border-[#31303C] text-[#44464E] cursor-not-allowed');
+    'inline-flex items-center h-[23px] px-[10px] rounded-md text-body transition-colors duration-fast ' +
+    (enabled ? FILL_INTERACTIVE_CLASS : FILL_DISABLED_CLASS);
+
+  // 커스텀 i18n에 복수형 처리가 없어 1개는 전용 키 사용
+  const panelCountBadge = (count: number): string =>
+    count === 1
+      ? t('settings.panelCountBadgeOne')
+      : t('settings.panelCountBadge', { count: String(count) });
 
   const handleNoteEffectChange = async (): Promise<void> => {
     const next: boolean = !noteEffect;
@@ -605,13 +593,20 @@ const Settings = ({
     }
   };
 
-  const handleSaveShortcuts = async (next: ShortcutsState): Promise<void> => {
+  const handleApplyShortcuts = async (next: ShortcutsState): Promise<void> => {
     setShortcuts(next);
     try {
       await window.api.settings.update({ shortcuts: next });
     } catch (error) {
       console.error('Failed to update shortcuts', error);
       showAlert?.(t('shortcutSetting.saveFailed'));
+      // 저장 실패가 daemon 재시작 실패일 수도 있어 로컬 롤백 대신 authoritative 상태 재조회
+      try {
+        const state = await window.api.settings.get();
+        setShortcuts(state.shortcuts);
+      } catch (syncError) {
+        console.error('Failed to resync shortcuts', syncError);
+      }
     }
   };
 
@@ -631,16 +626,6 @@ const Settings = ({
       showConfirm(t('settings.restartConfirm'), apply);
     } else {
       apply();
-    }
-  };
-
-  const _handleLaboratoryToggle = async (): Promise<void> => {
-    const next: boolean = !laboratoryEnabled;
-    setLaboratoryEnabled(next);
-    try {
-      await window.api.settings.update({ laboratoryEnabled: next });
-    } catch (error) {
-      console.error('Failed to toggle laboratory mode', error);
     }
   };
 
@@ -707,8 +692,7 @@ const Settings = ({
           console.error('Failed to regenerate OBS token', error);
         }
       },
-      undefined,
-      t('settings.obsTokenRegenConfirm'),
+      { confirmText: t('settings.obsTokenRegenConfirm') },
     );
   };
 
@@ -761,9 +745,12 @@ const Settings = ({
           useKeyStore.setState({
             keyMappings: result.keys,
             positions: result.positions,
+            canonicalPositions: result.positions,
             customTabs: result.customTabs,
             selectedKeyType: result.selectedKeyType,
           });
+          // 초기화 이전 요소를 가리키는 stale 선택 제거 — 패널이 무효 대상에 쓰는 것 방지
+          useGridSelectionStore.getState().clearSelection();
         }
       } catch (error) {
         console.error('Failed to reset presets', error);
@@ -771,12 +758,9 @@ const Settings = ({
     };
 
     if (showConfirm) {
-      showConfirm(
-        t('settings.resetAllConfirm'),
-        reset,
-        undefined,
-        t('settings.initialize'),
-      );
+      showConfirm(t('settings.resetAllConfirm'), reset, {
+        confirmText: t('settings.initialize'),
+      });
     } else {
       reset();
     }
@@ -815,115 +799,51 @@ const Settings = ({
     <div className="relative w-full h-full">
       <div
         ref={scrollContainerRef}
-        className={`settings-content-scroll w-full h-full flex flex-col py-[10px] px-[10px] gap-[19px] overflow-y-auto bg-[#0B0B0D] ${
-          isScrollHovered ? 'show-scrollbar' : ''
-        }`}
-        onMouseEnter={() => setIsScrollHovered(true)}
-        onMouseLeave={() => setIsScrollHovered(false)}
+        className="settings-content-scroll w-full h-full flex flex-col py-[12px] px-[12px] gap-[12px] overflow-y-auto bg-app"
       >
         {/* 설정 */}
-        <div className="flex flex-row gap-[19px]">
-          <div className="flex flex-col gap-[10px] w-[348px]">
+        <div className="flex flex-row gap-[12px]">
+          <div className="flex flex-col gap-[12px] w-[348px]">
             {/* 키뷰어 설정 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+            <SettingCard>
+              <SettingToggleRow
+                label={t('settings.overlayLock')}
+                checked={overlayLocked}
+                onToggle={handleOverlayLockChange}
                 onMouseEnter={() => setHoveredKey('overlayLock')}
                 onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleOverlayLockChange}
-              >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.overlayLock')}
-                </p>
-                <Checkbox
-                  checked={overlayLocked}
-                  onChange={handleOverlayLockChange}
-                />
-              </div>
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+              />
+              <SettingToggleRow
+                label={t('settings.alwaysOnTop')}
+                checked={alwaysOnTop}
+                onToggle={handleAlwaysOnTopChange}
                 onMouseEnter={() => setHoveredKey('alwaysOnTop')}
                 onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleAlwaysOnTopChange}
-              >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.alwaysOnTop')}
-                </p>
-                <Checkbox
-                  checked={alwaysOnTop}
-                  onChange={handleAlwaysOnTopChange}
-                />
-              </div>
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+              />
+              <SettingToggleRow
+                label={t('settings.noteEffect')}
+                checked={noteEffect}
+                onToggle={handleNoteEffectChange}
                 onMouseEnter={() => setHoveredKey('noteEffect')}
                 onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleNoteEffectChange}
-              >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.noteEffect')}
-                </p>
-                <Checkbox
-                  checked={noteEffect}
-                  onChange={handleNoteEffectChange}
-                />
-              </div>
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+              />
+              <SettingToggleRow
+                label={t('settings.keyCounter')}
+                checked={keyCounterEnabled}
+                onToggle={handleKeyCounterToggle}
                 onMouseEnter={() => setHoveredKey('keyCounter')}
                 onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleKeyCounterToggle}
-              >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.keyCounter')}
-                </p>
-                <div className="flex items-center gap-[8px]">
-                  {/* <button
-                    onClick={handleResetCounters}
-                    className="py-[4px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-2 text-[#DBDEE8] hover:bg-[#34343c]"
-                  >
-                    {t("settings.counterResetButton")}
-                  </button> */}
-                  <Checkbox
-                    checked={keyCounterEnabled}
-                    onChange={handleKeyCounterToggle}
-                  />
-                </div>
-              </div>
-              {/*
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onMouseEnter={() => setHoveredKey("laboratory")}
-                onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleLaboratoryToggle}
-              >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.laboratory")}
-                </p>
-                <Checkbox
-                  checked={laboratoryEnabled}
-                  onChange={handleLaboratoryToggle}
-                />
-              </div>
-              */}
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onClick={handleTrayToggle}
-              >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.trayEnabled')}
-                </p>
-                <Checkbox checked={trayEnabled} onChange={handleTrayToggle} />
-              </div>
-              {null}
-              <div
-                className="flex flex-row justify-between items-center h-[40px]"
+              />
+              <SettingToggleRow
+                label={t('settings.trayEnabled')}
+                checked={trayEnabled}
+                onToggle={handleTrayToggle}
+              />
+              <SettingRow
+                label={t('settings.resizeAnchor')}
                 onMouseEnter={() => setHoveredKey('resizeAnchor')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.resizeAnchor')}
-                </p>
                 <Dropdown
                   options={RESIZE_ANCHOR_OPTIONS.map((opt) => ({
                     value: opt.value,
@@ -941,87 +861,41 @@ const Settings = ({
                   placeholder={t('settings.selectAnchor')}
                   align="right"
                 />
-              </div>
-            </div>
+              </SettingRow>
+            </SettingCard>
             {/* 커스텀 CSS & JS 설정 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+            <SettingCard>
               <div
-                className="flex flex-col gap-[0px]"
                 onMouseEnter={() => setHoveredKey('customCSS')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <div
-                  className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                  onClick={handleToggleCustomCSS}
-                >
-                  <p className="text-style-3 text-[#FFFFFF]">
-                    {t('settings.customCSS')}
-                  </p>
-                  <Checkbox
-                    checked={useCustomCSS}
-                    onChange={handleToggleCustomCSS}
-                  />
-                </div>
-                <div className="flex flex-row justify-between items-center h-[40px]">
-                  <p
-                    className={
-                      'text-[12px] truncate max-w-[150px] ' +
-                      (useCustomCSS ? 'text-[#989BA6]' : 'text-[#44464E]')
-                    }
-                  >
-                    {customCSSPath && customCSSPath.length > 0
-                      ? customCSSPath
-                      : t('settings.noCssFile')}
-                  </p>
+                <SettingRow label={t('settings.customCSSLabel')}>
                   <button
-                    onClick={handleLoadCustomCSS}
-                    disabled={!useCustomCSS}
-                    className={
-                      'py-[4px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-2 ' +
-                      (useCustomCSS
-                        ? 'text-[#DBDEE8]'
-                        : 'text-[#44464E] cursor-not-allowed bg-[#222228] border-[#31303C]')
+                    onClick={() =>
+                      setActiveSettingsPanel((prev) =>
+                        prev === 'css' ? null : 'css',
+                      )
                     }
+                    className={actionButtonClass(true)}
                   >
-                    {t('settings.loadCss')}
+                    {t('settings.manageCss')}
                   </button>
-                </div>
+                </SettingRow>
               </div>
               <div
-                className="flex flex-col gap-[0px]"
                 onMouseEnter={() => setHoveredKey('customJS')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <div
-                  className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                  onClick={handleToggleCustomJS}
-                >
-                  <p className="text-style-3 text-[#FFFFFF]">
-                    {t('settings.customJS')}
-                  </p>
-                  <Checkbox
-                    checked={useCustomJS}
-                    onChange={handleToggleCustomJS}
-                  />
-                </div>
-                <div className="flex flex-row justify-between items-center h-[40px]">
-                  <p
-                    className={
-                      'text-[12px] truncate max-w-[150px] ' +
-                      (useCustomJS ? 'text-[#989BA6]' : 'text-[#44464E]')
-                    }
-                  >
-                    {t('settings.pluginManageLabel')}
-                  </p>
+                <SettingRow label={t('settings.customJSLabel')}>
                   <div className="flex flex-row gap-[6px]">
                     <button
                       onClick={handleReloadPlugins}
                       disabled={!canReloadPlugins || isReloadingPlugins}
                       className={
-                        'flex items-center justify-center px-[5px] py-[4px] border-[1px] rounded-[7px] transition-none ' +
+                        'flex items-center justify-center w-[23px] h-[23px] rounded-md transition-colors duration-fast ' +
                         (canReloadPlugins && !isReloadingPlugins
-                          ? 'bg-[#2A2A31] border-[#3A3944] hover:bg-[#34343c]'
-                          : 'bg-[#222228] border-[#31303C] cursor-not-allowed')
+                          ? 'bg-fill text-fg hover:bg-fill-hover'
+                          : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
                       }
                       style={
                         isReloadingPlugins
@@ -1030,78 +904,63 @@ const Settings = ({
                       }
                       title={t('settings.reloadPlugins')}
                     >
-                      <ResetIcon
-                        className={
-                          'w-[13px] h-[13px] -scale-x-100 ' +
-                          (canReloadPlugins && !isReloadingPlugins
-                            ? '[&_path]:fill-[#DBDEE8]'
-                            : '[&_path]:fill-[#44464E]')
-                        }
-                      />
+                      <ResetIcon className="w-[13px] h-[13px] -scale-x-100" />
                     </button>
                     <button
-                      onClick={handleOpenPluginModal}
+                      onClick={() =>
+                        setActiveSettingsPanel((prev) =>
+                          prev === 'plugins' ? null : 'plugins',
+                        )
+                      }
                       className={actionButtonClass(true)}
                     >
                       {t('settings.managePlugins')}
                     </button>
                   </div>
-                </div>
+                </SettingRow>
               </div>
-            </div>
+            </SettingCard>
             {/* OBS 모드 */}
-            <div
-              className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]"
+            <SettingCard
               onMouseEnter={() => setHoveredKey('obsMode')}
               onMouseLeave={() => setHoveredKey(null)}
             >
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onClick={handleObsToggle}
+              <SettingToggleRow
+                label={t('settings.obsMode')}
+                checked={obsStatus.running}
+                onToggle={handleObsToggle}
+              />
+              <SettingRow
+                label={
+                  <p
+                    className={
+                      'text-body ' +
+                      (obsStatus.running ? 'text-fg-muted' : 'text-fg-disabled')
+                    }
+                  >
+                    {obsStatus.running
+                      ? obsStatus.clientCount > 0
+                        ? `${t('settings.obsRunning')} · ${t(
+                            'settings.obsClients',
+                            { count: obsStatus.clientCount },
+                          )}`
+                        : t('settings.obsRunning')
+                      : t('settings.obsStopped')}
+                  </p>
+                }
               >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.obsMode')}
-                </p>
-                <Checkbox
-                  checked={obsStatus.running}
-                  onChange={handleObsToggle}
-                />
-              </div>
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p
-                  className={
-                    'text-[12px] ' +
-                    (obsStatus.running ? 'text-[#989BA6]' : 'text-[#44464E]')
-                  }
-                >
-                  {obsStatus.running
-                    ? obsStatus.clientCount > 0
-                      ? `${t('settings.obsRunning')} · ${t(
-                          'settings.obsClients',
-                          { count: obsStatus.clientCount },
-                        )}`
-                      : t('settings.obsRunning')
-                    : t('settings.obsStopped')}
-                </p>
                 <div className="flex items-center gap-[6px]">
                   <button
                     onClick={handleObsRegenerateToken}
                     disabled={!obsStatus.running}
                     className={
-                      'flex items-center justify-center px-[5px] py-[4px] border-[1px] rounded-[7px] transition-colors ' +
+                      'flex items-center justify-center w-[23px] h-[23px] rounded-md transition-colors duration-fast ' +
                       (obsStatus.running
-                        ? 'bg-[#2A2A31] border-[#3A3944] hover:bg-[#34343c]'
-                        : 'bg-[#222228] border-[#31303C] cursor-not-allowed')
+                        ? 'bg-fill text-fg hover:bg-fill-hover'
+                        : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
                     }
                   >
-                    <ResetIcon
-                      className={
-                        'w-[13px] h-[13px] -scale-x-100 ' +
-                        (obsStatus.running
-                          ? '[&_path]:fill-[#DBDEE8]'
-                          : '[&_path]:fill-[#44464E]')
-                      }
-                    />
+                    <ResetIcon className="w-[13px] h-[13px] -scale-x-100" />
                   </button>
                   <button
                     onClick={handleObsCopyUrl}
@@ -1111,71 +970,70 @@ const Settings = ({
                     {t('settings.obsCopyUrl')}
                   </button>
                 </div>
-              </div>
-            </div>
+              </SettingRow>
+            </SettingCard>
             {/* 키음 출력 설정 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
-              <div
-                className="flex flex-row justify-between items-center h-[40px]"
+            <SettingCard>
+              <SettingRow
+                label={
+                  <p className="text-label text-fg flex-1 min-w-0 truncate pr-[10px]">
+                    {t('settings.keySoundOutput') || '키 사운드 출력'}
+                  </p>
+                }
                 onMouseEnter={() => setHoveredKey('keySoundOutput')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <p className="text-style-3 text-[#FFFFFF] flex-1 min-w-0 truncate pr-[10px]">
-                  {t('settings.keySoundOutput') || '키 사운드 출력'}
-                </p>
-                <div className="shrink-0">
-                  <Dropdown
-                    options={[
-                      {
-                        value: 'defaultDevice',
-                        label:
-                          t('settings.keySoundOutputDefault') ||
-                          '기본 재생 장치',
-                      },
-                      ...visibleAsioDrivers.map((name) => {
-                        // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
-                        const failed =
-                          name === requestedAsioDriver && !!keySoundOutputError;
-                        return {
-                          value: `asio:${name}`,
-                          // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
-                          label: failed
-                            ? `⚠ ${keySoundOutputError}`
-                            : `ASIO: ${
-                                name.length > 16
-                                  ? `${name.slice(0, 16)}…`
-                                  : name
-                              }`,
-                        };
-                      }),
-                    ]}
-                    value={
-                      keySoundOutput?.requested.kind === 'asio'
-                        ? `asio:${keySoundOutput.requested.driverName}`
-                        : 'defaultDevice'
-                    }
-                    onChange={handleKeySoundOutputChange}
-                    placeholder={
-                      t('settings.keySoundOutputDefault') || '기본 재생 장치'
-                    }
-                    align="right"
-                    widthClass="max-w-[160px]"
-                    disabled={
-                      asioDriversLoaded && visibleAsioDrivers.length === 0
-                    }
-                  />
-                </div>
-              </div>
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p
-                  className={`text-style-3 ${
+                <Dropdown
+                  options={[
+                    {
+                      value: 'defaultDevice',
+                      label:
+                        t('settings.keySoundOutputDefault') || '기본 재생 장치',
+                    },
+                    ...visibleAsioDrivers.map((name) => {
+                      // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
+                      const failed =
+                        name === requestedAsioDriver && !!keySoundOutputError;
+                      return {
+                        value: `asio:${name}`,
+                        // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
+                        label: failed
+                          ? `⚠ ${keySoundOutputError}`
+                          : `ASIO: ${
+                              name.length > 16 ? `${name.slice(0, 16)}…` : name
+                            }`,
+                      };
+                    }),
+                  ]}
+                  value={
                     keySoundOutput?.requested.kind === 'asio'
-                      ? 'text-[#FFFFFF]'
-                      : 'text-[#666666]'
-                  }`}
-                >
-                  {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
-                </p>
+                      ? `asio:${keySoundOutput.requested.driverName}`
+                      : 'defaultDevice'
+                  }
+                  onChange={handleKeySoundOutputChange}
+                  placeholder={
+                    t('settings.keySoundOutputDefault') || '기본 재생 장치'
+                  }
+                  align="right"
+                  widthClass="max-w-[160px]"
+                  disabled={
+                    asioDriversLoaded && visibleAsioDrivers.length === 0
+                  }
+                />
+              </SettingRow>
+              <SettingRow
+                label={
+                  <p
+                    className={`text-label ${
+                      keySoundOutput?.requested.kind === 'asio'
+                        ? 'text-fg'
+                        : 'text-fg-disabled'
+                    }`}
+                  >
+                    {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
+                  </p>
+                }
+              >
                 <Dropdown
                   options={visibleAsioBuffers.map((size) => ({
                     value: String(size),
@@ -1188,14 +1046,11 @@ const Settings = ({
                   widthClass="w-[70px]"
                   disabled={keySoundOutput?.requested.kind !== 'asio'}
                 />
-              </div>
-            </div>
+              </SettingRow>
+            </SettingCard>
             {/* 기타 설정 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.language')}
-                </p>
+            <SettingCard>
+              <SettingRow label={t('settings.language')}>
                 <Dropdown
                   options={LANGUAGE_OPTIONS}
                   value={language}
@@ -1203,22 +1058,20 @@ const Settings = ({
                   placeholder={t('settings.selectLanguage')}
                   align="right"
                 />
-              </div>
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.shortcuts')}
-                </p>
+              </SettingRow>
+              <SettingRow label={t('settings.shortcuts')}>
                 <button
-                  onClick={() => setShortcutModalOpen(true)}
+                  onClick={() =>
+                    setActiveSettingsPanel((prev) =>
+                      prev === 'shortcuts' ? null : 'shortcuts',
+                    )
+                  }
                   className={actionButtonClass(true)}
                 >
                   {t('settings.configure')}
                 </button>
-              </div>
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.graphicsOption')}
-                </p>
+              </SettingRow>
+              <SettingRow label={t('settings.graphicsOption')}>
                 <Dropdown
                   options={isMacOS ? macAngleOptions : ANGLE_OPTIONS}
                   value={isMacOS ? 'metal' : angleMode}
@@ -1227,41 +1080,27 @@ const Settings = ({
                   disabled={isMacOS}
                   align="right"
                 />
-              </div>
+              </SettingRow>
               {!isMacOS && (
-                <div
-                  className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                  onClick={handleAutoUpdateToggle}
-                >
-                  <p className="text-style-3 text-[#FFFFFF]">
-                    {t('settings.autoUpdate')}
-                  </p>
-                  <Checkbox
-                    checked={autoUpdateEnabled}
-                    onChange={handleAutoUpdateToggle}
-                  />
-                </div>
-              )}
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onClick={handleDeveloperModeToggle}
-              >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.developerMode')}
-                </p>
-                <Checkbox
-                  checked={developerModeEnabled}
-                  onChange={handleDeveloperModeToggle}
+                <SettingToggleRow
+                  label={t('settings.autoUpdate')}
+                  checked={autoUpdateEnabled}
+                  onToggle={handleAutoUpdateToggle}
                 />
-              </div>
+              )}
+              <SettingToggleRow
+                label={t('settings.developerMode')}
+                checked={developerModeEnabled}
+                onToggle={handleDeveloperModeToggle}
+              />
               {/* 버전 및 설정 초기화 */}
-              <div className="flex justify-between items-center py-[14px] px-[12px] bg-[#101013] rounded-[7px] mt-[7px] mb-[12px]">
-                <p className="text-style-3 text-[#FFFFFF]">
+              <div className="flex justify-between items-center py-[10px] px-[10px] bg-inset rounded-md mt-[8px] mb-[8px]">
+                <p className="text-body text-fg-muted tabular-nums">
                   Ver {__APP_VERSION__}
                 </p>
                 <div className="flex gap-[8px]">
                   <button
-                    className="bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] py-[4px] px-[9px] text-style-2 text-[#DCDEE7] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center h-[23px] px-[10px] rounded-md text-body text-fg bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
                     onClick={() => checkForUpdates(true)}
                     disabled={isChecking}
                   >
@@ -1270,58 +1109,105 @@ const Settings = ({
                       : t('update.checkUpdate')}
                   </button>
                   <button
-                    className="bg-[#401C1D] rounded-[7px] py-[4px] px-[9px] text-style-2 text-[#E8DBDB]"
+                    className="inline-flex items-center h-[23px] px-[10px] rounded-md text-body text-danger-fg bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active transition-colors duration-fast"
                     onClick={handleResetAll}
                   >
                     {t('settings.resetData')}
                   </button>
                 </div>
               </div>
-            </div>
+            </SettingCard>
           </div>
         </div>
       </div>
-      <div className="absolute flex items-center justify-center top-[10px] right-[10px] w-[522px] h-[376px] bg-primary rounded-[7px] pointer-events-none overflow-hidden">
-        {hoveredKey && PREVIEW_SOURCES[hoveredKey] ? (
-          <div className="relative w-full h-full">
-            <video
-              key={hoveredKey}
-              src={PREVIEW_SOURCES[hoveredKey]}
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black to-transparent pointer-events-none">
-              <span className="mb-[15px] text-white text-[15px] font-medium">
-                {t(
-                  hoveredKey === 'obsMode'
-                    ? 'settings.obsGuide'
-                    : `settings.${hoveredKey}Desc`,
-                )}
-              </span>
-            </div>
+      {/* 우측 고정 콘텐츠 페인 - 기본은 튜토리얼 프리뷰, 선택 시 설정 상세가 같은 표면을 채움 */}
+      <div
+        className={
+          'absolute top-[12px] right-[12px] bottom-[12px] left-[372px] bg-fill-faint rounded-surface overflow-hidden' +
+          (activeSettingsPanel ? '' : ' pointer-events-none')
+        }
+      >
+        {!activeSettingsPanel && (
+          <div className="flex items-center justify-center w-full h-full">
+            {hoveredKey && PREVIEW_SOURCES[hoveredKey] ? (
+              <div className="relative w-full h-full">
+                <video
+                  key={hoveredKey}
+                  src={PREVIEW_SOURCES[hoveredKey]}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+                  <span className="mb-[16px] text-white text-title">
+                    {t(
+                      hoveredKey === 'obsMode'
+                        ? 'settings.obsGuide'
+                        : `settings.${hoveredKey}Desc`,
+                    )}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <FlaskIcon className="text-fill" />
+            )}
           </div>
-        ) : (
-          <FlaskIcon />
+        )}
+        {activeSettingsPanel && (
+          <SettingsSidePanel
+            activePanel={activeSettingsPanel}
+            onClose={() => setActiveSettingsPanel(null)}
+            pages={[
+              {
+                key: 'shortcuts',
+                title: t('shortcutSetting.title'),
+                content: (
+                  <ShortcutsPanelContent
+                    shortcuts={shortcuts}
+                    onApply={handleApplyShortcuts}
+                    onClose={() => setActiveSettingsPanel(null)}
+                  />
+                ),
+              },
+              {
+                key: 'plugins',
+                title: t('settings.managePluginsTitle'),
+                headerBadge: panelCountBadge(jsPlugins.length),
+                content: (
+                  <PluginsPanelContent
+                    plugins={jsPlugins}
+                    useCustomJS={useCustomJS}
+                    onToggleCustomJS={handleToggleCustomJS}
+                    onAdd={handleAddPlugins}
+                    onToggle={handlePluginToggle}
+                    onRemove={handlePluginRemove}
+                    isAdding={isAddingPlugins}
+                    isPluginActionPending={pendingPluginId !== null}
+                    onClose={() => setActiveSettingsPanel(null)}
+                  />
+                ),
+              },
+              {
+                key: 'css',
+                title: t('settings.manageCssTitle'),
+                headerBadge: panelCountBadge(cssHistoryCount),
+                content: (
+                  <CssPanelContent
+                    useCustomCSS={useCustomCSS}
+                    customCSSPath={customCSSPath}
+                    onToggleCustomCSS={handleToggleCustomCSS}
+                    showAlert={(msg: string) => showAlert?.(msg)}
+                    onClose={() => setActiveSettingsPanel(null)}
+                    onHistoryCountChange={setCssHistoryCount}
+                  />
+                ),
+              },
+            ]}
+          />
         )}
       </div>
-      {isPluginModalOpen && (
-        <PluginManagerModal
-          isOpen={isPluginModalOpen}
-          onClose={handleClosePluginModal}
-          onAdd={handleAddPlugins}
-          onToggle={handlePluginToggle}
-          onRemove={handlePluginRemove}
-          plugins={jsPlugins}
-          isAdding={isAddingPlugins}
-          pendingPluginAction={
-            pendingPluginId ? { id: pendingPluginId, op: 'toggle' } : null
-          }
-          t={t}
-        />
-      )}
       {isDataDeleteModalOpen && pluginToDelete && (
         <PluginDataDeleteModal
           isOpen={isDataDeleteModalOpen}
@@ -1333,14 +1219,6 @@ const Settings = ({
           onDeletePluginOnly={() => removePluginOnly(pluginToDelete.id)}
           pluginName={pluginToDelete.name}
           t={t}
-        />
-      )}
-      {isShortcutModalOpen && (
-        <ShortcutSettingsModal
-          isOpen={isShortcutModalOpen}
-          shortcuts={shortcuts}
-          onClose={() => setShortcutModalOpen(false)}
-          onSave={handleSaveShortcuts}
         />
       )}
     </div>

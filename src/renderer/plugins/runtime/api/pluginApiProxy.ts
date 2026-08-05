@@ -15,6 +15,7 @@ interface CreatePluginApiProxyOptions {
   pluginId: string;
   registerCleanup: (cleanup: () => void) => void;
   isReloading: () => boolean;
+  waitForReloadEnd: () => Promise<void>;
 }
 
 /**
@@ -23,7 +24,7 @@ interface CreatePluginApiProxyOptions {
 export const createPluginApiProxy = (
   options: CreatePluginApiProxyOptions,
 ): typeof window.api => {
-  const { pluginId, registerCleanup, isReloading } = options;
+  const { pluginId, registerCleanup, isReloading, waitForReloadEnd } = options;
 
   const originalStorage = window.api.plugin.storage;
   const namespacedStorage = createNamespacedStorage(pluginId, originalStorage);
@@ -45,6 +46,7 @@ export const createPluginApiProxy = (
     registerCleanup,
     wrapFunctionWithContext: wrapWithContext,
     isReloading,
+    waitForReloadEnd,
   });
 
   const defineSettings = createDefineSettings({

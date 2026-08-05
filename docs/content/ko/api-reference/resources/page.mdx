@@ -29,48 +29,6 @@ const result = await dmn.image.load();
 
 ## 사운드
 
-### `dmn.sound.load()`
+사운드 라이브러리의 표시 여부, 편집, 호환성 API는 별도의 [사운드 API 레퍼런스](/docs/api-reference/sound)를 참고하세요.
 
-시스템 파일 선택기를 열어 사운드를 가져오고 앱이 관리하는 경로를 반환합니다.
-
-### `dmn.sound.list()`
-
-사용할 수 있는 로컬 및 내장 사운드 목록을 반환합니다.
-
-```typescript
-type SoundListItem = {
-  soundPath: string;
-  fileName: string;
-  sizeBytes: number;
-  modifiedAtMs?: number;
-  enabled: boolean;
-  source: 'local' | 'builtin';
-  originalPath?: string;
-  trimStartRatio?: number;
-  trimEndRatio?: number;
-  displayName?: string;
-};
-```
-
-### `dmn.sound.rename(soundPath, displayName)`
-
-로컬 사운드의 표시 이름을 변경합니다. 내장 사운드의 이름은 변경할 수 없습니다.
-
-### `dmn.sound.remove(soundPath)`
-
-로컬 사운드를 삭제합니다. 내장 사운드는 삭제할 수 없습니다.
-
-### `dmn.sound.setEnabled(soundPath, enabled)`
-
-> Deprecated: 기존 플러그인과의 호환성을 위해 유지됩니다. 현재 사운드 피커는 활성 상태를 사용하지 않습니다.
-
-레거시 활성 상태를 갱신하고 결과를 반환합니다.
-
-```typescript
-const result = await dmn.sound.setEnabled(soundPath, false);
-// { success: true, soundPath, enabled: false }
-```
-
-### 사운드 편집
-
-`saveProcessedWav`, `loadOriginal`, `updateProcessedWav`는 내장 사운드 편집기를 지원합니다. 리소스 API가 반환하는 경로는 앱이 관리하는 불투명 식별자로 취급해야 합니다.
+리소스 API가 반환하는 경로는 앱이 관리하는 불투명 식별자로 취급해야 합니다.

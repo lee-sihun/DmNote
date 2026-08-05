@@ -8,7 +8,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { reconcileSelectionAfterIndexedElementDeletion } from '@stores/grid/useGridSelectionStore';
 import type { KeyPosition } from '@src/types/key/keys';
 import type {
   StatItemPosition,
@@ -24,10 +24,18 @@ import type {
   CounterAnimationBezier,
 } from '@src/types/key/keys';
 import { createDefaultCounterSettings } from '@src/types/key/keys';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_HAIRLINE,
+  DEFAULT_ELEMENT_RADIUS,
+} from '@utils/core/elementDefaults';
 
-// 공통: zIndex 목록 수집
+// 공통: zIndex 목록 수집 - 결과가 persist되는 z 계산에 쓰이므로 canonical 기준
 function collectAllZIndexes(mode: string) {
-  const keyPos = useKeyStore.getState().positions[mode] || [];
+  const keyPos = useKeyStore.getState().canonicalPositions[mode] || [];
   const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
 
   const statPos = useStatItemStore.getState().positions[mode] || [];
@@ -89,24 +97,6 @@ function getMinZIndex(mode: string): number {
   );
 }
 
-// 히스토리 push 헬퍼
-function pushHistorySnapshot(
-  currentStatPositions: StatItemPositions,
-  currentGraphPositions: GraphItemPositions,
-) {
-  const currentKeyPositions = useKeyStore.getState().positions;
-  const currentPluginElements =
-    usePluginDisplayElementStore.getState().elements;
-  const { keyMappings: km } = useKeyStore.getState();
-  useHistoryStore.getState().pushState({
-    keyMappings: km,
-    positions: currentKeyPositions,
-    statPositions: currentStatPositions,
-    graphPositions: currentGraphPositions,
-    pluginElements: currentPluginElements,
-  });
-}
-
 // Stat positions persist 헬퍼
 async function persistStatPositions(
   nextPositions: StatItemPositions,
@@ -121,13 +111,6 @@ async function persistStatPositions(
     console.error(errorMessage || 'Failed to update stat items', error);
   } finally {
     store.setLocalUpdateInProgress(false);
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-      positions: nextPositions,
-    });
-  } catch {
-    /* 무시 */
   }
 }
 
@@ -146,13 +129,6 @@ async function persistGraphPositions(
   } finally {
     store.setLocalUpdateInProgress(false);
   }
-  try {
-    window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-      positions: nextPositions,
-    });
-  } catch {
-    /* 무시 */
-  }
 }
 
 // Knob positions persist 헬퍼
@@ -169,13 +145,6 @@ async function persistKnobPositions(
     console.error(errorMessage || 'Failed to update knob items', error);
   } finally {
     store.setLocalUpdateInProgress(false);
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-      positions: nextPositions,
-    });
-  } catch {
-    /* 무시 */
   }
 }
 
@@ -223,7 +192,6 @@ export interface CanvasActions {
   persistStatPositions: typeof persistStatPositions;
   persistGraphPositions: typeof persistGraphPositions;
   persistKnobPositions: typeof persistKnobPositions;
-  pushHistorySnapshot: typeof pushHistorySnapshot;
 }
 
 export interface DuplicateState {
@@ -252,13 +220,12 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[indexToDelete]) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
-
     const nextPositions = {
       ...current,
       [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
     };
     persistStatPositions(nextPositions, 'Failed to delete stat item');
+    reconcileSelectionAfterIndexedElementDeletion('stat', indexToDelete);
   };
 
   const moveStatToFront = (index: number) => {
@@ -267,7 +234,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -285,7 +251,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const target = tabPositions[index];
     if (!target) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -306,7 +271,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const target = tabPositions[index];
     if (!target) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -326,7 +290,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const minZ = getMinZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -389,7 +352,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const current = store.positions;
     const tabPositions = current[selectedKeyType] || [];
 
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -407,13 +369,12 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[indexToDelete]) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
-
     const nextPositions = {
       ...current,
       [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
     };
     persistGraphPositions(nextPositions, 'Failed to delete graph item');
+    reconcileSelectionAfterIndexedElementDeletion('graph', indexToDelete);
   };
 
   const moveGraphToFront = (index: number) => {
@@ -422,7 +383,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -440,7 +400,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const target = tabPositions[index];
     if (!target) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -461,7 +420,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const target = tabPositions[index];
     if (!target) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -481,7 +439,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const minZ = getMinZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -515,7 +472,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const current = store.positions;
     const tabPositions = current[selectedKeyType] || [];
 
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -529,7 +485,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
 
   const addStatAtPosition = (dx: number, dy: number) => {
     const current = useStatItemStore.getState().positions;
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
 
     const list = [...(current[selectedKeyType] || [])];
     list.push({
@@ -547,7 +502,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       idleTransparent: false,
       count: 0,
       noteColor: '#FFFFFF',
-      noteOpacity: 80,
+      noteOpacity: 90,
       noteAlignment: 'center',
       noteEffectEnabled: true,
       noteGlowEnabled: false,
@@ -565,7 +520,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
 
   const addGraphAtPosition = (dx: number, dy: number) => {
     const current = useGraphItemStore.getState().positions;
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
 
     const list = [...(current[selectedKeyType] || [])];
     list.push({
@@ -588,7 +542,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       idleTransparent: false,
       count: 0,
       noteColor: '#FFFFFF',
-      noteOpacity: 80,
+      noteOpacity: 90,
       noteAlignment: 'center',
       noteEffectEnabled: true,
       noteGlowEnabled: false,
@@ -598,12 +552,12 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       noteAutoYCorrection: true,
       className: '',
       counter: createDefaultCounterSettings(),
-      backgroundColor: 'rgba(46, 46, 47, 0.9)',
-      borderColor: 'rgba(113, 113, 113, 0.9)',
-      borderWidth: 3,
-      borderRadius: 10,
-      fontColor: '#FFFFFF',
-      activeFontColor: '#FFFFFF',
+      backgroundColor: DEFAULT_ELEMENT_BG,
+      borderColor: DEFAULT_ELEMENT_HAIRLINE,
+      borderWidth: 1,
+      borderRadius: DEFAULT_ELEMENT_RADIUS,
+      fontColor: DEFAULT_ELEMENT_FONT,
+      activeFontColor: DEFAULT_ELEMENT_FONT,
       fontSize: 12,
       useInlineStyles: false,
       displayText: '',
@@ -613,30 +567,22 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     persistGraphPositions(nextPositions, 'Failed to add graph item');
   };
 
-  // 노브 히스토리 스냅샷 (현재 stat/graph 캡처)
-  const pushKnobHistory = () =>
-    pushHistorySnapshot(
-      useStatItemStore.getState().positions,
-      useGraphItemStore.getState().positions,
-    );
-
   const deleteKnobAtIndex = (indexToDelete: number) => {
     const current = useKnobItemStore.getState().positions;
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[indexToDelete]) return;
-    pushKnobHistory();
     const nextPositions = {
       ...current,
       [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
     };
     persistKnobPositions(nextPositions, 'Failed to delete knob item');
+    reconcileSelectionAfterIndexedElementDeletion('knob', indexToDelete);
   };
 
   const moveKnobToFront = (index: number) => {
     const current = useKnobItemStore.getState().positions;
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
-    pushKnobHistory();
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -652,7 +598,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     const target = tabPositions[index];
     if (!target) return;
-    pushKnobHistory();
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -671,7 +616,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const tabPositions = current[selectedKeyType] || [];
     const target = tabPositions[index];
     if (!target) return;
-    pushKnobHistory();
     const currentZIndex = target.zIndex ?? index;
     const updatedPositions = {
       ...current,
@@ -689,7 +633,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const current = useKnobItemStore.getState().positions;
     const tabPositions = current[selectedKeyType] || [];
     if (!tabPositions[index]) return;
-    pushKnobHistory();
     const minZ = getMinZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -720,7 +663,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     if (!templatePosition) return;
     const current = useKnobItemStore.getState().positions;
     const tabPositions = current[selectedKeyType] || [];
-    pushKnobHistory();
     const maxZ = getMaxZIndex(selectedKeyType);
     const nextPositions = {
       ...current,
@@ -734,7 +676,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
 
   const addKnobAtPosition = (dx: number, dy: number) => {
     const current = useKnobItemStore.getState().positions;
-    pushKnobHistory();
     const list = [...(current[selectedKeyType] || [])];
     list.push({
       axisId: '',
@@ -751,7 +692,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       idleTransparent: false,
       count: 0,
       noteColor: '#FFFFFF',
-      noteOpacity: 80,
+      noteOpacity: 90,
       noteAlignment: 'center',
       noteEffectEnabled: false,
       noteGlowEnabled: false,
@@ -761,11 +702,11 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       noteAutoYCorrection: true,
       className: '',
       counter: createDefaultCounterSettings(),
-      backgroundColor: 'rgba(46, 46, 47, 0.9)',
-      activeBackgroundColor: 'rgba(121, 121, 121, 0.9)',
-      borderColor: 'rgba(113, 113, 113, 0.9)',
-      activeBorderColor: 'rgba(255, 255, 255, 0.9)',
-      borderWidth: 3,
+      backgroundColor: DEFAULT_ELEMENT_BG,
+      activeBackgroundColor: DEFAULT_ELEMENT_ACTIVE_BG,
+      borderColor: DEFAULT_ELEMENT_FONT,
+      activeBorderColor: DEFAULT_ELEMENT_ACTIVE_FONT,
+      borderWidth: 0,
     });
     const nextPositions = { ...current, [selectedKeyType]: list };
     persistKnobPositions(nextPositions, 'Failed to add knob item');
@@ -799,6 +740,5 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     persistStatPositions,
     persistGraphPositions,
     persistKnobPositions,
-    pushHistorySnapshot,
   };
 }

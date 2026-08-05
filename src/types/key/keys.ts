@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { elementShadowSpecSchema } from './shadows';
 import { NOTE_SETTINGS_CONSTRAINTS } from '../settings/noteSettingsConstraints';
 import { getDefaultCounterSettings } from '@src/renderer/defaults';
+import { gradientSpecSchema, type GradientSpec } from '../color';
 
 export const keyCounterPlacementSchema = z.union([
   z.literal('inside'),
@@ -55,6 +57,8 @@ const keyCounterSettingsInputSchema = z
     fontUnderline: z.boolean().optional(),
     fontStrikethrough: z.boolean().optional(),
     animation: keyCounterAnimationSchema.partial().optional(),
+    fillIdleGradient: gradientSpecSchema.nullable().optional(),
+    fillActiveGradient: gradientSpecSchema.nullable().optional(),
   })
   .partial();
 
@@ -79,6 +83,9 @@ export interface KeyCounterSettings {
   alignMode: KeyCounterAlignMode;
   fill: KeyCounterColor;
   stroke: KeyCounterColor;
+  // fill 전용 그라데이션 형제 (stroke는 영구 제외)
+  fillIdleGradient?: GradientSpec | null;
+  fillActiveGradient?: GradientSpec | null;
   gap: number; // px 단위 간격
   fontSize: number; // px
   fontWeight: number; // CSS font-weight
@@ -116,6 +123,8 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     fontUnderline,
     fontStrikethrough,
     animation,
+    fillIdleGradient,
+    fillActiveGradient,
   } = parsed.data;
   const normalizedBezier: CounterAnimationBezier = [
     Number.isFinite(animation?.bezier?.[0])
@@ -145,6 +154,9 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
       idle: stroke?.idle ?? fallback.stroke.idle,
       active: stroke?.active ?? fallback.stroke.active,
     },
+    fillIdleGradient: fillIdleGradient ?? fallback.fillIdleGradient ?? null,
+    fillActiveGradient:
+      fillActiveGradient ?? fallback.fillActiveGradient ?? null,
     gap:
       typeof gap === 'number' && Number.isFinite(gap) && gap >= 0
         ? gap
@@ -305,8 +317,15 @@ export const keyPositionSchema = z.object({
   activeBackgroundColor: z.string().optional(),
   borderColor: z.string().optional(),
   activeBorderColor: z.string().optional(),
+  // 그라데이션 형제 필드 — 있으면 렌더 우선, 단색 필드는 다운그레이드 폴백 (api-contract v2.3)
+  backgroundGradient: gradientSpecSchema.optional(),
+  activeBackgroundGradient: gradientSpecSchema.optional(),
+  borderGradient: gradientSpecSchema.optional(),
+  activeBorderGradient: gradientSpecSchema.optional(),
   borderWidth: z.number().optional(),
   borderRadius: z.number().optional(),
+  shadow: elementShadowSpecSchema.optional(),
+  activeShadow: elementShadowSpecSchema.optional(),
   fontSize: z.number().optional(),
   fontColor: z.string().optional(),
   activeFontColor: z.string().optional(),

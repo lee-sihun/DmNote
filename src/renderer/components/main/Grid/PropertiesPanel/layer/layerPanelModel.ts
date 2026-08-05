@@ -8,7 +8,7 @@ import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
-import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import type { PluginPanelElementView } from '@src/types/plugin/api';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { LayerItem, DisplayItem } from '../types';
 
@@ -23,7 +23,7 @@ interface BuildLayerItemsParams {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
-  pluginElements: PluginDisplayElementInternal[];
+  pluginElements: PluginPanelElementView[];
 }
 
 export function buildLayerItems({

@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { CounterTabContentProps } from '../types';
 import type {
   KeyCounterAnimationSettings,
@@ -10,15 +11,29 @@ import {
   PropertyRow,
   FontStyleToggle,
   NumberInput,
-  SectionDivider,
+  PropertySection,
 } from '../PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
+import { usePanelNav } from '../PanelNavContext';
+import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
+import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import {
+  counterFillPair,
+  gradientToCss,
+  type ColorModeValue,
+} from '@src/types/color';
 
-type PickerTarget = 'fill' | 'stroke' | 'font' | null;
+// 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
+const FONT_PAGE_KEY = 'single-counter:font';
+const ANIMATION_PAGE_KEY = 'single-counter:animation';
+
+type PickerTarget = 'fill' | 'stroke' | null;
 type ColorState = 'idle' | 'active';
 
 const CounterTabContent: React.FC<CounterTabContentProps> = ({
@@ -32,13 +47,24 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 }) => {
   const fillBtnRef = useRef<HTMLButtonElement>(null);
   const strokeBtnRef = useRef<HTMLButtonElement>(null);
-  const fontBtnRef = useRef<HTMLButtonElement>(null);
-  const animationBtnRef = useRef<HTMLButtonElement>(null);
 
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
-  const pickerOpen = pickerFor !== null && pickerFor !== 'font';
+  const pickerOpen = pickerFor !== null;
   const [colorState, setColorState] = useState<ColorState>('idle');
-  const [showAnimationPicker, setShowAnimationPicker] = useState(false);
+  const showActiveState = !isStat;
+  const effectiveColorState = showActiveState ? colorState : 'idle';
+  const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
+
+  useEffect(() => {
+    if (!showActiveState) {
+      setColorState('idle');
+      setPickerFor(null);
+    }
+  }, [showActiveState]);
+
+  // 인-패널 내비게이션 (폰트/애니메이션 서브 페이지)
+  const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
+    usePanelNav();
 
   const counterSettings = normalizeCounterSettings(keyPosition.counter);
 
@@ -110,10 +136,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     if (!pickerFor) return;
     const key =
       pickerFor === 'fill'
-        ? colorState === 'active'
+        ? effectiveColorState === 'active'
           ? 'fillActive'
           : 'fillIdle'
-        : colorState === 'active'
+        : effectiveColorState === 'active'
         ? 'strokeActive'
         : 'strokeIdle';
 
@@ -126,17 +152,17 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
     const key =
       pickerFor === 'fill'
-        ? colorState === 'active'
+        ? effectiveColorState === 'active'
           ? 'fillActive'
           : 'fillIdle'
-        : colorState === 'active'
+        : effectiveColorState === 'active'
         ? 'strokeActive'
         : 'strokeIdle';
 
     setLocalColors((prev) => ({ ...prev, [key]: color }));
 
     if (pickerFor === 'fill') {
-      if (colorState === 'active') {
+      if (effectiveColorState === 'active') {
         handleCounterUpdate({
           fill: { ...counterSettings.fill, active: color },
         });
@@ -148,7 +174,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       return;
     }
 
-    if (colorState === 'active') {
+    if (effectiveColorState === 'active') {
       handleCounterUpdate({
         stroke: { ...counterSettings.stroke, active: color },
       });
@@ -159,290 +185,363 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     }
   };
 
+  // ── fill 그라데이션 배선 (stroke는 단색 유지) ──
+
+  const storedFillGradient =
+    effectiveColorState === 'active'
+      ? counterSettings.fillActiveGradient ?? null
+      : counterSettings.fillIdleGradient ?? null;
+
+  const handleFillCommit = (value: ColorModeValue) => {
+    const pair = counterFillPair(value);
+    const key = effectiveColorState === 'active' ? 'fillActive' : 'fillIdle';
+    setLocalColors((prev) => ({ ...prev, [key]: pair.color }));
+    if (effectiveColorState === 'active') {
+      handleCounterUpdate({
+        fill: { ...counterSettings.fill, active: pair.color },
+        fillActiveGradient: pair.gradient,
+      });
+    } else {
+      handleCounterUpdate({
+        fill: { ...counterSettings.fill, idle: pair.color },
+        fillIdleGradient: pair.gradient,
+      });
+    }
+  };
+
+  const fillGradientState = useGradientColorState({
+    pair:
+      pickerFor === 'fill'
+        ? {
+            color: activeColorFor('fill', effectiveColorState),
+            gradient: storedFillGradient,
+          }
+        : {},
+    fallbackColor: '#ffffff',
+    // 요소 종류·키 모드 포함 — 형식 왕복 기억이 다른 대상과 교차하지 않게
+    contextKey: `${
+      isStat ? 'stat' : 'key'
+    }:${selectedKeyType}:${keyIndex}:fill:${effectiveColorState}`,
+    canvasAnchor:
+      pickerFor === 'fill'
+        ? { kind: isStat ? 'stat' : 'key', index: keyIndex }
+        : undefined,
+    canvasSurface: 'counterFill',
+    canvasState: effectiveColorState,
+    onPreview: (value) => {
+      if (value.mode === 'solid') handleColorChange(value.color);
+    },
+    onCommit: handleFillCommit,
+  });
+
   return (
     <>
-      {/* 카운터 사용 */}
-      <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
-          {t('counterSetting.counterEnabled') || '카운터 표시'}
-        </p>
-        <Checkbox
-          checked={counterSettings.enabled}
-          onChange={() =>
-            handleCounterUpdate({ enabled: !counterSettings.enabled })
-          }
-        />
-      </div>
+      <PropertySection>
+        {/* 카운터 사용 */}
+        <div className="flex justify-between items-center w-full min-h-[32px]">
+          <p className="text-fg-muted text-label">
+            {t('counterSetting.counterEnabled') || '카운터 표시'}
+          </p>
+          <Checkbox
+            checked={counterSettings.enabled}
+            onChange={() =>
+              handleCounterUpdate({ enabled: !counterSettings.enabled })
+            }
+          />
+        </div>
+      </PropertySection>
 
-      <SectionDivider />
-
-      {/* 배치 영역 */}
-      <PropertyRow label={t('counterSetting.placementArea') || '배치 영역'}>
-        <Dropdown
-          options={[
-            {
-              label: t('counterSetting.placementInside') || '내부',
-              value: 'inside',
-            },
-            {
-              label: t('counterSetting.placementOutside') || '외부',
-              value: 'outside',
-            },
-          ]}
-          value={counterSettings.placement}
-          onChange={(value) =>
-            handleCounterUpdate({ placement: value as 'inside' | 'outside' })
-          }
-        />
-      </PropertyRow>
-
-      {/* 정렬 방향 */}
-      <PropertyRow label={t('counterSetting.alignDirection') || '정렬 방향'}>
-        <Dropdown
-          options={[
-            { label: t('counterSetting.alignTop') || '상단', value: 'top' },
-            {
-              label: t('counterSetting.alignBottom') || '하단',
-              value: 'bottom',
-            },
-            { label: t('counterSetting.alignLeft') || '좌측', value: 'left' },
-            { label: t('counterSetting.alignRight') || '우측', value: 'right' },
-          ]}
-          value={counterSettings.align}
-          onChange={(value) =>
-            handleCounterUpdate({
-              align: value as 'top' | 'bottom' | 'left' | 'right',
-            })
-          }
-        />
-      </PropertyRow>
-
-      {/* 정렬 방식 (내부 배치 전용) */}
-      {counterSettings.placement === 'inside' && (
-        <PropertyRow label={t('counterSetting.alignMode') || '정렬 방식'}>
+      <PropertySection>
+        {/* 배치 영역 */}
+        <PropertyRow label={t('counterSetting.placementArea') || '배치 영역'}>
           <Dropdown
             options={[
               {
-                label: t('counterSetting.alignModeCenter') || '가운데',
-                value: 'center',
+                label: t('counterSetting.placementInside') || '내부',
+                value: 'inside',
               },
               {
-                label: t('counterSetting.alignModeBetween') || '양끝',
-                value: 'between',
+                label: t('counterSetting.placementOutside') || '외부',
+                value: 'outside',
               },
             ]}
-            value={counterSettings.alignMode ?? 'center'}
+            value={counterSettings.placement}
+            onChange={(value) =>
+              handleCounterUpdate({ placement: value as 'inside' | 'outside' })
+            }
+          />
+        </PropertyRow>
+
+        {/* 정렬 방향 */}
+        <PropertyRow label={t('counterSetting.alignDirection') || '정렬 방향'}>
+          <Dropdown
+            options={[
+              { label: t('counterSetting.alignTop') || '상단', value: 'top' },
+              {
+                label: t('counterSetting.alignBottom') || '하단',
+                value: 'bottom',
+              },
+              { label: t('counterSetting.alignLeft') || '좌측', value: 'left' },
+              {
+                label: t('counterSetting.alignRight') || '우측',
+                value: 'right',
+              },
+            ]}
+            value={counterSettings.align}
             onChange={(value) =>
               handleCounterUpdate({
-                alignMode: value as 'center' | 'between',
+                align: value as 'top' | 'bottom' | 'left' | 'right',
               })
             }
           />
         </PropertyRow>
-      )}
 
-      {/* 간격 */}
-      <PropertyRow label={t('counterSetting.gap') || '간격'}>
-        <NumberInput
-          value={counterSettings.gap}
-          onChange={(value) => handleCounterUpdate({ gap: value })}
-          suffix="px"
-          min={0}
-          max={9999}
-          width="54px"
-        />
-      </PropertyRow>
+        {/* 정렬 방식 (내부 배치 전용) */}
+        {counterSettings.placement === 'inside' && (
+          <PropertyRow label={t('counterSetting.alignMode') || '정렬 방식'}>
+            <Dropdown
+              options={[
+                {
+                  label: t('counterSetting.alignModeCenter') || '가운데',
+                  value: 'center',
+                },
+                {
+                  label: t('counterSetting.alignModeBetween') || '양끝',
+                  value: 'between',
+                },
+              ]}
+              value={counterSettings.alignMode ?? 'center'}
+              onChange={(value) =>
+                handleCounterUpdate({
+                  alignMode: value as 'center' | 'between',
+                })
+              }
+            />
+          </PropertyRow>
+        )}
 
-      <SectionDivider />
+        {/* 간격 */}
+        <PropertyRow label={t('counterSetting.gap') || '간격'}>
+          <NumberInput
+            value={counterSettings.gap}
+            onChange={(value) => handleCounterUpdate({ gap: value })}
+            suffix="px"
+            min={0}
+            max={9999}
+            width="54px"
+          />
+        </PropertyRow>
+      </PropertySection>
 
-      {/* 채우기 색상 */}
-      <PropertyRow label={t('counterSetting.fill') || '채우기'}>
-        <button
-          ref={fillBtnRef}
-          type="button"
-          onClick={() => handlePickerToggle('fill')}
-          className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'fill'
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] hover:border-[#505058]'
-          }`}
-          style={{
-            backgroundColor: getDisplayColor(
-              activeColorFor('fill', colorState),
-            ),
-          }}
-        />
-      </PropertyRow>
+      <PropertySection>
+        {/* 채우기 색상 */}
+        <PropertyRow label={t('counterSetting.fill') || '채우기'}>
+          <ColorSwatchButton
+            ref={fillBtnRef}
+            type="button"
+            onClick={() => handlePickerToggle('fill')}
+            open={pickerFor === 'fill'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(activeColorFor('fill', effectiveColorState))}
+            image={
+              storedFillGradient ? gradientToCss(storedFillGradient) : undefined
+            }
+          />
+        </PropertyRow>
 
-      {/* 외곽선 색상 */}
-      <PropertyRow label={t('counterSetting.stroke') || '외곽선'}>
-        <button
-          ref={strokeBtnRef}
-          type="button"
-          onClick={() => handlePickerToggle('stroke')}
-          className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'stroke'
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] hover:border-[#505058]'
-          }`}
-          style={{
-            backgroundColor: getDisplayColor(
-              activeColorFor('stroke', colorState),
-            ),
-          }}
-        />
-      </PropertyRow>
+        {/* 외곽선 색상 */}
+        <PropertyRow label={t('counterSetting.stroke') || '외곽선'}>
+          <ColorSwatchButton
+            ref={strokeBtnRef}
+            type="button"
+            onClick={() => handlePickerToggle('stroke')}
+            open={pickerFor === 'stroke'}
+            className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
+            surfaceClassName="rounded-md"
+            color={getDisplayColor(
+              activeColorFor('stroke', effectiveColorState),
+            )}
+          />
+        </PropertyRow>
+      </PropertySection>
 
-      <SectionDivider />
+      <PropertySection>
+        {/* 폰트 */}
+        <PropertyRow label={t('counterSetting.font') || '폰트'}>
+          <button
+            type="button"
+            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
+            } text-fg text-body`}
+            onClick={() => {
+              setPickerFor(null);
+              if (activePageKey === FONT_PAGE_KEY) closePage();
+              else openPage(FONT_PAGE_KEY);
+            }}
+          >
+            {t('propertiesPanel.configure') || '설정하기'}
+          </button>
+        </PropertyRow>
 
-      {/* 폰트 */}
-      <PropertyRow label={t('counterSetting.font') || '폰트'}>
-        <button
-          ref={fontBtnRef}
-          type="button"
-          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-            pickerFor === 'font' ? 'border-[#459BF8]' : 'border-[#3A3943]'
-          } text-[#DBDEE8] text-style-4`}
-          onClick={() => handlePickerToggle('font')}
-        >
-          {t('propertiesPanel.configure') || '설정하기'}
-        </button>
-      </PropertyRow>
+        {/* 폰트 크기 */}
+        <PropertyRow label={t('counterSetting.fontSize') || '폰트 크기'}>
+          <NumberInput
+            value={counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}
+            onChange={(value) => handleCounterUpdate({ fontSize: value })}
+            suffix="px"
+            min={8}
+            max={72}
+            width="54px"
+          />
+        </PropertyRow>
 
-      {/* 폰트 크기 */}
-      <PropertyRow label={t('counterSetting.fontSize') || '폰트 크기'}>
-        <NumberInput
-          value={counterSettings.fontSize ?? 16}
-          onChange={(value) => handleCounterUpdate({ fontSize: value })}
-          suffix="px"
-          min={8}
-          max={72}
-          width="54px"
-        />
-      </PropertyRow>
+        {/* 폰트 스타일 */}
+        <PropertyRow label={t('counterSetting.fontStyle') || '폰트 스타일'}>
+          <FontStyleToggle
+            isBold={(counterSettings.fontWeight ?? 400) >= 700}
+            isItalic={counterSettings.fontItalic ?? false}
+            isUnderline={counterSettings.fontUnderline ?? false}
+            isStrikethrough={counterSettings.fontStrikethrough ?? false}
+            onBoldChange={(value) =>
+              handleCounterUpdate({ fontWeight: value ? 700 : 400 })
+            }
+            onItalicChange={(value) =>
+              handleCounterUpdate({ fontItalic: value })
+            }
+            onUnderlineChange={(value) =>
+              handleCounterUpdate({ fontUnderline: value })
+            }
+            onStrikethroughChange={(value) =>
+              handleCounterUpdate({ fontStrikethrough: value })
+            }
+          />
+        </PropertyRow>
+      </PropertySection>
 
-      {/* 폰트 스타일 */}
-      <PropertyRow label={t('counterSetting.fontStyle') || '폰트 스타일'}>
-        <FontStyleToggle
-          isBold={(counterSettings.fontWeight ?? 400) >= 700}
-          isItalic={counterSettings.fontItalic ?? false}
-          isUnderline={counterSettings.fontUnderline ?? false}
-          isStrikethrough={counterSettings.fontStrikethrough ?? false}
-          onBoldChange={(value) =>
-            handleCounterUpdate({ fontWeight: value ? 700 : 400 })
-          }
-          onItalicChange={(value) => handleCounterUpdate({ fontItalic: value })}
-          onUnderlineChange={(value) =>
-            handleCounterUpdate({ fontUnderline: value })
-          }
-          onStrikethroughChange={(value) =>
-            handleCounterUpdate({ fontStrikethrough: value })
-          }
-        />
-      </PropertyRow>
+      <PropertySection>
+        {/* 카운터 애니메이션 */}
+        <div className="flex justify-between items-center w-full min-h-[32px]">
+          <p className="text-fg-muted text-label">
+            {t('counterSetting.animationEnabled') || '카운터 애니메이션'}
+          </p>
+          <Checkbox
+            checked={counterSettings.animation.enabled}
+            onChange={() =>
+              handleCounterUpdate({
+                animation: {
+                  ...counterSettings.animation,
+                  enabled: !counterSettings.animation.enabled,
+                },
+              })
+            }
+          />
+        </div>
 
-      <SectionDivider />
+        <PropertyRow label={t('counterSetting.animation') || '애니메이션 설정'}>
+          <button
+            type="button"
+            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+              activePageKey === ANIMATION_PAGE_KEY ? 'shadow-focus-ring' : ''
+            } text-fg text-body`}
+            onClick={() => {
+              setPickerFor(null);
+              if (activePageKey === ANIMATION_PAGE_KEY) closePage();
+              else openPage(ANIMATION_PAGE_KEY);
+            }}
+          >
+            {t('propertiesPanel.configure') || '설정하기'}
+          </button>
+        </PropertyRow>
+      </PropertySection>
 
-      {/* 카운터 애니메이션 */}
-      <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
-          {t('counterSetting.animationEnabled') || '카운터 애니메이션'}
-        </p>
-        <Checkbox
-          checked={counterSettings.animation.enabled}
-          onChange={() =>
-            handleCounterUpdate({
-              animation: {
-                ...counterSettings.animation,
-                enabled: !counterSettings.animation.enabled,
-              },
-            })
-          }
-        />
-      </div>
-
-      <PropertyRow label={t('counterSetting.animation') || '애니메이션 설정'}>
-        <button
-          ref={animationBtnRef}
-          type="button"
-          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-            showAnimationPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-          } text-[#DBDEE8] text-style-4`}
-          onClick={() => setShowAnimationPicker((prev) => !prev)}
-        >
-          {t('propertiesPanel.configure') || '설정하기'}
-        </button>
-      </PropertyRow>
-
-      {pickerFor && pickerFor !== 'font' && (
+      {pickerFor && (
         <ColorPicker
           open={pickerOpen}
           referenceRef={pickerFor === 'fill' ? fillBtnRef : strokeBtnRef}
           panelElement={panelElement}
-          color={activeColorFor(pickerFor as 'fill' | 'stroke', colorState)}
-          onColorChange={(c: string) => handleColorChange(c)}
-          onColorChangeComplete={(c: string) => handleColorChangeComplete(c)}
+          color={
+            pickerFor === 'fill'
+              ? fillGradientState.pickerColor
+              : activeColorFor(
+                  pickerFor as 'fill' | 'stroke',
+                  effectiveColorState,
+                )
+          }
+          onColorChange={(c: string) =>
+            pickerFor === 'fill'
+              ? fillGradientState.handlePickerColorChange(c, false)
+              : handleColorChange(c)
+          }
+          onColorChangeComplete={(c: string) =>
+            pickerFor === 'fill'
+              ? fillGradientState.handlePickerColorChange(c, true)
+              : handleColorChangeComplete(c)
+          }
           onClose={() => setPickerFor(null)}
           solidOnly={true}
           interactiveRefs={colorPickerInteractiveRefs}
-          stateMode={colorState}
-          onStateModeChange={(mode: string) =>
-            setColorState(mode as ColorState)
+          stateMode={showActiveState ? effectiveColorState : undefined}
+          onStateModeChange={
+            showActiveState
+              ? (mode: string) => setColorState(mode as ColorState)
+              : undefined
+          }
+          headerSlot={
+            pickerFor === 'fill' ? fillGradientState.headerSlot : undefined
+          }
+          footerSlot={
+            pickerFor === 'fill' ? fillGradientState.footerSlot : undefined
+          }
+          gradientSpec={
+            pickerFor === 'fill'
+              ? fillGradientState.paletteGradientSpec
+              : undefined
+          }
+          onGradientSpecSelect={
+            pickerFor === 'fill'
+              ? fillGradientState.handleGradientSpecSelect
+              : undefined
           }
         />
       )}
 
-      {/* FontPicker */}
-      {pickerFor === 'font' && (
-        <FontPicker
-          open={true}
-          referenceRef={fontBtnRef}
-          panelElement={panelElement}
-          selectedFont={counterSettings.fontFamily || null}
-          onFontSelect={(fontName) => {
-            handleCounterUpdate({ fontFamily: fontName });
-          }}
-          onClose={() => setPickerFor(null)}
-          interactiveRefs={[fontBtnRef]}
-        />
-      )}
+      {/* FontPicker — 패널 서브 페이지 */}
+      {renderPageKey === FONT_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <FontPicker
+            open
+            selectedFont={counterSettings.fontFamily || null}
+            onFontSelect={(fontName) => {
+              handleCounterUpdate({ fontFamily: fontName });
+            }}
+            pageTitle={t('counterSetting.font') || '폰트'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
 
-      {showAnimationPicker && (
-        <CounterAnimationPicker
-          open={showAnimationPicker}
-          referenceRef={animationBtnRef}
-          panelElement={panelElement}
-          animation={counterSettings.animation}
-          counterSettings={counterSettings}
-          keyVisual={{
-            width: keyPosition.width,
-            height: keyPosition.height,
-            backgroundColor: keyPosition.backgroundColor,
-            borderColor: keyPosition.borderColor,
-            borderWidth: keyPosition.borderWidth,
-            borderRadius: keyPosition.borderRadius,
-            fontColor: keyPosition.fontColor,
-            fontSize: keyPosition.fontSize,
-            fontWeight: keyPosition.fontWeight,
-            fontFamily: keyPosition.fontFamily,
-            fontItalic: keyPosition.fontItalic,
-            fontUnderline: keyPosition.fontUnderline,
-            fontStrikethrough: keyPosition.fontStrikethrough,
-            displayText: keyPosition.displayText,
-            displayName: keyDisplayName,
-            className: keyPosition.className,
-            activeBackgroundColor: keyPosition.activeBackgroundColor,
-            activeBorderColor: keyPosition.activeBorderColor,
-            activeFontColor: keyPosition.activeFontColor,
-            useInlineStyles: keyPosition.useInlineStyles,
-            isStat,
-          }}
-          onAnimationChange={handleAnimationUpdate}
-          onClose={() => setShowAnimationPicker(false)}
-          t={t}
-          interactiveRefs={[animationBtnRef]}
-        />
-      )}
+      {/* CounterAnimationPicker — 패널 서브 페이지 */}
+      {renderPageKey === ANIMATION_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <CounterAnimationPicker
+            open
+            animation={counterSettings.animation}
+            counterSettings={counterSettings}
+            keyVisual={{
+              ...keyPosition,
+              displayName: keyDisplayName,
+              isStat,
+            }}
+            onAnimationChange={handleAnimationUpdate}
+            t={t}
+            pageTitle={t('counterSetting.animation') || '애니메이션'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
     </>
   );
 };

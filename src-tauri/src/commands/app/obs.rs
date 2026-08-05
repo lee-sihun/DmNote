@@ -5,27 +5,11 @@ use uuid::Uuid;
 
 use crate::{errors::CmdResult, models::obs::ObsStatus, state::AppState};
 
-/// 저장된 토큰 재사용 또는 신규 생성 후 store에 저장
-fn resolve_and_save_token(state: &AppState) -> String {
-    let existing = state.store.with_state(|s| s.obs_token.clone());
-    if let Some(token) = existing {
-        if !token.is_empty() {
-            return token;
-        }
-    }
-    // 신규 생성 후 저장
-    let token = Uuid::new_v4().simple().to_string();
-    let t = token.clone();
-    let _ = state.store.update(|s| {
-        s.obs_token = Some(t.clone());
-    });
-    token
-}
-
 #[tauri::command]
 pub async fn obs_start(app: AppHandle, state: State<'_, AppState>) -> CmdResult<ObsStatus> {
     let port = state.store.with_state(|s| s.obs_port);
-    let token = resolve_and_save_token(&state);
+    // 저장 불가면 시작 중단 — 서버가 쓰는 토큰은 반드시 디스크에 존재해야 함
+    let token = state.resolve_and_save_obs_token()?;
 
     // OBS 정적 파일 서빙 설정
     if cfg!(debug_assertions) {
@@ -58,10 +42,13 @@ pub async fn obs_start(app: AppHandle, state: State<'_, AppState>) -> CmdResult<
         .await
         .map_err(crate::errors::CommandError::msg)?;
     // 성공한 포트를 store에 저장 (fallback 시 다음 시작에 재사용)
+    // 실패해도 서버는 이미 동작 중 — 다음 시작에 fallback을 다시 거치므로 경고만 남김
     if actual_port != port {
-        let _ = state.store.update(|s| {
+        if let Err(error) = state.store.update(|s| {
             s.obs_port = actual_port;
-        });
+        }) {
+            log::warn!("[ObsBridge] fallback 포트 저장 실패: {error}");
+        }
     }
     // 초기 스냅샷 캐싱 (신규 클라이언트에 전송됨)
     state.refresh_obs_snapshot();
@@ -90,11 +77,11 @@ pub fn obs_status(state: State<'_, AppState>) -> CmdResult<ObsStatus> {
 #[tauri::command]
 pub fn obs_regenerate_token(app: AppHandle, state: State<'_, AppState>) -> CmdResult<ObsStatus> {
     let token = Uuid::new_v4().simple().to_string();
-    // store에 저장
+    // 디스크 저장이 성공한 뒤에만 메모리 토큰 교체 — 실패 시 구 토큰이 그대로 유효한 일관 상태 유지
     let t = token.clone();
-    let _ = state.store.update(|s| {
+    state.store.update(|s| {
         s.obs_token = Some(t.clone());
-    });
+    })?;
     // 실행 중이면 bridge 메모리 토큰도 교체
     if state.obs_bridge.is_running() {
         state.obs_bridge.set_token(token);

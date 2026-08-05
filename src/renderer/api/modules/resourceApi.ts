@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
+import { runLegacyEditorMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
 
 export const fontApi = {
   load: () =>
@@ -8,7 +9,11 @@ export const fontApi = {
 
 export const imageApi = {
   load: () =>
-    invoke<import('@src/types/plugin/api').ImageLoadResult>('image_load'),
+    runLegacyEditorMutation(
+      () =>
+        invoke<import('@src/types/plugin/api').ImageLoadResult>('image_load'),
+      { syncAfter: false },
+    ),
 };
 
 export const soundApi = {
@@ -16,21 +21,31 @@ export const soundApi = {
     invoke<import('@src/types/plugin/api').SoundLoadResult>('sound_load'),
   list: () =>
     invoke<import('@src/types/plugin/api').SoundListItem[]>('sound_list'),
-  /** @deprecated 사운드 피커는 활성 상태를 사용하지 않습니다. */
-  setEnabled: (soundPath: string, enabled: boolean) =>
-    invoke<import('@src/types/plugin/api').SoundSetEnabledResult>(
-      'sound_set_enabled',
-      { soundPath, enabled },
-    ),
   rename: (soundPath: string, displayName: string) =>
     invoke<import('@src/types/plugin/api').SoundRenameResult>('sound_rename', {
       soundPath,
       displayName,
     }),
   remove: (soundPath: string) =>
-    invoke<import('@src/types/plugin/api').SoundDeleteResult>('sound_delete', {
-      soundPath,
-    }),
+    runLegacyEditorMutation(() =>
+      invoke<import('@src/types/plugin/api').SoundDeleteResult>(
+        'sound_delete',
+        {
+          soundPath,
+        },
+      ),
+    ),
+  setHidden: (soundPath: string, hidden: boolean) =>
+    invoke<import('@src/types/plugin/api').SoundSetHiddenResult>(
+      'sound_set_hidden',
+      { soundPath, hidden },
+    ),
+  // deprecated — setHidden의 역논리 별칭 (enabled = !hidden)
+  setEnabled: (soundPath: string, enabled: boolean) =>
+    invoke<import('@src/types/plugin/api').SoundSetEnabledResult>(
+      'sound_set_enabled',
+      { soundPath, enabled },
+    ),
   saveProcessedWav: (
     wavBase64: string,
     fileName?: string,
@@ -127,14 +142,18 @@ export const counterAnimationApi = {
   update: (
     request: import('@src/types/plugin/api').CounterAnimationUpdateRequest,
   ) =>
-    invoke<import('@src/types/plugin/api').CounterAnimationUpsertResponse>(
-      'counter_animation_update',
-      { request },
+    runLegacyEditorMutation(() =>
+      invoke<import('@src/types/plugin/api').CounterAnimationUpsertResponse>(
+        'counter_animation_update',
+        { request },
+      ),
     ),
   remove: (id: string) =>
-    invoke<import('@src/types/plugin/api').CounterAnimationDeleteResponse>(
-      'counter_animation_delete',
-      { id },
+    runLegacyEditorMutation(() =>
+      invoke<import('@src/types/plugin/api').CounterAnimationDeleteResponse>(
+        'counter_animation_delete',
+        { id },
+      ),
     ),
   onChanged: (
     listener: (

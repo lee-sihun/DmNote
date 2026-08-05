@@ -10,7 +10,10 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { ElementShadowSpec } from '@src/types/key/shadows';
+import type { ColorModeValue } from '@src/types/color';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
   normalizeCounterSettings,
   createDefaultCounterSettings,
@@ -19,8 +22,6 @@ import {
   PropertyRow,
   NumberInput,
   ColorInput,
-  SidebarToggleIcon,
-  ModeToggleIcon,
   Tabs,
   BatchStyleTabContent,
   BatchNoteTabContent,
@@ -100,6 +101,7 @@ interface BatchKeyLikePanelProps {
   selectedKeyElements: SelectedElement[];
   selectedStatElements: SelectedElement[];
   selectedGraphElements: SelectedElement[];
+  selectedKnobElements: SelectedElement[];
   selectedKeyLikeElements: SelectedElement[];
   selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
   isRenaming: boolean;
@@ -110,8 +112,6 @@ interface BatchKeyLikePanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   // batch handlers
@@ -121,12 +121,12 @@ interface BatchKeyLikePanelProps {
   handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
   handleBatchSpacing: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   handleBatchSpacingPreview: (spacing: number) => void;
   handleBatchSpacingCommit: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
@@ -135,11 +135,27 @@ interface BatchKeyLikePanelProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchShadowChangeComplete: (
+    state: 'idle' | 'active',
+    patch: Partial<ElementShadowSpec>,
+  ) => void;
+  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
+  handleBatchGradientCommit?: (
+    target: 'backgroundColor' | 'borderColor',
+    state: 'idle' | 'active',
+    value: ColorModeValue,
+  ) => void;
   handleKeyOnlyStyleChangeComplete: (
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => void;
-  handleBatchCounterUpdate: (updates: Partial<KeyCounterSettings>) => void;
+  handleBatchCounterUpdate: (
+    updates: Partial<KeyCounterSettings>,
+    options?: {
+      activeStateOnly?: boolean;
+      colorState?: 'idle' | 'active';
+    },
+  ) => void;
   handleBatchNoteColorChange: (value: NoteColor) => void;
   handleBatchNoteColorChangeComplete: (value: NoteColor) => void;
   handleBatchGlowColorChange: (value: NoteColor) => void;
@@ -151,6 +167,11 @@ interface BatchKeyLikePanelProps {
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
   getMixedValueKeysOnly: MixedValueGetter<KeyPosition>;
+  getMixedValueActiveCapable: MixedValueGetter<KeyPosition>;
+  handleActiveCapableStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => void;
   getSelectedKeysData: () => KeyData[];
   getSelectedGraphsData: () => KeyData[];
   getSelectedBatchStyleData: () => KeyData[];
@@ -166,7 +187,6 @@ interface BatchKeyLikePanelProps {
   handleBatchGlowColorChangeCompleteKeysOnly: (value: NoteColor) => void;
   // refs
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchNoteColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchGlowColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchBorderColorButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -203,6 +223,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   selectedBatchStyleElements,
   selectedKeyElements,
   selectedStatElements: _selectedStatElements,
+  selectedKnobElements,
   selectedGraphElements,
   selectedKeyLikeElements,
   selectedGroupInfo,
@@ -214,8 +235,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   activeTab,
   setActiveTab,
   handleBatchAlign,
@@ -227,6 +246,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchShadowChangeComplete,
+  handleBatchShadowEnabledChange,
+  handleBatchGradientCommit,
   handleKeyOnlyStyleChangeComplete,
   handleBatchCounterUpdate,
   handleGraphBatchSharedSetting,
@@ -234,10 +256,12 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   getMixedValueBatch,
   getMixedValueGraphs,
   getMixedValueKeysOnly,
+  getMixedValueActiveCapable,
+  handleActiveCapableStyleChangeComplete,
   getSelectedKeysData,
   getSelectedGraphsData,
   getSelectedBatchStyleData,
-  getSelectedKeyOnlyPositions: _getSelectedKeyOnlyPositions,
+  getSelectedKeyOnlyPositions,
   handleBatchKeyOnlyStyleChangeComplete,
   handleBatchNoteColorChangeKeysOnly: _handleBatchNoteColorChangeKeysOnly,
   handleBatchNoteColorChangeCompleteKeysOnly:
@@ -250,7 +274,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchGlowColorChange: _handleBatchGlowColorChange,
   handleBatchGlowColorChangeComplete: _handleBatchGlowColorChangeComplete,
   batchScrollRefFor,
-  batchThumbRefFor,
   batchNoteColorButtonRef,
   batchGlowColorButtonRef,
   batchBorderColorButtonRef,
@@ -286,6 +309,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     ? getSelectedBatchStyleData
     : getSelectedKeysData;
 
+  // opacity가 mixed면 첫 항목 값을 공통값처럼 단언하지 않고 원색으로 표시
+  const opacityOrFull = (mixed: { isMixed: boolean; value: number }) =>
+    mixed.isMixed ? 1 : mixed.value / 100;
+
   const getBatchNoteColorDisplay = () => {
     if (batchPickerFor === 'noteColor') {
       const value = batchLocalColors.noteColor;
@@ -296,16 +323,18 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         value.type === 'gradient'
       ) {
         return {
-          style: {
-            background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
-          },
+          color: undefined,
+          gradient: { top: value.top, bottom: value.bottom },
+          opacity: batchLocalOpacities.noteOpacity / 100,
           label: 'Gradient',
           isMixed: false,
         };
       }
       const color = typeof value === 'string' ? value : '#FFFFFF';
       return {
-        style: { backgroundColor: color },
+        color,
+        gradient: undefined,
+        opacity: batchLocalOpacities.noteOpacity / 100,
         label: color.replace(/^#/, ''),
         isMixed: false,
       };
@@ -319,10 +348,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     );
     if (isMixed)
       return {
-        style: { backgroundColor: '#666' },
+        color: '#666',
+        gradient: undefined,
+        opacity: 1,
         label: 'Mixed',
         isMixed: true,
       };
+    const opacity = opacityOrFull(mixedFn((pos) => pos.noteOpacity, 80));
     if (
       value &&
       typeof value === 'object' &&
@@ -330,8 +362,15 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       value.type === 'gradient'
     ) {
       return {
-        style: {
-          background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
+        color: undefined,
+        gradient: { top: value.top, bottom: value.bottom },
+        opacity: {
+          top: opacityOrFull(
+            mixedFn((pos) => pos.noteOpacityTop ?? pos.noteOpacity, 80),
+          ),
+          bottom: opacityOrFull(
+            mixedFn((pos) => pos.noteOpacityBottom ?? pos.noteOpacity, 80),
+          ),
         },
         label: 'Gradient',
         isMixed: false,
@@ -339,7 +378,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     }
     const color = typeof value === 'string' ? value : '#FFFFFF';
     return {
-      style: { backgroundColor: color },
+      color,
+      gradient: undefined,
+      opacity,
       label: color.replace(/^#/, ''),
       isMixed: false,
     };
@@ -355,16 +396,18 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         value.type === 'gradient'
       ) {
         return {
-          style: {
-            background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
-          },
+          color: undefined,
+          gradient: { top: value.top, bottom: value.bottom },
+          opacity: batchLocalOpacities.glowOpacity / 100,
           label: 'Gradient',
           isMixed: false,
         };
       }
       const color = typeof value === 'string' ? value : '#FFFFFF';
       return {
-        style: { backgroundColor: color },
+        color,
+        gradient: undefined,
+        opacity: batchLocalOpacities.glowOpacity / 100,
         label: color.replace(/^#/, ''),
         isMixed: false,
       };
@@ -378,10 +421,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     );
     if (isMixed)
       return {
-        style: { backgroundColor: '#666' },
+        color: '#666',
+        gradient: undefined,
+        opacity: 1,
         label: 'Mixed',
         isMixed: true,
       };
+    const opacity = opacityOrFull(mixedFn((pos) => pos.noteGlowOpacity, 70));
     if (
       value &&
       typeof value === 'object' &&
@@ -389,8 +435,18 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       value.type === 'gradient'
     ) {
       return {
-        style: {
-          background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
+        color: undefined,
+        gradient: { top: value.top, bottom: value.bottom },
+        opacity: {
+          top: opacityOrFull(
+            mixedFn((pos) => pos.noteGlowOpacityTop ?? pos.noteGlowOpacity, 70),
+          ),
+          bottom: opacityOrFull(
+            mixedFn(
+              (pos) => pos.noteGlowOpacityBottom ?? pos.noteGlowOpacity,
+              70,
+            ),
+          ),
         },
         label: 'Gradient',
         isMixed: false,
@@ -398,7 +454,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     }
     const color = typeof value === 'string' ? value : '#FFFFFF';
     return {
-      style: { backgroundColor: color },
+      color,
+      gradient: undefined,
+      opacity,
       label: color.replace(/^#/, ''),
       isMixed: false,
     };
@@ -409,7 +467,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     if (batchPickerFor === 'borderColor') {
       const color = batchLocalColors.borderColor;
       return {
-        style: { backgroundColor: color },
+        color,
+        gradient: undefined,
+        opacity: batchLocalColors.borderOpacity / 100,
         label: color.replace(/^#/, ''),
         isMixed: false,
       };
@@ -420,45 +480,34 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     const { isMixed, value } = mixedFn((pos) => pos.noteBorderColor, '#FFFFFF');
     if (isMixed)
       return {
-        style: { backgroundColor: '#666' },
+        color: '#666',
+        gradient: undefined,
+        opacity: 1,
         label: 'Mixed',
         isMixed: true,
       };
     const color = typeof value === 'string' ? value : '#FFFFFF';
     return {
-      style: { backgroundColor: color },
+      color,
+      gradient: undefined,
+      opacity: opacityOrFull(mixedFn((pos) => pos.noteBorderOpacity, 100)),
       label: color.replace(/^#/, ''),
       isMixed: false,
     };
   };
 
   const keysData = getSelectedKeysData();
-  const batchCounterSettings = keysData[0]?.position
-    ? normalizeCounterSettings(keysData[0].position.counter)
+  const keyOnlyPositions = getSelectedKeyOnlyPositions();
+  const firstCounterPosition =
+    keyOnlyPositions[0]?.position ?? keysData[0]?.position;
+  const batchCounterSettings = firstCounterPosition
+    ? normalizeCounterSettings(firstCounterPosition.counter)
     : createDefaultCounterSettings();
   const firstPos = keysData[0]?.position;
   const batchKeyVisual = firstPos
     ? {
-        width: firstPos.width,
-        height: firstPos.height,
-        backgroundColor: firstPos.backgroundColor,
-        borderColor: firstPos.borderColor,
-        borderWidth: firstPos.borderWidth,
-        borderRadius: firstPos.borderRadius,
-        fontColor: firstPos.fontColor,
-        fontSize: firstPos.fontSize,
-        fontWeight: firstPos.fontWeight,
-        fontFamily: firstPos.fontFamily,
-        fontItalic: firstPos.fontItalic,
-        fontUnderline: firstPos.fontUnderline,
-        fontStrikethrough: firstPos.fontStrikethrough,
-        displayText: firstPos.displayText,
+        ...firstPos,
         displayName: keysData[0]?.keyInfo?.displayName,
-        className: firstPos.className,
-        activeBackgroundColor: firstPos.activeBackgroundColor,
-        activeBorderColor: firstPos.activeBorderColor,
-        activeFontColor: firstPos.activeFontColor,
-        useInlineStyles: firstPos.useInlineStyles,
         isStat: selectedKeyLikeElements[0]?.type === 'stat',
       }
     : undefined;
@@ -522,21 +571,18 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   };
 
   return (
-    <div
-      ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
-    >
+    <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       {/* 헤더 + 탭 영역 */}
-      <div className="flex-shrink-0 border-b border-[#3A3943]">
+      <div className="flex-shrink-0">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+        <div className={PANEL_HEADER_CLASS}>
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -558,7 +604,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               ) : (
                 <div className="flex items-center gap-[4px] min-w-0">
                   <span
-                    className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
                     onDoubleClick={handleRenameStart}
                     title={selectedGroupInfo.name}
                   >
@@ -566,7 +612,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -574,31 +620,15 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 </div>
               )
             ) : (
-              <span className="text-[#DBDEE8] text-style-2">
+              <span className="text-fg text-label leading-none">
                 {t('propertiesPanel.multiSelection') || '다중 선택'}
               </span>
             )}
             {!selectedGroupInfo && (
-              <span className="text-[#6B6D75] text-style-4">
+              <span className="text-fg-faint text-body">
                 ({selectedBatchStyleElements.length})
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-[4px]">
-            <button
-              onClick={handleToggleMode}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-            >
-              <ModeToggleIcon mode="layer" />
-            </button>
-            <button
-              onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
           </div>
         </div>
 
@@ -626,10 +656,15 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               activeTab === TABS.STYLE ? '' : 'hidden'
             }`}
           >
-            <div className="p-[12px] flex flex-col gap-[12px]">
+            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
               <BatchStyleTabContent
                 selectedCount={selectedBatchStyleElements.length}
                 showSoundControls={selectedKeyElements.length > 0}
+                showShadowControls={!hasGraphSelection}
+                shadowActiveState={
+                  selectedKeyElements.length > 0 ||
+                  selectedKnobElements.length > 0
+                }
                 getMixedValue={styleMixedValueGetter}
                 getSelectedKeysData={styleSelectedDataGetter}
                 afterSizeContent={
@@ -639,7 +674,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         label={t('propertiesPanel.graphShape') || 'Graph Shape'}
                       >
                         {graphTypeState.isMixed ? (
-                          <span className="text-[#6B6D75] text-style-4 italic">
+                          <span className="text-fg-faint text-body italic">
                             Mixed
                           </span>
                         ) : null}
@@ -655,8 +690,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                       </PropertyRow>
 
                       {hasLineGraph && (
-                        <div className="flex justify-between items-center w-full h-[23px]">
-                          <p className="text-white text-style-2">
+                        <div className="flex justify-between items-center w-full min-h-[32px]">
+                          <p className="text-fg-muted text-label">
                             {t('propertiesPanel.graphShowAverageLine') ||
                               'Show Average Line'}
                           </p>
@@ -675,7 +710,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
                       >
                         {graphSpeedState.isMixed ? (
-                          <span className="text-[#6B6D75] text-style-4 italic">
+                          <span className="text-fg-faint text-body italic">
                             Mixed
                           </span>
                         ) : null}
@@ -703,7 +738,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         label={t('propertiesPanel.graphColor') || 'Graph Color'}
                       >
                         {graphColorState.isMixed ? (
-                          <span className="text-[#6B6D75] text-style-4 italic">
+                          <span className="text-fg-faint text-body italic">
                             Mixed
                           </span>
                         ) : null}
@@ -720,14 +755,14 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         />
                       </PropertyRow>
 
-                      <div className="flex justify-between items-center w-full h-[23px]">
-                        <p className="text-white text-style-2">
+                      <div className="flex justify-between items-center w-full min-h-[32px]">
+                        <p className="text-fg-muted text-label">
                           {t('propertiesPanel.graphAnimation') ||
                             'Graph Animation'}
                         </p>
                         <div className="flex items-center gap-[6px]">
                           {graphAnimationState.isMixed ? (
-                            <span className="text-[#6B6D75] text-style-4 italic">
+                            <span className="text-fg-faint text-body italic">
                               Mixed
                             </span>
                           ) : null}
@@ -754,7 +789,16 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 handleBatchResize={handleBatchResize}
                 handleBatchStyleChange={handleBatchStyleChange}
                 handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+                handleBatchShadowChangeComplete={
+                  handleBatchShadowChangeComplete
+                }
+                handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
+                handleBatchGradientCommit={handleBatchGradientCommit}
                 getKeyOnlyMixedValue={getMixedValueKeysOnly}
+                getActiveCapableMixedValue={getMixedValueActiveCapable}
+                handleActiveCapableStyleChangeComplete={
+                  handleActiveCapableStyleChangeComplete
+                }
                 handleKeyOnlyStyleChangeComplete={
                   handleKeyOnlyStyleChangeComplete
                 }
@@ -768,13 +812,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 t={t}
               />
             </div>
-            <div className="properties-panel-overlay-bar">
-              <div
-                ref={batchThumbRefFor(TABS.STYLE)}
-                className="properties-panel-overlay-thumb"
-                style={{ display: 'none' }}
-              />
-            </div>
           </div>
 
           {/* NOTE 탭 viewport */}
@@ -785,7 +822,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 activeTab === TABS.NOTE ? '' : 'hidden'
               }`}
             >
-              <div className="p-[12px] flex flex-col gap-[12px]">
+              <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
                 <BatchNoteTabContent
                   getMixedValue={getMixedValueKeysOnly}
                   handleBatchStyleChangeComplete={
@@ -812,13 +849,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   t={t}
                 />
               </div>
-              <div className="properties-panel-overlay-bar">
-                <div
-                  ref={batchThumbRefFor(TABS.NOTE)}
-                  className="properties-panel-overlay-thumb"
-                  style={{ display: 'none' }}
-                />
-              </div>
             </div>
           )}
 
@@ -829,7 +859,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               activeTab === TABS.COUNTER ? '' : 'hidden'
             }`}
           >
-            <div className="p-[12px] flex flex-col gap-[12px]">
+            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
               <BatchCounterTabContent
                 batchCounterSettings={batchCounterSettings}
                 keyVisual={batchKeyVisual}
@@ -842,15 +872,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
                 isFillPickerOpen={batchPickerFor === 'fill'}
                 isStrokePickerOpen={batchPickerFor === 'stroke'}
-                panelElement={panelElement}
                 t={t}
-              />
-            </div>
-            <div className="properties-panel-overlay-bar">
-              <div
-                ref={batchThumbRefFor(TABS.COUNTER)}
-                className="properties-panel-overlay-thumb"
-                style={{ display: 'none' }}
               />
             </div>
           </div>
@@ -871,12 +893,14 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               batchPickerFor !== 'noteColor' && batchPickerFor !== 'glowColor'
             }
             stateMode={
-              batchPickerFor === 'fill' || batchPickerFor === 'stroke'
+              (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
+              selectedKeyElements.length > 0
                 ? batchCounterColorState
                 : undefined
             }
             onStateModeChange={
-              batchPickerFor === 'fill' || batchPickerFor === 'stroke'
+              (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
+              selectedKeyElements.length > 0
                 ? setBatchCounterColorState
                 : undefined
             }
@@ -946,35 +970,42 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 : styleMixedValueGetter((pos) => pos.inactiveImage, '').value
             }
             activeImage={
-              styleMixedValueGetter((pos) => pos.activeImage, '').isMixed
+              getMixedValueActiveCapable((pos) => pos.activeImage, '').isMixed
                 ? ''
-                : styleMixedValueGetter((pos) => pos.activeImage, '').value
+                : getMixedValueActiveCapable((pos) => pos.activeImage, '').value
             }
             idleTransparent={
               styleMixedValueGetter((pos) => pos.idleTransparent, false).value
             }
             activeTransparent={
-              styleMixedValueGetter((pos) => pos.activeTransparent, false).value
+              getMixedValueActiveCapable((pos) => pos.activeTransparent, false)
+                .value
             }
             onIdleImageChange={(imageUrl: string) => {
               handleBatchStyleChangeComplete('inactiveImage', imageUrl);
             }}
             onActiveImageChange={(imageUrl: string) => {
-              handleBatchStyleChangeComplete('activeImage', imageUrl);
+              handleActiveCapableStyleChangeComplete('activeImage', imageUrl);
             }}
             onIdleTransparentChange={(value: boolean) => {
               handleBatchStyleChangeComplete('idleTransparent', value);
             }}
             onActiveTransparentChange={(value: boolean) => {
-              handleBatchStyleChangeComplete('activeTransparent', value);
+              handleActiveCapableStyleChangeComplete(
+                'activeTransparent',
+                value,
+              );
             }}
             onIdleImageReset={() => {
               handleBatchStyleChangeComplete('inactiveImage', '');
             }}
             onActiveImageReset={() => {
-              handleBatchStyleChangeComplete('activeImage', '');
+              handleActiveCapableStyleChangeComplete('activeImage', '');
             }}
             onClose={() => setShowBatchImagePicker(false)}
+            showActiveState={
+              selectedKeyElements.length > 0 || selectedKnobElements.length > 0
+            }
           />
         )}
       </>
@@ -998,20 +1029,18 @@ interface BatchGraphOnlyPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   handleBatchAlign: (
     direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
   ) => void;
   handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
   handleBatchSpacing: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   handleBatchSpacingPreview: (spacing: number) => void;
   handleBatchSpacingCommit: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
@@ -1020,12 +1049,16 @@ interface BatchGraphOnlyPanelProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchGradientCommit?: (
+    target: 'backgroundColor' | 'borderColor',
+    state: 'idle' | 'active',
+    value: ColorModeValue,
+  ) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
   getSelectedGraphsData: () => KeyData[];
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
   showBatchImagePicker: boolean;
   setShowBatchImagePicker: (value: boolean) => void;
@@ -1047,8 +1080,6 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   handleBatchAlign,
   handleBatchDistribute,
   handleBatchSpacing,
@@ -1058,12 +1089,12 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchGradientCommit,
   handleGraphBatchSharedSetting,
   getMixedValueGraphs,
   getMixedValueGraphsAsKey,
   getSelectedGraphsData,
   batchScrollRefFor,
-  batchThumbRefFor,
   batchImageButtonRef,
   showBatchImagePicker,
   setShowBatchImagePicker,
@@ -1104,19 +1135,16 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   const batchGraphSpacing = getBatchSpacingValue();
 
   return (
-    <div
-      ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
-    >
-      <div className="flex-shrink-0 border-b border-[#3A3943]">
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+    <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
+      <div className="flex-shrink-0">
+        <div className={PANEL_HEADER_CLASS}>
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -1138,7 +1166,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               ) : (
                 <div className="flex items-center gap-[4px] min-w-0">
                   <span
-                    className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
                     onDoubleClick={handleRenameStart}
                     title={selectedGroupInfo.name}
                   >
@@ -1146,7 +1174,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -1154,31 +1182,15 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 </div>
               )
             ) : (
-              <span className="text-[#DBDEE8] text-style-2">
+              <span className="text-fg text-label leading-none">
                 {t('propertiesPanel.multiSelection') || '다중 선택'}
               </span>
             )}
             {!selectedGroupInfo && (
-              <span className="text-[#6B6D75] text-style-4">
+              <span className="text-fg-faint text-body">
                 ({selectedGraphElements.length})
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-[4px]">
-            <button
-              onClick={handleToggleMode}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-            >
-              <ModeToggleIcon mode="layer" />
-            </button>
-            <button
-              onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
           </div>
         </div>
       </div>
@@ -1188,19 +1200,21 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           ref={batchScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             <BatchStyleTabContent
               selectedCount={selectedGraphElements.length}
               hideDisplayText
               hideFontControls
               showSoundControls={false}
+              showShadowControls={false}
+              shadowActiveState={false}
               afterSizeContent={
                 <>
                   <PropertyRow
                     label={t('propertiesPanel.graphShape') || 'Graph Shape'}
                   >
                     {graphTypeState.isMixed ? (
-                      <span className="text-[#6B6D75] text-style-4 italic">
+                      <span className="text-fg-faint text-body italic">
                         Mixed
                       </span>
                     ) : null}
@@ -1216,8 +1230,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                   </PropertyRow>
 
                   {hasLineGraph && (
-                    <div className="flex justify-between items-center w-full h-[23px]">
-                      <p className="text-white text-style-2">
+                    <div className="flex justify-between items-center w-full min-h-[32px]">
+                      <p className="text-fg-muted text-label">
                         {t('propertiesPanel.graphShowAverageLine') ||
                           'Show Average Line'}
                       </p>
@@ -1236,7 +1250,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                     label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
                   >
                     {graphSpeedState.isMixed ? (
-                      <span className="text-[#6B6D75] text-style-4 italic">
+                      <span className="text-fg-faint text-body italic">
                         Mixed
                       </span>
                     ) : null}
@@ -1261,7 +1275,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                     label={t('propertiesPanel.graphColor') || 'Graph Color'}
                   >
                     {graphColorState.isMixed ? (
-                      <span className="text-[#6B6D75] text-style-4 italic">
+                      <span className="text-fg-faint text-body italic">
                         Mixed
                       </span>
                     ) : null}
@@ -1276,13 +1290,13 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                     />
                   </PropertyRow>
 
-                  <div className="flex justify-between items-center w-full h-[23px]">
-                    <p className="text-white text-style-2">
+                  <div className="flex justify-between items-center w-full min-h-[32px]">
+                    <p className="text-fg-muted text-label">
                       {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
                     </p>
                     <div className="flex items-center gap-[6px]">
                       {graphAnimationState.isMixed ? (
-                        <span className="text-[#6B6D75] text-style-4 italic">
+                        <span className="text-fg-faint text-body italic">
                           Mixed
                         </span>
                       ) : null}
@@ -1309,6 +1323,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               handleBatchResize={handleBatchResize}
               handleBatchStyleChange={handleBatchStyleChange}
               handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+              handleBatchGradientCommit={handleBatchGradientCommit}
               showBatchImagePicker={showBatchImagePicker}
               onToggleBatchImagePicker={() =>
                 setShowBatchImagePicker(!showBatchImagePicker)
@@ -1319,13 +1334,6 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               t={t}
             />
           </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={batchThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
-          </div>
         </div>
       </div>
 
@@ -1334,6 +1342,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           open={showBatchImagePicker}
           referenceRef={batchImageButtonRef}
           panelElement={panelElement}
+          showActiveState={false}
           idleImage={
             getMixedValueGraphs((pos) => pos.inactiveImage, '').isMixed
               ? ''
@@ -1391,20 +1400,18 @@ interface BatchKnobOnlyPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   handleBatchAlign: (
     direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
   ) => void;
   handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
   handleBatchSpacing: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   handleBatchSpacingPreview: (spacing: number) => void;
   handleBatchSpacingCommit: (
     spacing: number,
-    options?: { skipHistory?: boolean },
+    options?: { gestureId?: string; deferSave?: boolean },
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
@@ -1413,12 +1420,21 @@ interface BatchKnobOnlyPanelProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
+  handleBatchShadowChangeComplete: (
+    state: 'idle' | 'active',
+    patch: Partial<ElementShadowSpec>,
+  ) => void;
+  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
+  handleBatchGradientCommit?: (
+    target: 'backgroundColor' | 'borderColor',
+    state: 'idle' | 'active',
+    value: ColorModeValue,
+  ) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
   getSelectedKnobsData: () => KeyData[];
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
   showBatchImagePicker: boolean;
   setShowBatchImagePicker: (value: boolean) => void;
@@ -1440,8 +1456,6 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   handleBatchAlign,
   handleBatchDistribute,
   handleBatchSpacing,
@@ -1451,12 +1465,14 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  handleBatchShadowChangeComplete,
+  handleBatchShadowEnabledChange,
+  handleBatchGradientCommit,
   handleKnobBatchSharedSetting,
   getMixedValueKnobs,
   getMixedValueKnobsAsKey,
   getSelectedKnobsData,
   batchScrollRefFor,
-  batchThumbRefFor,
   batchImageButtonRef,
   showBatchImagePicker,
   setShowBatchImagePicker,
@@ -1472,19 +1488,16 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   const batchKnobSpacing = getBatchSpacingValue();
 
   return (
-    <div
-      ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
-    >
-      <div className="flex-shrink-0 border-b border-[#3A3943]">
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+    <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
+      <div className="flex-shrink-0">
+        <div className={PANEL_HEADER_CLASS}>
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -1506,7 +1519,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               ) : (
                 <div className="flex items-center gap-[4px] min-w-0">
                   <span
-                    className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
                     onDoubleClick={handleRenameStart}
                     title={selectedGroupInfo.name}
                   >
@@ -1514,7 +1527,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -1522,31 +1535,15 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                 </div>
               )
             ) : (
-              <span className="text-[#DBDEE8] text-style-2">
+              <span className="text-fg text-label leading-none">
                 {t('propertiesPanel.multiSelection') || '다중 선택'}
               </span>
             )}
             {!selectedGroupInfo && (
-              <span className="text-[#6B6D75] text-style-4">
+              <span className="text-fg-faint text-body">
                 ({selectedKnobElements.length})
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-[4px]">
-            <button
-              onClick={handleToggleMode}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-            >
-              <ModeToggleIcon mode="layer" />
-            </button>
-            <button
-              onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
           </div>
         </div>
       </div>
@@ -1556,19 +1553,20 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
           ref={batchScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             <BatchStyleTabContent
               selectedCount={selectedKnobElements.length}
               hideDisplayText
               hideFontControls
               showSoundControls={false}
+              shadowKind="knob"
               afterSizeContent={
                 <>
                   <PropertyRow
                     label={t('propertiesPanel.knobSensitivity') || '민감도'}
                   >
                     {sensitivityState.isMixed ? (
-                      <span className="text-[#6B6D75] text-style-4 italic">
+                      <span className="text-fg-faint text-body italic">
                         Mixed
                       </span>
                     ) : null}
@@ -1588,13 +1586,13 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                     />
                   </PropertyRow>
 
-                  <div className="flex justify-between items-center w-full h-[23px]">
-                    <p className="text-white text-style-2">
+                  <div className="flex justify-between items-center w-full min-h-[32px]">
+                    <p className="text-fg-muted text-label">
                       {t('propertiesPanel.knobReverse') || '방향 반전'}
                     </p>
                     <div className="flex items-center gap-[6px]">
                       {reverseState.isMixed ? (
-                        <span className="text-[#6B6D75] text-style-4 italic">
+                        <span className="text-fg-faint text-body italic">
                           Mixed
                         </span>
                       ) : null}
@@ -1621,6 +1619,9 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               handleBatchResize={handleBatchResize}
               handleBatchStyleChange={handleBatchStyleChange}
               handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+              handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
+              handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
+              handleBatchGradientCommit={handleBatchGradientCommit}
               showBatchImagePicker={showBatchImagePicker}
               onToggleBatchImagePicker={() =>
                 setShowBatchImagePicker(!showBatchImagePicker)
@@ -1629,13 +1630,6 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}
               t={t}
-            />
-          </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={batchThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
             />
           </div>
         </div>

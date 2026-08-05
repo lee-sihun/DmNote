@@ -5,7 +5,11 @@ import { useEffect } from 'react';
  * Tauri 웹뷰에서 Ctrl+P (인쇄), Ctrl+S (저장), Ctrl+F (찾기) 등의
  * 브라우저 기본 동작을 방지합니다.
  */
-export function useBlockBrowserShortcuts() {
+export function useBlockBrowserShortcuts(options?: {
+  // 분리 패널 창처럼 Cmd/Ctrl+W를 앱 핸들러(재부착)로 넘겨야 하는 창용
+  allowCloseKeyPropagation?: boolean;
+}) {
+  const allowCloseKeyPropagation = options?.allowCloseKeyPropagation === true;
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
@@ -46,7 +50,9 @@ export function useBlockBrowserShortcuts() {
         // 새 탭
         { key: 't', ctrl: true },
         // 탭 닫기
-        { key: 'w', ctrl: true },
+        { key: 'w', ctrl: true, allowPropagation: allowCloseKeyPropagation },
+        // 전체 창 닫기 - 분리 패널에서도 재부착이 아닌 조합은 명시 차단
+        { key: 'w', ctrl: true, shift: true },
         // 닫은 탭 복원
         { key: 't', ctrl: true, shift: true },
         // 확대/축소
@@ -90,5 +96,5 @@ export function useBlockBrowserShortcuts() {
     // 캡처 단계에서 이벤트를 가로채서 가장 먼저 처리
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, []);
+  }, [allowCloseKeyPropagation]);
 }

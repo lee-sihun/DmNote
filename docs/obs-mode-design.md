@@ -29,7 +29,7 @@
   → [AppState (단일 상태 허브)]
       ├─ [기존 overlay window]     ← OBS 모드 OFF
       ├─ [ObsBridgeService]        ← OBS 모드 ON
-      │    └─ WebSocket 서버 (localhost:PORT)
+      │    └─ WebSocket 서버 (0.0.0.0:PORT — 같은 네트워크 다른 PC 접속 지원, 토큰 인증)
       │         ├─ HTTP: OBS 페이지 정적 파일 서빙  ✅
       │         └─ WS: 키 이벤트 / 설정 / 레이아웃 브로드캐스트
       └─ [Main window]
@@ -74,7 +74,7 @@
 | 방향 | 타입 | 용도 | 빈도 | 상태 |
 |------|------|------|------|------|
 | C→S | `hello` | 최초 접속 핸드셰이크 | 1회 | ✅ |
-| S→C | `hello_ack` | 프로토콜 승인 + deny list | 1회 | ✅ |
+| S→C | `hello_ack` | 프로토콜 승인 + allow list | 1회 | ✅ |
 | S→C | `snapshot` | 전체 상태 동기화 | 접속 시 + resync | ✅ |
 | S→C | `tauri_event` | 범용 Tauri 이벤트 포워딩 | 빈번 | ✅ (v4: 기존 key_event/settings_diff/counter_update 통합) |
 | C→S | `invoke_request` | 커맨드 실행 요청 (WS RPC) | 초기 + 간헐 | ✅ |
@@ -87,7 +87,7 @@
 ```
 1. OBS 페이지 접속 (WS 직접 연결)              ← v1: HTTP upgrade 없이 직접 WS
 2. 클라이언트 → hello { client, protocol, appVersion, token }
-3. 서버 → hello_ack { serverVersion, obsMode, denyList }
+3. 서버 → hello_ack { serverVersion, obsMode, allowedList }
 4. 서버 → snapshot { 전체 상태 }
 5. 이후 tauri_event (keys:state, settings:changed 등) + invoke_request/invoke_response
 6. seq gap 감지 시 → resync_request → snapshot 재전송
@@ -104,10 +104,14 @@
     "client": "obs-browser",
     "protocol": 1,
     "appVersion": "1.5.2",
-    "resumeFromSeq": 0
+    "resumeFromSeq": 0,
+    "token": "<세션 토큰>"
   }
 }
 ```
+
+서버는 `v`와 `payload.protocol`이 서버의 `OBS_PROTOCOL_VERSION`과 일치하지 않으면
+`error { code: "PROTOCOL_MISMATCH" }`를 보내고 연결을 종료한다 (fail-closed, 토큰 검증보다 먼저 수행).
 
 #### snapshot (S→C) ✅
 ```json
@@ -143,7 +147,7 @@
 }
 ```
 > v4에서 기존 `key_event`, `settings_diff`, `counter_update` 전용 메시지를 `tauri_event`로 통합.
-> 백엔드 `register_event_forwarding()`이 22개 Tauri 이벤트를 자동 포워딩.
+> 백엔드 `register_event_forwarding()`이 24개 Tauri 이벤트를 자동 포워딩.
 
 ### 3.5 상태 일관성 ✅
 
@@ -197,7 +201,7 @@ pub type AssetFetcher = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + S
 - `broadcast_snapshot()` — 스냅샷 전송 ✅
 - `broadcast_tauri_event(event, data)` — 범용 Tauri 이벤트 포워딩 ✅
 - `update_snapshot(snapshot)` — 캐시 갱신 ✅
-- `register_event_forwarding(app)` — 22개 Tauri 이벤트 → WS 자동 포워딩 ✅
+- `register_event_forwarding(app)` — 24개 Tauri 이벤트 → WS 자동 포워딩 ✅
 - `set_app_handle(handle)` — invoke_request WS RPC용 AppHandle 설정 ✅
 - `status()` — 실행 상태 + 포트 + 클라이언트 수 조회 ✅
 
@@ -543,13 +547,13 @@ OBS 환경:
 |------|------|:---:|
 | 프론트 IPC shim | `__TAURI_INTERNALS__` → WS RPC 교체 | **범용** |
 | 프론트 이벤트 시스템 | 콜백 레지스트리 + `tauri_event` 디스패치 | **범용** |
-| 프론트 deny 체크 | `hello_ack`에서 수신한 단일 배열로 동적 구성 | **백엔드에서 수신 (관리 불필요)** |
+| 프론트 allow 체크 | `hello_ack`에서 수신한 단일 배열로 동적 구성 | **백엔드에서 수신 (관리 불필요)** |
 | 백엔드 WS RPC | `invoke_request` → `webview.on_message()` 자동 디스패치 | **범용** |
-| 백엔드 deny 리스트 | OBS에서 의미 없는 커맨드 차단 | **프로젝트별 설정 (유일한 관리 포인트)** |
+| 백엔드 allow 리스트 | OBS에서 허용할 커맨드만 명시 | **프로젝트별 설정 (유일한 관리 포인트)** |
 | 백엔드 이벤트 포워딩 | Tauri emit → `tauri_event` WS 브로드캐스트 | **범용** |
 
-프로젝트별로 관리하는 것은 **deny 리스트 하나뿐** — **백엔드 Rust 코드에서 1곳만 관리**.
-프론트엔드는 WS handshake(`hello_ack`)에서 deny 리스트를 수신하여 No-op Set을 동적 구성.
+프로젝트별로 관리하는 것은 **allow 리스트 하나뿐** — **백엔드 Rust 코드에서 1곳만 관리**.
+프론트엔드는 WS handshake(`hello_ack`)에서 allow 리스트를 수신하여 허용 Set을 동적 구성.
 나머지 인프라는 어떤 Tauri 앱이든 그대로 이식 가능.
 
 ### 12.4 IPC Shim 구현
@@ -559,14 +563,15 @@ OBS 환경:
 shim은 **커맨드별 분기를 하지 않는다**. 모든 invoke 호출은 다음 3단계로만 처리:
 
 1. **이벤트 플러그인** (`plugin:event|*`) → 로컬 콜백 레지스트리에서 처리
-2. **No-op** (OBS에서 의미 없는 창 관리 커맨드) → 즉시 반환
+2. **allow 체크** (allowlist에 없는 커맨드는 no-op/차단) → 즉시 반환
 3. **WS RPC** → 백엔드에 전달, 실제 커맨드 핸들러가 처리
 
 ```typescript
 // src/renderer/api/ipcShim.ts
 
-// deny 리스트는 하드코딩 아님 — WS handshake(hello_ack)에서 수신
-let denyList: string[] = [];
+// allow 리스트는 하드코딩 아님 — WS handshake(hello_ack)에서 수신
+let allowList: string[] = [];
+let allowListReceived = false;
 
 async function shimInvoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
   // 1. 이벤트 플러그인 (프론트엔드 로컬)
@@ -574,74 +579,86 @@ async function shimInvoke(cmd: string, args?: Record<string, unknown>): Promise<
   if (cmd === 'plugin:event|unlisten') { handleEventUnlisten(args); return; }
   if (cmd === 'plugin:event|emit') { handleEventEmit(args); return; }
 
-  // 2. deny 체크 (백엔드에서 수신한 단일 리스트)
-  if (isDenied(cmd)) return;
+  // 2. allow 체크 (백엔드에서 수신한 단일 리스트)
+  if (!isAllowed(cmd)) return;
 
-  // 3. 나머지 전부 → WS RPC (백엔드가 실제 처리)
+  // 3. 허용된 커맨드만 → WS RPC (백엔드가 실제 처리)
   return wsRpc(cmd, args);
 }
 
-// "|"로 끝나면 prefix 매칭, 아니면 exact 매칭
-function isDenied(cmd: string): boolean {
-  return denyList.some(entry =>
-    entry.endsWith('|') ? cmd.startsWith(entry) : cmd === entry
-  );
+// allowlist 정확 일치 — hello_ack 수신 전에는 백엔드 이중 검사에 위임
+function isAllowed(cmd: string): boolean {
+  if (!allowListReceived) return true;
+  return allowList.includes(cmd);
 }
 ```
 
-**커맨드 추가 시 shim 수정 불필요** — 백엔드에 커맨드가 있으면 자동으로 동작.
+**신규 커맨드는 기본 차단** — OBS 오버레이에 실제로 필요한 커맨드만 백엔드 allowlist에 추가한다.
+deny 방식(신규 커맨드 기본 노출)과 정반대이며, 위험 커맨드가 실수로 원격에 열리는 것을 구조적으로 막는다.
 
-#### deny 리스트 일원화
+#### allow 리스트 일원화
 
-**백엔드가 유일한 source of truth**. 단일 배열 하나로 exact + prefix 매칭 통합.
-`|`로 끝나는 항목은 prefix 매칭, 아니면 exact 매칭.
+**백엔드가 유일한 source of truth**. 단일 배열, **정확 일치(exact match)** 매칭.
+prefix 매칭은 없다 — 명시된 커맨드 이름만 허용된다.
 프론트엔드는 WS handshake에서 수신:
 
 ```json
-// hello_ack 응답에 deny 리스트 포함
+// hello_ack 응답에 allow 리스트 포함
 {
   "type": "hello_ack",
   "payload": {
-    "serverVersion": "1.5.2",
+    "serverVersion": "1.6.1",
     "obsMode": true,
-    "denyList": [
-      "overlay_resize", "overlay_set_visible", "overlay_set_lock",
-      "overlay_set_anchor", "overlay_get",
-      "window_minimize", "window_close", "window_show_main",
-      "window_open_devtools_all",
-      "app_quit", "app_restart", "app_open_external", "app_auto_update",
-      "plugin:window|", "plugin:menu|", "plugin:resources|"
+    "allowedList": [
+      "app_bootstrap", "settings_get", "layer_groups_get",
+      "note_tab_get_all", "note_tab_get",
+      "css_get", "css_get_use", "css_tab_get_all", "css_tab_get",
+      "js_get", "js_get_use", "get_cursor_settings",
+      "keys_get", "keys_get_counters", "positions_get",
+      "stat_positions_get", "graph_positions_get", "knob_positions_get",
+      "custom_tabs_list", "counter_animation_list",
+      "plugin_bridge_send", "plugin_bridge_send_to",
+      "raw_input_subscribe", "raw_input_unsubscribe",
+      "plugin_storage_get", "plugin_storage_set", "plugin_storage_remove",
+      "plugin_storage_keys", "plugin_storage_has_data", "plugin_storage_clear_by_prefix"
     ]
   }
 }
 ```
 
-프론트 shim은 `hello_ack` 수신 시 `denyList`를 그대로 저장:
+프론트 shim은 `hello_ack` 수신 시 `allowedList`를 그대로 저장:
 
 ```typescript
 function onHelloAck(payload: HelloAckPayload) {
-  denyList = payload.denyList ?? [];
+  if (payload.allowedList) {
+    allowList = payload.allowedList;
+    allowListReceived = true;
+  }
 }
 ```
 
 이 구조의 장점:
-- **관리 포인트 1곳** — Rust 코드의 `DENIED_WS_COMMANDS` 배열 하나만 수정
-- **단일 배열** — exact/prefix 구분 없이 하나의 리스트로 통합 (`|` suffix 컨벤션)
+- **관리 포인트 1곳** — Rust 코드의 `ALLOWED_WS_COMMANDS` 배열 하나만 수정
+- **fail-closed** — allowlist에 없으면 차단 — 신규 커맨드가 검토 없이 원격에 열리지 않음
 - **빌드 의존성 없음** — codegen이나 공유 JSON 파일 불필요
 - **런타임 동기화** — 백엔드 버전이 올라가도 프론트 shim 재빌드 필요 없음
+- **백엔드 이중 검사** — 프론트는 UX상 조기 차단일 뿐, 실제 경계는 `handle_invoke_request`가 `ALLOWED_WS_COMMANDS`로 재검사
 
-#### deny 커맨드 목록 (참고 — Rust에서만 관리)
+#### allow 커맨드 목록 (참고 — Rust에서만 관리)
 
-| 항목 | 매칭 | 이유 |
-|------|------|------|
-| `overlay_resize`, `overlay_set_visible` 등 | exact | Tauri 윈도우 조작 |
-| `window_minimize`, `window_close` 등 | exact | 네이티브 윈도우 제어 |
-| `app_quit`, `app_restart` 등 | exact | 앱 생명주기 |
-| `plugin:window\|` | prefix | Tauri window 플러그인 전체 |
-| `plugin:menu\|` | prefix | Tauri menu 플러그인 전체 |
-| `plugin:resources\|` | prefix | Tauri resources 플러그인 전체 |
+오버레이 렌더에 필요한 읽기 계열 + 플러그인 브릿지/구독/네임스페이스 storage만 허용. 전부 정확 일치.
 
-`raw_input_subscribe` 등 **백엔드 기능이 필요한 커맨드**는 deny가 아닌 WS RPC로 처리.
+| 분류 | 커맨드 | 이유 |
+|------|--------|------|
+| 부트스트랩·상태 | `app_bootstrap`, `settings_get`, `layer_groups_get`, `note_tab_get_all`, `note_tab_get` | 오버레이 초기 스냅샷·상태 읽기 |
+| CSS/JS 읽기 | `css_get`, `css_get_use`, `css_tab_get_all`, `css_tab_get`, `js_get`, `js_get_use` | 커스텀 CSS/JS 로드 |
+| 위치·카운터 읽기 | `keys_get`, `keys_get_counters`, `positions_get`, `stat_positions_get`, `graph_positions_get`, `knob_positions_get`, `custom_tabs_list`, `counter_animation_list` | 배치·통계 읽기 |
+| 커서 | `get_cursor_settings` | macOS 커서 처리 |
+| 플러그인 브릿지·구독 | `plugin_bridge_send`, `plugin_bridge_send_to`, `raw_input_subscribe`, `raw_input_unsubscribe` | 오버레이 플러그인 동기화·입력 구독 |
+| 플러그인 storage | `plugin_storage_get`, `plugin_storage_set`, `plugin_storage_remove`, `plugin_storage_keys`, `plugin_storage_has_data`, `plugin_storage_clear_by_prefix` | 플러그인 네임스페이스 저장소 |
+
+`settings_update`, `sound_delete`, `js_set_content`, `preset_save` 등 **변이·파일 커맨드는 allowlist에 없어 원격 차단**.
+`plugin:window|`, `plugin:menu|` 등 네이티브 창/메뉴 커맨드도 allowlist에 없으므로 자동 no-op 처리된다.
 
 ### 12.5 WS ↔ Tauri 이벤트 매핑
 
@@ -665,7 +682,7 @@ WS 브로드캐스트 메시지를 수신하면 Tauri 이벤트명으로 변환�
 
 | WS 메시지 타입 | → Tauri 이벤트 | 비고 |
 |---------------|---------------|------|
-| `tauri_event` | 이벤트명 그대로 | 범용 이벤트 포워딩 — 22개 이벤트 자동 디스패치 |
+| `tauri_event` | 이벤트명 그대로 | 범용 이벤트 포워딩 — 24개 이벤트 자동 디스패치 |
 | `snapshot` | `keys:changed`, `positions:changed`, `settings:changed` 등 | 다수 이벤트 일괄 디스패치 |
 | `invoke_response` | — | WS RPC 응답 (pendingRpc resolve/reject) |
 
@@ -681,8 +698,8 @@ shim이 설치되면 자동으로 WS 경유 동작 — 별도 처리 불필요.
 overlay/App.tsx가 `@tauri-apps/api/window`, `@tauri-apps/api/menu` 등을 직접 import.
 이 모듈들은 내부적으로 `invoke('plugin:window|...', ...)` 형태로 호출.
 
-백엔드 deny 리스트의 `denyPrefixes`에 `plugin:window|`, `plugin:menu|` 등이 포함되어
-shim이 handshake 시 수신한 prefix 매칭으로 자동 no-op 처리 — 별도 모듈 모킹 불필요.
+`plugin:window|`, `plugin:menu|` 등은 allowlist에 없으므로 shim의 allow 체크에서
+자동 no-op 처리 — 별도 모듈 모킹 불필요.
 
 `convertFileSrc()`는 `__TAURI_INTERNALS__.convertFileSrc`에 설치되므로 shim에서 직접 제공.
 OBS HTTP 서버의 `/media/<base64>?token=...` 경로로 변환:
@@ -767,9 +784,9 @@ async function bootstrap() {
 | 리스크 | 심각도 | 대응 |
 |--------|--------|------|
 | `window.__TAURI_INTERNALS__` 내부 API 변경 | 중 | Tauri 버전 고정 + 업그레이드 시 shim 검증 |
-| WS RPC 보안 (임의 커맨드 실행) | 중 | deny 리스트 + Tauri ACL 재사용 + 세션 토큰 검증 |
+| WS RPC 보안 (임의 커맨드 실행) | 중 | allow 리스트(정확 일치) + Tauri ACL 재사용 + 세션 토큰 검증 + Host/Origin 검증 |
 | `InvokeRequest` API 안정성 | 중 | Tauri 2.x 내 변경 가능성 낮음, 업그레이드 시 한 곳만 수정 |
-| overlay 전용 API 누락으로 런타임 에러 | 낮 | No-op prefix 매칭 (`plugin:window|*`) + try/catch 가드 |
+| overlay 전용 API 누락으로 런타임 에러 | 낮 | allowlist 미포함 커맨드 자동 no-op + try/catch 가드 |
 | WS RPC 지연 (localhost) | 낮 | <1ms, 체감 불가 |
 | pendingRpc dispose 시 미해결 Promise | 낮 | dispose 시 모든 pending을 reject 처리 |
 
@@ -792,8 +809,8 @@ async fn handle_invoke_request(
     args: Value,
     ws_tx: &WsSender,
 ) {
-    // 1. deny 리스트 체크 (= 프론트 No-op 리스트와 동일)
-    if DENIED_WS_COMMANDS.contains(&command) {
+    // 1. allow 리스트 체크 (= 프론트 허용 리스트와 동일, 정확 일치)
+    if !ALLOWED_WS_COMMANDS.contains(&command) {
         ws_tx.send(invoke_response_error(request_id, "Command not allowed"));
         return;
     }
@@ -817,54 +834,54 @@ async fn handle_invoke_request(
 }
 ```
 
-#### deny 리스트 (유일한 source of truth)
+#### allow 리스트 (유일한 source of truth)
 
 **이 배열 하나가 프론트/백엔드 양쪽의 유일한 관리 포인트**.
-`|`로 끝나는 항목은 prefix 매칭, 아니면 exact 매칭 — 프론트/백엔드 동일 규칙.
+정확 일치(exact match)만 허용 — prefix 매칭 없음.
 WS handshake 시 `hello_ack`에 포함하여 프론트엔드에 전달 (§12.4 참조).
 
 ```rust
-// obs_bridge.rs — 유일한 deny 리스트 정의 (단일 배열)
-const DENIED_WS_COMMANDS: &[&str] = &[
-    // exact 매칭
-    "overlay_resize", "overlay_set_visible", "overlay_set_lock",
-    "overlay_set_anchor", "overlay_get",
-    "window_minimize", "window_close", "window_show_main",
-    "window_open_devtools_all",
-    "app_quit", "app_restart", "app_open_external", "app_auto_update",
-    // prefix 매칭 ("|"로 끝남)
-    "plugin:window|", "plugin:menu|", "plugin:resources|",
+// obs_bridge.rs — 유일한 allow 리스트 정의 (단일 배열, 정확 일치)
+const ALLOWED_WS_COMMANDS: &[&str] = &[
+    "app_bootstrap", "settings_get", "layer_groups_get",
+    "note_tab_get_all", "note_tab_get",
+    "css_get", "css_get_use", "css_tab_get_all", "css_tab_get",
+    "js_get", "js_get_use", "get_cursor_settings",
+    "keys_get", "keys_get_counters", "positions_get",
+    "stat_positions_get", "graph_positions_get", "knob_positions_get",
+    "custom_tabs_list", "counter_animation_list",
+    "plugin_bridge_send", "plugin_bridge_send_to",
+    "raw_input_subscribe", "raw_input_unsubscribe",
+    "plugin_storage_get", "plugin_storage_set", "plugin_storage_remove",
+    "plugin_storage_keys", "plugin_storage_has_data", "plugin_storage_clear_by_prefix",
 ];
 
-fn is_denied(cmd: &str) -> bool {
-    DENIED_WS_COMMANDS.iter().any(|entry| {
-        if entry.ends_with('|') { cmd.starts_with(entry) }
-        else { cmd == *entry }
-    })
+fn is_allowed_command(cmd: &str) -> bool {
+    ALLOWED_WS_COMMANDS.contains(&cmd)
 }
 ```
 
 ```rust
-// hello_ack 전송 시 deny 리스트 포함
+// hello_ack 전송 시 allow 리스트 포함
 fn build_hello_ack(&self) -> Value {
     json!({
         "serverVersion": self.server_version,
         "obsMode": true,
-        "denyList": DENIED_WS_COMMANDS,
+        "allowedList": ALLOWED_WS_COMMANDS,
     })
 }
 ```
 
-deny에 없는 커맨드는 **자동으로 Tauri가 처리** — 새 커맨드 추가 시 양쪽 모두 수정 불필요.
-Tauri의 ACL 시스템이 보안 경계 역할을 하므로 별도 화이트리스트 불필요.
+allowlist에 없는 커맨드는 **차단** — 신규 `#[tauri::command]`는 검토 후 명시적으로 추가해야 원격 노출된다.
+Tauri ACL에 더해, 변이·파일·창 제어 커맨드를 원격 표면에서 구조적으로 배제하는 것이 이 리스트의 목적.
 
 #### 장점
 
 - **match문 완전 제거** — 커맨드별 분기 없음
 - **인자 역직렬화 자동** — Tauri의 `#[tauri::command]` 매크로가 처리
 - **ACL 재사용** — Tauri permissions 시스템이 보안 검증
-- **새 커맨드 자동 지원** — `#[tauri::command]` 추가하면 WS에서도 즉시 동작
-- **관리 포인트 1개** — Rust deny 리스트만 수정하면 `hello_ack`로 프론트에 자동 전파
+- **fail-closed** — allowlist에 명시한 커맨드만 원격 노출, 신규 커맨드는 기본 차단
+- **관리 포인트 1개** — Rust allow 리스트만 수정하면 `hello_ack`로 프론트에 자동 전파
 
 #### 제약
 
@@ -963,7 +980,7 @@ function onWsMessage(envelope) {
 |---|------|------|------|
 | 1 | **프론트 IPC shim** — WS 연결 + invoke/listen + No-op + WS RPC | `api/ipcShim.ts` | ✅ `dac007a` |
 | 2 | **백엔드 WS RPC** — `invoke_request` → `webview.on_message()` 자동 디스패치 | `obs_bridge.rs` | ✅ `3893666` |
-| 3 | **백엔드 이벤트 포워딩** — 22개 Tauri 이벤트 → `tauri_event` WS 포워딩 | `obs_bridge.rs`, `app_state.rs` | ✅ `28adb94` |
+| 3 | **백엔드 이벤트 포워딩** — 24개 Tauri 이벤트 → `tauri_event` WS 포워딩 | `obs_bridge.rs`, `app_state.rs` | ✅ `28adb94` |
 | 4 | **snapshot 필드 보강** — `layerGroups`, `tabNoteOverrides`, `tabCssOverrides` | `app_state.rs`, `mod.rs`, `app.ts` | ✅ `f32faf4` |
 | 5 | **convertFileSrc 수정** — OBS HTTP `/media/` base64url 매핑 | `api/ipcShim.ts` | ✅ (Step 1에 포함) |
 | 6 | **obs/index.tsx 재작성** — shim → dmnoteApi → overlay/App | `windows/obs/index.tsx` | ✅ (기존 구현 검증) |
@@ -973,8 +990,8 @@ function onWsMessage(envelope) {
 - overlay/App.tsx **코드 변경 0**
 - obs/index.tsx → IPC Shim 설치 → overlay/App.tsx **동일 코드** 실행
 - 중복 로직 **완전 해소** (레거시 624줄 삭제)
-- **커맨드 추가 시 양쪽 모두 수정 불필요** — deny 리스트에 없으면 자동 동작
-- **deny 리스트 관리 포인트 1곳** — Rust `DENIED_WS_COMMANDS` 수정 시 WS handshake로 프론트에 자동 반영
+- **신규 커맨드 기본 차단** — allowlist에 명시해야 원격 노출, 위험 커맨드 실수 노출 방지
+- **allow 리스트 관리 포인트 1곳** — Rust `ALLOWED_WS_COMMANDS` 수정 시 WS handshake로 프론트에 자동 반영
 - **auto_start_obs 경로**에도 IPC Shim 지원 추가 (set_app_handle + register_event_forwarding)
 
 Codex(GPT 5.4) 리뷰에서 발견/수정한 이슈:

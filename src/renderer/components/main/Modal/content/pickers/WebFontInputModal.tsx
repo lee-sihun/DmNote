@@ -1,14 +1,7 @@
 /* eslint-disable react-hooks/refs */
-import { useState, useRef, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { EditorSelection, EditorState } from '@codemirror/state';
-import {
-  EditorView,
-  highlightActiveLine,
-  highlightActiveLineGutter,
-  keymap,
-  lineNumbers,
-  placeholder,
-} from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, placeholder } from '@codemirror/view';
 import {
   defaultKeymap,
   history,
@@ -22,8 +15,13 @@ import {
   syntaxHighlighting,
 } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
-import Modal from '@components/main/Modal/Modal';
-import { validateWebFontFaceCss } from '@src/types/settings/fonts';
+import FullSurfaceModalLayout from '@components/main/Modal/FullSurfaceModalLayout';
+import {
+  buildDraftPreviewCss,
+  validateWebFontFaceCss,
+} from '@src/types/settings/fonts';
+import type { WebFontWeightRange } from '@src/types/settings/fonts';
+import type { CSSProperties } from 'react';
 
 interface WebFontInputModalProps {
   isOpen: boolean;
@@ -31,8 +29,46 @@ interface WebFontInputModalProps {
   onSubmit: (css: string, displayName: string) => void;
   initialCss?: string;
   isDuplicateFontFamily?: (fontFamily: string) => boolean;
+  /** 시트 제목 분기 — 추가/수정 */
+  mode?: 'add' | 'edit';
   t: (key: string, options?: Record<string, string>) => string;
 }
+
+// 형식 예시 — 코드라 로케일 불필요. 줄 높이 부풀림은 absolute placeholder CSS가 방지
+const WEBFONT_PLACEHOLDER_EXAMPLE = `@font-face {\n  font-family: 'FontName';\n  src: url('https://...') format('woff2');\n  font-weight: 400;\n  font-style: normal;\n}`;
+
+// 스페시멘 전용 패밀리 — 등록된 실제 폰트와 충돌하지 않게 초안 이름으로 교체
+const DRAFT_PREVIEW_FAMILY = 'DmnWebFontDraftPreview';
+const DRAFT_PREVIEW_STYLE_ID = 'webfont-draft-preview';
+
+// 가변 범위는 경계값 + 안쪽 400/700 대표 스톱으로 압축해 행 수를 억제
+const expandWeightStops = (ranges: WebFontWeightRange[]): number[] => {
+  const stops = new Set<number>();
+  for (const { min, max } of ranges) {
+    stops.add(min);
+    stops.add(max);
+    for (const mid of [400, 700]) {
+      if (mid > min && mid < max) stops.add(mid);
+    }
+  }
+  return Array.from(stops).sort((a, b) => a - b);
+};
+
+const injectDraftPreviewCSS = (css: string) => {
+  const existing = document.getElementById(DRAFT_PREVIEW_STYLE_ID);
+  if (existing) {
+    existing.textContent = css;
+  } else {
+    const style = document.createElement('style');
+    style.id = DRAFT_PREVIEW_STYLE_ID;
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+};
+
+const removeDraftPreviewCSS = () => {
+  document.getElementById(DRAFT_PREVIEW_STYLE_ID)?.remove();
+};
 
 const WEBFONT_EDITOR_HIGHLIGHT_STYLE = HighlightStyle.define([
   { tag: tags.comment, color: '#6A9955' },
@@ -42,10 +78,10 @@ const WEBFONT_EDITOR_HIGHLIGHT_STYLE = HighlightStyle.define([
   { tag: [tags.bracket, tags.punctuation], color: '#D4D4D4' },
 ]);
 
+// 활성 줄 하이라이트는 제외 — 여러 줄 placeholder가 한 줄에 담겨
+// 빈 상태에서 블록 전체가 선택된 것처럼 보임
 const WEBFONT_EDITOR_BASE_EXTENSIONS = [
   lineNumbers(),
-  highlightActiveLine(),
-  highlightActiveLineGutter(),
   history(),
   indentUnit.of('  '),
   css(),
@@ -72,9 +108,16 @@ const WebFontInputModal = ({
   onSubmit,
   initialCss = '',
   isDuplicateFontFamily,
+  mode = 'add',
   t,
 }: WebFontInputModalProps) => {
   const [cssInput, setCssInput] = useState('');
+  // 스페시멘 로드 결과 — css 스냅샷 키로 최신 입력과 대조, 굵기별 성패 기록 (loading은 파생)
+  const [previewLoad, setPreviewLoad] = useState<{
+    css: string;
+    loaded: number[];
+    failed: number[];
+  } | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const handleSubmitRef = useRef<() => void>(() => undefined);
@@ -95,10 +138,21 @@ const WebFontInputModal = ({
 
   const canSubmit = cssValidation.status === 'ready' && !hasDuplicateFontFamily;
 
-  const detectedFontFileName = (() => {
-    const defaultFileName = t('webFontInput.defaultFileName') || 'web-font';
-    return extractedFontFamily || defaultFileName;
-  })();
+  // 중복 폰트도 스페시멘은 보여줌 — 저장만 막고 확인은 허용
+  const previewActive =
+    isOpen && cssValidation.status === 'ready' && !!extractedFontFamily;
+  // 일부 굵기만 실패하면 ready 유지 — 실패 행은 스페시멘에서 개별 표시
+  const previewStatus: 'idle' | 'loading' | 'ready' | 'error' = !previewActive
+    ? 'idle'
+    : previewLoad?.css === trimmedCSS
+    ? previewLoad.loaded.length > 0
+      ? 'ready'
+      : 'error'
+    : 'loading';
+  const weightStops = expandWeightStops(cssValidation.detectedWeights);
+  const failedWeights = new Set(
+    previewLoad?.css === trimmedCSS ? previewLoad.failed : [],
+  );
 
   const availabilityLabel = (() => {
     if (cssValidation.status === 'ready' && hasDuplicateFontFamily) {
@@ -134,13 +188,11 @@ const WebFontInputModal = ({
     }
   })();
 
-  const fixedHintMessage =
-    t('webFontInput.fixedHint') || '@font-face CSS를 추가할 수 있습니다.';
+  const sheetTitle =
+    mode === 'edit'
+      ? t('webFontInput.titleEdit') || '웹 폰트 수정'
+      : t('webFontInput.titleAdd') || '웹 폰트 추가';
   const submitButtonLabel = t('webFontInput.submit') || '저장';
-
-  const placeholderText = `${
-    t('webFontInput.cssLabel') || '@font-face CSS'
-  }\n\n@font-face {\n  font-family: 'FontName';\n  src: url('https://...') format('woff2');\n  font-weight: 400;\n  font-style: normal;\n}`;
 
   const resetEditorContent = (nextValue = '') => {
     setCssInput(nextValue);
@@ -197,7 +249,7 @@ const WebFontInputModal = ({
       doc: normalizedInitialCss,
       extensions: [
         ...WEBFONT_EDITOR_BASE_EXTENSIONS,
-        placeholder(placeholderText),
+        placeholder(WEBFONT_PLACEHOLDER_EXAMPLE),
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
@@ -236,7 +288,7 @@ const WebFontInputModal = ({
         editorViewRef.current = null;
       }
     };
-  }, [isOpen, normalizedInitialCss, placeholderText]);
+  }, [isOpen, normalizedInitialCss]);
 
   useLayoutEffect(() => {
     if (!isOpen) return;
@@ -259,30 +311,85 @@ const WebFontInputModal = ({
     setCssInput(normalizedInitialCss);
   }, [isOpen, normalizedInitialCss]);
 
+  // 스페시멘 로드 — 입력이 잠잠해지면 초안 패밀리로 주입하고 실제 로드를 확인
+  useEffect(() => {
+    if (!previewActive) {
+      removeDraftPreviewCSS();
+      return;
+    }
+
+    let cancelled = false;
+    const cssSnapshot = trimmedCSS;
+    const timer = setTimeout(() => {
+      // @font-face 블록만 주입 — 블록 밖 규칙이 앱 전역 스타일을 오염시키지 못함
+      injectDraftPreviewCSS(
+        buildDraftPreviewCss(cssSnapshot, DRAFT_PREVIEW_FAMILY),
+      );
+      // 선언된 굵기마다 로드 확인 — 스톱별 요청이 각자 가장 가까운 face를 당겨옴
+      const stops = expandWeightStops(
+        validateWebFontFaceCss(cssSnapshot).detectedWeights,
+      );
+      const targets = stops.length > 0 ? stops : [400];
+      Promise.allSettled(
+        targets.map((weight) =>
+          document.fonts.load(`${weight} 16px "${DRAFT_PREVIEW_FAMILY}"`),
+        ),
+      ).then((results) => {
+        if (cancelled) return;
+        const loaded: number[] = [];
+        const failed: number[] = [];
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value.length > 0) {
+            loaded.push(targets[index]);
+          } else {
+            failed.push(targets[index]);
+          }
+        });
+        setPreviewLoad({ css: cssSnapshot, loaded, failed });
+      });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [previewActive, trimmedCSS]);
+
+  // 언마운트 시 초안 스타일 잔류 방지
+  useEffect(() => () => removeDraftPreviewCSS(), []);
+
   if (!isOpen) return null;
 
-  return (
-    <Modal onClick={handleClose}>
-      <div
-        className="w-[640px] max-w-[calc(100vw-80px)] flex flex-col bg-[#1A191E] rounded-[10px] border border-[#2A2A30] overflow-hidden"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="h-[37px] bg-[#2A2A30] border-b border-[#3A3943] px-[12px] flex items-center justify-between">
-          <div className="min-w-0 flex items-center gap-[8px]">
-            <span className="px-[6px] h-[18px] rounded-[4px] border border-[#3A3943] bg-[#1A191E] text-[10px] leading-[18px] font-semibold tracking-[0.2px] text-[#8CC2FF]">
-              CSS
-            </span>
-            <span className="truncate text-[12px] leading-[16px] text-[#DBDEE8]">
-              {detectedFontFileName}
-            </span>
-          </div>
-          <span className="text-[11px] leading-[14px] text-[#8A8D99]">
-            {availabilityLabel}
-          </span>
-        </div>
+  const specimenFontFamily = `'${DRAFT_PREVIEW_FAMILY}'`;
+  const pangramText =
+    t('webFontInput.previewPangram') || '다람쥐 헌 쳇바퀴에 타고파';
+  const singleWeight = weightStops.length === 1;
+  // font-synthesis 차단 — 없는 굵기를 가짜 볼드로 합성하지 않아 실제 로드 결과가 그대로 보임
+  const specimenTextStyle = (weight: number): CSSProperties => ({
+    fontFamily: specimenFontFamily,
+    fontWeight: weight,
+    fontSynthesis: 'none',
+  });
 
-        <div className="p-[12px] pb-[0px]">
-          <div className="w-full h-[220px] rounded-[8px] border border-[#3A3943] bg-[#1E1E1E] overflow-hidden">
+  return (
+    <FullSurfaceModalLayout
+      onClose={handleClose}
+      title={sheetTitle}
+      submitLabel={submitButtonLabel}
+      submitDisabled={!canSubmit}
+      onSubmit={handleSubmit}
+      cancelLabel={t('common.cancel') || '취소'}
+    >
+      {/* 본문 — 입력(에디터)과 결과(스페시멘) 섹션 카드를 나란히 (사이드 패널 문법) */}
+      <div className="flex-1 min-h-0 flex gap-[12px]">
+        {/* CSS 입력 섹션 */}
+        <div className="flex-[5] min-w-0 bg-fill-faint rounded-surface p-[10px] flex flex-col gap-[8px]">
+          <div className="shrink-0 px-[2px]">
+            <p className="text-caption text-fg-faint">
+              {t('webFontInput.cssLabel') || '@font-face CSS'}
+            </p>
+          </div>
+          <div className="flex-1 min-h-0 rounded-md bg-inset overflow-hidden">
             <div
               ref={editorContainerRef}
               className="h-full webfont-cm-editor"
@@ -290,36 +397,111 @@ const WebFontInputModal = ({
           </div>
         </div>
 
-        <div className="h-[28px] mt-[10px] bg-[#2A2A30] border-t border-[#3A3943] px-[12px] flex items-center justify-between gap-[12px]">
-          <p className="truncate text-[11px] leading-[14px] text-[#8A8D99]">
-            {fixedHintMessage}
+        {/* 미리보기 섹션 — 검증 상태는 결과 옆이 제자리, 색은 무채색 유지 */}
+        <div className="flex-[3] min-w-[220px] max-w-[340px] bg-fill-faint rounded-surface p-[10px] flex flex-col gap-[8px]">
+          <div className="shrink-0 flex items-center justify-between gap-[8px] px-[2px]">
+            <p className="text-caption text-fg-faint">
+              {t('webFontInput.previewLabel') || '미리보기'}
+            </p>
+            <span role="status" className="text-caption text-fg-muted truncate">
+              {availabilityLabel}
+            </span>
+          </div>
+          {/* 로드 상태 발표 전용 — 스페시멘은 라이브 영역 밖에 둬서 통짜 낭독을 피함 */}
+          <p role="status" className="sr-only">
+            {previewStatus === 'loading'
+              ? t('webFontInput.previewLoading') || '폰트 불러오는 중…'
+              : previewStatus === 'error'
+              ? t('webFontInput.previewError') || '폰트를 불러오지 못했습니다'
+              : previewStatus === 'ready'
+              ? t('webFontInput.previewReady') || '폰트 미리보기 준비됨'
+              : ''}
           </p>
-          <p className="shrink-0 text-[11px] leading-[14px] text-[#8A8D99]">
-            Ctrl/Cmd + Enter
-          </p>
-        </div>
-
-        <div className="bg-[#1A191E] border-t border-[#2A2A30] px-[12px] py-[10px] flex items-center justify-end gap-[10.5px]">
-          <button
-            className={`w-[120px] h-[30px] rounded-[7px] text-style-3 text-[#DCDEE7] transition-colors ${
-              canSubmit
-                ? 'bg-[#2A2A30] hover:bg-[#34343c]'
-                : 'bg-[#222228] cursor-not-allowed opacity-50'
-            }`}
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-          >
-            {submitButtonLabel}
-          </button>
-          <button
-            className="px-[24px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3 transition-colors"
-            onClick={handleClose}
-          >
-            {t('common.cancel') || '취소'}
-          </button>
+          {/* 패딩은 스크롤 컨테이너 안쪽 소유 — 웰에 두면 스크롤 시 위아래 죽은 띠가 생김 */}
+          <div className="flex-1 min-h-0 min-w-0 rounded-md bg-inset flex flex-col justify-center overflow-hidden">
+            {previewStatus === 'ready' ? (
+              /* 스크롤 페이드와 등장 모션은 animation 충돌로 분리 — 바깥이 스크롤, 안쪽이 모션 */
+              <div
+                key={extractedFontFamily}
+                className="min-w-0 max-h-full overflow-y-auto modal-content-scroll dmn-scroll-fade px-[16px] py-[12px]"
+              >
+                <div className="min-w-0">
+                  <p
+                    className="text-[28px] leading-[36px] text-fg break-words"
+                    style={{ fontFamily: specimenFontFamily }}
+                  >
+                    {extractedFontFamily}
+                  </p>
+                  <div className="mt-[24px] flex flex-col gap-[6px] text-[14px] leading-[21px] text-fg-muted">
+                    {weightStops.map((weight) => (
+                      <div
+                        key={weight}
+                        className="min-w-0 flex items-baseline gap-[6px]"
+                      >
+                        <span className="shrink-0 w-[30px] text-caption text-fg-faint tabular-nums">
+                          {weight}
+                        </span>
+                        {failedWeights.has(weight) ? (
+                          <span className="text-caption text-danger-fg">
+                            {t('webFontInput.weightLoadFailed') || '로드 실패'}
+                          </span>
+                        ) : (
+                          <p
+                            className="flex-1 min-w-0 truncate"
+                            style={specimenTextStyle(weight)}
+                          >
+                            {singleWeight
+                              ? pangramText
+                              : `${pangramText} AaBb 09`}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    {singleWeight && !failedWeights.has(weightStops[0]) && (
+                      <>
+                        <p
+                          className="pl-[36px] truncate"
+                          style={specimenTextStyle(weightStops[0])}
+                        >
+                          AaBb CcDd EeFf GgHh
+                        </p>
+                        <p
+                          className="pl-[36px] truncate tabular-nums"
+                          style={specimenTextStyle(weightStops[0])}
+                        >
+                          0123456789 · 99.9% · 300ms
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : previewStatus === 'error' ? (
+              <div className="flex flex-col gap-[4px] text-center px-[16px]">
+                <p className="text-label text-fg">
+                  {t('webFontInput.previewError') ||
+                    '폰트를 불러오지 못했습니다'}
+                </p>
+                <p className="text-caption text-fg-muted">
+                  {t('webFontInput.previewErrorHint') || 'src URL을 확인하세요'}
+                </p>
+              </div>
+            ) : (
+              <p
+                className={`text-caption text-fg-muted text-center px-[16px] ${
+                  previewStatus === 'loading' ? 'animate-pulse' : ''
+                }`}
+              >
+                {previewStatus === 'loading'
+                  ? t('webFontInput.previewLoading') || '폰트 불러오는 중…'
+                  : t('webFontInput.previewEmpty') ||
+                    '유효한 @font-face를 입력하면 미리보기가 표시됩니다'}
+              </p>
+            )}
+          </div>
         </div>
       </div>
-    </Modal>
+    </FullSurfaceModalLayout>
   );
 };
 

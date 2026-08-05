@@ -7,11 +7,16 @@ import React, {
 import { useTranslation } from '@contexts/useTranslation';
 import Checkbox from '@components/main/common/Checkbox';
 import {
+  PropertyRow,
+  PropertySection,
+} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import {
   COLOR_MODES,
   toGradient,
   type NoteTabState,
   type NotePreviewData,
 } from '@hooks/Modal/useUnifiedKeySettingState';
+import { ColorSwatchSurface } from '@components/main/Modal/content/pickers/ColorSwatch';
 
 // ============================================================================
 // 타입 정의
@@ -56,25 +61,6 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         setState((prev) => ({ ...prev, showGlowPicker: false }));
       }
     }, [state.glowEnabled, state.showGlowPicker, setState]);
-
-    // 색상 미리보기 스타일
-    const renderColorPreview = () => {
-      if (state.colorMode === COLOR_MODES.gradient) {
-        return {
-          background: `linear-gradient(to bottom, ${state.noteColor}, ${state.gradientBottom})`,
-        };
-      }
-      return { backgroundColor: state.noteColor };
-    };
-
-    const renderGlowColorPreview = () => {
-      if (state.glowColorMode === COLOR_MODES.gradient) {
-        return {
-          background: `linear-gradient(to bottom, ${state.glowColor}, ${state.glowGradientBottom})`,
-        };
-      }
-      return { backgroundColor: state.glowColor };
-    };
 
     // 색상 라벨
     const colorLabel =
@@ -308,75 +294,84 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
     };
 
     return (
-      <div className="flex flex-col gap-[19px]">
-        {/* 색상 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('keySetting.noteColor')}</p>
-          <button
-            ref={colorButtonRef}
-            type="button"
-            className={`relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-              state.showPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-            } text-[#DBDEE8] text-style-2`}
-            onClick={() =>
-              setState((prev) => ({ ...prev, showPicker: !prev.showPicker }))
-            }
-          >
-            <div
-              className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
-              style={renderColorPreview()}
-            />
-            <span className="ml-[16px] text-left">{colorLabel}</span>
-          </button>
-        </div>
-
-        {/* 노트 투명도 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
-            {t('keySetting.noteOpacity')}
-          </p>
-          <input
-            type="text"
-            value={state.displayNoteOpacity}
-            onChange={handleOpacityChange}
-            onFocus={() =>
-              setState((prev) => ({
-                ...prev,
-                isFocused: true,
-                displayNoteOpacity: prev.noteOpacity.toString(),
-              }))
-            }
-            onBlur={handleOpacityBlur}
-            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
-          />
-        </div>
-
-        <div className="h-px w-full bg-[#2A2A30]" />
-
-        {/* 글로우 */}
-        <div className="flex flex-col gap-[19px]">
-          <div className="flex justify-between w-full items-center">
-            <p className="text-white text-style-2">
-              {t('keySetting.noteGlow')}
+      <div className="flex flex-col gap-[12px]">
+        {/* 노트 색상·투명도 카드 */}
+        <PropertySection>
+          {/* 색상 */}
+          <div className="flex justify-between items-center w-full min-h-[32px]">
+            <p className="text-fg-muted text-label">
+              {t('keySetting.noteColor')}
             </p>
-            <Checkbox checked={state.glowEnabled} onChange={handleGlowToggle} />
+            <button
+              ref={colorButtonRef}
+              type="button"
+              className={`relative w-[80px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                state.showPicker ? 'shadow-focus-ring' : ''
+              } text-fg text-label`}
+              onClick={() =>
+                setState((prev) => ({ ...prev, showPicker: !prev.showPicker }))
+              }
+            >
+              <ColorSwatchSurface
+                className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
+                color={
+                  state.colorMode === COLOR_MODES.solid
+                    ? state.noteColor
+                    : undefined
+                }
+                gradient={
+                  state.colorMode === COLOR_MODES.gradient
+                    ? {
+                        top: state.noteColor,
+                        bottom: state.gradientBottom,
+                      }
+                    : undefined
+                }
+                opacity={state.noteOpacity / 100}
+              />
+              <span className="ml-[16px] text-left">{colorLabel}</span>
+            </button>
           </div>
 
+          <PropertyRow label={t('keySetting.noteOpacity')}>
+            <input
+              type="text"
+              value={state.displayNoteOpacity}
+              onChange={handleOpacityChange}
+              onFocus={() =>
+                setState((prev) => ({
+                  ...prev,
+                  isFocused: true,
+                  displayNoteOpacity: prev.noteOpacity.toString(),
+                }))
+              }
+              onBlur={handleOpacityBlur}
+              className="text-center w-[47px] h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body tabular-nums text-fg"
+            />
+          </PropertyRow>
+        </PropertySection>
+
+        {/* 글로우 카드 */}
+        <PropertySection>
+          <PropertyRow label={t('keySetting.noteGlow')}>
+            <Checkbox checked={state.glowEnabled} onChange={handleGlowToggle} />
+          </PropertyRow>
+
           <div
-            className={`flex justify-between w-full items-center ${
+            className={`flex justify-between items-center w-full min-h-[32px] ${
               !state.glowEnabled ? 'opacity-40' : ''
             }`}
           >
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('keySetting.noteGlowColor')}
             </p>
             <button
               ref={glowColorButtonRef}
               type="button"
               disabled={!state.glowEnabled}
-              className={`relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                state.showGlowPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-              } text-[#DBDEE8] text-style-2`}
+              className={`relative w-[80px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                state.showGlowPicker ? 'shadow-focus-ring' : ''
+              } text-fg text-label`}
               onClick={() => {
                 if (state.glowEnabled) {
                   setState((prev) => ({
@@ -386,20 +381,33 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
                 }
               }}
             >
-              <div
-                className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
-                style={renderGlowColorPreview()}
+              <ColorSwatchSurface
+                className="absolute left-[6px] top-1/2 -translate-y-1/2 w-[11px] h-[11px] rounded-[2px]"
+                color={
+                  state.glowColorMode === COLOR_MODES.solid
+                    ? state.glowColor
+                    : undefined
+                }
+                gradient={
+                  state.glowColorMode === COLOR_MODES.gradient
+                    ? {
+                        top: state.glowColor,
+                        bottom: state.glowGradientBottom,
+                      }
+                    : undefined
+                }
+                opacity={state.glowOpacity / 100}
               />
               <span className="ml-[16px] text-left">{glowColorLabel}</span>
             </button>
           </div>
 
           <div
-            className={`flex justify-between w-full items-center ${
+            className={`flex justify-between items-center w-full min-h-[32px] ${
               !state.glowEnabled ? 'opacity-40' : ''
             }`}
           >
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('keySetting.noteGlowSize')}
             </p>
             <input
@@ -416,16 +424,16 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
                 }))
               }
               onBlur={handleGlowSizeBlur}
-              className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+              className="text-center w-[47px] h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body tabular-nums text-fg"
             />
           </div>
 
           <div
-            className={`flex justify-between w-full items-center ${
+            className={`flex justify-between items-center w-full min-h-[32px] ${
               !state.glowEnabled ? 'opacity-40' : ''
             }`}
           >
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('keySetting.noteGlowOpacity')}
             </p>
             <input
@@ -441,38 +449,31 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
                 }))
               }
               onBlur={handleGlowOpacityBlur}
-              className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+              className="text-center w-[47px] h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body tabular-nums text-fg"
             />
           </div>
-        </div>
+        </PropertySection>
 
-        <div className="h-px w-full bg-[#2A2A30]" />
+        {/* 노트 동작 카드 */}
+        <PropertySection>
+          <PropertyRow label={t('keySetting.noteEffectEnabled')}>
+            <Checkbox
+              checked={state.noteEffectEnabled}
+              onChange={handleNoteEffectToggle}
+            />
+          </PropertyRow>
 
-        {/* 노트 효과 사용 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
-            {t('keySetting.noteEffectEnabled')}
-          </p>
-          <Checkbox
-            checked={state.noteEffectEnabled}
-            onChange={handleNoteEffectToggle}
-          />
-        </div>
-
-        {/* Y축 자동 보정 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
-            {t('keySetting.noteAutoYCorrection')}
-          </p>
-          <Checkbox
-            checked={state.autoYCorrection}
-            onChange={() => {
-              const newValue = !state.autoYCorrection;
-              setState((prev) => ({ ...prev, autoYCorrection: newValue }));
-              onPreview({ noteAutoYCorrection: newValue });
-            }}
-          />
-        </div>
+          <PropertyRow label={t('keySetting.noteAutoYCorrection')}>
+            <Checkbox
+              checked={state.autoYCorrection}
+              onChange={() => {
+                const newValue = !state.autoYCorrection;
+                setState((prev) => ({ ...prev, autoYCorrection: newValue }));
+                onPreview({ noteAutoYCorrection: newValue });
+              }}
+            />
+          </PropertyRow>
+        </PropertySection>
       </div>
     );
   },

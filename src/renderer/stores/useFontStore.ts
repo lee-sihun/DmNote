@@ -168,30 +168,9 @@ export function syncFontCSS(): void {
     }
   });
 
-  // 폰트 피커 열기 및 폰트 적용 시 FOUT 최소화를 위한 폰트 사전 로드
-  void preloadFontFaces(fonts.map((font) => font.name));
-}
-
-const loadedFontFamilies = new Set<string>();
-
-async function preloadFontFaces(families: Array<string | undefined | null>) {
-  if (typeof document === 'undefined') return;
-  if (!('fonts' in document)) return;
-  const fontSet = (document as Document & { fonts: FontFaceSet }).fonts;
-  const pending = families
-    .filter((name): name is string => !!name && !loadedFontFamilies.has(name))
-    .map((name) =>
-      fontSet
-        .load(`16px "${name}"`)
-        .then(() => {
-          loadedFontFamilies.add(name);
-        })
-        .catch(() => {}),
-    );
-
-  if (pending.length) {
-    await Promise.all(pending);
-  }
+  // 전 폰트 강제 preload 금지 — enabled 폰트 전체를 즉시 디코드하면
+  // 미사용 대형 폰트 하나로도 상주 메모리가 수십 MB 증가한다 (실측 +111MB).
+  // 실제 참조되는 폰트는 브라우저가 사용 시점에 로드하고 FontPicker도 열 때 자연 로드한다.
 }
 
 // 모든 활성화된 폰트 CSS를 로드하는 함수

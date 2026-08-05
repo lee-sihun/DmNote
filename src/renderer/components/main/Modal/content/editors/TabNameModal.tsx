@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
+import { usePressAction } from '@hooks/usePressAction';
 import React, { useEffect, useState } from 'react';
 import Modal from '../../Modal';
 import { useTranslation } from '@contexts/useTranslation';
@@ -59,40 +60,43 @@ const TabNameModal = ({
     onClose();
   };
 
+  // IME 조합 종료·onChange flush와의 경합으로 첫 click이 유실되는 것을 방어
+  const submitPress = usePressAction(handleSubmit);
+  const cancelPress = usePressAction(onClose);
+
   if (!isOpen) return null;
 
   return (
-    <Modal onClick={onClose}>
+    <Modal onClick={onClose} ariaLabel={t('tabs.createTitle')}>
       <div
-        className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30]"
+        className="flex flex-col w-[280px] p-[14px] gap-[12px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-style-3 text-[#FFFFFF]">
-          {t('tabs.createTitle')}
+        <div className="text-title text-fg">{t('tabs.createTitle')}</div>
+        {/* 인풋·에러 묶음 — 에러는 인풋에 밀착 */}
+        <div className="flex flex-col gap-[6px]">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSubmit();
+            }}
+            className="w-full min-w-0 h-[30px] px-[12px] rounded-surface bg-inset text-fg text-body focus:shadow-focus-ring"
+            placeholder={t('tabs.name.placeholder')}
+          />
+          {error && <div className="text-danger-fg text-body">{error}</div>}
         </div>
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSubmit();
-          }}
-          className="w-full min-w-0 h-[30px] px-[12px] rounded-[7px] bg-[#2A2A30] text-[#DCDEE7] text-style-3 border-[1px] border-[#3A3943] focus:border-[#459BF8]"
-          placeholder={t('tabs.name.placeholder')}
-        />
-        {error && (
-          <div className="text-[#ED6A5E] text-style-1 my-[-12px]">{error}</div>
-        )}
-        <div className="flex gap-[10.5px]">
+        <div className="flex gap-[8px]">
           <button
-            className="flex-1 h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
-            onClick={handleSubmit}
+            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
+            {...submitPress}
           >
             {t('tabs.create')}
           </button>
           <button
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
-            onClick={onClose}
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            {...cancelPress}
           >
             {t('common.cancel')}
           </button>

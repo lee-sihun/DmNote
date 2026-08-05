@@ -96,7 +96,7 @@ dmn.plugin.defineElement({
 
 메시지 문자열에서 `{{param}}` 형태로 파라미터를 치환할 수 있습니다.
 
-```javascript
+```javascript fragment=object-members
 messages: {
   ko: {
     greeting: "안녕하세요, {{name}}님!",
@@ -106,7 +106,7 @@ messages: {
     greeting: "Hello, {{name}}!",
     keyCount: "Total {{count}} inputs",
   },
-}
+},
 
 // 템플릿에서 사용
 template: (state, settings, { html, t }) => html`

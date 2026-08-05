@@ -84,15 +84,21 @@ dmn.plugin.defineElement({
 });
 ```
 
-## Settings Schema
+## Settings Schema (settings)
 
 Define settings schema to auto-generate settings UI. Default is property panel;
 use `settingsUI: "modal"` for modal style.
 
 ### Supported Types
 
-```javascript
+```javascript fragment=object-members
 settings: {
+  // Card section — starts a new settings card
+  appearanceSection: {
+    type: "section",
+    label: "Appearance", // optional caption above the card
+  },
+
   // String
   nickname: {
     type: "string",
@@ -118,11 +124,6 @@ settings: {
     label: "Show Graph",
   },
 
-  // Divider
-  sectionDivider: {
-    type: "divider",
-  },
-
   // Color
   textColor: {
     type: "color",
@@ -143,20 +144,37 @@ settings: {
 },
 ```
 
-`type: "divider"` adds only a divider in the settings UI without needing `default` or `label`.
+`type: "section"` starts a new card. Its key is a layout identifier and is never
+included in stored values, defaults, `getSettings()`, or change callbacks. Settings
+before the first section appear in an implicit untitled card. A section without a
+label still creates a card boundary.
+
+<Callout type="info">
+  The legacy `type: "divider"` (an in-card separator line) was removed together
+  with the introduction of sections. Divider entries in existing plugins are
+  ignored (no crash) — use sections to group settings instead.
+</Callout>
+
+Sections behave identically in the property panel and with `settingsUI: "modal"`.
 
 ### Conditional Visibility (visible)
 
 Add a `visible` property to setting items to dynamically show/hide them based on other setting values.
 Settings without `visible` are always shown (same as existing behavior).
 
-```javascript
+```javascript fragment=object-members
 settings: {
   // Mode selection
   showGraph: {
     type: "boolean",
     default: true,
     label: "Show Graph",
+  },
+
+  graphSection: {
+    type: "section",
+    label: "Graph",
+    visible: (settings) => settings.showGraph,
   },
 
   // Static boolean — always hidden
@@ -168,10 +186,6 @@ settings: {
   },
 
   // Function — dynamically show/hide based on other settings
-  graphDivider: {
-    type: "divider",
-    visible: (settings) => settings.showGraph,
-  },
   graphColor: {
     type: "color",
     default: "#86EFAC",
@@ -191,15 +205,21 @@ settings: {
   Hidden settings retain their stored values — only display is controlled, no data loss.
 </Callout>
 
+On a `section`, `visible` hides the entire group up to the next section. The boundary
+is retained even while hidden, so adjacent groups never merge. If every value setting
+inside a section is hidden, its card and caption are hidden too. If a visibility
+function throws, that item or section is hidden (fail-closed) and the error is logged.
+The same rules and empty-state behavior apply to panel and modal settings UIs.
+
 The `visible` signature follows the same pattern as `PluginMenuItem.visible` in context menus:
 
-```typescript
+```typescript fragment=type-members
 visible?: boolean | ((settings: Record<string, any>) => boolean);
 ```
 
 ### Accessing Settings
 
-```javascript
+```javascript fragment=object-members
 // In template
 template: (state, settings, { html }) => html`
   <div style="color: ${settings.textColor};">
@@ -232,6 +252,12 @@ Sets the anchor position when element size changes. Default is `"top-left"`.
 | `bottom-center` | Bottom center      |
 | `bottom-right`  | Bottom-right       |
 
+### Anchor Behavior
+
+- `top-left`: the top-left corner stays fixed as the size changes (default)
+- `center`: the center position stays fixed as the size changes
+- `bottom-right`: the bottom-right corner stays fixed as the size changes
+
 ### Definition Level Setting
 
 Define default anchor for all instances:
@@ -252,7 +278,7 @@ Use `setAnchor()` and `getAnchor()` in `onMount` to dynamically change anchor:
 dmn.plugin.defineElement({
   name: "Dynamic Anchor Panel",
 
-  onMount: ({ setAnchor, getAnchor }) => {
+  onMount: ({ setAnchor, getAnchor, getSettings }) => {
     // Check current anchor
     console.log("Current anchor:", getAnchor()); // "top-left"
 
@@ -270,6 +296,12 @@ dmn.plugin.defineElement({
 });
 ```
 
+### Anchor Priority
+
+1. Per-instance `resizeAnchor` (set via `setAnchor`)
+2. `resizeAnchor` on the definition
+3. Default `"top-left"`
+
 ## Resize Settings (resizable, preserveAxis)
 
 Use `resizable` option to let users resize elements directly in the grid.
@@ -277,6 +309,7 @@ Use `resizable` option to let users resize elements directly in the grid.
 ### resizable
 
 Set `resizable: true` to show 8-direction resize handles:
+The initial size is 200×150. A saved or estimated size takes precedence when available.
 
 ```javascript
 dmn.plugin.defineElement({
@@ -310,5 +343,388 @@ dmn.plugin.defineElement({
   resizable: true,
   preserveAxis: "width", // Preserve width on settings change
   // ...
+});
+```
+
+### Usage Example
+
+For a panel with a graph toggle, like the KPS panel:
+
+- With `preserveAxis: "width"`, the width is preserved when the graph is toggled on and off
+- The height adjusts automatically depending on whether the graph is shown
+
+```javascript
+dmn.plugin.defineElement({
+  name: "KPS Panel",
+  resizable: true,
+  preserveAxis: "width",
+  resizeAnchor: "bottom-left", // Bottom fixed (graph expands upward)
+
+  settings: {
+    showGraph: { type: "boolean", default: true, label: "Show Graph" },
+  },
+
+  template: (state, settings, { html }) => html`
+    <div style="width: 100%; height: 100%;">
+      <div class="kps-value">${state.kps ?? 0}</div>
+      ${settings.showGraph ? html`<div class="graph">...</div>` : ""}
+    </div>
+  `,
+});
+```
+
+<Callout type="tip">
+  Apply `width: 100%; height: 100%` to the root element of a `resizable`
+  element's template so the content fills the size the user chose.
+</Callout>
+
+## Context Menu (contextMenu)
+
+### Basic Setup
+
+```javascript fragment=object-members
+contextMenu: {
+  create: "Create Panel",   // Right-click on empty grid space
+  delete: "Delete Panel",   // Right-click on the panel
+},
+```
+
+### Custom Menu Items
+
+```javascript fragment=object-members
+contextMenu: {
+  create: "Create Panel",
+  delete: "Delete Panel",
+  items: [
+    {
+      label: "Reset Stats",
+      onClick: ({ actions }) => actions.reset(),
+    },
+    {
+      label: "Export Data",
+      onClick: async ({ element, actions }) => {
+        await actions.exportData();
+      },
+      // Conditional visibility
+      visible: ({ element }) => !!element.settings.enableExport,
+      // Conditional disable
+      disabled: ({ element }) => element.settings.exportFormat === "none",
+      // Position (top or bottom, default: bottom)
+      position: "bottom",
+    },
+  ],
+},
+
+// Register actions in onMount
+onMount: ({ expose, setState }) => {
+  expose({
+    reset: () => setState({ count: 0 }),
+    exportData: async () => { /* export logic */ },
+  });
+},
+```
+
+Items with `position: "top"` appear above the built-in menu entries; the rest
+appear below them.
+
+<Callout type="info">
+  Menu predicates run in the main window with `{ element, actions }`. Overlay
+  runtime state set via `setState` is not synced into this context by default —
+  `element.state` here reflects the main-window state (initialized from
+  `previewState`). To base conditions on overlay state, declare the keys in
+  `contextMenuStateKeys`.
+</Callout>
+
+### Overlay State in Predicates (contextMenuStateKeys)
+
+Declare overlay state keys that menu predicates need. Only the declared keys are
+mirrored to the main window (on `setState` changes) and merged into
+`element.state` during predicate evaluation. High-frequency state is never sent
+unless declared, and the main-window preview state stays untouched.
+
+```javascript fragment=object-members
+// Mirror only `active` for menu predicates
+contextMenuStateKeys: ["active"],
+
+contextMenu: {
+  items: [
+    {
+      label: "Stop Capture",
+      action: "stopCapture",
+      visible: ({ element }) => !!element.state?.active,
+    },
+  ],
+},
+```
+
+## Template (template)
+
+The template function receives `state` and `settings` and returns the UI.
+See [Template Syntax](/docs/template-syntax) for the full syntax.
+
+```javascript fragment=object-members
+template: (state, settings, { html, t, locale }) => html`
+  <div style="color: ${settings.textColor};">
+    <strong>${state.value}</strong>
+    ${settings.showDetails ? html`
+      <div class="details">Details</div>
+    ` : ""}
+  </div>
+`,
+```
+
+### Template Helpers
+
+| Helper   | Description                              |
+| -------- | ---------------------------------------- |
+| `html`   | htm tag function (creates React Elements) |
+| `t(key)` | i18n translation function                |
+| `locale` | Current locale code                      |
+
+## Preview State (previewState)
+
+Initial state shown as a preview in the main window.
+The actual logic runs only in the overlay, so the main window displays this state.
+
+```javascript fragment=object-members
+previewState: {
+  kps: 12,
+  history: [5, 8, 12, 10, 15],
+},
+```
+
+## Mount Logic (onMount)
+
+`onMount` runs only in the overlay and implements the actual behavior.
+
+### Context Object
+
+```javascript fragment=object-members
+onMount: (context) => {
+  const {
+    setState,         // Update state
+    getSettings,      // Get current settings
+    setAnchor,        // Set resize anchor
+    getAnchor,        // Get current anchor
+    onHook,           // Register event hooks
+    expose,           // Expose functions for the context menu
+    locale,           // Current locale code
+    t,                // Translation function
+    onLocaleChange,   // Subscribe to locale changes
+    onSettingsChange, // Subscribe to settings changes
+  } = context;
+
+  // Return cleanup function
+  return () => { /* cleanup */ };
+},
+```
+
+### Event Hooks (onHook)
+
+```javascript fragment=object-members
+onMount: ({ onHook, setState }) => {
+  // Mapped key events
+  onHook("key", ({ key, state, mode }) => {
+    if (state === "DOWN") {
+      console.log(`${key} pressed (${mode})`);
+    }
+  });
+
+  // All raw input events (keyboard, mouse)
+  onHook("rawKey", ({ device, label, state }) => {
+    console.log(`[${device}] ${label} ${state}`);
+  });
+},
+```
+
+### Settings Change Detection (onSettingsChange)
+
+Use this when you need to react to settings changes immediately.
+
+<Callout type="info">
+  In most cases, reading the latest settings with `getSettings()` is enough.
+  Use `onSettingsChange` only when you need external API calls or resource
+  re-initialization.
+</Callout>
+
+```javascript fragment=object-members
+onMount: ({ setState, getSettings, onSettingsChange }) => {
+  const fetchData = async (nickname) => {
+    const response = await fetch(`/api/user/${nickname}`);
+    const data = await response.json();
+    setState({ data });
+  };
+
+  // Initial load
+  fetchData(getSettings().nickname);
+
+  // Refetch when the nickname changes
+  onSettingsChange((newSettings, oldSettings) => {
+    if (newSettings.nickname !== oldSettings.nickname) {
+      fetchData(newSettings.nickname);
+    }
+  });
+},
+```
+
+## i18n Support (messages)
+
+```javascript
+dmn.plugin.defineElement({
+  name: "Localized Panel",
+
+  messages: {
+    ko: {
+      "menu.create": "패널 생성",
+      "menu.delete": "패널 삭제",
+      "label.count": "카운트",
+    },
+    en: {
+      "menu.create": "Create Panel",
+      "menu.delete": "Delete Panel",
+      "label.count": "Count",
+    },
+  },
+
+  contextMenu: {
+    create: "menu.create", // Use message keys
+    delete: "menu.delete",
+  },
+
+  settings: {
+    count: {
+      type: "number",
+      default: 0,
+      label: "label.count", // Use message keys
+    },
+  },
+
+  template: (state, settings, { html, t, locale }) => html`
+    <div data-locale="${locale}">${t("label.count")}: ${state.value ?? 0}</div>
+  `,
+});
+```
+
+## Practical Example: KPS Panel
+
+```javascript
+// @id kps-panel
+
+dmn.plugin.defineElement({
+  name: "KPS Panel",
+  maxInstances: 1,
+
+  contextMenu: {
+    create: "Create KPS Panel",
+    delete: "Delete KPS Panel",
+    items: [
+      {
+        label: "Reset Stats",
+        onClick: ({ actions }) => actions.reset(),
+      },
+    ],
+  },
+
+  settings: {
+    showGraph: { type: "boolean", default: true, label: "Show Graph" },
+    textColor: { type: "color", default: "#FFFFFF", label: "Text Color" },
+    graphColor: {
+      type: "color",
+      default: "#86EFAC",
+      label: "Graph Color",
+      visible: (s) => s.showGraph,
+    },
+  },
+
+  previewState: {
+    kps: 12,
+    max: 20,
+    history: [5, 8, 12, 15, 10, 12],
+  },
+
+  template: (state, settings, { html }) => html`
+    <div
+      style="
+      background: rgba(0, 0, 0, 0.8);
+      padding: 16px;
+      border-radius: 8px;
+      color: ${settings.textColor};
+      min-width: 120px;
+    "
+    >
+      <div style="font-size: 32px; font-weight: bold;">
+        ${state.kps ?? 0}
+        <span style="font-size: 14px; opacity: 0.7;">KPS</span>
+      </div>
+      ${settings.showGraph
+        ? html`
+            <div
+              style="
+          display: flex;
+          gap: 2px;
+          height: 40px;
+          align-items: flex-end;
+          margin-top: 8px;
+        "
+            >
+              ${(state.history ?? []).map((v) => {
+                const height = state.max ? (v / state.max) * 100 : 0;
+                return html`
+                  <div
+                    style="
+                flex: 1;
+                height: ${height}%;
+                background: ${settings.graphColor};
+                border-radius: 2px 2px 0 0;
+                opacity: 0.7;
+              "
+                  ></div>
+                `;
+              })}
+            </div>
+          `
+        : ""}
+    </div>
+  `,
+
+  onMount: ({ setState, expose, onHook }) => {
+    const timestamps = [];
+    let max = 0;
+    const historySize = 20;
+    const history = [];
+
+    onHook("key", ({ state }) => {
+      if (state === "DOWN") {
+        timestamps.push(Date.now());
+      }
+    });
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      // Keep only timestamps within the last second
+      while (timestamps.length && timestamps[0] < now - 1000) {
+        timestamps.shift();
+      }
+
+      const kps = timestamps.length;
+      max = Math.max(max, kps);
+
+      history.push(kps);
+      if (history.length > historySize) history.shift();
+
+      setState({ kps, max, history: [...history] });
+    }, 50);
+
+    expose({
+      reset: () => {
+        timestamps.length = 0;
+        history.length = 0;
+        max = 0;
+        setState({ kps: 0, max: 0, history: [] });
+      },
+    });
+
+    return () => clearInterval(interval);
+  },
 });
 ```

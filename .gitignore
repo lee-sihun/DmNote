@@ -16,19 +16,4 @@ mcp.json
 
 tasks/
 
-# --- C# / Visual Studio (UWP) ---
-[Bb]in/
-[Oo]bj/
-.vs/
-*.user
-*.suo
-*.dbmdl
-*.jfm
-AppPackages/
-BundleArtifacts/
-*.appxupload
-*.msixupload
-*.appxbundle
-*.msixbundle
 *.pfx
-Package.StoreAssociation.xml

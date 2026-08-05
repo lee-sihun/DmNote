@@ -12,6 +12,12 @@ import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { LayerGroups } from '@src/types/layerGroups';
+import type {
+  EditorCommitRequest,
+  EditorCommitResult,
+  EditorCommittedV1,
+  EditorGetResult,
+} from '@src/types/editor';
 import {
   SettingsDiff,
   SettingsPatchInput,
@@ -32,6 +38,12 @@ export type KeyStatePayload = {
   mode: string;
   /** 입력 수신~emit 경과 시간(ms). performance.now() - eventAgeMs로 실제 입력 시각 복원 */
   eventAgeMs?: number;
+  /** UP 한정. 데몬이 입력 캡처 시점 기준으로 측정한 물리 눌림 지속 시간(ms) */
+  holdDurationMs?: number;
+};
+export type KeysResetPayload = {
+  /** 리셋 사유 (예: hook_restart) */
+  reason: string;
 };
 export type InputDevice = 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
 export type RawInputPayload = {
@@ -76,6 +88,28 @@ export type CssLoadResult = {
   path?: string;
 };
 
+// CSS 불러오기 히스토리
+export type CssHistoryStatus = 'available' | 'missing' | 'invalid' | 'tooLarge';
+export type CustomCssHistoryItem = {
+  path: string;
+  lastUsedAt: number;
+  status: CssHistoryStatus;
+};
+export type CssHistoryErrorCode =
+  | 'PATH_NOT_AUTHORIZED'
+  | 'NOT_FOUND'
+  | 'NOT_REGULAR_FILE'
+  | 'INVALID_EXTENSION'
+  | 'TOO_LARGE'
+  | 'INVALID_UTF8'
+  | 'IO_ERROR';
+export type CssActivateResult = {
+  success: boolean;
+  code?: CssHistoryErrorCode;
+  content?: string;
+  path?: string;
+};
+
 // 폰트 타입
 export type FontLoadResult = {
   success: boolean;
@@ -101,12 +135,27 @@ export type SoundListItem = {
   fileName: string;
   sizeBytes: number;
   modifiedAtMs?: number;
+  /** 피커 목록에서 숨김 여부 — 재생에는 영향 없음 */
+  hidden: boolean;
+  /** @deprecated hidden의 역논리 별칭 (enabled = !hidden) — 1.6.1 호환 */
   enabled: boolean;
   source: 'local' | 'builtin';
   originalPath?: string;
   trimStartRatio?: number;
   trimEndRatio?: number;
   displayName?: string;
+};
+
+export type SoundSetHiddenResult = {
+  success: boolean;
+  soundPath: string;
+  hidden: boolean;
+};
+
+export type SoundSetEnabledResult = {
+  success: boolean;
+  soundPath: string;
+  enabled: boolean;
 };
 
 export type SoundSaveProcessedWavResult = {
@@ -118,12 +167,6 @@ export type SoundSaveProcessedWavResult = {
 export type SoundRenameResult = {
   success: boolean;
   displayName: string;
-};
-
-export type SoundSetEnabledResult = {
-  success: boolean;
-  soundPath: string;
-  enabled: boolean;
 };
 
 export type SoundDeleteResult = {
@@ -209,6 +252,18 @@ export type TabCssSetResult = {
   tabId: string;
   css?: import('@src/types/plugin/css').TabCss;
 };
+export type TabCssActivateResult = {
+  success: boolean;
+  code?: CssHistoryErrorCode;
+  tabId: string;
+  css?: import('@src/types/plugin/css').TabCss;
+};
+export type TabCssExportResult = {
+  success: boolean;
+  code?: 'NO_TAB_CSS' | 'IO_ERROR';
+  error?: string;
+  path?: string;
+};
 
 // 탭별 노트 트랙 설정 타입
 export type TabNoteResponse = {
@@ -261,7 +316,13 @@ export type CustomTabDeleteResult = {
   selected: string;
   error?: string;
 };
-export type KeyCounterUpdate = { mode: string; key: string; count: number };
+export type KeyCounterUpdate = {
+  mode: string;
+  key: string;
+  count: number;
+  sessionId: string;
+  revision: number;
+};
 
 export type PresetOperationResult = { success: boolean; error?: string };
 
@@ -420,22 +481,29 @@ export interface PluginDefinitionContextMenuItem {
   position?: 'top' | 'bottom';
 }
 
-export type PluginSettingType =
+export type PluginValueSettingType =
   | 'boolean'
   | 'color'
   | 'number'
   | 'string'
-  | 'select'
-  | 'divider';
+  | 'select';
+
+// divider 타입은 section 도입과 함께 제거 — 기존 플러그인의 divider는
+// 정규화에서 미지원 타입으로 조용히 제외됨 (fail-closed)
+export type PluginLayoutSettingType = 'section';
+
+export type PluginSettingType =
+  | PluginValueSettingType
+  | PluginLayoutSettingType;
 
 export type PluginSettingSchema =
   | {
-      type: 'divider';
+      type: 'section';
       label?: string;
       visible?: boolean | ((settings: Record<string, unknown>) => boolean);
     }
   | {
-      type: Exclude<PluginSettingType, 'divider'>;
+      type: PluginValueSettingType;
       default: string | number | boolean;
       label: string;
       min?: number; // for number
@@ -539,6 +607,13 @@ export interface PluginDefinition {
     items?: PluginDefinitionContextMenuItem[];
   };
   /**
+   * 메뉴 predicate가 참조할 오버레이 상태 키 (옵트인 저빈도 동기화)
+   * 선언된 키의 setState 변경만 메인 윈도우로 전달되어 contextMenu.items의
+   * visible/disabled 평가 시 element.state에 병합됨 — 고빈도 상태(bars 등)는
+   * 선언하지 않는 한 절대 전송되지 않음. 프리뷰(previewState 기반 state)는 불변
+   */
+  contextMenuStateKeys?: string[];
+  /**
    * 설정 UI 표시 방식
    * - "panel": 속성 패널 (기본값)
    * - "modal": 기존 모달
@@ -559,6 +634,81 @@ export interface PluginDefinitionInternal extends PluginDefinition {
   id: string;
   pluginId: string;
 }
+
+// ========== 분리 패널 read-model 투영 ==========
+
+/**
+ * visible을 main이 현재 settings로 평가한 boolean으로 치환한 스키마
+ * 함수 필드가 없어 창 경계 직렬화 가능
+ */
+export type PluginResolvedSettingSchema =
+  | {
+      type: 'section';
+      label?: string;
+      visible: boolean;
+    }
+  | {
+      type: PluginValueSettingType;
+      default: string | number | boolean;
+      label: string;
+      min?: number;
+      max?: number;
+      step?: number;
+      options?: { label: string; value: string | number | boolean }[];
+      placeholder?: string;
+      visible: boolean;
+    };
+
+/**
+ * 분리 패널로 push되는 definition 투영
+ * template·hook·컨텍스트 메뉴 콜백 등 함수 필드 제외
+ */
+export type PluginDefinitionView = {
+  definitionId: string;
+  name: string;
+  resizable?: boolean;
+  preserveAxis?: 'width' | 'height' | 'both' | 'none';
+  resizeAnchor?: ElementResizeAnchor;
+  settingsUI?: 'panel' | 'modal';
+  resolvedSettingsSchema: Record<string, PluginResolvedSettingSchema>;
+  messages?: PluginMessages;
+};
+
+/** 분리 패널 편집 UI가 실제로 소비하는 요소 필드만 담은 read-model */
+export type PluginPanelElementView = Pick<
+  PluginDisplayElementInternal,
+  | 'id'
+  | 'fullId'
+  | 'pluginId'
+  | 'definitionId'
+  | 'position'
+  | 'settings'
+  | 'measuredSize'
+  | 'estimatedSize'
+  | 'resizeAnchor'
+  | 'zIndex'
+  | 'hidden'
+  | 'width'
+  | 'height'
+  | 'tabId'
+>;
+
+/**
+ * main → panel 플러그인 read-model 스냅샷
+ * backend modelRevision은 RPC 충돌 게이트, pushSeq는 패널의 역행 push 차단 기준
+ */
+export type PluginPanelModelSnapshot = {
+  /** backend canonical plugin_model_revision - RPC expectedModelRevision 도메인 */
+  modelRevision: number;
+  /** push 순서 전용 단조 시퀀스 - 역전된 낡은 push 무시 기준 (revision과 별개) */
+  pushSeq: number;
+  /** main authority generation - 패널이 첫 mutation 전에 설치 */
+  authorityGeneration: number;
+  elements: PluginPanelElementView[];
+  definitions: PluginDefinitionView[];
+  /** fullId → key별 visibility (main이 요소별 현재 settings로 평가, 스키마 본문은 definition view 1회) */
+  elementVisibility: Record<string, Record<string, boolean>>;
+};
 
 // ========== defineSettings API ==========
 
@@ -685,6 +835,10 @@ export type PluginDisplayElementConfig = Omit<PluginDisplayElement, 'id'> & {
 
 export type Unsubscribe = () => void;
 
+export type ReadyUnsubscribe = Unsubscribe & {
+  ready: Promise<void>;
+};
+
 // UI Components Options
 export interface ButtonOptions {
   variant?: 'primary' | 'danger' | 'secondary';
@@ -754,10 +908,19 @@ export interface DMNoteAPI {
     update(patch: SettingsPatchInput): Promise<SettingsState>;
     onChanged(listener: (diff: SettingsDiff) => void): Unsubscribe;
   };
+  editor: {
+    get(): Promise<EditorGetResult>;
+    commit(request: EditorCommitRequest): Promise<EditorCommitResult>;
+    onCommitted(listener: (event: EditorCommittedV1) => void): ReadyUnsubscribe;
+  };
   keys: {
     get(): Promise<KeyMappings>;
     getCounters(): Promise<KeyCounters>;
     update(mappings: KeyMappings): Promise<KeyMappings>;
+    updateWithPositions(
+      mappings: KeyMappings,
+      positions: KeyPositions,
+    ): Promise<{ keys: KeyMappings; positions: KeyPositions }>;
     getPositions(): Promise<KeyPositions>;
     updatePositions(positions: KeyPositions): Promise<KeyPositions>;
     setMode(mode: string): Promise<KeysModeResponse>;
@@ -769,7 +932,10 @@ export interface DMNoteAPI {
       listener: (positions: KeyPositions) => void,
     ): Unsubscribe;
     onModeChanged(listener: (payload: ModeChangePayload) => void): Unsubscribe;
-    onKeyState(listener: (payload: KeyStatePayload) => void): Unsubscribe;
+    onKeyState(listener: (payload: KeyStatePayload) => void): ReadyUnsubscribe;
+    onKeysReset(
+      listener: (payload: KeysResetPayload) => void,
+    ): ReadyUnsubscribe;
     onRawInput(listener: (payload: RawInputPayload) => void): Unsubscribe;
     resetCounters(): Promise<KeyCounters>;
     resetCountersMode(mode: string): Promise<KeyCounters>;
@@ -842,6 +1008,9 @@ export interface DMNoteAPI {
     load(): Promise<CssLoadResult>;
     setContent(content: string): Promise<CssSetContentResult>;
     reset(): Promise<void>;
+    historyGet(): Promise<CustomCssHistoryItem[]>;
+    historyActivate(path: string): Promise<CssActivateResult>;
+    historyRemove(path: string): Promise<CustomCssHistoryItem[]>;
     onUse(listener: (payload: CssTogglePayload) => void): Unsubscribe;
     onContent(listener: (payload: CustomCss) => void): Unsubscribe;
     // 탭별 CSS API
@@ -855,6 +1024,11 @@ export interface DMNoteAPI {
         css: import('@src/types/plugin/css').TabCss | null,
       ): Promise<TabCssSetResult>;
       toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>;
+      activateHistory(
+        tabId: string,
+        path: string,
+      ): Promise<TabCssActivateResult>;
+      export(tabId: string): Promise<TabCssExportResult>;
       onChanged(listener: (payload: TabCssResponse) => void): Unsubscribe;
     };
   };
@@ -886,13 +1060,17 @@ export interface DMNoteAPI {
   sound: {
     load(): Promise<SoundLoadResult>;
     list(): Promise<SoundListItem[]>;
-    /** @deprecated 사운드 피커는 활성 상태를 사용하지 않습니다. */
+    rename(soundPath: string, displayName: string): Promise<SoundRenameResult>;
+    remove(soundPath: string): Promise<SoundDeleteResult>;
+    setHidden(
+      soundPath: string,
+      hidden: boolean,
+    ): Promise<SoundSetHiddenResult>;
+    /** @deprecated setHidden의 역논리 별칭 — enabled = !hidden */
     setEnabled(
       soundPath: string,
       enabled: boolean,
     ): Promise<SoundSetEnabledResult>;
-    rename(soundPath: string, displayName: string): Promise<SoundRenameResult>;
-    remove(soundPath: string): Promise<SoundDeleteResult>;
     saveProcessedWav(
       wavBase64: string,
       fileName?: string,

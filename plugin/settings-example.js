@@ -18,6 +18,10 @@
 // ============================================
 const globalSettings = dmn.plugin.defineSettings({
   settings: {
+    appearanceSection: {
+      type: "section",
+      label: "section.appearance",
+    },
     // 기본 테마 색상
     primaryColor: {
       type: "color",
@@ -32,6 +36,10 @@ const globalSettings = dmn.plugin.defineSettings({
       max: 24,
       step: 1,
       label: "global.fontSize",
+    },
+    behaviorSection: {
+      type: "section",
+      label: "section.behavior",
     },
     // 애니메이션 활성화
     enableAnimation: {
@@ -62,6 +70,8 @@ const globalSettings = dmn.plugin.defineSettings({
       "global.theme.dark": "다크",
       "global.theme.light": "라이트",
       "global.theme.system": "시스템 설정",
+      "section.appearance": "모양",
+      "section.behavior": "동작",
       "menu.create": "예제 패널 생성",
       "menu.delete": "예제 패널 삭제",
       "menu.globalSettings": "전역 설정",
@@ -79,6 +89,8 @@ const globalSettings = dmn.plugin.defineSettings({
       "global.theme.dark": "Dark",
       "global.theme.light": "Light",
       "global.theme.system": "System",
+      "section.appearance": "Appearance",
+      "section.behavior": "Behavior",
       "menu.create": "Create Example Panel",
       "menu.delete": "Delete Example Panel",
       "menu.globalSettings": "Global Settings",
@@ -129,8 +141,8 @@ dmn.plugin.defineElement({
     ],
   },
 
-  // 다국어 메시지 (전역 설정의 messages 재사용)
-  messages: globalSettings.get().__messages || {
+  // 다국어 메시지 (defineElement는 자체 messages 번들 사용)
+  messages: {
     ko: {
       "menu.create": "예제 패널 생성",
       "menu.delete": "예제 패널 삭제",
@@ -140,6 +152,7 @@ dmn.plugin.defineElement({
       "panel.clickCount": "클릭 횟수",
       "settings.showTitle": "제목 표시",
       "settings.customText": "커스텀 텍스트",
+      "section.content": "콘텐츠",
     },
     en: {
       "menu.create": "Create Example Panel",
@@ -150,11 +163,16 @@ dmn.plugin.defineElement({
       "panel.clickCount": "Click Count",
       "settings.showTitle": "Show Title",
       "settings.customText": "Custom Text",
+      "section.content": "Content",
     },
   },
 
   // 인스턴스별 설정 (각 패널마다 다를 수 있음)
   settings: {
+    contentSection: {
+      type: "section",
+      label: "section.content",
+    },
     showTitle: {
       type: "boolean",
       default: true,

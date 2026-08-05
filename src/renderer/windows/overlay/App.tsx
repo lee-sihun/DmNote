@@ -14,6 +14,7 @@ import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
 import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
+import { obsApi } from '@api/modules/obsApi';
 import { useBuiltinStatsSubscription } from '@hooks/overlay/useBuiltinStatsSubscription';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -24,23 +25,54 @@ import {
   resetAllKeySignals,
 } from '@stores/signals/keySignals';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import type { KeyPosition } from '@src/types/key/keys';
-import type { StatItemPosition } from '@src/types/key/statItems';
-import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type { KnobItemPosition } from '@src/types/key/knobs';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
 
-type KeyDelayTimerEntry = { timers: Set<ReturnType<typeof setTimeout>> };
+type KeyDelayTimerHandle = ReturnType<typeof setTimeout>;
+type KeyDelayTimerEntry = {
+  timers: Map<KeyDelayTimerHandle, () => void>;
+};
+
+const cancelKeyDelayTimers = (
+  entries: Map<string, KeyDelayTimerEntry>,
+  pendingTimers: Map<KeyDelayTimerHandle, () => void>,
+) => {
+  pendingTimers.forEach((_apply, timer) => clearTimeout(timer));
+  pendingTimers.clear();
+  entries.forEach((entry) => entry.timers.clear());
+  entries.clear();
+};
+
+const flushKeyDelayTimers = (
+  entries: Map<string, KeyDelayTimerEntry>,
+  pendingTimers: Map<KeyDelayTimerHandle, () => void>,
+) => {
+  const pending = [...pendingTimers.entries()];
+  pendingTimers.clear();
+  entries.forEach((entry) => entry.timers.clear());
+  entries.clear();
+
+  pending.forEach(([timer, apply]) => {
+    clearTimeout(timer);
+    apply();
+  });
+};
 
 // 입력 시각 보정용 age 상한(ms). 백엔드 stall/클럭 이상으로 비정상적으로 큰
 // 값이 와도 노트가 화면 위로 튀지 않도록 제한
 const MAX_EVENT_AGE_MS = 250;
 
+const validKeySet = (keys: readonly string[]) =>
+  new Set(keys.filter((key) => key.length > 0));
+
+const validKeySignature = (keys: readonly string[]) =>
+  JSON.stringify([...validKeySet(keys)].sort());
+
 export default function App() {
+  const isBootstrapped = useKeyStore((state) => state.isBootstrapped);
   useCustomCssInjection();
-  useCustomJsInjection();
+  useCustomJsInjection(isBootstrapped);
   useAppBootstrap();
   useBuiltinStatsSubscription();
   useBlockBrowserShortcuts();
@@ -80,66 +112,6 @@ export default function App() {
         // 무시
       }
     };
-  }, []);
-
-  // 메인에서 bridge를 통한 positions 동기화 수신
-  useEffect(() => {
-    const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, KeyPosition[]>;
-    }>('positions:sync', (data) => {
-      if (data?.positions) {
-        useKeyStore.setState((state) => ({
-          ...state,
-          positions: data.positions,
-        }));
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 메인에서 bridge를 통한 statPositions 동기화 수신
-  useEffect(() => {
-    const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, StatItemPosition[]>;
-    }>('statPositions:sync', (data) => {
-      if (data?.positions) {
-        useStatItemStore.setState((state) => ({
-          ...state,
-          positions: data.positions,
-        }));
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 메인에서 bridge를 통한 graphPositions 동기화 수신
-  useEffect(() => {
-    const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, GraphItemPosition[]>;
-    }>('graphPositions:sync', (data) => {
-      if (data?.positions) {
-        useGraphItemStore.setState((state) => ({
-          ...state,
-          positions: data.positions,
-        }));
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 메인에서 bridge를 통한 knobPositions 동기화 수신
-  useEffect(() => {
-    const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, KnobItemPosition[]>;
-    }>('knobPositions:sync', (data) => {
-      if (data?.positions) {
-        useKnobItemStore.setState((state) => ({
-          ...state,
-          positions: data.positions,
-        }));
-      }
-    });
-    return () => unsubscribe();
   }, []);
 
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
@@ -386,6 +358,7 @@ export default function App() {
     handleKeyDown,
     handleKeyUp,
     finalizeAllActive,
+    reconcileActiveNotes,
     noteBuffer,
     updateTrackLayouts,
   } = useNoteSystem({
@@ -399,14 +372,23 @@ export default function App() {
   // 키 딜레이 설정
   const keyDisplayDelayMs = Number(noteSettings?.keyDisplayDelayMs ?? 0);
 
+  // 키 딜레이 타이머 관리 (down/up 별도 관리)
+  const keyDelayTimersRef = useRef<Map<string, KeyDelayTimerEntry>>(new Map());
+  const pendingKeyDelayTimersRef = useRef<Map<KeyDelayTimerHandle, () => void>>(
+    new Map(),
+  );
+
   // 키 딜레이 값을 ref로 관리하여 클로저 문제 방지
   const keyDisplayDelayMsRef = useRef(keyDisplayDelayMs);
   useEffect(() => {
+    if (keyDisplayDelayMsRef.current !== keyDisplayDelayMs) {
+      flushKeyDelayTimers(
+        keyDelayTimersRef.current,
+        pendingKeyDelayTimersRef.current,
+      );
+    }
     keyDisplayDelayMsRef.current = keyDisplayDelayMs;
   }, [keyDisplayDelayMs]);
-
-  // 키 딜레이 타이머 관리 (down/up 별도 관리)
-  const keyDelayTimersRef = useRef<Map<string, KeyDelayTimerEntry>>(new Map());
 
   // 키 활성 상태는 signals로 관리하여 App 리렌더를 방지
   const [_layoutVersion, setLayoutVersion] = useState(0);
@@ -427,6 +409,41 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKeyType]);
 
+  // 구독 콜백이 읽는 최신 컨텍스트 - 구독 자체는 마운트 1회로 고정
+  // positions·keyMappings가 deps에 있으면 undo의 canonical 복원마다 재구독되고,
+  // cleanup의 resetAllKeySignals가 눌림 표시 중간에 끼어들어 이중 깜빡임 발생
+  const keyEventContextRef = useRef({
+    noteEffect,
+    keyMappings,
+    positions,
+    selectedKeyType,
+    handleKeyDown,
+    handleKeyUp,
+    finalizeAllActive,
+    reconcileActiveNotes,
+  });
+  useEffect(() => {
+    keyEventContextRef.current = {
+      noteEffect,
+      keyMappings,
+      positions,
+      selectedKeyType,
+      handleKeyDown,
+      handleKeyUp,
+      finalizeAllActive,
+      reconcileActiveNotes,
+    };
+  });
+
+  // 리셋 이후 이벤트가 도착한 키 추적 - 스냅샷 재수화보다 최신 이벤트가 우선
+  const seenSinceResetRef = useRef<Set<string>>(new Set());
+  // 대조(reconcile) fetch 이후 도착한 실이벤트 추적 - null이면 수집 안 함
+  const reconcileSeenRef = useRef<Set<string> | null>(null);
+  // 중첩 대조의 낡은 응답 차단 - keys:reset·탭 전환·새 대조가 세대를 올림
+  const reconcileGenerationRef = useRef(0);
+  // 탭 전환 재수화가 구독 확립을 기다릴 수 있게 구독 준비 promise 보관
+  const keyEventsReadyRef = useRef<Promise<unknown> | null>(null);
+
   useEffect(() => {
     // 키 딜레이 적용된 신호 업데이트
     const updateKeySignalWithDelay = (key: string, isDown: boolean) => {
@@ -434,99 +451,292 @@ export default function App() {
 
       let timerEntry = keyDelayTimersRef.current.get(key);
       if (!timerEntry) {
-        timerEntry = { timers: new Set() };
+        timerEntry = { timers: new Map() };
         keyDelayTimersRef.current.set(key, timerEntry);
       }
 
       if (delayMs <= 0) {
-        timerEntry.timers.forEach((timer) => clearTimeout(timer));
+        timerEntry.timers.forEach((_apply, timer) => {
+          clearTimeout(timer);
+          pendingKeyDelayTimersRef.current.delete(timer);
+        });
         timerEntry.timers.clear();
+        keyDelayTimersRef.current.delete(key);
         setKeyActiveSignal(key, isDown);
         return;
       }
 
+      const apply = () => setKeyActiveSignal(key, isDown);
       const timer = setTimeout(() => {
-        setKeyActiveSignal(key, isDown);
-        timerEntry?.timers.delete(timer);
-      }, delayMs);
-      timerEntry.timers.add(timer);
-    };
+        const pendingApply = pendingKeyDelayTimersRef.current.get(timer);
+        if (!pendingApply) return;
 
-    // 키 이벤트 버스 초기화 (백엔드에서 한 번만 구독)
-    import('@utils/core/keyEventBus').then(({ keyEventBus }) => {
-      keyEventBus.initialize();
-    });
+        pendingKeyDelayTimersRef.current.delete(timer);
+        const currentEntry = keyDelayTimersRef.current.get(key);
+        currentEntry?.timers.delete(timer);
+        if (currentEntry?.timers.size === 0) {
+          keyDelayTimersRef.current.delete(key);
+        }
+        pendingApply();
+      }, delayMs);
+      timerEntry.timers.set(timer, apply);
+      pendingKeyDelayTimersRef.current.set(timer, apply);
+    };
 
     // HID 축 이벤트 버스 초기화 (input:axis 구독 → axisSignals 누적)
     import('@utils/core/axisEventBus').then(({ axisEventBus }) => {
       axisEventBus.initialize();
     });
 
-    // 버스를 통해 키 이벤트 수신
-    const unsubscribe = import('@utils/core/keyEventBus').then(
-      ({ keyEventBus }) => {
-        return keyEventBus.subscribe(({ key, state, eventAgeMs }) => {
-          const isDown = state === 'DOWN';
-          // 키 UI 업데이트 (딜레이 적용)
-          updateKeySignalWithDelay(key, isDown);
-          // 노트 이펙트는 즉시 처리 (딜레이 없음)
-          if (noteEffect) {
-            // 개별 키의 noteEffectEnabled 확인
-            const currentKeys = keyMappings[selectedKeyType] ?? [];
-            const currentPositions = positions[selectedKeyType] ?? [];
-            const keyIndex = currentKeys.indexOf(key);
-            const keyPosition = currentPositions[keyIndex];
-            const keyNoteEffectEnabled =
-              keyPosition?.noteEffectEnabled !== false;
+    let hydrationCancelled = false;
 
-            if (keyNoteEffectEnabled) {
+    // 키 이벤트 구독을 먼저 확립한 뒤 눌림 스냅샷 요청
+    const unsubscribe = import('@utils/core/keyEventBus').then(
+      async ({ keyEventBus }) => {
+        if (hydrationCancelled) return undefined;
+        const unsubscribeKeyEvents = keyEventBus.subscribe(
+          ({ key, state, mode, eventAgeMs, holdDurationMs }) => {
+            seenSinceResetRef.current.add(key);
+            reconcileSeenRef.current?.add(`${mode}::${key}`);
+            const isDown = state === 'DOWN';
+            // 키 UI 업데이트 (딜레이 적용)
+            updateKeySignalWithDelay(key, isDown);
+            const {
+              noteEffect,
+              keyMappings,
+              positions,
+              selectedKeyType,
+              handleKeyDown,
+              handleKeyUp,
+            } = keyEventContextRef.current;
+            // 노트 이펙트는 즉시 처리 (딜레이 없음)
+            if (noteEffect) {
               // 실제 입력 시각을 복원해 노트 시작 위치를 보정 (프레임 양자화 방지).
-              // requestAnimationFrame 래핑 시 노트 생성 시각이 프레임 경계로 양자화돼
-              // 주사율/OBS fps에 시간 해상도가 종속되던 문제 해결.
-              // age는 0~MAX_EVENT_AGE_MS로 clamp — 백엔드 stall/클럭 이상 시 노트가
-              // 화면 위로 튀는 것을 방지
-              const age = Math.min(
-                Math.max(eventAgeMs ?? 0, 0),
-                MAX_EVENT_AGE_MS,
-              );
-              const inputTime = performance.now() - age;
-              if (isDown) handleKeyDown(key, inputTime);
-              else handleKeyUp(key, inputTime);
+              // displayTime은 0~MAX_EVENT_AGE_MS 클램프 - 백엔드 stall/클럭 이상 시
+              // 노트가 화면 위로 튀는 것을 방지. physTime은 비클램프 - 단/롱 판정의
+              // hold 폴백 계산 전용이라 클램프 절단 왜곡을 받지 않음
+              const rawAge = Math.max(eventAgeMs ?? 0, 0);
+              const displayAge = Math.min(rawAge, MAX_EVENT_AGE_MS);
+              const now = performance.now();
+              const timing = {
+                displayTime: now - displayAge,
+                physTime: now - rawAge,
+                holdDurationMs,
+              };
+
+              if (isDown) {
+                // 개별 키의 noteEffectEnabled는 DOWN에만 적용
+                const currentKeys = keyMappings[selectedKeyType] ?? [];
+                const currentPositions = positions[selectedKeyType] ?? [];
+                const keyIndex = currentKeys.indexOf(key);
+                const keyPosition = currentPositions[keyIndex];
+                if (keyPosition?.noteEffectEnabled !== false) {
+                  handleKeyDown(key, timing);
+                }
+              } else {
+                // UP은 항상 전달 - DOWN 이후 설정이 꺼진 키의 활성 노트 고착 방지
+                handleKeyUp(key, timing);
+              }
             }
-          }
-        });
+          },
+        );
+
+        try {
+          await keyEventBus.initialize();
+        } catch (error) {
+          unsubscribeKeyEvents();
+          throw error;
+        }
+
+        if (hydrationCancelled) return unsubscribeKeyEvents;
+
+        // 지연 생성된 오버레이 hydration — 구독 이후 이벤트가 온 키는
+        // 최신 이벤트가 스냅샷보다 우선하며 KPS·노트 통계에는 반영하지 않음
+        const hydrationSeen = seenSinceResetRef.current;
+        void window.api.app
+          .bootstrap()
+          .then(({ activeKeys }) => {
+            if (hydrationCancelled || !activeKeys?.length) return;
+            // 탭 전환 리셋이 끼었으면 이 스냅샷은 낡음 - 전환 effect의 재수화가 담당
+            if (seenSinceResetRef.current !== hydrationSeen) return;
+            const { keyMappings, selectedKeyType } = keyEventContextRef.current;
+            const validKeys = validKeySet(keyMappings[selectedKeyType] ?? []);
+            for (const key of activeKeys) {
+              if (validKeys.has(key) && !hydrationSeen.has(key)) {
+                setKeyActiveSignal(key, true);
+              }
+            }
+          })
+          .catch((error) => {
+            if (!hydrationCancelled) {
+              console.error('Failed to hydrate active key state', error);
+            }
+          });
+
+        return unsubscribeKeyEvents;
       },
     );
+    keyEventsReadyRef.current = unsubscribe;
+    void unsubscribe.catch((error) => {
+      console.error('Failed to initialize key state listener', error);
+    });
+
+    // UP 유실 복구 - fresh 스냅샷과 활성 노트·눌림 신호를 대조 (실패 복구 경로)
+    const reconcileWithBootstrap = async (): Promise<void> => {
+      const generation = reconcileGenerationRef.current + 1;
+      reconcileGenerationRef.current = generation;
+      const sinceFetch = new Set<string>();
+      reconcileSeenRef.current = sinceFetch;
+      try {
+        const payload = await window.api.app.bootstrap();
+        if (hydrationCancelled) return;
+        // 더 새로운 대조나 keys:reset·탭 전환이 끼었으면 이 응답은 낡음
+        if (generation !== reconcileGenerationRef.current) return;
+        const { selectedKeyType, keyMappings, reconcileActiveNotes } =
+          keyEventContextRef.current;
+        // 모드 삼중 일치에서만 대조 - 비원자 스냅샷·낙관적 모드 전환 방어
+        if (
+          !payload.currentMode ||
+          payload.currentMode !== payload.selectedKeyType ||
+          payload.currentMode !== selectedKeyType
+        ) {
+          return;
+        }
+        const held = new Set(payload.activeKeys ?? []);
+        // fetch 이후 실이벤트가 도착한 키는 그 이벤트가 최신 - 대조에서 제외
+        for (const entry of sinceFetch) {
+          const sep = entry.indexOf('::');
+          if (sep < 0) continue;
+          if (entry.slice(0, sep) === payload.currentMode) {
+            held.add(entry.slice(sep + 2));
+          }
+        }
+        reconcileActiveNotes(held);
+        // 고착된 눌림 하이라이트도 같은 기준으로 정정
+        const validKeys = validKeySet(keyMappings[selectedKeyType] ?? []);
+        for (const key of validKeys) {
+          if (!sinceFetch.has(`${payload.currentMode}::${key}`)) {
+            setKeyActiveSignal(key, held.has(key));
+          }
+        }
+      } catch (error) {
+        if (!hydrationCancelled) {
+          console.error('Failed to reconcile active notes', error);
+        }
+      } finally {
+        if (reconcileSeenRef.current === sinceFetch) {
+          reconcileSeenRef.current = null;
+        }
+      }
+    };
+
+    // OBS Lagged/재연결 스냅샷은 유실된 keys:state를 개별 복구하지 못하므로 대조로 정리
+    const unsubscribeResync = obsApi.onResync(() => {
+      void reconcileWithBootstrap();
+    });
+
+    // 키보드 훅 (재)시작 - 이전 눌림 상태가 통째로 무효화되므로 전체 리셋 후 재수화
+    const unsubscribeKeysReset = window.api.keys.onKeysReset(() => {
+      // 진행 중인 대조의 낡은 스냅샷이 리셋 이후 상태를 덮지 못하게 무효화
+      reconcileGenerationRef.current += 1;
+      const { finalizeAllActive } = keyEventContextRef.current;
+      finalizeAllActive();
+      cancelKeyDelayTimers(
+        keyDelayTimersRef.current,
+        pendingKeyDelayTimersRef.current,
+      );
+      const seen = new Set<string>();
+      seenSinceResetRef.current = seen;
+      resetAllKeySignals();
+      void window.api.app
+        .bootstrap()
+        .then(({ activeKeys }) => {
+          if (hydrationCancelled || !activeKeys?.length) return;
+          if (seenSinceResetRef.current !== seen) return;
+          const { keyMappings, selectedKeyType } = keyEventContextRef.current;
+          const validKeys = validKeySet(keyMappings[selectedKeyType] ?? []);
+          for (const key of activeKeys) {
+            if (validKeys.has(key) && !seen.has(key)) {
+              setKeyActiveSignal(key, true);
+            }
+          }
+        })
+        .catch((error) => {
+          if (!hydrationCancelled) {
+            console.error('Failed to rehydrate after keys reset', error);
+          }
+        });
+    });
 
     const keyDelayTimers = keyDelayTimersRef.current;
+    const pendingKeyDelayTimers = pendingKeyDelayTimersRef.current;
 
     return () => {
-      unsubscribe.then((unsub) => {
-        try {
-          unsub?.();
-        } catch (error) {
-          console.error('Failed to remove key state listener', error);
-        }
-      });
+      hydrationCancelled = true;
+      unsubscribeResync();
+      unsubscribeKeysReset();
+      void unsubscribe
+        .then((unsub) => {
+          try {
+            unsub?.();
+          } catch (error) {
+            console.error('Failed to remove key state listener', error);
+          }
+        })
+        .catch(() => undefined);
       // 키 딜레이 타이머 정리
-      keyDelayTimers.forEach((timerEntry) => {
-        timerEntry.timers.forEach((timer) => clearTimeout(timer));
-        timerEntry.timers.clear();
-      });
-      keyDelayTimers.clear();
-      // 안전하게 모든 키 신호 초기화(선택적)
+      cancelKeyDelayTimers(keyDelayTimers, pendingKeyDelayTimers);
+      // 창 단위 정리 - 마운트 1회 구독이므로 여기는 실제 언마운트에서만 실행됨
       resetAllKeySignals();
     };
-  }, [
-    handleKeyDown,
-    handleKeyUp,
-    noteEffect,
-    keyMappings,
-    positions,
-    selectedKeyType,
-  ]);
+    // 콜백이 읽는 값은 keyEventContextRef로 공급 - 구독은 창 수명과 동일
+  }, []);
 
   const currentKeys = keyMappings[selectedKeyType] ?? [];
+  const currentValidKeySignature = validKeySignature(currentKeys);
+
+  // 탭·현재 키 집합 전환 시 예약 타이머와 눌림 신호를 권위 상태로 정합
+  // positions와 다른 탭의 매핑 변경은 signature가 같아 이 effect를 건드리지 않음
+  const keySignalResetArmedRef = useRef(false);
+  useEffect(() => {
+    if (!keySignalResetArmedRef.current) {
+      // 초기 마운트 수화는 구독 effect가 담당
+      keySignalResetArmedRef.current = true;
+      return;
+    }
+    // 탭 전환은 진행 중 대조의 스냅샷을 낡게 만든다
+    reconcileGenerationRef.current += 1;
+    let cancelled = false;
+    cancelKeyDelayTimers(
+      keyDelayTimersRef.current,
+      pendingKeyDelayTimersRef.current,
+    );
+    const seen = new Set<string>();
+    const validKeys = new Set<string>(JSON.parse(currentValidKeySignature));
+    seenSinceResetRef.current = seen;
+    resetAllKeySignals();
+    void Promise.resolve(keyEventsReadyRef.current)
+      .then(() => window.api.app.bootstrap())
+      .then(({ activeKeys }) => {
+        if (cancelled || !activeKeys?.length) return;
+        // 이후 전환의 리셋이 끼었으면 그쪽 재수화가 담당
+        if (seenSinceResetRef.current !== seen) return;
+        for (const key of activeKeys) {
+          if (validKeys.has(key) && !seen.has(key)) {
+            setKeyActiveSignal(key, true);
+          }
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Failed to rehydrate active key state', error);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedKeyType, currentValidKeySignature]);
+
   const currentPositions = positions[selectedKeyType] ?? [];
   const currentStatPositions = statPositions[selectedKeyType] ?? [];
   const currentGraphPositions = graphPositions[selectedKeyType] ?? [];

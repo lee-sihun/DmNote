@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/refs */
+import { usePressAction } from '@hooks/usePressAction';
 import React from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
@@ -25,7 +26,6 @@ import {
   type SaveData,
   type PreviewData,
 } from '@hooks/Modal/useUnifiedKeySettingState';
-import { getScrollShadowState } from '@utils/grid/scrollShadow';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 
 // ============================================================================
@@ -56,13 +56,6 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   const { t } = useTranslation();
   const initialSkipRef = React.useRef(skipAnimation);
   const contentRef = React.useRef<HTMLDivElement>(null);
-  const [scrollState, setScrollState] = React.useState({
-    hasTopShadow: false,
-    hasBottomShadow: false,
-  });
-  const [hasOverflow, setHasOverflow] = React.useState(false);
-  // 탭 전환 시 그림자 애니메이션 스킵 여부 (깜빡임 방지)
-  const [skipShadowTransition, setSkipShadowTransition] = React.useState(false);
   // 컨테이너 높이 (애니메이션용)
   const [containerHeight, setContainerHeight] = React.useState<number | null>(
     null,
@@ -75,27 +68,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   const noteTabRef = React.useRef<NoteTabContentRef>(null);
   const counterTabRef = React.useRef<CounterTabContentRef>(null);
 
-  // 스크롤 상태 업데이트 함수
-  const updateScrollState = (el: HTMLElement | null) => {
-    if (!el) return;
-    const nextState = getScrollShadowState(el, contentRef.current);
-    setScrollState((prev) =>
-      prev.hasTopShadow === nextState.hasTopShadow &&
-      prev.hasBottomShadow === nextState.hasBottomShadow
-        ? prev
-        : nextState,
-    );
-  };
-
-  // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
-  const {
-    scrollContainerRef: scrollRef,
-    wrapperElement,
-    lenisInstance,
-    scrollbarWidth,
-  } = useLenis({
-    onScroll: () => updateScrollState(wrapperElement),
-  });
+  const { scrollContainerRef: scrollRef, lenisInstance } = useLenis();
 
   const {
     activeTab,
@@ -119,46 +92,24 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
     onClose,
   });
 
-  // 탭 변경 또는 마운트 시 스크롤 상태 확인 (DOM 렌더링 후 확인)
+  // 탭 변경 또는 마운트 시 콘텐츠 높이 동기화 (높이 애니메이션용)
   React.useEffect(() => {
-    // 탭 전환 시 그림자 애니메이션 스킵
-    setSkipShadowTransition(true);
-
-    // 콘텐츠 크기 변경 감지를 위한 ResizeObserver
-    const el = wrapperElement;
     const contentEl = contentRef.current;
-    if (!el) return;
+    if (!contentEl) return;
 
     const updateHeight = () => {
-      if (contentEl) {
-        const contentHeight = contentEl.scrollHeight;
-        const maxHeight = 195;
-        setContainerHeight(Math.min(contentHeight, maxHeight));
-        const nextHasOverflow = contentHeight > maxHeight;
-        setHasOverflow((prev) =>
-          prev === nextHasOverflow ? prev : nextHasOverflow,
-        );
-      }
+      const contentHeight = contentEl.scrollHeight;
+      const maxHeight = 195;
+      setContainerHeight(Math.min(contentHeight, maxHeight));
     };
 
-    const resizeObserver = new ResizeObserver(() => {
-      updateScrollState(el);
-      updateHeight();
-    });
-
     // 스크롤 영역 내부의 콘텐츠 크기 변경을 감지
-    if (contentEl) {
-      resizeObserver.observe(contentEl);
-    }
-    resizeObserver.observe(el);
-
-    // 초기 상태 확인
-    updateScrollState(el);
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(contentEl);
     updateHeight();
 
-    // 다음 프레임에서 애니메이션 다시 활성화 및 첫 렌더 플래그 해제
+    // 다음 프레임에서 첫 렌더 플래그 해제
     const rafId = requestAnimationFrame(() => {
-      setSkipShadowTransition(false);
       isFirstRender.current = false;
     });
 
@@ -166,7 +117,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
       resizeObserver.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [activeTab, wrapperElement]);
+  }, [activeTab]);
 
   // 탭 변경 시 스크롤 최상단으로 초기화
   React.useEffect(() => {
@@ -231,84 +182,56 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
     handleKeyPreview({ activeTransparent: checked });
   };
 
+  // 입력 blur 커밋과의 경합으로 첫 click이 유실되는 것을 방어
+  const submitPress = usePressAction(() => handleSubmit());
+  const cancelPress = usePressAction(() => handleClose());
   return (
-    <Modal onClick={handleClose} animate={!initialSkipRef.current}>
+    <Modal
+      onClick={handleClose}
+      animate={!initialSkipRef.current}
+      ariaLabel={t('keySetting.title')}
+    >
       <div
-        className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
+        className="flex flex-col min-w-[264px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="pr-[14px]">
-          <TabSwitch
-            tabs={[
-              { id: TABS.KEY, label: t('keySetting.tabKey') },
-              { id: TABS.NOTE, label: t('keySetting.tabNote') },
-              { id: TABS.COUNTER, label: t('keySetting.tabCounter') },
-            ]}
-            activeTab={activeTab}
-            onTabChange={(tab) => setActiveTab(tab as TabType)}
-            className="mb-[19px]"
-          />
-        </div>
+        <TabSwitch
+          tabs={[
+            { id: TABS.KEY, label: t('keySetting.tabKey') },
+            { id: TABS.NOTE, label: t('keySetting.tabNote') },
+            { id: TABS.COUNTER, label: t('keySetting.tabCounter') },
+          ]}
+          activeTab={activeTab}
+          onTabChange={(tab) => setActiveTab(tab as TabType)}
+          className="mb-[12px]"
+        />
 
-        {/* 스크롤 영역 - 스크롤바가 모달 오른쪽 끝에 위치 */}
-        <div className="relative">
-          {/* 상단 그림자 */}
-          <div
-            className={`absolute top-0 left-0 ${
-              hasOverflow ? 'right-[14px]' : 'right-0'
-            } h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? '' : 'transition-opacity duration-150'
-            } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
-          />
-
-          <div
-            ref={scrollRef}
-            className="overflow-y-auto modal-content-scroll pr-[14px]"
-            style={{
-              height:
-                containerHeight !== null ? `${containerHeight}px` : 'auto',
-              maxHeight: '195px',
-              width:
-                hasOverflow && scrollbarWidth > 0
-                  ? `calc(100% + ${scrollbarWidth}px)`
-                  : undefined,
-              transform:
-                hasOverflow && scrollbarWidth > 0
-                  ? `translateX(-${scrollbarWidth}px)`
-                  : undefined,
-              paddingLeft:
-                hasOverflow && scrollbarWidth > 0
-                  ? `${scrollbarWidth}px`
-                  : undefined,
-              transition: isFirstRender.current
-                ? 'none'
-                : 'height 100ms ease-in-out',
-            }}
-          >
-            <div ref={contentRef}>{renderTabContent()}</div>
-          </div>
-
-          {/* 하단 그림자 */}
-          <div
-            className={`absolute bottom-0 left-0 ${
-              hasOverflow ? 'right-[14px]' : 'right-0'
-            } h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? '' : 'transition-opacity duration-150'
-            } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
-          />
+        {/* 스크롤 영역 */}
+        <div
+          ref={scrollRef}
+          className="overflow-y-auto modal-content-scroll dmn-scroll-fade"
+          style={{
+            height: containerHeight !== null ? `${containerHeight}px` : 'auto',
+            maxHeight: '195px',
+            transition: isFirstRender.current
+              ? 'none'
+              : 'height 100ms ease-in-out',
+          }}
+        >
+          <div ref={contentRef}>{renderTabContent()}</div>
         </div>
 
         {/* 저장/취소 버튼 */}
-        <div className="flex gap-[10.5px] mt-[19px] pr-[14px]">
+        <div className="flex gap-[8px] mt-[12px]">
           <button
-            onClick={handleSubmit}
-            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            {...submitPress}
+            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.save')}
           </button>
           <button
-            onClick={handleClose}
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+            {...cancelPress}
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.cancel')}
           </button>

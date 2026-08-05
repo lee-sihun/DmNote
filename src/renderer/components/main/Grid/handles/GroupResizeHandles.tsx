@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
@@ -142,8 +142,8 @@ const getHandleStyle = (
   isHovered: boolean,
 ): React.CSSProperties => {
   const baseStyle: React.CSSProperties = {
-    backgroundColor: isHovered ? 'rgba(59, 130, 246, 1)' : 'white',
-    border: '2px solid rgba(59, 130, 246, 0.9)',
+    backgroundColor: isHovered ? 'var(--ui-selection)' : 'white',
+    border: '2px solid var(--ui-selection-border-strong)',
     pointerEvents: 'none',
     transition: 'background-color 0.15s ease',
   };
@@ -244,6 +244,11 @@ const GroupResizeHandles = ({
     maxShrinkX: 0,
     maxShrinkY: 0,
   });
+  const activeResizeCleanupRef = useRef<(() => void) | null>(null);
+
+  useLayoutEffect(() => {
+    return () => activeResizeCleanupRef.current?.();
+  }, []);
 
   // 그룹 바운딩 박스 계산
   const groupData = calculateGroupBounds(
@@ -346,7 +351,8 @@ const GroupResizeHandles = ({
       handle,
     };
 
-    onGroupResizeStart?.(handle);
+    let resizeStarted = false;
+    let resizeFinished = false;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!resizeRef.current.isResizing) return;
@@ -702,7 +708,7 @@ const GroupResizeHandles = ({
         finalGroupMaxY = Math.max(finalGroupMaxY, bounds.y + bounds.height);
       }
 
-      onGroupResize?.({
+      const result = {
         groupBounds: {
           x: finalGroupMinX,
           y: finalGroupMinY,
@@ -711,23 +717,49 @@ const GroupResizeHandles = ({
         },
         elementBounds: newElementBounds,
         handle,
+      };
+      const changed = newElementBounds.some(({ element, bounds }) => {
+        const initial = startElementBounds.find(
+          (entry) =>
+            entry.element.id === element.id &&
+            entry.element.type === element.type &&
+            entry.element.index === element.index,
+        );
+        return (
+          !initial ||
+          bounds.x !== initial.bounds.x ||
+          bounds.y !== initial.bounds.y ||
+          bounds.width !== initial.bounds.width ||
+          bounds.height !== initial.bounds.height
+        );
       });
+      if (!resizeStarted && changed) {
+        resizeStarted = true;
+        onGroupResizeStart?.(handle);
+      }
+      if (resizeStarted) onGroupResize?.(result);
     };
 
     const handleMouseUp = () => {
+      if (resizeFinished) return;
+      resizeFinished = true;
       resizeRef.current.isResizing = false;
+      activeResizeCleanupRef.current = null;
       // 스마트 가이드 클리어
       useSmartGuidesStore.getState().clearGuides();
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('blur', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
       unlockCustomCursor();
-      onGroupResizeEnd?.();
+      if (resizeStarted) onGroupResizeEnd?.();
     };
 
+    activeResizeCleanupRef.current = handleMouseUp;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('blur', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
   };
 
   if (!groupData || selectedElements.length < 2) return null;
@@ -766,7 +798,7 @@ const GroupResizeHandles = ({
           top: selectionTop,
           width: selectionWidth,
           height: selectionHeight,
-          border: `${GROUP_BORDER_WIDTH}px solid rgba(59, 130, 246, 0.9)`,
+          border: `${GROUP_BORDER_WIDTH}px solid var(--ui-selection-border-strong)`,
           borderRadius: '6px',
           pointerEvents: 'none' as const,
           zIndex: 22,

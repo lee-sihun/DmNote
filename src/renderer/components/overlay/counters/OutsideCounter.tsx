@@ -17,6 +17,8 @@ interface OutsideCounterProps {
     width?: number;
     height?: number;
     counter?: unknown;
+    className?: string;
+    useInlineStyles?: boolean;
   };
   count: number;
   active: boolean;
@@ -52,15 +54,22 @@ const OutsideCounter = ({
   const fillColor = active
     ? counterSettings.fill.active
     : counterSettings.fill.idle;
+  const fillGradient = active
+    ? counterSettings.fillActiveGradient
+    : counterSettings.fillIdleGradient;
   const strokeColor = active
     ? counterSettings.stroke.active
     : counterSettings.stroke.idle;
 
   return (
-    <div className="pointer-events-none" style={style}>
+    <div
+      className={`pointer-events-none ${position.className || ''}`}
+      style={style}
+    >
       <CountDisplay
         count={count}
         fillColor={fillColor}
+        fillGradient={fillGradient}
         strokeColor={strokeColor}
         globalKey={globalKey}
         active={active}
@@ -74,6 +83,7 @@ const OutsideCounter = ({
         animationBezier={counterSettings.animation.bezier}
         animationScale={counterSettings.animation.scale}
         animationDurationMs={counterSettings.animation.durationMs}
+        useInlineStyles={position.useInlineStyles === true}
       />
     </div>
   );

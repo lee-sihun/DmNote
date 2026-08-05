@@ -5,7 +5,19 @@ description: 키 매핑, 이벤트, 커스텀 탭 API
 
 # 키 (keys)
 
+<Callout type="info">
+  OBS는 읽기 전용입니다. 네이티브 Tauri 메인·오버레이 창은 revision
+  coordinator를 거쳐 쓰고 같은 canonical 이벤트를 구독할 수 있습니다.
+</Callout>
+
 ## 키 매핑 조회/수정
+
+<Callout type="warning">
+  `keys[mode][i]`와 `keyPositions[mode][i]`는 인덱스로 결합되어 있습니다. 모드
+  집합이나 배열 길이를 바꾸는 `update()` 또는 `updatePositions()` 단독 호출은
+  `PAIRED_UPDATE_REQUIRED`로 실패할 수 있습니다. 키 추가·삭제·재정렬은
+  `updateWithPositions()`를 사용하세요.
+</Callout>
 
 ### get()
 
@@ -18,7 +30,7 @@ type KeyMappings = Record<string, string[]>;
 
 ```javascript
 const mappings = await dmn.keys.get();
-console.log("4key 매핑:", mappings["4key"]);
+console.log('4key 매핑:', mappings['4key']);
 ```
 
 ### update(mappings)
@@ -27,7 +39,7 @@ console.log("4key 매핑:", mappings["4key"]);
 
 ```javascript
 const current = await dmn.keys.get();
-current["4key"] = ["KeyS", "KeyD", "KeyJ", "KeyK"];
+current['4key'] = ['KeyS', 'KeyD', 'KeyJ', 'KeyK'];
 await dmn.keys.update(current);
 ```
 
@@ -46,23 +58,65 @@ interface KeyPosition {
   activeTransparent?: boolean;
   idleTransparent?: boolean;
   count: number;
-  noteColor: string | { type: "gradient"; top: string; bottom: string };
+  noteColor: string | { type: 'gradient'; top: string; bottom: string };
   noteOpacity: number;
   noteEffectEnabled: boolean;
   noteGlowEnabled: boolean;
   noteGlowSize: number;
   noteGlowOpacity: number;
-  noteGlowColor?: string | { type: "gradient"; top: string; bottom: string };
+  noteGlowColor?: string | { type: 'gradient'; top: string; bottom: string };
   noteAutoYCorrection: boolean;
   className?: string;
   zIndex?: number;
   counter: KeyCounterSettings;
+  backgroundColor?: string;
+  activeBackgroundColor?: string;
+  borderColor?: string;
+  activeBorderColor?: string;
+  borderWidth?: number; // px, 미지정 시 기본 1 — 0이면 테두리 없음
+  backgroundGradient?: GradientSpec | null;
+  activeBackgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
+  activeBorderGradient?: GradientSpec | null;
+  shadow?: ElementShadowSpec;
+  activeShadow?: ElementShadowSpec;
+}
+
+interface KeyCounterSettings {
+  // ...배치, 글자, stroke, 애니메이션 필드...
+  fill: { idle: string; active: string };
+  fillIdleGradient?: GradientSpec | null;
+  fillActiveGradient?: GradientSpec | null;
+}
+
+interface GradientSpec {
+  angle: number; // 0 이상 360 미만 — 360은 0으로 정규화 (CSS 기준, 0 = 위·시계 방향)
+  stops: { color: string; pos: number }[]; // 2–8개, pos는 0–1 오름차순
+}
+
+interface ElementShadowSpec {
+  enabled: boolean;
+  color: string; // 알파값으로 농도 조절
+  offsetX: number; // px, -100~100
+  offsetY: number; // px, -100~100
+  blur: number; // px, 0~100
 }
 ```
 
+그라데이션 필드가 있으면 렌더에서 대응 단색 필드보다 우선하며, 저장 시
+대응 단색 필드는 첫 스톱 색으로 자동 동기화됩니다. 단색으로 되돌리려면
+그라데이션 필드를 `null`로 두고 단색 필드를 갱신하세요.
+
+카운터 fill 그라데이션도 각각 `counter.fill.idle`과 `counter.fill.active`보다
+우선합니다. 카운터 stroke는 단색만 지원합니다.
+
+`shadow`와 `activeShadow`는 대기·입력 그림자를 각각 제어합니다. 필드를
+생략하면 기존 기본 그림자가 유지되며, 그림자를 명시적으로 끄려면
+`enabled: false`인 spec을 저장하세요.
+
 ```javascript
 const positions = await dmn.keys.getPositions();
-console.log("4key 위치:", positions["4key"]);
+console.log('4key 위치:', positions['4key']);
 ```
 
 ### updatePositions(positions)
@@ -71,8 +125,24 @@ console.log("4key 위치:", positions["4key"]);
 
 ```javascript
 const current = await dmn.keys.getPositions();
-current["4key"][0].dx = 100;
+current['4key'][0].dx = 100;
 await dmn.keys.updatePositions(current);
+```
+
+### updateWithPositions(mappings, positions)
+
+키 매핑과 인덱스로 결합된 위치 정보를 한 번의 원자적 커밋으로 갱신합니다.
+두 값의 모드 집합과 모드별 배열 길이는 같아야 합니다. 키를 추가·삭제·재정렬할
+때 사용하세요. 커밋된 값이 반환되며, 저장 성공 후 `keys:changed`와
+`positions:changed` 이벤트가 모두 방출됩니다.
+
+```typescript
+interface KeysWithPositionsResult {
+  keys: KeyMappings;
+  positions: KeyPositions;
+}
+
+const result = await dmn.keys.updateWithPositions(mappings, positions);
 ```
 
 ## 모드 관리
@@ -82,8 +152,8 @@ await dmn.keys.updatePositions(current);
 현재 활성 키 모드를 변경합니다.
 
 ```javascript
-const result = await dmn.keys.setMode("8key");
-console.log("모드 변경 성공:", result.success);
+const result = await dmn.keys.setMode('8key');
+console.log('모드 변경 성공:', result.success);
 ```
 
 ### resetMode(mode)
@@ -91,7 +161,7 @@ console.log("모드 변경 성공:", result.success);
 특정 키 모드를 기본값으로 초기화합니다.
 
 ```javascript
-await dmn.keys.resetMode("4key");
+await dmn.keys.resetMode('4key');
 ```
 
 ### resetAll()
@@ -110,7 +180,7 @@ const reset = await dmn.keys.resetAll();
 
 ```javascript
 const counters = await dmn.keys.getCounters();
-console.log("4key 카운터:", counters["4key"]);
+console.log('4key 카운터:', counters['4key']);
 ```
 
 ### setCounters(counters)
@@ -119,7 +189,7 @@ console.log("4key 카운터:", counters["4key"]);
 
 ```javascript
 await dmn.keys.setCounters({
-  "4key": { KeyD: 100, KeyF: 200, KeyJ: 150, KeyK: 180 },
+  '4key': { KeyD: 100, KeyF: 200, KeyJ: 150, KeyK: 180 },
 });
 ```
 
@@ -136,7 +206,7 @@ await dmn.keys.resetCounters();
 특정 모드의 키 카운트만 초기화합니다.
 
 ```javascript
-await dmn.keys.resetCountersMode("4key");
+await dmn.keys.resetCountersMode('4key');
 ```
 
 ### resetSingleCounter(mode, key)
@@ -144,7 +214,7 @@ await dmn.keys.resetCountersMode("4key");
 특정 모드의 특정 키 카운트만 초기화합니다.
 
 ```javascript
-await dmn.keys.resetSingleCounter("4key", "KeyD");
+await dmn.keys.resetSingleCounter('4key', 'KeyD');
 ```
 
 ## 이벤트 구독
@@ -163,12 +233,42 @@ interface KeyStatePayload {
   // 입력 수신~emit 경과 시간(ms).
   // `performance.now() - eventAgeMs`로 실제 입력 시각 복원
   eventAgeMs?: number;
+  // UP 이벤트 한정. 입력 데몬이 캡처 시점에 측정한 물리 눌림
+  // 지속 시간(ms) - 전달 지연·지터의 영향을 받지 않음
+  holdDurationMs?: number;
 }
 ```
 
 ```javascript
 const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
   console.log(`[${mode}] ${key} is ${state}`);
+});
+```
+
+반환된 함수에는 구독이 백엔드에 실제로 등록된 시점에 resolve되는 `ready`
+프로미스가 함께 노출됩니다. `ready` 이전에 발생한 이벤트는 전달되지 않을 수
+있으므로, 확실한 시작점이 필요하면(예: 스냅샷 요청 전) await 하세요:
+
+```javascript
+const unsub = dmn.keys.onKeyState(handler);
+await unsub.ready; // 이 시점부터 구독이 활성
+```
+
+### onKeysReset(listener)
+
+눌림 상태 전체가 무효화될 때 발화합니다. 예를 들어 글로벌 단축키 변경으로
+키보드 훅이 재시작되면 이전 `onKeyState` 이벤트에서 파생된 상태(눌림 유지,
+활성 시각화)는 더 이상 유효하지 않으므로, 정리 후 새 스냅샷으로 재구성하세요.
+
+```typescript
+interface KeysResetPayload {
+  reason: string; // 예: "hook_restart"
+}
+```
+
+```javascript
+dmn.keys.onKeysReset(({ reason }) => {
+  console.log(`키 상태 리셋: ${reason}`);
 });
 ```
 
@@ -179,7 +279,7 @@ const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
 
 ```typescript
 interface RawInputPayload {
-  device: "keyboard" | "mouse" | "gamepad" | "unknown";
+  device: 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
   label: string; // "KeyD", "MOUSE1", "HIDB:1ccf:101c:9:3" 등
   labels: string[]; // 모든 레이블 목록
   state: string; // "DOWN" | "UP"
@@ -200,13 +300,21 @@ HID 기기 버튼(Windows)은 `device: 'gamepad'`와
   구독자가 없으면 백엔드에서 이벤트를 emit하지 않아 성능 오버헤드가 없습니다.
 </Callout>
 
+<Callout type="warning">
+  아래 `onChanged()`와 `onPositionsChanged()`는 기존 플러그인 호환을 위해 계속
+  제공되지만, 신규 에디터 상태 동기화 용도로는 deprecated입니다. 여러 컬렉션의
+  원자적 변경은
+  [`dmn.editor.onCommitted()`](/docs/api-reference/editor#커밋된-변경-구독)로
+  구독하세요.
+</Callout>
+
 ### onChanged(listener)
 
 키 매핑 변경 이벤트를 구독합니다.
 
 ```javascript
 const unsub = dmn.keys.onChanged((mappings) => {
-  console.log("키 매핑 변경:", mappings);
+  console.log('키 매핑 변경:', mappings);
 });
 ```
 
@@ -216,7 +324,7 @@ const unsub = dmn.keys.onChanged((mappings) => {
 
 ```javascript
 const unsub = dmn.keys.onPositionsChanged((positions) => {
-  console.log("키 위치 변경:", positions);
+  console.log('키 위치 변경:', positions);
 });
 ```
 
@@ -226,7 +334,7 @@ const unsub = dmn.keys.onPositionsChanged((positions) => {
 
 ```javascript
 const unsub = dmn.keys.onModeChanged(({ mode }) => {
-  console.log("모드 변경:", mode);
+  console.log('모드 변경:', mode);
 });
 ```
 
@@ -235,10 +343,18 @@ const unsub = dmn.keys.onModeChanged(({ mode }) => {
 개별 키 카운트 변경 이벤트를 구독합니다.
 
 ```javascript
-const unsub = dmn.keys.onCounterChanged(({ mode, key, count }) => {
-  console.log(`[${mode}] ${key}: ${count}`);
-});
+const unsub = dmn.keys.onCounterChanged(
+  ({ mode, key, count, sessionId, revision }) => {
+    console.log(
+      `[${mode}] ${key}: ${count} (${sessionId}, revision ${revision})`,
+    );
+  },
+);
 ```
+
+`revision`은 `sessionId` 안에서 런타임 카운터 변경의 단조 증가 순서입니다.
+bootstrap 스냅샷과 실시간 이벤트를 조정할 때 `dmn.app.bootstrap()`의
+`keyCountersSessionId`/`keyCountersRevision`과 함께 비교할 수 있습니다.
 
 ### onCountersChanged(listener)
 
@@ -246,7 +362,7 @@ const unsub = dmn.keys.onCounterChanged(({ mode, key, count }) => {
 
 ```javascript
 const unsub = dmn.keys.onCountersChanged((counters) => {
-  console.log("카운터:", counters);
+  console.log('카운터:', counters);
 });
 ```
 
@@ -265,11 +381,11 @@ const tabs = await dmn.keys.customTabs.list();
 새 커스텀 탭을 생성합니다.
 
 ```javascript
-const result = await dmn.keys.customTabs.create("My Keys");
+const result = await dmn.keys.customTabs.create('My Keys');
 if (result.error) {
   console.error(result.error); // "invalid-name", "duplicate-name", "max-reached"
 } else {
-  console.log("생성됨:", result.result);
+  console.log('생성됨:', result.result);
 }
 ```
 
@@ -278,7 +394,7 @@ if (result.error) {
 커스텀 탭을 삭제합니다.
 
 ```javascript
-const result = await dmn.keys.customTabs.delete("custom-123");
+const result = await dmn.keys.customTabs.delete('custom-123');
 ```
 
 ### select(id)
@@ -286,17 +402,20 @@ const result = await dmn.keys.customTabs.delete("custom-123");
 커스텀 탭을 선택합니다.
 
 ```javascript
-await dmn.keys.customTabs.select("custom-123");
+await dmn.keys.customTabs.select('custom-123');
 ```
 
 ### restore(customTabs, selectedKeyType)
 
-커스텀 탭 목록과 선택된 모드를 일괄 복원합니다. 백엔드 상태, 오버레이, 메인 윈도우가 모두 동기화됩니다.
+이미 존재하는 커스텀 탭의 이름·순서와 선택 모드를 원자적으로 복원합니다. 모든
+탭 ID에는 짝이 맞는 `keys`와 `keyPositions`가 이미 있어야 합니다. 탭 추가·삭제나
+키 구조 변경에는 `create`, `delete`, `updateWithPositions`를 사용하세요. 고아 탭
+정보나 잘못된 입력은 저장 데이터를 바꾸지 않고 거절됩니다.
 
 ```javascript
 await dmn.keys.customTabs.restore(
-  [{ id: "custom-123", name: "My Keys", keys: ["KeyA", "KeyS"] }],
-  "custom-123",
+  [{ id: 'custom-123', name: 'My Keys' }],
+  'custom-123',
 );
 ```
 
@@ -307,7 +426,7 @@ await dmn.keys.customTabs.restore(
 ```javascript
 const unsub = dmn.keys.customTabs.onChanged(
   ({ customTabs, selectedKeyType }) => {
-    console.log("선택된 탭:", selectedKeyType);
+    console.log('선택된 탭:', selectedKeyType);
   },
 );
 ```

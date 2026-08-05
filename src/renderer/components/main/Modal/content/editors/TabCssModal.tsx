@@ -1,9 +1,21 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useState, useRef } from 'react';
 import Modal from '../../Modal';
 import Checkbox from '@components/main/common/Checkbox';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import {
+  FILL_DISABLED_CLASS,
+  FILL_INTERACTIVE_CLASS,
+  PANEL_APPLIED_LABEL_CLASS,
+  PANEL_PILL_CLASS,
+  PANEL_STATUS_BADGE_CLASS,
+} from '@components/main/SettingsPanel/panelChrome';
+import { FORM_ROW_CLASS, FORM_LABEL_CLASS } from '@utils/cardRecipes';
 import { useTranslation } from '@contexts/useTranslation';
+import { useLenis } from '@hooks/useLenis';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { pathBaseName } from '@utils/core/pathDisplay';
+import { cssHistoryStatusLabel } from '@utils/cssHistoryStatus';
+import type { CustomCssHistoryItem } from '@src/types/plugin/api';
 import type { TabCss } from '@src/types/plugin/css';
 
 interface TabCssModalProps {
@@ -12,17 +24,44 @@ interface TabCssModalProps {
   showAlert?: (message: string, confirmText?: string) => void;
 }
 
+const ACTION_BUTTON_CLASS =
+  'flex-1 h-[23px] rounded-md flex items-center justify-center text-body transition-colors duration-fast';
+
 const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   const { t } = useTranslation();
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
 
   const [tabCss, setTabCss] = useState<TabCss | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [history, setHistory] = useState<CustomCssHistoryItem[]>([]);
+  const [pendingHistoryPath, setPendingHistoryPath] = useState<string | null>(
+    null,
+  );
+  const [isExporting, setIsExporting] = useState(false);
+
+  const { scrollContainerRef: historyScrollRef } = useLenis();
 
   // 모달 열기 시점의 원본 상태 저장 (취소 시 복원용)
   const originalStateRef = useRef<TabCss | null>(null);
 
-  // 모달이 열릴 때 현재 탭의 CSS 정보 로드 및 원본 상태 저장
+  // 진행 중 백엔드 변경 - 취소가 이보다 먼저 비교하면 취소한 변경이
+  // 뒤늦게 커밋되는 레이스가 생기므로 취소 시 완료를 기다림
+  const pendingMutationRef = useRef<Promise<void> | null>(null);
+
+  const invokeTracked = async <T,>(op: () => Promise<T>): Promise<T> => {
+    const promise = op();
+    pendingMutationRef.current = promise.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      return await promise;
+    } finally {
+      pendingMutationRef.current = null;
+    }
+  };
+
+  // 모달이 열릴 때 현재 탭의 CSS 정보와 글로벌 히스토리 로드, 원본 상태 저장
   useEffect(() => {
     if (!isOpen) return;
 
@@ -40,6 +79,13 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
       })
       .finally(() => {
         setIsLoading(false);
+      });
+
+    window.api.css
+      .historyGet()
+      .then(setHistory)
+      .catch((error) => {
+        console.error('Failed to fetch CSS history:', error);
       });
   }, [isOpen, selectedKeyType]);
 
@@ -73,7 +119,9 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
 
   const handleClearCss = async () => {
     try {
-      const result = await window.api.css.tab.clear(selectedKeyType);
+      const result = await invokeTracked(() =>
+        window.api.css.tab.clear(selectedKeyType),
+      );
       if (result.success) {
         setTabCss(null);
       }
@@ -85,9 +133,8 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   const handleToggleCss = async () => {
     const newEnabled = !(tabCss?.enabled ?? true);
     try {
-      const result = await window.api.css.tab.toggle(
-        selectedKeyType,
-        newEnabled,
+      const result = await invokeTracked(() =>
+        window.api.css.tab.toggle(selectedKeyType, newEnabled),
       );
       if (result.success) {
         setTabCss((prev) =>
@@ -101,22 +148,73 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     }
   };
 
+  // 글로벌 히스토리 항목을 현재 탭 CSS로 적용
+  const handleApplyHistory = async (item: CustomCssHistoryItem) => {
+    if (pendingHistoryPath || item.status !== 'available') return;
+    if (tabCss?.path === item.path) return;
+    setPendingHistoryPath(item.path);
+    try {
+      const result = await invokeTracked(() =>
+        window.api.css.tab.activateHistory(selectedKeyType, item.path),
+      );
+      if (result.success && result.css) {
+        setTabCss(result.css);
+      } else if (!result.success) {
+        showAlert?.(
+          result.code
+            ? t(`settings.cssHistoryError.${result.code}`)
+            : t('tabCss.loadFailed'),
+        );
+      }
+    } catch (error) {
+      console.error('Failed to apply history CSS to tab:', error);
+    } finally {
+      setPendingHistoryPath(null);
+    }
+  };
+
+  // 현재 탭 CSS 콘텐츠를 파일로 내보내기
+  const handleExport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const result = await window.api.css.tab.export(selectedKeyType);
+      if (result.success) {
+        showAlert?.(t('tabCss.exported'));
+      } else if (result.code) {
+        showAlert?.(
+          t('tabCss.exportFailed') + (result.error ? ': ' + result.error : ''),
+        );
+      }
+      // 저장 다이얼로그 취소(success:false, code 없음)는 무시
+    } catch (error) {
+      console.error('Failed to export tab CSS:', error);
+      showAlert?.(t('tabCss.exportFailed'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // 저장: 현재 상태 유지하고 모달 닫기
   const handleSave = () => {
     onClose();
   };
 
-  // 취소: 원본 상태로 복원하고 모달 닫기
+  // 취소: 진행 중 변경 커밋을 기다린 뒤 백엔드 상태 기준으로 원본 복원
+  // (로컬 state 비교는 응답 도착 전 취소 시 변경 없음으로 오판)
   const handleCancel = async () => {
     const original = originalStateRef.current;
 
     try {
-      // 원본 상태와 현재 상태가 다른 경우에만 복원
-      const currentState = tabCss;
+      if (pendingMutationRef.current) {
+        await pendingMutationRef.current;
+      }
+      const { css } = await window.api.css.tab.get(selectedKeyType);
+      const current = css || null;
       const statesAreDifferent =
-        original?.path !== currentState?.path ||
-        original?.content !== currentState?.content ||
-        original?.enabled !== currentState?.enabled;
+        original?.path !== current?.path ||
+        original?.content !== current?.content ||
+        original?.enabled !== current?.enabled;
 
       if (statesAreDifferent) {
         // css.tab.set을 사용하여 원본 상태로 직접 복원
@@ -131,59 +229,152 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
 
   if (!isOpen) return null;
 
-  const hasTabCss = tabCss && tabCss.path;
+  const hasTabCss = Boolean(tabCss && tabCss.path);
   const cssEnabled = tabCss?.enabled ?? true;
+  const canExport = Boolean(tabCss?.content) && !isExporting;
 
   return (
-    <Modal onClick={handleCancel}>
+    <Modal onClick={handleCancel} ariaLabel={t('tabCss.enableCss')}>
       <div
-        className="flex flex-col items-center justify-center p-[20px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] gap-[19px]"
+        className="flex flex-col w-[288px] p-[14px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 gap-[12px]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* CSS 사용 여부 토글 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('tabCss.enableCss')}</p>
-          <Checkbox checked={cssEnabled} onChange={handleToggleCss} />
-        </div>
-
-        {/* CSS 파일 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('tabCss.cssFile')}</p>
-          <div className="flex items-center gap-[8px]">
-            <button
-              type="button"
-              onClick={handleClearCss}
-              disabled={isLoading || !hasTabCss}
-              className={`px-[7px] h-[23px] rounded-[7px] border-[1px] flex items-center justify-center text-style-4 ${
-                hasTabCss
-                  ? 'bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] border-[#4A2A2A] text-[#E6DBDB]'
-                  : 'bg-[#2A2A30] border-[#3A3943] text-[#6B6D77] cursor-not-allowed'
-              }`}
+        {/* 상태 카드 - 토글, 적용 파일, 파일 액션 */}
+        <PropertySection>
+          {/* 행 전체가 button role=switch라 키보드로도 조작 가능 */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={cssEnabled}
+            onClick={handleToggleCss}
+            data-dmn-press-scope=""
+            className={`${FORM_ROW_CLASS} cursor-pointer`}
+          >
+            <span className={FORM_LABEL_CLASS}>{t('tabCss.enableCss')}</span>
+            <span aria-hidden="true" className="pointer-events-none">
+              <Checkbox checked={cssEnabled} onChange={handleToggleCss} />
+            </span>
+          </button>
+          <div className={FORM_ROW_CLASS}>
+            <p className={`${FORM_LABEL_CLASS} shrink-0`}>
+              {t('tabCss.cssFile')}
+            </p>
+            <span
+              className="min-w-0 truncate text-body text-fg-muted"
+              title={tabCss?.path ?? undefined}
             >
-              {t('tabCss.remove')}
-            </button>
+              {tabCss?.path
+                ? pathBaseName(tabCss.path)
+                : t('settings.noCssFile')}
+            </span>
+          </div>
+          {/* 파일 액션 - 전폭 3등분으로 여백 확보 */}
+          <div className="flex gap-[6px] pt-[2px] pb-[8px]">
             <button
               type="button"
               onClick={handleLoadCss}
               disabled={isLoading}
-              className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4 hover:bg-[#303036] active:bg-[#393941]"
+              className={`${ACTION_BUTTON_CLASS} ${
+                isLoading ? FILL_DISABLED_CLASS : FILL_INTERACTIVE_CLASS
+              }`}
             >
               {t('tabCss.loadFile')}
             </button>
+            <button
+              type="button"
+              onClick={() => void handleExport()}
+              disabled={!canExport}
+              className={`${ACTION_BUTTON_CLASS} ${
+                canExport ? FILL_INTERACTIVE_CLASS : FILL_DISABLED_CLASS
+              }`}
+            >
+              {t('tabCss.export')}
+            </button>
+            <button
+              type="button"
+              onClick={handleClearCss}
+              disabled={isLoading || !hasTabCss}
+              className={`${ACTION_BUTTON_CLASS} ${
+                hasTabCss
+                  ? 'bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active text-danger-fg'
+                  : FILL_DISABLED_CLASS
+              }`}
+            >
+              {t('tabCss.remove')}
+            </button>
           </div>
-        </div>
+        </PropertySection>
+
+        {/* 글로벌 히스토리 - 헤더 없이 목록만, 히스토리가 없으면 통째로 숨김 */}
+        {history.length > 0 && (
+          <div className="bg-fill-faint rounded-surface px-[10px]">
+            {/* 4행(30px) + 상단 패딩 + 다섯째 행 24px 피크 - 하단 페이드(20px)가
+                피크 구간에 걸려 잘림 대신 스크롤 여지로 읽힘 */}
+            <div
+              ref={historyScrollRef}
+              className="max-h-[150px] overflow-y-auto modal-content-scroll dmn-scroll-fade"
+            >
+              <div className="flex flex-col py-[6px]">
+                {history.map((item) => {
+                  const badge = cssHistoryStatusLabel(t, item);
+                  const available = item.status === 'available';
+                  const isCurrent = tabCss?.path === item.path;
+                  const applicable = available && !isCurrent;
+                  return (
+                    <div
+                      key={item.path}
+                      className="flex items-center gap-[8px] min-h-[30px]"
+                      title={item.path}
+                    >
+                      <span
+                        className={`min-w-0 flex-1 truncate text-body ${
+                          available ? 'text-fg' : 'text-fg-disabled'
+                        }`}
+                      >
+                        {pathBaseName(item.path)}
+                      </span>
+                      {badge ? (
+                        <span className={PANEL_STATUS_BADGE_CLASS}>
+                          {badge}
+                        </span>
+                      ) : null}
+                      {isCurrent ? (
+                        <span className={PANEL_APPLIED_LABEL_CLASS}>
+                          {t('settings.cssApplied')}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void handleApplyHistory(item)}
+                          disabled={!applicable || pendingHistoryPath !== null}
+                          className={`${PANEL_PILL_CLASS} ${
+                            applicable
+                              ? FILL_INTERACTIVE_CLASS
+                              : FILL_DISABLED_CLASS
+                          }`}
+                        >
+                          {t('settings.cssApply')}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 버튼 영역 */}
-        <div className="flex gap-[10.5px]">
+        <div className="flex gap-[8px]">
           <button
             onClick={handleSave}
-            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.save')}
           </button>
           <button
             onClick={handleCancel}
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.cancel')}
           </button>

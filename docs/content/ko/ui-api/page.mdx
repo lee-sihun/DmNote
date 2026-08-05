@@ -60,7 +60,7 @@ dmn.ui.contextMenu.addGridMenuItem({
 
 ### 메뉴 항목 옵션
 
-```javascript
+```javascript fragment=expression
 {
   id: "my-menu",           // 플러그인 내 고유 ID
   label: "메뉴 항목",       // 표시 텍스트
@@ -232,10 +232,11 @@ dmn.plugin.registerCleanup(() => {
 
 ### alert
 
-간단한 알림을 표시합니다.
+간단한 알림을 표시합니다. 반환된 Promise는 사용자가 확인 버튼을 누르거나 다이얼로그가 닫힐 때 resolve됩니다.
 
 ```javascript
 await dmn.ui.dialog.alert("저장되었습니다!");
+// 사용자가 확인을 누른 뒤에 이어서 실행됨
 
 await dmn.ui.dialog.alert("작업 완료", { confirmText: "OK" });
 ```
@@ -243,6 +244,8 @@ await dmn.ui.dialog.alert("작업 완료", { confirmText: "OK" });
 ### confirm
 
 확인/취소 다이얼로그를 표시합니다.
+
+옵션: `confirmText`(확인 버튼 문구), `cancelText`(취소 버튼 문구), `danger`(파괴적 작업용 — 확인 버튼이 위험 색상으로 표시)
 
 ```javascript
 const ok = await dmn.ui.dialog.confirm("진행하시겠습니까?");
@@ -254,6 +257,7 @@ if (ok) {
 const confirmed = await dmn.ui.dialog.confirm("모든 데이터가 삭제됩니다.", {
   danger: true,
   confirmText: "삭제",
+  cancelText: "유지",
 });
 ```
 

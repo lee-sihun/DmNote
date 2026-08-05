@@ -22,6 +22,10 @@ description: Plugin settings management with defineSettings
 
 const pluginSettings = dmn.plugin.defineSettings({
   settings: {
+    connectionSection: {
+      type: "section",
+      label: "Connection",
+    },
     apiKey: {
       type: "string",
       default: "",
@@ -36,27 +40,26 @@ const pluginSettings = dmn.plugin.defineSettings({
       default: "dark",
       label: "Theme",
     },
-    sectionDivider: {
-      type: "divider",
+    behaviorSection: {
+      type: "section",
+      label: "Behavior",
     },
     enabled: {
       type: "boolean",
       default: true,
       label: "Enabled",
     },
+    // Conditional visibility — static boolean or function, shown only while enabled is true
+    advancedOption: {
+      type: "number",
+      default: 5,
+      label: "Advanced Option",
+      visible: (settings) => settings.enabled,
+    },
   },
 });
 
-// `type: "divider"` adds only a divider in settings panel/modal.
-
-// Conditional visibility — use visible property to dynamically show/hide items
-// Supports both static boolean and function
-advancedOption: {
-  type: "number",
-  default: 5,
-  label: "Advanced Option",
-  visible: (settings) => settings.enabled,  // Only shown when enabled is true
-},
+// section starts a new card. (The legacy divider type was removed — existing divider entries are ignored.)
 
 // Get settings values
 const current = pluginSettings.get();
@@ -71,6 +74,14 @@ if (confirmed) {
   console.log("Settings saved!");
 }
 ```
+
+`defineSettings` uses the same section contract as `defineElement`: a section starts
+a new card, its optional label appears above the card, and its key is excluded from
+stored/default values and callbacks. `section.visible` controls the entire group.
+Sections with no renderable value settings are hidden entirely; only when no value
+setting is renderable anywhere does the settings UI show its standard empty state.
+Panel and modal modes have identical semantics, including fail-closed visibility
+evaluation.
 
 ## API Reference
 
@@ -115,7 +126,7 @@ Both detect settings changes but have different purposes:
 
 ```javascript
 const settings = dmn.plugin.defineSettings({
-  settings: { apiKey: { type: "string", default: "" } },
+  settings: { apiKey: { type: "string", default: "", label: "API Key" } },
 
   // onChange: Always executes (cannot unsubscribe)
   onChange: (newSettings, oldSettings) => {
@@ -205,7 +216,144 @@ dmn.plugin.defineElement({
   // Instance-specific settings
   settings: {
     showGraph: { type: "boolean", default: true, label: "Show Graph" },
+    graphColor: {
+      type: "color",
+      default: "#86EFAC",
+      label: "Graph Color",
+      visible: (s) => s.showGraph,
+    },
   },
-  // ...
+
+  template: (state, instanceSettings, { html }) => {
+    const global = globalSettings.get();
+    return html`
+      <div style="color: ${global.defaultColor};">KPS: ${state.kps ?? 0}</div>
+    `;
+  },
+
+  onMount: ({ setState, onHook }) => {
+    const global = globalSettings.get();
+    let count = 0;
+
+    onHook("key", ({ state }) => {
+      if (state === "DOWN") count++;
+    });
+
+    const interval = setInterval(() => {
+      setState({ kps: count });
+      count = 0;
+    }, global.refreshRate);
+
+    return () => clearInterval(interval);
+  },
 });
 ```
+
+### Adding Settings to the Grid Menu
+
+You can also add a settings menu without any panel:
+
+```javascript
+// @id settings-only-plugin
+
+const pluginSettings = dmn.plugin.defineSettings({
+  settings: {
+    volume: { type: "number", default: 50, min: 0, max: 100, label: "Volume" },
+    notifications: { type: "boolean", default: true, label: "Notifications" },
+  },
+});
+
+// Add to the right-click menu on empty grid space
+dmn.ui.contextMenu.addGridMenuItem({
+  id: "my-plugin-settings",
+  label: "Plugin Settings",
+  onClick: () => pluginSettings.open(),
+});
+
+dmn.plugin.registerCleanup(() => {
+  dmn.ui.contextMenu.clearMyMenuItems();
+});
+```
+
+### Reacting to Settings Changes
+
+```javascript
+// @id data-fetcher
+
+const fetcherSettings = dmn.plugin.defineSettings({
+  settings: {
+    apiEndpoint: {
+      type: "string",
+      default: "https://api.example.com",
+      label: "API Endpoint",
+    },
+    refreshInterval: {
+      type: "number",
+      default: 5000,
+      min: 1000,
+      max: 60000,
+      label: "Refresh Interval (ms)",
+    },
+    autoRefresh: {
+      type: "boolean",
+      default: true,
+      label: "Auto Refresh",
+    },
+  },
+});
+
+let fetchInterval = null;
+
+function startFetching() {
+  const { refreshInterval, autoRefresh, apiEndpoint } = fetcherSettings.get();
+
+  if (fetchInterval) {
+    clearInterval(fetchInterval);
+    fetchInterval = null;
+  }
+
+  if (!autoRefresh) return;
+
+  fetchInterval = setInterval(async () => {
+    const response = await fetch(apiEndpoint);
+    const data = await response.json();
+    console.log("Data:", data);
+  }, refreshInterval);
+}
+
+// Restart the interval when settings change
+fetcherSettings.subscribe((newSettings, oldSettings) => {
+  if (
+    newSettings.apiEndpoint !== oldSettings.apiEndpoint ||
+    newSettings.refreshInterval !== oldSettings.refreshInterval ||
+    newSettings.autoRefresh !== oldSettings.autoRefresh
+  ) {
+    startFetching();
+  }
+});
+
+startFetching();
+
+dmn.plugin.registerCleanup(() => {
+  if (fetchInterval) clearInterval(fetchInterval);
+});
+```
+
+## Comparison with defineElement's onSettingsChange
+
+| Feature                  | `defineElement`              | `defineSettings`                        |
+| ------------------------ | ---------------------------- | --------------------------------------- |
+| Settings change handling | `onSettingsChange(callback)` | `onChange` + `subscribe()`              |
+| Unsubscribing            | Automatic (on unmount)       | Manual, via `subscribe()` return value  |
+| Where to use             | Inside `onMount` only        | Anywhere                                |
+| Target                   | Instance-specific settings   | Global/standalone settings              |
+
+## Automatic Behavior
+
+| Feature                        | Description                                                    |
+| ------------------------------ | -------------------------------------------------------------- |
+| **Automatic UI generation**    | Property panel/modal generated from the settings schema        |
+| **Automatic storage handling** | Saved to and restored from `plugin.storage`                    |
+| **i18n support**               | Integrates with messages                                       |
+| **Per-type components**        | boolean→checkbox, color→color picker, and so on                |
+| **Automatic panel sync**       | All panels of the same plugin re-render when settings change   |

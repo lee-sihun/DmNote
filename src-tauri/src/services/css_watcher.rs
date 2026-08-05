@@ -6,7 +6,6 @@
 //! - 디바운싱으로 연속 변경 시 한 번만 리로드
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,10 +13,16 @@ use std::time::Duration;
 use notify::RecommendedWatcher;
 use notify_debouncer_mini::{new_debouncer, Debouncer};
 use parking_lot::RwLock;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
-use crate::models::{CustomCss, TabCss};
-use crate::state::{AppState, AppStore};
+use crate::commands::editor::{css::TabCssResponse, state::emit_best_effort};
+use crate::errors::EditorCommitError;
+use crate::state::{store::AdmittedHistoryOverlapMutation, AppState, AppStore};
+use crate::{
+    custom_css::{custom_css_settings_diff, validate_css_path, ValidatedCssFile},
+    models::{AppStoreData, CustomCss, TabCss, TabCssOverrides},
+    state::local_asset_path::path_identity_key,
+};
 
 /// CSS 워칭 타입
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -71,19 +76,43 @@ impl CssWatcher {
         self.unwatch_target(&CssWatchTarget::Tab(tab_id.to_string()));
     }
 
+    pub fn resync_tabs(&self, overrides: &TabCssOverrides) {
+        {
+            let mut watchers = self.watchers.write();
+            watchers.retain(|_, entry| {
+                entry
+                    .targets
+                    .retain(|target| matches!(target, CssWatchTarget::Global));
+                !entry.targets.is_empty()
+            });
+        }
+
+        for (tab_id, css) in overrides {
+            if !css.enabled {
+                continue;
+            }
+            let Some(path) = css.path.as_deref() else {
+                continue;
+            };
+            if let Err(error) = self.watch_tab(path, tab_id) {
+                log::warn!("[CssWatcher] Failed to restore tab CSS watcher {tab_id}: {error}");
+            }
+        }
+    }
+
     /// 특정 경로에 대한 워칭 시작
     fn watch_path(&self, path: &str, target: CssWatchTarget) -> Result<(), String> {
-        let path_buf = PathBuf::from(path);
-
-        // 파일이 존재하는지 확인
-        if !path_buf.exists() {
-            return Err(format!("File not found: {}", path));
-        }
+        let path_buf = std::fs::canonicalize(path)
+            .map_err(|error| format!("Failed to resolve CSS path {path}: {error}"))?;
+        let identity = path_identity_key(&path_buf);
 
         let mut watchers = self.watchers.write();
 
-        // 이미 같은 경로를 워칭 중인 경우
-        if let Some(entry) = watchers.get_mut(&path_buf) {
+        if let Some(entry) = watchers
+            .iter_mut()
+            .find(|(watched_path, _)| path_identity_key(watched_path) == identity)
+            .map(|(_, entry)| entry)
+        {
             // 같은 타겟이 이미 등록되어 있으면 무시
             if !entry.targets.contains(&target) {
                 entry.targets.push(target);
@@ -211,120 +240,269 @@ fn handle_css_change(store: &AppStore, app: &AppHandle, changed_path: &Path) -> 
 
     log::debug!("[CssWatcher] File changed: {}", changed_path_str);
 
-    // 전역 CSS 체크
-    if let Some(global_path) = &snapshot.custom_css.path {
-        if paths_match(global_path, &changed_path_str) && snapshot.use_custom_css {
-            return reload_global_css(store, app, global_path);
-        }
-    }
-
-    // 탭별 CSS 체크
-    for (tab_id, tab_css) in &snapshot.tab_css_overrides {
-        if let Some(tab_path) = &tab_css.path {
-            if paths_match(tab_path, &changed_path_str) && tab_css.enabled {
-                return reload_tab_css(store, app, tab_id, tab_path);
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// 전역 CSS 리로드
-fn reload_global_css(store: &AppStore, app: &AppHandle, path: &str) -> Result<(), String> {
-    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
-
-    let css = CustomCss {
-        path: Some(path.to_string()),
-        content: content.clone(),
-    };
-
-    store
-        .update(|s| {
-            s.custom_css = css.clone();
-        })
-        .map_err(|e| e.to_string())?;
-
-    app.emit("css:content", &css).map_err(|e| e.to_string())?;
-
-    // OBS 브릿지에 CSS 변경 알림 (settings_diff 방식 — 전체 스냅샷은 키 상태 리셋 유발)
-    let app_state = app.state::<AppState>();
-    let snap = store.snapshot();
-    let diff = serde_json::json!({
-        "useCustomCSS": snap.use_custom_css,
-        "customCSS": snap.custom_css,
+    let global_matches = snapshot.use_custom_css
+        && snapshot
+            .custom_css
+            .path
+            .as_deref()
+            .is_some_and(|path| paths_match(path, &changed_path_str));
+    let tab_matches = snapshot.tab_css_overrides.values().any(|css| {
+        css.enabled
+            && css
+                .path
+                .as_deref()
+                .is_some_and(|path| paths_match(path, &changed_path_str))
     });
-    app_state.notify_obs_settings_diff(diff);
-
-    log::info!("[CssWatcher] Reloaded global CSS from: {}", path);
-    Ok(())
-}
-
-/// 탭별 CSS 리로드
-fn reload_tab_css(
-    store: &AppStore,
-    app: &AppHandle,
-    tab_id: &str,
-    path: &str,
-) -> Result<(), String> {
-    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
-
-    let tab_css = TabCss {
-        path: Some(path.to_string()),
-        content: content.clone(),
-        enabled: true,
-    };
-
-    store
-        .update(|s| {
-            s.tab_css_overrides
-                .insert(tab_id.to_string(), tab_css.clone());
-        })
-        .map_err(|e| e.to_string())?;
-
-    #[derive(serde::Serialize, Clone)]
-    #[serde(rename_all = "camelCase")]
-    struct TabCssResponse {
-        tab_id: String,
-        css: Option<TabCss>,
+    if !global_matches && !tab_matches {
+        return Ok(());
     }
 
-    let response = TabCssResponse {
-        tab_id: tab_id.to_string(),
-        css: Some(tab_css),
-    };
+    reload_css_consumers(store, app, &changed_path_str)
+}
 
-    app.emit("tabCss:changed", &response)
-        .map_err(|e| e.to_string())?;
+fn reload_css_consumers(store: &AppStore, app: &AppHandle, path: &str) -> Result<(), String> {
+    let app_state = app.state::<AppState>();
+    let _operation_guard = app_state.lock_css_operation();
+    let loaded = validate_css_path(Path::new(path)).map_err(|error| {
+        format!(
+            "CSS reload rejected code={} path={} detail={}",
+            error.code.as_str(),
+            path,
+            error.detail
+        )
+    })?;
+    let transaction = commit_css_reload(store, path, &loaded).map_err(|error| error.to_string())?;
+    let (committed_global, committed_tabs) = &transaction.value;
 
-    log::info!("[CssWatcher] Reloaded tab CSS {} from: {}", tab_id, path);
+    if let Some(status) = transaction.history_status.as_ref() {
+        emit_best_effort(app, "history:status", status);
+    }
+
+    if let Some(css) = committed_global.as_ref() {
+        emit_best_effort(app, "css:content", css);
+        app_state.notify_obs_settings_diff(custom_css_settings_diff(&store.snapshot()));
+    }
+    for (tab_id, css) in committed_tabs {
+        emit_best_effort(
+            app,
+            "tabCss:changed",
+            &TabCssResponse {
+                tab_id: tab_id.clone(),
+                css: Some(css.clone()),
+            },
+        );
+    }
+
+    if committed_global.is_none() && committed_tabs.is_empty() {
+        log::debug!("[CssWatcher] Discarded stale CSS reload for: {path}");
+    } else {
+        log::info!(
+            "[CssWatcher] Reloaded CSS from {} global={} tabs={}",
+            path,
+            committed_global.is_some(),
+            committed_tabs.len()
+        );
+    }
     Ok(())
 }
 
-/// 경로 비교 (플랫폼별 차이 무시)
+pub(crate) type CssReloadChanges = (Option<CustomCss>, Vec<(String, TabCss)>);
+
+pub(crate) fn commit_css_reload(
+    store: &AppStore,
+    path: &str,
+    loaded: &ValidatedCssFile,
+) -> Result<AdmittedHistoryOverlapMutation<CssReloadChanges>, EditorCommitError> {
+    let admission = store.admit_editor_mutation()?;
+    store.commit_history_overlap_mutation_with_admission(admission, |state| {
+        Ok(apply_reload_if_current(state, path, loaded))
+    })
+}
+
+pub(crate) fn apply_reload_if_current(
+    state: &mut AppStoreData,
+    path: &str,
+    loaded: &ValidatedCssFile,
+) -> (Option<CustomCss>, Vec<(String, TabCss)>) {
+    let global_css = if state.use_custom_css
+        && state
+            .custom_css
+            .path
+            .as_deref()
+            .is_some_and(|current| paths_match(current, path))
+    {
+        let css = CustomCss {
+            path: Some(loaded.canonical_path.clone()),
+            content: loaded.content.clone(),
+        };
+        state.custom_css = css.clone();
+        Some(css)
+    } else {
+        None
+    };
+
+    let mut tabs = Vec::new();
+    for (tab_id, css) in &mut state.tab_css_overrides {
+        if !css.enabled {
+            continue;
+        }
+        let Some(current_path) = css.path.as_deref() else {
+            continue;
+        };
+        if !paths_match(current_path, path) {
+            continue;
+        }
+
+        css.path = Some(loaded.canonical_path.clone());
+        css.content = loaded.content.clone();
+        tabs.push((tab_id.clone(), css.clone()));
+    }
+
+    (global_css, tabs)
+}
+
 fn paths_match(path1: &str, path2: &str) -> bool {
     let p1 = PathBuf::from(path1);
     let p2 = PathBuf::from(path2);
+    if path_identity_key(&p1) == path_identity_key(&p2) {
+        return true;
+    }
 
-    // 먼저 파일명이 같은지 빠르게 확인
-    match (p1.file_name(), p2.file_name()) {
-        (Some(name1), Some(name2)) if name1 == name2 => {
-            // 파일명이 같으면 전체 경로 비교
-            // 플랫폼 차이를 무시하기 위해 정규화된 문자열로 비교
-            let normalized1 = path1.replace('\\', "/").to_lowercase();
-            let normalized2 = path2.replace('\\', "/").to_lowercase();
+    matches!(
+        (p1.canonicalize(), p2.canonicalize()),
+        (Ok(canonical1), Ok(canonical2)) if canonical1 == canonical2
+    )
+}
 
-            if normalized1 == normalized2 {
-                return true;
-            }
+#[cfg(test)]
+mod tests {
+    use super::apply_reload_if_current;
+    use crate::{
+        custom_css::ValidatedCssFile,
+        models::{AppStoreData, CustomCss, TabCss},
+    };
 
-            // 문자열 불일치 시 canonicalize로 최종 확인 (고비용 — 마지막 단계에서만)
-            if let (Ok(canonical1), Ok(canonical2)) = (p1.canonicalize(), p2.canonicalize()) {
-                return canonical1 == canonical2;
-            }
+    #[test]
+    fn stale_global_reload_cannot_replace_a_new_path() {
+        let mut state = AppStoreData {
+            use_custom_css: true,
+            custom_css: CustomCss {
+                path: Some("/tmp/new.css".to_string()),
+                content: "new".to_string(),
+            },
+            ..AppStoreData::default()
+        };
+        let stale = ValidatedCssFile {
+            canonical_path: "/tmp/old.css".to_string(),
+            content: "old".to_string(),
+        };
 
-            false
-        }
-        _ => false,
+        let (global, tabs) = apply_reload_if_current(&mut state, "/tmp/old.css", &stale);
+        assert!(global.is_none());
+        assert!(tabs.is_empty());
+        assert_eq!(state.custom_css.content, "new");
+    }
+
+    #[test]
+    fn current_global_reload_replaces_content() {
+        let path = "/tmp/current.css";
+        let mut state = AppStoreData {
+            use_custom_css: true,
+            custom_css: CustomCss {
+                path: Some(path.to_string()),
+                content: "before".to_string(),
+            },
+            ..AppStoreData::default()
+        };
+        let reloaded = ValidatedCssFile {
+            canonical_path: "/tmp/canonical.css".to_string(),
+            content: "after".to_string(),
+        };
+
+        let (global, _) = apply_reload_if_current(&mut state, path, &reloaded);
+        assert!(global.is_some());
+        assert_eq!(state.custom_css.content, "after");
+        assert_eq!(state.custom_css.path.as_deref(), Some("/tmp/canonical.css"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_alias_and_canonical_target_share_reload_identity() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "dmnote-css-watcher-canonical-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("target.css");
+        let alias = root.join("alias.css");
+        std::fs::write(&target, "body {}").unwrap();
+        symlink(&target, &alias).unwrap();
+
+        assert!(super::paths_match(
+            &alias.to_string_lossy(),
+            &target.to_string_lossy()
+        ));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stale_tab_reload_preserves_new_path_and_enabled_state() {
+        let mut state = AppStoreData::default();
+        state.tab_css_overrides.insert(
+            "4key".to_string(),
+            TabCss {
+                path: Some("/tmp/new.css".to_string()),
+                content: "new".to_string(),
+                enabled: false,
+            },
+        );
+        let loaded = ValidatedCssFile {
+            canonical_path: "/tmp/old.css".to_string(),
+            content: "old".to_string(),
+        };
+
+        let (_, tabs) = apply_reload_if_current(&mut state, "/tmp/old.css", &loaded);
+
+        assert!(tabs.is_empty());
+        let css = &state.tab_css_overrides["4key"];
+        assert_eq!(css.content, "new");
+        assert!(!css.enabled);
+    }
+
+    #[test]
+    fn shared_file_reload_fans_out_to_global_and_all_tabs() {
+        let path = "/tmp/shared.css";
+        let tab_css = TabCss {
+            path: Some(path.to_string()),
+            content: "before".to_string(),
+            enabled: true,
+        };
+        let mut state = AppStoreData {
+            use_custom_css: true,
+            custom_css: CustomCss {
+                path: Some(path.to_string()),
+                content: "before".to_string(),
+            },
+            ..AppStoreData::default()
+        };
+        state
+            .tab_css_overrides
+            .insert("4key".to_string(), tab_css.clone());
+        state.tab_css_overrides.insert("5key".to_string(), tab_css);
+        let loaded = ValidatedCssFile {
+            canonical_path: path.to_string(),
+            content: "after".to_string(),
+        };
+
+        let (global, tabs) = apply_reload_if_current(&mut state, path, &loaded);
+
+        assert_eq!(global.unwrap().content, "after");
+        assert_eq!(tabs.len(), 2);
+        assert!(state
+            .tab_css_overrides
+            .values()
+            .all(|css| css.content == "after" && css.enabled));
     }
 }

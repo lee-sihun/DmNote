@@ -48,9 +48,20 @@ For counters:
 ## Applying CSS Files
 
 1. Create a CSS file with your desired styles.
-2. Go to the **Settings** tab.
-3. Click **Select CSS File** in the **Custom CSS** section.
-4. Select your CSS file.
+2. Go to the **Settings** tab and click **Manage CSS**.
+3. Turn on the **Enable** toggle, then click **Import CSS File**.
+4. Select your CSS file (`.css`, up to 1 MiB). Previously imported files stay in the panel list, ready to re-apply with one click.
+
+## Per-Tab CSS
+
+Each key tab can override the global CSS with its own file. Right-click the grid and choose the tab CSS menu to open the popover:
+
+- **Import**: pick a CSS file that applies to the current tab only.
+- **History list**: files already imported in the custom CSS panel appear below the file actions; click **Apply** on an entry to use it for this tab.
+- **Export**: save the CSS currently registered on this tab back to a `.css` file. This is handy when the original file was moved or deleted, since the tab keeps its own copy of the content.
+- The toggle at the top enables or disables the tab override without removing it.
+
+Tab CSS is applied only while the global **Custom CSS** toggle is on.
 
 ## Quick Start Example
 

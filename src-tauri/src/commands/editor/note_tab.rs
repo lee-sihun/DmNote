@@ -1,7 +1,8 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, State, WebviewWindow};
 
 use crate::{
+    commands::editor::state::emit_best_effort,
     errors::CmdResult,
     models::{TabNoteOverrides, TabNoteSettings},
     state::AppState,
@@ -49,25 +50,32 @@ pub fn note_tab_get(state: State<'_, AppState>, tab_id: String) -> CmdResult<Tab
 pub fn note_tab_set(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
     settings: Option<TabNoteSettings>,
 ) -> CmdResult<TabNoteSetResponse> {
-    if let Some(ref note_settings) = settings {
-        state.store.update(|store| {
-            store
-                .tab_note_overrides
-                .insert(tab_id.clone(), note_settings.clone());
-        })?;
-    } else {
-        state.store.update(|store| {
-            store.tab_note_overrides.remove(&tab_id);
-        })?;
-    }
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                if let Some(ref note_settings) = settings {
+                    store
+                        .tab_note_overrides
+                        .insert(tab_id.clone(), note_settings.clone());
+                } else {
+                    store.tab_note_overrides.remove(&tab_id);
+                }
+                Ok(())
+            })?;
 
     let response = TabNoteResponse {
         tab_id: tab_id.clone(),
         settings: settings.clone(),
     };
+    if let Some(status) = transaction.history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
     app.emit("tabNote:changed", &response)?;
     state.refresh_obs_snapshot();
 
@@ -83,16 +91,25 @@ pub fn note_tab_set(
 pub fn note_tab_clear(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     tab_id: String,
 ) -> CmdResult<TabNoteClearResponse> {
-    state.store.update(|store| {
-        store.tab_note_overrides.remove(&tab_id);
-    })?;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction =
+        state
+            .store
+            .commit_history_overlap_mutation_with_admission(admission, |store| {
+                store.tab_note_overrides.remove(&tab_id);
+                Ok(())
+            })?;
 
     let response = TabNoteResponse {
         tab_id: tab_id.clone(),
         settings: None,
     };
+    if let Some(status) = transaction.history_status.as_ref() {
+        emit_best_effort(&app, "history:status", status);
+    }
     app.emit("tabNote:changed", &response)?;
     state.refresh_obs_snapshot();
 

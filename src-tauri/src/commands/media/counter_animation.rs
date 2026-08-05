@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State, WebviewWindow};
 use uuid::Uuid;
 
 use crate::{
+    commands::editor::state::{emit_best_effort, publish_editor_change},
     errors::{CmdResult, CommandError},
     models::{
         default_counter_animation_builtin_presets, default_counter_animation_preset_id,
-        find_builtin_counter_animation_preset_by_id, CounterAnimationPreset,
-        CounterAnimationSource,
+        find_builtin_counter_animation_preset_by_id, CommittedEditorChange, CounterAnimationPreset,
+        CounterAnimationSource, EditorCommitOrigin, EditorField,
     },
     state::AppState,
 };
@@ -88,7 +89,7 @@ pub fn counter_animation_create(
         store.counter_animation_presets.push(next_preset.clone());
     })?;
 
-    emit_counter_animation_changed(&app, &updated.counter_animation_presets)?;
+    emit_counter_animation_changed(&app, &updated.counter_animation_presets);
 
     Ok(CounterAnimationUpsertResponse {
         preset,
@@ -100,6 +101,7 @@ pub fn counter_animation_create(
 pub fn counter_animation_update(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     request: CounterAnimationUpdateRequest,
 ) -> CmdResult<CounterAnimationUpsertResponse> {
     let target_id = request.id.trim().to_string();
@@ -134,29 +136,39 @@ pub fn counter_animation_update(
     }
 
     let next_preset = preset.clone();
-    let mut affected_usage_count = 0u32;
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_legacy_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("counter_animation_update".to_string()),
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+            ],
+            admission,
+            |store| {
+                if let Some(item) = store
+                    .counter_animation_presets
+                    .iter_mut()
+                    .find(|item| item.id == target_id)
+                {
+                    *item = next_preset.clone();
+                }
 
-    let updated = state.store.update(|store| {
-        if let Some(item) = store
-            .counter_animation_presets
-            .iter_mut()
-            .find(|item| item.id == target_id)
-        {
-            *item = next_preset.clone();
-        }
-
-        affected_usage_count = apply_preset_to_bound_counters(store, &target_id, &next_preset);
-    })?;
-
-    emit_counter_animation_changed(&app, &updated.counter_animation_presets)?;
-    if affected_usage_count > 0 {
-        emit_positions_changed(
-            &app,
-            &updated.key_positions,
-            &updated.stat_positions,
-            &updated.graph_positions,
+                let affected_usage_count =
+                    apply_preset_to_bound_counters(store, &target_id, &next_preset);
+                Ok((
+                    store.counter_animation_presets.clone(),
+                    affected_usage_count,
+                ))
+            },
         )?;
-    }
+    let (user_presets, affected_usage_count) = transaction.value;
+
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    emit_counter_animation_changed(&app, &user_presets);
+    emit_positions_changed(&app, &transaction.change, affected_usage_count);
 
     Ok(CounterAnimationUpsertResponse {
         preset,
@@ -168,6 +180,7 @@ pub fn counter_animation_update(
 pub fn counter_animation_delete(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     id: String,
 ) -> CmdResult<CounterAnimationDeleteResponse> {
     let target_id = id.trim().to_string();
@@ -191,27 +204,37 @@ pub fn counter_animation_delete(
             .ok_or_else(|| CommandError::msg("default builtin counter animation preset missing"))?;
     let fallback_preset_id = fallback_preset.id.clone();
 
-    let mut affected_usage_count = 0u32;
     let fallback_target = fallback_preset.clone();
 
-    let updated = state.store.update(|store| {
-        store
-            .counter_animation_presets
-            .retain(|preset| preset.id != target_id);
+    let admission = state.admit_frontend_history_mutation(window.label())?;
+    let transaction = state
+        .store
+        .commit_legacy_editor_transaction_with_admission(
+            EditorCommitOrigin::LegacyAdapter("counter_animation_delete".to_string()),
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+            ],
+            admission,
+            |store| {
+                store
+                    .counter_animation_presets
+                    .retain(|preset| preset.id != target_id);
 
-        affected_usage_count =
-            apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
-    })?;
-
-    emit_counter_animation_changed(&app, &updated.counter_animation_presets)?;
-    if affected_usage_count > 0 {
-        emit_positions_changed(
-            &app,
-            &updated.key_positions,
-            &updated.stat_positions,
-            &updated.graph_positions,
+                let affected_usage_count =
+                    apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
+                Ok((
+                    store.counter_animation_presets.clone(),
+                    affected_usage_count,
+                ))
+            },
         )?;
-    }
+    let (user_presets, affected_usage_count) = transaction.value;
+
+    publish_editor_change(state.inner(), &app, &transaction.change, false);
+    emit_counter_animation_changed(&app, &user_presets);
+    emit_positions_changed(&app, &transaction.change, affected_usage_count);
 
     Ok(CounterAnimationDeleteResponse {
         success: true,
@@ -228,27 +251,61 @@ fn build_library_payload(user_presets: &[CounterAnimationPreset]) -> CounterAnim
     }
 }
 
-fn emit_counter_animation_changed(
-    app: &AppHandle,
-    user_presets: &[CounterAnimationPreset],
-) -> CmdResult<()> {
-    app.emit(
+fn emit_counter_animation_changed(app: &AppHandle, user_presets: &[CounterAnimationPreset]) {
+    emit_best_effort(
+        app,
         "counterAnimation:changed",
         &build_library_payload(user_presets),
-    )?;
-    Ok(())
+    );
 }
 
 fn emit_positions_changed(
     app: &AppHandle,
-    key_positions: &crate::models::KeyPositions,
-    stat_positions: &crate::models::StatPositions,
-    graph_positions: &crate::models::GraphPositions,
-) -> CmdResult<()> {
-    app.emit("positions:changed", key_positions)?;
-    app.emit("statPositions:changed", stat_positions)?;
-    app.emit("graphPositions:changed", graph_positions)?;
-    Ok(())
+    change: &CommittedEditorChange,
+    affected_usage_count: u32,
+) {
+    if affected_usage_count == 0 {
+        return;
+    }
+
+    // 같은 애니메이션 값을 다시 저장한 경우에도 기존 refresh 이벤트 계약 유지
+    if change.result.changed_fields.is_empty() {
+        emit_best_effort(app, "positions:changed", &change.document.key_positions);
+        emit_best_effort(
+            app,
+            "statPositions:changed",
+            &change.document.stat_positions,
+        );
+        emit_best_effort(
+            app,
+            "graphPositions:changed",
+            &change.document.graph_positions,
+        );
+        return;
+    }
+
+    for field in &change.result.changed_fields {
+        match field {
+            EditorField::KeyPositions => {
+                emit_best_effort(app, "positions:changed", &change.document.key_positions);
+            }
+            EditorField::StatPositions => {
+                emit_best_effort(
+                    app,
+                    "statPositions:changed",
+                    &change.document.stat_positions,
+                );
+            }
+            EditorField::GraphPositions => {
+                emit_best_effort(
+                    app,
+                    "graphPositions:changed",
+                    &change.document.graph_positions,
+                );
+            }
+            _ => {}
+        }
+    }
 }
 
 fn apply_preset_to_bound_counters(
@@ -317,4 +374,101 @@ fn update_counter_animation_if_bound(
     counter.animation.duration_ms = preset.duration_ms;
     counter.normalize();
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_preset_to_bound_counters;
+    use crate::models::{
+        AppStoreData, CounterAnimationPreset, CounterAnimationSource, EditorDocumentV1,
+        EditorField, GraphPosition, GraphStatType, GraphType, KeyPosition, StatPosition, StatType,
+    };
+
+    const MODE: &str = "4key";
+    const TARGET_PRESET_ID: &str = "user-target";
+
+    fn target_preset() -> CounterAnimationPreset {
+        CounterAnimationPreset {
+            id: TARGET_PRESET_ID.to_string(),
+            name: "Target".to_string(),
+            source: CounterAnimationSource::User,
+            label_key: None,
+            bezier: [0.1, 0.2, 0.8, 0.9],
+            scale: 1.25,
+            duration_ms: 420,
+        }
+    }
+
+    fn position(bound: bool) -> KeyPosition {
+        let mut position = KeyPosition::default();
+        if bound {
+            position.counter.animation.preset_id = Some(TARGET_PRESET_ID.to_string());
+        }
+        position
+    }
+
+    fn counter_store(key_bound: bool, stat_bound: bool, graph_bound: bool) -> AppStoreData {
+        let mut store = AppStoreData::default();
+        store
+            .keys
+            .insert(MODE.to_string(), vec!["KeyA".to_string()]);
+        store
+            .key_positions
+            .insert(MODE.to_string(), vec![position(key_bound)]);
+        store.stat_positions.insert(
+            MODE.to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: position(stat_bound),
+            }],
+        );
+        store.graph_positions.insert(
+            MODE.to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 1,
+                graph_color: "#ffffff".to_string(),
+                show_avg_line: true,
+                position: position(graph_bound),
+            }],
+        );
+        store
+    }
+
+    #[test]
+    fn preset_update_changes_key_stat_and_graph_references() {
+        let mut store = counter_store(true, true, true);
+        let before = EditorDocumentV1::from_store(&store);
+
+        let affected =
+            apply_preset_to_bound_counters(&mut store, TARGET_PRESET_ID, &target_preset());
+        let after = EditorDocumentV1::from_store(&store);
+
+        assert_eq!(affected, 3);
+        assert_eq!(
+            before.changed_fields(&after),
+            vec![
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+            ]
+        );
+    }
+
+    #[test]
+    fn preset_update_reports_only_actually_changed_collections() {
+        let mut store = counter_store(false, true, false);
+        let before = EditorDocumentV1::from_store(&store);
+
+        let affected =
+            apply_preset_to_bound_counters(&mut store, TARGET_PRESET_ID, &target_preset());
+        let after = EditorDocumentV1::from_store(&store);
+
+        assert_eq!(affected, 1);
+        assert_eq!(
+            before.changed_fields(&after),
+            vec![EditorField::StatPositions]
+        );
+    }
 }

@@ -13,6 +13,7 @@ import {
   registerDisplayElementInstance,
   unregisterDisplayElementInstance,
 } from './instanceRegistry';
+import { rotatePluginInstancesEditSession } from './instancesCommitQueue';
 import {
   resolveFullId,
   resolveInstance,
@@ -20,28 +21,53 @@ import {
   type DisplayElementTarget,
 } from './targetResolver';
 import { buildDisplayElementTemplate } from './templateBuilder';
-import { saveToHistory } from './historyUtils';
 import type {
   PluginDisplayElement,
   PluginDisplayElementConfig,
   PluginDisplayElementInternal,
 } from '@src/types/plugin/api';
 
+let internalAddDepth = 0;
+
 /**
  * 내부용 디스플레이 요소 제거 함수
  */
+const disposeDisplayElementResources = (
+  fullId: string,
+  element?: PluginDisplayElementInternal,
+): void => {
+  if (element?._onClickId) handlerRegistry.unregister(element._onClickId);
+  if (element?._onPositionChangeId)
+    handlerRegistry.unregister(element._onPositionChangeId);
+  if (element?._onDeleteId) handlerRegistry.unregister(element._onDeleteId);
+  unregisterDisplayElementInstance(fullId);
+};
+
 const removeDisplayElementInternal = (fullId: string): void => {
   const store = usePluginDisplayElementStore.getState();
   const element = store.elements.find((el) => el.fullId === fullId);
-  if (element) {
-    if (element._onClickId) handlerRegistry.unregister(element._onClickId);
-    if (element._onPositionChangeId)
-      handlerRegistry.unregister(element._onPositionChangeId);
-    if (element._onDeleteId) handlerRegistry.unregister(element._onDeleteId);
-  }
-
+  disposeDisplayElementResources(fullId, element);
   store.removeElement(fullId);
-  unregisterDisplayElementInstance(fullId);
+};
+
+const removeDisplayElementsInternal = (fullIds: readonly string[]): void => {
+  const ids = new Set(fullIds);
+  if (ids.size === 0) return;
+
+  const store = usePluginDisplayElementStore.getState();
+  const elements = store.elements;
+  const elementsById = new Map(
+    elements.map((element) => [element.fullId, element]),
+  );
+
+  ids.forEach((fullId) => {
+    disposeDisplayElementResources(fullId, elementsById.get(fullId));
+  });
+
+  const remaining = elements.filter((element) => !ids.has(element.fullId));
+  if (remaining.length !== elements.length) {
+    store.setElements(remaining);
+  }
 };
 
 /**
@@ -68,8 +94,9 @@ export const displayElementApi = {
       return createNoopDisplayElementInstance();
     }
 
-    // 히스토리 저장 (요소 추가 전)
-    saveToHistory();
+    if (internalAddDepth === 0) {
+      rotatePluginInstancesEditSession(pluginId);
+    }
 
     const id = `element-${Date.now()}-${Math.random()
       .toString(36)
@@ -163,6 +190,7 @@ export const displayElementApi = {
           .updateElement(targetId, updates);
       },
       removeElement: (targetId) => {
+        rotatePluginInstancesEditSession(pluginId);
         removeDisplayElementInternal(targetId);
       },
       locale: currentLocale,
@@ -318,9 +346,10 @@ export const displayElementApi = {
     const fullId = resolveFullId(target);
     if (!fullId) return;
 
-    // 히스토리 저장 (요소 삭제 전)
-    saveToHistory();
-
+    const element = usePluginDisplayElementStore
+      .getState()
+      .elements.find((candidate) => candidate.fullId === fullId);
+    if (element) rotatePluginInstancesEditSession(element.pluginId);
     removeDisplayElementInternal(fullId);
   },
 
@@ -344,10 +373,28 @@ export const displayElementApi = {
     const elements = usePluginDisplayElementStore
       .getState()
       .elements.filter((el) => el.pluginId === pluginId);
+    if (elements.length === 0) return;
+
+    rotatePluginInstancesEditSession(pluginId);
     elements.forEach((element) => {
       removeDisplayElementInternal(element.fullId);
     });
   },
 };
 
-export { removeDisplayElementInternal };
+const addDisplayElementInternal = (
+  element: PluginDisplayElementConfig,
+): DisplayElementInstance => {
+  internalAddDepth += 1;
+  try {
+    return displayElementApi.add(element);
+  } finally {
+    internalAddDepth -= 1;
+  }
+};
+
+export {
+  addDisplayElementInternal,
+  removeDisplayElementInternal,
+  removeDisplayElementsInternal,
+};

@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
+import { enqueueEditorCompatibilityWrite } from '@src/renderer/editor/runtime/editorCompatibilityQueue';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
@@ -9,7 +11,14 @@ import type { LayerGroups } from '@src/types/layerGroups';
 export const statItemsApi = {
   getPositions: () => invoke<StatItemPositions>('stat_positions_get'),
   updatePositions: (positions: StatItemPositions) =>
-    invoke<StatItemPositions>('stat_positions_update', { positions }),
+    enqueueEditorCompatibilityWrite(
+      () =>
+        editorCoordinator.commitPatch({
+          schemaVersion: 1,
+          statPositions: positions,
+        }),
+      () => structuredClone(positions),
+    ),
   onPositionsChanged: (listener: (positions: StatItemPositions) => void) =>
     subscribe<StatItemPositions>('statPositions:changed', listener),
 };
@@ -17,7 +26,14 @@ export const statItemsApi = {
 export const graphItemsApi = {
   getPositions: () => invoke<GraphItemPositions>('graph_positions_get'),
   updatePositions: (positions: GraphItemPositions) =>
-    invoke<GraphItemPositions>('graph_positions_update', { positions }),
+    enqueueEditorCompatibilityWrite(
+      () =>
+        editorCoordinator.commitPatch({
+          schemaVersion: 1,
+          graphPositions: positions,
+        }),
+      () => structuredClone(positions),
+    ),
   onPositionsChanged: (listener: (positions: GraphItemPositions) => void) =>
     subscribe<GraphItemPositions>('graphPositions:changed', listener),
 };
@@ -25,7 +41,14 @@ export const graphItemsApi = {
 export const knobItemsApi = {
   getPositions: () => invoke<KnobItemPositions>('knob_positions_get'),
   updatePositions: (positions: KnobItemPositions) =>
-    invoke<KnobItemPositions>('knob_positions_update', { positions }),
+    enqueueEditorCompatibilityWrite(
+      () =>
+        editorCoordinator.commitPatch({
+          schemaVersion: 1,
+          knobPositions: positions,
+        }),
+      () => structuredClone(positions),
+    ),
   onPositionsChanged: (listener: (positions: KnobItemPositions) => void) =>
     subscribe<KnobItemPositions>('knobPositions:changed', listener),
 };
@@ -33,7 +56,14 @@ export const knobItemsApi = {
 export const layerGroupsApi = {
   get: () => invoke<LayerGroups>('layer_groups_get'),
   update: (groups: LayerGroups) =>
-    invoke<LayerGroups>('layer_groups_update', { groups }),
+    enqueueEditorCompatibilityWrite(
+      () =>
+        editorCoordinator.commitPatch({
+          schemaVersion: 1,
+          layerGroups: groups,
+        }),
+      () => structuredClone(groups),
+    ),
   onChanged: (listener: (groups: LayerGroups) => void) =>
     subscribe<LayerGroups>('layerGroups:changed', listener),
 };

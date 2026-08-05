@@ -163,13 +163,13 @@ const FloatingTooltip = ({
             shouldAnimateOpenRef.current ? 'tooltip-fade-in' : undefined
           }
         >
-          <div className="bg-[#1E1E22] text-[#EDEDED] text-[12px] px-2 py-1 rounded-md shadow-sm whitespace-nowrap">
+          <div className="bg-elevated text-fg text-caption px-[8px] py-[4px] rounded-md shadow-elevation-2 whitespace-nowrap">
             {content}
           </div>
           <div
             ref={arrowRef}
             style={arrowStyle}
-            className="w-[8px] h-[8px] rotate-45 bg-[#1E1E22] absolute pointer-events-none"
+            className="w-[8px] h-[8px] rotate-45 bg-elevated absolute pointer-events-none"
           />
         </div>
       )}

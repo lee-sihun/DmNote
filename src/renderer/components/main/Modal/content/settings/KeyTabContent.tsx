@@ -6,7 +6,12 @@ import React, {
 } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
+import {
+  PropertyRow,
+  PropertySection,
+} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import type {
   KeyTabState,
   KeyPreviewData,
@@ -129,6 +134,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       }
 
       const unsubscribe = window.api.keys.onRawInput((payload) => {
+        if (isHistoryEditorFlushLocked()) return;
         if (!payload || payload.state !== 'DOWN') return;
         const targetLabel =
           payload.label ||
@@ -226,124 +232,129 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
     };
 
     return (
-      <div className="flex flex-col gap-[19px]">
-        {/* 키 매핑 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
-            {t('keySetting.keyMapping')}
-          </p>
-          <button
-            onClick={handleKeyListen}
-            className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-              state.isListening ? 'border-[#459BF8]' : 'border-[#3A3943]'
-            } text-[#DBDEE8] text-style-2`}
-          >
-            {state.isListening
-              ? t('keySetting.pressAnyKey')
-              : state.displayKey || t('keySetting.clickToSet')}
-          </button>
-        </div>
-
-        {/* 키 사이즈 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('keySetting.keySize')}</p>
-          <div className="flex items-center gap-[10.5px]">
-            <div
-              className={`relative w-[54px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                state.widthFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
-              }`}
+      <div className="flex flex-col gap-[12px]">
+        {/* 키 매핑·사이즈 카드 */}
+        <PropertySection>
+          <PropertyRow label={t('keySetting.keyMapping')}>
+            <button
+              onClick={handleKeyListen}
+              className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
+                state.isListening ? 'shadow-focus-ring' : ''
+              } text-fg text-label`}
             >
-              <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
-                X
-              </span>
-              <input
-                type="number"
-                value={state.width}
-                onChange={handleWidthChange}
-                onFocus={() =>
-                  setState((prev) => ({ ...prev, widthFocused: true }))
-                }
-                onBlur={(e) => {
-                  setState((prev) => {
-                    const val = e.target.value;
-                    const finalVal =
-                      val === '' || Number.isNaN(parseInt(val, 10))
-                        ? 60
-                        : parseInt(val, 10);
-                    return { ...prev, width: finalVal, widthFocused: false };
-                  });
-                }}
-                className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-left"
-              />
-            </div>
-            <div
-              className={`relative w-[54px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                state.heightFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
-              }`}
-            >
-              <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
-                Y
-              </span>
-              <input
-                type="number"
-                value={state.height}
-                onChange={handleHeightChange}
-                onFocus={() =>
-                  setState((prev) => ({ ...prev, heightFocused: true }))
-                }
-                onBlur={(e) => {
-                  setState((prev) => {
-                    const val = e.target.value;
-                    const finalVal =
-                      val === '' || Number.isNaN(parseInt(val, 10))
-                        ? 60
-                        : parseInt(val, 10);
-                    return { ...prev, height: finalVal, heightFocused: false };
-                  });
-                }}
-                className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-left"
-              />
-            </div>
-          </div>
-        </div>
+              {state.isListening
+                ? t('keySetting.pressAnyKey')
+                : state.displayKey || t('keySetting.clickToSet')}
+            </button>
+          </PropertyRow>
 
-        {/* 커스텀 이미지 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
-            {t('keySetting.customImage')}
-          </p>
-          <button
-            ref={imageButtonRef}
-            type="button"
-            className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-              state.showImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-            } text-[#DBDEE8] text-style-4`}
-            onClick={() =>
-              setState((prev) => ({
-                ...prev,
-                showImagePicker: !prev.showImagePicker,
-              }))
-            }
-          >
-            {t('keySetting.configure')}
-          </button>
-        </div>
-
-        {/* 클래스 이름 - 커스텀 CSS 활성화 시에만 표시 */}
-        {useCustomCSS && (
-          <div className="flex justify-between w-full items-center">
-            <p className="text-white text-style-2">
-              {t('keySetting.className')}
+          {/* 키 사이즈 */}
+          <div className="flex justify-between items-center w-full min-h-[32px]">
+            <p className="text-fg-muted text-label">
+              {t('keySetting.keySize')}
             </p>
-            <input
-              type="text"
-              value={state.className}
-              onChange={handleClassNameChange}
-              placeholder="className"
-              className="text-center w-[90px] h-[23px] p-[6px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
-            />
+            <div className="flex items-center gap-[10.5px]">
+              <div
+                className={`relative w-[54px] h-[23px] bg-inset rounded-md ${
+                  state.widthFocused ? 'shadow-focus-ring' : ''
+                }`}
+              >
+                <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
+                  X
+                </span>
+                <input
+                  type="number"
+                  value={state.width}
+                  onChange={handleWidthChange}
+                  onFocus={() =>
+                    setState((prev) => ({ ...prev, widthFocused: true }))
+                  }
+                  onBlur={(e) => {
+                    setState((prev) => {
+                      const val = e.target.value;
+                      const finalVal =
+                        val === '' || Number.isNaN(parseInt(val, 10))
+                          ? 60
+                          : parseInt(val, 10);
+                      return { ...prev, width: finalVal, widthFocused: false };
+                    });
+                  }}
+                  className="absolute left-[20px] top-0 h-[23px] w-[26px] bg-transparent text-body tabular-nums text-fg text-left"
+                />
+              </div>
+              <div
+                className={`relative w-[54px] h-[23px] bg-inset rounded-md ${
+                  state.heightFocused ? 'shadow-focus-ring' : ''
+                }`}
+              >
+                <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
+                  Y
+                </span>
+                <input
+                  type="number"
+                  value={state.height}
+                  onChange={handleHeightChange}
+                  onFocus={() =>
+                    setState((prev) => ({ ...prev, heightFocused: true }))
+                  }
+                  onBlur={(e) => {
+                    setState((prev) => {
+                      const val = e.target.value;
+                      const finalVal =
+                        val === '' || Number.isNaN(parseInt(val, 10))
+                          ? 60
+                          : parseInt(val, 10);
+                      return {
+                        ...prev,
+                        height: finalVal,
+                        heightFocused: false,
+                      };
+                    });
+                  }}
+                  className="absolute left-[20px] top-0 h-[23px] w-[26px] bg-transparent text-body tabular-nums text-fg text-left"
+                />
+              </div>
+            </div>
           </div>
-        )}
+        </PropertySection>
+
+        {/* 외형 커스터마이징 카드 */}
+        <PropertySection>
+          {/* 커스텀 이미지 */}
+          <div className="flex justify-between items-center w-full min-h-[32px]">
+            <p className="text-fg-muted text-label">
+              {t('keySetting.customImage')}
+            </p>
+            <button
+              ref={imageButtonRef}
+              type="button"
+              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                state.showImagePicker ? 'shadow-focus-ring' : ''
+              } text-fg text-body`}
+              onClick={() =>
+                setState((prev) => ({
+                  ...prev,
+                  showImagePicker: !prev.showImagePicker,
+                }))
+              }
+            >
+              {t('keySetting.configure')}
+            </button>
+          </div>
+
+          {/* 클래스 이름 - 커스텀 CSS 활성화 시에만 표시 */}
+          {useCustomCSS && (
+            <PropertyRow label={t('keySetting.className')}>
+              <input
+                type="text"
+                value={state.className}
+                onChange={handleClassNameChange}
+                placeholder="className"
+                className="text-center w-[90px] h-[23px] p-[6px] bg-inset rounded-md focus:shadow-focus-ring text-body tabular-nums text-fg"
+              />
+            </PropertyRow>
+          )}
+        </PropertySection>
       </div>
     );
   },

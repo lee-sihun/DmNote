@@ -98,18 +98,15 @@ mod tests {
                 .expect("library entry missing");
             assert_eq!(entry.source, SoundSource::Builtin);
             assert_eq!(entry.display_name.as_deref(), Some(sound.display_name));
-            assert!(entry.enabled);
+        }
+
+        for entry in data.sound_library.values_mut() {
+            entry.hidden = true;
         }
 
         // 재실행: 변경 없음 (멱등)
         assert!(!seed_builtin_sounds(&dir, &mut data));
-
-        // 사용자 토글은 재시딩에도 보존
-        for entry in data.sound_library.values_mut() {
-            entry.enabled = false;
-        }
-        assert!(!seed_builtin_sounds(&dir, &mut data));
-        assert!(data.sound_library.values().all(|entry| !entry.enabled));
+        assert!(data.sound_library.values().all(|entry| entry.hidden));
 
         // Local로 오염된 source는 자가 치유
         for entry in data.sound_library.values_mut() {
@@ -120,6 +117,7 @@ mod tests {
             .sound_library
             .values()
             .all(|entry| entry.source == SoundSource::Builtin));
+        assert!(data.sound_library.values().all(|entry| entry.hidden));
 
         let _ = fs::remove_dir_all(&dir);
     }

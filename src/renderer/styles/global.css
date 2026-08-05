@@ -2,41 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer components {
-  .icon-btn {
-    @apply w-[24px] h-[24px] flex items-center justify-center hover:bg-[#303036] rounded-[4px] transition-colors;
-  }
-  .input-field {
-    @apply text-center h-[23px] bg-[#2A2A30] rounded-[7px] border border-[#3A3943] focus:border-[#459BF8] text-[11px] text-[#D7D8DB];
-  }
-  .btn-danger {
-    @apply bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB];
-  }
-  .btn-secondary {
-    @apply bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#D7D8DB];
-  }
-  .btn-default {
-    @apply px-[10px] h-[23px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[11px];
-  }
+/* 기본 서체 — 가변 웨이트 셀프호스팅 */
+@font-face {
+  font-family: 'Pretendard Variable';
+  src: url('../assets/fonts/PretendardVariable.woff2')
+    format('woff2-variations');
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
 }
 
+/* 'Pretendard' 로컬 alias — 저장 데이터·프리셋에 남은 비가변 family 참조를
+   동일 가변 파일로 해석 (구 CDN 내장 폰트 제거 대체, 오프라인 동작 보장) */
 @font-face {
-  font-family: 'SUIT-Regular';
-  src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2')
-    format('woff2');
-  font-weight: normal;
+  font-family: 'Pretendard';
+  src: url('../assets/fonts/PretendardVariable.woff2')
+    format('woff2-variations');
+  font-weight: 45 920;
   font-style: normal;
+  font-display: swap;
 }
 
 :root {
-  font-family: 'SUIT-Regular', sans-serif;
+  font-family: 'Pretendard Variable', 'Pretendard', -apple-system,
+    BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 html,
 body,
 #root {
   height: 100%;
-  /* background: transparent !important; */
 }
 
 * {
@@ -52,31 +49,10 @@ body,
   -webkit-app-region: no-drag;
 }
 
-/* 기존 CSS 그리드 배경 - SVG GridBackground 컴포넌트로 대체됨 */
-/* .grid-bg {
-  background-image: linear-gradient(
-      to right,
-      rgb(25, 25, 28) 1px,
-      transparent 1px
-    ),
-    linear-gradient(to bottom, rgb(25, 25, 28) 1px, transparent 1px);
-  background-size: 5px 5px;
-} */
-
 .image-rendering {
   image-rendering: -webkit-optimize-contrast;
   transform: translateZ(0);
   backface-visibility: hidden;
-}
-
-/* 라디오 버튼 스타일링 */
-input[type='radio']:checked + span {
-  border-color: #ffb400;
-}
-
-input[type='radio']:checked + span span {
-  background: #ffb400;
-  transform: scale(0.5);
 }
 
 /* 숫자 인풋 버튼 제거 */
@@ -86,166 +62,7 @@ input[type='number']::-webkit-outer-spin-button {
   margin: 0;
 }
 
-/* SettingsTab custom scrollbar */
-.settings-scroll {
-  overscroll-behavior: contain;
-}
-
-.settings-scroll::-webkit-scrollbar {
-  width: 6px;
-  background: transparent;
-}
-
-.settings-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.settings-scroll::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 0px;
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb,
-.settings-scroll:hover::-webkit-scrollbar-thumb {
-  background: #989ba6;
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-track,
-.settings-scroll:hover::-webkit-scrollbar-track {
-  background: #24262d;
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover,
-.settings-scroll:hover::-webkit-scrollbar-thumb:hover {
-  background: #b1b4bd;
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:active,
-.settings-scroll:hover::-webkit-scrollbar-thumb:active {
-  background: #d0d3d9;
-}
-
-/* ListPopup 컨텍스트 메뉴 커스텀 스크롤바 */
-.listpopup-scroll {
-  overscroll-behavior: contain;
-}
-
-.listpopup-scroll::-webkit-scrollbar {
-  width: 4px;
-  background: transparent;
-}
-
-.listpopup-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 4px 0;
-}
-
-.listpopup-scroll::-webkit-scrollbar-thumb {
-  background: #4a4d5a;
-  border-radius: 4px;
-}
-
-.listpopup-scroll:hover::-webkit-scrollbar-thumb {
-  background: #5e6170;
-}
-
-.listpopup-scroll::-webkit-scrollbar-thumb:hover {
-  background: #74778a;
-}
-
-.listpopup-scroll::-webkit-scrollbar-thumb:active {
-  background: #8b8ea0;
-}
-
-@keyframes tooltipFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.tooltip-fade-in {
-  animation: tooltipFadeIn 120ms ease-out;
-}
-
-@keyframes modalScale {
-  from {
-    transform: scale(0.95);
-  }
-
-  to {
-    transform: scale(1);
-  }
-}
-
-.animate-modal-scale {
-  animation: modalScale 120ms ease-out forwards;
-}
-
-@keyframes modalFade {
-  to {
-    opacity: 1;
-  }
-}
-
-.animate-modal-fade {
-  animation: modalFade 60ms ease-out forwards;
-}
-
-/* ColorPicker */
-.rcp-saturation {
-  border-radius: 7px !important;
-  cursor: pointer !important;
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
-}
-
-.rcp-saturation-cursor {
-  height: 10px !important;
-  width: 10px !important;
-  transform: translate(-50%, -50%) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid white !important;
-  border-radius: 100% !important;
-}
-
-.rcp-hue {
-  border-radius: 7px !important;
-  cursor: pointer !important;
-  height: 10px !important;
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
-}
-
-.rcp-hue-cursor {
-  height: 10px !important;
-  width: 10px !important;
-  transform: translate(-50%, 0%) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid white !important;
-  border-radius: 100% !important;
-}
-
-.rcp-alpha {
-  border-radius: 7px !important;
-  cursor: pointer !important;
-  height: 10px !important;
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
-}
-
-.rcp-alpha-cursor {
-  height: 10px !important;
-  width: 10px !important;
-  transform: translate(-50%, 0%) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid white !important;
-  border-radius: 100% !important;
-}
-
-.counter {
+:where(.counter) {
   position: relative;
   display: inline-block;
   pointer-events: none;
@@ -253,10 +70,36 @@ input[type='number']::-webkit-outer-spin-button {
   box-sizing: border-box;
   padding-inline: var(--dmn-counter-safe-inline, 1px);
   white-space: nowrap;
+  letter-spacing: 0.06em;
+  font-size: var(--dmn-counter-font-size-default, 16px);
+  font-family: var(--dmn-counter-font-family-default, inherit);
+  font-weight: var(--dmn-counter-font-weight-default, 400);
+  font-style: var(--dmn-counter-font-style-default, normal);
+  text-decoration: var(--dmn-counter-text-decoration-default, none);
+  text-align: var(--dmn-counter-text-align-default, center);
+  line-height: var(--dmn-counter-line-height-default, normal);
   color: var(--counter-color, var(--counter-color-default, #ffffff));
+  /* 앱 그라데이션은 fallback으로만 적용. 기존 --counter-color를 지정하면
+     image/clip 값이 문법상 무효가 되어 단색 사용자 색으로 자동 복귀 */
+  background-image: var(
+    --counter-fill-image,
+    var(--counter-color, var(--dmn-counter-fill-image-default, none))
+  );
+  -webkit-background-clip: var(
+    --counter-fill-clip,
+    var(--counter-color, var(--dmn-counter-fill-clip-default, border-box))
+  );
+  background-clip: var(
+    --counter-fill-clip,
+    var(--counter-color, var(--dmn-counter-fill-clip-default, border-box))
+  );
+  -webkit-text-fill-color: var(
+    --counter-text-fill-color,
+    var(--counter-color, var(--dmn-counter-text-fill-default, currentcolor))
+  );
 }
 
-.counter::before {
+:where(.counter)::before {
   content: attr(data-text);
   position: absolute;
   inset: 0;
@@ -277,246 +120,122 @@ input[type='number']::-webkit-outer-spin-button {
   padding-inline: var(--dmn-text-safe-inline, 2px);
 }
 
-/* Modal scrollbar */
-.modal-content-scroll {
-  overscroll-behavior: contain;
-  /* 네이티브 동작 유지 */
-  -webkit-overflow-scrolling: touch;
-  transform: translateZ(0);
-  contain: paint;
+/*
+ * 기본 키 디자인 — 표면 분리는 1px 헤어라인 보더(테두리 색상 UI로 수정 가능)가 담당
+ * 커스텀 CSS([data-state] 셀렉터, head 뒤쪽 주입)가 덮어쓸 수 있도록
+ * :where로 특이도를 동률 이하로 유지. 섀도 값은
+ * utils/core/elementDefaults.ts와 동기 유지
+ */
+:where([data-key-element]) {
+  /* 속성 패널 값은 fallback 전용 — 커스텀 CSS의 일반 속성·공개 변수가 우선 */
+  background-color: var(--key-bg, var(--dmn-key-bg-default));
+  background-image: var(
+    --key-bg-image,
+    var(--key-bg, var(--dmn-key-bg-image-default, none))
+  );
+  border: var(--key-border, var(--dmn-key-border-default));
+  border-radius: var(--key-radius, var(--dmn-key-radius-default));
+  color: var(--key-text-color, var(--dmn-key-text-color-default));
+  font-size: var(--dmn-key-font-size-default, inherit);
+  font-family: var(--dmn-key-font-family-default, inherit);
+  font-weight: var(--dmn-key-font-weight-default, inherit);
+  font-style: var(--dmn-key-font-style-default, normal);
+  text-decoration: var(--dmn-key-text-decoration-default, none);
+  padding: var(
+    --key-padding,
+    var(--key-border, var(--dmn-key-padding-default, 0px))
+  );
 }
 
-.modal-content-scroll::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-  background: transparent;
+:where([data-graph-element]) {
+  background: var(--graph-bg, var(--dmn-graph-bg-default));
+  border: var(--graph-border, var(--dmn-graph-border-default));
+  border-radius: var(--graph-radius, var(--dmn-graph-radius-default));
+  color: var(--dmn-graph-text-color-default, #fff);
+  font-family: var(--dmn-graph-font-family-default, inherit);
+  padding: var(
+    --graph-padding,
+    var(--graph-border, var(--dmn-graph-padding-default, 0px))
+  );
 }
 
-.modal-content-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 2px;
+:where([data-knob-element]) {
+  background: var(--knob-bg, var(--dmn-knob-bg-default));
+  border: var(--knob-border, var(--dmn-knob-border-default));
+  border-radius: var(--knob-radius, var(--dmn-knob-radius-default));
+  padding: var(
+    --knob-padding,
+    var(--knob-border, var(--dmn-knob-padding-default, 0px))
+  );
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb {
-  background: #3a3943;
-  border-radius: 2px;
+:where([data-knob-element][data-knob-state='inactive']) {
+  box-shadow: var(--knob-shadow, var(--dmn-knob-shadow-default, none));
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb:hover {
-  background: #4a4953;
+:where([data-knob-element][data-knob-state='active']) {
+  box-shadow: var(
+    --knob-active-shadow,
+    var(--knob-shadow, var(--dmn-knob-shadow-default, none))
+  );
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb:active {
-  background: #5a5963;
+:where([data-knob-indicator]) {
+  background: var(
+    --knob-indicator,
+    var(--dmn-knob-indicator-default, currentcolor)
+  );
 }
 
-/* WebFontInputModal code editor */
-.webfont-cm-editor {
+/* 투명 보더 아래로 사용자 배경이 비치지 않게 하되 커스텀 CSS가 항상 우선 */
+:where([data-key-element], [data-graph-element], [data-knob-element]) {
+  background-clip: padding-box;
+}
+
+/* 그라데이션 보더도 앱 기본값은 fallback. 기존 border 변수를 지정하면
+   border 문법이 background에는 무효가 되어 앱 링이 자동으로 사라진다 */
+:where([data-key-element] > [data-gradient-border-ring]) {
+  background: var(
+    --key-border-image,
+    var(--key-border, var(--dmn-border-gradient-image-default, none))
+  );
+}
+
+:where([data-graph-element] > [data-gradient-border-ring]) {
+  background: var(
+    --graph-border-image,
+    var(--graph-border, var(--dmn-border-gradient-image-default, none))
+  );
+}
+
+:where([data-graph-element] > [data-graph-image]) {
+  inset: 0;
+  width: 100%;
   height: 100%;
-}
-
-.webfont-cm-editor .cm-editor {
-  height: 100%;
-  background: #1e1e1e;
-  color: #d4d4d4;
-}
-
-.webfont-cm-editor .cm-scroller,
-.webfont-cm-editor .cm-content,
-.webfont-cm-editor .cm-line {
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.webfont-cm-editor .cm-scroller,
-.webfont-cm-editor .cm-content,
-.webfont-cm-editor .cm-gutterElement {
-  font-family: Consolas, 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 20px;
-  letter-spacing: 0;
-  font-variant-ligatures: none;
-  font-feature-settings: 'liga' 0, 'calt' 0;
-}
-
-.webfont-cm-editor .cm-gutterElement {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.webfont-cm-editor .cm-scroller {
-  overflow: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-.webfont-cm-editor .cm-content {
-  min-height: 100%;
-  padding: 8px 12px 8px 14px;
-  tab-size: 2;
-  caret-color: #d4d4d4;
-}
-
-.webfont-cm-editor .cm-line {
-  padding: 0;
-}
-
-.webfont-cm-editor .cm-gutters {
-  background: #252526;
-  color: #858585;
-  border-right: 1px solid #33343d;
-}
-
-.webfont-cm-editor .cm-lineNumbers .cm-gutterElement {
-  width: 52px;
-  min-width: 52px;
   box-sizing: border-box;
-  padding: 0 12px 0 0;
-  text-align: right;
+  padding: inherit;
 }
 
-.webfont-cm-editor .cm-activeLine {
-  background: #ffffff10;
+:where([data-knob-element] > [data-gradient-border-ring]) {
+  background: var(
+    --knob-border-image,
+    var(--knob-border, var(--dmn-border-gradient-image-default, none))
+  );
 }
 
-.webfont-cm-editor .cm-activeLineGutter {
-  color: #c6c6c6;
-  background: #252526;
+:where([data-key-element][data-state='inactive']) {
+  box-shadow: var(--key-shadow, var(--dmn-key-shadow-default, none));
 }
 
-.webfont-cm-editor .cm-content ::selection {
-  background: #5b7fae;
+:where([data-key-element][data-state='active']) {
+  /* 눌림 깊이는 외부 섀도로만 표현 — inset은 투명 보더도 밝은 링처럼 보이게 함 */
+  box-shadow: var(
+    --key-active-shadow,
+    var(--key-shadow, var(--dmn-key-shadow-default, none))
+  );
 }
 
-.webfont-cm-editor .cm-content ::-moz-selection {
-  background: #5b7fae;
-}
-
-.webfont-cm-editor .cm-cursor,
-.webfont-cm-editor .cm-dropCursor {
-  border-left-color: #d4d4d4;
-}
-
-.webfont-cm-editor .cm-editor.cm-focused {
-  outline: none;
-}
-
-.webfont-cm-editor .cm-placeholder {
-  color: #6f6e7a;
-  white-space: pre;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-  background: transparent;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb {
-  background: #3a3943;
-  border-radius: 2px;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
-  background: #4a4953;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
-  background: #5a5963;
-}
-
-/* PropertiesPanel 오버레이 스크롤바 (레이아웃 수축 방지) */
-.properties-panel-overlay-scroll {
-  position: relative;
-  overflow: hidden;
-}
-
-.properties-panel-overlay-viewport {
-  height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-}
-
-.properties-panel-overlay-viewport::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-.properties-panel-overlay-bar {
-  position: absolute;
-  top: 0;
-  right: 0px;
-  bottom: 0;
-  width: 4px;
-  opacity: 0;
-  transition: opacity 120ms ease-out;
-  pointer-events: none;
-}
-
-.properties-panel-overlay-scroll:hover .properties-panel-overlay-bar {
-  opacity: 1;
-}
-
-.properties-panel-overlay-thumb {
-  position: absolute;
-  left: 0;
-  right: 0;
-  background: #3a3943;
-  border-radius: 2px;
-}
-
-.properties-panel-overlay-scroll:hover .properties-panel-overlay-thumb {
-  background: #4a4953;
-}
-
-.properties-panel-overlay-scroll:active .properties-panel-overlay-thumb {
-  background: #5a5963;
-}
-
-/* 설정 스크롤 - 호버 시에만 표시 */
-.settings-content-scroll {
-  overscroll-behavior: contain;
-}
-
-.settings-content-scroll::-webkit-scrollbar {
-  width: 4px;
-  background: transparent;
-}
-
-.settings-content-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.settings-content-scroll::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb {
-  background: #3a3943;
-}
-
-.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #4a4953;
-}
-
-.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb:active {
-  background: #5a5963;
-}
-
-body.dmn-custom-cursor,
-body.dmn-custom-cursor * {
-  cursor: none !important;
-}
-
-/* 
+/*
  * 드래그/리사이즈 중 애니메이션 비활성화
  * 커스텀 CSS에서 transition이나 animation이 적용된 경우,
  * 메인 창 그리드에서 키/플러그인 요소를 드래그하거나 크기 조절할 때

@@ -2,7 +2,11 @@ import { create } from 'zustand';
 import {
   PluginDisplayElementInternal,
   PluginDefinitionInternal,
+  PluginDefinitionView,
+  PluginPanelElementView,
 } from '@src/types/plugin/api';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
+import { schedulePluginPanelModelSync } from '@utils/plugin/panelModelSync';
 import { useKeyStore } from '../data/useKeyStore';
 
 // syncToOverlay 쓰로틀링을 위한 변수
@@ -38,7 +42,12 @@ function boxesOverlap(a: BoundingBox, b: BoundingBox): boolean {
 
 interface PluginDisplayElementStore {
   elements: PluginDisplayElementInternal[];
+  panelElements: PluginPanelElementView[];
   definitions: Map<string, PluginDefinitionInternal>;
+  /** 패널 창 전용 - main이 push한 definition 투영 미러 (main·overlay에선 비어 있음) */
+  definitionViews: Map<string, PluginDefinitionView>;
+  /** 패널 창 전용 - fullId → key별 visibility 미러 (main이 요소별 settings로 평가) */
+  elementVisibilityViews: Map<string, Record<string, boolean>>;
   addElement: (element: PluginDisplayElementInternal) => void;
   updateElement: (
     fullId: string,
@@ -56,6 +65,12 @@ interface PluginDisplayElementStore {
     options?: { skipSync?: boolean },
   ) => void;
   registerDefinition: (definition: PluginDefinitionInternal) => void;
+  /** 패널 창 전용 - main push 스냅샷을 읽기 미러로 반영 (동기화 발신 없음) */
+  applyPanelModel: (
+    elements: PluginPanelElementView[],
+    definitionViews: PluginDefinitionView[],
+    elementVisibility: Record<string, Record<string, boolean>>,
+  ) => void;
   // z-order 관련 함수들
   bringToFront: (fullId: string) => void;
   sendToBack: (fullId: string) => void;
@@ -66,7 +81,10 @@ interface PluginDisplayElementStore {
 export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
   (set) => ({
     elements: [],
+    panelElements: [],
     definitions: new Map(),
+    definitionViews: new Map(),
+    elementVisibilityViews: new Map(),
 
     addElement: (element) =>
       set((state) => {
@@ -169,8 +187,21 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
       set((state) => {
         const newDefinitions = new Map(state.definitions);
         newDefinitions.set(definition.id, definition);
+        // definitions 변경도 elements 스냅샷과 함께 패널 미러로 push
+        if (window.__dmn_window_type === 'main') {
+          schedulePluginPanelModelSync(state.elements, newDefinitions);
+        }
         return { definitions: newDefinitions };
       }),
+
+    applyPanelModel: (elements, definitionViews, elementVisibility) =>
+      set(() => ({
+        panelElements: elements,
+        definitionViews: new Map(
+          definitionViews.map((view) => [view.definitionId, view]),
+        ),
+        elementVisibilityViews: new Map(Object.entries(elementVisibility)),
+      })),
 
     // z-order: 맨 앞으로 (가장 높은 zIndex로 설정)
     bringToFront: (fullId) =>
@@ -179,8 +210,8 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         if (!element) return state;
 
         // 현재 탭의 키들과 플러그인 요소들의 zIndex 수집
-        const { selectedKeyType, positions } = useKeyStore.getState();
-        const keyPositions = positions[selectedKeyType] || [];
+        const { selectedKeyType, canonicalPositions } = useKeyStore.getState();
+        const keyPositions = canonicalPositions[selectedKeyType] || [];
         const keyZIndexes = keyPositions.map((p, i) => p.zIndex ?? i);
         const pluginZIndexes = state.elements.map((el) => el.zIndex ?? 0);
         const maxZIndex = Math.max(0, ...keyZIndexes, ...pluginZIndexes);
@@ -202,8 +233,8 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         if (!element) return state;
 
         // 현재 탭의 키들과 플러그인 요소들의 zIndex 수집
-        const { selectedKeyType, positions } = useKeyStore.getState();
-        const keyPositions = positions[selectedKeyType] || [];
+        const { selectedKeyType, canonicalPositions } = useKeyStore.getState();
+        const keyPositions = canonicalPositions[selectedKeyType] || [];
         const keyZIndexes = keyPositions.map((p, i) => p.zIndex ?? i);
         const pluginZIndexes = state.elements.map((el) => el.zIndex ?? 0);
         const minZIndex = Math.min(0, ...keyZIndexes, ...pluginZIndexes);
@@ -225,8 +256,8 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         if (!element) return state;
 
         const currentZIndex = element.zIndex ?? 0;
-        const { selectedKeyType, positions } = useKeyStore.getState();
-        const keyPositions = positions[selectedKeyType] || [];
+        const { selectedKeyType, canonicalPositions } = useKeyStore.getState();
+        const keyPositions = canonicalPositions[selectedKeyType] || [];
 
         // 대상 요소의 바운딩 박스
         const targetBox = {
@@ -297,8 +328,8 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         if (!element) return state;
 
         const currentZIndex = element.zIndex ?? 0;
-        const { selectedKeyType, positions } = useKeyStore.getState();
-        const keyPositions = positions[selectedKeyType] || [];
+        const { selectedKeyType, canonicalPositions } = useKeyStore.getState();
+        const keyPositions = canonicalPositions[selectedKeyType] || [];
 
         // 대상 요소의 바운딩 박스
         const targetBox = {
@@ -364,17 +395,21 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
   }),
 );
 
+export const selectPropertyPanelPluginElements = (
+  state: PluginDisplayElementStore,
+): PluginPanelElementView[] =>
+  window.__dmn_window_type === 'panel' ? state.panelElements : state.elements;
+
 // 메인 윈도우에서 오버레이로 동기화 (즉시 실행)
+// 분리 패널 read-model 미러에도 동일 스냅샷 push (패널 창이 없으면 no-op)
 function syncToOverlay(elements: PluginDisplayElementInternal[]) {
-  try {
-    if (window.api?.bridge) {
-      window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-        elements,
-      });
-    }
-  } catch (error) {
-    console.error('[DisplayElement Store] Failed to sync to overlay:', error);
-  }
+  sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
+    elements,
+  });
+  schedulePluginPanelModelSync(
+    elements,
+    usePluginDisplayElementStore.getState().definitions,
+  );
 }
 
 // 쓰로틀링된 동기화 (빈번한 호출 방지)

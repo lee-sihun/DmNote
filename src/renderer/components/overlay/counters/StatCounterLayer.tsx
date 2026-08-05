@@ -12,6 +12,8 @@ interface StatPosition {
   height?: number;
   hidden?: boolean;
   counter?: unknown;
+  className?: string;
+  useInlineStyles?: boolean;
   statType: string;
 }
 

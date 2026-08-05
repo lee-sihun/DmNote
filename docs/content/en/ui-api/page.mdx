@@ -60,7 +60,7 @@ dmn.ui.contextMenu.addGridMenuItem({
 
 ### Menu Item Options
 
-```javascript
+```javascript fragment=expression
 {
   id: "my-menu",           // Unique ID within plugin
   label: "Menu Item",      // Display text
@@ -191,10 +191,11 @@ Modal dialogs for user interaction.
 
 ### alert
 
-Show simple alert.
+Show simple alert. The returned Promise resolves when the user presses the confirm button or the dialog is dismissed.
 
 ```javascript
 await dmn.ui.dialog.alert("Saved!");
+// Runs after the user confirms
 
 await dmn.ui.dialog.alert("Task complete", { confirmText: "OK" });
 ```
@@ -203,9 +204,18 @@ await dmn.ui.dialog.alert("Task complete", { confirmText: "OK" });
 
 Show confirm/cancel dialog.
 
+Options: `confirmText` (confirm button label), `cancelText` (cancel button label), `danger` (for destructive actions — renders the confirm button in danger colors)
+
 ```javascript
 const ok = await dmn.ui.dialog.confirm("Proceed?");
 if (ok) {
   // Confirm clicked
 }
+
+// Destructive action
+const confirmed = await dmn.ui.dialog.confirm("All data will be deleted.", {
+  danger: true,
+  confirmText: "Delete",
+  cancelText: "Keep",
+});
 ```

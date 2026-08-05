@@ -13,7 +13,7 @@ description: dmn.plugin 네임스페이스 API 레퍼런스
 
 플러그인 언로드 시 호출될 클린업 함수를 등록합니다.
 
-```typescript
+```typescript fragment=signature
 dmn.plugin.registerCleanup(cleanup: () => void): void
 ```
 
@@ -32,7 +32,7 @@ dmn.plugin.registerCleanup(() => {
 
 플러그인별 격리된 스토리지입니다. 자세한 내용은 [스토리지](/docs/storage) 문서를 참고하세요.
 
-```typescript
+```typescript fragment=signature
 dmn.plugin.storage.get<T = any>(key: string): Promise<T | null>
 dmn.plugin.storage.set(key: string, value: any): Promise<void>
 dmn.plugin.storage.remove(key: string): Promise<void>
@@ -46,7 +46,7 @@ dmn.plugin.storage.clearByPrefix(prefix: string): Promise<number>
 
 선언형 UI를 정의합니다. 자세한 내용은 [선언형 API](/docs/declarative-api) 문서를 참고하세요.
 
-```typescript
+```typescript fragment=signature
 dmn.plugin.defineElement(definition: PluginDefinition): void
 ```
 
@@ -54,7 +54,7 @@ dmn.plugin.defineElement(definition: PluginDefinition): void
 
 패널(`defineElement`)과 독립적인 **플러그인 전역 설정**을 정의합니다. 자세한 내용은 [설정 시스템](/docs/settings) 문서를 참고하세요.
 
-```typescript
+```typescript fragment=signature
 dmn.plugin.defineSettings(
   definition: PluginSettingsDefinition
 ): PluginSettingsInstance
@@ -103,6 +103,12 @@ interface PluginDefinition {
   };
 
   /**
+   * 메뉴 predicate가 참조할 오버레이 상태 키 (옵트인 저빈도 동기화)
+   * 선언된 키의 setState 변경만 메인 윈도우로 전달됨
+   */
+  contextMenuStateKeys?: string[];
+
+  /**
    * 설정 UI 표시 방식
    * @default "panel"
    */
@@ -111,8 +117,8 @@ interface PluginDefinition {
   /** 설정 스키마 */
   settings?: Record<string, PluginSettingSchema>;
 
-  /** 다국어 메시지 */
-  messages?: Record<string, Record<string, string>>;
+  /** 다국어 메시지 (중첩 객체 허용 — PluginMessages) */
+  messages?: Record<string, Record<string, unknown>>;
 
   /** 미리보기 상태 (메인 윈도우용) */
   previewState?: Record<string, any>;
@@ -207,7 +213,7 @@ interface PluginDefinitionHookContext {
 
 인스턴스별로 리사이즈 앵커를 동적으로 변경하거나 조회합니다.
 
-```javascript
+```javascript fragment=object-members
 onMount: ({ setAnchor, getAnchor, getSettings }) => {
   // 현재 앵커 확인
   console.log("현재 앵커:", getAnchor()); // "top-left" (기본값)
@@ -234,17 +240,30 @@ onMount: ({ setAnchor, getAnchor, getSettings }) => {
 설정 스키마 정의 타입입니다.
 
 ```typescript
-interface PluginSettingSchema {
-  type: "boolean" | "color" | "number" | "string" | "select";
-  default: any;
-  label: string;
-  min?: number; // number 타입용
-  max?: number; // number 타입용
-  step?: number; // number 타입용
-  options?: { label: string; value: any }[]; // select 타입용
-  placeholder?: string; // string/number 타입용
-}
+type PluginSettingSchema =
+  | {
+      type: "boolean" | "color" | "number" | "string" | "select";
+      default: string | number | boolean;
+      label: string;
+      min?: number;
+      max?: number;
+      step?: number;
+      options?: { label: string; value: string | number | boolean }[];
+      placeholder?: string;
+      visible?: boolean | ((settings: Record<string, unknown>) => boolean);
+    }
+  | {
+      type: "section";
+      label?: string; // 카드 위 선택적 캡션
+      visible?: boolean | ((settings: Record<string, unknown>) => boolean);
+    };
 ```
+
+값 설정과 section의 union입니다. section 키는 레이아웃 식별자로 저장값·기본값·조회값·
+변경 콜백에 포함되지 않으며, 카드를 시작하고 `visible`로 그룹 전체를 제어합니다.
+패널과 모달은 같은 의미 규칙을 사용하고 visibility 예외는 해당 항목/그룹을 숨기는
+fail-closed 방식으로 처리합니다. 과거의 `divider` 타입은 제거되었습니다 —
+기존 플러그인의 divider 항목은 미지원 타입으로 무시됩니다.
 
 ## 예시
 

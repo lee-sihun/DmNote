@@ -3,6 +3,27 @@ import React, { useEffect, useState } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getAxisSignal } from '@stores/signals/axisSignals';
 import { resolveImageSource } from '@utils/core/imageSource';
+import { warmupImageSource } from '@utils/core/imageWarmup';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_ACTIVE_BG,
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+  DEFAULT_ELEMENT_BORDER_WIDTH,
+} from '@utils/core/elementDefaults';
+import {
+  gradientToCss,
+  gradientRingStyle,
+  resolveStatePair,
+  type GradientSpec,
+} from '@src/types/color';
+import {
+  elementShadowToCss,
+  resolveElementShadow,
+  type ElementShadowSpec,
+} from '@src/types/key/shadows';
 
 interface KnobPosition {
   hidden?: boolean;
@@ -26,8 +47,15 @@ interface KnobPosition {
   activeBackgroundColor?: string;
   borderColor?: string;
   activeBorderColor?: string;
+  backgroundGradient?: GradientSpec | null;
+  activeBackgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
+  activeBorderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
+  shadow?: ElementShadowSpec;
+  activeShadow?: ElementShadowSpec;
+  useInlineStyles?: boolean;
 }
 
 interface OverlayKnobItemProps {
@@ -64,9 +92,17 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
     activeBackgroundColor,
     borderColor,
     activeBorderColor,
+    backgroundGradient,
+    activeBackgroundGradient,
+    borderGradient,
+    activeBorderGradient,
     borderWidth,
     borderRadius,
+    shadow,
+    activeShadow,
+    useInlineStyles,
   } = position ?? {};
+  const useInline = useInlineStyles === true;
 
   const accum = axisId ? getAxisSignal(axisId).value : 0;
 
@@ -95,13 +131,20 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
     };
   }, [axisId]);
 
+  const inactiveImageSrc = resolveImageSource(inactiveImage);
+  const activeImageSrc = resolveImageSource(activeImage);
+
+  // 첫 회전 입력에서 active 이미지 cold decode가 겹치지 않도록 선행 디코드 (Key/StatItem과 동일 패턴)
+  useEffect(() => {
+    warmupImageSource(inactiveImageSrc);
+    warmupImageSource(activeImageSrc);
+  }, [inactiveImageSrc, activeImageSrc]);
+
   if (!position || position.hidden) return null;
 
   // accum은 회전수 단위(물리 1회전 ≈ 1.0) — sensitivity는 순수 배율
   const angle = accum * 360 * sensitivity * (reverse ? -1 : 1);
 
-  const inactiveImageSrc = resolveImageSource(inactiveImage);
-  const activeImageSrc = resolveImageSource(activeImage);
   const imageSrc =
     (isActive && activeImageSrc ? activeImageSrc : inactiveImageSrc) || null;
   const isUsingActiveImage = isActive && !!activeImageSrc;
@@ -113,13 +156,52 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
 
   const isTransparent = isActive ? activeTransparent : idleTransparent;
   const stateBackground = isActive
-    ? activeBackgroundColor || backgroundColor || 'rgba(121, 121, 121, 0.9)'
-    : backgroundColor || 'rgba(46, 46, 47, 0.9)';
+    ? activeBackgroundColor || backgroundColor || DEFAULT_ELEMENT_ACTIVE_BG
+    : backgroundColor || DEFAULT_ELEMENT_BG;
+  // 보더 색은 회전 인식 막대 색을 겸함 — 폴백은 텍스트 색 계열
   const stateBorderColor = isActive
-    ? activeBorderColor || borderColor || 'rgba(255, 255, 255, 0.9)'
-    : borderColor || 'rgba(113, 113, 113, 0.9)';
+    ? activeBorderColor || borderColor || DEFAULT_ELEMENT_ACTIVE_FONT
+    : borderColor || DEFAULT_ELEMENT_FONT;
+  // 그라데이션 쌍 해석 — 상태 간 색/그라데이션이 섞이지 않도록 쌍 단위 폴백
+  const bgPair = resolveStatePair(
+    isActive,
+    { color: backgroundColor, gradient: backgroundGradient },
+    { color: activeBackgroundColor, gradient: activeBackgroundGradient },
+  );
+  const borderPair = resolveStatePair(
+    isActive,
+    { color: borderColor, gradient: borderGradient },
+    { color: activeBorderColor, gradient: activeBorderGradient },
+  );
+  const bgSpec = bgPair.gradient ?? null;
+  const borderSpec = borderPair.gradient ?? null;
+  // 키·그래프와 동일 규칙 — 두께 미지정이면 기본 두께 링, 0은 명시적 비활성
+  const gradientRingWidth = borderWidth ?? DEFAULT_ELEMENT_BORDER_WIDTH;
+  const showBorderRing =
+    Boolean(borderSpec) && (borderWidth != null ? borderWidth > 0 : true);
   // 모서리 반경 미지정 시 원형 유지 (px 지정 시 키와 동일한 px 단위)
   const resolvedRadius = borderRadius != null ? `${borderRadius}px` : '50%';
+  const resolvedBackground = isTransparent
+    ? 'transparent'
+    : bgSpec
+    ? gradientToCss(bgSpec)
+    : stateBackground;
+  const resolvedBorder =
+    !showBorderRing && borderWidth && borderWidth > 0
+      ? `${borderWidth}px solid ${stateBorderColor}`
+      : 'none';
+  const resolvedShadow = elementShadowToCss(
+    resolveElementShadow({
+      active: isActive,
+      shadow,
+      activeShadow,
+      defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+      defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+      suppressDefault: Boolean(
+        isTransparent || imageSrc || (borderWidth && borderWidth > 0),
+      ),
+    }),
+  );
 
   const transform = `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`;
 
@@ -131,28 +213,57 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
         height: `${height}px`,
         transform,
         zIndex: position.zIndex ?? index,
-        contain: 'layout style paint',
+        contain: 'layout style',
       }}
     >
       <div
-        style={{
-          width: '100%',
-          height: '100%',
-          borderRadius: resolvedRadius,
-          overflow: 'hidden',
-          position: 'relative',
-          background: isTransparent ? 'transparent' : stateBackground,
-          border:
-            borderWidth && borderWidth > 0
-              ? `${borderWidth}px solid ${stateBorderColor}`
-              : undefined,
-          boxSizing: 'border-box',
-          transform: `rotate(${angle}deg)`,
-          transition: 'transform 0.1s linear',
-          willChange: 'transform',
-          backfaceVisibility: 'hidden',
-        }}
+        style={
+          {
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            position: 'relative',
+            ...(useInline
+              ? {
+                  borderRadius: resolvedRadius,
+                  background: resolvedBackground,
+                  backgroundClip: 'padding-box',
+                  border: resolvedBorder,
+                  padding: showBorderRing
+                    ? `${gradientRingWidth}px`
+                    : undefined,
+                  boxShadow: resolvedShadow,
+                }
+              : {
+                  '--dmn-knob-bg-default': resolvedBackground,
+                  '--dmn-knob-border-default': resolvedBorder,
+                  '--dmn-knob-radius-default': resolvedRadius,
+                  '--dmn-knob-padding-default': showBorderRing
+                    ? `${gradientRingWidth}px`
+                    : '0px',
+                  '--dmn-knob-shadow-default': resolvedShadow,
+                  '--dmn-knob-indicator-default': stateBorderColor,
+                }),
+            boxSizing: 'border-box',
+            transform: `rotate(${angle}deg)`,
+            transition: 'transform 0.1s linear',
+            willChange: 'transform',
+            backfaceVisibility: 'hidden',
+          } as React.CSSProperties
+        }
+        data-knob-element="true"
+        data-knob-state={isActive ? 'active' : 'inactive'}
       >
+        {showBorderRing && borderSpec && (
+          <span
+            aria-hidden="true"
+            data-gradient-border-ring="true"
+            style={{
+              ...gradientRingStyle(borderSpec, gradientRingWidth),
+              ...(useInline ? { background: gradientToCss(borderSpec) } : {}),
+            }}
+          />
+        )}
         {imageSrc ? (
           <img
             src={imageSrc}
@@ -176,9 +287,10 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
               width: '8%',
               height: '76%',
               transform: 'translateX(-50%)',
-              background: stateBorderColor,
+              background: useInline ? stateBorderColor : undefined,
               borderRadius: '4px',
             }}
+            data-knob-indicator="true"
           />
         )}
       </div>

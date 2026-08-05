@@ -6,6 +6,12 @@ import type { NoteSettings } from '@src/types/settings/noteSettings';
 import type { GridSettings, SettingsState } from '@src/types/settings/settings';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { FontSettings } from '@src/types/settings/fonts';
+import {
+  DEFAULT_ELEMENT_FONT,
+  DEFAULT_ELEMENT_ACTIVE_FONT,
+  DEFAULT_COUNTER_FONT_SIZE,
+  DEFAULT_COUNTER_FONT_WEIGHT,
+} from '@utils/core/elementDefaults';
 
 export interface DefaultsPayload {
   settings: SettingsState;
@@ -95,13 +101,13 @@ function FALLBACK_COUNTER_SETTINGS(): KeyCounterSettings {
   return {
     enabled: true,
     placement: 'inside',
-    align: 'top',
+    align: 'bottom',
     alignMode: 'center',
-    fill: { idle: 'rgba(121, 121, 121, 0.9)', active: '#FFFFFF' },
+    fill: { idle: DEFAULT_ELEMENT_FONT, active: DEFAULT_ELEMENT_ACTIVE_FONT },
     stroke: { idle: 'transparent', active: 'transparent' },
-    gap: 6,
-    fontSize: 16,
-    fontWeight: 700,
+    gap: 4,
+    fontSize: DEFAULT_COUNTER_FONT_SIZE,
+    fontWeight: DEFAULT_COUNTER_FONT_WEIGHT,
     fontFamily: null,
     fontItalic: false,
     fontUnderline: false,
@@ -119,8 +125,8 @@ function FALLBACK_COUNTER_SETTINGS(): KeyCounterSettings {
 function FALLBACK_NOTE_SETTINGS(): NoteSettings {
   return {
     frameLimit: 0,
-    speed: 180,
-    trackHeight: 150,
+    speed: 400,
+    trackHeight: 300,
     reverse: false,
     fadePosition: 'auto',
     fadeTopPx: 50,

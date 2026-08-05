@@ -14,13 +14,20 @@ Keys indicate their current state through the `data-state` attribute:
 - `data-state="inactive"`: Key not pressed
 - `data-state="active"`: Key being pressed
 
+<Callout type="info">
+  With **Inline Styles Priority** disabled, property-panel solid colors,
+  gradients, borders, and typography are lower-priority defaults. Setting
+  `--key-bg` or `--key-border` also removes the corresponding background or
+  border gradient saved in the app.
+</Callout>
+
 ## Global Key Styles
 
 Set styles that apply to all keys:
 
 ```css
-[data-state="inactive"],
-[data-state="active"] {
+[data-state='inactive'],
+[data-state='active'] {
   /* Corner roundness */
   --key-radius: 8px;
 
@@ -38,7 +45,7 @@ Set styles that apply to all keys:
 Styles when the key is not pressed:
 
 ```css
-[data-state="inactive"] {
+[data-state='inactive'] {
   /* Background color */
   --key-bg: #2a2a2a;
 
@@ -58,7 +65,7 @@ Styles when the key is not pressed:
 Styles when the key is being pressed:
 
 ```css
-[data-state="active"] {
+[data-state='active'] {
   /* Background color */
   --key-bg: #ff2b80;
 
@@ -81,7 +88,7 @@ Styles when the key is being pressed:
 You can implement a press effect where the key moves when pressed:
 
 ```css
-[data-state="active"] {
+[data-state='active'] {
   /* X offset */
   --key-offset-x: 0px;
 
@@ -113,7 +120,7 @@ Use class names to apply different styles to specific keys.
 
 ```css
 /* Active state for keys with .blue class */
-.blue[data-state="active"] {
+.blue[data-state='active'] {
   --key-bg: transparent;
   --key-border: 3px solid #2ebef3;
   --key-text-color: #2ebef3;
@@ -122,7 +129,7 @@ Use class names to apply different styles to specific keys.
 }
 
 /* Active state for keys with .special class */
-.special[data-state="active"] {
+.special[data-state='active'] {
   --key-bg: transparent;
   background: linear-gradient(45deg, #ff2b80, #2ebef3);
   --key-border: none;
@@ -135,49 +142,44 @@ Use class names to apply different styles to specific keys.
 
 - ✅ Correct: `blue`
 - ❌ Wrong: `.blue`
-</Callout>
+  </Callout>
 
 ## Style Examples
 
 ### Neon Sign Style
 
 ```css
-[data-state="inactive"] {
+[data-state='inactive'] {
   --key-bg: transparent;
   --key-border: 3px solid #333;
   --key-text-color: #333;
 }
 
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: transparent;
   --key-border: 3px solid #ff2b80;
   --key-text-color: #ff2b80;
-  text-shadow:
-    0px 0px 2px #ff2b80,
-    0px 0px 4px #ff2b80,
-    0px 0px 8px #ff2b80;
-  box-shadow:
-    0px 0px 4px #ff2b80,
-    inset 0px 0px 4px rgba(255, 43, 128, 0.3);
+  text-shadow: 0px 0px 2px #ff2b80, 0px 0px 4px #ff2b80, 0px 0px 8px #ff2b80;
+  box-shadow: 0px 0px 4px #ff2b80, inset 0px 0px 4px rgba(255, 43, 128, 0.3);
 }
 ```
 
 ### Minimal Flat Style
 
 ```css
-[data-state="inactive"],
-[data-state="active"] {
+[data-state='inactive'],
+[data-state='active'] {
   --key-radius: 4px;
   transition: 0.05s ease-out;
 }
 
-[data-state="inactive"] {
+[data-state='inactive'] {
   --key-bg: #f0f0f0;
   --key-border: none;
   --key-text-color: #333;
 }
 
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: #333;
   --key-border: none;
   --key-text-color: #fff;
@@ -187,7 +189,7 @@ Use class names to apply different styles to specific keys.
 ### Pastel 3D Style
 
 ```css
-[data-state="inactive"] {
+[data-state='inactive'] {
   --key-radius: 20px;
   --key-bg: #ffd4e5;
   --key-border: 2px solid #e8b4c8;
@@ -195,7 +197,7 @@ Use class names to apply different styles to specific keys.
   box-shadow: 0px 4px 0px #d9a0b8;
 }
 
-[data-state="active"] {
+[data-state='active'] {
   --key-bg: #ffc4dd;
   --key-border: 2px solid #e8b4c8;
   --key-text-color: #8b5a6b;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import UnifiedKeySetting from '../../Modal/content/dialogs/UnifiedKeySetting';
 import { createDefaultCounterSettings } from '@src/types/key/keys';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import type {
   KeyPosition,
   KeyCounterSettings,
@@ -55,7 +56,7 @@ interface GridKeySettingModalProps {
   selectedKey: SelectedKeyInfo | null;
   setSelectedKey: (key: SelectedKeyInfo | null) => void;
   currentKeyPosition: KeyPosition | undefined;
-  onKeyUpdate: (data: Omit<SaveData, 'counter'>) => void;
+  onKeyUpdate: (data: SaveData) => void;
   onKeyPreview: (index: number, updates: KeyPreviewUpdates) => void;
   onNoteColorPreview: (
     index: number,
@@ -68,7 +69,6 @@ interface GridKeySettingModalProps {
     noteAutoYCorrection: boolean,
     noteEffectEnabled: boolean,
   ) => void;
-  onCounterUpdate: (index: number, payload: KeyCounterSettings) => void;
   onCounterPreview: (index: number, payload: KeyCounterSettings) => void;
   shouldSkipModalAnimation: boolean;
   onModalAnimationConsumed: (() => void) | undefined;
@@ -85,7 +85,6 @@ const GridKeySettingModal = ({
   onKeyUpdate,
   onKeyPreview,
   onNoteColorPreview,
-  onCounterUpdate,
   onCounterPreview,
   shouldSkipModalAnimation,
   onModalAnimationConsumed,
@@ -107,49 +106,16 @@ const GridKeySettingModal = ({
   if (!selectedKey || !currentKeyPosition) return null;
 
   const handleClose = () => {
-    // 미리보기 롤백
-    if (originalKeyData) {
-      if (typeof onKeyPreview === 'function' && originalKeyData.key) {
-        const origKey = originalKeyData.key;
-        onKeyPreview(selectedKey.index, {
-          activeImage: origKey.activeImage,
-          inactiveImage: origKey.inactiveImage,
-          activeTransparent: origKey.activeTransparent,
-          idleTransparent: origKey.idleTransparent,
-          width: origKey.width,
-          height: origKey.height,
-          className: origKey.className,
-        });
-      }
-      if (typeof onCounterPreview === 'function') {
-        onCounterPreview(selectedKey.index, originalKeyData.counter);
-      }
-      if (typeof onNoteColorPreview === 'function' && originalKeyData.key) {
-        const origKey = originalKeyData.key;
-        onNoteColorPreview(
-          selectedKey.index,
-          origKey.noteColor,
-          origKey.noteOpacity,
-          origKey.noteGlowEnabled,
-          origKey.noteGlowSize,
-          origKey.noteGlowOpacity,
-          origKey.noteGlowColor,
-          origKey.noteAutoYCorrection,
-          origKey.noteEffectEnabled,
-        );
-      }
-    }
+    // 프리뷰는 canonical을 건드리지 않으므로 게스처 취소만으로 원복
+    editGestureController.cancel();
     setSelectedKey(null);
     setOriginalKeyData(null);
   };
 
   const handleSave = (data: SaveData) => {
-    const { counter, ...keyAndNoteData } = data;
     if (typeof onKeyUpdate === 'function') {
-      onKeyUpdate(keyAndNoteData);
-    }
-    if (counter && typeof onCounterUpdate === 'function') {
-      onCounterUpdate(selectedKey.index, counter);
+      // key·note·counter를 단일 payload로 저장 - 커밋과 히스토리를 각 1회로 유지
+      onKeyUpdate(data);
     }
     setOriginalKeyData(null);
     setSelectedKey(null);
@@ -244,7 +210,7 @@ const GridKeySettingModal = ({
         width: currentKeyPosition.width,
         height: currentKeyPosition.height,
         noteColor: currentKeyPosition.noteColor || '#FFFFFF',
-        noteOpacity: currentKeyPosition.noteOpacity || 80,
+        noteOpacity: currentKeyPosition.noteOpacity ?? 90,
         noteEffectEnabled: currentKeyPosition.noteEffectEnabled,
         noteGlowEnabled: currentKeyPosition.noteGlowEnabled ?? true,
         noteGlowSize: currentKeyPosition.noteGlowSize ?? 20,

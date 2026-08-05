@@ -107,7 +107,7 @@ const CanvasTool = ({
 
   return (
     <TooltipGroup>
-      <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
+      <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[4px]">
         {tools.map((toolItem) => (
           <FloatingTooltip
             key={toolItem.key}
@@ -144,6 +144,7 @@ const CanvasTool = ({
       </div>
       <ListPopup
         open={isAddPopupOpen}
+        ariaLabel={t('common.more')}
         referenceRef={addButtonRef as unknown as React.RefObject<HTMLElement>}
         onClose={() => setIsAddPopupOpen(false)}
         items={[
@@ -167,6 +168,7 @@ const CanvasTool = ({
       />
       <ListPopup
         open={isResetPopupOpen}
+        ariaLabel={t('common.more')}
         referenceRef={resetButtonRef as unknown as React.RefObject<HTMLElement>}
         onClose={() => setIsResetPopupOpen(false)}
         items={[
@@ -215,12 +217,12 @@ const IconButton = React.forwardRef<
         type="button"
         aria-label={ariaLabel}
         aria-pressed={isSelected}
-        className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors active:bg-button-active ${
+        className={`flex items-center justify-center h-[30px] w-[30px] rounded-md transition-colors duration-fast active:bg-fill-hover ${
           isSelected
             ? selectedVariant === 'hover'
-              ? 'bg-button-hover'
-              : 'bg-button-active'
-            : 'bg-button-primary hover:bg-button-hover'
+              ? 'bg-fill text-fg'
+              : 'bg-surface-active text-fg'
+            : 'text-fg-muted hover:bg-fill hover:text-fg'
         }`}
         onClick={onClick}
       >

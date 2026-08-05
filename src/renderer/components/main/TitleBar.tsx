@@ -17,14 +17,14 @@ const TitleBar = (): React.ReactElement => {
   return (
     <div
       data-tauri-drag-region
-      className="relative w-full h-[30px] min-h-[30px] flex justify-center items-center bg-primary rounded-t-[6px] [app-region:drag]"
+      className="relative w-full h-[30px] min-h-[30px] flex justify-center items-center bg-app border-b border-line rounded-t-[8px] [app-region:drag]"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
-      <div className="flex items-center gap-[6px]">
-        <Logo className="w-[12px] h-[12px]" />
-        <div className="text-[12px] font-bold tracking-[0.05em] text-[#999BA5] select-none">
+      <div className="flex items-center gap-[6px] text-fg-muted pointer-events-none">
+        <Logo className="w-[12px] h-[12px] shrink-0" />
+        <span className="text-[12px] leading-[12px] font-semibold tracking-[0.06em] select-none">
           DM NOTE
-        </div>
+        </span>
       </div>
       {!isMacOS && (
         <div
@@ -34,13 +34,13 @@ const TitleBar = (): React.ReactElement => {
         >
           <button
             onClick={handleMinimize}
-            className="w-[36px] h-full flex justify-center items-center hover:bg-[#21232B] active:bg-[#282B35] transition-colors"
+            className="w-[38px] h-full flex justify-center items-center text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
           >
             <Minimize className="scale-[0.8] pointer-events-none" />
           </button>
           <button
             onClick={handleClose}
-            className="w-[36px] h-full flex justify-center items-center hover:bg-[#501D1E] active:bg-[#5A2829] transition-colors rounded-tr-[6px]"
+            className="w-[38px] h-full flex justify-center items-center text-fg-muted hover:bg-danger hover:text-white active:bg-danger-active transition-colors duration-fast rounded-tr-[8px]"
           >
             <Close className="scale-[0.7] pointer-events-none" />
           </button>

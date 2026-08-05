@@ -3,23 +3,15 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useUIStore } from '@stores/useUIStore';
 import FolderIcon from '@assets/svgs/folder.svg';
 import SettingIcon from '@assets/svgs/setting.svg';
-import CloseEyeIcon from '@assets/svgs/close_eye.svg';
-import OpenEyeIcon from '@assets/svgs/open_eye.svg';
 import ChevronDownIcon from '@assets/svgs/chevron-down.svg';
 import TurnIcon from '@assets/svgs/turn_arrow.svg';
 import FloatingTooltip from '../Modal/FloatingTooltip';
 import ListPopup from '../Modal/ListPopup';
+import IconSwap from '../common/IconSwap';
+import EyeToggleIcon from '../common/EyeToggleIcon';
 import { TooltipGroup } from '../Modal/TooltipGroup';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { useKeyStore } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { getCounterCacheSnapshot } from '@stores/signals/keyCounterCache';
 import { obsApi } from '@api/modules/obsApi';
-import { useSettingsStore } from '@stores/useSettingsStore';
-import { useFontStore } from '@stores/useFontStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 interface SettingToolProps {
   isSettingsOpen?: boolean;
@@ -48,7 +40,6 @@ SettingToolProps) => {
   const setExportImportPopupOpen = useUIStore(
     (state) => state.setExportImportPopupOpen,
   );
-  const pushHistoryState = useHistoryStore((state) => state.pushState);
 
   // isExportImportOpen 상태를 설정하면서 전역 스토어에도 동기화
   const setIsExportImportOpen = (
@@ -115,6 +106,8 @@ SettingToolProps) => {
     const next = !isOverlayVisible;
     setIsOverlayVisible(next);
     window.api.overlay.setVisible(next).catch((error) => {
+      // 실패 시 낙관적 갱신 롤백 — 백엔드 상태는 무변경이므로 이전 값이 진실
+      setIsOverlayVisible(!next);
       console.error('Failed to toggle overlay', error);
     });
   };
@@ -131,57 +124,11 @@ SettingToolProps) => {
     }
   };
 
-  const captureHistorySnapshot = async () => {
-    const keyState = useKeyStore.getState();
-    const keyCounters = await window.api.keys
-      .getCounters()
-      .catch(() => getCounterCacheSnapshot());
-
-    const settings = useSettingsStore.getState();
-    const fontState = useFontStore.getState();
-
-    return {
-      keyMappings: keyState.keyMappings,
-      positions: keyState.positions,
-      statPositions: useStatItemStore.getState().positions,
-      graphPositions: useGraphItemStore.getState().positions,
-      pluginElements: usePluginDisplayElementStore.getState().elements,
-      layerGroups: useLayerGroupStore.getState().layerGroups,
-      keyCounters,
-      customTabs: keyState.customTabs,
-      selectedKeyType: keyState.selectedKeyType,
-      settingsSnapshot: {
-        useCustomCSS: settings.useCustomCSS,
-        customCSSContent: settings.customCSSContent,
-        customCSSPath: settings.customCSSPath,
-        useCustomJS: settings.useCustomJS,
-        jsPlugins: settings.jsPlugins,
-        fontSettings: { customFonts: fontState.customFonts },
-        backgroundColor: settings.backgroundColor,
-        noteSettings: settings.noteSettings,
-        noteEffect: settings.noteEffect,
-        tabNoteOverrides: settings.tabNoteOverrides,
-      },
-    };
-  };
-
   const handlePresetLoad = async () => {
     try {
-      const before = await captureHistorySnapshot();
       const result = await window.api.presets.load();
       if (result?.success) {
-        pushHistoryState({
-          keyMappings: before.keyMappings,
-          positions: before.positions,
-          statPositions: before.statPositions,
-          graphPositions: before.graphPositions,
-          pluginElements: before.pluginElements,
-          layerGroups: before.layerGroups,
-          keyCounters: before.keyCounters,
-          customTabs: before.customTabs,
-          selectedKeyType: before.selectedKeyType,
-          settingsSnapshot: before.settingsSnapshot,
-        });
+        useGridSelectionStore.getState().clearSelection();
       }
       showAlert?.(
         result?.success ? t('preset.loadSuccess') : t('preset.loadFail'),
@@ -222,28 +169,19 @@ SettingToolProps) => {
       code.includes('invalid-tab-preset') ||
       code.includes('invalid-preset')
     ) {
-      return t('preset.loadTabInvalidPreset');
+      // 백엔드가 담아준 원인 필드 경로 노출 (예: keyPositions["4key"][1].…)
+      const detail = code.split('invalid-preset:')[1]?.trim();
+      const base = t('preset.loadTabInvalidPreset');
+      return detail ? `${base} (${detail})` : base;
     }
     return t('preset.loadTabFail');
   };
 
   const handlePresetLoadTab = async () => {
     try {
-      const before = await captureHistorySnapshot();
       const result = await window.api.presets.loadTab();
       if (result?.success) {
-        pushHistoryState({
-          keyMappings: before.keyMappings,
-          positions: before.positions,
-          statPositions: before.statPositions,
-          graphPositions: before.graphPositions,
-          pluginElements: before.pluginElements,
-          layerGroups: before.layerGroups,
-          keyCounters: before.keyCounters,
-          customTabs: before.customTabs,
-          selectedKeyType: before.selectedKeyType,
-          settingsSnapshot: before.settingsSnapshot,
-        });
+        useGridSelectionStore.getState().clearSelection();
       }
       showAlert?.(
         result?.success ? t('preset.loadTabSuccess') : t('preset.loadTabFail'),
@@ -255,10 +193,10 @@ SettingToolProps) => {
   };
 
   return (
-    <div className="flex gap-[10px]">
+    <div className="flex gap-[8px]">
       {!isSettingsOpen && (
         <TooltipGroup>
-          <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[0px]">
+          <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[0px]">
             <FloatingTooltip content={t('tooltip.exportPreset')}>
               <Button icon={<FolderIcon />} onClick={handlePresetSave} />
             </FloatingTooltip>
@@ -276,9 +214,9 @@ SettingToolProps) => {
             <div className="relative">
               <ListPopup
                 open={isExportImportOpen}
+                ariaLabel={t('common.more')}
                 referenceRef={exportImportRef}
                 onClose={() => setIsExportImportOpen(false)}
-                textAlign="left"
                 items={[
                   {
                     id: 'import',
@@ -315,7 +253,7 @@ SettingToolProps) => {
         </TooltipGroup>
       )}
       <TooltipGroup>
-        <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
+        <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[4px]">
           <FloatingTooltip
             content={
               isObsModeActive
@@ -326,7 +264,7 @@ SettingToolProps) => {
             }
           >
             <Button
-              icon={isOverlayVisible ? <CloseEyeIcon /> : <OpenEyeIcon />}
+              icon={<EyeToggleIcon slashed={isOverlayVisible} />}
               onClick={isObsModeActive ? undefined : toggleOverlay}
               disabled={isObsModeActive}
             />
@@ -338,7 +276,13 @@ SettingToolProps) => {
               }
             >
               <Button
-                icon={isSettingsOpen ? <TurnIcon /> : <SettingIcon />}
+                icon={
+                  <IconSwap
+                    active={isSettingsOpen}
+                    activeIcon={<TurnIcon />}
+                    inactiveIcon={<SettingIcon />}
+                  />
+                }
                 onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
               />
             </FloatingTooltip>
@@ -358,6 +302,7 @@ SettingToolProps) => {
               <div className="relative">
                 <ListPopup
                   open={isExtrasOpen}
+                  ariaLabel={t('common.more')}
                   referenceRef={extrasRef}
                   onClose={() => setIsExtrasOpen(false)}
                   items={menuItems}
@@ -395,13 +340,13 @@ const Button = ({
     <button
       type="button"
       disabled={disabled}
-      className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors ${
+      className={`flex items-center justify-center h-[30px] w-[30px] rounded-md transition-colors duration-fast ${
         disabled
-          ? 'opacity-40 cursor-not-allowed'
-          : `active:bg-button-active ${
+          ? 'opacity-40 cursor-not-allowed text-fg-muted'
+          : `active:bg-fill-hover ${
               isSelected
-                ? 'bg-button-active'
-                : 'bg-button-primary hover:bg-button-hover'
+                ? 'bg-surface-active text-fg'
+                : 'text-fg-muted hover:bg-fill hover:text-fg'
             }`
       }`}
       onClick={disabled ? undefined : onClick}
@@ -422,10 +367,10 @@ const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
       <button
         ref={ref}
         type="button"
-        className={`flex items-center justify-center h-[30px] w-[14px] rounded-[7px] transition-colors active:bg-button-active ${
+        className={`flex items-center justify-center h-[30px] w-[14px] rounded-md transition-colors duration-fast active:bg-fill-hover ${
           isSelected
-            ? 'bg-button-active hover:bg-button-active'
-            : 'bg-button-primary hover:bg-button-hover'
+            ? 'bg-surface-active text-fg'
+            : 'text-fg-muted hover:bg-fill hover:text-fg'
         }`}
         onClick={onClick}
       >

@@ -1,5 +1,15 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { forwardRef, useEffect, useRef, useState } from 'react';
+import {
+  DEFAULT_ELEMENT_BG,
+  DEFAULT_ELEMENT_HAIRLINE,
+  DEFAULT_ELEMENT_RADIUS,
+} from '@utils/core/elementDefaults';
+import {
+  gradientToCss,
+  gradientRingStyle,
+  type GradientSpec,
+} from '@src/types/color';
 
 const BAR_ANIMATION_DURATION_MS = 150;
 const LINE_ANIMATION_DURATION_MS = 150;
@@ -16,6 +26,8 @@ interface GraphPanelProps {
   showAvgLine?: boolean;
   backgroundColor?: string;
   borderColor?: string;
+  backgroundGradient?: GradientSpec | null;
+  borderGradient?: GradientSpec | null;
   borderWidth?: number;
   borderRadius?: number;
   imageSrc?: string | null;
@@ -31,7 +43,9 @@ interface GraphPanelProps {
   dataEditing?: boolean;
   isViewportTransforming?: boolean;
   onClick?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
   onMouseDown?: (e: React.MouseEvent) => void;
+  onPointerDown?: (e: React.PointerEvent<HTMLElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   onDragStart?: (e: React.DragEvent) => void;
 }
@@ -168,10 +182,12 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       graphType = 'line',
       graphColor = '#86EFAC',
       showAvgLine = true,
-      backgroundColor = 'rgba(17, 17, 20, 0.9)',
-      borderColor = 'rgba(255, 255, 255, 0.1)',
-      borderWidth = 3,
-      borderRadius = 8,
+      backgroundColor = DEFAULT_ELEMENT_BG,
+      borderColor = DEFAULT_ELEMENT_HAIRLINE,
+      backgroundGradient = null,
+      borderGradient = null,
+      borderWidth = 1,
+      borderRadius = DEFAULT_ELEMENT_RADIUS,
       imageSrc = null,
       imageFit = 'cover',
       useInlineStyles = false,
@@ -185,7 +201,9 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       dataEditing,
       isViewportTransforming = false,
       onClick,
+      onDoubleClick,
       onMouseDown,
+      onPointerDown,
       onContextMenu,
       onDragStart,
     },
@@ -372,27 +390,24 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
 
     const resolvedBorderWidth = Number.isFinite(Number(borderWidth))
       ? Math.max(0, Number(borderWidth))
-      : 3;
+      : 1;
     const resolvedBorderRadius = Number.isFinite(Number(borderRadius))
       ? Math.max(0, Number(borderRadius))
-      : 8;
+      : DEFAULT_ELEMENT_RADIUS;
     const useInline = useInlineStyles === true;
-    const resolvedBackgroundColor = backgroundColor || 'rgba(17, 17, 20, 0.9)';
+    const resolvedBackgroundColor = backgroundGradient
+      ? gradientToCss(backgroundGradient)
+      : backgroundColor || DEFAULT_ELEMENT_BG;
+    // 그라데이션 보더는 보더 대신 동일 두께 padding — overflow:hidden이
+    // 패딩 박스에서 클리핑되므로 링 자식이 가장자리에 정확히 그려짐
+    const showBorderRing = Boolean(borderGradient) && resolvedBorderWidth > 0;
     const fallbackBorder =
       resolvedBorderWidth <= 0
         ? 'none'
         : `${resolvedBorderWidth}px solid ${
-            borderColor || 'rgba(255, 255, 255, 0.1)'
+            borderColor || DEFAULT_ELEMENT_HAIRLINE
           }`;
-    const resolvedBorder = useInline
-      ? fallbackBorder
-      : `var(--graph-border, ${fallbackBorder})`;
-    const resolvedBg = useInline
-      ? resolvedBackgroundColor
-      : `var(--graph-bg, ${resolvedBackgroundColor})`;
-    const resolvedRadius = useInline
-      ? `${resolvedBorderRadius}px`
-      : `var(--graph-radius, ${resolvedBorderRadius}px)`;
+    const resolvedBorder = showBorderRing ? 'none' : fallbackBorder;
     const resolvedGraphColor = graphColor || '#86EFAC';
     const graphStrokeColor = useInline
       ? resolvedGraphColor
@@ -403,35 +418,60 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
     return (
       <div
         ref={ref}
-        className={`absolute select-none ${className || ''}`}
-        style={{
-          width: `${width}px`,
-          height: `${height}px`,
-          transform,
-          background: resolvedBg,
-          color: '#FFFFFF',
-          border: resolvedBorder,
-          borderRadius: resolvedRadius,
-          boxSizing: 'border-box',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          cursor: interactive ? 'pointer' : 'default',
-          fontFamily:
-            "Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
-          willChange:
-            dataEditing || isViewportTransforming ? 'transform' : 'auto',
-          backfaceVisibility: 'hidden',
-          transformStyle: 'preserve-3d',
-          contain: 'layout style paint',
-          imageRendering: 'auto',
-          isolation: 'isolate',
-          zIndex,
-        }}
+        className={`absolute select-none ${
+          interactive ? 'dmn-grabbable' : ''
+        } ${className || ''}`}
+        style={
+          {
+            width: `${width}px`,
+            height: `${height}px`,
+            transform,
+            ...(useInline
+              ? {
+                  background: resolvedBackgroundColor,
+                  backgroundClip: 'padding-box',
+                  color: '#FFFFFF',
+                  border: resolvedBorder,
+                  padding: showBorderRing
+                    ? `${resolvedBorderWidth}px`
+                    : undefined,
+                  borderRadius: `${resolvedBorderRadius}px`,
+                  fontFamily:
+                    "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
+                }
+              : {
+                  '--dmn-graph-bg-default': resolvedBackgroundColor,
+                  '--dmn-graph-border-default': resolvedBorder,
+                  '--dmn-graph-radius-default': `${resolvedBorderRadius}px`,
+                  '--dmn-graph-padding-default': showBorderRing
+                    ? `${resolvedBorderWidth}px`
+                    : '0px',
+                  '--dmn-graph-text-color-default': '#FFFFFF',
+                  '--dmn-graph-font-family-default':
+                    "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
+                }),
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            cursor: interactive ? undefined : 'default',
+            willChange:
+              dataEditing || isViewportTransforming ? 'transform' : 'auto',
+            backfaceVisibility: 'hidden',
+            transformStyle: 'preserve-3d',
+            contain: 'layout style paint',
+            imageRendering: 'auto',
+            isolation: 'isolate',
+            zIndex,
+          } as React.CSSProperties
+        }
         data-state="inactive"
+        data-graph-element="true"
         data-editing={dataEditing ? 'true' : undefined}
         onClick={onClick}
+        onDoubleClick={onDoubleClick}
         onMouseDown={onMouseDown}
+        onPointerDown={onPointerDown}
         onContextMenu={onContextMenu}
         onDragStart={onDragStart}
       >
@@ -440,11 +480,9 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
             src={imageSrc}
             alt=""
             draggable={false}
+            data-graph-image="true"
             style={{
               position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
               objectFit: (imageFit ||
                 'cover') as React.CSSProperties['objectFit'],
               pointerEvents: 'none',
@@ -453,6 +491,19 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
             }}
           />
         ) : null}
+        {showBorderRing && borderGradient && (
+          <span
+            aria-hidden="true"
+            data-gradient-border-ring="true"
+            style={{
+              ...gradientRingStyle(borderGradient, resolvedBorderWidth),
+              ...(useInline
+                ? { background: gradientToCss(borderGradient) }
+                : {}),
+              zIndex: 1,
+            }}
+          />
+        )}
         {resolvedGraphType === 'bar' ? (
           <div
             style={{

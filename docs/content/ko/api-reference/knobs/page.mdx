@@ -5,6 +5,11 @@ description: HID 노브 요소를 위한 dmn.knobItems API 레퍼런스
 
 # 노브 API
 
+<Callout type="info">
+  OBS는 읽기 전용입니다. 네이티브 Tauri 메인·오버레이 창은 revision
+  coordinator를 거쳐 노브 레이아웃을 쓸 수 있습니다.
+</Callout>
+
 노브 요소 — HID 기기 축(예: 리듬게임 컨트롤러의 노브)에 바인딩되어 물리
 노브와 함께 회전하는 시각화 요소 — 를 관리합니다. HID 기기의 **버튼**은
 키보드 키와 완전히 동일하게 매핑·시각화되고, **축**은 전용 노브 요소로
@@ -48,10 +53,16 @@ type KnobItemPositions = Record<string, KnobItemPosition[]>;
 
 - `backgroundColor` / `activeBackgroundColor` — 대기 / 회전 중 배경색
 - `borderColor` / `activeBorderColor` — 대기 / 회전 중 테두리 색상
-- `borderWidth` — 테두리 두께(px, 기본 3)
+- `borderWidth` — 0보다 클 때만 단색 테두리 두께로 사용; 미지정 시 1px 폴백은 그라데이션 테두리에만 적용되고 0이면 두 형식 모두 비활성
+- `backgroundGradient` / `activeBackgroundGradient` — 배경 그라데이션(GradientSpec, 지정 시 단색보다 우선)
+- `borderGradient` / `activeBorderGradient` — 테두리 그라데이션(GradientSpec)
+- `shadow` / `activeShadow` — 대기 / 회전 중 그림자(ElementShadowSpec, color 알파값으로 농도 조절)
 - `borderRadius` — 모서리 반경(px), 미지정 시 원형
 - `inactiveImage` / `activeImage` — 대기 / 회전 중 커스텀 이미지
 - `idleTransparent` / `activeTransparent` — 배경 투명 토글
+
+`ElementShadowSpec`은 `enabled`, `color`, `offsetX`, `offsetY`, `blur`로
+구성됩니다. 오프셋은 -100~100px, 흐림은 0~100px 범위입니다.
 
 물리 노브가 회전하는 동안 요소는 키의 눌림처럼 입력(active)
 색상/이미지로 전환되며, `누적 회전수 × 360° × sensitivity`만큼 회전합니다.
@@ -80,6 +91,13 @@ await dmn.knobItems.updatePositions(positions);
 ### `dmn.knobItems.onPositionsChanged(callback): Unsubscribe`
 
 노브 레이아웃 변경(`knobPositions:changed`)을 구독합니다.
+
+<Callout type="warning">
+  이 이벤트는 기존 플러그인 호환을 위해 계속 제공되지만, 신규 에디터 상태 동기화
+  용도로는 deprecated입니다. canonical 원자적 변경 흐름은
+  [`dmn.editor.onCommitted()`](/docs/api-reference/editor#커밋된-변경-구독)로
+  구독하세요.
+</Callout>
 
 ```typescript
 const unsub = dmn.knobItems.onPositionsChanged((positions) => {

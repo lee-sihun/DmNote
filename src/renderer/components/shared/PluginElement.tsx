@@ -7,24 +7,16 @@ import {
   DisplayElementTemplateHelpers,
 } from '@src/types/plugin/api';
 import { useDraggable } from '@hooks/Grid';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { useKeyStore as useKeyStoreForHistory } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSmartGuidesElements } from '@hooks/Grid';
-import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import {
-  calculateBounds,
-  calculateSnapPoints,
-  calculateGroupBounds,
-} from '@utils/grid/smartGuides';
 import {
   useGridSelectionStore,
   SelectedElement,
   isElementInMarquee,
 } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useTranslation } from '@contexts/useTranslation';
 import ListPopup, { ListItem } from '../main/Modal/ListPopup';
@@ -35,6 +27,22 @@ import {
   clearExposedActions,
 } from '@utils/displayElementActions';
 import { setupPluginDropdownInteractions } from '@utils/plugin/pluginDropdownManager';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
+import { obsApi } from '@api/modules/obsApi';
+import { evaluatePluginMenuItems } from '@utils/plugin/pluginElementContextMenu';
+import {
+  getPluginMenuRuntimeState,
+  normalizeStateKeys,
+} from '@utils/plugin/pluginMenuRuntimeState';
+import {
+  measureConnectedPluginElement,
+  resolveResizablePluginElementSize,
+} from '@utils/plugin/pluginElementMeasurement';
+import {
+  beginPluginInstancesEditSession,
+  endPluginInstancesEditSession,
+  rotatePluginInstancesEditSession,
+} from '@plugins/runtime/displayElement/instancesCommitQueue';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
@@ -98,11 +106,11 @@ interface PluginElementProps {
     referenceElement: HTMLDivElement | null;
   }) => boolean;
   onMultiDrag?: (deltaX: number, deltaY: number) => void;
-  onMultiDragStart?: () => void;
+  onMultiDragStart?: () => void | (() => void);
   onMultiDragEnd?: () => void;
 }
 
-export const PluginElement: React.FC<PluginElementProps> = ({
+const PluginElementImpl: React.FC<PluginElementProps> = ({
   element,
   windowType,
   activeTool,
@@ -214,6 +222,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const exposedActionsRef = useRef<
     Record<string, (...args: unknown[]) => unknown>
   >({});
+  // 컨텍스트 메뉴 predicate 예외는 요소·항목당 1회만 기록
+  const menuPredicateErrorRef = useRef(new Set<string>());
 
   // Settings 변경 감지용 ref와 콜백 리스트
   const prevSettingsRef = useRef<Record<string, unknown> | null>(null);
@@ -398,23 +408,6 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     };
   })();
 
-  // 히스토리 저장 함수 (드래그 시작 시 호출)
-  const saveToHistory = () => {
-    if (windowType !== 'main') return;
-
-    const { keyMappings, positions } = useKeyStoreForHistory.getState();
-    const statPositions = useStatItemStore.getState().positions;
-    const graphPositions = useGraphItemStore.getState().positions;
-    const pluginElements = usePluginDisplayElementStore.getState().elements;
-    useHistoryStore.getState().pushState({
-      keyMappings,
-      positions,
-      statPositions,
-      graphPositions,
-      pluginElements,
-    });
-  };
-
   // 스마트 가이드를 위한 다른 요소들의 bounds 가져오기
   const { getOtherElements } = useSmartGuidesElements();
 
@@ -424,19 +417,6 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   );
 
   // 선택 드래그 상태
-  const multiDragRef = useRef<{
-    isDragging: boolean;
-    startX: number;
-    startY: number;
-    lastSnappedDeltaX: number;
-    lastSnappedDeltaY: number;
-  }>({
-    isDragging: false,
-    startX: 0,
-    startY: 0,
-    lastSnappedDeltaX: 0,
-    lastSnappedDeltaY: 0,
-  });
 
   // 선택된 상태면 선택 모드 활성화
   const isSelectionMode = isSelected;
@@ -451,7 +431,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     gridSize: gridSnapSize,
     initialX: calculatedPosition.x,
     initialY: calculatedPosition.y,
-    onDragStart: saveToHistory, // 드래그 시작 시 히스토리 저장
+    onDragStart: () => {
+      const token = beginPluginInstancesEditSession(element.pluginId);
+      return () => endPluginInstancesEditSession(element.pluginId, token);
+    },
     onPositionChange: (newX, newY) => {
       // 선택 모드가 아닐 때만 개별 이동
       if (windowType === 'main' && element.draggable && !isSelectionMode) {
@@ -490,257 +473,30 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   });
 
   // 선택 요소 드래그 핸들러 (스마트 가이드 포함)
-  const handleSelectionDragMouseDown = (e: React.MouseEvent) => {
-    if (!isSelectionMode || e.button !== 0) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    // 드래그 시작 전 기존 스마트 가이드 클리어 (이전 드래그가 정상 종료되지 않은 경우 대비)
-    useSmartGuidesStore.getState().clearGuides();
-
-    // 드래그 시작 시 애니메이션 비활성화
-    useGridSelectionStore.getState().setDraggingOrResizing(true);
-
-    // 드래그 시작 시 히스토리 저장
-    onMultiDragStart?.();
-
-    // 현재 요소의 시작 위치 저장 (스냅 계산용)
-    const startX = element.position.x;
-    const startY = element.position.y;
-    const currentWidth =
-      element.measuredSize?.width ?? element.estimatedSize?.width ?? 200;
-    const currentHeight =
-      element.measuredSize?.height ?? element.estimatedSize?.height ?? 150;
-    const elementId = element.fullId;
-
-    multiDragRef.current = {
-      isDragging: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      lastSnappedDeltaX: 0,
-      lastSnappedDeltaY: 0,
-    };
-
-    let rafId: number | null = null;
-    // 드래그 종료 플래그 (rAF 콜백에서 체크)
-    let dragEnded = false;
-    const smartGuidesStore = useSmartGuidesStore.getState();
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!multiDragRef.current.isDragging || dragEnded) return;
-
-      if (rafId) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-
-        // 드래그가 종료되었으면 rAF 콜백에서도 무시
-        if (dragEnded) return;
-
-        const currentZoom = zoom;
-        // raw delta (스냅 전)
-        const rawDeltaX =
-          (moveEvent.clientX - multiDragRef.current.startX) / currentZoom;
-        const rawDeltaY =
-          (moveEvent.clientY - multiDragRef.current.startY) / currentZoom;
-
-        // 이동 후 예상 위치
-        const newX = startX + rawDeltaX;
-        const newY = startY + rawDeltaY;
-
-        // 스마트 가이드 계산 (현재 요소 기준으로 다른 비선택 요소들과 스냅)
-        const otherElements = getOtherElements(elementId);
-
-        // gridSettings에서 정렬/간격 가이드 활성화 여부 확인
-        const gridSettings = useSettingsStore.getState().gridSettings;
-        const alignmentGuidesEnabled = gridSettings?.alignmentGuides !== false;
-        const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
-
-        // 선택된 다른 요소들도 제외 (자기 자신만 기준)
-        const nonSelectedElements = otherElements.filter(
-          (el) =>
-            !selectedElements.some(
-              (sel) =>
-                sel.id === el.id ||
-                (sel.type === 'key' && el.id === `key-${sel.index}`),
-            ),
-        );
-
-        const draggedBounds = calculateBounds(
-          newX,
-          newY,
-          currentWidth,
-          currentHeight,
-          elementId,
-        );
-
-        // 다중 선택 시 그룹 전체의 bounds 계산 (캔버스 중앙 스냅용)
-        let groupBounds = null;
-        if (selectedElements.length > 1) {
-          // 선택된 요소들의 현재 bounds 수집
-          const selectedBoundsArray = selectedElements
-            .map((sel) => {
-              // 현재 드래그 중인 요소인 경우 새 위치 사용
-              if (sel.id === elementId) {
-                return draggedBounds;
-              }
-              // 다른 선택된 요소들은 otherElements에서 찾아서 이동량 적용
-              const found = otherElements.find(
-                (el) =>
-                  el.id === sel.id ||
-                  (sel.type === 'key' && el.id === `key-${sel.index}`),
-              );
-              if (found) {
-                return calculateBounds(
-                  found.left + rawDeltaX,
-                  found.top + rawDeltaY,
-                  found.width,
-                  found.height,
-                  found.id,
-                );
-              }
-              return null;
-            })
-            .filter((b): b is NonNullable<typeof b> => b !== null);
-          groupBounds = calculateGroupBounds(selectedBoundsArray);
-        }
-
-        // 다중 선택 시 그룹 바운딩 박스를 스냅 기준으로 사용
-        const snapTargetBounds =
-          selectedElements.length > 1 && groupBounds
-            ? groupBounds
-            : draggedBounds;
-
-        const snapResult = alignmentGuidesEnabled
-          ? calculateSnapPoints(
-              snapTargetBounds,
-              nonSelectedElements,
-              undefined,
-              {
-                groupBounds,
-                disableSpacing: !spacingGuidesEnabled,
-              },
-            )
-          : null;
-
-        let finalX: number;
-        let finalY: number;
-
-        // 스마트 가이드 스냅 적용
-        if (snapResult?.didSnapX) {
-          // 다중 선택 시: 그룹 바운딩 박스의 스냅 이동량을 개별 요소에 적용
-          if (selectedElements.length > 1 && groupBounds) {
-            const groupSnapDeltaX = snapResult.snappedX - groupBounds.left;
-            finalX = newX + groupSnapDeltaX;
-          } else {
-            finalX = snapResult.snappedX;
-          }
-        } else {
-          // 그리드 스냅
-          const snapSize = gridSettings?.gridSnapSize || 5;
-          finalX = Math.round(newX / snapSize) * snapSize;
-        }
-
-        if (snapResult?.didSnapY) {
-          // 다중 선택 시: 그룹 바운딩 박스의 스냅 이동량을 개별 요소에 적용
-          if (selectedElements.length > 1 && groupBounds) {
-            const groupSnapDeltaY = snapResult.snappedY - groupBounds.top;
-            finalY = newY + groupSnapDeltaY;
-          } else {
-            finalY = snapResult.snappedY;
-          }
-        } else {
-          // 그리드 스냅
-          const snapSize = gridSettings?.gridSnapSize || 5;
-          finalY = Math.round(newY / snapSize) * snapSize;
-        }
-
-        // 스냅된 delta 계산
-        const snappedDeltaX = Math.round(finalX - startX);
-        const snappedDeltaY = Math.round(finalY - startY);
-
-        // 가이드라인 업데이트
-        if (snapResult && (snapResult.didSnapX || snapResult.didSnapY)) {
-          // 다중 선택 시 그룹 바운딩 박스를 표시
-          const displayBounds =
-            selectedElements.length > 1 && groupBounds
-              ? calculateBounds(
-                  groupBounds.left +
-                    (snapResult.didSnapX
-                      ? snapResult.snappedX - groupBounds.left
-                      : 0),
-                  groupBounds.top +
-                    (snapResult.didSnapY
-                      ? snapResult.snappedY - groupBounds.top
-                      : 0),
-                  groupBounds.width,
-                  groupBounds.height,
-                  'group',
-                )
-              : calculateBounds(
-                  finalX,
-                  finalY,
-                  currentWidth,
-                  currentHeight,
-                  elementId,
-                );
-          smartGuidesStore.setDraggedBounds(displayBounds);
-          smartGuidesStore.setActiveGuides(snapResult.guides);
-
-          // 간격 가이드도 업데이트
-          if (
-            spacingGuidesEnabled &&
-            snapResult.spacingGuides &&
-            snapResult.spacingGuides.length > 0
-          ) {
-            smartGuidesStore.setSpacingGuides(snapResult.spacingGuides);
-          } else {
-            smartGuidesStore.setSpacingGuides([]);
-          }
-        } else {
-          smartGuidesStore.clearGuides();
-        }
-
-        // 이전 delta와의 차이만큼 이동
-        const moveDeltaX =
-          snappedDeltaX - multiDragRef.current.lastSnappedDeltaX;
-        const moveDeltaY =
-          snappedDeltaY - multiDragRef.current.lastSnappedDeltaY;
-
-        if (moveDeltaX !== 0 || moveDeltaY !== 0) {
-          multiDragRef.current.lastSnappedDeltaX = snappedDeltaX;
-          multiDragRef.current.lastSnappedDeltaY = snappedDeltaY;
-          onMultiDrag?.(moveDeltaX, moveDeltaY);
-        }
-      });
-    };
-
-    const handleMouseUp = () => {
-      // 드래그 종료 플래그 설정 (rAF 콜백 무시)
-      dragEnded = true;
-      // 진행 중인 rAF 취소
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      multiDragRef.current.isDragging = false;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      // window blur 시에도 cleanup 되도록 이벤트 제거
-      window.removeEventListener('blur', handleMouseUp);
-      // 스마트 가이드 클리어
-      useSmartGuidesStore.getState().clearGuides();
-      // 드래그 종료 시 애니메이션 복원
-      useGridSelectionStore.getState().setDraggingOrResizing(false);
-      // 드래그 종료 시 오버레이 동기화
-      onMultiDragEnd?.();
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    // window blur 시에도 드래그 종료 처리 (창이 포커스를 잃었을 때)
-    window.addEventListener('blur', handleMouseUp);
-  };
+  const {
+    handlePointerDown: handleSelectionDragPointerDown,
+    movedDuringPressRef,
+  } = useSelectionDrag({
+    enabled: windowType === 'main' && isSelectionMode,
+    zoom,
+    startX: element.position.x,
+    startY: element.position.y,
+    elementId: element.fullId,
+    elementWidth:
+      element.measuredSize?.width ?? element.estimatedSize?.width ?? 200,
+    elementHeight:
+      element.measuredSize?.height ?? element.estimatedSize?.height ?? 150,
+    elementType: 'plugin',
+    selectedElements,
+    getOtherElements,
+    getSelectedElementIds: (selectedElement) =>
+      selectedElement.type === 'key'
+        ? [selectedElement.id, `key-${selectedElement.index}`]
+        : [selectedElement.id],
+    onMultiDragStart,
+    onMultiDrag,
+    onMultiDragEnd,
+  });
 
   const { ref: draggableRef, dx: renderX, dy: renderY } = draggable;
 
@@ -797,6 +553,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     const target = element.scoped ? shadowRoot : containerRef.current;
     if (!target) return;
 
+    let measurementFrame: number | null = null;
+
     // 메인 윈도우에서만 실제 크기 측정 후 store 업데이트
     // resizable인 경우: 이미 measuredSize가 있고 재측정이 필요하지 않으면 스킵
     const isResizableWithSize =
@@ -805,8 +563,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       !needsRemeasureRef.current;
 
     if (windowType === 'main' && containerRef.current && !isResizableWithSize) {
-      requestAnimationFrame(() => {
-        if (containerRef.current) {
+      const measurementTarget = containerRef.current;
+      measurementFrame = requestAnimationFrame(() => {
+        measurementFrame = null;
+        if (containerRef.current === measurementTarget) {
           // 재측정이 필요한 경우, 일시적으로 크기 제약을 풀어 자연스러운 콘텐츠 크기 측정
           const needsRemeasure =
             needsRemeasureRef.current && definition?.resizable;
@@ -828,15 +588,21 @@ export const PluginElement: React.FC<PluginElementProps> = ({
             }
           }
 
-          const rect = containerRef.current.getBoundingClientRect();
-          const measuredWidth = Math.ceil(rect.width / zoom);
-          const measuredHeight = Math.ceil(rect.height / zoom);
+          const measuredSize = measureConnectedPluginElement(
+            measurementTarget,
+            zoom,
+          );
 
           // 스타일 복원
           if (needsRemeasure) {
             containerRef.current.style.width = originalWidth;
             containerRef.current.style.height = originalHeight;
           }
+
+          if (!measuredSize) return;
+
+          const measuredWidth = measuredSize.width;
+          const measuredHeight = measuredSize.height;
 
           // 설정 변경으로 인한 재측정인 경우, preserveAxis에 해당하는 축은 유지
           let finalWidth = measuredWidth;
@@ -976,6 +742,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         const targetEl = e.target as HTMLElement;
         const checkbox = targetEl.closest('[data-checkbox-toggle]');
         if (checkbox) {
+          // label 기본 동작(input으로의 합성 클릭 재토글) 차단 — 수동 토글만 커밋
+          e.preventDefault();
           const input = checkbox.querySelector(
             'input[type=checkbox]',
           ) as HTMLInputElement;
@@ -984,17 +752,17 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           if (input) {
             input.checked = !input.checked;
 
-            // 스타일 토글
+            // 스타일 토글 — createCheckbox의 액센트 토큰과 동기
             if (input.checked) {
-              checkbox.classList.remove('bg-[#3B4049]');
-              checkbox.classList.add('bg-[#493C1D]');
-              knob.classList.remove('left-[2px]', 'bg-[#989BA6]');
-              knob.classList.add('left-[13px]', 'bg-[#FFB400]');
+              checkbox.classList.remove('bg-line-strong');
+              checkbox.classList.add('bg-accent');
+              knob.classList.remove('left-[2px]');
+              knob.classList.add('left-[14px]');
             } else {
-              checkbox.classList.remove('bg-[#493C1D]');
-              checkbox.classList.add('bg-[#3B4049]');
-              knob.classList.remove('left-[13px]', 'bg-[#FFB400]');
-              knob.classList.add('left-[2px]', 'bg-[#989BA6]');
+              checkbox.classList.remove('bg-accent');
+              checkbox.classList.add('bg-line-strong');
+              knob.classList.remove('left-[14px]');
+              knob.classList.add('left-[2px]');
             }
 
             // change 이벤트 발생
@@ -1047,6 +815,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
       // 정리
       return () => {
+        if (measurementFrame !== null) {
+          cancelAnimationFrame(measurementFrame);
+        }
         target.removeEventListener('click', handleCheckboxToggle);
         target.removeEventListener('click', handleEvent);
         target.removeEventListener('change', handleEvent);
@@ -1091,8 +862,52 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
     const cleanups: (() => void)[] = [];
 
+    // 메뉴 predicate용 선언 키(contextMenuStateKeys) 동기화 —
+    // 스토어는 rAF 배치라 동기 shadow에서 diff를 계산해 변경분만 송신
+    const menuStateKeys = normalizeStateKeys(definition.contextMenuStateKeys);
+    const latestState: Record<string, unknown> = {
+      ...(usePluginDisplayElementStore
+        .getState()
+        .elements.find((el) => el.fullId === element.fullId)?.state ?? {}),
+    };
+    const lastSentMenuState: Record<string, unknown> = {};
+    const sendMenuStateSync = () => {
+      if (menuStateKeys.length === 0) return;
+      const changed: Record<string, unknown> = {};
+      for (const key of menuStateKeys) {
+        if (!Object.prototype.hasOwnProperty.call(latestState, key)) continue;
+        const value = latestState[key];
+        if (
+          Object.prototype.hasOwnProperty.call(lastSentMenuState, key) &&
+          Object.is(lastSentMenuState[key], value)
+        ) {
+          continue;
+        }
+        changed[key] = value;
+        lastSentMenuState[key] = value;
+      }
+      if (Object.keys(changed).length === 0) return;
+      sendBridgeMessageBestEffort(
+        'main',
+        'plugin:displayElement:syncMenuState',
+        { fullId: element.fullId, state: changed },
+      );
+    };
+
+    // OBS WS 재연결 시 단절 중 유실됐을 수 있는 제어 상태 재송신
+    if (menuStateKeys.length > 0) {
+      const unsubMenuStateResync = obsApi.onResync(() => {
+        Object.keys(lastSentMenuState).forEach((key) => {
+          delete lastSentMenuState[key];
+        });
+        sendMenuStateSync();
+      });
+      cleanups.push(unsubMenuStateResync);
+    }
+
     const context = {
       setState: (updates: Record<string, unknown>) => {
+        Object.assign(latestState, updates);
         // rAF 기반 배치 업데이트 사용 (성능 최적화)
         const currentElement = usePluginDisplayElementStore
           .getState()
@@ -1102,6 +917,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
             state: { ...currentElement.state, ...updates },
           });
         }
+        sendMenuStateSync();
       },
       getSettings: () => {
         const currentElement = usePluginDisplayElementStore
@@ -1113,16 +929,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         // 오버레이 로컬 스토어 업데이트
         updateElement(element.fullId, { resizeAnchor: anchor });
         // 메인 윈도우로 동기화 (브릿지 통해)
-        if (window.api?.bridge) {
-          window.api.bridge.sendTo(
-            'main',
-            'plugin:displayElement:updateAnchor',
-            {
-              fullId: element.fullId,
-              resizeAnchor: anchor,
-            },
-          );
-        }
+        sendBridgeMessageBestEffort(
+          'main',
+          'plugin:displayElement:updateAnchor',
+          {
+            fullId: element.fullId,
+            resizeAnchor: anchor,
+          },
+        );
       },
       getAnchor: (): ElementResizeAnchor => {
         const currentElement = usePluginDisplayElementStore
@@ -1206,6 +1020,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       cleanups.push(mountCleanup);
     }
 
+    // 동기 onMount 완료 후 초기 1회 송신 — 이미 setState로 보낸 키는 dedup됨
+    sendMenuStateSync();
+
     return () => {
       clearExposedActions(element.fullId);
       exposedActionsRef.current = {};
@@ -1230,21 +1047,17 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       // 명시적인 zIndex가 있으면 사용, 없으면 키 개수 + 배열 인덱스로 계산
       // 키들 뒤에 순서대로 배치되어 통합 z-order 동작
       zIndex: element.zIndex ?? keyCount + arrayIndex,
-      cursor:
-        element.draggable && windowType === 'main'
-          ? 'move'
-          : element.onClick && windowType === 'main'
-          ? 'pointer'
-          : 'default',
+      // 커서는 dmn-grabbable 클래스가 소유 (호버 무변화, 잡는 동안만 grabbing)
+      cursor: windowType === 'main' ? undefined : 'default',
       willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
       pointerEvents: windowType === 'main' ? 'auto' : 'none',
     };
 
-    // resizable 플러그인 요소의 경우 명시적 크기 적용
-    // 내부 콘텐츠가 width/height: 100%로 이 크기를 따라감
-    if (definition?.resizable && element.measuredSize) {
-      baseStyle.width = element.measuredSize.width;
-      baseStyle.height = element.measuredSize.height;
+    // resizable 요소는 첫 측정 전에도 부모 크기를 제공
+    if (definition?.resizable) {
+      const renderSize = resolveResizablePluginElementSize(element);
+      baseStyle.width = renderSize.width;
+      baseStyle.height = renderSize.height;
       baseStyle.overflow = 'hidden';
     }
 
@@ -1252,8 +1065,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   })();
 
   const attachRef = (node: HTMLDivElement | null) => {
+    containerRef.current = node;
     if (node) {
-      containerRef.current = node;
       // 선택 모드가 아닐 때만 드래그 ref 연결
       if (element.draggable && windowType === 'main' && !isSelectionMode) {
         draggableRef(node);
@@ -1311,6 +1124,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const handleClick = (e: React.MouseEvent) => {
     // 우클릭은 컨텍스트 메뉴용이므로 제외
     if (e.button !== 0) return;
+
+    // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화
+    if (isMac() && e.ctrlKey) return;
 
     if (windowType === 'main' && activeTool === 'eraser') {
       e.stopPropagation();
@@ -1434,6 +1250,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       return;
     }
 
+    // 선택된 상태에서는 일반 클릭 흡수 (키와 동일 순서) —
+    // 다중 선택 멤버 재클릭이 선택을 단일로 축소하지 않아야
+    // 더블클릭의 "멤버면 선택 보존 + 배치 편집 진입" 정책이 성립한다
+    if (isSelectionMode) {
+      e.stopPropagation();
+      return;
+    }
+
     const settingsUI = definition?.settingsUI ?? 'panel';
     if (windowType === 'main' && settingsUI !== 'modal') {
       e.stopPropagation();
@@ -1453,12 +1277,6 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       return;
     }
 
-    // 선택된 상태에서는 일반 클릭 이벤트 무시
-    if (isSelectionMode) {
-      e.stopPropagation();
-      return;
-    }
-
     // onClick 핸들러가 있고, 메인 윈도우에서만
     if (!element.onClick || windowType !== 'main') return;
 
@@ -1473,16 +1291,96 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     }
   };
 
-  // 컨텍스트 메뉴 항목 생성
+  // 더블클릭 편집 진입 — 순수 더블클릭만 통과 (드래그·수식키·지우개·뷰포트 변환 제외).
+  // 다중 선택의 멤버면 선택을 보존해 배치 편집으로, 아니면 이 요소만 선택.
+  // settingsUI가 modal인 플러그인은 클릭 선택 자체가 없으므로 제외
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (windowType !== 'main') return;
+    if ((definition?.settingsUI ?? 'panel') === 'modal') return;
+    if (isMac() && e.ctrlKey) return;
+    if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+    if (activeTool === 'eraser') return;
+    if (isViewportTransforming) return;
+    if (draggable.recentPressMovedRef.current || movedDuringPressRef.current)
+      return;
+    e.stopPropagation();
+
+    const { selectedElements: currentSelection } =
+      useGridSelectionStore.getState();
+    const isMultiMember =
+      currentSelection.length > 1 &&
+      currentSelection.some((el) => el.id === element.fullId);
+    if (!isMultiMember) {
+      useGridSelectionStore.getState().selectElement({
+        type: 'plugin',
+        id: element.fullId,
+      });
+    }
+    openPropertiesPanelForSelection();
+  };
+
+  const createActionsProxy = (elementId: string) =>
+    new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (typeof prop !== 'string') return undefined;
+          return (...args: unknown[]) => {
+            sendBridgeMessageBestEffort(
+              'overlay',
+              'plugin:displayElement:invokeAction',
+              {
+                elementId,
+                action: prop,
+                args,
+              },
+            );
+          };
+        },
+      },
+    );
+
+  // 컨텍스트 메뉴 항목 생성 — 열려 있을 때만 커스텀 predicate 평가
   const contextMenuItems: ListItem[] = (() => {
-    if (!element.contextMenu) return [];
+    if (!contextMenuOpen || !element.contextMenu) return [];
 
     const {
       enableDelete = true,
       deleteLabel = '삭제',
       customItems = [],
     } = element.contextMenu;
-    const items: ListItem[] = [];
+
+    // predicate가 보는 element.state에는 contextMenuStateKeys로 선언된
+    // 오버레이 런타임 값만 병합 — 프리뷰용 state 자체는 불변
+    const menuStateKeys = normalizeStateKeys(definition?.contextMenuStateKeys);
+    const menuElement =
+      menuStateKeys.length > 0
+        ? {
+            ...element,
+            state: {
+              ...element.state,
+              ...getPluginMenuRuntimeState(element.fullId, menuStateKeys),
+            },
+          }
+        : element;
+
+    // visible/disabled/position 계약 이행 (grid/key 메뉴와 동일 의미)
+    const { top, bottom } = evaluatePluginMenuItems(
+      customItems,
+      { element: menuElement, actions: createActionsProxy(element.fullId) },
+      (label) => pluginTranslate(label, undefined, label),
+      (index, kind, error) => {
+        const errorKey = `${element.fullId}:${index}:${kind}`;
+        if (menuPredicateErrorRef.current.has(errorKey)) return;
+        menuPredicateErrorRef.current.add(errorKey);
+        console.error(
+          `[Plugin ${element.pluginId}] Failed to evaluate context menu "${kind}" for item ${index}:`,
+          error,
+        );
+      },
+    );
+
+    const items: ListItem[] = [...top];
 
     if (enableDelete) {
       items.push({
@@ -1490,14 +1388,6 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         label: pluginTranslate(deleteLabel, undefined, deleteLabel),
       });
     }
-
-    // 커스텀 항목 추가
-    customItems.forEach((item, index) => {
-      items.push({
-        id: `custom-${index}`,
-        label: pluginTranslate(item.label, undefined, item.label),
-      });
-    });
 
     // z-order 항목 추가
     items.push(
@@ -1507,48 +1397,26 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       { id: 'sendToBack', label: t('contextMenu.sendToBack') },
     );
 
+    items.push(...bottom);
+
     return items;
   })();
-
-  const createActionsProxy = (elementId: string) =>
-    new Proxy(
-      {},
-      {
-        get: (_target, prop: string | symbol) => {
-          if (typeof prop !== 'string') return undefined;
-          return (...args: unknown[]) => {
-            try {
-              window.api?.bridge?.sendTo(
-                'overlay',
-                'plugin:displayElement:invokeAction',
-                {
-                  elementId,
-                  action: prop,
-                  args,
-                },
-              );
-            } catch (error) {
-              console.error(
-                '[PluginElement] Failed to invoke exposed action',
-                error,
-              );
-            }
-          };
-        },
-      },
-    );
 
   // 컨텍스트 메뉴 항목 선택
   const handleContextMenuSelect = (itemId: string) => {
     if (itemId === 'delete') {
       deletePluginElement();
     } else if (itemId === 'bringToFront') {
+      rotatePluginInstancesEditSession(element.pluginId);
       usePluginDisplayElementStore.getState().bringToFront(element.fullId);
     } else if (itemId === 'bringForward') {
+      rotatePluginInstancesEditSession(element.pluginId);
       usePluginDisplayElementStore.getState().bringForward(element.fullId);
     } else if (itemId === 'sendBackward') {
+      rotatePluginInstancesEditSession(element.pluginId);
       usePluginDisplayElementStore.getState().sendBackward(element.fullId);
     } else if (itemId === 'sendToBack') {
+      rotatePluginInstancesEditSession(element.pluginId);
       usePluginDisplayElementStore.getState().sendToBack(element.fullId);
     } else if (itemId.startsWith('custom-')) {
       const index = parseInt(itemId.replace('custom-', ''), 10);
@@ -1587,13 +1455,20 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       <div
         ref={attachRef}
         id={element.id}
-        className={element.className}
+        className={`${windowType === 'main' ? 'dmn-grabbable' : ''} ${
+          element.className || ''
+        }`}
         style={elementStyle}
         data-plugin-element={element.fullId}
         data-plugin-id={element.pluginId}
         data-editing={isDraggingOrResizing ? 'true' : undefined}
         onClick={handleClick}
-        onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
+        onDoubleClick={handleDoubleClick}
+        onPointerDown={
+          windowType === 'main' && isSelectionMode
+            ? handleSelectionDragPointerDown
+            : undefined
+        }
         onContextMenu={handleContextMenu}
       >
         {element.scoped && shadowRoot
@@ -1608,14 +1483,18 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         createPortal(
           <ListPopup
             open={contextMenuOpen}
+            ariaLabel={t('common.more')}
             position={contextMenuPosition}
             onClose={() => setContextMenuOpen(false)}
             items={contextMenuItems}
             onSelect={handleContextMenuSelect}
-            className="!z-[10000]"
           />,
           document.body,
         )}
     </>
   );
 };
+
+// 요소 하나의 갱신이 나머지 전체 리렌더로 번지지 않도록 차단
+// (스토어 update 경로는 미변경 요소의 참조를 유지하므로 shallow 비교로 스킵됨)
+export const PluginElement = React.memo(PluginElementImpl);

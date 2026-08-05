@@ -8,9 +8,8 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import {
   applyGroupIdToSelectedElements,
   buildNextLayerGroupName,
@@ -29,11 +28,11 @@ export async function groupSelectedElements(
 ): Promise<boolean> {
   if (selectedElements.length === 0) return false;
 
-  const { keyMappings, positions } = useKeyStore.getState();
+  // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
+  const { canonicalPositions: positions } = useKeyStore.getState();
   const statPos = useStatItemStore.getState().positions;
   const graphPos = useGraphItemStore.getState().positions;
   const knobPos = useKnobItemStore.getState().positions;
-  const pluginEls = usePluginDisplayElementStore.getState().elements;
   const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
   const modeGroups = currentLayerGroups[selectedKeyType] || [];
 
@@ -89,40 +88,26 @@ export async function groupSelectedElements(
     normalized.groupsChanged;
   if (!hasChange) return false;
 
-  // 히스토리 저장
-  useHistoryStore.getState().pushState({
-    keyMappings,
-    positions,
-    statPositions: statPos,
-    graphPositions: graphPos,
-    pluginElements: pluginEls,
-    layerGroups: currentLayerGroups,
-  });
-
   // 스토어 반영
   useKeyStore.getState().setPositions(normalized.keyPositions);
   useStatItemStore.getState().setPositions(normalized.statPositions);
   useGraphItemStore.getState().setPositions(normalized.graphPositions);
   useKnobItemStore.getState().setPositions(normalized.knobPositions);
-
-  // API 동기화
-  await Promise.all([
-    window.api.keys.updatePositions(normalized.keyPositions).catch(() => {}),
-    window.api.statItems
-      .updatePositions(normalized.statPositions)
-      .catch(() => {}),
-    window.api.graphItems
-      .updatePositions(normalized.graphPositions)
-      .catch(() => {}),
-    window.api.knobItems
-      .updatePositions(normalized.knobPositions)
-      .catch(() => {}),
-  ]);
-
   if (createdGroup || normalized.groupsChanged) {
     useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-    await window.api.layerGroups.update(normalized.layerGroups).catch(() => {});
   }
+
+  // 참조와 그룹 정의를 같은 revision으로 저장
+  await editorCoordinator
+    .commitPatch({
+      schemaVersion: 1,
+      keyPositions: normalized.keyPositions,
+      statPositions: normalized.statPositions,
+      graphPositions: normalized.graphPositions,
+      knobPositions: normalized.knobPositions,
+      layerGroups: normalized.layerGroups,
+    })
+    .catch(() => {});
 
   return true;
 }
@@ -137,11 +122,10 @@ export async function ungroupSelectedElements(
 ): Promise<boolean> {
   if (selectedElements.length === 0) return false;
 
-  const { keyMappings, positions } = useKeyStore.getState();
+  const { canonicalPositions: positions } = useKeyStore.getState();
   const statPos = useStatItemStore.getState().positions;
   const graphPos = useGraphItemStore.getState().positions;
   const knobPos = useKnobItemStore.getState().positions;
-  const pluginEls = usePluginDisplayElementStore.getState().elements;
   const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
 
   const ungrouped = applyGroupIdToSelectedElements({
@@ -166,40 +150,25 @@ export async function ungroupSelectedElements(
   const hasChange = ungrouped.changed || normalized.groupsChanged;
   if (!hasChange) return false;
 
-  // 히스토리 저장
-  useHistoryStore.getState().pushState({
-    keyMappings,
-    positions,
-    statPositions: statPos,
-    graphPositions: graphPos,
-    pluginElements: pluginEls,
-    layerGroups: currentLayerGroups,
-  });
-
   // 스토어 반영
   useKeyStore.getState().setPositions(normalized.keyPositions);
   useStatItemStore.getState().setPositions(normalized.statPositions);
   useGraphItemStore.getState().setPositions(normalized.graphPositions);
   useKnobItemStore.getState().setPositions(normalized.knobPositions);
-
-  // API 동기화
-  await Promise.all([
-    window.api.keys.updatePositions(normalized.keyPositions).catch(() => {}),
-    window.api.statItems
-      .updatePositions(normalized.statPositions)
-      .catch(() => {}),
-    window.api.graphItems
-      .updatePositions(normalized.graphPositions)
-      .catch(() => {}),
-    window.api.knobItems
-      .updatePositions(normalized.knobPositions)
-      .catch(() => {}),
-  ]);
-
   if (normalized.groupsChanged) {
     useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-    await window.api.layerGroups.update(normalized.layerGroups).catch(() => {});
   }
+
+  await editorCoordinator
+    .commitPatch({
+      schemaVersion: 1,
+      keyPositions: normalized.keyPositions,
+      statPositions: normalized.statPositions,
+      graphPositions: normalized.graphPositions,
+      knobPositions: normalized.knobPositions,
+      layerGroups: normalized.layerGroups,
+    })
+    .catch(() => {});
 
   return true;
 }

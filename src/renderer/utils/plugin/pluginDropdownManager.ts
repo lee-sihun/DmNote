@@ -31,6 +31,7 @@ const resetMenuStyles = (menu: DropdownMenuElement) => {
   menu.style.boxShadow = '';
   menu.style.borderRadius = '';
   menu.dataset.pluginDropdownPortal = 'false';
+  delete menu.dataset.dmnPopupSubmenu;
 };
 
 export function setupPluginDropdownInteractions(
@@ -119,12 +120,13 @@ export function setupPluginDropdownInteractions(
     menu.classList.remove('hidden');
     menu.classList.add('flex');
     menu.style.position = 'fixed';
-    menu.style.zIndex = '10020';
-    menu.style.maxHeight = '220px';
+    // z 계층: 크롬 30 < 팝업 40 < 모달 50 < 포털 메뉴 60
+    menu.style.zIndex = '60';
+    menu.style.maxHeight = '200px';
     menu.style.overflowY = 'auto';
-    menu.style.boxShadow = '0px 12px 30px rgba(0, 0, 0, 0.45)';
-    menu.style.borderRadius = '7px';
     menu.dataset.pluginDropdownPortal = 'true';
+    // 네이티브 드롭다운과 같은 포털 메뉴 표식 — Escape 양보·클릭어웨이 예외 판정용
+    menu.dataset.dmnPopupSubmenu = 'true';
 
     openMenus.add(menu);
 
@@ -210,7 +212,16 @@ export function setupPluginDropdownInteractions(
     }
   };
 
+  // Escape 소유 — 최상위 포털 레이어이므로 소비 후 자신만 닫기
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (!openMenus.size) return;
+    event.preventDefault();
+    closeAllMenus();
+  };
+
   document.addEventListener('click', handleClick, true);
+  document.addEventListener('keydown', handleKeydown);
   document.addEventListener('scroll', handleScrollOrResize, true);
   window.addEventListener('resize', handleScrollOrResize);
 
@@ -222,6 +233,7 @@ export function setupPluginDropdownInteractions(
 
     closeAllMenus();
     document.removeEventListener('click', handleClick, true);
+    document.removeEventListener('keydown', handleKeydown);
     document.removeEventListener('scroll', handleScrollOrResize, true);
     window.removeEventListener('resize', handleScrollOrResize);
     observer?.disconnect();

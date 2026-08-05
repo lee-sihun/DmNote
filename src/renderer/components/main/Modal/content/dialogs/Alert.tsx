@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { usePressAction } from '@hooks/usePressAction';
+import React, { useCallback, useRef } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
-import { getScrollShadowState } from '@utils/grid/scrollShadow';
 
 interface AlertProps {
   isOpen: boolean;
@@ -11,6 +11,8 @@ interface AlertProps {
   confirmText?: string;
   cancelText?: string;
   showCancel?: boolean;
+  danger?: boolean;
+  onCustomContentMount?: (element: HTMLElement) => void | (() => void);
   onConfirm?: () => void;
   onCancel?: () => void;
 }
@@ -22,50 +24,43 @@ const Alert = ({
   confirmText,
   cancelText,
   showCancel,
+  danger = false,
+  onCustomContentMount,
   onConfirm,
   onCancel,
 }: AlertProps) => {
   const { t } = useTranslation();
 
-  const [scrollState, setScrollState] = useState<{
-    hasTopShadow: boolean;
-    hasBottomShadow: boolean;
-  }>({
-    hasTopShadow: false,
-    hasBottomShadow: false,
-  });
+  const { scrollContainerRef: scrollRef } = useLenis();
+  const customContentCleanupRef = useRef<(() => void) | null>(null);
+  const setCustomContentRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      customContentCleanupRef.current?.();
+      customContentCleanupRef.current = null;
+      scrollRef(node);
 
-  // 스크롤 상태 업데이트 함수
-  const updateScrollState = (el: HTMLElement | null) => {
-    if (!el) return;
-    const nextState = getScrollShadowState(el);
-    setScrollState((prev) =>
-      prev.hasTopShadow === nextState.hasTopShadow &&
-      prev.hasBottomShadow === nextState.hasBottomShadow
-        ? prev
-        : nextState,
-    );
-  };
+      if (!node || !onCustomContentMount) return;
+      const pluginContent = node.querySelector<HTMLElement>(
+        '[data-plugin-dialog-content]',
+      );
+      if (!pluginContent) {
+        console.warn('[Dialog API] Plugin dialog content was not mounted');
+        return;
+      }
 
-  // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
-  const {
-    scrollContainerRef: scrollRef,
-    wrapperElement,
-    scrollbarWidth,
-  } = useLenis({
-    onScroll: () => updateScrollState(wrapperElement),
-  });
+      const cleanup = onCustomContentMount(pluginContent);
+      customContentCleanupRef.current =
+        typeof cleanup === 'function' ? cleanup : null;
+    },
+    [onCustomContentMount, scrollRef],
+  );
 
   const isConfirm = type === 'confirm';
   const isCustom = type === 'custom';
 
-  useEffect(() => {
-    if (isCustom && wrapperElement) {
-      // DOM이 렌더링된 후 스크롤 상태 확인
-      const timer = setTimeout(() => updateScrollState(wrapperElement), 0);
-      return () => clearTimeout(timer);
-    }
-  }, [isCustom, message, wrapperElement]);
+  // custom dialog의 입력 blur·IME flush와 click 경합 방어 (일반 알림에도 무해)
+  const confirmPress = usePressAction(() => onConfirm?.());
+  const cancelPress = usePressAction(() => onCancel?.());
 
   if (!isOpen) return null;
 
@@ -73,55 +68,25 @@ const Alert = ({
   const cancelLabel = cancelText || t('common.cancel');
   const shouldShowCancel = isConfirm || (isCustom && showCancel);
 
-  const hasOverflow =
-    !!wrapperElement &&
-    wrapperElement.scrollHeight > wrapperElement.clientHeight + 1;
-
   return (
-    <Modal onClick={onCancel}>
+    <Modal
+      onClick={onCancel}
+      ariaLabel={isCustom ? t('common.dialog') : message}
+    >
       <div
-        className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
+        className="flex flex-col min-w-[264px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 메시지 텍스트 or Custom HTML */}
         {isCustom ? (
-          <div className="relative">
-            {/* 상단 그림자 */}
-            <div
-              className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 transition-opacity duration-150 ${
-                scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-
-            <div
-              ref={scrollRef}
-              className="max-h-[244px] overflow-y-auto modal-content-scroll pr-[14px] text-center text-[#FFFFFF]"
-              style={{
-                width:
-                  hasOverflow && scrollbarWidth > 0
-                    ? `calc(100% + ${scrollbarWidth}px)`
-                    : undefined,
-                transform:
-                  hasOverflow && scrollbarWidth > 0
-                    ? `translateX(-${scrollbarWidth}px)`
-                    : undefined,
-                paddingLeft:
-                  hasOverflow && scrollbarWidth > 0
-                    ? `${scrollbarWidth}px`
-                    : undefined,
-              }}
-              dangerouslySetInnerHTML={{ __html: message }}
-            />
-
-            {/* 하단 그림자 */}
-            <div
-              className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 transition-opacity duration-150 ${
-                scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-          </div>
+          <div
+            key={message}
+            ref={setCustomContentRef}
+            className="max-h-[244px] overflow-y-auto modal-content-scroll dmn-scroll-fade text-center text-fg"
+            dangerouslySetInnerHTML={{ __html: message }}
+          />
         ) : (
-          <div className="max-w-[235.5px] text-center text-[#FFFFFF] text-style-3 !leading-[20px] pr-[14px]">
+          <div className="max-w-[236px] self-center text-center text-fg text-label px-[8px] py-[8px]">
             {message}
           </div>
         )}
@@ -130,20 +95,22 @@ const Alert = ({
         <div
           className={`flex ${
             !shouldShowCancel ? 'justify-center' : ''
-          } gap-[10.5px] mt-[19px] pr-[14px]`}
+          } gap-[8px] mt-[12px]`}
         >
           <button
-            onClick={onConfirm}
-            className={`w-${
-              shouldShowCancel ? '[150px]' : 'full'
-            } h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3`}
+            {...confirmPress}
+            className={`${shouldShowCancel ? 'flex-[2]' : 'w-full'} h-[30px] ${
+              danger
+                ? 'bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active text-danger-fg'
+                : 'bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active text-accent-fg'
+            } rounded-surface text-label transition-colors duration-fast`}
           >
             {confirmLabel}
           </button>
           {shouldShowCancel && (
             <button
-              onClick={onCancel}
-              className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+              {...cancelPress}
+              className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             >
               {cancelLabel}
             </button>
