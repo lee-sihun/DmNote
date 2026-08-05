@@ -78,6 +78,9 @@
     "vite-plugin-svgr": "^4.5.0",
     "vitest": "^4.0.18"
   },
+  "overrides": {
+    "tmp": "0.2.7"
+  },
   "dependencies": {
     "@codemirror/commands": "^6.10.1",
     "@codemirror/lang-css": "^6.3.1",
