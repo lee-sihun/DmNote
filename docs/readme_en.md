@@ -6,10 +6,10 @@
   <h1>DM Note</h1>
   
   <p>
-    <strong>Key viewer program with extensive customization support</strong>
+    <strong>Make it yours</strong>
   </p>
   <p>
-    <strong>Offers user-defined key mapping and styling, easily switchable presets, and a modern, intuitive interface.</strong>
+    <strong>A customizable key viewer for DJMAX RESPECT V and any game</strong>
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
@@ -21,7 +21,7 @@ https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
 
 ## 🌟 Overview
 
-**DM Note** is a key viewer program optimized for DJMAX RESPECT V, and can be freely used with any other game. With simple setup, you can visually display key inputs during streaming or gameplay video creation. Currently, it officially supports Windows 10/11 and macOS environments only. If you are on Linux, we recommend trying the [community fork version](https://github.com/northernorca/DmNote).
+**DM Note** is a customizable key viewer for DJMAX RESPECT V and any other game. With simple setup, you can visually display key inputs during streaming or gameplay video creation. Currently, it officially supports Windows 10/11 and macOS environments only. If you are on Linux, we recommend trying the [community fork version](https://github.com/northernorca/DmNote).
 
 [Download DM NOTE v1.6.1](https://github.com/lee-sihun/DmNote/releases/download/1.6.1/DM.NOTE.v.1.6.1.zip)
 
