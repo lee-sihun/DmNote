@@ -1641,6 +1641,37 @@ mod tests {
         bridge.stop();
     }
 
+    // v1 번들은 KeySlot union 와이어 형식을 소비할 수 없으므로 handshake에서 결정적으로 거부
+    #[tokio::test]
+    async fn legacy_protocol_v1_hello_is_rejected() {
+        let bridge = Arc::new(ObsBridgeService::new("test"));
+        let port = bridge
+            .start(0, "token".to_string())
+            .await
+            .expect("OBS bridge 시작 실패");
+
+        let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}"))
+            .await
+            .expect("WS 연결 실패");
+        let hello = serde_json::json!({
+            "v": 1,
+            "type": "hello",
+            "seq": 0,
+            "payload": { "token": "token", "protocol": 1 },
+        });
+        ws.send(Message::Text(hello.to_string()))
+            .await
+            .expect("hello 전송 실패");
+
+        let error = receive_envelope(&mut ws, "error").await;
+        assert_eq!(
+            error.payload.get("code").and_then(Value::as_str),
+            Some("PROTOCOL_MISMATCH")
+        );
+
+        bridge.stop();
+    }
+
     #[test]
     fn binding_listens_on_all_interfaces_for_lan_access() {
         assert!(bind_address(34891).ip().is_unspecified());

@@ -57,7 +57,7 @@
 
 ```json
 {
-  "v": 1,
+  "v": 2,
   "type": "key_event",
   "seq": 10241,
   "ts": 1741339200123,
@@ -98,11 +98,11 @@
 #### hello (C→S) ✅
 ```json
 {
-  "v": 1,
+  "v": 2,
   "type": "hello",
   "payload": {
     "client": "obs-browser",
-    "protocol": 1,
+    "protocol": 2,
     "appVersion": "1.5.2",
     "resumeFromSeq": 0,
     "token": "<세션 토큰>"
@@ -116,7 +116,7 @@
 #### snapshot (S→C) ✅
 ```json
 {
-  "v": 1,
+  "v": 2,
   "type": "snapshot",
   "seq": 10,
   "payload": {
@@ -137,7 +137,7 @@
 #### tauri_event (S→C) ✅
 ```json
 {
-  "v": 1,
+  "v": 2,
   "type": "tauri_event",
   "seq": 11,
   "payload": {
@@ -760,14 +760,14 @@ async function bootstrap() {
 
 ```json
 // C→S
-{ "v": 1, "type": "invoke_request", "seq": 42,
+{ "v": 2, "type": "invoke_request", "seq": 42,
   "payload": { "requestId": "rpc_xxx", "command": "settings_get", "args": {} } }
 
 // S→C
-{ "v": 1, "type": "invoke_response", "seq": 43,
+{ "v": 2, "type": "invoke_response", "seq": 43,
   "payload": { "requestId": "rpc_xxx", "result": { ... } } }
 // 에러 시
-{ "v": 1, "type": "invoke_response", "seq": 43,
+{ "v": 2, "type": "invoke_response", "seq": 43,
   "payload": { "requestId": "rpc_xxx", "error": "Not found" } }
 ```
 
@@ -775,7 +775,7 @@ async function bootstrap() {
 
 ```json
 // S→C — 백엔드의 모든 Tauri emit을 WS로 전달
-{ "v": 1, "type": "tauri_event", "seq": 44,
+{ "v": 2, "type": "tauri_event", "seq": 44,
   "payload": { "event": "keys:counter", "data": { "mode": "4key", "key": "A", "count": 42 } } }
 ```
 
