@@ -687,11 +687,9 @@ describe('plugin element 갱신 격리 (#111)', () => {
     // 레이아웃 필드 갱신으로 App이 실제 리렌더된 뒤에도 유지 -
     // useNoteSystem 모킹이 불안정 identity를 반환해도 재구독·리셋되지 않아야 함
     await act(async () => {
-      usePluginDisplayElementStore
-        .getState()
-        .updateElement('plugin:el', {
-          measuredSize: { width: 80, height: 40 },
-        });
+      usePluginDisplayElementStore.getState().updateElement('plugin:el', {
+        measuredSize: { width: 80, height: 40 },
+      });
     });
     await flushAsync();
     expect(getKeySignal('KeyK').value).toBe(true);

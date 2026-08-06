@@ -334,3 +334,77 @@ describe('useNoteSystem 길이 연속성', () => {
     expect(note!.endTime).toBe(60);
   });
 });
+
+describe('useNoteSystem 반환 API 안정성 (#111)', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  let result: HookResult;
+
+  const render = async (noteEffect: boolean) => {
+    await act(async () => {
+      root.render(
+        <Harness
+          noteEffect={noteEffect}
+          noteSettings={DELAY_SETTINGS}
+          onResult={(value) => {
+            result = value;
+          }}
+        />,
+      );
+    });
+  };
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+  });
+
+  it('반환 함수는 리렌더·noteEffect 토글에도 동일 참조를 유지한다', async () => {
+    await render(true);
+    const first = result;
+
+    await render(true); // 단순 리렌더
+    expect(Object.is(result, first)).toBe(true);
+
+    await render(false); // noteEffect 토글
+    expect(Object.is(result.handleKeyDown, first.handleKeyDown)).toBe(true);
+    expect(Object.is(result.handleKeyUp, first.handleKeyUp)).toBe(true);
+    expect(Object.is(result.subscribe, first.subscribe)).toBe(true);
+    expect(Object.is(result.finalizeAllActive, first.finalizeAllActive)).toBe(
+      true,
+    );
+    expect(
+      Object.is(result.reconcileActiveNotes, first.reconcileActiveNotes),
+    ).toBe(true);
+    expect(Object.is(result.updateTrackLayouts, first.updateTrackLayouts)).toBe(
+      true,
+    );
+    expect(Object.is(result.noteBuffer, first.noteBuffer)).toBe(true);
+  });
+
+  it('noteEffect off 후에는 기존 캡처 참조로 호출해도 노트를 만들지 않는다', async () => {
+    await render(true);
+    const captured = result.handleKeyDown;
+
+    await render(false);
+    act(() => {
+      captured('KeyK', { displayTime: 0, physTime: 0 });
+    });
+    expect(result.notesRef.current['KeyK'] ?? []).toHaveLength(0);
+  });
+
+  it('마운트 직후 noteEffect=false면 첫 렌더부터 노트를 만들지 않는다', async () => {
+    await render(false);
+    act(() => {
+      result.handleKeyDown('KeyK', { displayTime: 0, physTime: 0 });
+    });
+    expect(result.notesRef.current['KeyK'] ?? []).toHaveLength(0);
+  });
+});
