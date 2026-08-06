@@ -1021,6 +1021,10 @@ export default function App() {
         console.warn(
           'Overlay resize timed out; rendering without window resize',
         );
+        // 적용 여부 불명이므로 native 지식 무효화 - 이후 candidate는 no-op
+        // 판정 없이 반드시 재요청하고, 백엔드 도착순 적용으로 창이 수렴
+        // (fixed-position delta도 null 기준이라 delta 0으로 재정렬)
+        nativeParamsRef.current = null;
         promote(snapshot);
         settle();
       }, RESIZE_INFLIGHT_TIMEOUT_MS);

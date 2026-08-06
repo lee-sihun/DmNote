@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   scene: vi.fn(),
   updateTrackLayouts: vi.fn(),
   clearAllNotes: vi.fn(),
+  overlayAnchor: { value: 'top-left' },
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
@@ -99,7 +100,9 @@ vi.mock('@stores/useSettingsStore', () => {
     tabNoteOverrides: {},
     noteEffect: false,
     gridSettings: { overlayPadding: 30 },
-    overlayResizeAnchor: 'top-left',
+    get overlayResizeAnchor() {
+      return mocks.overlayAnchor.value;
+    },
     keyCounterEnabled: false,
   };
   return {
@@ -198,6 +201,8 @@ const lastResizePayload = () =>
       left: number;
       right: number;
     };
+    fixedPositionDeltaX?: number;
+    fixedPositionDeltaY?: number;
   };
 
 // 부팅 시퀀스 재현: 빈 store로 마운트한 뒤 bootstrap이 채우는 순서
@@ -242,6 +247,7 @@ describe('overlay geometry transaction', () => {
     mocks.scene.mockClear();
     mocks.updateTrackLayouts.mockClear();
     mocks.clearAllNotes.mockClear();
+    mocks.overlayAnchor.value = 'top-left';
     window.api = makeApiMock();
     useKeyStore.setState({
       selectedKeyType: '4key',
@@ -604,6 +610,135 @@ describe('overlay geometry transaction', () => {
         await vi.advanceTimersByTimeAsync(0);
       });
       expect(mocks.resize).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('타임아웃은 native 지식을 무효화해 P 복귀 candidate가 no-op이 아니라 IPC로 재요청된다', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      // P 성공으로 native 기준 확립 (width 120)
+      await act(async () => {
+        useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(1);
+      expect(lastResizePayload().width).toBe(120);
+
+      // A: 영구 pending in-flight (width 220)
+      const never = deferred<{
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>();
+      mocks.resize.mockReturnValueOnce(never.promise);
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(2);
+
+      // candidate가 P로 복귀 - in-flight 중이라 큐잉만
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(2);
+
+      // 타임아웃: 백엔드가 A를 적용했을 수 있으므로 queued P는
+      // nativeParams(P)와의 no-op이 아니라 반드시 IPC 재요청이어야 함
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(3);
+      expect(lastResizePayload().width).toBe(120);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(lastSceneProps()?.displayPositions).toHaveLength(1);
+
+      // 늦은 A 성공은 토큰 가드로 무시 - 렌더·native 기록을 덮지 않음
+      await act(async () => {
+        never.resolve({ x: 0, y: 0, width: 220, height: 420 });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(lastSceneProps()?.displayPositions).toHaveLength(1);
+      expect(mocks.resize).toHaveBeenCalledTimes(3);
+
+      // 재요청 성공이 native 기록을 복구했는지: 동일 P candidate는 다시 no-op
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('타임아웃 후 fixed-position 재요청은 오염 없는 delta 0 기준으로 나간다', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // fixed-position anchor로 재마운트
+    act(() => root.unmount());
+    mocks.overlayAnchor.value = 'fixed-position';
+    root = createRoot(container);
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushAsync();
+
+    vi.useFakeTimers();
+    try {
+      // P(minX 0) 성공 - 첫 dispatch는 native 기준이 없어 delta 0
+      await act(async () => {
+        useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(1);
+      expect(lastResizePayload().fixedPositionDeltaX).toBe(0);
+
+      // A(minX 50): native P 기준 delta 50, 영구 pending
+      const never = deferred<{
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>();
+      mocks.resize.mockReturnValueOnce(never.promise);
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(50, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(2);
+      expect(lastResizePayload().fixedPositionDeltaX).toBe(50);
+
+      // candidate P 복귀 (큐잉)
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(2);
+
+      // 타임아웃: native 무효화 → P 재요청은 오염된 기준 없이 delta 0
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(3);
+      expect(lastResizePayload().fixedPositionDeltaX).toBe(0);
+      expect(lastResizePayload().fixedPositionDeltaY).toBe(0);
     } finally {
       vi.useRealTimers();
     }
