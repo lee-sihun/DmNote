@@ -2498,6 +2498,84 @@ impl AppState {
                                 fallback_age_ms,
                             );
 
+                            // 키음은 물리 다운당 1회: press 기여 슬롯을 병합해
+                            // 사운드 활성 첫 슬롯 설정 사용 (오디오 중첩 방지)
+                            if is_down && message.device == crate::ipc::InputDeviceKind::Keyboard {
+                                if let Some((sound_canonical, sound_slot_indices)) =
+                                    crate::keyboard::manager::collect_sound_dispatch(&outcome.events)
+                                {
+                                    if let Some((sound_path, per_key_volume)) = app_state
+                                        .resolve_key_sound_binding(
+                                            &outcome.mode,
+                                            &sound_slot_indices,
+                                        )
+                                    {
+                                        #[cfg(debug_assertions)]
+                                        let key_sound_input_started_at = Instant::now();
+                                        #[cfg(debug_assertions)]
+                                        let key_sound_dispatch_started_at = Instant::now();
+                                        #[cfg(debug_assertions)]
+                                        let dispatch_ms = key_sound_dispatch_started_at
+                                            .elapsed()
+                                            .as_secs_f64()
+                                            * 1000.0;
+                                        #[cfg(debug_assertions)]
+                                        let trace = KeySoundDispatchTrace::new(
+                                            key_sound_input_started_at,
+                                            dispatch_ms,
+                                        );
+                                        app_state.key_sound.play_file(
+                                            &sound_path,
+                                            per_key_volume,
+                                            #[cfg(debug_assertions)]
+                                            Some(trace),
+                                            #[cfg(not(debug_assertions))]
+                                            None,
+                                        );
+                                        #[cfg(debug_assertions)]
+                                        if app_state.key_sound.latency_logging_enabled() {
+                                            log::debug!(
+                                                "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} volume={:.3} path={}",
+                                                outcome.mode,
+                                                sound_canonical,
+                                                per_key_volume,
+                                                sound_path
+                                            );
+                                        }
+                                    } else {
+                                        #[cfg(debug_assertions)]
+                                        let key_sound_input_started_at = Instant::now();
+                                        #[cfg(debug_assertions)]
+                                        let key_sound_dispatch_started_at = Instant::now();
+                                        #[cfg(debug_assertions)]
+                                        let dispatch_ms = key_sound_dispatch_started_at
+                                            .elapsed()
+                                            .as_secs_f64()
+                                            * 1000.0;
+                                        #[cfg(debug_assertions)]
+                                        let trace = KeySoundDispatchTrace::new(
+                                            key_sound_input_started_at,
+                                            dispatch_ms,
+                                        );
+                                        app_state.key_sound.play_labels(
+                                            &message.labels,
+                                            #[cfg(debug_assertions)]
+                                            Some(trace),
+                                            #[cfg(not(debug_assertions))]
+                                            None,
+                                        );
+                                        #[cfg(debug_assertions)]
+                                        if app_state.key_sound.latency_logging_enabled() {
+                                            log::debug!(
+                                                "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} source=soundpack",
+                                                outcome.mode,
+                                                sound_canonical
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+
                             for slot_event in outcome.events {
                                 if slot_event.press && is_down {
                                     app_state.increment_key_counter_and_emit(
@@ -2505,78 +2583,6 @@ impl AppState {
                                         &outcome.mode,
                                         &slot_event.canonical,
                                     );
-
-                                    if message.device == crate::ipc::InputDeviceKind::Keyboard {
-                                        if let Some((sound_path, per_key_volume)) = app_state
-                                            .resolve_key_sound_binding(
-                                                &outcome.mode,
-                                                &slot_event.slot_indices,
-                                            )
-                                        {
-                                            #[cfg(debug_assertions)]
-                                            let key_sound_input_started_at = Instant::now();
-                                            #[cfg(debug_assertions)]
-                                            let key_sound_dispatch_started_at = Instant::now();
-                                            #[cfg(debug_assertions)]
-                                            let dispatch_ms = key_sound_dispatch_started_at
-                                                .elapsed()
-                                                .as_secs_f64()
-                                                * 1000.0;
-                                            #[cfg(debug_assertions)]
-                                            let trace = KeySoundDispatchTrace::new(
-                                                key_sound_input_started_at,
-                                                dispatch_ms,
-                                            );
-                                            app_state.key_sound.play_file(
-                                                &sound_path,
-                                                per_key_volume,
-                                                #[cfg(debug_assertions)]
-                                                Some(trace),
-                                                #[cfg(not(debug_assertions))]
-                                                None,
-                                            );
-                                            #[cfg(debug_assertions)]
-                                            if app_state.key_sound.latency_logging_enabled() {
-                                                log::debug!(
-                                                    "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} volume={:.3} path={}",
-                                                    outcome.mode,
-                                                    slot_event.canonical,
-                                                    per_key_volume,
-                                                    sound_path
-                                                );
-                                            }
-                                        } else {
-                                            #[cfg(debug_assertions)]
-                                            let key_sound_input_started_at = Instant::now();
-                                            #[cfg(debug_assertions)]
-                                            let key_sound_dispatch_started_at = Instant::now();
-                                            #[cfg(debug_assertions)]
-                                            let dispatch_ms = key_sound_dispatch_started_at
-                                                .elapsed()
-                                                .as_secs_f64()
-                                                * 1000.0;
-                                            #[cfg(debug_assertions)]
-                                            let trace = KeySoundDispatchTrace::new(
-                                                key_sound_input_started_at,
-                                                dispatch_ms,
-                                            );
-                                            app_state.key_sound.play_labels(
-                                                &message.labels,
-                                                #[cfg(debug_assertions)]
-                                                Some(trace),
-                                                #[cfg(not(debug_assertions))]
-                                                None,
-                                            );
-                                            #[cfg(debug_assertions)]
-                                            if app_state.key_sound.latency_logging_enabled() {
-                                                log::debug!(
-                                                    "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} source=soundpack",
-                                                    outcome.mode,
-                                                    slot_event.canonical
-                                                );
-                                            }
-                                        }
-                                    }
                                 }
 
                                 let Some(is_active) = slot_event.transition else {

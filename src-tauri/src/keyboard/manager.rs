@@ -25,6 +25,21 @@ pub struct SlotEvent {
     pub press: bool,
 }
 
+// 키음 디스패치용: press 이벤트들의 기여 슬롯 인덱스를 병합
+// 한 물리 다운이 여러 슬롯을 트리거해도 사운드는 1회만 재생 (오디오 중첩 방지)
+pub fn collect_sound_dispatch(events: &[SlotEvent]) -> Option<(&str, Vec<usize>)> {
+    let mut canonical: Option<&str> = None;
+    let mut indices: Vec<usize> = Vec::new();
+    for event in events.iter().filter(|event| event.press) {
+        canonical.get_or_insert(event.canonical.as_str());
+        indices.extend_from_slice(&event.slot_indices);
+    }
+    let canonical = canonical?;
+    indices.sort_unstable();
+    indices.dedup();
+    Some((canonical, indices))
+}
+
 #[derive(Debug, Clone)]
 struct SlotSpec {
     members: Vec<String>,
@@ -701,6 +716,38 @@ mod tests {
 
         assert!(manager.set_mode("target"));
         assert_eq!(manager.pressed_keys(), vec!["A"]);
+    }
+
+    #[test]
+    fn collect_sound_dispatch_merges_press_slots_into_single_dispatch() {
+        let events = vec![
+            SlotEvent {
+                canonical: "A".to_string(),
+                slot_indices: vec![1],
+                transition: Some(true),
+                press: true,
+            },
+            SlotEvent {
+                canonical: "A|B".to_string(),
+                slot_indices: vec![0, 1],
+                transition: None,
+                press: true,
+            },
+            SlotEvent {
+                canonical: "C".to_string(),
+                slot_indices: vec![2],
+                transition: Some(false),
+                press: false,
+            },
+        ];
+
+        let (canonical, indices) = super::collect_sound_dispatch(&events).unwrap();
+
+        assert_eq!(canonical, "A");
+        assert_eq!(indices, vec![0, 1]);
+
+        // press 이벤트가 없으면 디스패치 자체가 없음
+        assert!(super::collect_sound_dispatch(&events[2..]).is_none());
     }
 
     #[test]
