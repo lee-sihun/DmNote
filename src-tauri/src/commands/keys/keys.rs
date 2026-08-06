@@ -312,6 +312,7 @@ pub fn keys_reset_all(
     note_patch.speed = Some(defaults.speed);
     note_patch.track_height = Some(defaults.track_height);
     note_patch.reverse = Some(defaults.reverse);
+    note_patch.direction = Some(defaults.direction);
     note_patch.fade_position = Some(defaults.fade_position.clone());
     note_patch.fade_top_px = Some(defaults.fade_top_px);
     note_patch.fade_bottom_px = Some(defaults.fade_bottom_px);

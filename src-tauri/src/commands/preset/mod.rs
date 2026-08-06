@@ -373,7 +373,7 @@ mod tests {
                 }]
             },
             "backgroundColor": "#112233",
-            "noteSettings": { "speed": 321, "trackHeight": 222 },
+            "noteSettings": { "speed": 321, "trackHeight": 222, "direction": "up" },
             "noteEffect": false,
             "laboratoryEnabled": true,
             "customTabs": [{ "id": "custom-130", "name": "Old tab" }],

@@ -456,6 +456,16 @@ pub enum NoteAlignment {
     Right,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum NoteDirection {
+    #[default]
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
 // 그림자 범위 계약 — 프론트 zod(ELEMENT_SHADOW_CONSTRAINTS)와 동기 유지
 pub const SHADOW_OFFSET_MIN: f64 = -100.0;
 pub const SHADOW_OFFSET_MAX: f64 = 100.0;
@@ -517,6 +527,8 @@ pub struct KeyPosition {
     /// 노트 정렬 (left/center/right). 기본값 center.
     #[serde(default)]
     pub note_alignment: NoteAlignment,
+    #[serde(default)]
+    pub note_direction: Option<NoteDirection>,
     #[serde(default = "default_note_effect_enabled")]
     pub note_effect_enabled: bool,
     #[serde(default = "default_note_glow_enabled")]
@@ -649,6 +661,7 @@ impl Default for KeyPosition {
             note_border_radius: None,
             note_width: None,
             note_alignment: NoteAlignment::default(),
+            note_direction: None,
             note_effect_enabled: default_note_effect_enabled(),
             note_glow_enabled: default_note_glow_enabled(),
             note_glow_size: default_note_glow_size(),
@@ -1440,6 +1453,7 @@ pub struct NoteSettings {
     pub speed: u32,
     pub track_height: u32,
     pub reverse: bool,
+    pub direction: NoteDirection,
     pub fade_position: FadePosition,
     #[serde(default = "default_fade_top_px")]
     pub fade_top_px: u32,
@@ -1486,6 +1500,7 @@ impl Default for NoteSettings {
             speed: 400,
             track_height: 300,
             reverse: false,
+            direction: NoteDirection::default(),
             fade_position: FadePosition::Auto,
             fade_top_px: 50,
             fade_bottom_px: 0,
@@ -1654,6 +1669,8 @@ pub struct TabNoteSettings {
     pub track_height: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reverse: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<NoteDirection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fade_position: Option<FadePosition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2342,6 +2359,7 @@ pub struct NoteSettingsPatch {
     pub speed: Option<u32>,
     pub track_height: Option<u32>,
     pub reverse: Option<bool>,
+    pub direction: Option<NoteDirection>,
     pub fade_position: Option<FadePosition>,
     pub fade_top_px: Option<u32>,
     pub fade_bottom_px: Option<u32>,
@@ -2504,7 +2522,8 @@ mod tests {
     use super::{
         compact_canonical_rgba, FadePosition, GradientSpec, KeyCounterAlign, KeyCounterAlignMode,
         KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings, KeyPosition,
-        KeySlot, NoteColor, NoteSettings, SlotMatch, StatType, MAX_SLOT_KEYS,
+        KeySlot, NoteColor, NoteDirection, NoteSettings, SlotMatch, StatType, TabNoteSettings,
+        MAX_SLOT_KEYS,
     };
     use serde::Deserialize;
 
@@ -2598,6 +2617,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn note_settings_missing_direction_defaults_to_up() {
+        let settings: NoteSettings = serde_json::from_str(r#"{"speed":321}"#).unwrap();
+
+        assert_eq!(settings.direction, NoteDirection::Up);
+    }
+
+    #[test]
+    fn tab_note_settings_direction_round_trips_and_skips_none() {
+        let empty = serde_json::to_value(TabNoteSettings::default()).unwrap();
+        assert!(empty.get("direction").is_none());
+
+        let settings = TabNoteSettings {
+            direction: Some(NoteDirection::Right),
+            ..TabNoteSettings::default()
+        };
+        let serialized = serde_json::to_value(&settings).unwrap();
+        assert_eq!(serialized, serde_json::json!({ "direction": "right" }));
+
+        let restored: TabNoteSettings = serde_json::from_value(serialized).unwrap();
+        assert_eq!(restored, settings);
+    }
+
     // 필수 필드만 채운 최소 KeyPosition JSON. 시각 px 필드는 호출부에서 주입
     fn key_position_json(visual_px: &str) -> String {
         format!(
@@ -2642,6 +2684,23 @@ mod tests {
     }
 
     #[test]
+    fn key_position_note_direction_accepts_absent_null_and_value() {
+        let absent: KeyPosition =
+            serde_json::from_str(r#"{"dx":0,"dy":0,"width":60,"count":0}"#).unwrap();
+        let null: KeyPosition =
+            serde_json::from_str(r#"{"dx":0,"dy":0,"width":60,"count":0,"noteDirection":null}"#)
+                .unwrap();
+        let value: KeyPosition =
+            serde_json::from_str(r#"{"dx":0,"dy":0,"width":60,"count":0,"noteDirection":"left"}"#)
+                .unwrap();
+
+        assert_eq!(absent.note_direction, None);
+        assert_eq!(null.note_direction, None);
+        assert_eq!(value.note_direction, Some(NoteDirection::Left));
+        assert!(serde_json::to_value(absent).unwrap()["noteDirection"].is_null());
+    }
+
+    #[test]
     fn gradient_opacity_fields_survive_serde_round_trip() {
         let json = key_position_json(
             r#""noteOpacityTop": 91, "noteOpacityBottom": 37,
@@ -2672,6 +2731,7 @@ mod tests {
             "speed": 456,
             "trackHeight": 222,
             "reverse": true,
+            "direction": "up",
             "fadePosition": "bottom",
             "delayedNoteEnabled": true,
             "shortNoteThresholdMs": 73,
@@ -2683,6 +2743,7 @@ mod tests {
         assert_eq!(settings.speed, 456);
         assert_eq!(settings.track_height, 222);
         assert!(settings.reverse);
+        assert_eq!(settings.direction, NoteDirection::Up);
         assert_eq!(settings.fade_position, FadePosition::Bottom);
         assert!(settings.delayed_note_enabled);
         assert_eq!(settings.short_note_threshold_ms, 73);

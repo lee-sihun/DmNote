@@ -128,6 +128,7 @@ function FALLBACK_NOTE_SETTINGS(): NoteSettings {
     speed: 400,
     trackHeight: 300,
     reverse: false,
+    direction: 'up',
     fadePosition: 'auto',
     fadeTopPx: 50,
     fadeBottomPx: 0,

@@ -5,6 +5,7 @@ export interface NoteSettings {
   speed: number;
   trackHeight: number;
   reverse: boolean;
+  direction: 'up' | 'down' | 'left' | 'right';
   fadeTopPx: number;
   fadeBottomPx: number;
   reverseFadeTopPx: number;
@@ -24,6 +25,7 @@ export const DEFAULT_NOTE_SETTINGS: NoteSettings = {
   speed: NOTE_SETTINGS_CONSTRAINTS.speed.default,
   trackHeight: NOTE_SETTINGS_CONSTRAINTS.trackHeight.default,
   reverse: false,
+  direction: 'up',
   fadeTopPx: NOTE_SETTINGS_CONSTRAINTS.fadeTopPx.default,
   fadeBottomPx: NOTE_SETTINGS_CONSTRAINTS.fadeBottomPx.default,
   reverseFadeTopPx: NOTE_SETTINGS_CONSTRAINTS.reverseFadeTopPx.default,

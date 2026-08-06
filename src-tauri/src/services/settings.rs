@@ -307,6 +307,9 @@ fn apply_note_patch(mut settings: NoteSettings, patch: &NoteSettingsPatch) -> No
     if let Some(value) = patch.reverse {
         settings.reverse = value;
     }
+    if let Some(value) = patch.direction {
+        settings.direction = value;
+    }
     if let Some(value) = patch.fade_position.as_ref() {
         settings.fade_position = value.clone();
     }
@@ -359,4 +362,22 @@ fn apply_js_patch(mut script: CustomJs, patch: &CustomJsPatch) -> CustomJs {
     }
     let _ = script.normalize();
     script
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::NoteDirection;
+
+    #[test]
+    fn apply_note_patch_updates_direction() {
+        let patch = NoteSettingsPatch {
+            direction: Some(NoteDirection::Left),
+            ..NoteSettingsPatch::default()
+        };
+
+        let updated = apply_note_patch(NoteSettings::default(), &patch);
+
+        assert_eq!(updated.direction, NoteDirection::Left);
+    }
 }

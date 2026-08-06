@@ -253,21 +253,7 @@ pub fn preset_load(
 
     let mut desired_settings = resolved_settings.note_settings;
     desired_settings.migrate_fade_position();
-    let note_patch = NoteSettingsPatch {
-        frame_limit: Some(desired_settings.frame_limit),
-        speed: Some(desired_settings.speed),
-        track_height: Some(desired_settings.track_height),
-        reverse: Some(desired_settings.reverse),
-        fade_position: Some(desired_settings.fade_position),
-        fade_top_px: Some(desired_settings.fade_top_px),
-        fade_bottom_px: Some(desired_settings.fade_bottom_px),
-        reverse_fade_top_px: Some(desired_settings.reverse_fade_top_px),
-        reverse_fade_bottom_px: Some(desired_settings.reverse_fade_bottom_px),
-        delayed_note_enabled: Some(desired_settings.delayed_note_enabled),
-        short_note_threshold_ms: Some(desired_settings.short_note_threshold_ms),
-        short_note_min_length_px: Some(desired_settings.short_note_min_length_px),
-        key_display_delay_ms: Some(desired_settings.key_display_delay_ms),
-    };
+    let note_patch = preset_note_settings_patch(desired_settings);
 
     let css_use = resolved_settings.use_custom_css;
     let mut custom_css = resolved_settings.custom_css;
@@ -456,6 +442,25 @@ pub fn preset_load(
         success: true,
         error: None,
     })
+}
+
+fn preset_note_settings_patch(settings: NoteSettings) -> NoteSettingsPatch {
+    NoteSettingsPatch {
+        frame_limit: Some(settings.frame_limit),
+        speed: Some(settings.speed),
+        track_height: Some(settings.track_height),
+        reverse: Some(settings.reverse),
+        direction: Some(settings.direction),
+        fade_position: Some(settings.fade_position),
+        fade_top_px: Some(settings.fade_top_px),
+        fade_bottom_px: Some(settings.fade_bottom_px),
+        reverse_fade_top_px: Some(settings.reverse_fade_top_px),
+        reverse_fade_bottom_px: Some(settings.reverse_fade_bottom_px),
+        delayed_note_enabled: Some(settings.delayed_note_enabled),
+        short_note_threshold_ms: Some(settings.short_note_threshold_ms),
+        short_note_min_length_px: Some(settings.short_note_min_length_px),
+        key_display_delay_ms: Some(settings.key_display_delay_ms),
+    }
 }
 
 #[tauri::command]
@@ -1551,8 +1556,20 @@ mod tests {
     use super::*;
     use crate::{
         defaults::{default_keys, default_positions},
-        models::{CustomCssHistoryEntry, CustomFont, JsPlugin, KnobPosition},
+        models::{CustomCssHistoryEntry, CustomFont, JsPlugin, KnobPosition, NoteDirection},
     };
+
+    #[test]
+    fn preset_note_settings_patch_includes_direction() {
+        let settings = NoteSettings {
+            direction: NoteDirection::Down,
+            ..NoteSettings::default()
+        };
+
+        let patch = preset_note_settings_patch(settings);
+
+        assert_eq!(patch.direction, Some(NoteDirection::Down));
+    }
 
     #[test]
     fn full_preset_settings_patch_preserves_custom_css_history() {

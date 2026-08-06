@@ -39,6 +39,7 @@ const KEY_POSITION_PATCH_FIELDS: &[&str] = &[
     "noteBorderRadius",
     "noteWidth",
     "noteAlignment",
+    "noteDirection",
     "noteEffectEnabled",
     "noteGlowEnabled",
     "noteGlowSize",

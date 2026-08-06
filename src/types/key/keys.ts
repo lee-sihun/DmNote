@@ -289,6 +289,8 @@ export const keyPositionSchema = z.object({
     .enum(['left', 'center', 'right'])
     .optional()
     .default('center'),
+  // 노트 진행 방향 오버라이드. 미설정 = 전역·탭 설정 상속 (default 금지)
+  noteDirection: z.enum(['up', 'down', 'left', 'right']).optional(),
   noteEffectEnabled: z.boolean().optional().default(true),
   noteGlowEnabled: z.boolean().optional().default(false),
   noteGlowSize: z.number().min(0).max(50).optional().default(20),

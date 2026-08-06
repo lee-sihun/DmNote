@@ -150,6 +150,7 @@ const NULLABLE_POSITION_FIELDS = new Set([
   'noteBorderWidth',
   'noteBorderColor',
   'noteBorderSide',
+  'noteDirection',
   'className',
   'zIndex',
   'backgroundColor',

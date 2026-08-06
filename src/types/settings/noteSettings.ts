@@ -10,6 +10,14 @@ export const fadePositionSchema = z.union([
   z.literal('both'),
 ]);
 
+export const noteDirectionSchema = z.union([
+  z.literal('up'),
+  z.literal('down'),
+  z.literal('left'),
+  z.literal('right'),
+]);
+export type NoteDirection = z.infer<typeof noteDirectionSchema>;
+
 export const noteSettingsSchema = z.object({
   frameLimit: z
     .number()
@@ -27,6 +35,8 @@ export const noteSettingsSchema = z.object({
     .min(NOTE_SETTINGS_CONSTRAINTS.trackHeight.min)
     .max(NOTE_SETTINGS_CONSTRAINTS.trackHeight.max),
   reverse: z.boolean(),
+  // 트랙이 키의 어느 쪽에 놓이는지. 이상값은 필드 단위로만 'up' 복구
+  direction: noteDirectionSchema.catch('up').optional().default('up'),
   // 하위 호환: 기존 store.json에 fadePosition이 있을 수 있음
   fadePosition: fadePositionSchema.optional().default('auto'),
   fadeTopPx: z
@@ -75,6 +85,7 @@ export const NOTE_SETTINGS_DEFAULTS: NoteSettings = Object.freeze({
   speed: NOTE_SETTINGS_CONSTRAINTS.speed.default,
   trackHeight: NOTE_SETTINGS_CONSTRAINTS.trackHeight.default,
   reverse: false,
+  direction: 'up',
   fadePosition: 'auto',
   fadeTopPx: NOTE_SETTINGS_CONSTRAINTS.fadeTopPx.default,
   fadeBottomPx: NOTE_SETTINGS_CONSTRAINTS.fadeBottomPx.default,
@@ -125,6 +136,7 @@ export function mergeNoteSettings(
     speed: tabOverride.speed ?? global.speed,
     trackHeight: tabOverride.trackHeight ?? global.trackHeight,
     reverse: tabOverride.reverse ?? global.reverse,
+    direction: tabOverride.direction ?? global.direction,
     fadePosition: tabOverride.fadePosition ?? global.fadePosition,
     fadeTopPx: tabOverride.fadeTopPx ?? global.fadeTopPx,
     fadeBottomPx: tabOverride.fadeBottomPx ?? global.fadeBottomPx,
