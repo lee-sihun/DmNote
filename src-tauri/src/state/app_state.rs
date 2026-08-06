@@ -883,6 +883,30 @@ fn run_panel_close_timeout(
     result.map(|()| true)
 }
 
+#[derive(Default)]
+struct OverlayResizeExecutionState {
+    last_executed_gen: Option<u64>,
+}
+
+impl OverlayResizeExecutionState {
+    fn is_stale(&self, request_gen: Option<u64>) -> bool {
+        request_gen.is_some_and(|request_gen| {
+            self.last_executed_gen
+                .is_some_and(|last_executed_gen| request_gen <= last_executed_gen)
+        })
+    }
+
+    fn mark_executed(&mut self, request_gen: Option<u64>) {
+        if let Some(request_gen) = request_gen {
+            self.last_executed_gen = Some(request_gen);
+        }
+    }
+
+    fn reset(&mut self) {
+        self.last_executed_gen = None;
+    }
+}
+
 pub struct AppState {
     pub store: Arc<AppStore>,
     pub settings: SettingsService,
@@ -894,7 +918,7 @@ pub struct AppState {
     /// 오버레이 생성·가시성 전환 single-flight 가드
     /// 메인 스레드 이벤트 콜백에서 획득 금지 — setup 훅은 이벤트 루프 가동 전이라 예외
     overlay_creation_lock: Mutex<()>,
-    overlay_resize_lock: Mutex<()>,
+    overlay_resize_lock: Mutex<OverlayResizeExecutionState>,
     overlay_bounds_generation: Arc<AtomicU64>,
     selection_session: Mutex<SelectionSessionSnapshot>,
     plugin_authority: PluginRuntimeAuthority,
@@ -973,7 +997,7 @@ impl AppState {
             overlay_force_close: Arc::new(AtomicBool::new(false)),
             overlay_initializing: Arc::new(AtomicBool::new(false)),
             overlay_creation_lock: Mutex::new(()),
-            overlay_resize_lock: Mutex::new(()),
+            overlay_resize_lock: Mutex::new(OverlayResizeExecutionState::default()),
             overlay_bounds_generation: Arc::new(AtomicU64::new(0)),
             selection_session: Mutex::new(selection_session),
             plugin_authority: PluginRuntimeAuthority::default(),
@@ -2079,8 +2103,12 @@ impl AppState {
         fixed_position_delta_y: Option<f64>,
         request_gen: Option<u64>,
     ) -> crate::errors::CmdResult<OverlayResizeResponse> {
+        let mut resize_execution = self.overlay_resize_lock.lock();
+        if resize_execution.is_stale(request_gen) {
+            return self.current_overlay_resize_response(app, request_gen);
+        }
+
         with_validated_overlay_dimensions(width, height, |width, height| {
-            let _resize_guard = self.overlay_resize_lock.lock();
             self.resize_overlay_validated(
                 app,
                 width,
@@ -2092,7 +2120,34 @@ impl AppState {
                 fixed_position_delta_x,
                 fixed_position_delta_y,
                 request_gen,
+                &mut resize_execution,
             )
+        })
+    }
+
+    fn current_overlay_resize_response(
+        &self,
+        app: &AppHandle,
+        request_gen: Option<u64>,
+    ) -> crate::errors::CmdResult<OverlayResizeResponse> {
+        let window = app
+            .get_webview_window(OVERLAY_LABEL)
+            .ok_or_else(|| anyhow!("Overlay window is not open"))?;
+        let fallback = self
+            .store
+            .snapshot()
+            .overlay_bounds
+            .unwrap_or(OverlayBounds {
+                x: 0.0,
+                y: 0.0,
+                width: DEFAULT_OVERLAY_WIDTH,
+                height: DEFAULT_OVERLAY_HEIGHT,
+            });
+        let scale_factor = window.scale_factor().unwrap_or(1.0);
+        let bounds = observe_overlay_bounds(&window, scale_factor, &fallback).bounds;
+        Ok(OverlayResizeResponse {
+            bounds,
+            request_gen,
         })
     }
 
@@ -2109,6 +2164,7 @@ impl AppState {
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
         request_gen: Option<u64>,
+        resize_execution: &mut OverlayResizeExecutionState,
     ) -> crate::errors::CmdResult<OverlayResizeResponse> {
         // 오버레이가 이미 열려있을 때만 리사이즈 수행
         // 창 미존재 시 에러 반환 (자동 생성하지 않음)
@@ -2212,6 +2268,7 @@ impl AppState {
             width,
             height,
         };
+        resize_execution.mark_executed(request_gen);
         let native_exit = apply_native_overlay_resize_transaction(
             previous_observation,
             &bounds,
@@ -2227,7 +2284,14 @@ impl AppState {
             },
             |fallback| observe_overlay_bounds(&window, scale_factor, fallback),
         );
-        let content_min_update = applied_content_min_update(&native_exit, content_min);
+        let semantic_update = applied_semantic_baseline_update(
+            &native_exit,
+            OverlaySemanticBaselineUpdate {
+                content_top_offset: next_content_top_offset,
+                content_margins: content_margins_update,
+                content_min: Some(content_min),
+            },
+        );
         finalize_overlay_resize_exit(
             native_exit,
             request_gen,
@@ -2236,9 +2300,7 @@ impl AppState {
                     &self.store,
                     &self.overlay_bounds_generation,
                     applied_bounds.clone(),
-                    next_content_top_offset,
-                    content_margins_update,
-                    content_min_update,
+                    semantic_update,
                 )
             },
             |applied_response| {
@@ -3211,6 +3273,7 @@ impl AppState {
             window_builder
         };
 
+        self.overlay_resize_lock.lock().reset();
         let window = window_builder
             .always_on_top(true)
             .skip_taskbar(false)
@@ -5028,6 +5091,27 @@ impl PanelBoundsPersistenceController {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct OverlaySemanticBaselineUpdate {
+    content_top_offset: Option<f64>,
+    content_margins: Option<Option<ContentMargins>>,
+    content_min: Option<Option<ContentMin>>,
+}
+
+impl OverlaySemanticBaselineUpdate {
+    fn apply_to(self, state: &mut AppStoreData) {
+        if let Some(offset) = self.content_top_offset {
+            state.overlay_last_content_top_offset = Some(offset);
+        }
+        if let Some(margins) = self.content_margins {
+            state.overlay_last_content_margins = margins;
+        }
+        if let Some(content_min) = self.content_min {
+            state.overlay_last_content_min = content_min;
+        }
+    }
+}
+
 fn defer_overlay_bounds_from_window(
     window: &WebviewWindow,
     store: &Arc<AppStore>,
@@ -5046,9 +5130,7 @@ fn defer_overlay_bounds_from_window(
             width: size.width,
             height: size.height,
         },
-        None,
-        None,
-        None,
+        OverlaySemanticBaselineUpdate::default(),
     )
 }
 
@@ -5056,22 +5138,12 @@ fn defer_overlay_bounds(
     store: &Arc<AppStore>,
     generation: &Arc<AtomicU64>,
     bounds: OverlayBounds,
-    content_top_offset: Option<f64>,
-    content_margins_update: Option<Option<ContentMargins>>,
-    content_min_update: Option<Option<ContentMin>>,
+    semantic_update: OverlaySemanticBaselineUpdate,
 ) -> Result<()> {
     store.update_deferred(move |state| {
         state.overlay_bounds = Some(bounds);
         state.overlay_bounds_are_logical = true;
-        if let Some(offset) = content_top_offset {
-            state.overlay_last_content_top_offset = Some(offset);
-        }
-        if let Some(margins) = content_margins_update {
-            state.overlay_last_content_margins = margins;
-        }
-        if let Some(content_min) = content_min_update {
-            state.overlay_last_content_min = content_min;
-        }
+        semantic_update.apply_to(state);
     })?;
     let scheduled_generation = generation.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
 
@@ -5141,11 +5213,15 @@ enum NativeOverlayResizeExit {
     Partial(OverlayBounds),
 }
 
-fn applied_content_min_update(
+fn applied_semantic_baseline_update(
     native_exit: &NativeOverlayResizeExit,
-    content_min: Option<ContentMin>,
-) -> Option<Option<ContentMin>> {
-    matches!(native_exit, NativeOverlayResizeExit::Applied(_)).then_some(content_min)
+    semantic_update: OverlaySemanticBaselineUpdate,
+) -> OverlaySemanticBaselineUpdate {
+    if matches!(native_exit, NativeOverlayResizeExit::Applied(_)) {
+        semantic_update
+    } else {
+        OverlaySemanticBaselineUpdate::default()
+    }
 }
 
 fn apply_native_overlay_resize_transaction(
@@ -5453,7 +5529,7 @@ mod tests {
 
     use super::{
         acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
-        applied_content_min_update, apply_native_overlay_resize_transaction,
+        applied_semantic_baseline_update, apply_native_overlay_resize_transaction,
         apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
         changed_panel_max_height, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
         content_margin_position_adjustment, finalize_overlay_resize_exit,
@@ -5471,14 +5547,15 @@ mod tests {
         EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
         FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData,
         MonitorSpec, Mutex, NativeOverlayResizeExit, OverlayBoundsObservation,
-        OverlayPositionAdjustment, PanelBoundsChange, PanelBoundsPersistenceController,
-        PanelBoundsPersistenceState, PanelBoundsSample, PanelCloseRequestState,
-        PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab, PanelViewMode, PanelViewState,
-        PanelViewTarget, PanelVisibilityEventEmitter, PanelVisibilityPayload,
-        PanelVisibilityReason, PhysicalPosition, PhysicalSize, SelectionSessionElement,
-        SelectionSessionSnapshot, TargetedPanelViewState, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
-        KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION,
-        MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
+        OverlayPositionAdjustment, OverlayResizeExecutionState, OverlaySemanticBaselineUpdate,
+        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
+        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab,
+        PanelPropertyTab, PanelViewMode, PanelViewState, PanelViewTarget,
+        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
+        PhysicalPosition, PhysicalSize, SelectionSessionElement, SelectionSessionSnapshot,
+        TargetedPanelViewState, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION, MAX_SELECTION_ELEMENTS,
+        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
         MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
         PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
@@ -5698,39 +5775,250 @@ mod tests {
     }
 
     #[test]
-    fn content_min_baseline_advances_only_after_position_apply() {
-        let bounds = OverlayBounds {
-            x: 40.0,
-            y: 60.0,
+    fn reverse_request_generation_preserves_the_latest_semantic_baseline() {
+        let previous_margins = ContentMargins {
+            top: 10.0,
+            bottom: 20.0,
+            left: 30.0,
+            right: 40.0,
+        };
+        let current_margins = ContentMargins {
+            top: 15.0,
+            bottom: 25.0,
+            left: 35.0,
+            right: 45.0,
+        };
+        let stale_margins = ContentMargins {
+            top: 8.0,
+            bottom: 18.0,
+            left: 20.0,
+            right: 30.0,
+        };
+        let previous_min = ContentMin { x: 10.0, y: 20.0 };
+        let current_min = ContentMin { x: 40.0, y: 50.0 };
+        let stale_min = ContentMin { x: -10.0, y: 5.0 };
+        let applied_bounds = OverlayBounds {
+            x: 125.0,
+            y: 125.0,
             width: 900.0,
             height: 700.0,
         };
-        let content_min = Some(ContentMin { x: 30.0, y: 15.0 });
+        let mut execution = OverlayResizeExecutionState::default();
+        let mut store = AppStoreData {
+            overlay_last_content_top_offset: Some(previous_margins.top),
+            overlay_last_content_margins: Some(previous_margins),
+            overlay_last_content_min: Some(previous_min),
+            ..AppStoreData::default()
+        };
+        let mut position = OverlayPositionAdjustment { x: 100.0, y: 100.0 };
 
+        assert!(!execution.is_stale(Some(1)));
+        execution.mark_executed(Some(1));
+
+        assert!(!execution.is_stale(Some(3)));
+        execution.mark_executed(Some(3));
+        let current_transition = resolve_content_margin_transition(
+            Some(current_margins),
+            None,
+            store.overlay_last_content_margins,
+            store.overlay_last_content_top_offset,
+        )
+        .unwrap();
+        let current_fixed = resolve_fixed_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            Some(current_min),
+            store.overlay_last_content_min,
+            None,
+            None,
+        );
+        let current_margin = content_margin_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            current_transition.previous,
+            current_transition.current,
+        );
+        position.x += current_fixed.x + current_margin.x;
+        position.y += current_fixed.y + current_margin.y;
+        applied_semantic_baseline_update(
+            &NativeOverlayResizeExit::Applied(applied_bounds),
+            OverlaySemanticBaselineUpdate {
+                content_top_offset: Some(current_margins.top),
+                content_margins: Some(Some(current_margins)),
+                content_min: Some(Some(current_min)),
+            },
+        )
+        .apply_to(&mut store);
+        assert_eq!(position, OverlayPositionAdjustment { x: 125.0, y: 125.0 });
+
+        let position_after_gen_3 = position;
+        let baseline_after_gen_3 = (
+            store.overlay_last_content_top_offset,
+            store.overlay_last_content_margins,
+            store.overlay_last_content_min,
+        );
+        let stale_transition = resolve_content_margin_transition(
+            Some(stale_margins),
+            None,
+            store.overlay_last_content_margins,
+            store.overlay_last_content_top_offset,
+        )
+        .unwrap();
+        let stale_fixed = resolve_fixed_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            Some(stale_min),
+            store.overlay_last_content_min,
+            None,
+            None,
+        );
+        let stale_margin = content_margin_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            stale_transition.previous,
+            stale_transition.current,
+        );
+        assert_ne!(
+            OverlayPositionAdjustment {
+                x: stale_fixed.x + stale_margin.x,
+                y: stale_fixed.y + stale_margin.y,
+            },
+            OverlayPositionAdjustment::default()
+        );
+        assert!(execution.is_stale(Some(2)));
+        assert!(execution.is_stale(Some(3)));
+
+        assert_eq!(execution.last_executed_gen, Some(3));
+        assert_eq!(position, position_after_gen_3);
         assert_eq!(
-            applied_content_min_update(
-                &NativeOverlayResizeExit::Applied(bounds.clone()),
-                content_min,
+            (
+                store.overlay_last_content_top_offset,
+                store.overlay_last_content_margins,
+                store.overlay_last_content_min,
             ),
-            Some(content_min)
+            baseline_after_gen_3
+        );
+
+        assert!(!execution.is_stale(None));
+        execution.mark_executed(None);
+        assert_eq!(execution.last_executed_gen, Some(3));
+        execution.reset();
+        assert!(!execution.is_stale(Some(1)));
+    }
+
+    #[test]
+    fn partial_exit_preserves_semantic_baselines_for_the_next_success() {
+        let previous_margins = ContentMargins {
+            top: 10.0,
+            bottom: 20.0,
+            left: 30.0,
+            right: 40.0,
+        };
+        let current_margins = ContentMargins {
+            top: 15.0,
+            bottom: 25.0,
+            left: 35.0,
+            right: 45.0,
+        };
+        let previous_min = ContentMin { x: 10.0, y: 20.0 };
+        let current_min = ContentMin { x: 40.0, y: 50.0 };
+        let partial_bounds = OverlayBounds {
+            x: 100.0,
+            y: 100.0,
+            width: 900.0,
+            height: 700.0,
+        };
+        let candidate_update = OverlaySemanticBaselineUpdate {
+            content_top_offset: Some(current_margins.top),
+            content_margins: Some(Some(current_margins)),
+            content_min: Some(Some(current_min)),
+        };
+        let mut store = AppStoreData {
+            overlay_last_content_top_offset: Some(previous_margins.top),
+            overlay_last_content_margins: Some(previous_margins),
+            overlay_last_content_min: Some(previous_min),
+            ..AppStoreData::default()
+        };
+
+        applied_semantic_baseline_update(
+            &NativeOverlayResizeExit::Partial(partial_bounds.clone()),
+            candidate_update,
+        )
+        .apply_to(&mut store);
+        assert_eq!(
+            (
+                store.overlay_last_content_top_offset,
+                store.overlay_last_content_margins,
+                store.overlay_last_content_min,
+            ),
+            (
+                Some(previous_margins.top),
+                Some(previous_margins),
+                Some(previous_min),
+            )
+        );
+
+        let transition = resolve_content_margin_transition(
+            Some(current_margins),
+            None,
+            store.overlay_last_content_margins,
+            store.overlay_last_content_top_offset,
+        )
+        .unwrap();
+        let fixed_adjustment = resolve_fixed_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            Some(current_min),
+            store.overlay_last_content_min,
+            None,
+            None,
+        );
+        let margin_adjustment = content_margin_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            transition.previous,
+            transition.current,
         );
         assert_eq!(
-            applied_content_min_update(
-                &NativeOverlayResizeExit::Partial(bounds.clone()),
-                content_min,
-            ),
-            None
+            OverlayPositionAdjustment {
+                x: fixed_adjustment.x + margin_adjustment.x,
+                y: fixed_adjustment.y + margin_adjustment.y,
+            },
+            OverlayPositionAdjustment { x: 25.0, y: 25.0 }
         );
+
+        applied_semantic_baseline_update(
+            &NativeOverlayResizeExit::Applied(partial_bounds),
+            candidate_update,
+        )
+        .apply_to(&mut store);
         assert_eq!(
-            applied_content_min_update(
-                &NativeOverlayResizeExit::Unapplied {
-                    bounds,
-                    error: CommandError::msg("injected position failure"),
-                },
-                content_min,
+            (
+                store.overlay_last_content_top_offset,
+                store.overlay_last_content_margins,
+                store.overlay_last_content_min,
             ),
-            None
+            (
+                Some(current_margins.top),
+                Some(current_margins),
+                Some(current_min),
+            )
         );
+        let repeated_transition = resolve_content_margin_transition(
+            Some(current_margins),
+            None,
+            store.overlay_last_content_margins,
+            store.overlay_last_content_top_offset,
+        )
+        .unwrap();
+        let repeated_fixed = resolve_fixed_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            Some(current_min),
+            store.overlay_last_content_min,
+            None,
+            None,
+        );
+        let repeated_margin = content_margin_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            repeated_transition.previous,
+            repeated_transition.current,
+        );
+        assert_eq!(repeated_fixed, OverlayPositionAdjustment::default());
+        assert_eq!(repeated_margin, OverlayPositionAdjustment::default());
     }
 
     #[test]

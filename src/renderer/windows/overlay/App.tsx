@@ -141,8 +141,10 @@ const resizeParamsEqual = (
   nearlyEqual(a.contentMargins.bottom, b.contentMargins.bottom) &&
   nearlyEqual(a.contentMargins.left, b.contentMargins.left) &&
   nearlyEqual(a.contentMargins.right, b.contentMargins.right) &&
-  (a.anchor !== 'fixed-position' ||
-    (nearlyEqual(a.minX, b.minX) && nearlyEqual(a.minY, b.minY)));
+  // contentMin 기준점은 백엔드 프로토콜 상태 - 앵커와 무관하게 원점 변경 시
+  // 항상 발행해 동기화 (stale 기준점은 fixed-position 전환 시 창 이동 유발)
+  nearlyEqual(a.minX, b.minX) &&
+  nearlyEqual(a.minY, b.minY);
 
 // 계약 §4 오류 wire: { errorCode, details, retryable }
 const isOverlayDimensionExceeded = (

@@ -706,18 +706,20 @@ describe('overlay geometry transaction', () => {
   });
 
   // 백엔드 멱등 모델: x=100에서 시작, contentMin 절대값을 저장 기준점과 비교해
-  // 스스로 delta를 계산·원자 갱신 (같은 요청 재수신 = delta 0). gen 에코
+  // 스스로 delta를 계산 (같은 요청 재수신 = delta 0). 창 이동은 fixed-position
+  // 앵커에서만, 기준점은 앵커와 무관하게 항상 원자 갱신. gen 에코
   const createBackendModel = () => {
     const state = { x: 100, y: 100, width: 0, height: 0 };
     let referenceMin: { x: number; y: number } | null = null;
     const apply = (payload: {
       width: number;
       height: number;
+      anchor?: string;
       requestGen?: number;
       contentMin?: { x: number; y: number };
     }) => {
       if (payload.contentMin) {
-        if (referenceMin) {
+        if (referenceMin && payload.anchor === 'fixed-position') {
           state.x += payload.contentMin.x - referenceMin.x;
           state.y += payload.contentMin.y - referenceMin.y;
         }
@@ -1060,6 +1062,47 @@ describe('overlay geometry transaction', () => {
     await flushAsync();
     expect(mocks.resize).toHaveBeenCalledTimes(4);
     expect(backend.state.width).toBe(220);
+  });
+
+  it('원점만 다른 탭 전환도 발행되어 contentMin 기준점이 stale로 남지 않는다', async () => {
+    const backend = createBackendModel();
+    mocks.resize.mockImplementation((payload) =>
+      Promise.resolve(backend.apply(payload)),
+    );
+
+    // A 탭(minX 0, top-left) - 기준점 0 확립
+    await act(async () => {
+      useKeyStore.setState(
+        bootLikeState('8key', {
+          '8key': [pos(0, 0)],
+          '4key': [pos(50, 0)],
+        }),
+      );
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
+    expect(backend.state.x).toBe(100);
+
+    // B 탭(minX 50): 크기·마진 동일, 원점만 다름 - no-op이 아니라 발행 (R8-1)
+    await act(async () => {
+      useKeyStore.setState({ selectedKeyType: '4key' });
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(2);
+    expect(lastResizePayload().contentMin).toEqual({ x: 50, y: 0 });
+    // top-left라 창은 이동하지 않고 기준점만 동기화
+    expect(backend.state.x).toBe(100);
+
+    // fixed-position 전환: 기준점이 최신(50)이라 delta 0 - 창 좌표 불변
+    mocks.overlayAnchor.value = 'fixed-position';
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: { ...state.positions, '4key': [pos(50, 0)] },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(3);
+    expect(backend.state.x).toBe(100);
   });
 
   it('wire: contentMin을 항상 포함하고 구 delta 필드는 보내지 않는다', async () => {
