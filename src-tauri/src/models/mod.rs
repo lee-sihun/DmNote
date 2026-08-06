@@ -1841,6 +1841,13 @@ pub struct ContentMargins {
     pub right: f64,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentMin {
+    pub x: f64,
+    pub y: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayBounds {
@@ -1975,6 +1982,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub overlay_last_content_margins: Option<ContentMargins>,
     #[serde(default)]
+    pub overlay_last_content_min: Option<ContentMin>,
+    #[serde(default)]
     pub overlay_bounds_are_logical: bool,
     #[serde(default)]
     pub key_counter_enabled: bool,
@@ -2051,6 +2060,7 @@ impl Default for AppStoreData {
             panel_bounds: None,
             overlay_last_content_top_offset: None,
             overlay_last_content_margins: None,
+            overlay_last_content_min: None,
             overlay_bounds_are_logical: false,
             key_counter_enabled: false,
             grid_settings: GridSettings::default(),
@@ -2541,8 +2551,8 @@ pub struct SettingsPatch {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_canonical_rgba, AppStoreData, ContentMargins, FadePosition, GradientSpec,
-        KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement,
+        compact_canonical_rgba, AppStoreData, ContentMargins, ContentMin, FadePosition,
+        GradientSpec, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement,
         KeyCounterSettings, KeyMappings, KeyPosition, KeySlot, NoteColor, NoteDirection,
         NoteSettings, OverlayBounds, OverlayResizeResponse, SlotMatch, StatType, TabNoteSettings,
         MAX_SLOT_KEYS,
@@ -2656,14 +2666,19 @@ mod tests {
                 "right": 4.0
             })
         );
+        assert_eq!(
+            serde_json::to_value(ContentMin { x: -12.5, y: 48.0 }).unwrap(),
+            serde_json::json!({ "x": -12.5, "y": 48.0 })
+        );
 
         let mut legacy = serde_json::to_value(AppStoreData::default()).unwrap();
-        legacy
-            .as_object_mut()
-            .unwrap()
-            .remove("overlayLastContentMargins");
+        let legacy = legacy.as_object_mut().unwrap();
+        legacy.remove("overlayLastContentMargins");
+        legacy.remove("overlayLastContentMin");
+        let legacy = serde_json::Value::Object(legacy.clone());
         let restored: AppStoreData = serde_json::from_value(legacy).unwrap();
         assert_eq!(restored.overlay_last_content_margins, None);
+        assert_eq!(restored.overlay_last_content_min, None);
     }
 
     #[test]

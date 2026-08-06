@@ -43,9 +43,10 @@ use crate::{
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
-        ContentMargins, DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters,
-        KeyMappings, KeySlot, KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor,
-        OverlayResizeResponse, PanelBounds, SettingsDiff, SettingsState, TabCssOverrides,
+        ContentMargins, ContentMin, DefaultsPayload, HistoryStatus, KeyCounterSettings,
+        KeyCounters, KeyMappings, KeySlot, KeySoundOutputBackendPersist, OverlayBounds,
+        OverlayResizeAnchor, OverlayResizeResponse, PanelBounds, SettingsDiff, SettingsState,
+        TabCssOverrides,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
     state::local_asset_path::path_identity_key,
@@ -893,6 +894,7 @@ pub struct AppState {
     /// 오버레이 생성·가시성 전환 single-flight 가드
     /// 메인 스레드 이벤트 콜백에서 획득 금지 — setup 훅은 이벤트 루프 가동 전이라 예외
     overlay_creation_lock: Mutex<()>,
+    overlay_resize_lock: Mutex<()>,
     overlay_bounds_generation: Arc<AtomicU64>,
     selection_session: Mutex<SelectionSessionSnapshot>,
     plugin_authority: PluginRuntimeAuthority,
@@ -971,6 +973,7 @@ impl AppState {
             overlay_force_close: Arc::new(AtomicBool::new(false)),
             overlay_initializing: Arc::new(AtomicBool::new(false)),
             overlay_creation_lock: Mutex::new(()),
+            overlay_resize_lock: Mutex::new(()),
             overlay_bounds_generation: Arc::new(AtomicU64::new(0)),
             selection_session: Mutex::new(selection_session),
             plugin_authority: PluginRuntimeAuthority::default(),
@@ -2071,11 +2074,13 @@ impl AppState {
         anchor: Option<String>,
         content_top_offset: Option<f64>,
         content_margins: Option<ContentMargins>,
+        content_min: Option<ContentMin>,
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
         request_gen: Option<u64>,
     ) -> crate::errors::CmdResult<OverlayResizeResponse> {
         with_validated_overlay_dimensions(width, height, |width, height| {
+            let _resize_guard = self.overlay_resize_lock.lock();
             self.resize_overlay_validated(
                 app,
                 width,
@@ -2083,6 +2088,7 @@ impl AppState {
                 anchor,
                 content_top_offset,
                 content_margins,
+                content_min,
                 fixed_position_delta_x,
                 fixed_position_delta_y,
                 request_gen,
@@ -2099,6 +2105,7 @@ impl AppState {
         anchor: Option<String>,
         content_top_offset: Option<f64>,
         content_margins: Option<ContentMargins>,
+        content_min: Option<ContentMin>,
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
         request_gen: Option<u64>,
@@ -2113,6 +2120,7 @@ impl AppState {
             .and_then(|value| overlay_resize_anchor_from_str(&value))
             .unwrap_or_else(|| snapshot.overlay_resize_anchor.clone());
         let content_margins = content_margins.filter(content_margins_are_finite);
+        let content_min = content_min.filter(content_min_is_finite);
         let legacy_content_top_offset = content_top_offset.filter(|value| value.is_finite());
         let next_content_top_offset = content_margins
             .map(|margins| margins.top)
@@ -2177,8 +2185,13 @@ impl AppState {
                 OverlayResizeAnchor::TopLeft => {}
             }
 
-            let fixed_adjustment =
-                fixed_position_adjustment(&anchor, fixed_position_delta_x, fixed_position_delta_y);
+            let fixed_adjustment = resolve_fixed_position_adjustment(
+                &anchor,
+                content_min,
+                snapshot.overlay_last_content_min,
+                fixed_position_delta_x,
+                fixed_position_delta_y,
+            );
             new_x += fixed_adjustment.x;
             new_y += fixed_adjustment.y;
 
@@ -2199,10 +2212,9 @@ impl AppState {
             width,
             height,
         };
-        apply_native_overlay_resize_transaction(
+        let native_exit = apply_native_overlay_resize_transaction(
             previous_observation,
             &bounds,
-            request_gen,
             |next_width, next_height| {
                 window
                     .set_size(LogicalSize::new(next_width, next_height))
@@ -2214,21 +2226,11 @@ impl AppState {
                     .map_err(Into::into)
             },
             |fallback| observe_overlay_bounds(&window, scale_factor, fallback),
-        )?;
-        let response = OverlayResizeResponse {
-            bounds,
-            request_gen,
-        };
-
-        log::debug!(
-            "[IPC] resize_overlay: emit overlay:resized ({}x{} at {}, {})",
-            response.bounds.width,
-            response.bounds.height,
-            response.bounds.x,
-            response.bounds.y
         );
-        complete_overlay_resize_after_native_apply(
-            response,
+        let content_min_update = applied_content_min_update(&native_exit, content_min);
+        finalize_overlay_resize_exit(
+            native_exit,
+            request_gen,
             |applied_bounds| {
                 defer_overlay_bounds(
                     &self.store,
@@ -2236,9 +2238,17 @@ impl AppState {
                     applied_bounds.clone(),
                     next_content_top_offset,
                     content_margins_update,
+                    content_min_update,
                 )
             },
             |applied_response| {
+                log::debug!(
+                    "[IPC] resize_overlay: emit overlay:resized ({}x{} at {}, {})",
+                    applied_response.bounds.width,
+                    applied_response.bounds.height,
+                    applied_response.bounds.x,
+                    applied_response.bounds.y
+                );
                 app.emit("overlay:resized", applied_response)?;
                 Ok(())
             },
@@ -5038,6 +5048,7 @@ fn defer_overlay_bounds_from_window(
         },
         None,
         None,
+        None,
     )
 }
 
@@ -5047,6 +5058,7 @@ fn defer_overlay_bounds(
     bounds: OverlayBounds,
     content_top_offset: Option<f64>,
     content_margins_update: Option<Option<ContentMargins>>,
+    content_min_update: Option<Option<ContentMin>>,
 ) -> Result<()> {
     store.update_deferred(move |state| {
         state.overlay_bounds = Some(bounds);
@@ -5056,6 +5068,9 @@ fn defer_overlay_bounds(
         }
         if let Some(margins) = content_margins_update {
             state.overlay_last_content_margins = margins;
+        }
+        if let Some(content_min) = content_min_update {
+            state.overlay_last_content_min = content_min;
         }
     })?;
     let scheduled_generation = generation.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
@@ -5116,17 +5131,38 @@ fn overlay_bounds_are_restored(actual: &OverlayBounds, expected: &OverlayBounds)
         && (actual.height - expected.height).abs() <= OVERLAY_BOUNDS_RESTORE_TOLERANCE
 }
 
+#[derive(Debug)]
+enum NativeOverlayResizeExit {
+    Applied(OverlayBounds),
+    Unapplied {
+        bounds: OverlayBounds,
+        error: crate::errors::CommandError,
+    },
+    Partial(OverlayBounds),
+}
+
+fn applied_content_min_update(
+    native_exit: &NativeOverlayResizeExit,
+    content_min: Option<ContentMin>,
+) -> Option<Option<ContentMin>> {
+    matches!(native_exit, NativeOverlayResizeExit::Applied(_)).then_some(content_min)
+}
+
 fn apply_native_overlay_resize_transaction(
     previous: OverlayBoundsObservation,
     desired: &OverlayBounds,
-    request_gen: Option<u64>,
     mut set_size: impl FnMut(f64, f64) -> crate::errors::CmdResult<()>,
     set_position: impl FnOnce(f64, f64) -> crate::errors::CmdResult<()>,
-    observe_after_rollback: impl FnOnce(&OverlayBounds) -> OverlayBoundsObservation,
-) -> crate::errors::CmdResult<()> {
-    set_size(desired.width, desired.height)?;
+    mut observe_exit: impl FnMut(&OverlayBounds) -> OverlayBoundsObservation,
+) -> NativeOverlayResizeExit {
+    if let Err(error) = set_size(desired.width, desired.height) {
+        return NativeOverlayResizeExit::Unapplied {
+            bounds: observe_exit(&previous.bounds).bounds,
+            error,
+        };
+    }
     let position_error = match set_position(desired.x, desired.y) {
-        Ok(()) => return Ok(()),
+        Ok(()) => return NativeOverlayResizeExit::Applied(observe_exit(desired).bounds),
         Err(error) => error,
     };
 
@@ -5136,13 +5172,16 @@ fn apply_native_overlay_resize_transaction(
     } else {
         desired
     };
-    let observed = observe_after_rollback(fallback);
+    let observed = observe_exit(fallback);
     if rollback_error.is_none()
         && previous.complete
         && observed.complete
         && overlay_bounds_are_restored(&observed.bounds, &previous.bounds)
     {
-        return Err(position_error);
+        return NativeOverlayResizeExit::Unapplied {
+            bounds: observed.bounds,
+            error: position_error,
+        };
     }
 
     log::warn!(
@@ -5160,25 +5199,46 @@ fn apply_native_overlay_resize_transaction(
         );
     }
 
-    Err(OverlayResizePartialError::new(request_gen, observed.bounds).into())
+    NativeOverlayResizeExit::Partial(observed.bounds)
 }
 
-fn complete_overlay_resize_after_native_apply(
-    response: OverlayResizeResponse,
-    record_bounds: impl FnOnce(&OverlayBounds) -> Result<()>,
+fn finalize_overlay_resize_exit(
+    native_exit: NativeOverlayResizeExit,
+    request_gen: Option<u64>,
+    record_applied_bounds: impl FnOnce(&OverlayBounds) -> Result<()>,
     emit_resized: impl FnOnce(&OverlayResizeResponse) -> Result<()>,
 ) -> crate::errors::CmdResult<OverlayResizeResponse> {
-    if let Err(error) = record_bounds(&response.bounds) {
-        log::warn!(
-            "failed to record applied overlay bounds; native resize remains authoritative: {error:#}"
-        );
+    let should_record = !matches!(&native_exit, NativeOverlayResizeExit::Unapplied { .. });
+    let bounds = match &native_exit {
+        NativeOverlayResizeExit::Applied(bounds)
+        | NativeOverlayResizeExit::Partial(bounds)
+        | NativeOverlayResizeExit::Unapplied { bounds, .. } => bounds.clone(),
+    };
+    let response = OverlayResizeResponse {
+        bounds,
+        request_gen,
+    };
+
+    if should_record {
+        if let Err(error) = record_applied_bounds(&response.bounds) {
+            log::warn!(
+                "failed to record applied overlay bounds; native resize remains authoritative: {error:#}"
+            );
+        }
     }
     if let Err(error) = emit_resized(&response) {
         log::warn!(
             "failed to emit applied overlay resize; native resize remains authoritative: {error:#}"
         );
     }
-    Ok(response)
+
+    match native_exit {
+        NativeOverlayResizeExit::Applied(_) => Ok(response),
+        NativeOverlayResizeExit::Unapplied { error, .. } => Err(error),
+        NativeOverlayResizeExit::Partial(_) => {
+            Err(OverlayResizePartialError::new(request_gen, response.bounds).into())
+        }
+    }
 }
 
 fn flush_deferred_overlay_bounds(store: &Arc<AppStore>, generation: &Arc<AtomicU64>) -> Result<()> {
@@ -5272,6 +5332,10 @@ fn content_margins_are_finite(margins: &ContentMargins) -> bool {
         && margins.right.is_finite()
 }
 
+fn content_min_is_finite(content_min: &ContentMin) -> bool {
+    content_min.x.is_finite() && content_min.y.is_finite()
+}
+
 fn resolve_content_margin_transition(
     current_margins: Option<ContentMargins>,
     current_top_offset: Option<f64>,
@@ -5354,6 +5418,28 @@ fn fixed_position_adjustment(
     }
 }
 
+fn resolve_fixed_position_adjustment(
+    anchor: &OverlayResizeAnchor,
+    current_content_min: Option<ContentMin>,
+    previous_content_min: Option<ContentMin>,
+    legacy_delta_x: Option<f64>,
+    legacy_delta_y: Option<f64>,
+) -> OverlayPositionAdjustment {
+    if anchor != &OverlayResizeAnchor::FixedPosition {
+        return OverlayPositionAdjustment::default();
+    }
+    let Some(current) = current_content_min else {
+        return fixed_position_adjustment(anchor, legacy_delta_x, legacy_delta_y);
+    };
+    let previous = previous_content_min
+        .filter(content_min_is_finite)
+        .unwrap_or(current);
+    OverlayPositionAdjustment {
+        x: current.x - previous.x,
+        y: current.y - previous.y,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -5367,31 +5453,32 @@ mod tests {
 
     use super::{
         acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
-        apply_native_overlay_resize_transaction, apply_panel_bounds_change,
-        begin_panel_close_request, bootstrap_keyboard_state, changed_panel_max_height,
-        collect_authorized_css_paths, collect_frontend_lifecycle_targets,
-        complete_overlay_resize_after_native_apply, content_margin_position_adjustment,
+        applied_content_min_update, apply_native_overlay_resize_transaction,
+        apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
+        changed_panel_max_height, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
+        content_margin_position_adjustment, finalize_overlay_resize_exit,
         fixed_position_adjustment, frontend_history_mutation_blocked,
         frontend_lifecycle_restore_labels, global_css_watch_path, install_history_handshake,
         install_lifecycle_handshake, key_state_payload, next_keyboard_recovery_plan,
         normalize_overlay_dimensions, panel_bounds_from_sample, panel_height_bounds,
         publish_panel_hidden_transition, publish_panel_visibility_transition,
         publish_selection_snapshot, resolve_content_margin_transition, resolve_event_age_ms,
-        resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
-        should_recover_keyboard_daemon, take_cancelable_editor_flush_handshake,
-        take_editor_flush_handshake, take_targeted_panel_view_state, validate_selection_session,
+        resolve_fixed_position_adjustment, resolve_panel_window_layout, run_panel_close_timeout,
+        should_create_overlay_on_startup, should_recover_keyboard_daemon,
+        take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
+        take_targeted_panel_view_state, validate_selection_session,
         with_validated_overlay_dimensions, EditorFlushAcknowledge, EditorFlushCompletion,
         EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
         FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData,
-        MonitorSpec, Mutex, OverlayBoundsObservation, OverlayPositionAdjustment, PanelBoundsChange,
-        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
-        PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
-        PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
-        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
-        SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
-        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
-        KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION, MAX_SELECTION_ELEMENTS,
-        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
+        MonitorSpec, Mutex, NativeOverlayResizeExit, OverlayBoundsObservation,
+        OverlayPositionAdjustment, PanelBoundsChange, PanelBoundsPersistenceController,
+        PanelBoundsPersistenceState, PanelBoundsSample, PanelCloseRequestState,
+        PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab, PanelViewMode, PanelViewState,
+        PanelViewTarget, PanelVisibilityEventEmitter, PanelVisibilityPayload,
+        PanelVisibilityReason, PhysicalPosition, PhysicalSize, SelectionSessionElement,
+        SelectionSessionSnapshot, TargetedPanelViewState, HISTORY_FRONTEND_FLUSH_INTERRUPTED,
+        KEYBOARD_DAEMON_STABLE_RUNTIME, KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION,
+        MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
         MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
         PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
@@ -5399,8 +5486,8 @@ mod tests {
         errors::{CommandError, OverlayResizeErrorCode},
         keyboard::KeyboardManager,
         models::{
-            AppStoreData, ContentMargins, CustomCss, OverlayBounds, OverlayResizeAnchor,
-            OverlayResizeResponse, PanelBounds, TabCss,
+            AppStoreData, ContentMargins, ContentMin, CustomCss, OverlayBounds,
+            OverlayResizeAnchor, OverlayResizeResponse, PanelBounds, TabCss,
         },
         state::local_asset_path::path_identity_key,
     };
@@ -5556,6 +5643,97 @@ mod tests {
     }
 
     #[test]
+    fn fixed_position_content_min_is_idempotent_and_legacy_delta_still_works() {
+        let previous = ContentMin { x: 10.0, y: 25.0 };
+        let current = ContentMin { x: 40.0, y: 15.0 };
+        let mut store = AppStoreData {
+            overlay_last_content_min: Some(previous),
+            ..AppStoreData::default()
+        };
+        let first = resolve_fixed_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            Some(current),
+            store.overlay_last_content_min,
+            Some(999.0),
+            Some(999.0),
+        );
+        store.overlay_last_content_min = Some(current);
+        let repeated = resolve_fixed_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            Some(current),
+            store.overlay_last_content_min,
+            Some(999.0),
+            Some(999.0),
+        );
+
+        assert_eq!(first, OverlayPositionAdjustment { x: 30.0, y: -10.0 });
+        assert_eq!(repeated, OverlayPositionAdjustment::default());
+        assert_eq!(
+            OverlayPositionAdjustment {
+                x: first.x + repeated.x,
+                y: first.y + repeated.y,
+            },
+            first
+        );
+        assert_eq!(
+            resolve_fixed_position_adjustment(
+                &OverlayResizeAnchor::FixedPosition,
+                None,
+                Some(previous),
+                Some(7.0),
+                Some(-9.0),
+            ),
+            OverlayPositionAdjustment { x: 7.0, y: -9.0 }
+        );
+        assert_eq!(
+            resolve_fixed_position_adjustment(
+                &OverlayResizeAnchor::FixedPosition,
+                Some(current),
+                None,
+                Some(999.0),
+                Some(999.0),
+            ),
+            OverlayPositionAdjustment::default()
+        );
+    }
+
+    #[test]
+    fn content_min_baseline_advances_only_after_position_apply() {
+        let bounds = OverlayBounds {
+            x: 40.0,
+            y: 60.0,
+            width: 900.0,
+            height: 700.0,
+        };
+        let content_min = Some(ContentMin { x: 30.0, y: 15.0 });
+
+        assert_eq!(
+            applied_content_min_update(
+                &NativeOverlayResizeExit::Applied(bounds.clone()),
+                content_min,
+            ),
+            Some(content_min)
+        );
+        assert_eq!(
+            applied_content_min_update(
+                &NativeOverlayResizeExit::Partial(bounds.clone()),
+                content_min,
+            ),
+            None
+        );
+        assert_eq!(
+            applied_content_min_update(
+                &NativeOverlayResizeExit::Unapplied {
+                    bounds,
+                    error: CommandError::msg("injected position failure"),
+                },
+                content_min,
+            ),
+            None
+        );
+    }
+
+    #[test]
     fn over_cap_resize_rejection_skips_all_window_and_store_state_changes() {
         let stored_margins = ContentMargins {
             top: 10.0,
@@ -5613,6 +5791,64 @@ mod tests {
     }
 
     #[test]
+    fn successful_native_exit_emits_observed_bounds() {
+        let previous = OverlayBounds {
+            x: 40.0,
+            y: 60.0,
+            width: 640.0,
+            height: 480.0,
+        };
+        let desired = OverlayBounds {
+            x: 120.0,
+            y: 180.0,
+            width: 900.0,
+            height: 700.0,
+        };
+        let observed = OverlayBounds {
+            x: 120.5,
+            y: 179.5,
+            width: 900.0,
+            height: 700.0,
+        };
+        let recorded = Mutex::new(None);
+        let emitted = Mutex::new(None);
+
+        let native_exit = apply_native_overlay_resize_transaction(
+            complete_bounds_observation(previous),
+            &desired,
+            |_, _| Ok(()),
+            |_, _| Ok(()),
+            |_| complete_bounds_observation(observed.clone()),
+        );
+        let response = finalize_overlay_resize_exit(
+            native_exit,
+            Some(80),
+            |bounds| {
+                *recorded.lock() = Some(bounds.clone());
+                Ok(())
+            },
+            |response| {
+                *emitted.lock() = Some(serde_json::to_value(response)?);
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert_eq!(response.bounds, observed);
+        assert_eq!(*recorded.lock(), Some(observed.clone()));
+        assert_eq!(
+            *emitted.lock(),
+            Some(serde_json::json!({
+                "x": 120.5,
+                "y": 179.5,
+                "width": 900.0,
+                "height": 700.0,
+                "requestGen": 80
+            }))
+        );
+    }
+
+    #[test]
     fn position_failure_with_verified_size_rollback_returns_general_error() {
         let previous = OverlayBounds {
             x: 40.0,
@@ -5629,11 +5865,12 @@ mod tests {
         let actual = Mutex::new(previous.clone());
         let size_calls = AtomicUsize::new(0);
         let observation_called = AtomicBool::new(false);
+        let record_called = AtomicBool::new(false);
+        let emitted = Mutex::new(None);
 
-        let error = apply_native_overlay_resize_transaction(
+        let native_exit = apply_native_overlay_resize_transaction(
             complete_bounds_observation(previous.clone()),
             &desired,
-            Some(81),
             |width, height| {
                 size_calls.fetch_add(1, Ordering::SeqCst);
                 let mut bounds = actual.lock();
@@ -5649,13 +5886,36 @@ mod tests {
                 observation_called.store(true, Ordering::SeqCst);
                 complete_bounds_observation(actual.lock().clone())
             },
+        );
+        let error = finalize_overlay_resize_exit(
+            native_exit,
+            Some(81),
+            |_| {
+                record_called.store(true, Ordering::SeqCst);
+                Ok(())
+            },
+            |response| {
+                *emitted.lock() = Some(serde_json::to_value(response)?);
+                Ok(())
+            },
         )
         .unwrap_err();
 
         assert!(matches!(error, CommandError::Message(_)));
         assert_eq!(size_calls.load(Ordering::SeqCst), 2);
         assert!(observation_called.load(Ordering::SeqCst));
+        assert!(!record_called.load(Ordering::SeqCst));
         assert_eq!(*actual.lock(), previous);
+        assert_eq!(
+            *emitted.lock(),
+            Some(serde_json::json!({
+                "x": 40.0,
+                "y": 60.0,
+                "width": 640.0,
+                "height": 480.0,
+                "requestGen": 81
+            }))
+        );
     }
 
     #[test]
@@ -5674,11 +5934,12 @@ mod tests {
         };
         let actual = Mutex::new(previous.clone());
         let size_calls = AtomicUsize::new(0);
+        let recorded = Mutex::new(None);
+        let emitted = Mutex::new(None);
 
-        let error = apply_native_overlay_resize_transaction(
+        let native_exit = apply_native_overlay_resize_transaction(
             complete_bounds_observation(previous.clone()),
             &desired,
-            Some(82),
             |width, height| {
                 let call = size_calls.fetch_add(1, Ordering::SeqCst);
                 if call == 1 {
@@ -5691,10 +5952,33 @@ mod tests {
             },
             |_, _| Err(CommandError::msg("injected position failure")),
             |_| complete_bounds_observation(actual.lock().clone()),
+        );
+        let error = finalize_overlay_resize_exit(
+            native_exit,
+            Some(82),
+            |bounds| {
+                *recorded.lock() = Some(bounds.clone());
+                Ok(())
+            },
+            |response| {
+                *emitted.lock() = Some(serde_json::to_value(response)?);
+                Ok(())
+            },
         )
         .unwrap_err();
 
         assert_eq!(size_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(*recorded.lock(), Some(actual.lock().clone()));
+        assert_eq!(
+            *emitted.lock(),
+            Some(serde_json::json!({
+                "x": 40.0,
+                "y": 60.0,
+                "width": 900.0,
+                "height": 700.0,
+                "requestGen": 82
+            }))
+        );
         assert_eq!(
             serde_json::to_value(&error).unwrap(),
             serde_json::json!({
@@ -5722,7 +6006,7 @@ mod tests {
     }
 
     #[test]
-    fn initial_size_failure_does_not_attempt_position_or_observation() {
+    fn initial_size_failure_skips_position_and_emits_observed_bounds() {
         let previous = OverlayBounds {
             x: 40.0,
             y: 60.0,
@@ -5737,11 +6021,12 @@ mod tests {
         };
         let position_called = AtomicBool::new(false);
         let observation_called = AtomicBool::new(false);
+        let record_called = AtomicBool::new(false);
+        let emitted = Mutex::new(None);
 
-        let error = apply_native_overlay_resize_transaction(
-            complete_bounds_observation(previous),
+        let native_exit = apply_native_overlay_resize_transaction(
+            complete_bounds_observation(previous.clone()),
             &desired,
-            Some(83),
             |_, _| Err(CommandError::msg("injected initial size failure")),
             |_, _| {
                 position_called.store(true, Ordering::SeqCst);
@@ -5749,14 +6034,37 @@ mod tests {
             },
             |_| {
                 observation_called.store(true, Ordering::SeqCst);
-                complete_bounds_observation(desired.clone())
+                complete_bounds_observation(previous.clone())
+            },
+        );
+        let error = finalize_overlay_resize_exit(
+            native_exit,
+            Some(83),
+            |_| {
+                record_called.store(true, Ordering::SeqCst);
+                Ok(())
+            },
+            |response| {
+                *emitted.lock() = Some(serde_json::to_value(response)?);
+                Ok(())
             },
         )
         .unwrap_err();
 
         assert!(matches!(error, CommandError::Message(_)));
         assert!(!position_called.load(Ordering::SeqCst));
-        assert!(!observation_called.load(Ordering::SeqCst));
+        assert!(observation_called.load(Ordering::SeqCst));
+        assert!(!record_called.load(Ordering::SeqCst));
+        assert_eq!(
+            *emitted.lock(),
+            Some(serde_json::json!({
+                "x": 40.0,
+                "y": 60.0,
+                "width": 640.0,
+                "height": 480.0,
+                "requestGen": 83
+            }))
+        );
     }
 
     #[test]
@@ -5773,8 +6081,9 @@ mod tests {
         let record_called = AtomicBool::new(false);
         let emit_called = AtomicBool::new(false);
 
-        let returned = complete_overlay_resize_after_native_apply(
-            expected.clone(),
+        let returned = finalize_overlay_resize_exit(
+            NativeOverlayResizeExit::Applied(expected.bounds.clone()),
+            expected.request_gen,
             |bounds| {
                 record_called.store(true, Ordering::SeqCst);
                 assert_eq!(bounds, &expected.bounds);
@@ -5806,8 +6115,9 @@ mod tests {
         };
         let emitted = Mutex::new(None);
 
-        let returned = complete_overlay_resize_after_native_apply(
-            expected.clone(),
+        let returned = finalize_overlay_resize_exit(
+            NativeOverlayResizeExit::Applied(expected.bounds.clone()),
+            expected.request_gen,
             |_| Ok(()),
             |response| {
                 *emitted.lock() = Some(serde_json::to_value(response)?);
@@ -5841,8 +6151,9 @@ mod tests {
         };
         let emitted = Mutex::new(None);
 
-        let returned = complete_overlay_resize_after_native_apply(
-            expected.clone(),
+        let returned = finalize_overlay_resize_exit(
+            NativeOverlayResizeExit::Applied(expected.bounds.clone()),
+            expected.request_gen,
             |_| Ok(()),
             |response| {
                 *emitted.lock() = Some(serde_json::to_value(response)?);

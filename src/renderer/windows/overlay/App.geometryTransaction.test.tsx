@@ -220,8 +220,7 @@ const lastResizePayload = () =>
       left: number;
       right: number;
     };
-    fixedPositionDeltaX?: number;
-    fixedPositionDeltaY?: number;
+    contentMin?: { x: number; y: number };
   };
 
 // 부팅 시퀀스 재현: 빈 store로 마운트한 뒤 bootstrap이 채우는 순서
@@ -387,7 +386,7 @@ describe('overlay geometry transaction', () => {
     expect(scene?.displayPositions[1].dx).toBe(10029);
   });
 
-  it('거부 실패는 로그·권위에만 반영되고 발행 정책은 last-sent 기준을 유지한다', async () => {
+  it('실패는 last-sent를 무효화해 동일 params candidate도 재발행된다 (멱등)', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.resize.mockImplementationOnce(() =>
       Promise.reject({
@@ -407,30 +406,29 @@ describe('overlay geometry transaction', () => {
     });
     await flushAsync();
 
-    // 거부돼도 렌더는 승격 (실패는 로그·권위 전용, 회복은 이벤트 화해 담당)
+    // 거부돼도 렌더는 승격 (실패는 로그 전용)
     expect(mocks.resize).toHaveBeenCalledTimes(1);
     expect(lastSceneProps()?.selectedKeyType).toBe('8key');
     expect(warnSpy).toHaveBeenCalled();
 
-    // 같은 params의 새 candidate: last-sent와 같아 재발행하지 않음 (master 의미론)
+    // 같은 params의 새 candidate: 실패로 last-sent가 무효화됐으므로 재발행
     await act(async () => {
       useKeyStore.setState((state) => ({
         positions: { ...state.positions, '8key': [pos(0, 0)] },
       }));
     });
     await flushAsync();
-    expect(mocks.resize).toHaveBeenCalledTimes(1);
+    expect(mocks.resize).toHaveBeenCalledTimes(2);
 
-    // 다른 params는 무조건 발행
+    // 성공 후 같은 params는 다시 no-op
     await act(async () => {
       useKeyStore.setState((state) => ({
-        positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
+        positions: { ...state.positions, '8key': [pos(0, 0)] },
       }));
     });
     await flushAsync();
     expect(mocks.resize).toHaveBeenCalledTimes(2);
-    expect(lastResizePayload().width).toBe(220);
-    expect(lastSceneProps()?.displayPositions).toHaveLength(2);
+    expect(lastSceneProps()?.displayPositions).toHaveLength(1);
   });
 
   it('탭 왕복: 초과 탭과 정상 탭을 오가도 항상 해당 탭이 렌더된다', async () => {
@@ -707,19 +705,24 @@ describe('overlay geometry transaction', () => {
     }
   });
 
-  // fixed-position 백엔드 모델: x=100에서 시작해 delta를 누적 적용,
-  // 응답·이벤트에 requestGen 에코 (신규 wire)
+  // 백엔드 멱등 모델: x=100에서 시작, contentMin 절대값을 저장 기준점과 비교해
+  // 스스로 delta를 계산·원자 갱신 (같은 요청 재수신 = delta 0). gen 에코
   const createBackendModel = () => {
     const state = { x: 100, y: 100, width: 0, height: 0 };
+    let referenceMin: { x: number; y: number } | null = null;
     const apply = (payload: {
       width: number;
       height: number;
       requestGen?: number;
-      fixedPositionDeltaX?: number;
-      fixedPositionDeltaY?: number;
+      contentMin?: { x: number; y: number };
     }) => {
-      state.x += payload.fixedPositionDeltaX ?? 0;
-      state.y += payload.fixedPositionDeltaY ?? 0;
+      if (payload.contentMin) {
+        if (referenceMin) {
+          state.x += payload.contentMin.x - referenceMin.x;
+          state.y += payload.contentMin.y - referenceMin.y;
+        }
+        referenceMin = { ...payload.contentMin };
+      }
       state.width = payload.width;
       state.height = payload.height;
       return {
@@ -743,8 +746,8 @@ describe('overlay geometry transaction', () => {
     await flushAsync();
   };
 
-  it('확인이 전부 유실돼도 fixed-position candidate는 봉쇄 없이 발행된다', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('fixed-position 확인 지연에도 contentMin 멱등으로 delta 누적 없이 정확한 위치에 도달한다', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     await remountWithFixedPositionAnchor();
 
     const backend = createBackendModel();
@@ -754,7 +757,7 @@ describe('overlay geometry transaction', () => {
 
     vi.useFakeTimers();
     try {
-      // P(minX 0) 성공 - 창 x 100 유지, 권위 확립
+      // P(minX 0) 성공 - 창 x 100, 기준점 확립
       await act(async () => {
         useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
         await vi.advanceTimersByTimeAsync(0);
@@ -762,8 +765,11 @@ describe('overlay geometry transaction', () => {
       expect(mocks.resize).toHaveBeenCalledTimes(1);
       expect(backend.state.x).toBe(100);
 
-      // A(minX 50): 요청 자체가 유실 - 응답도 이벤트도 영원히 없음
-      mocks.resize.mockImplementationOnce(() => new Promise(() => {}));
+      // A(minX 50): 백엔드는 적용했지만 확인이 무기한 지연 (x 150, 기준점 50)
+      mocks.resize.mockImplementationOnce((payload) => {
+        backend.apply(payload);
+        return new Promise(() => {});
+      });
       await act(async () => {
         useKeyStore.setState((state) => ({
           positions: { ...state.positions, '8key': [pos(50, 0)] },
@@ -771,13 +777,14 @@ describe('overlay geometry transaction', () => {
         await vi.advanceTimersByTimeAsync(0);
       });
       expect(mocks.resize).toHaveBeenCalledTimes(2);
+      expect(backend.state.x).toBe(150);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(5000);
       });
 
-      // C(minX 20): 미결 gen이 남아 있어도 발행이 봉쇄되지 않음 - 권위(P) 기준
-      // delta 20으로 즉시 발행 (R6-2)
+      // C(minX 20): 절대값 contentMin이라 프론트가 A의 적용 여부를 몰라도
+      // 백엔드 기준점 비교로 정확한 위치 도달 - delta 누적 없음 (R7-2)
       await act(async () => {
         useKeyStore.setState((state) => ({
           positions: { ...state.positions, '8key': [pos(20, 0)] },
@@ -785,17 +792,14 @@ describe('overlay geometry transaction', () => {
         await vi.advanceTimersByTimeAsync(0);
       });
       expect(mocks.resize).toHaveBeenCalledTimes(3);
-      expect(lastResizePayload().fixedPositionDeltaX).toBe(20);
+      expect(lastResizePayload().contentMin).toEqual({ x: 20, y: 0 });
       expect(backend.state.x).toBe(120);
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('deferred'),
-      );
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('resized 이벤트 채택: 응답이 유실돼도 실적용 이벤트로 위치 권위가 복구된다', async () => {
+  it('응답이 유실돼도 확인 이벤트와 contentMin 멱등으로 위치가 복구된다', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     await remountWithFixedPositionAnchor();
 
@@ -856,7 +860,7 @@ describe('overlay geometry transaction', () => {
     }
   });
 
-  it('타임아웃 전 도착한 resized 이벤트도 채택되어 응답 유실을 복구한다', async () => {
+  it('타임아웃 전 도착한 확인 이벤트도 유실 없이 화해에 반영된다', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await remountWithFixedPositionAnchor();
 
@@ -916,79 +920,55 @@ describe('overlay geometry transaction', () => {
     }
   });
 
-  it('이후 요청의 실패가 이전 미결 성공의 채택을 막지 않는다', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('실패 직전 재코얼레스된 동일 params 대기가 no-op으로 폐기되지 않는다', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.useFakeTimers();
-    try {
-      // P(gen1) 성공으로 권위 확립
-      await act(async () => {
-        useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
-        await vi.advanceTimersByTimeAsync(0);
-      });
-      expect(mocks.resize).toHaveBeenCalledTimes(1);
 
-      // A(gen2, width 220): 영구 pending → 타임아웃
-      const late = deferred<{
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      }>();
-      mocks.resize.mockReturnValueOnce(late.promise);
-      await act(async () => {
-        useKeyStore.setState((state) => ({
-          positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
-        }));
-        await vi.advanceTimersByTimeAsync(0);
-      });
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(5000);
-      });
-      expect(mocks.resize).toHaveBeenCalledTimes(2);
+    // P 성공
+    await act(async () => {
+      useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
 
-      // B(gen3, width 320) 발행·실패 - 채택 권위(P)는 유지, gen3만 미적용 확정
-      mocks.resize.mockImplementationOnce(() =>
-        Promise.reject(new Error('ipc down')),
-      );
-      await act(async () => {
-        useKeyStore.setState((state) => ({
-          positions: { ...state.positions, '8key': [pos(0, 0), pos(200, 0)] },
-        }));
-        await vi.advanceTimersByTimeAsync(0);
-      });
-      expect(mocks.resize).toHaveBeenCalledTimes(3);
+    // A(220): pending in-flight
+    const lateA = deferred<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>();
+    mocks.resize.mockReturnValueOnce(lateA.promise);
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(2);
 
-      // A 늦은 성공: gen2 > 채택 gen1이므로 B 실패와 무관하게 권위로 채택
-      // (응답은 권위 갱신 전용 - 재발행은 일으키지 않음)
-      await act(async () => {
-        late.resolve({ x: 0, y: 0, width: 220, height: 420 });
-        await vi.advanceTimersByTimeAsync(0);
-      });
-      expect(mocks.resize).toHaveBeenCalledTimes(3);
+    // B(320) 도착 후 다시 A로 재코얼레스 - 대기 슬롯 최종값이 in-flight A와 동일
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: { ...state.positions, '8key': [pos(0, 0), pos(200, 0)] },
+      }));
+    });
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(2);
 
-      // 후속 fixed-position 정상: 앵커 전환 디스패치(delta 0) 후 이동 delta 정상
-      mocks.overlayAnchor.value = 'fixed-position';
-      await act(async () => {
-        useKeyStore.setState((state) => ({
-          positions: { ...state.positions, '8key': [pos(0, 0), pos(200, 0)] },
-        }));
-        await vi.advanceTimersByTimeAsync(0);
-      });
-      expect(mocks.resize).toHaveBeenCalledTimes(4);
-      expect(lastResizePayload().fixedPositionDeltaX).toBe(0);
-
-      await act(async () => {
-        useKeyStore.setState((state) => ({
-          positions: { ...state.positions, '8key': [pos(30, 0), pos(230, 0)] },
-        }));
-        await vi.advanceTimersByTimeAsync(0);
-      });
-      expect(mocks.resize).toHaveBeenCalledTimes(5);
-      expect(lastResizePayload().fixedPositionDeltaX).toBe(30);
-    } finally {
-      vi.useRealTimers();
-    }
+    // A 실패: last-sent 무효화 → settle이 동일 params 대기(A)를 no-op으로
+    // 폐기하지 않고 재발행 (R7-3)
+    await act(async () => {
+      lateA.reject(new Error('ipc down'));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(3);
+    expect(lastResizePayload().width).toBe(220);
+    expect(lastSceneProps()?.displayPositions).toHaveLength(2);
   });
 
   it('gen 없는 resized 이벤트도 화해 루프로 창을 last-sent 목표로 복원한다 (하위 호환)', async () => {
@@ -1023,11 +1003,19 @@ describe('overlay geometry transaction', () => {
     await flushAsync();
     expect(backend.state.width).toBe(120);
 
-    // A(220): 크기 적용 후 위치 실패 - 검증된 롤백으로 원상 복구 + 일반 Err
+    // A(220): 크기 적용 후 위치 실패 - 검증된 롤백으로 원상 복구.
+    // 백엔드 실제 순서: 롤백 exit에서 실측 이벤트 발행(선행) 후 Err 응답(후행)
     mocks.resize.mockImplementationOnce((payload) => {
       backend.apply(payload);
       backend.state.width = 120;
       backend.state.height = 420;
+      mocks.resizedListener.current?.({
+        x: backend.state.x,
+        y: backend.state.y,
+        width: backend.state.width,
+        height: backend.state.height,
+        requestGen: (payload as { requestGen?: number }).requestGen,
+      });
       return Promise.reject(new Error('position failed; rolled back'));
     });
     await act(async () => {
@@ -1036,22 +1024,10 @@ describe('overlay geometry transaction', () => {
       }));
     });
     await flushAsync();
-    // 렌더는 220 레이아웃, 창은 롤백된 120 - 불일치 상태
-    expect(mocks.resize).toHaveBeenCalledTimes(2);
-    expect(lastSceneProps()?.displayPositions).toHaveLength(2);
-    expect(backend.state.width).toBe(120);
-
-    // 백엔드가 롤백 결과를 브로드캐스트 → 화해 루프가 목표(220)로 보정 재발행
-    await act(async () => {
-      mocks.resizedListener.current?.({
-        x: 100,
-        y: 100,
-        width: 120,
-        height: 420,
-      });
-    });
-    await flushAsync();
+    // 선행 이벤트는 in-flight 중 기록되고 후행 rejection의 settle에서 화해 발동
+    // → 목표(220)로 보정 재발행되어 창·렌더 일치
     expect(mocks.resize).toHaveBeenCalledTimes(3);
+    expect(lastSceneProps()?.displayPositions).toHaveLength(2);
     expect(backend.state.width).toBe(220);
 
     // 연속 보정 1회 제한: 달성 확인 없이 또 불일치 이벤트 → 재발행 없음
@@ -1086,7 +1062,23 @@ describe('overlay geometry transaction', () => {
     expect(backend.state.width).toBe(220);
   });
 
-  it('partial 오류는 실측 크기를 권위로 채택해 복귀 candidate가 보정 IPC를 낸다', async () => {
+  it('wire: contentMin을 항상 포함하고 구 delta 필드는 보내지 않는다', async () => {
+    await act(async () => {
+      useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
+
+    const payload = mocks.resize.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload.contentMin).toEqual({ x: 0, y: 0 });
+    expect('fixedPositionDeltaX' in payload).toBe(false);
+    expect('fixedPositionDeltaY' in payload).toBe(false);
+  });
+
+  it('partial 오류 후에도 복귀 candidate가 재발행된다', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     await remountWithFixedPositionAnchor();
 

@@ -3,7 +3,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     errors::CmdResult,
-    models::{BootstrapOverlayState, ContentMargins, OverlayResizeResponse},
+    models::{BootstrapOverlayState, ContentMargins, ContentMin, OverlayResizeResponse},
     state::AppState,
 };
 
@@ -18,6 +18,8 @@ pub struct OverlayResizeArgs {
     pub content_top_offset: Option<f64>,
     #[serde(default)]
     pub content_margins: Option<ContentMargins>,
+    #[serde(default)]
+    pub content_min: Option<ContentMin>,
     #[serde(default)]
     pub fixed_position_delta_x: Option<f64>,
     #[serde(default)]
@@ -73,6 +75,7 @@ pub fn overlay_resize(
         payload.anchor,
         payload.content_top_offset,
         payload.content_margins,
+        payload.content_min,
         payload.fixed_position_delta_x,
         payload.fixed_position_delta_y,
         payload.request_gen,
@@ -82,7 +85,7 @@ pub fn overlay_resize(
 #[cfg(test)]
 mod tests {
     use super::OverlayResizeArgs;
-    use crate::models::ContentMargins;
+    use crate::models::{ContentMargins, ContentMin};
 
     #[test]
     fn resize_payload_accepts_legacy_top_offset_without_margins() {
@@ -95,6 +98,7 @@ mod tests {
 
         assert_eq!(payload.content_top_offset, Some(150.0));
         assert_eq!(payload.content_margins, None);
+        assert_eq!(payload.content_min, None);
         assert_eq!(payload.request_gen, None);
     }
 
@@ -109,6 +113,10 @@ mod tests {
                 "left": 33,
                 "right": 44
             },
+            "contentMin": {
+                "x": -12.5,
+                "y": 48
+            },
             "requestGen": 73
         }))
         .unwrap();
@@ -122,6 +130,7 @@ mod tests {
                 right: 44.0,
             })
         );
+        assert_eq!(payload.content_min, Some(ContentMin { x: -12.5, y: 48.0 }));
         assert_eq!(payload.request_gen, Some(73));
     }
 }

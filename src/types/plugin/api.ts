@@ -999,6 +999,8 @@ export interface DMNoteAPI {
       anchor?: string;
       // 적용 확인(응답·overlay:resized)과의 상관용 요청 gen
       requestGen?: number;
+      // 콘텐츠 bounds 최소점 절대값 - 백엔드가 fixed-position 위치를 멱등 계산
+      contentMin?: { x: number; y: number };
       contentTopOffset?: number;
       // 4변 마진 계약. 부재 시 contentTopOffset 경로로 동작
       contentMargins?: {
