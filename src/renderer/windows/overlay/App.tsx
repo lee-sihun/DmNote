@@ -26,6 +26,11 @@ import {
 } from '@stores/signals/keySignals';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
+import {
+  selectPluginLayoutElements,
+  pluginLayoutElementsEqual,
+} from '@utils/plugin/pluginLayoutElements';
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
 
@@ -120,8 +125,11 @@ export default function App() {
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
   const knobPositions = useKnobItemStore((state) => state.positions);
-  const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements,
+  // 레이아웃 필드만 투영 구독 - 플러그인 state/html 변경이 App 리렌더로 승격되지 않게
+  const pluginElements = useStoreWithEqualityFn(
+    usePluginDisplayElementStore,
+    selectPluginLayoutElements,
+    pluginLayoutElementsEqual,
   );
 
   const backgroundColor = useSettingsStore((state) => state.backgroundColor);

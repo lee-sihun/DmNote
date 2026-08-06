@@ -592,3 +592,109 @@ describe('note timing payload and loss recovery', () => {
     expect(mocks.reconcileActiveNotes).not.toHaveBeenCalled();
   });
 });
+
+describe('plugin element 갱신 격리 (#111)', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  let originalApi: Window['api'];
+
+  const makePluginElement = () => ({
+    id: 'el',
+    fullId: 'plugin:el',
+    pluginId: 'plugin',
+    html: '<div>tick: 0</div>',
+    position: { x: 0, y: 0 },
+    tabId: '4key',
+    state: { count: 0 },
+  });
+
+  beforeEach(async () => {
+    originalApi = window.api;
+    resetSharedMocks();
+    mocks.noteEffectEnabled.value = false;
+    window.api = makeApiMock();
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      customTabs: [],
+      keyMappings: {
+        '4key': ['KeyK', 'KeyJ'],
+        '8key': ['KeyQ'],
+      },
+      positions: { '4key': [], '8key': [] },
+      canonicalPositions: { '4key': [], '8key': [] },
+      isBootstrapped: true,
+      isLocalUpdateInProgress: false,
+    });
+    resetAllKeySignals();
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushAsync();
+    await act(async () => {
+      usePluginDisplayElementStore.getState().addElement(makePluginElement());
+    });
+    mocks.bootstrap.mockClear();
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    resetAllKeySignals();
+    window.api = originalApi;
+    vi.restoreAllMocks();
+  });
+
+  it('state/html만 갱신하면 오버레이 루트를 리렌더하지 않는다', async () => {
+    const before = mocks.sceneRenders.count;
+
+    await act(async () => {
+      usePluginDisplayElementStore
+        .getState()
+        .updateElementBatched('plugin:el', { state: { count: 1 } });
+      flushRafCallbacks();
+    });
+    await act(async () => {
+      usePluginDisplayElementStore
+        .getState()
+        .updateElement('plugin:el', { html: '<div>tick: 1</div>' });
+    });
+    expect(mocks.sceneRenders.count).toBe(before);
+
+    // positive control - 레이아웃 필드(position) 변경은 리렌더되어야 함
+    await act(async () => {
+      usePluginDisplayElementStore
+        .getState()
+        .updateElement('plugin:el', { position: { x: 30, y: 0 } });
+    });
+    expect(mocks.sceneRenders.count).toBeGreaterThan(before);
+  });
+
+  it('plugin element 갱신이 키 눌림 signal을 리셋하지 않는다', async () => {
+    setKeyActive('KeyK', true);
+
+    // state 갱신 (App 리렌더 없음)
+    await act(async () => {
+      usePluginDisplayElementStore
+        .getState()
+        .updateElementBatched('plugin:el', { state: { count: 2 } });
+      flushRafCallbacks();
+    });
+    expect(getKeySignal('KeyK').value).toBe(true);
+
+    // 레이아웃 필드 갱신으로 App이 실제 리렌더된 뒤에도 유지 -
+    // useNoteSystem 모킹이 불안정 identity를 반환해도 재구독·리셋되지 않아야 함
+    await act(async () => {
+      usePluginDisplayElementStore
+        .getState()
+        .updateElement('plugin:el', {
+          measuredSize: { width: 80, height: 40 },
+        });
+    });
+    await flushAsync();
+    expect(getKeySignal('KeyK').value).toBe(true);
+    expect(mocks.bootstrap).not.toHaveBeenCalled();
+  });
+});
