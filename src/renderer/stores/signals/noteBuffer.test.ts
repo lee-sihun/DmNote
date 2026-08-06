@@ -112,3 +112,62 @@ const bufferAtEpochBoundary = (nowMs: number): boolean => {
   const buffer = createNoteBuffer();
   return buffer.maybeRebaseEpoch(nowMs);
 };
+
+describe('NoteBuffer noteDir 인스턴스 속성', () => {
+  const directedLayout = (
+    trackKey: string,
+    direction: 'up' | 'down' | 'left' | 'right',
+    trackIndex = 0,
+  ) => ({
+    ...layoutFor(trackKey),
+    trackIndex,
+    direction,
+  });
+
+  it('allocate가 트랙 방향 벡터를 스냅샷한다 (미지정 = up)', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([layoutFor('Z'), directedLayout('X', 'left', 1)]);
+
+    buffer.allocate('Z', 'note-up', 1000);
+    buffer.allocate('X', 'note-left', 1001);
+
+    expect([buffer.noteDir[0], buffer.noteDir[1]]).toEqual([0, -1]);
+    expect([buffer.noteDir[2], buffer.noteDir[3]]).toEqual([-1, 0]);
+  });
+
+  it('release 시프트가 noteDir 정렬을 유지한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      directedLayout('A', 'down', 0),
+      directedLayout('B', 'right', 1),
+    ]);
+    buffer.allocate('A', 'note-a', 1000);
+    buffer.allocate('B', 'note-b', 1001);
+
+    buffer.release('note-a');
+
+    expect([buffer.noteDir[0], buffer.noteDir[1]]).toEqual([1, 0]);
+    expect([buffer.noteDir[2], buffer.noteDir[3]]).toEqual([0, 0]);
+  });
+
+  it('releaseBatch 압축과 clear가 noteDir를 정리한다', () => {
+    const buffer = createNoteBuffer();
+    buffer.updateTrackLayouts([
+      directedLayout('A', 'down', 0),
+      directedLayout('B', 'left', 1),
+      directedLayout('C', 'right', 2),
+    ]);
+    buffer.allocate('A', 'note-a', 1000);
+    buffer.allocate('B', 'note-b', 1001);
+    buffer.allocate('C', 'note-c', 1002);
+
+    buffer.releaseBatch(['note-a', 'note-c']);
+    // 생존한 note-b(left)가 앞으로 압축되고 잔여 슬롯은 0
+    expect([buffer.noteDir[0], buffer.noteDir[1]]).toEqual([-1, 0]);
+    expect([buffer.noteDir[2], buffer.noteDir[3]]).toEqual([0, 0]);
+    expect([buffer.noteDir[4], buffer.noteDir[5]]).toEqual([0, 0]);
+
+    buffer.clear();
+    expect(buffer.noteDir.every((v) => v === 0)).toBe(true);
+  });
+});

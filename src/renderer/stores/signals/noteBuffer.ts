@@ -1,5 +1,6 @@
 import { DEFAULT_NOTE_BORDER_RADIUS } from '@constants/overlayDefaults';
 import { toRgbHexColor } from '@utils/color/colorUtils';
+import { DIRECTION_VECTORS } from '@utils/layout/trackGeometry';
 
 const MAX_NOTES = 2048;
 
@@ -94,6 +95,8 @@ export type TrackLayoutInput = {
 };
 
 type ResolvedTrackStyle = {
+  dirX: number;
+  dirY: number;
   opacityTop: number;
   opacityBottom: number;
   glowSize: number;
@@ -177,6 +180,8 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
       ? layout.noteBorderOpacity
       : 100;
 
+  const directionVector = DIRECTION_VECTORS[layout.direction ?? 'up'].d;
+
   return {
     ...layout,
     resolved: {
@@ -197,6 +202,8 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
       borderWidth,
       borderColor: borderColorSRGB,
       borderOpacity: clampPercentToUnit(borderOpacityPercent),
+      dirX: directionVector.x,
+      dirY: directionVector.y,
     },
   };
 };
@@ -215,6 +222,8 @@ export class NoteBuffer {
   readonly noteGlowColorTop: Float32Array;
   readonly noteGlowColorBottom: Float32Array;
   readonly noteBorder: Float32Array;
+  // 노트별 진행 방향 벡터 (캔버스 좌표 d) - allocate 시점 스냅샷
+  readonly noteDir: Float32Array;
 
   private readonly noteIdByIndex: (string | null)[];
   private readonly trackKeyByIndex: (string | null)[];
@@ -240,6 +249,7 @@ export class NoteBuffer {
     this.noteGlowColorTop = new Float32Array(MAX_NOTES * 3);
     this.noteGlowColorBottom = new Float32Array(MAX_NOTES * 3);
     this.noteBorder = new Float32Array(MAX_NOTES * 4);
+    this.noteDir = new Float32Array(MAX_NOTES * 2);
 
     this.noteIdByIndex = new Array<string | null>(MAX_NOTES).fill(null);
     this.trackKeyByIndex = new Array<string | null>(MAX_NOTES).fill(null);
@@ -341,6 +351,8 @@ export class NoteBuffer {
       borderWidth,
       borderColor,
       borderOpacity,
+      dirX,
+      dirY,
     } = layout.resolved;
     const trackIndex = layout.trackIndex;
 
@@ -409,6 +421,11 @@ export class NoteBuffer {
         insertIndex * 4,
         this.activeCount * 4,
       );
+      this.noteDir.copyWithin(
+        (insertIndex + 1) * 2,
+        insertIndex * 2,
+        this.activeCount * 2,
+      );
 
       for (let i = this.activeCount; i > insertIndex; i -= 1) {
         this.noteIdByIndex[i] = this.noteIdByIndex[i - 1];
@@ -463,6 +480,10 @@ export class NoteBuffer {
     this.noteBorder[borderOffset + 1] = borderColor[0];
     this.noteBorder[borderOffset + 2] = borderColor[1];
     this.noteBorder[borderOffset + 3] = borderColor[2];
+
+    const dirOffset = insertIndex * 2;
+    this.noteDir[dirOffset] = dirX;
+    this.noteDir[dirOffset + 1] = dirY;
 
     this.noteIdByIndex[insertIndex] = noteId;
     this.trackKeyByIndex[insertIndex] = trackKey;
@@ -519,6 +540,7 @@ export class NoteBuffer {
         (last + 1) * 3,
       );
       this.noteBorder.copyWithin(index * 4, nextIndex * 4, (last + 1) * 4);
+      this.noteDir.copyWithin(index * 2, nextIndex * 2, totalSize);
 
       for (let i = index; i < last; i += 1) {
         const movedId = this.noteIdByIndex[i + 1];
@@ -555,6 +577,8 @@ export class NoteBuffer {
     this.noteGlowColorBottom.fill(0, glowColorOffset, glowColorOffset + 3);
     const borderClearOffset = last * 4;
     this.noteBorder.fill(0, borderClearOffset, borderClearOffset + 4);
+    const dirClearOffset = last * 2;
+    this.noteDir.fill(0, dirClearOffset, dirClearOffset + 2);
 
     this.version += 1;
     return index;
@@ -616,6 +640,7 @@ export class NoteBuffer {
     this.noteGlowColorTop.fill(0, writeIndex * 3, previousCount * 3);
     this.noteGlowColorBottom.fill(0, writeIndex * 3, previousCount * 3);
     this.noteBorder.fill(0, writeIndex * 4, previousCount * 4);
+    this.noteDir.fill(0, writeIndex * 2, previousCount * 2);
 
     this.activeCount = writeIndex;
     this.version += 1;
@@ -640,6 +665,7 @@ export class NoteBuffer {
     this.noteGlowColorTop.fill(0);
     this.noteGlowColorBottom.fill(0);
     this.noteBorder.fill(0);
+    this.noteDir.fill(0);
   }
 
   private copySlot(from: number, to: number) {
@@ -695,6 +721,11 @@ export class NoteBuffer {
     this.noteBorder[toBorder + 1] = this.noteBorder[fromBorder + 1];
     this.noteBorder[toBorder + 2] = this.noteBorder[fromBorder + 2];
     this.noteBorder[toBorder + 3] = this.noteBorder[fromBorder + 3];
+
+    const fromDir = from * 2;
+    const toDir = to * 2;
+    this.noteDir[toDir] = this.noteDir[fromDir];
+    this.noteDir[toDir + 1] = this.noteDir[fromDir + 1];
   }
 }
 
