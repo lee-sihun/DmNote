@@ -62,24 +62,6 @@ impl Default for KeySlot {
     }
 }
 
-impl PartialEq<str> for KeySlot {
-    fn eq(&self, other: &str) -> bool {
-        matches!(self, Self::Single(key) if key == other)
-    }
-}
-
-impl PartialEq<&str> for KeySlot {
-    fn eq(&self, other: &&str) -> bool {
-        self == *other
-    }
-}
-
-impl PartialEq<String> for KeySlot {
-    fn eq(&self, other: &String) -> bool {
-        self == other.as_str()
-    }
-}
-
 impl KeySlot {
     pub fn canonical(&self) -> String {
         match self {

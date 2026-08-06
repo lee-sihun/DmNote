@@ -96,7 +96,7 @@ interface OverlaySceneProps {
   // 키/위치 데이터 (currentKeys = canonical 문자열)
   currentKeys: string[];
   // 인덱스 정렬된 표시 라벨 (멀티 슬롯 합성 라벨용)
-  currentKeyLabels?: string[];
+  currentKeyLabels: string[];
   displayPositions: KeyPosition[];
   currentPositions: KeyPosition[];
   displayStatPositions: Record<string, unknown>[];
@@ -176,9 +176,9 @@ const OverlayScene = ({
       )}
 
       {currentKeys.map((key, index) => {
-        // 멀티 슬롯은 합성 라벨, 단일 키는 기존 displayName
+        // 멀티 슬롯은 합성 라벨, 라벨 배열이 짧으면 단일 키 displayName 폴백
         const displayName =
-          currentKeyLabels?.[index] ?? getKeyInfoByGlobalKey(key).displayName;
+          currentKeyLabels[index] ?? getKeyInfoByGlobalKey(key).displayName;
         const basePosition =
           displayPositions[index] ??
           currentPositions[index] ??

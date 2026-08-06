@@ -102,6 +102,7 @@ export interface EditorCommitErrorDetails {
   currentRevision?: number;
   validationCode?: string;
   field?: string;
+  currentHistoryEpoch?: number;
 }
 
 export interface EditorCommitError {

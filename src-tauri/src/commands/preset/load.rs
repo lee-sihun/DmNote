@@ -1672,7 +1672,10 @@ mod tests {
 }"#;
         std::fs::write(&source_path, valid_source).unwrap();
         let parsed = read_preset_file(&source_path).unwrap();
-        assert_eq!(parsed.keys.as_ref().unwrap()["custom"], ["Q"]);
+        assert_eq!(
+            parsed.keys.as_ref().unwrap()["custom"],
+            [KeySlot::from("Q")]
+        );
         assert_eq!(parsed.key_positions.as_ref().unwrap()["custom"][0].dx, 12.5);
         assert_eq!(
             parsed.custom_js.as_ref().unwrap().plugins[0].id,
@@ -2255,7 +2258,7 @@ mod tests {
         assert_eq!(store.keys["5key"], untouched_keys);
         assert_eq!(store.key_positions["5key"], untouched_positions);
         assert_eq!(store.key_positions["4key"][0].dx, 777.0);
-        assert_eq!(store.keys["4key"][0], "Imported");
+        assert_eq!(store.keys["4key"][0], KeySlot::from("Imported"));
         assert_eq!(store.keys["4key"].len(), store.key_positions["4key"].len());
     }
 

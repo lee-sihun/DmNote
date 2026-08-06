@@ -2301,7 +2301,11 @@ mod tests {
         ] {
             let loaded = load_literal_fixture(version, &fixture);
             assert_eq!(loaded.editor_revision, 0, "{version}");
-            assert_eq!(loaded.keys["fixture-tab"], vec!["F13"], "{version}");
+            assert_eq!(
+                loaded.keys["fixture-tab"],
+                vec![KeySlot::from("F13")],
+                "{version}"
+            );
             assert_eq!(loaded.key_positions["fixture-tab"][0].dx, 13.0, "{version}");
             assert_eq!(loaded.key_counters["fixture-tab"]["F13"], 17, "{version}");
 
@@ -2340,6 +2344,50 @@ mod tests {
         v1_4_plus.plugin_data.clear();
         let cleared = serde_json::to_value(v1_4_plus).unwrap();
         assert!(cleared.get("editorRevision").is_none());
+    }
+
+    // master(구버전) recover_key_mapping_entries의 동결 사본: 문자열이 아닌
+    // 항목을 제자리 빈 문자열로 대체 (구버전 복구 동작, 2026-08 기준)
+    fn frozen_legacy_recover_keys(entries: &serde_json::Value) -> Vec<String> {
+        entries
+            .as_array()
+            .expect("keys mode must be an array")
+            .iter()
+            .map(|entry| entry.as_str().unwrap_or("").to_string())
+            .collect()
+    }
+
+    #[test]
+    fn downgrade_recovery_replaces_multi_slots_in_place_without_compaction() {
+        // 신버전이 직렬화한 keys 와이어 형식이 구버전 복구에서 어떻게 열화되는지 고정
+        let slots = vec![
+            KeySlot::from("Q"),
+            KeySlot::Multi {
+                keys: vec!["A".to_string(), "B".to_string()],
+                match_mode: SlotMatch::Any,
+            },
+            KeySlot::from("C"),
+            KeySlot::Multi {
+                keys: vec!["LEFT CTRL".to_string(), "Z".to_string()],
+                match_mode: SlotMatch::All,
+            },
+            KeySlot::default(),
+        ];
+        let wire = serde_json::to_value(&slots).unwrap();
+
+        let recovered = frozen_legacy_recover_keys(&wire);
+
+        // 배열 길이 보존(keyPositions 인덱스 결합 불변식), Multi만 제자리 "" 대체
+        assert_eq!(
+            recovered,
+            vec![
+                "Q".to_string(),
+                String::new(),
+                "C".to_string(),
+                String::new(),
+                String::new(),
+            ]
+        );
     }
 
     #[test]
@@ -2577,7 +2625,10 @@ mod tests {
         let loaded = load_store_from_path(&path).unwrap();
         assert!(!loaded.repaired);
         assert!(loaded.needs_persist);
-        assert_eq!(loaded.data.keys["4key"].last().unwrap(), "F5");
+        assert_eq!(
+            loaded.data.keys["4key"].last().unwrap(),
+            &KeySlot::from("F5")
+        );
         assert_eq!(
             loaded.data.key_positions["4key"].last().unwrap(),
             &KeyPosition::default()
@@ -2588,7 +2639,7 @@ mod tests {
         );
         assert!(loaded.data.keys["5key"].last().unwrap().is_unassigned());
         assert_eq!(loaded.data.key_positions["keys-only"].len(), 2);
-        assert_eq!(loaded.data.keys["positions-only"], vec![String::new()]);
+        assert_eq!(loaded.data.keys["positions-only"], vec![KeySlot::default()]);
 
         let modes = loaded
             .data
@@ -2970,7 +3021,10 @@ mod tests {
                 name: "Legacy tab".to_string(),
             }]
         );
-        assert_eq!(loaded.data.keys["legacy-tab"], vec!["A", "B"]);
+        assert_eq!(
+            loaded.data.keys["legacy-tab"],
+            vec![KeySlot::from("A"), KeySlot::from("B")]
+        );
         assert_eq!(loaded.data.key_positions["legacy-tab"].len(), 2);
         assert_eq!(loaded.data.key_positions["legacy-tab"][0].dx, 777.0);
         assert_eq!(loaded.data.key_positions["legacy-tab"][1].dx, 888.0);
@@ -3051,7 +3105,10 @@ mod tests {
 
         assert!(!loaded.repaired);
         assert_eq!(loaded.data.selected_key_type, "tauri-legacy-tab");
-        assert_eq!(loaded.data.keys["tauri-legacy-tab"], vec!["Q"]);
+        assert_eq!(
+            loaded.data.keys["tauri-legacy-tab"],
+            vec![KeySlot::from("Q")]
+        );
         assert_eq!(loaded.data.key_positions["tauri-legacy-tab"].len(), 1);
         let position = &loaded.data.key_positions["tauri-legacy-tab"][0];
         assert_eq!(position.dx, 654.0);
@@ -3134,14 +3191,14 @@ mod tests {
         assert_eq!(
             loaded.data.keys["alpha-tab"],
             vec![
-                String::new(),
-                "A".to_string(),
-                String::new(),
-                "C".to_string(),
-                String::new(),
+                KeySlot::default(),
+                KeySlot::from("A"),
+                KeySlot::default(),
+                KeySlot::from("C"),
+                KeySlot::default(),
             ]
         );
-        assert_eq!(loaded.data.keys["beta-tab"], vec!["D".to_string()]);
+        assert_eq!(loaded.data.keys["beta-tab"], vec![KeySlot::from("D")]);
         assert!(loaded.data.keys["empty-mode"].is_empty());
         assert_eq!(loaded.data.keys["4key"], default_keys()["4key"]);
         assert_eq!(
@@ -3452,7 +3509,7 @@ mod tests {
         assert_eq!(loaded.data.selected_key_type, "positions-damaged");
         assert_eq!(
             loaded.data.keys["keys-damaged"],
-            vec![String::new(), String::new()]
+            vec![KeySlot::default(), KeySlot::default()]
         );
         assert_eq!(
             loaded.data.key_positions["keys-damaged"]
@@ -3461,14 +3518,17 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![111.0, 222.0]
         );
-        assert_eq!(loaded.data.keys["positions-damaged"], vec!["A", "B", "C"]);
+        assert_eq!(
+            loaded.data.keys["positions-damaged"],
+            vec![KeySlot::from("A"), KeySlot::from("B"), KeySlot::from("C")]
+        );
         assert_eq!(
             loaded.data.key_positions["positions-damaged"],
             vec![KeyPosition::default(); 3]
         );
         assert_eq!(
             loaded.data.keys["valid-mismatch"],
-            vec!["Q".to_string(), String::new()]
+            vec![KeySlot::from("Q"), KeySlot::default()]
         );
         assert_eq!(loaded.data.key_positions["valid-mismatch"].len(), 2);
         assert!(loaded.data.keys["missing-both"].is_empty());
@@ -3520,7 +3580,7 @@ mod tests {
         assert!(!loaded.repaired);
         assert!(loaded.needs_persist);
         assert_eq!(loaded.data.selected_key_type, "4key");
-        assert_eq!(loaded.data.keys["ghost-tab"], vec!["G"]);
+        assert_eq!(loaded.data.keys["ghost-tab"], vec![KeySlot::from("G")]);
     }
 
     #[test]
@@ -3730,7 +3790,7 @@ mod tests {
         assert!(loaded.repaired);
         assert!(loaded.data.custom_tabs.is_empty());
         assert_eq!(loaded.data.selected_key_type, "4key");
-        assert_eq!(loaded.data.keys["ghost-tab"], vec!["G".to_string()]);
+        assert_eq!(loaded.data.keys["ghost-tab"], vec![KeySlot::from("G")]);
     }
 
     #[test]

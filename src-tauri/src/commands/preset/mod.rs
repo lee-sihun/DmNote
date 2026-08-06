@@ -243,7 +243,7 @@ mod tests {
     // file URL 경로 테스트가 유닉스 전용이라 Windows에선 미사용 경고 방지
     #[cfg(not(target_os = "windows"))]
     use super::local_source_path_from_image_ref;
-    use crate::models::{KeyCounterColor, NoteColor};
+    use crate::models::{KeyCounterColor, KeySlot, NoteColor};
     use serde::Deserialize;
     use serde_json::json;
 
@@ -383,7 +383,10 @@ mod tests {
         }))
         .expect("1.3.0 preset must deserialize");
 
-        assert_eq!(tauri_130.keys.as_ref().unwrap()["custom-130"], ["Q"]);
+        assert_eq!(
+            tauri_130.keys.as_ref().unwrap()["custom-130"],
+            vec![KeySlot::from("Q")]
+        );
         let old_position = &tauri_130.key_positions.as_ref().unwrap()["custom-130"][0];
         assert_eq!(old_position.dx, 12.5);
         assert_eq!(old_position.dy, -3.0);
@@ -437,7 +440,10 @@ mod tests {
         for (version, fixture) in transition_fixtures {
             let preset: PresetFile = serde_json::from_value(fixture)
                 .unwrap_or_else(|error| panic!("{version} preset must deserialize: {error}"));
-            assert_eq!(preset.keys.as_ref().unwrap()["4key"], vec!["Q"]);
+            assert_eq!(
+                preset.keys.as_ref().unwrap()["4key"],
+                vec![KeySlot::from("Q")]
+            );
         }
 
         let tauri_161: PresetFile = serde_json::from_value(json!({
@@ -530,7 +536,10 @@ mod tests {
         }))
         .expect("1.6.1 preset must deserialize");
 
-        assert_eq!(tauri_161.keys.as_ref().unwrap()["custom-161"], ["W"]);
+        assert_eq!(
+            tauri_161.keys.as_ref().unwrap()["custom-161"],
+            [KeySlot::from("W")]
+        );
         let position_161 = &tauri_161.key_positions.as_ref().unwrap()["custom-161"][0];
         assert_eq!(position_161.group_id.as_deref(), Some("historic-group"));
         assert_eq!(

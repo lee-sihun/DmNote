@@ -12,7 +12,6 @@ declare global {
 }
 import { useTranslation } from '@contexts/useTranslation';
 import DraggableKey from '@components/shared/Key';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import GridKeySettingModal from './GridKeySettingModal';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
@@ -1462,8 +1461,8 @@ const Grid = ({
         suppressDefault: Boolean(previewImage),
       }),
     );
-    const displayName =
-      getKeyInfoByGlobalKey(keyName)?.displayName || keyName || '';
+    // keyName은 호출부에서 slotDisplayName으로 합성된 표시 라벨
+    const displayName = keyName || '';
 
     // 키의 중심이 마우스에 위치하도록 오프셋 계산
     const offsetX = duplicateCursor.x - width / 2;
@@ -2101,7 +2100,7 @@ const Grid = ({
                 { confirmText: t('confirm.remove') },
               );
             } else if (id === 'duplicate') {
-              const keyCode = slotDisplayName(
+              const displayLabel = slotDisplayName(
                 keyMappings[selectedKeyType]?.[contextIndex] ?? '',
               );
               const position =
@@ -2141,7 +2140,7 @@ const Grid = ({
                 setDuplicateState({
                   elementType: 'key',
                   sourceIndex: contextIndex,
-                  keyName: keyCode,
+                  keyName: displayLabel,
                   position: {
                     ...position,
                     noteColor: clonedNoteColor,

@@ -1295,7 +1295,10 @@ impl Drop for HistoryBarrierLease {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{keyboard::KeyboardManager, models::EDITOR_SCHEMA_VERSION};
+    use crate::{
+        keyboard::KeyboardManager,
+        models::{KeySlot, EDITOR_SCHEMA_VERSION},
+    };
     use std::{
         collections::HashMap,
         sync::mpsc,
@@ -1422,7 +1425,7 @@ mod tests {
         assert!(matches!(
             history.past.back().map(|entry| &entry.before),
             Some(HistorySnapshot::Editor { before, .. })
-                if before.keys.as_ref().unwrap()["mode"] == ["repeated"]
+                if before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("repeated")]
         ));
     }
 
@@ -1469,7 +1472,7 @@ mod tests {
                 HistorySnapshot::PluginElements(plugin),
                 HistorySnapshot::Editor { before, .. }
             ] if plugin.plugin_id == "plugin-b"
-                && before.keys.as_ref().unwrap()["mode"] == ["before"]
+                && before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("before")]
         ));
     }
 
@@ -1515,7 +1518,7 @@ mod tests {
         assert!(matches!(
             &latest.before,
             HistorySnapshot::Editor { before, .. }
-                if before.keys.as_ref().unwrap()["mode"] == ["after-intervening-editor"]
+                if before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("after-intervening-editor")]
         ));
 
         let intervening = undo_order.next().unwrap();
@@ -1523,7 +1526,7 @@ mod tests {
         assert!(matches!(
             &intervening.before,
             HistorySnapshot::Editor { before, .. }
-                if before.keys.as_ref().unwrap()["mode"] == ["before-intervening-editor"]
+                if before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("before-intervening-editor")]
         ));
     }
 

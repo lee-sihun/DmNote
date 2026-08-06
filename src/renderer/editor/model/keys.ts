@@ -16,6 +16,7 @@ import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
 } from '@src/types/key/keys';
+import { cloneSlot } from '@utils/keySlot';
 
 // ----------------------------------------------------------------------------
 // 기본 키 포지션 생성
@@ -172,7 +173,7 @@ export function duplicateKey(
   return {
     mappings: {
       ...mappings,
-      [mode]: [...mapping, sourceKey],
+      [mode]: [...mapping, cloneSlot(sourceKey)],
     },
     positions: {
       ...positions,

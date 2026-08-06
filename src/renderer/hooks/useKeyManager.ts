@@ -530,6 +530,8 @@ export function useKeyManager() {
       newSlot,
     );
     setKeyMappings(updatedMappings);
+    // 실패 투영은 coordinator 소유: retryable은 pending 재시도로 수렴,
+    // 비재시도 거절은 discardRejectedPending이 권위 문서를 동기 복원
     window.api.keys.update(updatedMappings).catch((error) => {
       console.error('Failed to update key mapping', error);
     });

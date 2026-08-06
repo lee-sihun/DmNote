@@ -5870,7 +5870,7 @@ mod tests {
         assert_eq!(store.writer.persist_count(), persist_count + 1);
         let snapshot = store.snapshot();
         assert_eq!(snapshot.editor_revision, 1);
-        assert_eq!(snapshot.keys["4key"][0], "StrictKey");
+        assert_eq!(snapshot.keys["4key"][0], KeySlot::from("StrictKey"));
         assert_eq!(snapshot.key_counters["4key"]["StrictKey"], 0);
         assert!(!snapshot.key_counters["4key"].contains_key(&old_key));
         assert_eq!(change.history_status.unwrap().history_revision, 1);
@@ -5882,7 +5882,7 @@ mod tests {
             .unwrap()
             .data;
         assert_eq!(reloaded.editor_revision, 1);
-        assert_eq!(reloaded.keys["4key"][0], "StrictKey");
+        assert_eq!(reloaded.keys["4key"][0], KeySlot::from("StrictKey"));
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -7031,7 +7031,7 @@ mod tests {
         drop(barrier);
 
         let restored = store.snapshot();
-        assert_eq!(restored.keys["4key"][0], old_key);
+        assert_eq!(restored.keys["4key"][0].canonical(), old_key);
         assert_eq!(restored.key_counters, counters_after_commit);
 
         store.flush_and_shutdown().unwrap();
@@ -7451,7 +7451,10 @@ mod tests {
         let outcome = undo.join().unwrap();
 
         assert_eq!(outcome.change.unwrap().result.revision, 3);
-        assert_eq!(state.store.snapshot().keys[&mode][0], original_key);
+        assert_eq!(
+            state.store.snapshot().keys[&mode][0].canonical(),
+            original_key
+        );
         assert_eq!(state.snapshot_key_counters(), expected_counters);
         assert!(state.keyboard.register_key_down(&mode, &original_key));
         assert!(!state.keyboard.register_key_down(&mode, &legacy_key));
@@ -8052,7 +8055,7 @@ mod tests {
             .unwrap();
 
         let snapshot = store.snapshot();
-        assert_eq!(snapshot.keys["ghost"], vec!["GhostKey".to_string()]);
+        assert_eq!(snapshot.keys["ghost"], vec![KeySlot::from("GhostKey")]);
         assert_eq!(
             snapshot.key_positions["ghost"],
             vec![KeyPosition::default()]
@@ -8208,7 +8211,7 @@ mod tests {
         let keys = change.document.keys;
         let positions = change.document.key_positions;
         assert_eq!(store.writer.persist_count(), persist_count + 1);
-        assert_eq!(keys["4key"].last().unwrap(), "F5");
+        assert_eq!(keys["4key"].last().unwrap(), &KeySlot::from("F5"));
         assert_eq!(positions["4key"].last().unwrap(), &KeyPosition::default());
         assert!(keys["5key"].last().unwrap().is_unassigned());
         assert_eq!(keys["4key"].len(), positions["4key"].len());
@@ -9702,7 +9705,7 @@ mod tests {
         assert!(!store.skip_asset_sweep);
         let snapshot = store.snapshot();
         assert_eq!(snapshot.custom_tabs.len(), 1);
-        assert_eq!(snapshot.keys[tab_id], vec!["F5"]);
+        assert_eq!(snapshot.keys[tab_id], vec![KeySlot::from("F5")]);
         assert_eq!(snapshot.key_positions[tab_id].len(), 1);
         assert_eq!(snapshot.stat_positions[tab_id].len(), 1);
         assert_eq!(snapshot.graph_positions[tab_id].len(), 1);
@@ -9730,7 +9733,7 @@ mod tests {
         let reloaded = crate::state::migration::load_store_from_path(&store_path).unwrap();
         assert!(!reloaded.repaired);
         assert_eq!(reloaded.data.custom_tabs.len(), 1);
-        assert_eq!(reloaded.data.keys[tab_id], vec!["F5"]);
+        assert_eq!(reloaded.data.keys[tab_id], vec![KeySlot::from("F5")]);
         assert_eq!(reloaded.data.key_positions[tab_id].len(), 1);
         assert_eq!(reloaded.data.stat_positions[tab_id].len(), 1);
         assert_eq!(reloaded.data.graph_positions[tab_id].len(), 1);
