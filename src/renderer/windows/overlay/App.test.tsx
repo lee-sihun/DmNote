@@ -20,9 +20,13 @@ const mocks = vi.hoisted(() => ({
   handleKeyUp: vi.fn(),
   finalizeAllActive: vi.fn(),
   reconcileActiveNotes: vi.fn(),
+  subscribe: vi.fn((_cb: (event: unknown) => void) => () => {}),
+  notesRef: { current: {} },
+  noteBuffer: {},
   resyncListener: null as null | (() => void),
   keysResetListener: null as null | ((payload: unknown) => void),
   noteEffectEnabled: { value: false },
+  sceneRenders: { count: 0 },
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
@@ -56,15 +60,20 @@ vi.mock('@hooks/overlay/useBuiltinStatsSubscription', () => ({
   useBuiltinStatsSubscription: vi.fn(),
 }));
 vi.mock('@hooks/overlay/useNoteSystem', () => ({
+  // 실제 훅이 불안정 참조를 반환해도 App이 재구독·리셋하지 않아야 한다는
+  // 계약(#111)을 검증하기 위해 의도적으로 매 렌더 새 identity를 반환.
+  // 안정 참조(mocks.handleKeyDown 직접 전달)로 되돌리지 말 것
   useNoteSystem: () => ({
-    notesRef: { current: {} },
-    subscribe: vi.fn(() => () => {}),
-    handleKeyDown: mocks.handleKeyDown,
-    handleKeyUp: mocks.handleKeyUp,
-    finalizeAllActive: mocks.finalizeAllActive,
-    reconcileActiveNotes: mocks.reconcileActiveNotes,
-    noteBuffer: {},
-    updateTrackLayouts: mocks.updateTrackLayouts,
+    notesRef: mocks.notesRef,
+    subscribe: (cb: (event: unknown) => void) => mocks.subscribe(cb),
+    handleKeyDown: (...args: unknown[]) => mocks.handleKeyDown(...args),
+    handleKeyUp: (...args: unknown[]) => mocks.handleKeyUp(...args),
+    finalizeAllActive: (...args: unknown[]) => mocks.finalizeAllActive(...args),
+    reconcileActiveNotes: (...args: unknown[]) =>
+      mocks.reconcileActiveNotes(...args),
+    noteBuffer: mocks.noteBuffer,
+    updateTrackLayouts: (...args: unknown[]) =>
+      mocks.updateTrackLayouts(...args),
   }),
 }));
 vi.mock('@stores/data/useStatItemStore', () => ({
@@ -117,12 +126,14 @@ vi.mock('@stores/useSettingsStore', () => {
       selector(state),
   };
 });
-vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
-  usePluginDisplayElementStore: <T,>(
-    selector: (state: { elements: never[] }) => T,
-  ) => selector({ elements: [] }),
+// usePluginDisplayElementStore는 실제 스토어 사용 — 플러그인 element 갱신이
+// 오버레이 App에 미치는 영향(리렌더 승격·signal 리셋)을 실제 경로로 검증
+vi.mock('@components/shared/OverlayScene', () => ({
+  default: () => {
+    mocks.sceneRenders.count += 1;
+    return null;
+  },
 }));
-vi.mock('@components/shared/OverlayScene', () => ({ default: () => null }));
 vi.mock('@hooks/shared/useLayoutComputation', () => ({
   computeLayout: () => ({
     bounds: null,
@@ -156,11 +167,47 @@ vi.mock('@api/modules/obsApi', () => ({
 }));
 
 import App from './App';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
 interface Deferred<T> {
   promise: Promise<T>;
   resolve: (value: T) => void;
 }
+
+// 스토어 updateElementBatched의 모듈 전역 rAF 큐(pendingStateUpdates·rafScheduled)를
+// 결정적으로 제어 - 테스트 종료 시 예약 callback을 전부 소진해 다음 테스트로의 누수 차단
+type RafCallback = (time: number) => void;
+const rafCallbacks = new Map<number, RafCallback>();
+let rafIdCounter = 0;
+
+const flushRafCallbacks = () => {
+  while (rafCallbacks.size > 0) {
+    const pending = [...rafCallbacks.values()];
+    rafCallbacks.clear();
+    pending.forEach((callback) => callback(performance.now()));
+  }
+};
+
+beforeEach(() => {
+  rafCallbacks.clear();
+  vi.stubGlobal('requestAnimationFrame', (callback: RafCallback) => {
+    rafIdCounter += 1;
+    rafCallbacks.set(rafIdCounter, callback);
+    return rafIdCounter;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+    rafCallbacks.delete(id);
+  });
+  usePluginDisplayElementStore.setState({ elements: [] });
+});
+
+afterEach(() => {
+  act(() => {
+    flushRafCallbacks();
+  });
+  usePluginDisplayElementStore.setState({ elements: [] });
+  vi.unstubAllGlobals();
+});
 
 const deferred = <T,>(): Deferred<T> => {
   let resolve!: (value: T) => void;
@@ -198,6 +245,8 @@ const resetSharedMocks = () => {
   mocks.handleKeyUp.mockClear();
   mocks.finalizeAllActive.mockClear();
   mocks.reconcileActiveNotes.mockClear();
+  mocks.subscribe.mockClear();
+  mocks.sceneRenders.count = 0;
 };
 
 describe('overlay active key reconciliation', () => {
