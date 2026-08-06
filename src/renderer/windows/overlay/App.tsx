@@ -104,6 +104,18 @@ interface OverlayGeometrySnapshot {
 
 const nearlyEqual = (a: number, b: number): boolean => Math.abs(a - b) < 0.5;
 
+// 비유한 지오메트리 방어 - native 호출 전 전 필드 검사
+const resizeParamsAreFinite = (params: OverlayResizeParams): boolean =>
+  Number.isFinite(params.width) &&
+  Number.isFinite(params.height) &&
+  Number.isFinite(params.contentTopOffset) &&
+  Number.isFinite(params.contentMargins.top) &&
+  Number.isFinite(params.contentMargins.bottom) &&
+  Number.isFinite(params.contentMargins.left) &&
+  Number.isFinite(params.contentMargins.right) &&
+  Number.isFinite(params.minX) &&
+  Number.isFinite(params.minY);
+
 const resizeParamsEqual = (
   a: OverlayResizeParams,
   b: OverlayResizeParams,
@@ -904,13 +916,14 @@ export default function App() {
   ]);
 
   const [applied, setApplied] = useState<OverlayGeometrySnapshot | null>(null);
-  const appliedRef = useRef<OverlayGeometrySnapshot | null>(null);
+  // 렌더 승격과 분리된 native 실적용 params (성공 응답 기준으로만 갱신)
+  // 실패한 목표 크기가 no-op 판정 기준으로 남아 재시도를 누르는 문제 방지
+  const nativeParamsRef = useRef<OverlayResizeParams | null>(null);
   const inFlightRef = useRef<OverlayGeometrySnapshot | null>(null);
   const queuedLatestRef = useRef<OverlayGeometrySnapshot | null>(null);
 
   useEffect(() => {
     const promote = (snapshot: OverlayGeometrySnapshot) => {
-      appliedRef.current = snapshot;
       setApplied(snapshot);
     };
 
@@ -928,39 +941,48 @@ export default function App() {
         promote(snapshot);
         return;
       }
-      // GPU·창 상한 사전 검사 (계약 §4: 거부 시 applied 유지, 새 candidate에서만 재시도)
-      if (
-        params.width > MAX_OVERLAY_DIMENSION ||
-        params.height > MAX_OVERLAY_DIMENSION
-      ) {
+      // 비유한 지오메트리는 native 호출 생략, 렌더만 낙관 승격 (계약 §4 v2.6)
+      if (!resizeParamsAreFinite(params)) {
         console.warn(
-          `Overlay dimension exceeds limit (${params.width}x${params.height} > ${MAX_OVERLAY_DIMENSION}); keeping previous layout`,
+          'Overlay resize skipped: non-finite geometry; rendering without window resize',
+          params,
         );
-        return;
-      }
-      const appliedParams = appliedRef.current?.resizeParams ?? null;
-      // no-op 승격: params 동일하면 IPC 없이 로컬 성공 (in-flight 부재 시에만 도달)
-      if (appliedParams && resizeParamsEqual(appliedParams, params)) {
         promote(snapshot);
         return;
       }
-      const fixedPositionAnchor = params.anchor === 'fixed-position';
+      // 상한 초과는 거부 대신 포화(saturate) - 창은 상한으로 클램프해 요청하고
+      // 콘텐츠는 전체 레이아웃 기준으로 항상 렌더 (계약 §4 v2.6, 잘린 viewport 수용)
+      const width = Math.min(params.width, MAX_OVERLAY_DIMENSION);
+      const height = Math.min(params.height, MAX_OVERLAY_DIMENSION);
+      if (width !== params.width || height !== params.height) {
+        console.warn(
+          `Overlay dimension exceeds limit (${params.width}x${params.height} > ${MAX_OVERLAY_DIMENSION}); saturating window size`,
+        );
+      }
+      const dispatchParams: OverlayResizeParams = { ...params, width, height };
+      const nativeParams = nativeParamsRef.current;
+      // no-op 승격: native 실적용 값과 동일하면 IPC 없이 로컬 성공 (in-flight 부재 시에만 도달)
+      if (nativeParams && resizeParamsEqual(nativeParams, dispatchParams)) {
+        promote(snapshot);
+        return;
+      }
+      const fixedPositionAnchor = dispatchParams.anchor === 'fixed-position';
       const fixedPositionDeltaX =
-        fixedPositionAnchor && appliedParams?.anchor === 'fixed-position'
-          ? params.minX - appliedParams.minX
+        fixedPositionAnchor && nativeParams?.anchor === 'fixed-position'
+          ? dispatchParams.minX - nativeParams.minX
           : 0;
       const fixedPositionDeltaY =
-        fixedPositionAnchor && appliedParams?.anchor === 'fixed-position'
-          ? params.minY - appliedParams.minY
+        fixedPositionAnchor && nativeParams?.anchor === 'fixed-position'
+          ? dispatchParams.minY - nativeParams.minY
           : 0;
       inFlightRef.current = snapshot;
       window.api.overlay
         .resize({
-          width: params.width,
-          height: params.height,
-          anchor: params.anchor,
-          contentTopOffset: params.contentTopOffset,
-          contentMargins: params.contentMargins,
+          width: dispatchParams.width,
+          height: dispatchParams.height,
+          anchor: dispatchParams.anchor,
+          contentTopOffset: dispatchParams.contentTopOffset,
+          contentMargins: dispatchParams.contentMargins,
           fixedPositionDeltaX: fixedPositionAnchor
             ? fixedPositionDeltaX
             : undefined,
@@ -968,20 +990,35 @@ export default function App() {
             ? fixedPositionDeltaY
             : undefined,
         })
-        .then(() => {
+        .then((bounds) => {
+          // no-op 판정 기준은 백엔드 실적용 크기 (반올림·보정 반영)
+          nativeParamsRef.current = {
+            ...dispatchParams,
+            width: Number.isFinite(bounds.width)
+              ? bounds.width
+              : dispatchParams.width,
+            height: Number.isFinite(bounds.height)
+              ? bounds.height
+              : dispatchParams.height,
+          };
           // in-flight 성공은 최신 대기 여부와 무관하게 반드시 커밋 (native 기준)
           promote(snapshot);
           settle();
         })
         .catch((error) => {
           if (isOverlayDimensionExceeded(error)) {
+            // 백엔드 원자 거부는 안전망 - 렌더러 포화로 정상 경로에선 도달하지 않음
             console.warn(
               'Overlay resize rejected: dimension exceeded',
               error.details,
             );
           } else {
+            // 창 미존재(OBS 페이지·오버레이 숨김 등)·전송 실패
             console.error('Failed to resize overlay window', error);
           }
+          // 실패해도 렌더는 승격 - native 기록만 미갱신이라 다음 candidate가
+          // no-op에 눌리지 않고 재시도 (창 크기만 못 바꾼 채 콘텐츠는 표시)
+          promote(snapshot);
           settle();
         });
     };
