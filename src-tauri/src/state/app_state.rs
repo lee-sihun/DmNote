@@ -45,7 +45,7 @@ use crate::{
         overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
         ContentMargins, DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters,
         KeyMappings, KeySlot, KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor,
-        PanelBounds, SettingsDiff, SettingsState, TabCssOverrides,
+        OverlayResizeResponse, PanelBounds, SettingsDiff, SettingsState, TabCssOverrides,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
     state::local_asset_path::path_identity_key,
@@ -2072,7 +2072,8 @@ impl AppState {
         content_margins: Option<ContentMargins>,
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
-    ) -> crate::errors::CmdResult<OverlayBounds> {
+        request_gen: Option<u64>,
+    ) -> crate::errors::CmdResult<OverlayResizeResponse> {
         with_validated_overlay_dimensions(width, height, |width, height| {
             self.resize_overlay_validated(
                 app,
@@ -2083,6 +2084,7 @@ impl AppState {
                 content_margins,
                 fixed_position_delta_x,
                 fixed_position_delta_y,
+                request_gen,
             )
         })
     }
@@ -2098,7 +2100,8 @@ impl AppState {
         content_margins: Option<ContentMargins>,
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
-    ) -> crate::errors::CmdResult<OverlayBounds> {
+        request_gen: Option<u64>,
+    ) -> crate::errors::CmdResult<OverlayResizeResponse> {
         // 오버레이가 이미 열려있을 때만 리사이즈 수행
         // 창 미존재 시 에러 반환 (자동 생성하지 않음)
         let window = app
@@ -2190,16 +2193,20 @@ impl AppState {
             width,
             height,
         };
+        let response = OverlayResizeResponse {
+            bounds,
+            request_gen,
+        };
 
         log::debug!(
             "[IPC] resize_overlay: emit overlay:resized ({}x{} at {}, {})",
-            bounds.width,
-            bounds.height,
-            bounds.x,
-            bounds.y
+            response.bounds.width,
+            response.bounds.height,
+            response.bounds.x,
+            response.bounds.y
         );
         complete_overlay_resize_after_native_apply(
-            bounds,
+            response,
             |applied_bounds| {
                 defer_overlay_bounds(
                     &self.store,
@@ -2209,16 +2216,8 @@ impl AppState {
                     content_margins_update,
                 )
             },
-            |applied_bounds| {
-                app.emit(
-                    "overlay:resized",
-                    &json!({
-                        "x": applied_bounds.x,
-                        "y": applied_bounds.y,
-                        "width": applied_bounds.width,
-                        "height": applied_bounds.height,
-                    }),
-                )?;
+            |applied_response| {
+                app.emit("overlay:resized", applied_response)?;
                 Ok(())
             },
         )
@@ -5055,21 +5054,21 @@ fn defer_overlay_bounds(
 }
 
 fn complete_overlay_resize_after_native_apply(
-    bounds: OverlayBounds,
+    response: OverlayResizeResponse,
     record_bounds: impl FnOnce(&OverlayBounds) -> Result<()>,
-    emit_resized: impl FnOnce(&OverlayBounds) -> Result<()>,
-) -> crate::errors::CmdResult<OverlayBounds> {
-    if let Err(error) = record_bounds(&bounds) {
+    emit_resized: impl FnOnce(&OverlayResizeResponse) -> Result<()>,
+) -> crate::errors::CmdResult<OverlayResizeResponse> {
+    if let Err(error) = record_bounds(&response.bounds) {
         log::warn!(
             "failed to record applied overlay bounds; native resize remains authoritative: {error:#}"
         );
     }
-    if let Err(error) = emit_resized(&bounds) {
+    if let Err(error) = emit_resized(&response) {
         log::warn!(
             "failed to emit applied overlay resize; native resize remains authoritative: {error:#}"
         );
     }
-    Ok(bounds)
+    Ok(response)
 }
 
 fn flush_deferred_overlay_bounds(store: &Arc<AppStore>, generation: &Arc<AtomicU64>) -> Result<()> {
@@ -5290,7 +5289,7 @@ mod tests {
         keyboard::KeyboardManager,
         models::{
             AppStoreData, ContentMargins, CustomCss, OverlayBounds, OverlayResizeAnchor,
-            PanelBounds, TabCss,
+            OverlayResizeResponse, PanelBounds, TabCss,
         },
         state::local_asset_path::path_identity_key,
     };
@@ -5497,11 +5496,14 @@ mod tests {
 
     #[test]
     fn post_apply_failures_return_exact_applied_overlay_bounds() {
-        let expected = OverlayBounds {
-            x: 41.5,
-            y: 82.25,
-            width: 900.0,
-            height: 450.0,
+        let expected = OverlayResizeResponse {
+            bounds: OverlayBounds {
+                x: 41.5,
+                y: 82.25,
+                width: 900.0,
+                height: 450.0,
+            },
+            request_gen: Some(18),
         };
         let record_called = AtomicBool::new(false);
         let emit_called = AtomicBool::new(false);
@@ -5510,12 +5512,12 @@ mod tests {
             expected.clone(),
             |bounds| {
                 record_called.store(true, Ordering::SeqCst);
-                assert_eq!(bounds, &expected);
+                assert_eq!(bounds, &expected.bounds);
                 Err(anyhow::anyhow!("injected bounds record failure"))
             },
-            |bounds| {
+            |response| {
                 emit_called.store(true, Ordering::SeqCst);
-                assert_eq!(bounds, &expected);
+                assert_eq!(response, &expected);
                 Err(anyhow::anyhow!("injected resize event failure"))
             },
         )
@@ -5524,6 +5526,75 @@ mod tests {
         assert!(record_called.load(Ordering::SeqCst));
         assert!(emit_called.load(Ordering::SeqCst));
         assert_eq!(returned, expected);
+    }
+
+    #[test]
+    fn request_generation_is_echoed_by_resize_response_and_event() {
+        let expected = OverlayResizeResponse {
+            bounds: OverlayBounds {
+                x: 10.0,
+                y: 20.0,
+                width: 860.0,
+                height: 320.0,
+            },
+            request_gen: Some(73),
+        };
+        let emitted = Mutex::new(None);
+
+        let returned = complete_overlay_resize_after_native_apply(
+            expected.clone(),
+            |_| Ok(()),
+            |response| {
+                *emitted.lock() = Some(serde_json::to_value(response)?);
+                Ok(())
+            },
+        )
+        .unwrap();
+        let expected_wire = serde_json::json!({
+            "x": 10.0,
+            "y": 20.0,
+            "width": 860.0,
+            "height": 320.0,
+            "requestGen": 73
+        });
+
+        assert_eq!(returned, expected);
+        assert_eq!(serde_json::to_value(returned).unwrap(), expected_wire);
+        assert_eq!(*emitted.lock(), Some(expected_wire));
+    }
+
+    #[test]
+    fn missing_request_generation_preserves_legacy_resize_wire_shape() {
+        let expected = OverlayResizeResponse {
+            bounds: OverlayBounds {
+                x: 10.0,
+                y: 20.0,
+                width: 860.0,
+                height: 320.0,
+            },
+            request_gen: None,
+        };
+        let emitted = Mutex::new(None);
+
+        let returned = complete_overlay_resize_after_native_apply(
+            expected.clone(),
+            |_| Ok(()),
+            |response| {
+                *emitted.lock() = Some(serde_json::to_value(response)?);
+                Ok(())
+            },
+        )
+        .unwrap();
+        let legacy_wire = serde_json::json!({
+            "x": 10.0,
+            "y": 20.0,
+            "width": 860.0,
+            "height": 320.0
+        });
+
+        assert_eq!(returned, expected);
+        assert_eq!(serde_json::to_value(returned).unwrap(), legacy_wire);
+        assert_eq!(*emitted.lock(), Some(legacy_wire));
     }
 
     #[test]

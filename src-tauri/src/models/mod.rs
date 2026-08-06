@@ -1850,6 +1850,15 @@ pub struct OverlayBounds {
     pub height: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayResizeResponse {
+    #[serde(flatten)]
+    pub bounds: OverlayBounds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_gen: Option<u64>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PanelBounds {
@@ -2535,7 +2544,8 @@ mod tests {
         compact_canonical_rgba, AppStoreData, ContentMargins, FadePosition, GradientSpec,
         KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement,
         KeyCounterSettings, KeyMappings, KeyPosition, KeySlot, NoteColor, NoteDirection,
-        NoteSettings, SlotMatch, StatType, TabNoteSettings, MAX_SLOT_KEYS,
+        NoteSettings, OverlayBounds, OverlayResizeResponse, SlotMatch, StatType, TabNoteSettings,
+        MAX_SLOT_KEYS,
     };
     use serde::Deserialize;
 
@@ -2654,6 +2664,47 @@ mod tests {
             .remove("overlayLastContentMargins");
         let restored: AppStoreData = serde_json::from_value(legacy).unwrap();
         assert_eq!(restored.overlay_last_content_margins, None);
+    }
+
+    #[test]
+    fn resize_generation_round_trips_without_entering_stored_overlay_bounds() {
+        let bounds = OverlayBounds {
+            x: 10.0,
+            y: 20.0,
+            width: 860.0,
+            height: 320.0,
+        };
+        let response = OverlayResizeResponse {
+            bounds: bounds.clone(),
+            request_gen: Some(73),
+        };
+        let response_wire = serde_json::json!({
+            "x": 10.0,
+            "y": 20.0,
+            "width": 860.0,
+            "height": 320.0,
+            "requestGen": 73
+        });
+
+        assert_eq!(serde_json::to_value(&response).unwrap(), response_wire);
+        assert_eq!(
+            serde_json::from_value::<OverlayResizeResponse>(response_wire).unwrap(),
+            response
+        );
+
+        let store = AppStoreData {
+            overlay_bounds: Some(bounds),
+            ..AppStoreData::default()
+        };
+        assert_eq!(
+            serde_json::to_value(store).unwrap()["overlayBounds"],
+            serde_json::json!({
+                "x": 10.0,
+                "y": 20.0,
+                "width": 860.0,
+                "height": 320.0
+            })
+        );
     }
 
     #[test]

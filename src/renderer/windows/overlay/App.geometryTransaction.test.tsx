@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
           y: number;
           width: number;
           height: number;
+          requestGen?: number;
         }) => void),
   },
 }));
@@ -704,12 +705,14 @@ describe('overlay geometry transaction', () => {
     }
   });
 
-  // fixed-position 백엔드 모델: x=100에서 시작해 delta를 누적 적용
+  // fixed-position 백엔드 모델: x=100에서 시작해 delta를 누적 적용,
+  // 응답·이벤트에 requestGen 에코 (신규 wire)
   const createBackendModel = () => {
     const state = { x: 100, y: 100, width: 0, height: 0 };
     const apply = (payload: {
       width: number;
       height: number;
+      requestGen?: number;
       fixedPositionDeltaX?: number;
       fixedPositionDeltaY?: number;
     }) => {
@@ -722,6 +725,7 @@ describe('overlay geometry transaction', () => {
         y: state.y,
         width: state.width,
         height: state.height,
+        requestGen: payload.requestGen,
       };
     };
     return { state, apply };
@@ -843,10 +847,11 @@ describe('overlay geometry transaction', () => {
         await vi.advanceTimersByTimeAsync(5000);
       });
 
-      // 백엔드는 실제로 A를 적용했고 resized 이벤트만 도착 → 권위 채택
+      // 백엔드는 실제로 A를 적용했고 gen 에코 이벤트만 도착 → 리듀서 채택
       // 현재 렌더(A)와 권위가 일치하므로 보정 IPC 없음
       const appliedBounds = backend.apply(pendingPayload!);
       expect(backend.state.x).toBe(150);
+      expect(appliedBounds.requestGen).toBeDefined();
       await act(async () => {
         mocks.resizedListener.current?.(appliedBounds);
         await vi.advanceTimersByTimeAsync(0);
@@ -865,6 +870,168 @@ describe('overlay geometry transaction', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('타임아웃 전 도착한 resized 이벤트도 채택되어 응답 유실을 복구한다', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await remountWithFixedPositionAnchor();
+
+    const backend = createBackendModel();
+    mocks.resize.mockImplementation((payload) =>
+      Promise.resolve(backend.apply(payload)),
+    );
+
+    vi.useFakeTimers();
+    try {
+      // P(minX 0) 성공 - 권위 확립
+      await act(async () => {
+        useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(backend.state.x).toBe(100);
+
+      // A(minX 50): 응답은 영원히 유실, 백엔드는 즉시 적용해 이벤트 발행
+      let pendingPayload: Parameters<typeof backend.apply>[0] | null = null;
+      mocks.resize.mockImplementationOnce((payload) => {
+        pendingPayload = payload;
+        return new Promise(() => {});
+      });
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(50, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(2);
+
+      // 타임아웃 전에 이벤트 도착 - 버리지 않고 리듀서로 채택
+      const appliedBounds = backend.apply(pendingPayload!);
+      expect(backend.state.x).toBe(150);
+      await act(async () => {
+        mocks.resizedListener.current?.(appliedBounds);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // 타임아웃 경과 후 P 복귀: 이미 채택된 권위 덕에 지연 없이 delta -50 디스패치
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('deferred'),
+      );
+      expect(mocks.resize).toHaveBeenCalledTimes(3);
+      expect(backend.state.x).toBe(100);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('이후 요청의 실패가 이전 미결 성공의 채택을 막지 않는다', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      // P(gen1) 성공으로 권위 확립
+      await act(async () => {
+        useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(1);
+
+      // A(gen2, width 220): 영구 pending → 타임아웃
+      const late = deferred<{
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>();
+      mocks.resize.mockReturnValueOnce(late.promise);
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(2);
+
+      // B(gen3, width 320) 발행·실패 - 채택 권위(P)는 유지, gen3만 미적용 확정
+      mocks.resize.mockImplementationOnce(() =>
+        Promise.reject(new Error('ipc down')),
+      );
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0), pos(200, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(3);
+
+      // A 늦은 성공: gen2 > 채택 gen1이므로 B 실패와 무관하게 채택 →
+      // 현재 렌더(B, 320)와 달라 보정 디스패치 재발행
+      await act(async () => {
+        late.resolve({ x: 0, y: 0, width: 220, height: 420 });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(4);
+      expect(lastResizePayload().width).toBe(320);
+
+      // 후속 fixed-position 정상: 앵커 전환 디스패치(delta 0) 후 이동 delta 정상
+      mocks.overlayAnchor.value = 'fixed-position';
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0), pos(200, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(5);
+      expect(lastResizePayload().fixedPositionDeltaX).toBe(0);
+
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(30, 0), pos(230, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(6);
+      expect(lastResizePayload().fixedPositionDeltaX).toBe(30);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gen 없는 resized 이벤트는 확정 권위의 크기만 보조 갱신한다 (하위 호환)', async () => {
+    // P 성공 - 권위 120x420
+    await act(async () => {
+      useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
+
+    // 구 백엔드/외부 리사이즈: gen 없는 이벤트 - 채택·보정 없이 크기만 반영
+    await act(async () => {
+      mocks.resizedListener.current?.({ x: 0, y: 0, width: 130, height: 420 });
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
+
+    // 다음 candidate가 외부 변경된 크기(130)와의 차이를 보고 복원 디스패치
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: { ...state.positions, '8key': [pos(0, 0)] },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(2);
+    expect(lastResizePayload().width).toBe(120);
   });
 
   it('백엔드 최소 크기 미만 요청은 100으로 정규화해 보내고 동일 candidate 재발행 시 IPC를 생략한다', async () => {

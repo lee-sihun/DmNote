@@ -3,7 +3,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     errors::CmdResult,
-    models::{BootstrapOverlayState, ContentMargins, OverlayBounds},
+    models::{BootstrapOverlayState, ContentMargins, OverlayResizeResponse},
     state::AppState,
 };
 
@@ -22,6 +22,8 @@ pub struct OverlayResizeArgs {
     pub fixed_position_delta_x: Option<f64>,
     #[serde(default)]
     pub fixed_position_delta_y: Option<f64>,
+    #[serde(default)]
+    pub request_gen: Option<u64>,
 }
 
 #[tauri::command]
@@ -63,7 +65,7 @@ pub fn overlay_resize(
     state: State<'_, AppState>,
     app: AppHandle,
     payload: OverlayResizeArgs,
-) -> CmdResult<OverlayBounds> {
+) -> CmdResult<OverlayResizeResponse> {
     state.resize_overlay(
         &app,
         payload.width,
@@ -73,6 +75,7 @@ pub fn overlay_resize(
         payload.content_margins,
         payload.fixed_position_delta_x,
         payload.fixed_position_delta_y,
+        payload.request_gen,
     )
 }
 
@@ -92,6 +95,7 @@ mod tests {
 
         assert_eq!(payload.content_top_offset, Some(150.0));
         assert_eq!(payload.content_margins, None);
+        assert_eq!(payload.request_gen, None);
     }
 
     #[test]
@@ -104,7 +108,8 @@ mod tests {
                 "bottom": 22,
                 "left": 33,
                 "right": 44
-            }
+            },
+            "requestGen": 73
         }))
         .unwrap();
 
@@ -117,5 +122,6 @@ mod tests {
                 right: 44.0,
             })
         );
+        assert_eq!(payload.request_gen, Some(73));
     }
 }

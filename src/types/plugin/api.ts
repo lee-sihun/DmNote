@@ -77,7 +77,8 @@ export type OverlayState = BootstrapPayload['overlay'];
 export type OverlayVisibilityPayload = { visible: boolean };
 export type OverlayLockPayload = { locked: boolean };
 export type OverlayAnchorPayload = { anchor: string };
-export type OverlayResizePayload = OverlayBounds;
+// requestGen: 리사이즈 요청 gen 에코 (구 백엔드/외부 리사이즈는 부재)
+export type OverlayResizePayload = OverlayBounds & { requestGen?: number };
 
 export type CssTogglePayload = { enabled: boolean };
 export type CssSetContentResult = { success: boolean; error?: string };
@@ -996,6 +997,8 @@ export interface DMNoteAPI {
       width: number;
       height: number;
       anchor?: string;
+      // 적용 확인(응답·overlay:resized)과의 상관용 요청 gen
+      requestGen?: number;
       contentTopOffset?: number;
       // 4변 마진 계약. 부재 시 contentTopOffset 경로로 동작
       contentMargins?: {
