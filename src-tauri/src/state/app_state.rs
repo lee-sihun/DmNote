@@ -915,32 +915,29 @@ impl OverlayResizeExecutionState {
         request_session.zip(request_gen)
     }
 
-    fn admit_request(
-        &mut self,
+    fn is_stale(
+        &self,
         window_label: &str,
         request_session: Option<u64>,
         request_gen: Option<u64>,
     ) -> bool {
         let Some((session, gen)) = Self::request_generation(request_session, request_gen) else {
-            return true;
+            return false;
         };
-        let Some(window_state) = self.by_window_label.get_mut(window_label) else {
-            self.by_window_label.insert(
-                window_label.to_string(),
-                OverlayResizeWindowGeneration::new(session),
-            );
-            return true;
+        let Some(window_state) = self.by_window_label.get(window_label) else {
+            return false;
         };
 
         if session < window_state.active_session {
-            return false;
+            return true;
         }
         if session == window_state.active_session {
-            return window_state.high_gen.is_none_or(|high_gen| gen > high_gen);
+            return window_state
+                .high_gen
+                .is_some_and(|high_gen| gen <= high_gen);
         }
 
-        window_state.adopt_session(session);
-        true
+        false
     }
 
     fn mark_executed(
@@ -952,12 +949,17 @@ impl OverlayResizeExecutionState {
         let Some((session, gen)) = Self::request_generation(request_session, request_gen) else {
             return;
         };
-        let Some(window_state) = self.by_window_label.get_mut(window_label) else {
+        let window_state = self
+            .by_window_label
+            .entry(window_label.to_string())
+            .or_insert_with(|| OverlayResizeWindowGeneration::new(session));
+        if session < window_state.active_session {
             return;
-        };
-        if session == window_state.active_session {
-            window_state.high_gen = Some(window_state.high_gen.map_or(gen, |high| high.max(gen)));
         }
+        if session > window_state.active_session {
+            window_state.adopt_session(session);
+        }
+        window_state.high_gen = Some(window_state.high_gen.map_or(gen, |high| high.max(gen)));
     }
 }
 
@@ -2160,7 +2162,7 @@ impl AppState {
         request_gen: Option<u64>,
     ) -> crate::errors::CmdResult<OverlayResizeResponse> {
         let mut resize_execution = self.overlay_resize_lock.lock();
-        if !resize_execution.admit_request(caller_window_label, request_session, request_gen) {
+        if resize_execution.is_stale(caller_window_label, request_session, request_gen) {
             return self.current_overlay_resize_response(app, request_gen);
         }
 
@@ -5838,18 +5840,22 @@ mod tests {
         let mut execution = OverlayResizeExecutionState::default();
         let window_label = "overlay";
 
-        assert!(execution.admit_request(window_label, Some(100), Some(1)));
+        assert!(!execution.is_stale(window_label, Some(100), Some(1)));
         execution.mark_executed(window_label, Some(100), Some(1));
-        assert!(execution.admit_request(window_label, Some(100), Some(2)));
+        assert!(!execution.is_stale(window_label, Some(100), Some(2)));
         execution.mark_executed(window_label, Some(100), Some(2));
 
-        assert!(execution.admit_request(window_label, Some(200), Some(1)));
+        assert!(!execution.is_stale(window_label, Some(200), Some(1)));
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.active_session, 100);
+        assert_eq!(window_state.high_gen, Some(2));
+
         execution.mark_executed(window_label, Some(200), Some(1));
 
-        assert!(!execution.admit_request(window_label, Some(100), Some(3)));
-        assert!(execution.admit_request(window_label, Some(200), Some(2)));
+        assert!(execution.is_stale(window_label, Some(100), Some(3)));
+        assert!(!execution.is_stale(window_label, Some(200), Some(2)));
         execution.mark_executed(window_label, Some(200), Some(2));
-        assert!(!execution.admit_request(window_label, Some(200), Some(2)));
+        assert!(execution.is_stale(window_label, Some(200), Some(2)));
 
         let window_state = execution.by_window_label.get(window_label).unwrap();
         assert_eq!(window_state.active_session, 200);
@@ -5860,17 +5866,17 @@ mod tests {
     fn different_window_labels_keep_independent_active_sessions() {
         let mut execution = OverlayResizeExecutionState::default();
 
-        assert!(execution.admit_request("overlay", Some(100), Some(5)));
+        assert!(!execution.is_stale("overlay", Some(100), Some(5)));
         execution.mark_executed("overlay", Some(100), Some(5));
-        assert!(execution.admit_request("obs", Some(100), Some(1)));
+        assert!(!execution.is_stale("obs", Some(100), Some(1)));
         execution.mark_executed("obs", Some(100), Some(1));
 
-        assert!(execution.admit_request("overlay", Some(200), Some(1)));
+        assert!(!execution.is_stale("overlay", Some(200), Some(1)));
         execution.mark_executed("overlay", Some(200), Some(1));
-        assert!(execution.admit_request("obs", Some(100), Some(2)));
+        assert!(!execution.is_stale("obs", Some(100), Some(2)));
         execution.mark_executed("obs", Some(100), Some(2));
 
-        assert!(!execution.admit_request("overlay", Some(100), Some(6)));
+        assert!(execution.is_stale("overlay", Some(100), Some(6)));
         let overlay_state = execution.by_window_label.get("overlay").unwrap();
         let obs_state = execution.by_window_label.get("obs").unwrap();
         assert_eq!(
@@ -5888,11 +5894,11 @@ mod tests {
         let mut execution = OverlayResizeExecutionState::default();
         let window_label = "overlay";
 
-        assert!(execution.admit_request(window_label, Some(100), Some(5)));
+        assert!(!execution.is_stale(window_label, Some(100), Some(5)));
         execution.mark_executed(window_label, Some(100), Some(5));
-        assert!(execution.admit_request(window_label, None, Some(1)));
+        assert!(!execution.is_stale(window_label, None, Some(1)));
         execution.mark_executed(window_label, None, Some(1));
-        assert!(execution.admit_request(window_label, Some(200), None));
+        assert!(!execution.is_stale(window_label, Some(200), None));
         execution.mark_executed(window_label, Some(200), None);
 
         let window_state = execution.by_window_label.get(window_label).unwrap();
@@ -5905,13 +5911,13 @@ mod tests {
         let mut execution = OverlayResizeExecutionState::default();
         let window_label = "overlay";
 
-        assert!(execution.admit_request(window_label, Some(100), Some(9)));
+        assert!(!execution.is_stale(window_label, Some(100), Some(9)));
         execution.mark_executed(window_label, Some(100), Some(9));
-        assert!(execution.admit_request(window_label, Some(300), Some(1)));
+        assert!(!execution.is_stale(window_label, Some(300), Some(1)));
         execution.mark_executed(window_label, Some(300), Some(1));
 
-        assert!(!execution.admit_request(window_label, Some(200), Some(99)));
-        assert!(!execution.admit_request(window_label, Some(100), Some(10)));
+        assert!(execution.is_stale(window_label, Some(200), Some(99)));
+        assert!(execution.is_stale(window_label, Some(100), Some(10)));
 
         let window_state = execution.by_window_label.get(window_label).unwrap();
         assert_eq!(window_state.active_session, 300);
@@ -5958,10 +5964,10 @@ mod tests {
         };
         let mut position = OverlayPositionAdjustment { x: 100.0, y: 100.0 };
 
-        assert!(execution.admit_request(window_label, request_session, Some(1)));
+        assert!(!execution.is_stale(window_label, request_session, Some(1)));
         execution.mark_executed(window_label, request_session, Some(1));
 
-        assert!(execution.admit_request(window_label, request_session, Some(3)));
+        assert!(!execution.is_stale(window_label, request_session, Some(3)));
         execution.mark_executed(window_label, request_session, Some(3));
         let current_transition = resolve_content_margin_transition(
             Some(current_margins),
@@ -6027,8 +6033,8 @@ mod tests {
             },
             OverlayPositionAdjustment::default()
         );
-        assert!(!execution.admit_request(window_label, request_session, Some(2)));
-        assert!(!execution.admit_request(window_label, request_session, Some(3)));
+        assert!(execution.is_stale(window_label, request_session, Some(2)));
+        assert!(execution.is_stale(window_label, request_session, Some(3)));
 
         assert_eq!(
             execution
@@ -6047,8 +6053,8 @@ mod tests {
             baseline_after_gen_3
         );
 
-        assert!(execution.admit_request(window_label, None, Some(2)));
-        assert!(execution.admit_request(window_label, request_session, None));
+        assert!(!execution.is_stale(window_label, None, Some(2)));
+        assert!(!execution.is_stale(window_label, request_session, None));
         execution.mark_executed(window_label, None, Some(999));
         execution.mark_executed(window_label, request_session, None);
         assert_eq!(
@@ -6181,6 +6187,12 @@ mod tests {
 
     #[test]
     fn over_cap_resize_rejection_skips_all_window_and_store_state_changes() {
+        let mut resize_execution = OverlayResizeExecutionState::default();
+        let window_label = "overlay";
+        assert!(!resize_execution.is_stale(window_label, Some(100), Some(1)));
+        resize_execution.mark_executed(window_label, Some(100), Some(1));
+        assert!(!resize_execution.is_stale(window_label, Some(u64::MAX), Some(1)));
+
         let stored_margins = ContentMargins {
             top: 10.0,
             bottom: 20.0,
@@ -6207,6 +6219,7 @@ mod tests {
             MAX_OVERLAY_DIMENSION + 1.0,
             480.0,
             |width, height| {
+                resize_execution.mark_executed(window_label, Some(u64::MAX), Some(1));
                 initializing = false;
                 window_state.width = width;
                 window_state.height = height;
@@ -6226,6 +6239,15 @@ mod tests {
         assert_eq!(store_state, store_before);
         assert_eq!(window_state, window_before);
         assert!(initializing);
+
+        let generation = resize_execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(generation.active_session, 100);
+        assert_eq!(generation.high_gen, Some(1));
+        assert!(!resize_execution.is_stale(window_label, Some(100), Some(2)));
+        resize_execution.mark_executed(window_label, Some(100), Some(2));
+        let generation = resize_execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(generation.active_session, 100);
+        assert_eq!(generation.high_gen, Some(2));
     }
 
     #[test]
