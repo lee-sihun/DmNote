@@ -84,6 +84,7 @@ interface UseNoteSystemReturn {
   handleKeyUp: (keyName: string, timing?: NoteKeyTiming) => void;
   finalizeAllActive: () => void;
   reconcileActiveNotes: (activeKeys: ReadonlySet<string>) => void;
+  clearAllNotes: () => void;
   noteBuffer: NoteBuffer;
   updateTrackLayouts: (layouts: TrackLayoutInput[]) => void;
 }
@@ -346,52 +347,57 @@ export function useNoteSystem({
     prevCleanupScalarsRef.current = cleanupScalars;
   }, [noteSettings]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 활성 노트·타이머 전체 정리 (노트 이펙트 off, 유효 방향 전환 시 공용)
+  const clearAllNotes = () => {
+    // 클린업 타이머 취소
+    if (cleanupTimerRef.current !== null) {
+      clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+      nextCleanupTimeRef.current = Infinity;
+    }
+    releaseAllNotes(
+      notesRef.current,
+      notePoolRef.current,
+      noteLookupRef.current,
+    );
+    noteLookupRef.current.clear();
+    // activeNotes에 남아있는 타이머 정리
+    for (const [, stateList] of activeNotes.current.entries()) {
+      if (!Array.isArray(stateList)) continue;
+      for (const state of stateList) {
+        try {
+          if (state?.startTimer) {
+            clearTimeout(state.startTimer);
+            state.startTimer = null;
+          }
+          if (state?.finalizeTimer) {
+            clearTimeout(state.finalizeTimer);
+            state.finalizeTimer = null;
+          }
+        } catch {}
+      }
+    }
+    activeNotes.current.clear();
+    for (const timer of finalizeTimersRef.current.values()) {
+      try {
+        clearTimeout(timer);
+      } catch {}
+    }
+    finalizeTimersRef.current.clear();
+    noteBufferRef.current.clear();
+    notifySubscribers({
+      type: 'clear',
+      activeCount: 0,
+      version: noteBufferRef.current.version,
+    });
+  };
+
   useEffect(() => {
     noteEffectEnabled.current = !!noteEffect;
     if (!noteEffect) {
-      // 클린업 타이머 취소
-      if (cleanupTimerRef.current !== null) {
-        clearTimeout(cleanupTimerRef.current);
-        cleanupTimerRef.current = null;
-        nextCleanupTimeRef.current = Infinity;
-      }
-      releaseAllNotes(
-        notesRef.current,
-        notePoolRef.current,
-        noteLookupRef.current,
-      );
-      noteLookupRef.current.clear();
-      // activeNotes에 남아있는 타이머 정리
-      for (const [, stateList] of activeNotes.current.entries()) {
-        if (!Array.isArray(stateList)) continue;
-        for (const state of stateList) {
-          try {
-            if (state?.startTimer) {
-              clearTimeout(state.startTimer);
-              state.startTimer = null;
-            }
-            if (state?.finalizeTimer) {
-              clearTimeout(state.finalizeTimer);
-              state.finalizeTimer = null;
-            }
-          } catch {}
-        }
-      }
-      activeNotes.current.clear();
-      for (const timer of finalizeTimersRef.current.values()) {
-        try {
-          clearTimeout(timer);
-        } catch {}
-      }
-      finalizeTimersRef.current.clear();
-      noteBufferRef.current.clear();
-      notifySubscribers({
-        type: 'clear',
-        activeCount: 0,
-        version: noteBufferRef.current.version,
-      });
+      clearAllNotes();
     }
-  }, [noteEffect]);
+  }, [noteEffect]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createNote = (keyName: string, startTimeOverride?: number): string => {
     const startTime = startTimeOverride ?? performance.now();
@@ -778,6 +784,7 @@ export function useNoteSystem({
     handleKeyUp: effectiveHandleKeyUp,
     finalizeAllActive,
     reconcileActiveNotes,
+    clearAllNotes,
     noteBuffer: noteBufferRef.current,
     updateTrackLayouts: (layouts: TrackLayoutInput[]) =>
       noteBufferRef.current.updateTrackLayouts(layouts),

@@ -429,6 +429,7 @@ export default function App() {
     handleKeyUp,
     finalizeAllActive,
     reconcileActiveNotes,
+    clearAllNotes,
     noteBuffer,
     updateTrackLayouts,
   } = useNoteSystem({
@@ -996,6 +997,23 @@ export default function App() {
   useEffect(() => {
     if (applied) updateTrackLayouts(applied.layout.webglTracks);
   }, [applied, updateTrackLayouts]);
+
+  // 유효 방향 전환 시 활성 노트 정리 (계약 §7, 첫 마운트 제외)
+  // 스냅샷 좌표가 새 좌표계와 어긋나는 아티팩트 방지 - 전역·탭·키별 어느
+  // 계층 변경이든 directionSignature 변화로 수렴
+  const lastDirectionSignatureRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!applied) return;
+    const signature = applied.directionSignature;
+    if (
+      lastDirectionSignatureRef.current !== null &&
+      lastDirectionSignatureRef.current !== signature
+    ) {
+      clearAllNotes();
+    }
+    lastDirectionSignatureRef.current = signature;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applied]);
 
   // 모든 지오메트리 소비자는 같은 applied generation만 소비 (계약 §4)
   if (!applied) return null;
