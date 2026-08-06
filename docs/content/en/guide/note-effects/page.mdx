@@ -44,12 +44,24 @@ Adjust the falling speed of notes.
 
 Set the maximum height that notes fall.
 
+### Direction
+
+Choose which side of the keys the track sits on. Pick up (default), down,
+left, or right, and notes grow in that direction. Besides the global setting,
+per-tab note settings and the per-key note direction property can override it;
+an empty per-key value inherits the setting above it.
+
+Fade and color gradient top/bottom values are interpreted relative to the
+direction. The first value is the end far from the key, the second is the key
+side.
+
 ### Reverse
 
-Reverse the direction notes fall.
+Reverses the flow of notes inside the track. It is independent from the
+direction option and combines with all four directions.
 
-- **Disabled**: Falls from top to bottom
-- **Enabled**: Rises from bottom to top
+- **Disabled**: Flows from the far end toward the key
+- **Enabled**: Flows from the key toward the far end
 
 ## Usage Tips
 
