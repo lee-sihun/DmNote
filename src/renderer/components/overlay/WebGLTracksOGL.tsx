@@ -15,12 +15,13 @@ import { isMac } from '@utils/core/platform';
 
 const vertexShader = `
   attribute vec3 position;
-  attribute vec3 noteInfo; // x: startTime, y: endTime, z: trackX
-  attribute vec2 noteSize; // x: width, y: trackBottomY
+  attribute vec3 noteInfo; // x: startTime, y: endTime, z: origin.x (히트라인 c=0 코너)
+  attribute vec2 noteSize; // x: 교차축 크기, y: origin.y
+  attribute vec2 noteDir;  // 진행 방향 벡터 d (캔버스 좌표, y 아래 양수)
   attribute vec4 noteColorTop;
   attribute vec4 noteColorBottom;
   attribute float noteRadius;
-  attribute vec3 noteGlow; // x: glow size, y: glow opacity top (0-1), z: glow opacity bottom (0-1)
+  attribute vec3 noteGlow; // x: glow size, y: glow opacity far (0-1), z: glow opacity near (0-1)
   attribute vec3 noteGlowColorTop;
   attribute vec3 noteGlowColorBottom;
   attribute vec4 noteBorder; // x: width, yzw: RGB color
@@ -46,15 +47,14 @@ const vertexShader = `
   varying vec3 vGlowColorBottom;
   varying vec4 vBorder; // x: width, yzw: RGB color
   varying float vBorderOpacity;
-  varying float vTrackTopY;
-  varying float vTrackBottomY;
+  // 흐름 비율 (1 - s/H). 글로우 확장 정점의 raw 값을 보간하고 fragment에서 clamp
+  varying float vFlowRatioRaw;
 
   void main() {
     float startTime = noteInfo.x;
     float endTime = noteInfo.y;
-    float trackX = noteInfo.z;
-    float trackBottomY = noteSize.y;
-    float noteWidth = noteSize.x;
+    vec2 origin = vec2(noteInfo.z, noteSize.y);
+    float crossSize = noteSize.x;
 
     if (startTime == 0.0) {
       gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
@@ -66,8 +66,8 @@ const vertexShader = `
     bool isActive = endTime == 0.0;
     float rawNoteLength = 0.0;
     float glowSize = max(noteGlow.x, 0.0);
-    float glowOpacityTop = clamp(noteGlow.y, 0.0, 1.0);
-    float glowOpacityBottom = clamp(noteGlow.z, 0.0, 1.0);
+    float glowOpacityFar = clamp(noteGlow.y, 0.0, 1.0);
+    float glowOpacityNear = clamp(noteGlow.z, 0.0, 1.0);
 
     if (isActive) {
       rawNoteLength = max(0.0, (uTime - startTime) * uFlowSpeed / 1000.0);
@@ -75,85 +75,84 @@ const vertexShader = `
       rawNoteLength = max(0.0, (endTime - startTime) * uFlowSpeed / 1000.0);
     }
 
-    float noteLength = min(rawNoteLength, uTrackHeight);
-    float noteTopY;
-    float noteBottomY;
-
+    // s = 히트라인으로부터 진행 방향 거리. 활성 [0, len], 완료 [travel, travel+len]
+    float len = min(rawNoteLength, uTrackHeight);
+    float rawLo;
+    float rawHi;
     if (isActive) {
-      if (uReverse < 0.5) {
-        noteBottomY = trackBottomY;
-        noteTopY = trackBottomY - noteLength;
-      } else {
-        float trackTopY_local = trackBottomY - uTrackHeight;
-        noteTopY = trackTopY_local;
-        noteBottomY = trackTopY_local + noteLength;
-      }
+      rawLo = 0.0;
+      rawHi = len;
     } else {
-      if (uReverse < 0.5) {
-        float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
-        noteBottomY = trackBottomY - travel;
-        noteTopY = noteBottomY - noteLength;
-      } else {
-        float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
-        float trackTopY_local = trackBottomY - uTrackHeight;
-        noteTopY = trackTopY_local + travel;
-        noteBottomY = noteTopY + noteLength;
-      }
+      float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
+      rawLo = travel;
+      rawHi = travel + len;
     }
 
-    float trackTopY = trackBottomY - uTrackHeight;
-    noteTopY = max(noteTopY, trackTopY);
-    noteBottomY = min(noteBottomY, trackBottomY);
+    // 리버스 = s공간 미러 (방향과 독립)
+    if (uReverse >= 0.5) {
+      float mirroredLo = uTrackHeight - rawHi;
+      rawHi = uTrackHeight - rawLo;
+      rawLo = mirroredLo;
+    }
 
-    // noteBottomY < noteTopY: 트랙을 벗어난 역방향 완료 노트 —
-    // 음수 길이 쿼드 래스터라이즈와 clamp(r, 0, 음수) undefined 방지
-    // strict less로 길이 0(스폰 프레임 글로우 퍼프)은 보존
-    if (noteBottomY <= trackTopY || noteBottomY < 0.0 || noteBottomY < noteTopY) {
+    // 컬링은 raw 구간으로 선판정 (클램프 후 판정하면 트랙을 벗어난 완료
+    // 노트가 0길이로 접혀 잔류). 키쪽 경계는 strict less로 스폰 프레임
+    // 길이 0 글로우 퍼프를 보존
+    if (rawLo >= uTrackHeight || rawHi < 0.0 || rawHi < rawLo) {
       gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
       vColorTop = vec4(0.0);
       vColorBottom = vec4(0.0);
       return;
     }
 
-    noteLength = noteBottomY - noteTopY;
-    float centerCanvasY = (noteTopY + noteBottomY) / 2.0;
-    float centerWorldY = uScreenHeight - centerCanvasY;
+    float sLo = clamp(rawLo, 0.0, uTrackHeight);
+    float sHi = clamp(rawHi, 0.0, uTrackHeight);
+    float noteLength = sHi - sLo;
 
-    float expandedWidth = noteWidth + glowSize * 2.0;
+    vec2 dir = noteDir;
+    vec2 perp = vec2(-dir.y, dir.x);
+
+    float centerS = (sLo + sHi) / 2.0;
+    vec2 centerCanvas = origin + dir * centerS + perp * (crossSize / 2.0);
+    // 캔버스(y 아래) → 월드(y 위) 변환: y만 뒤집기
+    vec2 centerWorld = vec2(centerCanvas.x, uScreenHeight - centerCanvas.y);
+    vec2 dirWorld = vec2(dir.x, -dir.y);
+    vec2 perpWorld = vec2(perp.x, -perp.y);
+
+    float expandedWidth = crossSize + glowSize * 2.0;
     float expandedLength = noteLength + glowSize * 2.0;
 
-    vec3 transformed = vec3(position.x, position.y, position.z);
-    transformed.x *= expandedWidth;
-    transformed.y *= expandedLength;
-    transformed.x += trackX + noteWidth / 2.0;
-    transformed.y += centerWorldY;
-    transformed.z = 0.0;
+    // 쿼드 로컬: position.x = 교차축, position.y = 진행축
+    vec2 planar = centerWorld
+      + dirWorld * (position.y * expandedLength)
+      + perpWorld * (position.x * expandedWidth);
 
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(planar, 0.0, 1.0);
 
     vColorTop = noteColorTop;
     vColorBottom = noteColorBottom;
-    vHalfSize = vec2(noteWidth, noteLength) * 0.5;
+    vHalfSize = vec2(crossSize, noteLength) * 0.5;
     vLocalPos = vec2(position.x * expandedWidth, position.y * expandedLength);
     vRadius = noteRadius;
     vGlowSize = glowSize;
-    vGlowOpacity = vec2(glowOpacityTop, glowOpacityBottom);
+    vGlowOpacity = vec2(glowOpacityFar, glowOpacityNear);
     vGlowColorTop = noteGlowColorTop;
     vGlowColorBottom = noteGlowColorBottom;
     vBorder = noteBorder;
     vBorderOpacity = noteBorderOpacity;
-    vTrackTopY = trackTopY;
-    vTrackBottomY = trackBottomY;
+
+    // 확장 정점의 raw s로 흐름 비율 계산 (fragment에서 clamp)
+    float sVertex = centerS + position.y * expandedLength;
+    vFlowRatioRaw = 1.0 - sVertex / max(uTrackHeight, 0.0001);
   }
 `;
 
 const fragmentShader = `
   precision highp float;
 
-  uniform float uCanvasBottomDomY;
-  uniform float uDomPerPx;
-  uniform float uFadeTopPx;
-  uniform float uFadeBottomPx;
+  uniform float uTrackHeight;
+  uniform float uFadeFarPx;
+  uniform float uFadeNearPx;
 
   varying vec4 vColorTop;
   varying vec4 vColorBottom;
@@ -166,16 +165,12 @@ const fragmentShader = `
   varying vec3 vGlowColorBottom;
   varying vec4 vBorder; // x: width, yzw: RGB color
   varying float vBorderOpacity;
-  varying float vTrackTopY;
-  varying float vTrackBottomY;
+  varying float vFlowRatioRaw;
 
   void main() {
-    // gl_FragCoord는 crop된 캔버스 기준 물리 픽셀 단위
-    // uDomPerPx = cssHeight / drawingBufferHeight — 비정수 DPR의 backing 반올림 반영
-    // max()는 uniform 미설정/0 방어
-    float currentDOMY = uCanvasBottomDomY - gl_FragCoord.y * max(uDomPerPx, 0.0001);
-    float trackHeight = max(vTrackBottomY - vTrackTopY, 0.0001);
-    float gradientRatio = clamp((currentDOMY - vTrackTopY) / trackHeight, 0.0, 1.0);
+    // 흐름 비율: 0 = 먼쪽 끝, 1 = 키(히트라인)쪽. 버텍스 raw 보간 후 여기서 clamp
+    float trackHeight = max(uTrackHeight, 0.0001);
+    float gradientRatio = clamp(vFlowRatioRaw, 0.0, 1.0);
     float trackRelativeY = gradientRatio;
 
     vec4 baseColor = mix(vColorTop, vColorBottom, gradientRatio);
@@ -237,13 +232,13 @@ const fragmentShader = `
     }
 
     float fadeMask = 1.0;
-    if (uFadeTopPx > 0.0) {
-      float topFadeRatio = uFadeTopPx / trackHeight;
-      fadeMask = min(fadeMask, clamp(trackRelativeY / topFadeRatio, 0.0, 1.0));
+    if (uFadeFarPx > 0.0) {
+      float farFadeRatio = uFadeFarPx / trackHeight;
+      fadeMask = min(fadeMask, clamp(trackRelativeY / farFadeRatio, 0.0, 1.0));
     }
-    if (uFadeBottomPx > 0.0) {
-      float bottomFadeRatio = uFadeBottomPx / trackHeight;
-      fadeMask = min(fadeMask, clamp((1.0 - trackRelativeY) / bottomFadeRatio, 0.0, 1.0));
+    if (uFadeNearPx > 0.0) {
+      float nearFadeRatio = uFadeNearPx / trackHeight;
+      fadeMask = min(fadeMask, clamp((1.0 - trackRelativeY) / nearFadeRatio, 0.0, 1.0));
     }
     bodyAlpha *= fadeMask;
     borderAlpha *= fadeMask;
@@ -279,6 +274,7 @@ const INSTANCED_ATTRIBUTE_KEYS: readonly string[] = Object.freeze([
   'noteBorder',
   'noteBorderOpacity',
   'trackIndex',
+  'noteDir',
 ]);
 
 const FINALIZE_ATTRIBUTE_KEYS: readonly string[] = Object.freeze(['noteInfo']);
@@ -462,6 +458,7 @@ interface NoteBuffer {
   noteBorder: Float32Array;
   noteBorderOpacity: Float32Array;
   trackIndex: Float32Array;
+  noteDir: Float32Array;
 }
 
 interface WebGLTracksOGLProps {
@@ -606,6 +603,12 @@ export function WebGLTracksOGL({
       data: noteBuffer.trackIndex,
       usage: gl.DYNAMIC_DRAW,
     });
+    geometry.addAttribute('noteDir', {
+      instanced: 1,
+      size: 2,
+      data: noteBuffer.noteDir,
+      usage: gl.DYNAMIC_DRAW,
+    });
     markInstancedAttributesDirty(geometry, noteBuffer.activeCount);
     geometryRef.current = geometry;
 
@@ -621,14 +624,12 @@ export function WebGLTracksOGL({
           value: noteSettings.speed || DEFAULT_NOTE_SETTINGS.speed,
         },
         uScreenHeight: { value: window.innerHeight },
-        uCanvasBottomDomY: { value: window.innerHeight },
-        uDomPerPx: { value: 1 },
         uTrackHeight: {
           value: noteSettings.trackHeight || DEFAULT_NOTE_SETTINGS.trackHeight,
         },
         uReverse: { value: noteSettings.reverse ? 1.0 : 0.0 },
-        uFadeTopPx: { value: resolvedFadeValues(noteSettings).topPx },
-        uFadeBottomPx: { value: resolvedFadeValues(noteSettings).bottomPx },
+        uFadeFarPx: { value: resolvedFadeValues(noteSettings).topPx },
+        uFadeNearPx: { value: resolvedFadeValues(noteSettings).bottomPx },
       },
     });
     programRef.current = program;
@@ -863,8 +864,8 @@ export function WebGLTracksOGL({
       noteSettings.trackHeight || DEFAULT_NOTE_SETTINGS.trackHeight;
     uniforms.uReverse.value = noteSettings.reverse ? 1.0 : 0.0;
     const fade = resolvedFadeValues(noteSettings);
-    uniforms.uFadeTopPx.value = fade.topPx;
-    uniforms.uFadeBottomPx.value = fade.bottomPx;
+    uniforms.uFadeFarPx.value = fade.topPx;
+    uniforms.uFadeNearPx.value = fade.bottomPx;
   }, [noteSettings]);
 
   // 트랙 union bounds로 캔버스 crop — backing 크기가 컴포지팅 비용을 결정하므로
@@ -897,10 +898,6 @@ export function WebGLTracksOGL({
         bottom: windowH - (rect.y + rect.h),
       });
       program.uniforms.uScreenHeight.value = windowH;
-      program.uniforms.uCanvasBottomDomY.value = rect.y + rect.h;
-      // 비정수 DPR에서 backing 반올림까지 반영한 정확 CSS px/물리 px 비율
-      program.uniforms.uDomPerPx.value =
-        rect.h / Math.max(renderer.gl.drawingBufferHeight, 1);
       cropAppliedRef.current = { rect, windowH, dpr };
     };
 
