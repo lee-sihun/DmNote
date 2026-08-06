@@ -64,7 +64,7 @@ const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const MIN_OVERLAY_DIMENSION: f64 = 100.0;
 const MAX_OVERLAY_DIMENSION: f64 = 4_096.0;
-const MAX_OVERLAY_RESIZE_SESSIONS: usize = 8;
+const MAX_RETIRED_OVERLAY_RESIZE_SESSIONS: usize = 8;
 const OVERLAY_BOUNDS_RESTORE_TOLERANCE: f64 = 0.5;
 const PANEL_WIDTH: f64 = 240.0;
 // 피커가 트리거 행 아래에 그대로 들어갈 세로 여유 - 이보다 낮으면 팝업이
@@ -886,8 +886,32 @@ fn run_panel_close_timeout(
 
 #[derive(Default)]
 struct OverlayResizeExecutionState {
-    highest_gen_by_session: HashMap<u64, u64>,
-    session_insertion_order: VecDeque<u64>,
+    by_window_label: HashMap<String, OverlayResizeWindowGeneration>,
+}
+
+struct OverlayResizeWindowGeneration {
+    active_session: u64,
+    high_gen: Option<u64>,
+    retired_sessions: VecDeque<u64>,
+}
+
+impl OverlayResizeWindowGeneration {
+    fn new(active_session: u64) -> Self {
+        Self {
+            active_session,
+            high_gen: None,
+            retired_sessions: VecDeque::new(),
+        }
+    }
+
+    fn adopt_session(&mut self, session: u64) {
+        if self.retired_sessions.len() >= MAX_RETIRED_OVERLAY_RESIZE_SESSIONS {
+            self.retired_sessions.pop_front();
+        }
+        self.retired_sessions.push_back(self.active_session);
+        self.active_session = session;
+        self.high_gen = None;
+    }
 }
 
 impl OverlayResizeExecutionState {
@@ -898,31 +922,49 @@ impl OverlayResizeExecutionState {
         request_session.zip(request_gen)
     }
 
-    fn is_stale(&self, request_session: Option<u64>, request_gen: Option<u64>) -> bool {
+    fn admit_request(
+        &mut self,
+        window_label: &str,
+        request_session: Option<u64>,
+        request_gen: Option<u64>,
+    ) -> bool {
         let Some((session, gen)) = Self::request_generation(request_session, request_gen) else {
-            return false;
+            return true;
         };
-        self.highest_gen_by_session
-            .get(&session)
-            .is_some_and(|highest_gen| gen <= *highest_gen)
+        let Some(window_state) = self.by_window_label.get_mut(window_label) else {
+            self.by_window_label.insert(
+                window_label.to_string(),
+                OverlayResizeWindowGeneration::new(session),
+            );
+            return true;
+        };
+
+        if session == window_state.active_session {
+            return window_state.high_gen.is_none_or(|high_gen| gen > high_gen);
+        }
+        if window_state.retired_sessions.contains(&session) {
+            return false;
+        }
+
+        window_state.adopt_session(session);
+        true
     }
 
-    fn mark_executed(&mut self, request_session: Option<u64>, request_gen: Option<u64>) {
+    fn mark_executed(
+        &mut self,
+        window_label: &str,
+        request_session: Option<u64>,
+        request_gen: Option<u64>,
+    ) {
         let Some((session, gen)) = Self::request_generation(request_session, request_gen) else {
             return;
         };
-        if let Some(highest_gen) = self.highest_gen_by_session.get_mut(&session) {
-            *highest_gen = (*highest_gen).max(gen);
+        let Some(window_state) = self.by_window_label.get_mut(window_label) else {
             return;
+        };
+        if session == window_state.active_session {
+            window_state.high_gen = Some(window_state.high_gen.map_or(gen, |high| high.max(gen)));
         }
-
-        if self.highest_gen_by_session.len() >= MAX_OVERLAY_RESIZE_SESSIONS {
-            if let Some(oldest_session) = self.session_insertion_order.pop_front() {
-                self.highest_gen_by_session.remove(&oldest_session);
-            }
-        }
-        self.highest_gen_by_session.insert(session, gen);
-        self.session_insertion_order.push_back(session);
     }
 }
 
@@ -2112,6 +2154,7 @@ impl AppState {
     pub fn resize_overlay(
         &self,
         app: &AppHandle,
+        caller_window_label: &str,
         width: f64,
         height: f64,
         anchor: Option<String>,
@@ -2124,7 +2167,7 @@ impl AppState {
         request_gen: Option<u64>,
     ) -> crate::errors::CmdResult<OverlayResizeResponse> {
         let mut resize_execution = self.overlay_resize_lock.lock();
-        if resize_execution.is_stale(request_session, request_gen) {
+        if !resize_execution.admit_request(caller_window_label, request_session, request_gen) {
             return self.current_overlay_resize_response(app, request_gen);
         }
 
@@ -2141,6 +2184,7 @@ impl AppState {
                 fixed_position_delta_y,
                 request_session,
                 request_gen,
+                caller_window_label,
                 &mut resize_execution,
             )
         })
@@ -2186,6 +2230,7 @@ impl AppState {
         fixed_position_delta_y: Option<f64>,
         request_session: Option<u64>,
         request_gen: Option<u64>,
+        caller_window_label: &str,
         resize_execution: &mut OverlayResizeExecutionState,
     ) -> crate::errors::CmdResult<OverlayResizeResponse> {
         // 오버레이가 이미 열려있을 때만 리사이즈 수행
@@ -2290,7 +2335,7 @@ impl AppState {
             width,
             height,
         };
-        resize_execution.mark_executed(request_session, request_gen);
+        resize_execution.mark_executed(caller_window_label, request_session, request_gen);
         let native_exit = apply_native_overlay_resize_transaction(
             previous_observation,
             &bounds,
@@ -5575,7 +5620,7 @@ mod tests {
         PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
         PhysicalPosition, PhysicalSize, SelectionSessionElement, SelectionSessionSnapshot,
         TargetedPanelViewState, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
-        KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION, MAX_OVERLAY_RESIZE_SESSIONS,
+        KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION, MAX_RETIRED_OVERLAY_RESIZE_SESSIONS,
         MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
         MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
         PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
@@ -5796,52 +5841,107 @@ mod tests {
     }
 
     #[test]
-    fn interleaved_request_sessions_keep_independent_generation_gates() {
+    fn same_window_label_retires_the_previous_session() {
         let mut execution = OverlayResizeExecutionState::default();
+        let window_label = "overlay";
 
-        assert!(!execution.is_stale(Some(100), Some(1)));
-        execution.mark_executed(Some(100), Some(1));
-        assert!(!execution.is_stale(Some(200), Some(1)));
-        execution.mark_executed(Some(200), Some(1));
-        assert!(!execution.is_stale(Some(100), Some(3)));
-        execution.mark_executed(Some(100), Some(3));
-        assert!(!execution.is_stale(Some(200), Some(2)));
-        execution.mark_executed(Some(200), Some(2));
+        assert!(execution.admit_request(window_label, Some(100), Some(1)));
+        execution.mark_executed(window_label, Some(100), Some(1));
+        assert!(execution.admit_request(window_label, Some(100), Some(2)));
+        execution.mark_executed(window_label, Some(100), Some(2));
 
-        assert_eq!(execution.highest_gen_by_session.get(&100).copied(), Some(3));
-        assert_eq!(execution.highest_gen_by_session.get(&200).copied(), Some(2));
-        assert!(execution.is_stale(Some(100), Some(2)));
-        assert!(execution.is_stale(Some(100), Some(3)));
-        assert!(execution.is_stale(Some(200), Some(1)));
+        assert!(execution.admit_request(window_label, Some(200), Some(1)));
+        execution.mark_executed(window_label, Some(200), Some(1));
+
+        assert!(!execution.admit_request(window_label, Some(100), Some(3)));
+        assert!(execution.admit_request(window_label, Some(200), Some(2)));
+        execution.mark_executed(window_label, Some(200), Some(2));
+        assert!(!execution.admit_request(window_label, Some(200), Some(2)));
+
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.active_session, 200);
+        assert_eq!(window_state.high_gen, Some(2));
+        assert_eq!(
+            window_state
+                .retired_sessions
+                .iter()
+                .copied()
+                .collect::<Vec<_>>(),
+            vec![100]
+        );
     }
 
     #[test]
-    fn request_generation_sessions_prune_the_oldest_insertion_at_the_cap() {
+    fn different_window_labels_keep_independent_active_sessions() {
         let mut execution = OverlayResizeExecutionState::default();
 
-        for session in 0..MAX_OVERLAY_RESIZE_SESSIONS as u64 {
-            execution.mark_executed(Some(session), Some(10));
+        assert!(execution.admit_request("overlay", Some(100), Some(5)));
+        execution.mark_executed("overlay", Some(100), Some(5));
+        assert!(execution.admit_request("obs", Some(100), Some(1)));
+        execution.mark_executed("obs", Some(100), Some(1));
+
+        assert!(execution.admit_request("overlay", Some(200), Some(1)));
+        execution.mark_executed("overlay", Some(200), Some(1));
+        assert!(execution.admit_request("obs", Some(100), Some(2)));
+        execution.mark_executed("obs", Some(100), Some(2));
+
+        assert!(!execution.admit_request("overlay", Some(100), Some(6)));
+        let overlay_state = execution.by_window_label.get("overlay").unwrap();
+        let obs_state = execution.by_window_label.get("obs").unwrap();
+        assert_eq!(
+            (overlay_state.active_session, overlay_state.high_gen),
+            (200, Some(1))
+        );
+        assert_eq!(
+            (obs_state.active_session, obs_state.high_gen),
+            (100, Some(2))
+        );
+    }
+
+    #[test]
+    fn missing_session_or_generation_bypasses_the_window_gate() {
+        let mut execution = OverlayResizeExecutionState::default();
+        let window_label = "overlay";
+
+        assert!(execution.admit_request(window_label, Some(100), Some(5)));
+        execution.mark_executed(window_label, Some(100), Some(5));
+        assert!(execution.admit_request(window_label, None, Some(1)));
+        execution.mark_executed(window_label, None, Some(1));
+        assert!(execution.admit_request(window_label, Some(200), None));
+        execution.mark_executed(window_label, Some(200), None);
+
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.active_session, 100);
+        assert_eq!(window_state.high_gen, Some(5));
+        assert!(window_state.retired_sessions.is_empty());
+    }
+
+    #[test]
+    fn retired_session_fence_prunes_the_oldest_at_the_cap() {
+        let mut execution = OverlayResizeExecutionState::default();
+        let window_label = "overlay";
+
+        assert!(execution.admit_request(window_label, Some(0), Some(1)));
+        execution.mark_executed(window_label, Some(0), Some(1));
+        for session in 1..=(MAX_RETIRED_OVERLAY_RESIZE_SESSIONS as u64 + 1) {
+            assert!(execution.admit_request(window_label, Some(session), Some(1)));
+            execution.mark_executed(window_label, Some(session), Some(1));
         }
-        assert_eq!(
-            execution.highest_gen_by_session.len(),
-            MAX_OVERLAY_RESIZE_SESSIONS
-        );
 
-        let newest_session = MAX_OVERLAY_RESIZE_SESSIONS as u64;
-        execution.mark_executed(Some(newest_session), Some(1));
-
+        let window_state = execution.by_window_label.get(window_label).unwrap();
         assert_eq!(
-            execution.highest_gen_by_session.len(),
-            MAX_OVERLAY_RESIZE_SESSIONS
+            window_state.retired_sessions.len(),
+            MAX_RETIRED_OVERLAY_RESIZE_SESSIONS
         );
-        assert!(!execution.highest_gen_by_session.contains_key(&0));
-        assert_eq!(execution.session_insertion_order.front().copied(), Some(1));
+        assert_eq!(window_state.retired_sessions.front().copied(), Some(1));
         assert_eq!(
-            execution.session_insertion_order.back().copied(),
-            Some(newest_session)
+            window_state.retired_sessions.back().copied(),
+            Some(MAX_RETIRED_OVERLAY_RESIZE_SESSIONS as u64)
         );
-        assert!(!execution.is_stale(Some(0), Some(1)));
-        assert!(execution.is_stale(Some(1), Some(9)));
+        assert_eq!(
+            window_state.active_session,
+            MAX_RETIRED_OVERLAY_RESIZE_SESSIONS as u64 + 1
+        );
     }
 
     #[test]
@@ -5874,6 +5974,7 @@ mod tests {
             height: 700.0,
         };
         let mut execution = OverlayResizeExecutionState::default();
+        let window_label = "overlay";
         let request_session = Some(100);
         let mut store = AppStoreData {
             overlay_last_content_top_offset: Some(previous_margins.top),
@@ -5883,11 +5984,11 @@ mod tests {
         };
         let mut position = OverlayPositionAdjustment { x: 100.0, y: 100.0 };
 
-        assert!(!execution.is_stale(request_session, Some(1)));
-        execution.mark_executed(request_session, Some(1));
+        assert!(execution.admit_request(window_label, request_session, Some(1)));
+        execution.mark_executed(window_label, request_session, Some(1));
 
-        assert!(!execution.is_stale(request_session, Some(3)));
-        execution.mark_executed(request_session, Some(3));
+        assert!(execution.admit_request(window_label, request_session, Some(3)));
+        execution.mark_executed(window_label, request_session, Some(3));
         let current_transition = resolve_content_margin_transition(
             Some(current_margins),
             None,
@@ -5952,10 +6053,16 @@ mod tests {
             },
             OverlayPositionAdjustment::default()
         );
-        assert!(execution.is_stale(request_session, Some(2)));
-        assert!(execution.is_stale(request_session, Some(3)));
+        assert!(!execution.admit_request(window_label, request_session, Some(2)));
+        assert!(!execution.admit_request(window_label, request_session, Some(3)));
 
-        assert_eq!(execution.highest_gen_by_session.get(&100).copied(), Some(3));
+        assert_eq!(
+            execution
+                .by_window_label
+                .get(window_label)
+                .and_then(|state| state.high_gen),
+            Some(3)
+        );
         assert_eq!(position, position_after_gen_3);
         assert_eq!(
             (
@@ -5966,11 +6073,17 @@ mod tests {
             baseline_after_gen_3
         );
 
-        assert!(!execution.is_stale(None, Some(2)));
-        assert!(!execution.is_stale(request_session, None));
-        execution.mark_executed(None, Some(999));
-        execution.mark_executed(request_session, None);
-        assert_eq!(execution.highest_gen_by_session.get(&100).copied(), Some(3));
+        assert!(execution.admit_request(window_label, None, Some(2)));
+        assert!(execution.admit_request(window_label, request_session, None));
+        execution.mark_executed(window_label, None, Some(999));
+        execution.mark_executed(window_label, request_session, None);
+        assert_eq!(
+            execution
+                .by_window_label
+                .get(window_label)
+                .and_then(|state| state.high_gen),
+            Some(3)
+        );
     }
 
     #[test]

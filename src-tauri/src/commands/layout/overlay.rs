@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use crate::{
     errors::CmdResult,
@@ -68,10 +68,12 @@ pub fn overlay_set_anchor(
 pub fn overlay_resize(
     state: State<'_, AppState>,
     app: AppHandle,
+    window: WebviewWindow,
     payload: OverlayResizeArgs,
 ) -> CmdResult<OverlayResizeResponse> {
     state.resize_overlay(
         &app,
+        window.label(),
         payload.width,
         payload.height,
         payload.anchor,
