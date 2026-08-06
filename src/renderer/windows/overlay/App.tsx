@@ -143,6 +143,25 @@ const resizeParamsEqual = (
   (a.anchor !== 'fixed-position' ||
     (nearlyEqual(a.minX, b.minX) && nearlyEqual(a.minY, b.minY)));
 
+// 성공 응답·resized 이벤트의 실적용 크기를 권위 기록에 반영 (반올림·보정 반영)
+const withAppliedDims = (
+  params: OverlayResizeParams,
+  width: number,
+  height: number,
+): OverlayResizeParams => ({
+  ...params,
+  width: Number.isFinite(width) ? width : params.width,
+  height: Number.isFinite(height) ? height : params.height,
+});
+
+// 타임아웃으로 결론 없이 남은 최신 요청 - 늦은 응답·resized 이벤트의 채택 후보
+interface UnresolvedResizeRequest {
+  gen: number;
+  dispatchParams: OverlayResizeParams;
+  // 타임아웃이 무효화하기 직전의 권위 (늦은 실패 확정 시 복원용)
+  previousAuthority: OverlayResizeParams | null;
+}
+
 // 계약 §4 오류 wire: { errorCode, details, retryable }
 const isOverlayDimensionExceeded = (
   error: unknown,
@@ -931,13 +950,24 @@ export default function App() {
   ]);
 
   const [applied, setApplied] = useState<OverlayGeometrySnapshot | null>(null);
-  // 렌더 승격과 분리된 native 실적용 params (성공 응답 기준으로만 갱신)
-  // 실패한 목표 크기가 no-op 판정 기준으로 남아 재시도를 누르는 문제 방지
+  const appliedRef = useRef<OverlayGeometrySnapshot | null>(null);
+  // 렌더 승격과 분리된 native 실적용 권위 - no-op 판정과 fixed-position delta의
+  // 위치 기준(minX/minY). 갱신 소스 3개: 정상 성공, 늦은 성공의 gen 펜싱 채택,
+  // overlay:resized 이벤트 채택. 실패한 목표 크기는 기록하지 않음
   const nativeParamsRef = useRef<OverlayResizeParams | null>(null);
   const inFlightRef = useRef<OverlayGeometrySnapshot | null>(null);
   const queuedLatestRef = useRef<OverlayGeometrySnapshot | null>(null);
   // single-flight라 타이머도 최대 1개 - 언마운트 시 정리
   const inFlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 디스패치 세대 - 늦은 응답의 채택/폐기 펜싱 (실제 IPC 발행 시에만 증가)
+  const requestGenRef = useRef(0);
+  const unresolvedRequestRef = useRef<UnresolvedResizeRequest | null>(null);
+  // 위치 권위 부재로 지연된 fixed-position 스냅샷 - 권위 회복 시 재평가
+  const awaitingAuthorityRef = useRef<OverlayGeometrySnapshot | null>(null);
+  // resized 이벤트 구독(마운트 수명)이 최신 effect의 로직을 쓰기 위한 간접 참조
+  const adoptAuthorityRef = useRef<(record: OverlayResizeParams) => void>(
+    () => {},
+  );
 
   useEffect(
     () => () => {
@@ -951,6 +981,7 @@ export default function App() {
 
   useEffect(() => {
     const promote = (snapshot: OverlayGeometrySnapshot) => {
+      appliedRef.current = snapshot;
       setApplied(snapshot);
     };
 
@@ -959,6 +990,25 @@ export default function App() {
       const next = queuedLatestRef.current;
       queuedLatestRef.current = null;
       if (next) dispatchOrPromote(next);
+    };
+
+    // 지연된 fixed-position 스냅샷(우선) 또는 현재 렌더를 재평가해 보정 디스패치
+    // (동일하면 no-op 승격으로 수렴)
+    const resumeDeferred = () => {
+      const target = awaitingAuthorityRef.current ?? appliedRef.current;
+      awaitingAuthorityRef.current = null;
+      if (!target) return;
+      if (inFlightRef.current) {
+        queuedLatestRef.current = target;
+        return;
+      }
+      dispatchOrPromote(target);
+    };
+
+    // 권위 채택·복원 공통 경로
+    const adoptNativeAuthority = (record: OverlayResizeParams) => {
+      nativeParamsRef.current = record;
+      resumeDeferred();
     };
 
     const dispatchOrPromote = (snapshot: OverlayGeometrySnapshot) => {
@@ -998,6 +1048,22 @@ export default function App() {
         return;
       }
       const fixedPositionAnchor = dispatchParams.anchor === 'fixed-position';
+      // 결론 없는(타임아웃) 요청이 창을 옮겼을 수 있는 동안에는 상대 delta의
+      // 기준이 미지 - 늦은 응답 채택·resized 이벤트·복원으로 권위가 회복될
+      // 때까지 fixed-position 디스패치를 지연 (렌더는 막지 않음)
+      // 미지 요청이 없는 권위 부재(cold start)는 delta 0이 안전 - 즉시 진행
+      if (
+        fixedPositionAnchor &&
+        !nativeParams &&
+        unresolvedRequestRef.current
+      ) {
+        console.warn(
+          'Overlay fixed-position resize deferred: awaiting native position authority',
+        );
+        awaitingAuthorityRef.current = snapshot;
+        promote(snapshot);
+        return;
+      }
       const fixedPositionDeltaX =
         fixedPositionAnchor && nativeParams?.anchor === 'fixed-position'
           ? dispatchParams.minX - nativeParams.minX
@@ -1006,6 +1072,7 @@ export default function App() {
         fixedPositionAnchor && nativeParams?.anchor === 'fixed-position'
           ? dispatchParams.minY - nativeParams.minY
           : 0;
+      const gen = ++requestGenRef.current;
       inFlightRef.current = snapshot;
       const clearInFlightTimer = () => {
         if (inFlightTimerRef.current !== null) {
@@ -1014,16 +1081,19 @@ export default function App() {
         }
       };
       // 응답 없는 IPC가 큐를 영구 봉쇄하지 않도록 타임아웃 시 낙관 승격 + settle
-      // nativeParams는 미갱신이라 다음 candidate가 재시도 가능
       inFlightTimerRef.current = setTimeout(() => {
         if (inFlightRef.current !== snapshot) return;
         inFlightTimerRef.current = null;
         console.warn(
           'Overlay resize timed out; rendering without window resize',
         );
-        // 적용 여부 불명이므로 native 지식 무효화 - 이후 candidate는 no-op
-        // 판정 없이 반드시 재요청하고, 백엔드 도착순 적용으로 창이 수렴
-        // (fixed-position delta도 null 기준이라 delta 0으로 재정렬)
+        // 적용 여부 불명 - 권위를 무효화해 no-op을 차단하되, 요청과 직전 권위를
+        // 보존해 늦은 응답·resized 이벤트가 진실을 채택/복원할 수 있게 함
+        unresolvedRequestRef.current = {
+          gen,
+          dispatchParams,
+          previousAuthority: nativeParamsRef.current,
+        };
         nativeParamsRef.current = null;
         promote(snapshot);
         settle();
@@ -1043,42 +1113,67 @@ export default function App() {
             : undefined,
         })
         .then((bounds) => {
-          // 타임아웃·언마운트 후 늦게 도착한 응답은 최신 상태를 덮지 않음
-          if (inFlightRef.current !== snapshot) return;
-          clearInFlightTimer();
-          // no-op 판정 기준은 백엔드 실적용 크기 (반올림·보정 반영)
-          nativeParamsRef.current = {
-            ...dispatchParams,
-            width: Number.isFinite(bounds.width)
-              ? bounds.width
-              : dispatchParams.width,
-            height: Number.isFinite(bounds.height)
-              ? bounds.height
-              : dispatchParams.height,
-          };
-          // in-flight 성공은 최신 대기 여부와 무관하게 반드시 커밋 (native 기준)
-          promote(snapshot);
-          settle();
+          if (inFlightRef.current === snapshot) {
+            clearInFlightTimer();
+            // no-op 판정 기준은 백엔드 실적용 크기 (반올림·보정 반영)
+            nativeParamsRef.current = withAppliedDims(
+              dispatchParams,
+              bounds.width,
+              bounds.height,
+            );
+            // in-flight 성공은 최신 대기 여부와 무관하게 반드시 커밋 (native 기준)
+            promote(snapshot);
+            settle();
+            return;
+          }
+          // 타임아웃 뒤 늦은 성공: 이후 새 디스패치가 없었다면 이 요청이 실제
+          // 적용된 native 진실 - 권위로 채택하고 현재 렌더와 다르면 보정 디스패치
+          if (requestGenRef.current === gen) {
+            unresolvedRequestRef.current = null;
+            adoptNativeAuthority(
+              withAppliedDims(dispatchParams, bounds.width, bounds.height),
+            );
+          }
+          // 새 디스패치가 있었으면 그 요청의 결론이 권위를 담당 - 무시
         })
         .catch((error) => {
-          if (inFlightRef.current !== snapshot) return;
-          clearInFlightTimer();
-          if (isOverlayDimensionExceeded(error)) {
-            // 백엔드 원자 거부는 안전망 - 렌더러 포화로 정상 경로에선 도달하지 않음
-            console.warn(
-              'Overlay resize rejected: dimension exceeded',
-              error.details,
-            );
-          } else {
-            // 창 미존재(OBS 페이지·오버레이 숨김 등)·전송 실패
-            console.error('Failed to resize overlay window', error);
+          if (inFlightRef.current === snapshot) {
+            clearInFlightTimer();
+            if (isOverlayDimensionExceeded(error)) {
+              // 백엔드 원자 거부는 안전망 - 렌더러 포화로 정상 경로에선 도달하지 않음
+              console.warn(
+                'Overlay resize rejected: dimension exceeded',
+                error.details,
+              );
+            } else {
+              // 창 미존재(OBS 페이지·오버레이 숨김 등)·전송 실패
+              console.error('Failed to resize overlay window', error);
+            }
+            // 실패해도 렌더는 승격 - native 기록만 미갱신이라 다음 candidate가
+            // no-op에 눌리지 않고 재시도 (창 크기만 못 바꾼 채 콘텐츠는 표시)
+            promote(snapshot);
+            settle();
+            return;
           }
-          // 실패해도 렌더는 승격 - native 기록만 미갱신이라 다음 candidate가
-          // no-op에 눌리지 않고 재시도 (창 크기만 못 바꾼 채 콘텐츠는 표시)
-          promote(snapshot);
-          settle();
+          // 타임아웃 뒤 늦은 실패: 창 미변경 확정 - 무효화했던 직전 권위를 복원해
+          // 지연된 스냅샷·현재 렌더를 재평가 (직전 권위가 없던 요청이면 cold
+          // start로 복귀하므로 지연분만 재개)
+          if (
+            requestGenRef.current === gen &&
+            unresolvedRequestRef.current?.gen === gen
+          ) {
+            const previous = unresolvedRequestRef.current.previousAuthority;
+            unresolvedRequestRef.current = null;
+            if (previous) {
+              adoptNativeAuthority(previous);
+            } else {
+              resumeDeferred();
+            }
+          }
         });
     };
+
+    adoptAuthorityRef.current = adoptNativeAuthority;
 
     // in-flight 중에는 no-op 판정 없이 최신 대기 슬롯에만 저장 (계약 §4 R5-1)
     if (inFlightRef.current) {
@@ -1087,6 +1182,26 @@ export default function App() {
     }
     dispatchOrPromote(candidate);
   }, [candidate]);
+
+  // 백엔드 실적용 브로드캐스트 구독 - 타임아웃으로 결론 없이 남은 요청이 나중에
+  // 적용돼도 이벤트로 진실이 도착하므로 위치 권위를 채택 (계약 §4 R3 경로 c)
+  useEffect(() => {
+    const unsubscribe = window.api.overlay.onResized((payload) => {
+      const unresolved = unresolvedRequestRef.current;
+      if (!unresolved) return;
+      // 새 디스패치가 있었으면 그 응답이 결론 담당
+      if (requestGenRef.current !== unresolved.gen) return;
+      unresolvedRequestRef.current = null;
+      adoptAuthorityRef.current(
+        withAppliedDims(
+          unresolved.dispatchParams,
+          payload.width,
+          payload.height,
+        ),
+      );
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     if (applied) updateTrackLayouts(applied.layout.webglTracks);

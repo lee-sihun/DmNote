@@ -190,6 +190,10 @@ const makeApiMock = () =>
         return vi.fn();
       }),
     },
+    overlay: {
+      resize: vi.fn(() => Promise.resolve({ x: 0, y: 0, width: 0, height: 0 })),
+      onResized: vi.fn(() => vi.fn()),
+    },
   } as unknown as Window['api']);
 
 const resetSharedMocks = () => {
