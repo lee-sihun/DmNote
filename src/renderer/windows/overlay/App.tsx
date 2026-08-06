@@ -87,13 +87,15 @@ const normalizeOverlayDimension = (value: number): number =>
     Math.round(Math.max(MIN_OVERLAY_DIMENSION, value)),
   );
 
-// 렌더러 세션 ID (모듈 로드 시 1회, u64 범위 내 53비트 난수) - 리로드·OBS
-// 새로고침으로 gen이 리셋돼도 백엔드 (session, gen) 게이트가 신규 세션을 수용
+// 렌더러 세션 ID (모듈 로드 시 1회) - 시각 순서 인코딩: 상위 Date.now(),
+// 하위 12비트 난수(동시 로드 충돌 회피). 백엔드는 더 큰 세션만 채택하므로
+// 나중에 로드된 렌더러(리로드·OBS 새로고침)가 항상 우선하고, 구 세션의
+// 지연 요청은 오채택되지 않음. Date.now()*2^12 + 12비트는 2^53 안전 정수
+// 범위 내 (2039년경까지 여유)
 const OVERLAY_RESIZE_SESSION = (() => {
-  const words = new Uint32Array(2);
+  const words = new Uint32Array(1);
   crypto.getRandomValues(words);
-  const value = (words[0] % 0x200000) * 0x100000000 + words[1];
-  return value === 0 ? 1 : value;
+  return Date.now() * 0x1000 + (words[0] & 0xfff);
 })();
 
 // 폴백 배열 identity 안정화 (메모 체인 무효화 방지)

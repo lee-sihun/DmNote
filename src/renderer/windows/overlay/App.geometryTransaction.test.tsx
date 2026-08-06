@@ -708,12 +708,12 @@ describe('overlay geometry transaction', () => {
   // 백엔드 멱등 모델: x=100에서 시작, contentMin 절대값을 저장 기준점과 비교해
   // 스스로 delta를 계산 (같은 요청 재수신 = delta 0). 창 이동은 fixed-position
   // 앵커에서만, 기준점은 앵커와 무관하게 항상 원자 갱신. gen 에코.
-  // (session, gen) 쌍 게이트 - 같은 세션의 역순 gen만 무시, 세션이 바뀌면
-  // gen 리셋(1부터)도 수용
+  // (session, gen) 게이트 - 세션은 시각 순서 인코딩이라 더 큰 세션만 채택
+  // (구 세션의 지연 요청 오채택 방지), 같은 세션에서는 역순 gen만 무시
   const createBackendModel = () => {
     const state = { x: 100, y: 100, width: 0, height: 0 };
     let referenceMin: { x: number; y: number } | null = null;
-    let lastSession: number | null = null;
+    let lastSession = 0;
     let lastGen = 0;
     const apply = (payload: {
       width: number;
@@ -731,7 +731,11 @@ describe('overlay geometry transaction', () => {
         requestGen: payload.requestGen,
       });
       if (typeof payload.requestGen === 'number') {
-        const session = payload.requestSession ?? null;
+        const session = payload.requestSession ?? 0;
+        if (session < lastSession) {
+          // 구 세션의 지연 요청 - 무시
+          return bounds();
+        }
         if (session === lastSession && payload.requestGen <= lastGen) {
           // 같은 세션의 역순/재전송 - 현재 상태만 반환
           return bounds();
@@ -1134,10 +1138,19 @@ describe('overlay geometry transaction', () => {
     expect(payload.contentMin).toEqual({ x: 0, y: 0 });
     expect('fixedPositionDeltaX' in payload).toBe(false);
     expect('fixedPositionDeltaY' in payload).toBe(false);
-    // 세션 ID: 모듈 로드 시 1회 생성된 양의 정수, 모든 발행에서 동일
+    // 세션 ID: 모듈 로드 시 1회 생성된 양의 정수, 안전 정수 경계 내
     expect(typeof payload.requestSession).toBe('number');
     expect(Number.isInteger(payload.requestSession)).toBe(true);
     expect(payload.requestSession as number).toBeGreaterThan(0);
+    expect(payload.requestSession as number).toBeLessThanOrEqual(
+      Number.MAX_SAFE_INTEGER,
+    );
+    // 시각 순서 인코딩: 상위 비트가 모듈 로드 시각 (나중 로드가 항상 더 큼)
+    expect(
+      Math.abs(
+        Math.floor((payload.requestSession as number) / 0x1000) - Date.now(),
+      ),
+    ).toBeLessThan(60_000);
 
     await act(async () => {
       useKeyStore.setState((state) => ({
@@ -1153,13 +1166,13 @@ describe('overlay geometry transaction', () => {
     expect(second.requestSession).toBe(payload.requestSession);
   });
 
-  it('멱등 모델: 같은 세션의 역순 gen은 무시하고 새 세션은 gen 리셋도 수용한다', () => {
+  it('멱등 모델: 더 큰 세션만 채택하고 구 세션의 지연 요청은 무시한다', () => {
     const backend = createBackendModel();
     backend.apply({
       width: 200,
       height: 400,
       requestGen: 5,
-      requestSession: 111,
+      requestSession: 222,
     });
     expect(backend.state.width).toBe(200);
 
@@ -1168,16 +1181,25 @@ describe('overlay geometry transaction', () => {
       width: 300,
       height: 400,
       requestGen: 1,
-      requestSession: 111,
+      requestSession: 222,
     });
     expect(backend.state.width).toBe(200);
 
-    // 렌더러 재시작(새 세션) - gen 1부터 다시 수용
+    // 렌더러 재시작(시각 순서상 더 큰 세션) - gen 1부터 다시 수용
     backend.apply({
       width: 300,
       height: 400,
       requestGen: 1,
-      requestSession: 222,
+      requestSession: 333,
+    });
+    expect(backend.state.width).toBe(300);
+
+    // 구 세션의 지연 요청 - gen이 커도 무시 (오채택 방지)
+    backend.apply({
+      width: 500,
+      height: 400,
+      requestGen: 9,
+      requestSession: 111,
     });
     expect(backend.state.width).toBe(300);
   });
