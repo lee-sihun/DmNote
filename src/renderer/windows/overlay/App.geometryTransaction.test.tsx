@@ -1166,6 +1166,24 @@ describe('overlay geometry transaction', () => {
     expect(second.requestSession).toBe(payload.requestSession);
   });
 
+  it('시계 역행 시 저장된 세션 + 1로 발급해 단조성을 보장한다', async () => {
+    // 미래 시각으로 발급된 세션이 저장된 상황 = 시계가 뒤로 조정된 뒤의 재로드
+    const storedSession = (Date.now() + 60 * 60 * 1000) * 0x1000;
+    window.localStorage.setItem(
+      'dmn.overlayResizeSession',
+      String(storedSession),
+    );
+
+    // 모듈 재로드 - 세션 재발급 + 저장 갱신
+    vi.resetModules();
+    await import('./App');
+
+    const reissued = Number(
+      window.localStorage.getItem('dmn.overlayResizeSession'),
+    );
+    expect(reissued).toBe(storedSession + 1);
+  });
+
   it('멱등 모델: 더 큰 세션만 채택하고 구 세션의 지연 요청은 무시한다', () => {
     const backend = createBackendModel();
     backend.apply({

@@ -87,15 +87,37 @@ const normalizeOverlayDimension = (value: number): number =>
     Math.round(Math.max(MIN_OVERLAY_DIMENSION, value)),
   );
 
+// 마지막 발급 세션 보존 키 - 시계 역행 시 단조성 보장용
+const OVERLAY_RESIZE_SESSION_STORAGE_KEY = 'dmn.overlayResizeSession';
+
 // 렌더러 세션 ID (모듈 로드 시 1회) - 시각 순서 인코딩: 상위 Date.now(),
 // 하위 12비트 난수(동시 로드 충돌 회피). 백엔드는 더 큰 세션만 채택하므로
 // 나중에 로드된 렌더러(리로드·OBS 새로고침)가 항상 우선하고, 구 세션의
 // 지연 요청은 오채택되지 않음. Date.now()*2^12 + 12비트는 2^53 안전 정수
-// 범위 내 (2039년경까지 여유)
+// 범위 내 (2039년경까지 여유).
+// 시스템 시계가 뒤로 조정되면 새 렌더러 세션이 이전보다 작아져 백엔드가
+// 영구 stale 처리하므로, 마지막 발급값을 localStorage에 보존해
+// max(시각 기반, 저장값 + 1)로 단조성을 보장하고 발급 후 저장을 갱신
 const OVERLAY_RESIZE_SESSION = (() => {
   const words = new Uint32Array(1);
   crypto.getRandomValues(words);
-  return Date.now() * 0x1000 + (words[0] & 0xfff);
+  const timeBased = Date.now() * 0x1000 + (words[0] & 0xfff);
+  try {
+    const stored = Number(
+      window.localStorage.getItem(OVERLAY_RESIZE_SESSION_STORAGE_KEY),
+    );
+    const session = Number.isSafeInteger(stored)
+      ? Math.max(timeBased, stored + 1)
+      : timeBased;
+    window.localStorage.setItem(
+      OVERLAY_RESIZE_SESSION_STORAGE_KEY,
+      String(session),
+    );
+    return session;
+  } catch {
+    // localStorage 불가 환경(샌드박스 임베드 등)은 시각 기반 폴백
+    return timeBased;
+  }
 })();
 
 // 폴백 배열 identity 안정화 (메모 체인 무효화 방지)
