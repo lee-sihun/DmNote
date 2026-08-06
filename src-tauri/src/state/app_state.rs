@@ -64,6 +64,7 @@ const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const MIN_OVERLAY_DIMENSION: f64 = 100.0;
 const MAX_OVERLAY_DIMENSION: f64 = 4_096.0;
+const OVERLAY_RESIZE_STALE_REJECTIONS_BEFORE_ESCAPE: u8 = 3;
 const OVERLAY_BOUNDS_RESTORE_TOLERANCE: f64 = 0.5;
 const PANEL_WIDTH: f64 = 240.0;
 // 피커가 트리거 행 아래에 그대로 들어갈 세로 여유 - 이보다 낮으면 팝업이
@@ -891,6 +892,8 @@ struct OverlayResizeExecutionState {
 struct OverlayResizeWindowGeneration {
     active_session: u64,
     high_gen: Option<u64>,
+    stale_session: Option<u64>,
+    consecutive_stale_rejections: u8,
 }
 
 impl OverlayResizeWindowGeneration {
@@ -898,12 +901,39 @@ impl OverlayResizeWindowGeneration {
         Self {
             active_session,
             high_gen: None,
+            stale_session: None,
+            consecutive_stale_rejections: 0,
         }
     }
 
     fn adopt_session(&mut self, session: u64) {
         self.active_session = session;
         self.high_gen = None;
+        self.reset_stale_rejections();
+    }
+
+    fn reset_stale_rejections(&mut self) {
+        self.stale_session = None;
+        self.consecutive_stale_rejections = 0;
+    }
+
+    fn should_reject_stale_session(&mut self, session: u64) -> bool {
+        if self.stale_session != Some(session) {
+            self.stale_session = Some(session);
+            self.consecutive_stale_rejections = 1;
+            return true;
+        }
+        if self.consecutive_stale_rejections >= OVERLAY_RESIZE_STALE_REJECTIONS_BEFORE_ESCAPE {
+            return false;
+        }
+
+        self.consecutive_stale_rejections += 1;
+        true
+    }
+
+    fn can_escape_stale_gate(&self, session: u64) -> bool {
+        self.stale_session == Some(session)
+            && self.consecutive_stale_rejections >= OVERLAY_RESIZE_STALE_REJECTIONS_BEFORE_ESCAPE
     }
 }
 
@@ -916,27 +946,31 @@ impl OverlayResizeExecutionState {
     }
 
     fn is_stale(
-        &self,
+        &mut self,
         window_label: &str,
         request_session: Option<u64>,
         request_gen: Option<u64>,
     ) -> bool {
         let Some((session, gen)) = Self::request_generation(request_session, request_gen) else {
+            if let Some(window_state) = self.by_window_label.get_mut(window_label) {
+                window_state.reset_stale_rejections();
+            }
             return false;
         };
-        let Some(window_state) = self.by_window_label.get(window_label) else {
+        let Some(window_state) = self.by_window_label.get_mut(window_label) else {
             return false;
         };
 
-        if session < window_state.active_session {
-            return true;
-        }
-        if session == window_state.active_session {
-            return window_state
-                .high_gen
-                .is_some_and(|high_gen| gen <= high_gen);
+        let stale = session < window_state.active_session
+            || (session == window_state.active_session
+                && window_state
+                    .high_gen
+                    .is_some_and(|high_gen| gen <= high_gen));
+        if stale {
+            return window_state.should_reject_stale_session(session);
         }
 
+        window_state.reset_stale_rejections();
         false
     }
 
@@ -953,6 +987,12 @@ impl OverlayResizeExecutionState {
             .by_window_label
             .entry(window_label.to_string())
             .or_insert_with(|| OverlayResizeWindowGeneration::new(session));
+        if window_state.can_escape_stale_gate(session) {
+            window_state.adopt_session(session);
+            window_state.high_gen = Some(gen);
+            return;
+        }
+        window_state.reset_stale_rejections();
         if session < window_state.active_session {
             return;
         }
@@ -5617,8 +5657,9 @@ mod tests {
         TargetedPanelViewState, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
         KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION, MAX_SELECTION_ELEMENTS,
         MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
-        MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
-        PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
+        MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL,
+        OVERLAY_RESIZE_STALE_REJECTIONS_BEFORE_ESCAPE, PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT,
+        PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
         errors::{CommandError, OverlayResizeErrorCode},
@@ -5922,6 +5963,92 @@ mod tests {
         let window_state = execution.by_window_label.get(window_label).unwrap();
         assert_eq!(window_state.active_session, 300);
         assert_eq!(window_state.high_gen, Some(1));
+    }
+
+    #[test]
+    fn fourth_consecutive_stale_request_adopts_its_session_on_execution() {
+        let mut execution = OverlayResizeExecutionState::default();
+        let window_label = "overlay";
+
+        assert!(!execution.is_stale(window_label, Some(500), Some(1)));
+        execution.mark_executed(window_label, Some(500), Some(1));
+        for gen in 1..=OVERLAY_RESIZE_STALE_REJECTIONS_BEFORE_ESCAPE {
+            assert!(execution.is_stale(window_label, Some(100), Some(u64::from(gen))));
+        }
+
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.active_session, 500);
+        assert_eq!(window_state.stale_session, Some(100));
+        assert_eq!(
+            window_state.consecutive_stale_rejections,
+            OVERLAY_RESIZE_STALE_REJECTIONS_BEFORE_ESCAPE
+        );
+
+        assert!(!execution.is_stale(window_label, Some(100), Some(4)));
+        assert_eq!(
+            execution
+                .by_window_label
+                .get(window_label)
+                .unwrap()
+                .active_session,
+            500
+        );
+        execution.mark_executed(window_label, Some(100), Some(4));
+
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.active_session, 100);
+        assert_eq!(window_state.high_gen, Some(4));
+        assert_eq!(window_state.stale_session, None);
+        assert_eq!(window_state.consecutive_stale_rejections, 0);
+    }
+
+    #[test]
+    fn one_delayed_stale_request_does_not_replace_the_active_session() {
+        let mut execution = OverlayResizeExecutionState::default();
+        let window_label = "overlay";
+
+        assert!(!execution.is_stale(window_label, Some(500), Some(1)));
+        execution.mark_executed(window_label, Some(500), Some(1));
+        assert!(execution.is_stale(window_label, Some(100), Some(9)));
+
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.active_session, 500);
+        assert_eq!(window_state.high_gen, Some(1));
+        assert_eq!(window_state.stale_session, Some(100));
+        assert_eq!(window_state.consecutive_stale_rejections, 1);
+    }
+
+    #[test]
+    fn interleaved_requests_reset_the_consecutive_stale_counter() {
+        let mut execution = OverlayResizeExecutionState::default();
+        let window_label = "overlay";
+
+        assert!(!execution.is_stale(window_label, Some(500), Some(1)));
+        execution.mark_executed(window_label, Some(500), Some(1));
+        assert!(execution.is_stale(window_label, Some(100), Some(1)));
+        assert!(execution.is_stale(window_label, Some(100), Some(2)));
+        assert!(execution.is_stale(window_label, Some(200), Some(1)));
+
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.stale_session, Some(200));
+        assert_eq!(window_state.consecutive_stale_rejections, 1);
+
+        assert!(execution.is_stale(window_label, Some(100), Some(3)));
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.stale_session, Some(100));
+        assert_eq!(window_state.consecutive_stale_rejections, 1);
+
+        assert!(!execution.is_stale(window_label, Some(500), Some(2)));
+        execution.mark_executed(window_label, Some(500), Some(2));
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.stale_session, None);
+        assert_eq!(window_state.consecutive_stale_rejections, 0);
+
+        assert!(execution.is_stale(window_label, Some(100), Some(4)));
+        let window_state = execution.by_window_label.get(window_label).unwrap();
+        assert_eq!(window_state.active_session, 500);
+        assert_eq!(window_state.stale_session, Some(100));
+        assert_eq!(window_state.consecutive_stale_rejections, 1);
     }
 
     #[test]
