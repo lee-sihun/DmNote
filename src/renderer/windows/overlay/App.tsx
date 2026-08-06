@@ -959,21 +959,25 @@ export default function App() {
   ]);
 
   const [applied, setApplied] = useState<OverlayGeometrySnapshot | null>(null);
-  const appliedRef = useRef<OverlayGeometrySnapshot | null>(null);
-  // 렌더 승격과 분리된 native 실적용 권위 - no-op 판정과 fixed-position delta의
-  // 위치 기준(minX/minY). '적용 확인'(성공 응답·resized 이벤트)의 gen 단조
-  // 채택으로만 갱신 - 프론트가 상관관계를 추측하지 않음
+  // 마지막으로 발행한 정규화 params - no-op 판정의 유일 기준 (master의
+  // lastResizeParams 의미론). 확인 유실이 발행을 막는 경로가 없음
+  const lastSentParamsRef = useRef<OverlayResizeParams | null>(null);
+  // native 위치 권위 - fixed-position delta 기준. '적용 확인'(응답·resized
+  // 이벤트)의 gen 단조 채택으로만 갱신, 부재(cold)면 delta 0
   const nativeParamsRef = useRef<OverlayResizeParams | null>(null);
-  const inFlightRef = useRef<OverlayGeometrySnapshot | null>(null);
-  const queuedLatestRef = useRef<OverlayGeometrySnapshot | null>(null);
+  // single-flight IPC 직렬화 - 진행 중 gen (렌더와는 무관)
+  const inFlightGenRef = useRef<number | null>(null);
+  const queuedParamsRef = useRef<OverlayResizeParams | null>(null);
   // single-flight라 타이머도 최대 1개 - 언마운트 시 정리
   const inFlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 디스패치 gen - payload requestGen으로 전송돼 적용 확인에 에코됨
   const requestGenRef = useRef(0);
   // 채택된 최고 gen (0 = 미채택)
   const adoptedGenRef = useRef(0);
-  // 결론(채택·실패) 없는 요청의 gen → dispatch params 상관 테이블
+  // 이벤트 gen 에코 → 발행 params 상관 테이블 (권위 채택 전용, 발행은 차단 안 함)
   const pendingParamsByGenRef = useRef(new Map<number, OverlayResizeParams>());
+  // 이벤트 화해 보정의 연속 발행 카운터 - 목표 달성·새 의도 발행에서 리셋
+  const eventReconcileCountRef = useRef(0);
   // resized 이벤트 구독(마운트 수명)이 최신 effect의 로직을 쓰기 위한 간접 참조
   const handleResizedRef = useRef<(payload: OverlayResizePayload) => void>(
     () => {},
@@ -990,97 +994,46 @@ export default function App() {
   );
 
   useEffect(() => {
-    const promote = (snapshot: OverlayGeometrySnapshot) => {
-      appliedRef.current = snapshot;
-      setApplied(snapshot);
-    };
-
-    const settle = () => {
-      inFlightRef.current = null;
-      const next = queuedLatestRef.current;
-      queuedLatestRef.current = null;
-      if (next) dispatchOrPromote(next);
+    const clearInFlightTimer = () => {
+      if (inFlightTimerRef.current !== null) {
+        clearTimeout(inFlightTimerRef.current);
+        inFlightTimerRef.current = null;
+      }
     };
 
     // '적용 확인' 단일 리듀서 - 확인 gen이 채택된 최고 gen보다 클 때만 채택
     // (성공 응답·resized 이벤트 어느 쪽이 먼저 오든, 어떤 순서로 오든 동일 결과)
-    const adoptAuthority = (
-      gen: number,
-      params: OverlayResizeParams,
-    ): boolean => {
-      if (gen <= adoptedGenRef.current) return false;
+    const adoptAuthority = (gen: number, params: OverlayResizeParams) => {
+      if (gen <= adoptedGenRef.current) return;
       adoptedGenRef.current = gen;
       nativeParamsRef.current = params;
       // 이하 gen의 미결 요청은 이후 확인이 창 상태를 대체 - 상관 테이블 정리
       for (const pendingGen of pendingParamsByGenRef.current.keys()) {
         if (pendingGen <= gen) pendingParamsByGenRef.current.delete(pendingGen);
       }
-      return true;
     };
 
-    // 미결 해소(채택·늦은 실패) 후 현재 렌더를 권위와 대조해 보정 디스패치
-    // (동일하면 no-op 승격으로 수렴, 지연됐던 fixed-position도 여기서 재개)
-    const reconcileApplied = () => {
-      if (inFlightRef.current || queuedLatestRef.current) return;
-      const target = appliedRef.current;
-      if (!target) return;
-      dispatchOrPromote(target);
+    const settle = () => {
+      inFlightGenRef.current = null;
+      const next = queuedParamsRef.current;
+      queuedParamsRef.current = null;
+      const lastSent = lastSentParamsRef.current;
+      if (next && !(lastSent && resizeParamsEqual(lastSent, next))) {
+        dispatch(next, false);
+      }
     };
 
-    const dispatchOrPromote = (snapshot: OverlayGeometrySnapshot) => {
-      const params = snapshot.resizeParams;
-      // 콘텐츠 없음: 창 조작 불필요, 즉시 승격
-      if (!params) {
-        promote(snapshot);
-        return;
-      }
-      // 비유한 지오메트리는 native 호출 생략, 렌더만 낙관 승격 (계약 §4 v2.6)
-      if (!resizeParamsAreFinite(params)) {
-        console.warn(
-          'Overlay resize skipped: non-finite geometry; rendering without window resize',
-          params,
-        );
-        promote(snapshot);
-        return;
-      }
-      // 상한 초과는 거부 대신 포화(saturate) - 창은 상한으로 클램프해 요청하고
-      // 콘텐츠는 전체 레이아웃 기준으로 항상 렌더 (계약 §4 v2.6, 잘린 viewport 수용)
-      // min·round도 백엔드 정규화와 동일하게 선적용해 no-op 비교 기준을 일치시킴
-      const width = normalizeOverlayDimension(params.width);
-      const height = normalizeOverlayDimension(params.height);
-      if (
-        params.width > MAX_OVERLAY_DIMENSION ||
-        params.height > MAX_OVERLAY_DIMENSION
-      ) {
-        console.warn(
-          `Overlay dimension exceeds limit (${params.width}x${params.height} > ${MAX_OVERLAY_DIMENSION}); saturating window size`,
-        );
-      }
-      const dispatchParams: OverlayResizeParams = { ...params, width, height };
+    // isReconcile: 이벤트 화해 보정 발행 여부 (연속 1회 제한 카운터 관리)
+    const dispatch = (
+      dispatchParams: OverlayResizeParams,
+      isReconcile: boolean,
+    ) => {
+      eventReconcileCountRef.current = isReconcile
+        ? eventReconcileCountRef.current + 1
+        : 0;
       const nativeParams = nativeParamsRef.current;
-      // 미결 요청(디스패치 후 채택도 실패 확정도 안 됨)이 있으면 창 상태 미지
-      const hasUnconfirmed = pendingParamsByGenRef.current.size > 0;
-      // no-op 승격: 창 상태가 확정이고 native 실적용 값과 동일할 때만
-      // (in-flight 부재 시에만 도달)
-      if (
-        !hasUnconfirmed &&
-        nativeParams &&
-        resizeParamsEqual(nativeParams, dispatchParams)
-      ) {
-        promote(snapshot);
-        return;
-      }
       const fixedPositionAnchor = dispatchParams.anchor === 'fixed-position';
-      // 같은 조건으로 fixed-position 지연 일원화 - 미지 창 위에 상대 delta를
-      // 쌓을 수 없음. 미결 gen이 확인(채택·실패)되면 reconcileApplied가 이
-      // 스냅샷(promote로 applied가 됨)을 재디스패치 (렌더는 막지 않음)
-      if (fixedPositionAnchor && hasUnconfirmed) {
-        console.warn(
-          'Overlay fixed-position resize deferred: awaiting native position authority',
-        );
-        promote(snapshot);
-        return;
-      }
+      // 권위(gen 단조 채택된 최신 위치) 기준 delta, 권위 부재(cold)면 0
       const fixedPositionDeltaX =
         fixedPositionAnchor && nativeParams?.anchor === 'fixed-position'
           ? dispatchParams.minX - nativeParams.minX
@@ -1091,23 +1044,14 @@ export default function App() {
           : 0;
       const gen = ++requestGenRef.current;
       pendingParamsByGenRef.current.set(gen, dispatchParams);
-      inFlightRef.current = snapshot;
-      const clearInFlightTimer = () => {
-        if (inFlightTimerRef.current !== null) {
-          clearTimeout(inFlightTimerRef.current);
-          inFlightTimerRef.current = null;
-        }
-      };
-      // 응답 없는 IPC가 큐를 영구 봉쇄하지 않도록 타임아웃 시 낙관 승격 + settle
-      // 권위는 채택 이력이 관리 - 이 gen은 상관 테이블에 미결로 남아
-      // no-op 판정·fixed-position 디스패치를 확인 도착까지 차단
+      // master 의미론: 발행 시점에 기록 - 응답 결과는 발행 정책에 영향 없음
+      lastSentParamsRef.current = dispatchParams;
+      inFlightGenRef.current = gen;
+      // 응답 없는 IPC가 큐를 영구 봉쇄하지 않도록 타임아웃 시 in-flight 해제만
       inFlightTimerRef.current = setTimeout(() => {
-        if (inFlightRef.current !== snapshot) return;
+        if (inFlightGenRef.current !== gen) return;
         inFlightTimerRef.current = null;
-        console.warn(
-          'Overlay resize timed out; rendering without window resize',
-        );
-        promote(snapshot);
+        console.warn('Overlay resize timed out; releasing in-flight slot');
         settle();
       }, RESIZE_INFLIGHT_TIMEOUT_MS);
       window.api.overlay
@@ -1126,52 +1070,34 @@ export default function App() {
             : undefined,
         })
         .then((bounds) => {
-          const confirmed = withAppliedDims(
-            dispatchParams,
-            bounds.width,
-            bounds.height,
+          // 응답은 권위 갱신 전용 - 타이밍(늦은 도착 포함)과 무관하게 단조 채택
+          adoptAuthority(
+            gen,
+            withAppliedDims(dispatchParams, bounds.width, bounds.height),
           );
-          if (inFlightRef.current === snapshot) {
+          if (inFlightGenRef.current === gen) {
             clearInFlightTimer();
-            adoptAuthority(gen, confirmed);
-            // in-flight 성공은 최신 대기 여부와 무관하게 반드시 커밋 (native 기준)
-            promote(snapshot);
             settle();
-            return;
           }
-          // 타임아웃 뒤 늦은 성공 - gen 단조 채택이라 이후 요청의 실패와
-          // 무관하게 이 실적용이 최신이면 권위로 복원됨
-          if (adoptAuthority(gen, confirmed)) reconcileApplied();
         })
         .catch((error) => {
-          // 부분 적용 확정: 창 크기는 실측대로 바뀐 상태 - 실패가 아니라
-          // '적용 확인'으로 리듀서에 합류 (마진·minX/minY는 요청 params 유지,
-          // width/height만 실측 반영 → no-op 금지·보정 디스패치 자동)
           if (isOverlayResizePartial(error)) {
-            const confirmed = withAppliedDims(
-              dispatchParams,
-              error.details.appliedBounds.width,
-              error.details.appliedBounds.height,
+            // 부분 적용 확정: 실측 크기를 권위로 채택 (창·렌더 화해는 이벤트 루프)
+            console.warn(
+              'Overlay resize partially applied; adopting measured bounds',
+              error.details,
             );
-            if (inFlightRef.current === snapshot) {
-              clearInFlightTimer();
-              console.warn(
-                'Overlay resize partially applied; adopting measured bounds',
-                error.details,
-              );
-              adoptAuthority(gen, confirmed);
-              promote(snapshot);
-              settle();
-              return;
-            }
-            // 타임아웃 뒤 늦은 partial도 gen 단조 채택으로 수렴
-            if (adoptAuthority(gen, confirmed)) reconcileApplied();
-            return;
-          }
-          // 실패 = 해당 gen 미적용 확정 - 채택 대기에서 제외 (채택 권위는 유지)
-          pendingParamsByGenRef.current.delete(gen);
-          if (inFlightRef.current === snapshot) {
-            clearInFlightTimer();
+            adoptAuthority(
+              gen,
+              withAppliedDims(
+                dispatchParams,
+                error.details.appliedBounds.width,
+                error.details.appliedBounds.height,
+              ),
+            );
+          } else {
+            // 실패 = 해당 gen 미적용 확정 - 채택 대기에서 제외 (채택 권위 유지)
+            pendingParamsByGenRef.current.delete(gen);
             if (isOverlayDimensionExceeded(error)) {
               // 백엔드 원자 거부는 안전망 - 렌더러 포화로 정상 경로에선 도달하지 않음
               console.warn(
@@ -1182,54 +1108,92 @@ export default function App() {
               // 창 미존재(OBS 페이지·오버레이 숨김 등)·전송 실패
               console.error('Failed to resize overlay window', error);
             }
-            // 실패해도 렌더는 승격 - 권위 미갱신이라 다음 candidate가 재시도
-            promote(snapshot);
-            settle();
-            return;
           }
-          // 타임아웃 뒤 늦은 실패: 미결 해소 - 지연됐던 렌더를 재평가
-          reconcileApplied();
+          if (inFlightGenRef.current === gen) {
+            clearInFlightTimer();
+            settle();
+          }
         });
     };
 
-    // '적용 확인' 이벤트 수신 - gen이 있으면 상관 테이블로 params를 복원해
-    // 응답 유실·타임아웃 전 도착 등 타이밍과 무관하게 리듀서로 수렴
+    const requestResize = (params: OverlayResizeParams | null) => {
+      // 콘텐츠 없음: 창 조작 불필요
+      if (!params) return;
+      // 비유한 지오메트리는 native 호출 생략 (렌더는 이미 승격됨)
+      if (!resizeParamsAreFinite(params)) {
+        console.warn(
+          'Overlay resize skipped: non-finite geometry; rendering without window resize',
+          params,
+        );
+        return;
+      }
+      // 상한 초과는 거부 대신 포화(saturate), min·round는 백엔드 정규화와 동일
+      const width = normalizeOverlayDimension(params.width);
+      const height = normalizeOverlayDimension(params.height);
+      if (
+        params.width > MAX_OVERLAY_DIMENSION ||
+        params.height > MAX_OVERLAY_DIMENSION
+      ) {
+        console.warn(
+          `Overlay dimension exceeds limit (${params.width}x${params.height} > ${MAX_OVERLAY_DIMENSION}); saturating window size`,
+        );
+      }
+      const dispatchParams: OverlayResizeParams = { ...params, width, height };
+      // in-flight 중에는 최신 대기 슬롯에만 저장 (settle에서 재평가)
+      if (inFlightGenRef.current !== null) {
+        queuedParamsRef.current = dispatchParams;
+        return;
+      }
+      // no-op: 마지막 발행 값과 같으면 생략 - 다르면 무조건 발행
+      const lastSent = lastSentParamsRef.current;
+      if (lastSent && resizeParamsEqual(lastSent, dispatchParams)) return;
+      dispatch(dispatchParams, false);
+    };
+
+    // 단일 화해 루프: resized 이벤트가 유일한 native 진실 - gen 에코는 권위
+    // 채택, bounds가 last-sent 목표와 다르고 in-flight가 없으면 목표로 보정
+    // 재발행 (연속 최대 1회). 부분 적용·롤백·응답 유실 전부 여기로 수렴
     handleResizedRef.current = (payload) => {
       const gen = payload.requestGen;
       if (typeof gen === 'number') {
         const params = pendingParamsByGenRef.current.get(gen);
-        if (!params) return; // 이미 확인·대체된 요청
-        if (
+        if (params) {
           adoptAuthority(
             gen,
             withAppliedDims(params, payload.width, payload.height),
-          )
-        ) {
-          reconcileApplied();
+          );
         }
-        return;
-      }
-      // gen 없는 이벤트(구 백엔드·외부 리사이즈): 콘텐츠 상관관계가 없어 채택
-      // 불가 - 확정 권위의 크기 진실만 보조 갱신 (다음 candidate가 필요 시 보정)
-      if (nativeParamsRef.current) {
+      } else if (nativeParamsRef.current) {
+        // gen 없는 이벤트(구 백엔드·외부 리사이즈): 확정 권위의 크기만 보조 갱신
         nativeParamsRef.current = withAppliedDims(
           nativeParamsRef.current,
           payload.width,
           payload.height,
         );
       }
+      const target = lastSentParamsRef.current;
+      if (!target) return;
+      if (
+        nearlyEqual(payload.width, target.width) &&
+        nearlyEqual(payload.height, target.height)
+      ) {
+        // 목표 달성 확인 - 보정 카운터 리셋
+        eventReconcileCountRef.current = 0;
+        return;
+      }
+      if (inFlightGenRef.current !== null) return;
+      if (eventReconcileCountRef.current >= 1) return;
+      // 실창이 목표와 다름 (부분 적용·롤백·외부 변경) - 목표로 보정 재발행
+      dispatch(target, true);
     };
 
-    // in-flight 중에는 no-op 판정 없이 최신 대기 슬롯에만 저장 (계약 §4 R5-1)
-    if (inFlightRef.current) {
-      queuedLatestRef.current = candidate;
-      return;
-    }
-    dispatchOrPromote(candidate);
+    // 렌더는 항상 즉시 승격 - 창은 비동기로 목표에 수렴 (master 의미론)
+    setApplied(candidate);
+    requestResize(candidate.resizeParams);
   }, [candidate]);
 
   // 백엔드 실적용 브로드캐스트 구독 (마운트 수명) - 처리는 최신 effect의
-  // 리듀서 경로로 위임
+  // 화해 루프로 위임
   useEffect(() => {
     const unsubscribe = window.api.overlay.onResized((payload) => {
       handleResizedRef.current(payload);
