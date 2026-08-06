@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     io::{BufRead, BufReader},
     path::Path,
     process::{Child, ChildStdin, Command, Stdio},
@@ -64,6 +64,7 @@ const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const MIN_OVERLAY_DIMENSION: f64 = 100.0;
 const MAX_OVERLAY_DIMENSION: f64 = 4_096.0;
+const MAX_OVERLAY_RESIZE_SESSIONS: usize = 8;
 const OVERLAY_BOUNDS_RESTORE_TOLERANCE: f64 = 0.5;
 const PANEL_WIDTH: f64 = 240.0;
 // 피커가 트리거 행 아래에 그대로 들어갈 세로 여유 - 이보다 낮으면 팝업이
@@ -883,43 +884,45 @@ fn run_panel_close_timeout(
     result.map(|()| true)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct OverlayResizeGeneration {
-    session: u64,
-    gen: u64,
-}
-
 #[derive(Default)]
 struct OverlayResizeExecutionState {
-    last_executed: Option<OverlayResizeGeneration>,
+    highest_gen_by_session: HashMap<u64, u64>,
+    session_insertion_order: VecDeque<u64>,
 }
 
 impl OverlayResizeExecutionState {
     fn request_generation(
         request_session: Option<u64>,
         request_gen: Option<u64>,
-    ) -> Option<OverlayResizeGeneration> {
-        request_session
-            .zip(request_gen)
-            .map(|(session, gen)| OverlayResizeGeneration { session, gen })
+    ) -> Option<(u64, u64)> {
+        request_session.zip(request_gen)
     }
 
     fn is_stale(&self, request_session: Option<u64>, request_gen: Option<u64>) -> bool {
-        let Some(request) = Self::request_generation(request_session, request_gen) else {
+        let Some((session, gen)) = Self::request_generation(request_session, request_gen) else {
             return false;
         };
-        self.last_executed
-            .is_some_and(|last| request.session == last.session && request.gen <= last.gen)
+        self.highest_gen_by_session
+            .get(&session)
+            .is_some_and(|highest_gen| gen <= *highest_gen)
     }
 
     fn mark_executed(&mut self, request_session: Option<u64>, request_gen: Option<u64>) {
-        if let Some(request) = Self::request_generation(request_session, request_gen) {
-            self.last_executed = Some(request);
+        let Some((session, gen)) = Self::request_generation(request_session, request_gen) else {
+            return;
+        };
+        if let Some(highest_gen) = self.highest_gen_by_session.get_mut(&session) {
+            *highest_gen = (*highest_gen).max(gen);
+            return;
         }
-    }
 
-    fn reset(&mut self) {
-        self.last_executed = None;
+        if self.highest_gen_by_session.len() >= MAX_OVERLAY_RESIZE_SESSIONS {
+            if let Some(oldest_session) = self.session_insertion_order.pop_front() {
+                self.highest_gen_by_session.remove(&oldest_session);
+            }
+        }
+        self.highest_gen_by_session.insert(session, gen);
+        self.session_insertion_order.push_back(session);
     }
 }
 
@@ -3292,7 +3295,6 @@ impl AppState {
             window_builder
         };
 
-        self.overlay_resize_lock.lock().reset();
         let window = window_builder
             .always_on_top(true)
             .skip_taskbar(false)
@@ -5573,8 +5575,8 @@ mod tests {
         PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
         PhysicalPosition, PhysicalSize, SelectionSessionElement, SelectionSessionSnapshot,
         TargetedPanelViewState, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
-        KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION, MAX_SELECTION_ELEMENTS,
-        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
+        KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION, MAX_OVERLAY_RESIZE_SESSIONS,
+        MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
         MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
         PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
@@ -5794,20 +5796,52 @@ mod tests {
     }
 
     #[test]
-    fn request_generation_gate_restarts_for_a_new_session() {
+    fn interleaved_request_sessions_keep_independent_generation_gates() {
         let mut execution = OverlayResizeExecutionState::default();
 
-        assert!(!execution.is_stale(Some(100), Some(8)));
-        execution.mark_executed(Some(100), Some(8));
-        assert!(execution.is_stale(Some(100), Some(7)));
-
+        assert!(!execution.is_stale(Some(100), Some(1)));
+        execution.mark_executed(Some(100), Some(1));
         assert!(!execution.is_stale(Some(200), Some(1)));
         execution.mark_executed(Some(200), Some(1));
-        assert_eq!(
-            execution.last_executed.map(|last| (last.session, last.gen)),
-            Some((200, 1))
-        );
+        assert!(!execution.is_stale(Some(100), Some(3)));
+        execution.mark_executed(Some(100), Some(3));
+        assert!(!execution.is_stale(Some(200), Some(2)));
+        execution.mark_executed(Some(200), Some(2));
+
+        assert_eq!(execution.highest_gen_by_session.get(&100).copied(), Some(3));
+        assert_eq!(execution.highest_gen_by_session.get(&200).copied(), Some(2));
+        assert!(execution.is_stale(Some(100), Some(2)));
+        assert!(execution.is_stale(Some(100), Some(3)));
         assert!(execution.is_stale(Some(200), Some(1)));
+    }
+
+    #[test]
+    fn request_generation_sessions_prune_the_oldest_insertion_at_the_cap() {
+        let mut execution = OverlayResizeExecutionState::default();
+
+        for session in 0..MAX_OVERLAY_RESIZE_SESSIONS as u64 {
+            execution.mark_executed(Some(session), Some(10));
+        }
+        assert_eq!(
+            execution.highest_gen_by_session.len(),
+            MAX_OVERLAY_RESIZE_SESSIONS
+        );
+
+        let newest_session = MAX_OVERLAY_RESIZE_SESSIONS as u64;
+        execution.mark_executed(Some(newest_session), Some(1));
+
+        assert_eq!(
+            execution.highest_gen_by_session.len(),
+            MAX_OVERLAY_RESIZE_SESSIONS
+        );
+        assert!(!execution.highest_gen_by_session.contains_key(&0));
+        assert_eq!(execution.session_insertion_order.front().copied(), Some(1));
+        assert_eq!(
+            execution.session_insertion_order.back().copied(),
+            Some(newest_session)
+        );
+        assert!(!execution.is_stale(Some(0), Some(1)));
+        assert!(execution.is_stale(Some(1), Some(9)));
     }
 
     #[test]
@@ -5921,10 +5955,7 @@ mod tests {
         assert!(execution.is_stale(request_session, Some(2)));
         assert!(execution.is_stale(request_session, Some(3)));
 
-        assert_eq!(
-            execution.last_executed.map(|last| (last.session, last.gen)),
-            Some((100, 3))
-        );
+        assert_eq!(execution.highest_gen_by_session.get(&100).copied(), Some(3));
         assert_eq!(position, position_after_gen_3);
         assert_eq!(
             (
@@ -5939,12 +5970,7 @@ mod tests {
         assert!(!execution.is_stale(request_session, None));
         execution.mark_executed(None, Some(999));
         execution.mark_executed(request_session, None);
-        assert_eq!(
-            execution.last_executed.map(|last| (last.session, last.gen)),
-            Some((100, 3))
-        );
-        execution.reset();
-        assert!(!execution.is_stale(request_session, Some(1)));
+        assert_eq!(execution.highest_gen_by_session.get(&100).copied(), Some(3));
     }
 
     #[test]
