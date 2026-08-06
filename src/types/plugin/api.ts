@@ -997,6 +997,13 @@ export interface DMNoteAPI {
       height: number;
       anchor?: string;
       contentTopOffset?: number;
+      // 4변 마진 계약. 부재 시 contentTopOffset 경로로 동작
+      contentMargins?: {
+        top: number;
+        bottom: number;
+        left: number;
+        right: number;
+      };
       fixedPositionDeltaX?: number;
       fixedPositionDeltaY?: number;
     }): Promise<OverlayBounds>;

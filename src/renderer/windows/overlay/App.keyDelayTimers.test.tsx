@@ -71,23 +71,29 @@ vi.mock('@stores/data/useKnobItemStore', () => ({
     selector: (state: { positions: Record<string, never[]> }) => T,
   ) => selector({ positions: {} }),
 }));
-vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
-  usePluginDisplayElementStore: <T,>(
-    selector: (state: { elements: never[] }) => T,
-  ) => selector({ elements: [] }),
-}));
+vi.mock('@stores/plugin/usePluginDisplayElementStore', () => {
+  const state = { elements: [] };
+  return {
+    usePluginDisplayElementStore: <T,>(
+      selector: (state: { elements: never[] }) => T,
+    ) => selector(state as { elements: never[] }),
+  };
+});
 vi.mock('@components/shared/OverlayScene', () => ({ default: () => null }));
-vi.mock('@hooks/shared/useLayoutComputation', () => ({
-  computeLayout: () => ({
+vi.mock('@hooks/shared/useLayoutComputation', () => {
+  const layoutResult = {
     bounds: null,
     displayPositions: [],
     displayStatPositions: [],
     displayGraphPositions: [],
     displayKnobPositions: [],
     positionOffset: { x: 0, y: 0 },
+    topMostY: 0,
+    margins: { top: 0, bottom: 0, left: 0, right: 0 },
     webglTracks: [],
-  }),
-}));
+  };
+  return { computeLayout: () => layoutResult };
+});
 vi.mock('@utils/core/axisEventBus', () => ({
   axisEventBus: { initialize: vi.fn() },
 }));

@@ -3,7 +3,12 @@ import {
   DEFAULT_NOTE_SETTINGS,
 } from '@constants/overlayDefaults';
 import { FALLBACK_POSITION } from '@components/shared/OverlayScene';
-import { computeTrackGeometry } from '@utils/layout/trackGeometry';
+import {
+  computeTrackGeometry,
+  isVerticalDirection,
+  resolveEffectiveDirection,
+} from '@utils/layout/trackGeometry';
+import type { NoteDirection } from '@src/types/settings/noteSettings';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
@@ -57,6 +62,27 @@ export function computeLayout(input: LayoutInput) {
     overlayPadding: PADDING = 30,
   } = input;
 
+  const globalDirection: NoteDirection = noteSettings?.direction ?? 'up';
+
+  // 표시 트랙의 유효 방향 집합 → 방향별 트랙 밴드 여백
+  // 표시 키가 하나도 없으면 기존 동작(위쪽 예약)으로 폴백
+  const visibleDirections = new Set<NoteDirection>();
+  currentPositions.forEach((pos) => {
+    if (pos.hidden) return;
+    visibleDirections.add(
+      resolveEffectiveDirection(pos.noteDirection, globalDirection),
+    );
+  });
+  if (visibleDirections.size === 0) {
+    visibleDirections.add('up');
+  }
+  const margins = {
+    top: visibleDirections.has('up') ? trackHeight : 0,
+    bottom: visibleDirections.has('down') ? trackHeight : 0,
+    left: visibleDirections.has('left') ? trackHeight : 0,
+    right: visibleDirections.has('right') ? trackHeight : 0,
+  };
+
   // bounds 계산
   const bounds: Bounds | null = (() => {
     const hasContent =
@@ -79,31 +105,50 @@ export function computeLayout(input: LayoutInput) {
       widths.push(pos.dx + pos.width);
       heights.push(pos.dy + pos.height);
 
-      // 노트 오프셋에 의한 트랙 영역 확장 반영
+      // 노트 오프셋에 의한 트랙 영역 확장 반영 (교차축 돌출 + 히트라인 이동)
+      // 트리거 조건은 기존과 동일: 오프셋이 있을 때만 확장
       const userOffsetX = pos.noteOffsetX ?? 0;
       const userOffsetY = pos.noteOffsetY ?? 0;
-      if (userOffsetX !== 0) {
-        const keyWidth = pos.width;
-        const desiredNoteWidth =
-          typeof pos.noteWidth === 'number' && Number.isFinite(pos.noteWidth)
-            ? Math.max(1, pos.noteWidth)
-            : keyWidth;
-        const noteAlign = pos.noteAlignment ?? 'center';
-        const alignOff =
-          noteAlign === 'left'
-            ? 0
-            : noteAlign === 'right'
-            ? keyWidth - desiredNoteWidth
-            : (keyWidth - desiredNoteWidth) / 2;
-        const noteLeft = pos.dx + alignOff + userOffsetX;
-        const noteRight = noteLeft + desiredNoteWidth;
-        xs.push(noteLeft);
-        widths.push(noteRight);
+      const direction = resolveEffectiveDirection(
+        pos.noteDirection,
+        globalDirection,
+      );
+      const vertical = isVerticalDirection(direction);
+      const crossOffset = vertical ? userOffsetX : userOffsetY;
+      const flowOffset = vertical ? userOffsetY : userOffsetX;
+      if (crossOffset !== 0) {
+        const geometry = computeTrackGeometry({
+          keyX: pos.dx,
+          keyY: pos.dy,
+          keyWidth: pos.width,
+          keyHeight: pos.height,
+          direction,
+          trackHeight,
+          noteWidth: pos.noteWidth,
+          noteAlignment: pos.noteAlignment,
+          noteOffsetX: pos.noteOffsetX,
+          noteOffsetY: pos.noteOffsetY,
+        });
+        if (vertical) {
+          xs.push(geometry.crossStart);
+          widths.push(geometry.crossStart + geometry.crossSize);
+        } else {
+          ys.push(geometry.crossStart);
+          heights.push(geometry.crossStart + geometry.crossSize);
+        }
       }
-      if (userOffsetY > 0) {
-        heights.push(pos.dy + pos.height + userOffsetY);
-      } else if (userOffsetY < 0) {
-        ys.push(pos.dy + userOffsetY);
+      if (flowOffset !== 0) {
+        if (vertical) {
+          if (userOffsetY > 0) {
+            heights.push(pos.dy + pos.height + userOffsetY);
+          } else {
+            ys.push(pos.dy + userOffsetY);
+          }
+        } else if (userOffsetX > 0) {
+          widths.push(pos.dx + pos.width + userOffsetX);
+        } else {
+          xs.push(pos.dx + userOffsetX);
+        }
       }
     });
 
@@ -178,10 +223,9 @@ export function computeLayout(input: LayoutInput) {
     };
   })();
 
-  // 오프셋 계산
-  const topOffset = trackHeight + PADDING;
-  const offsetX = bounds ? PADDING - bounds.minX : 0;
-  const offsetY = bounds ? topOffset - bounds.minY : 0;
+  // 오프셋 계산: 방향별 트랙 밴드가 있는 변에만 여백 확보
+  const offsetX = bounds ? PADDING + margins.left - bounds.minX : 0;
+  const offsetY = bounds ? PADDING + margins.top - bounds.minY : 0;
 
   const applyOffset = <T extends { dx: number; dy: number }>(
     items: T[],
@@ -201,7 +245,16 @@ export function computeLayout(input: LayoutInput) {
 
   const positionOffset = bounds ? { x: offsetX, y: offsetY } : { x: 0, y: 0 };
 
-  const topMostY = bounds ? topOffset : 0;
+  // 방향 그룹별 공통 히트라인 (표시 좌표 기준, autoCorrection용)
+  const contentWidth = bounds ? bounds.maxX - bounds.minX : 0;
+  const contentHeight = bounds ? bounds.maxY - bounds.minY : 0;
+  const baselines: Record<NoteDirection, number> = {
+    up: bounds ? PADDING + margins.top : 0,
+    down: bounds ? PADDING + margins.top + contentHeight : 0,
+    left: bounds ? PADDING + margins.left : 0,
+    right: bounds ? PADDING + margins.left + contentWidth : 0,
+  };
+  const topMostY = baselines.up;
 
   // WebGL 트랙 계산
   const webglTracks = currentKeys
@@ -210,8 +263,11 @@ export function computeLayout(input: LayoutInput) {
       if (originalPosition.hidden) return null;
       const position = displayPositions[index] ?? originalPosition;
       const useAutoCorrection = position.noteAutoYCorrection !== false;
-      // 방향 해석 지점 (계약 §2). 4방향 margins·창 확장이 붙기 전까지 'up' 고정
-      const direction = 'up' as const;
+      // 방향 해석 지점 (계약 §2): 키별 오버라이드 ?? 병합(전역+탭) 설정
+      const direction = resolveEffectiveDirection(
+        position.noteDirection,
+        globalDirection,
+      );
       const geometry = computeTrackGeometry({
         keyX: position.dx,
         keyY: position.dy,
@@ -223,7 +279,7 @@ export function computeLayout(input: LayoutInput) {
         noteAlignment: position.noteAlignment,
         noteOffsetX: position.noteOffsetX,
         noteOffsetY: position.noteOffsetY,
-        hitline: useAutoCorrection ? topMostY : undefined,
+        hitline: useAutoCorrection ? baselines[direction] : undefined,
       });
 
       return {
@@ -267,6 +323,7 @@ export function computeLayout(input: LayoutInput) {
     displayKnobPositions,
     positionOffset,
     topMostY,
+    margins,
     webglTracks,
   };
 }

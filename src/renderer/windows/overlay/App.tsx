@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   currentMonitor,
   getCurrentWindow,
@@ -34,7 +34,8 @@ import {
   slotCanonical,
   slotDisplayName,
 } from '@utils/keySlot';
-import type { KeySlot } from '@src/types/key/keys';
+import type { KeyPosition, KeySlot } from '@src/types/key/keys';
+import type { NoteSettings } from '@src/types/settings/noteSettings';
 
 type KeyDelayTimerHandle = ReturnType<typeof setTimeout>;
 type KeyDelayTimerEntry = {
@@ -69,6 +70,64 @@ const flushKeyDelayTimers = (
 // 입력 시각 보정용 age 상한(ms). 백엔드 stall/클럭 이상으로 비정상적으로 큰
 // 값이 와도 노트가 화면 위로 튀지 않도록 제한
 const MAX_EVENT_AGE_MS = 250;
+
+// 백엔드 상한과 동기 (초과는 OVERLAY_DIMENSION_EXCEEDED로 원자 거부됨)
+const MAX_OVERLAY_DIMENSION = 4096;
+
+// 폴백 배열 identity 안정화 (메모 체인 무효화 방지)
+const EMPTY_POSITIONS: KeyPosition[] = [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const EMPTY_ITEMS: any[] = [];
+
+interface OverlayResizeParams {
+  width: number;
+  height: number;
+  anchor: string;
+  contentTopOffset: number;
+  contentMargins: { top: number; bottom: number; left: number; right: number };
+  minX: number;
+  minY: number;
+}
+
+// 지오메트리 트랜잭션 단위 (계약 §4 AppliedGeometrySnapshot)
+interface OverlayGeometrySnapshot {
+  layout: ReturnType<typeof computeLayout>;
+  currentKeys: string[];
+  currentKeyLabels: string[];
+  currentPositions: KeyPosition[];
+  selectedKeyType: string;
+  noteSettings: NoteSettings;
+  trackHeight: number;
+  directionSignature: string;
+  resizeParams: OverlayResizeParams | null;
+}
+
+const nearlyEqual = (a: number, b: number): boolean => Math.abs(a - b) < 0.5;
+
+const resizeParamsEqual = (
+  a: OverlayResizeParams,
+  b: OverlayResizeParams,
+): boolean =>
+  nearlyEqual(a.width, b.width) &&
+  nearlyEqual(a.height, b.height) &&
+  a.anchor === b.anchor &&
+  nearlyEqual(a.contentMargins.top, b.contentMargins.top) &&
+  nearlyEqual(a.contentMargins.bottom, b.contentMargins.bottom) &&
+  nearlyEqual(a.contentMargins.left, b.contentMargins.left) &&
+  nearlyEqual(a.contentMargins.right, b.contentMargins.right) &&
+  (a.anchor !== 'fixed-position' ||
+    (nearlyEqual(a.minX, b.minX) && nearlyEqual(a.minY, b.minY)));
+
+// 계약 §4 오류 wire: { errorCode, details, retryable }
+const isOverlayDimensionExceeded = (
+  error: unknown,
+): error is {
+  errorCode: 'OVERLAY_DIMENSION_EXCEEDED';
+  details: Record<string, number>;
+} =>
+  typeof error === 'object' &&
+  error !== null &&
+  (error as { errorCode?: unknown }).errorCode === 'OVERLAY_DIMENSION_EXCEEDED';
 
 const validKeySet = (slots: readonly KeySlot[]) =>
   new Set(slots.filter(isSlotAssigned).map((slot) => slotCanonical(slot)));
@@ -137,9 +196,13 @@ export default function App() {
   const setAlwaysOnTop = useSettingsStore((state) => state.setAlwaysOnTop);
   const globalNoteSettings = useSettingsStore((state) => state.noteSettings);
   const tabNoteOverrides = useSettingsStore((state) => state.tabNoteOverrides);
-  const noteSettings = mergeNoteSettings(
-    globalNoteSettings,
-    tabNoteOverrides?.[selectedKeyType],
+  const noteSettings = useMemo(
+    () =>
+      mergeNoteSettings(
+        globalNoteSettings,
+        tabNoteOverrides?.[selectedKeyType],
+      ),
+    [globalNoteSettings, tabNoteOverrides, selectedKeyType],
   );
   const noteEffect = useSettingsStore((state) => state.noteEffect);
   const overlayPadding = useSettingsStore(
@@ -701,10 +764,19 @@ export default function App() {
     // 콜백이 읽는 값은 keyEventContextRef로 공급 - 구독은 창 수명과 동일
   }, []);
 
-  const currentSlots = keyMappings[selectedKeyType] ?? [];
+  const currentSlots = useMemo(
+    () => keyMappings[selectedKeyType] ?? [],
+    [keyMappings, selectedKeyType],
+  );
   // 시그널·트랙 키는 canonical, 표시는 합성 라벨 (계약 §3, §11)
-  const currentKeys = currentSlots.map((slot) => slotCanonical(slot));
-  const currentKeyLabels = currentSlots.map((slot) => slotDisplayName(slot));
+  const currentKeys = useMemo(
+    () => currentSlots.map((slot) => slotCanonical(slot)),
+    [currentSlots],
+  );
+  const currentKeyLabels = useMemo(
+    () => currentSlots.map((slot) => slotDisplayName(slot)),
+    [currentSlots],
+  );
   const currentValidKeySignature = validKeySignature(currentSlots);
 
   // 탭·현재 키 집합 전환 시 예약 타이머와 눌림 신호를 권위 상태로 정합
@@ -749,128 +821,204 @@ export default function App() {
     };
   }, [selectedKeyType, currentValidKeySignature]);
 
-  const currentPositions = positions[selectedKeyType] ?? [];
-  const currentStatPositions = statPositions[selectedKeyType] ?? [];
-  const currentGraphPositions = graphPositions[selectedKeyType] ?? [];
-  const currentKnobPositions = knobPositions[selectedKeyType] ?? [];
+  const currentPositions = positions[selectedKeyType] ?? EMPTY_POSITIONS;
+  const currentStatPositions = statPositions[selectedKeyType] ?? EMPTY_ITEMS;
+  const currentGraphPositions = graphPositions[selectedKeyType] ?? EMPTY_ITEMS;
+  const currentKnobPositions = knobPositions[selectedKeyType] ?? EMPTY_ITEMS;
 
-  const {
-    bounds,
-    displayPositions,
-    displayStatPositions,
-    displayGraphPositions,
-    displayKnobPositions,
-    positionOffset,
-    webglTracks,
-  } = computeLayout({
-    currentKeys,
-    currentPositions,
-    currentStatPositions,
-    currentGraphPositions,
-    currentKnobPositions,
-    trackHeight,
-    noteSettings,
-    selectedKeyType,
-    pluginElements,
-    overlayPadding,
-  });
+  const layout = useMemo(
+    () =>
+      computeLayout({
+        currentKeys,
+        currentPositions,
+        currentStatPositions,
+        currentGraphPositions,
+        currentKnobPositions,
+        trackHeight,
+        noteSettings,
+        selectedKeyType,
+        pluginElements,
+        overlayPadding,
+      }),
+    [
+      currentKeys,
+      currentPositions,
+      currentStatPositions,
+      currentGraphPositions,
+      currentKnobPositions,
+      trackHeight,
+      noteSettings,
+      selectedKeyType,
+      pluginElements,
+      overlayPadding,
+    ],
+  );
 
-  useEffect(() => {
-    updateTrackLayouts(webglTracks);
-  }, [webglTracks, updateTrackLayouts]);
-
-  // 이전 resize 값을 추적하여 실제로 변경되었을 때만 resize 호출
-  const lastResizeParams = useRef<{
-    width: number;
-    height: number;
-    anchor: string;
-    contentTopOffset: number;
-    minX: number;
-    minY: number;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!bounds) return;
-
-    const keyAreaWidth = bounds.maxX - bounds.minX;
-    const keyAreaHeight = bounds.maxY - bounds.minY;
-    const extraTop = trackHeight;
-    const totalWidth = keyAreaWidth + overlayPadding * 2;
-    const totalHeight = keyAreaHeight + overlayPadding * 2 + extraTop;
-    const contentTopOffset = extraTop + overlayPadding;
-    const currentMinX = bounds.minX;
-    const currentMinY = bounds.minY;
-
-    // 이전 값과 비교하여 실제로 변경되었을 때만 resize 호출
-    const lastParams = lastResizeParams.current;
-    const fixedPositionAnchor = overlayAnchor === 'fixed-position';
-    const fixedPositionDeltaX =
-      fixedPositionAnchor && lastParams?.anchor === 'fixed-position'
-        ? currentMinX - lastParams.minX
-        : 0;
-    const fixedPositionDeltaY =
-      fixedPositionAnchor && lastParams?.anchor === 'fixed-position'
-        ? currentMinY - lastParams.minY
-        : 0;
-    if (
-      lastParams &&
-      Math.abs(lastParams.width - totalWidth) < 0.5 &&
-      Math.abs(lastParams.height - totalHeight) < 0.5 &&
-      lastParams.anchor === overlayAnchor &&
-      Math.abs(lastParams.contentTopOffset - contentTopOffset) < 0.5 &&
-      (!fixedPositionAnchor ||
-        (Math.abs(lastParams.minX - currentMinX) < 0.5 &&
-          Math.abs(lastParams.minY - currentMinY) < 0.5))
-    ) {
-      return; // 변경사항 없음, resize 건너뛰기
+  // candidate 지오메트리 스냅샷 (계약 §4: resize 성공 후에만 applied로 승격)
+  const candidate = useMemo<OverlayGeometrySnapshot>(() => {
+    const { bounds, margins, webglTracks } = layout;
+    let resizeParams: OverlayResizeParams | null = null;
+    if (bounds) {
+      const keyAreaWidth = bounds.maxX - bounds.minX;
+      const keyAreaHeight = bounds.maxY - bounds.minY;
+      resizeParams = {
+        width: keyAreaWidth + overlayPadding * 2 + margins.left + margins.right,
+        height:
+          keyAreaHeight + overlayPadding * 2 + margins.top + margins.bottom,
+        anchor: overlayAnchor,
+        contentTopOffset: margins.top + overlayPadding,
+        contentMargins: {
+          top: margins.top + overlayPadding,
+          bottom: margins.bottom + overlayPadding,
+          left: margins.left + overlayPadding,
+          right: margins.right + overlayPadding,
+        },
+        minX: bounds.minX,
+        minY: bounds.minY,
+      };
     }
+    return {
+      layout,
+      currentKeys,
+      currentKeyLabels,
+      currentPositions,
+      selectedKeyType,
+      noteSettings,
+      trackHeight,
+      directionSignature: webglTracks
+        .map((track) => `${track?.trackKey}:${track?.direction}`)
+        .join('|'),
+      resizeParams,
+    };
+  }, [
+    layout,
+    overlayAnchor,
+    overlayPadding,
+    currentKeys,
+    currentKeyLabels,
+    currentPositions,
+    selectedKeyType,
+    noteSettings,
+    trackHeight,
+  ]);
 
-    lastResizeParams.current = {
-      width: totalWidth,
-      height: totalHeight,
-      anchor: overlayAnchor,
-      contentTopOffset,
-      minX: currentMinX,
-      minY: currentMinY,
+  const [applied, setApplied] = useState<OverlayGeometrySnapshot | null>(null);
+  const appliedRef = useRef<OverlayGeometrySnapshot | null>(null);
+  const inFlightRef = useRef<OverlayGeometrySnapshot | null>(null);
+  const queuedLatestRef = useRef<OverlayGeometrySnapshot | null>(null);
+
+  useEffect(() => {
+    const promote = (snapshot: OverlayGeometrySnapshot) => {
+      appliedRef.current = snapshot;
+      setApplied(snapshot);
     };
 
-    window.api.overlay
-      .resize({
-        width: totalWidth,
-        height: totalHeight,
-        anchor: overlayAnchor,
-        contentTopOffset,
-        fixedPositionDeltaX: fixedPositionAnchor
-          ? fixedPositionDeltaX
-          : undefined,
-        fixedPositionDeltaY: fixedPositionAnchor
-          ? fixedPositionDeltaY
-          : undefined,
-      })
-      .catch((error) => {
-        console.error('Failed to resize overlay window', error);
-      });
-  }, [bounds, trackHeight, overlayAnchor, overlayPadding]);
+    const settle = () => {
+      inFlightRef.current = null;
+      const next = queuedLatestRef.current;
+      queuedLatestRef.current = null;
+      if (next) dispatchOrPromote(next);
+    };
+
+    const dispatchOrPromote = (snapshot: OverlayGeometrySnapshot) => {
+      const params = snapshot.resizeParams;
+      // 콘텐츠 없음: 창 조작 불필요, 즉시 승격
+      if (!params) {
+        promote(snapshot);
+        return;
+      }
+      // GPU·창 상한 사전 검사 (계약 §4: 거부 시 applied 유지, 새 candidate에서만 재시도)
+      if (
+        params.width > MAX_OVERLAY_DIMENSION ||
+        params.height > MAX_OVERLAY_DIMENSION
+      ) {
+        console.warn(
+          `Overlay dimension exceeds limit (${params.width}x${params.height} > ${MAX_OVERLAY_DIMENSION}); keeping previous layout`,
+        );
+        return;
+      }
+      const appliedParams = appliedRef.current?.resizeParams ?? null;
+      // no-op 승격: params 동일하면 IPC 없이 로컬 성공 (in-flight 부재 시에만 도달)
+      if (appliedParams && resizeParamsEqual(appliedParams, params)) {
+        promote(snapshot);
+        return;
+      }
+      const fixedPositionAnchor = params.anchor === 'fixed-position';
+      const fixedPositionDeltaX =
+        fixedPositionAnchor && appliedParams?.anchor === 'fixed-position'
+          ? params.minX - appliedParams.minX
+          : 0;
+      const fixedPositionDeltaY =
+        fixedPositionAnchor && appliedParams?.anchor === 'fixed-position'
+          ? params.minY - appliedParams.minY
+          : 0;
+      inFlightRef.current = snapshot;
+      window.api.overlay
+        .resize({
+          width: params.width,
+          height: params.height,
+          anchor: params.anchor,
+          contentTopOffset: params.contentTopOffset,
+          contentMargins: params.contentMargins,
+          fixedPositionDeltaX: fixedPositionAnchor
+            ? fixedPositionDeltaX
+            : undefined,
+          fixedPositionDeltaY: fixedPositionAnchor
+            ? fixedPositionDeltaY
+            : undefined,
+        })
+        .then(() => {
+          // in-flight 성공은 최신 대기 여부와 무관하게 반드시 커밋 (native 기준)
+          promote(snapshot);
+          settle();
+        })
+        .catch((error) => {
+          if (isOverlayDimensionExceeded(error)) {
+            console.warn(
+              'Overlay resize rejected: dimension exceeded',
+              error.details,
+            );
+          } else {
+            console.error('Failed to resize overlay window', error);
+          }
+          settle();
+        });
+    };
+
+    // in-flight 중에는 no-op 판정 없이 최신 대기 슬롯에만 저장 (계약 §4 R5-1)
+    if (inFlightRef.current) {
+      queuedLatestRef.current = candidate;
+      return;
+    }
+    dispatchOrPromote(candidate);
+  }, [candidate]);
+
+  useEffect(() => {
+    if (applied) updateTrackLayouts(applied.layout.webglTracks);
+  }, [applied, updateTrackLayouts]);
+
+  // 모든 지오메트리 소비자는 같은 applied generation만 소비 (계약 §4)
+  if (!applied) return null;
 
   return (
     <OverlayScene
-      currentKeys={currentKeys}
-      currentKeyLabels={currentKeyLabels}
-      displayPositions={displayPositions}
-      currentPositions={currentPositions}
-      displayStatPositions={displayStatPositions}
-      displayGraphPositions={displayGraphPositions}
-      displayKnobPositions={displayKnobPositions}
-      selectedKeyType={selectedKeyType}
+      currentKeys={applied.currentKeys}
+      currentKeyLabels={applied.currentKeyLabels}
+      displayPositions={applied.layout.displayPositions}
+      currentPositions={applied.currentPositions}
+      displayStatPositions={applied.layout.displayStatPositions}
+      displayGraphPositions={applied.layout.displayGraphPositions}
+      displayKnobPositions={applied.layout.displayKnobPositions}
+      selectedKeyType={applied.selectedKeyType}
       noteEffect={noteEffect}
-      noteSettings={noteSettings}
-      webglTracks={webglTracks}
+      noteSettings={applied.noteSettings}
+      webglTracks={applied.layout.webglTracks}
       notesRef={notesRef}
       subscribe={subscribe}
       noteBuffer={noteBuffer}
       backgroundColor={backgroundColor}
       keyCounterEnabled={keyCounterEnabled}
-      positionOffset={positionOffset}
+      positionOffset={applied.layout.positionOffset}
       onMouseDownCapture={handleOverlayMouseDownCapture}
       showPluginElements={true}
     />

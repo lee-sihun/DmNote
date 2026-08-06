@@ -22,6 +22,13 @@ export const overlayApi = {
     height: number;
     anchor?: string;
     contentTopOffset?: number;
+    // 4변 마진 계약 (v2). 부재 시 백엔드는 contentTopOffset 경로로 동작
+    contentMargins?: {
+      top: number;
+      bottom: number;
+      left: number;
+      right: number;
+    };
     fixedPositionDeltaX?: number;
     fixedPositionDeltaY?: number;
   }) => invoke<OverlayBounds>('overlay_resize', { payload }),
