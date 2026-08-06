@@ -71,6 +71,8 @@ const extractColorStops = (
 export type TrackLayoutInput = {
   trackKey: string;
   trackIndex: number;
+  // 진행 방향 (미지정 = 'up'). position은 방향별 O 코너 (trackGeometry 참조)
+  direction?: 'up' | 'down' | 'left' | 'right';
   position: { dx: number; dy: number };
   width: number;
   height: number;

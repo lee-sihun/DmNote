@@ -3,6 +3,7 @@ import {
   DEFAULT_NOTE_SETTINGS,
 } from '@constants/overlayDefaults';
 import { FALLBACK_POSITION } from '@components/shared/OverlayScene';
+import { computeTrackGeometry } from '@utils/layout/trackGeometry';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
@@ -209,32 +210,32 @@ export function computeLayout(input: LayoutInput) {
       if (originalPosition.hidden) return null;
       const position = displayPositions[index] ?? originalPosition;
       const useAutoCorrection = position.noteAutoYCorrection !== false;
-      const trackStartY = useAutoCorrection ? topMostY : position.dy;
-      const keyWidth = position.width;
-      const desiredNoteWidth =
-        typeof position.noteWidth === 'number' &&
-        Number.isFinite(position.noteWidth)
-          ? Math.max(1, position.noteWidth)
-          : keyWidth;
-      const noteAlign = position.noteAlignment ?? 'center';
-      const noteAlignOffsetX =
-        noteAlign === 'left'
-          ? 0
-          : noteAlign === 'right'
-          ? keyWidth - desiredNoteWidth
-          : (keyWidth - desiredNoteWidth) / 2;
-      const userOffsetX = position.noteOffsetX ?? 0;
-      const userOffsetY = position.noteOffsetY ?? 0;
+      // 방향 해석 지점 (계약 §2). 4방향 margins·창 확장이 붙기 전까지 'up' 고정
+      const direction = 'up' as const;
+      const geometry = computeTrackGeometry({
+        keyX: position.dx,
+        keyY: position.dy,
+        keyWidth: position.width,
+        keyHeight: position.height,
+        direction,
+        trackHeight,
+        noteWidth: position.noteWidth,
+        noteAlignment: position.noteAlignment,
+        noteOffsetX: position.noteOffsetX,
+        noteOffsetY: position.noteOffsetY,
+        hitline: useAutoCorrection ? topMostY : undefined,
+      });
 
       return {
         trackKey: key,
         trackIndex: position.zIndex ?? index,
+        direction,
         position: {
           ...position,
-          dx: position.dx + noteAlignOffsetX + userOffsetX,
-          dy: trackStartY + userOffsetY,
+          dx: geometry.origin.x,
+          dy: geometry.origin.y,
         },
-        width: desiredNoteWidth,
+        width: geometry.crossSize,
         height: trackHeight,
         noteColor: position.noteColor,
         noteOpacity: position.noteOpacity,

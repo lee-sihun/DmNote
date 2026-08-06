@@ -4,6 +4,7 @@ import type { OGLRenderingContext } from 'ogl';
 import { animationScheduler } from '@utils/animation/animationScheduler';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
 import { resolvedFadeValues } from '@src/types/settings/noteSettings';
+import { trackRectFromOrigin } from '@utils/layout/trackGeometry';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 import {
   MAX_NOTES,
@@ -390,11 +391,17 @@ const computeTrackBounds = (
   let maxY = -Infinity;
   for (const track of tracks) {
     const pad = resolvedGlowSize(track) + CROP_AA_PAD;
-    minX = Math.min(minX, track.position.dx - pad);
-    maxX = Math.max(maxX, track.position.dx + track.width + pad);
     // 셰이더는 uTrackHeight 기준으로 노트를 클램프하므로 per-track height 대신 설정값 사용
-    minY = Math.min(minY, track.position.dy - trackHeight - pad);
-    maxY = Math.max(maxY, track.position.dy + pad);
+    const rect = trackRectFromOrigin(
+      { x: track.position.dx, y: track.position.dy },
+      track.direction ?? 'up',
+      trackHeight,
+      track.width,
+    );
+    minX = Math.min(minX, rect.minX - pad);
+    maxX = Math.max(maxX, rect.maxX + pad);
+    minY = Math.min(minY, rect.minY - pad);
+    maxY = Math.max(maxY, rect.maxY + pad);
   }
   // 뷰포트 교집합 + floor/ceil 반올림 (1px 클리핑·떨림 방지)
   const x = Math.max(0, Math.floor(minX));
