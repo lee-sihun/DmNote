@@ -401,10 +401,25 @@ describe('useNoteSystem 반환 API 안정성 (#111)', () => {
   });
 
   it('마운트 직후 noteEffect=false면 첫 렌더부터 노트를 만들지 않는다', async () => {
-    await render(false);
-    act(() => {
-      result.handleKeyDown('KeyK', { displayTime: 0, physTime: 0 });
+    // effect 실행 전(첫 렌더 중) 호출로 마운트~첫 effect 사이 창을 검증 -
+    // noteEffectEnabled ref 초기값이 !!noteEffect가 아니면 노트가 생성되어 실패
+    let calledDuringFirstRender = false;
+    await act(async () => {
+      root.render(
+        <Harness
+          noteEffect={false}
+          noteSettings={DELAY_SETTINGS}
+          onResult={(value) => {
+            result = value;
+            if (!calledDuringFirstRender) {
+              calledDuringFirstRender = true;
+              value.handleKeyDown('KeyK', { displayTime: 0, physTime: 0 });
+            }
+          }}
+        />,
+      );
     });
+    expect(calledDuringFirstRender).toBe(true);
     expect(result.notesRef.current['KeyK'] ?? []).toHaveLength(0);
   });
 });

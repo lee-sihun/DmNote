@@ -18,6 +18,9 @@ interface PluginLayoutElementsSourceState {
   elements: PluginDisplayElementInternal[];
 }
 
+// position 생략 요소(anchor 배치 등) 방어 - equality·computeLayout의 필수 계약 유지
+const ZERO_POSITION = Object.freeze({ x: 0, y: 0 });
+
 // filter 금지 - computeLayout의 hasContent 판정이 배열 길이를 보므로 길이·순서 보존
 // zIndex는 의도적 제외 - computeLayout 미사용, z-order는 PluginElement가 자체 구독으로 처리
 export const selectPluginLayoutElements = (
@@ -26,7 +29,7 @@ export const selectPluginLayoutElements = (
   state.elements.map((el) => ({
     hidden: el.hidden,
     tabId: el.tabId,
-    position: el.position,
+    position: el.position ?? ZERO_POSITION,
     anchor: el.anchor,
     measuredSize: el.measuredSize,
     estimatedSize: el.estimatedSize,

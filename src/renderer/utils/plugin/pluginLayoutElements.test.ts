@@ -145,4 +145,21 @@ describe('pluginLayoutElementsEqual', () => {
     expect(projected[0].hidden).toBe(true);
     expect(projected[1].hidden).toBe(false);
   });
+
+  it('position 없는 요소(anchor 배치 등)도 크래시 없이 비교한다', () => {
+    const noPosition = () => [
+      makeElement({
+        position: undefined as unknown as { x: number; y: number },
+        hidden: true,
+      }),
+    ];
+    // 정규화된 (0,0) 기준으로 equal 판정
+    expect(equalAfter(noPosition(), noPosition())).toBe(true);
+    // position 생성은 not equal (0,0 → 실제 좌표)
+    expect(
+      equalAfter(noPosition(), [
+        makeElement({ position: { x: 10, y: 20 }, hidden: true }),
+      ]),
+    ).toBe(false);
+  });
 });
