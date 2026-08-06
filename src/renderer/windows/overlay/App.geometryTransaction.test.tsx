@@ -1034,6 +1034,55 @@ describe('overlay geometry transaction', () => {
     expect(lastResizePayload().width).toBe(120);
   });
 
+  it('partial 오류는 실측 크기를 권위로 채택해 복귀 candidate가 보정 IPC를 낸다', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await remountWithFixedPositionAnchor();
+
+    const backend = createBackendModel();
+    mocks.resize.mockImplementation((payload) =>
+      Promise.resolve(backend.apply(payload)),
+    );
+
+    // P(gen1, width 120) 성공 - 권위 확립
+    await act(async () => {
+      useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
+    expect(backend.state.width).toBe(120);
+
+    // A(gen2, width 220): 크기는 적용됐지만 위치 롤백까지 실패한 partial
+    mocks.resize.mockImplementationOnce((payload) => {
+      const applied = backend.apply(payload);
+      return Promise.reject({
+        errorCode: 'OVERLAY_RESIZE_PARTIAL',
+        details: { requestGen: applied.requestGen, appliedBounds: applied },
+        retryable: false,
+      });
+    });
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(2);
+    expect(backend.state.width).toBe(220);
+    // 렌더는 승격되고 권위는 실측 220으로 채택됨
+    expect(lastSceneProps()?.displayPositions).toHaveLength(2);
+
+    // P 복귀: 미적용 확정으로 오인하면 no-op으로 눌려 창이 220에 고착 -
+    // 실측 채택 덕에 보정 IPC가 나가 창이 120으로 복원
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: { ...state.positions, '8key': [pos(0, 0)] },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(3);
+    expect(backend.state.width).toBe(120);
+  });
+
   it('백엔드 최소 크기 미만 요청은 100으로 정규화해 보내고 동일 candidate 재발행 시 IPC를 생략한다', async () => {
     await act(async () => {
       useKeyStore.setState(

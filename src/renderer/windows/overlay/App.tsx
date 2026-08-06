@@ -166,6 +166,22 @@ const isOverlayDimensionExceeded = (
   error !== null &&
   (error as { errorCode?: unknown }).errorCode === 'OVERLAY_DIMENSION_EXCEEDED';
 
+// 부분 적용 확정 wire: 크기는 적용됐고 위치 롤백까지 실패한 상태 (계약 §4 R5)
+const isOverlayResizePartial = (
+  error: unknown,
+): error is {
+  errorCode: 'OVERLAY_RESIZE_PARTIAL';
+  details: {
+    requestGen?: number;
+    appliedBounds: { x: number; y: number; width: number; height: number };
+  };
+} =>
+  typeof error === 'object' &&
+  error !== null &&
+  (error as { errorCode?: unknown }).errorCode === 'OVERLAY_RESIZE_PARTIAL' &&
+  typeof (error as { details?: { appliedBounds?: unknown } }).details
+    ?.appliedBounds === 'object';
+
 const validKeySet = (slots: readonly KeySlot[]) =>
   new Set(slots.filter(isSlotAssigned).map((slot) => slotCanonical(slot)));
 
@@ -1128,6 +1144,30 @@ export default function App() {
           if (adoptAuthority(gen, confirmed)) reconcileApplied();
         })
         .catch((error) => {
+          // 부분 적용 확정: 창 크기는 실측대로 바뀐 상태 - 실패가 아니라
+          // '적용 확인'으로 리듀서에 합류 (마진·minX/minY는 요청 params 유지,
+          // width/height만 실측 반영 → no-op 금지·보정 디스패치 자동)
+          if (isOverlayResizePartial(error)) {
+            const confirmed = withAppliedDims(
+              dispatchParams,
+              error.details.appliedBounds.width,
+              error.details.appliedBounds.height,
+            );
+            if (inFlightRef.current === snapshot) {
+              clearInFlightTimer();
+              console.warn(
+                'Overlay resize partially applied; adopting measured bounds',
+                error.details,
+              );
+              adoptAuthority(gen, confirmed);
+              promote(snapshot);
+              settle();
+              return;
+            }
+            // 타임아웃 뒤 늦은 partial도 gen 단조 채택으로 수렴
+            if (adoptAuthority(gen, confirmed)) reconcileApplied();
+            return;
+          }
           // 실패 = 해당 gen 미적용 확정 - 채택 대기에서 제외 (채택 권위는 유지)
           pendingParamsByGenRef.current.delete(gen);
           if (inFlightRef.current === snapshot) {

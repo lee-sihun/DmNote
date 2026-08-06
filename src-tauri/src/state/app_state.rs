@@ -34,7 +34,7 @@ use super::{
 };
 #[cfg(debug_assertions)]
 use crate::audio::KeySoundDispatchTrace;
-use crate::errors::{EditorCommitError, OverlayResizeError};
+use crate::errors::{EditorCommitError, OverlayResizeError, OverlayResizePartialError};
 use crate::{
     audio::{
         KeySoundEngine, KeySoundOutputBackend, KeySoundOutputDevices, KeySoundOutputState,
@@ -63,6 +63,7 @@ const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const MIN_OVERLAY_DIMENSION: f64 = 100.0;
 const MAX_OVERLAY_DIMENSION: f64 = 4_096.0;
+const OVERLAY_BOUNDS_RESTORE_TOLERANCE: f64 = 0.5;
 const PANEL_WIDTH: f64 = 240.0;
 // 피커가 트리거 행 아래에 그대로 들어갈 세로 여유 - 이보다 낮으면 팝업이
 // 매번 위로 뒤집히거나 창 경계로 클램프됨. 늘리는 것만 허용
@@ -2131,14 +2132,22 @@ impl AppState {
         );
 
         let scale_factor = window.scale_factor().unwrap_or(1.0);
-        let position = window
-            .outer_position()
-            .map(|value| value.to_logical::<f64>(scale_factor))
-            .unwrap_or_else(|_| LogicalPosition::new(0.0, 0.0));
-        let size = window
-            .outer_size()
-            .map(|value| value.to_logical::<f64>(scale_factor))
-            .unwrap_or_else(|_| LogicalSize::new(DEFAULT_OVERLAY_WIDTH, DEFAULT_OVERLAY_HEIGHT));
+        let previous_observation = observe_overlay_bounds(
+            &window,
+            scale_factor,
+            &OverlayBounds {
+                x: 0.0,
+                y: 0.0,
+                width: DEFAULT_OVERLAY_WIDTH,
+                height: DEFAULT_OVERLAY_HEIGHT,
+            },
+        );
+        let position =
+            LogicalPosition::new(previous_observation.bounds.x, previous_observation.bounds.y);
+        let size = LogicalSize::new(
+            previous_observation.bounds.width,
+            previous_observation.bounds.height,
+        );
 
         let mut new_x = position.x;
         let mut new_y = position.y;
@@ -2184,15 +2193,28 @@ impl AppState {
             }
         }
 
-        window.set_size(LogicalSize::new(width, height))?;
-        window.set_position(LogicalPosition::new(new_x, new_y))?;
-
         let bounds = OverlayBounds {
             x: new_x,
             y: new_y,
             width,
             height,
         };
+        apply_native_overlay_resize_transaction(
+            previous_observation,
+            &bounds,
+            request_gen,
+            |next_width, next_height| {
+                window
+                    .set_size(LogicalSize::new(next_width, next_height))
+                    .map_err(Into::into)
+            },
+            |next_x, next_y| {
+                window
+                    .set_position(LogicalPosition::new(next_x, next_y))
+                    .map_err(Into::into)
+            },
+            |fallback| observe_overlay_bounds(&window, scale_factor, fallback),
+        )?;
         let response = OverlayResizeResponse {
             bounds,
             request_gen,
@@ -5053,6 +5075,94 @@ fn defer_overlay_bounds(
     Ok(())
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct OverlayBoundsObservation {
+    bounds: OverlayBounds,
+    complete: bool,
+}
+
+fn observe_overlay_bounds(
+    window: &WebviewWindow,
+    scale_factor: f64,
+    fallback: &OverlayBounds,
+) -> OverlayBoundsObservation {
+    let position = window
+        .outer_position()
+        .ok()
+        .map(|value| value.to_logical::<f64>(scale_factor));
+    let size = window
+        .outer_size()
+        .ok()
+        .map(|value| value.to_logical::<f64>(scale_factor));
+    let complete = position.is_some() && size.is_some();
+    let position = position.unwrap_or_else(|| LogicalPosition::new(fallback.x, fallback.y));
+    let size = size.unwrap_or_else(|| LogicalSize::new(fallback.width, fallback.height));
+
+    OverlayBoundsObservation {
+        bounds: OverlayBounds {
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height,
+        },
+        complete,
+    }
+}
+
+fn overlay_bounds_are_restored(actual: &OverlayBounds, expected: &OverlayBounds) -> bool {
+    (actual.x - expected.x).abs() <= OVERLAY_BOUNDS_RESTORE_TOLERANCE
+        && (actual.y - expected.y).abs() <= OVERLAY_BOUNDS_RESTORE_TOLERANCE
+        && (actual.width - expected.width).abs() <= OVERLAY_BOUNDS_RESTORE_TOLERANCE
+        && (actual.height - expected.height).abs() <= OVERLAY_BOUNDS_RESTORE_TOLERANCE
+}
+
+fn apply_native_overlay_resize_transaction(
+    previous: OverlayBoundsObservation,
+    desired: &OverlayBounds,
+    request_gen: Option<u64>,
+    mut set_size: impl FnMut(f64, f64) -> crate::errors::CmdResult<()>,
+    set_position: impl FnOnce(f64, f64) -> crate::errors::CmdResult<()>,
+    observe_after_rollback: impl FnOnce(&OverlayBounds) -> OverlayBoundsObservation,
+) -> crate::errors::CmdResult<()> {
+    set_size(desired.width, desired.height)?;
+    let position_error = match set_position(desired.x, desired.y) {
+        Ok(()) => return Ok(()),
+        Err(error) => error,
+    };
+
+    let rollback_error = set_size(previous.bounds.width, previous.bounds.height).err();
+    let fallback = if rollback_error.is_none() {
+        &previous.bounds
+    } else {
+        desired
+    };
+    let observed = observe_after_rollback(fallback);
+    if rollback_error.is_none()
+        && previous.complete
+        && observed.complete
+        && overlay_bounds_are_restored(&observed.bounds, &previous.bounds)
+    {
+        return Err(position_error);
+    }
+
+    log::warn!(
+        "overlay position apply failed and native rollback was not verified: {position_error}"
+    );
+    if let Some(error) = rollback_error {
+        log::warn!("failed to roll back overlay size after position failure: {error}");
+    } else if !previous.complete || !observed.complete {
+        log::warn!("overlay rollback bounds could not be observed completely");
+    } else {
+        log::warn!(
+            "overlay rollback bounds differ from the previous native bounds: expected={:?}, actual={:?}",
+            previous.bounds,
+            observed.bounds
+        );
+    }
+
+    Err(OverlayResizePartialError::new(request_gen, observed.bounds).into())
+}
+
 fn complete_overlay_resize_after_native_apply(
     response: OverlayResizeResponse,
     record_bounds: impl FnOnce(&OverlayBounds) -> Result<()>,
@@ -5257,8 +5367,9 @@ mod tests {
 
     use super::{
         acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
-        apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
-        changed_panel_max_height, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
+        apply_native_overlay_resize_transaction, apply_panel_bounds_change,
+        begin_panel_close_request, bootstrap_keyboard_state, changed_panel_max_height,
+        collect_authorized_css_paths, collect_frontend_lifecycle_targets,
         complete_overlay_resize_after_native_apply, content_margin_position_adjustment,
         fixed_position_adjustment, frontend_history_mutation_blocked,
         frontend_lifecycle_restore_labels, global_css_watch_path, install_history_handshake,
@@ -5272,7 +5383,7 @@ mod tests {
         with_validated_overlay_dimensions, EditorFlushAcknowledge, EditorFlushCompletion,
         EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
         FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData,
-        MonitorSpec, Mutex, OverlayPositionAdjustment, PanelBoundsChange,
+        MonitorSpec, Mutex, OverlayBoundsObservation, OverlayPositionAdjustment, PanelBoundsChange,
         PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
         PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
         PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
@@ -5303,6 +5414,13 @@ mod tests {
         OverlayResizeAnchor::Center,
         OverlayResizeAnchor::FixedPosition,
     ];
+
+    fn complete_bounds_observation(bounds: OverlayBounds) -> OverlayBoundsObservation {
+        OverlayBoundsObservation {
+            bounds,
+            complete: true,
+        }
+    }
 
     fn assert_margin_adjustments(
         previous: ContentMargins,
@@ -5492,6 +5610,153 @@ mod tests {
             normalize_overlay_dimensions(MAX_OVERLAY_DIMENSION, MAX_OVERLAY_DIMENSION).unwrap(),
             (MAX_OVERLAY_DIMENSION, MAX_OVERLAY_DIMENSION)
         );
+    }
+
+    #[test]
+    fn position_failure_with_verified_size_rollback_returns_general_error() {
+        let previous = OverlayBounds {
+            x: 40.0,
+            y: 60.0,
+            width: 640.0,
+            height: 480.0,
+        };
+        let desired = OverlayBounds {
+            x: 120.0,
+            y: 180.0,
+            width: 900.0,
+            height: 700.0,
+        };
+        let actual = Mutex::new(previous.clone());
+        let size_calls = AtomicUsize::new(0);
+        let observation_called = AtomicBool::new(false);
+
+        let error = apply_native_overlay_resize_transaction(
+            complete_bounds_observation(previous.clone()),
+            &desired,
+            Some(81),
+            |width, height| {
+                size_calls.fetch_add(1, Ordering::SeqCst);
+                let mut bounds = actual.lock();
+                bounds.width = width;
+                bounds.height = height;
+                Ok(())
+            },
+            |x, y| {
+                assert_eq!((x, y), (desired.x, desired.y));
+                Err(CommandError::msg("injected position failure"))
+            },
+            |_| {
+                observation_called.store(true, Ordering::SeqCst);
+                complete_bounds_observation(actual.lock().clone())
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, CommandError::Message(_)));
+        assert_eq!(size_calls.load(Ordering::SeqCst), 2);
+        assert!(observation_called.load(Ordering::SeqCst));
+        assert_eq!(*actual.lock(), previous);
+    }
+
+    #[test]
+    fn failed_size_rollback_returns_partial_error_with_observed_bounds() {
+        let previous = OverlayBounds {
+            x: 40.0,
+            y: 60.0,
+            width: 640.0,
+            height: 480.0,
+        };
+        let desired = OverlayBounds {
+            x: 120.0,
+            y: 180.0,
+            width: 900.0,
+            height: 700.0,
+        };
+        let actual = Mutex::new(previous.clone());
+        let size_calls = AtomicUsize::new(0);
+
+        let error = apply_native_overlay_resize_transaction(
+            complete_bounds_observation(previous.clone()),
+            &desired,
+            Some(82),
+            |width, height| {
+                let call = size_calls.fetch_add(1, Ordering::SeqCst);
+                if call == 1 {
+                    return Err(CommandError::msg("injected size rollback failure"));
+                }
+                let mut bounds = actual.lock();
+                bounds.width = width;
+                bounds.height = height;
+                Ok(())
+            },
+            |_, _| Err(CommandError::msg("injected position failure")),
+            |_| complete_bounds_observation(actual.lock().clone()),
+        )
+        .unwrap_err();
+
+        assert_eq!(size_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            serde_json::to_value(&error).unwrap(),
+            serde_json::json!({
+                "errorCode": "OVERLAY_RESIZE_PARTIAL",
+                "details": {
+                    "requestGen": 82,
+                    "appliedBounds": {
+                        "x": 40.0,
+                        "y": 60.0,
+                        "width": 900.0,
+                        "height": 700.0
+                    }
+                },
+                "retryable": false
+            })
+        );
+        let CommandError::OverlayResizePartial(partial) = error else {
+            panic!("unverified rollback must return the partial resize error");
+        };
+        assert_eq!(
+            partial.error_code,
+            OverlayResizeErrorCode::OverlayResizePartial
+        );
+        assert_eq!(partial.details.applied_bounds, *actual.lock());
+    }
+
+    #[test]
+    fn initial_size_failure_does_not_attempt_position_or_observation() {
+        let previous = OverlayBounds {
+            x: 40.0,
+            y: 60.0,
+            width: 640.0,
+            height: 480.0,
+        };
+        let desired = OverlayBounds {
+            x: 120.0,
+            y: 180.0,
+            width: 900.0,
+            height: 700.0,
+        };
+        let position_called = AtomicBool::new(false);
+        let observation_called = AtomicBool::new(false);
+
+        let error = apply_native_overlay_resize_transaction(
+            complete_bounds_observation(previous),
+            &desired,
+            Some(83),
+            |_, _| Err(CommandError::msg("injected initial size failure")),
+            |_, _| {
+                position_called.store(true, Ordering::SeqCst);
+                Ok(())
+            },
+            |_| {
+                observation_called.store(true, Ordering::SeqCst);
+                complete_bounds_observation(desired.clone())
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, CommandError::Message(_)));
+        assert!(!position_called.load(Ordering::SeqCst));
+        assert!(!observation_called.load(Ordering::SeqCst));
     }
 
     #[test]

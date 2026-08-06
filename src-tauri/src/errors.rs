@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::OverlayBounds;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum EditorCommitErrorCode {
@@ -167,6 +169,7 @@ impl std::error::Error for EditorCommitError {}
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OverlayResizeErrorCode {
     OverlayDimensionExceeded,
+    OverlayResizePartial,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -221,6 +224,43 @@ impl std::fmt::Display for OverlayResizeError {
 
 impl std::error::Error for OverlayResizeError {}
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayResizePartialErrorDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_gen: Option<u64>,
+    pub applied_bounds: OverlayBounds,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayResizePartialError {
+    pub error_code: OverlayResizeErrorCode,
+    pub details: OverlayResizePartialErrorDetails,
+    pub retryable: bool,
+}
+
+impl OverlayResizePartialError {
+    pub fn new(request_gen: Option<u64>, applied_bounds: OverlayBounds) -> Self {
+        Self {
+            error_code: OverlayResizeErrorCode::OverlayResizePartial,
+            details: OverlayResizePartialErrorDetails {
+                request_gen,
+                applied_bounds,
+            },
+            retryable: false,
+        }
+    }
+}
+
+impl std::fmt::Display for OverlayResizePartialError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "overlay resize was partially applied")
+    }
+}
+
+impl std::error::Error for OverlayResizePartialError {}
+
 /// Tauri 커맨드 통합 에러 타입
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
@@ -244,6 +284,9 @@ pub enum CommandError {
 
     #[error(transparent)]
     OverlayResize(#[from] OverlayResizeError),
+
+    #[error(transparent)]
+    OverlayResizePartial(#[from] OverlayResizePartialError),
 }
 
 impl CommandError {
@@ -263,6 +306,7 @@ impl Serialize for CommandError {
         match self {
             Self::Editor(error) => error.serialize(serializer),
             Self::OverlayResize(error) => error.serialize(serializer),
+            Self::OverlayResizePartial(error) => error.serialize(serializer),
             _ => serializer.serialize_str(&self.to_string()),
         }
     }
@@ -273,7 +317,8 @@ pub type CmdResult<T> = Result<T, CommandError>;
 
 #[cfg(test)]
 mod tests {
-    use super::{CommandError, OverlayResizeError};
+    use super::{CommandError, OverlayResizeError, OverlayResizePartialError};
+    use crate::models::OverlayBounds;
     use serde_json::json;
     use tauri::ipc::{InvokeError, InvokeResponse};
 
@@ -285,6 +330,22 @@ mod tests {
                 "desiredHeight": 5000.0,
                 "maxWidth": 4096.0,
                 "maxHeight": 4096.0
+            },
+            "retryable": false
+        })
+    }
+
+    fn expected_overlay_resize_partial_error() -> serde_json::Value {
+        json!({
+            "errorCode": "OVERLAY_RESIZE_PARTIAL",
+            "details": {
+                "requestGen": 73,
+                "appliedBounds": {
+                    "x": 10.0,
+                    "y": 20.0,
+                    "width": 900.0,
+                    "height": 320.0
+                }
             },
             "retryable": false
         })
@@ -312,5 +373,45 @@ mod tests {
             panic!("overlay resize failure must reject the invoke");
         };
         assert_eq!(value, expected_overlay_resize_error());
+    }
+
+    #[test]
+    fn overlay_resize_partial_error_round_trips_with_the_wire_contract() {
+        let error = OverlayResizePartialError::new(
+            Some(73),
+            OverlayBounds {
+                x: 10.0,
+                y: 20.0,
+                width: 900.0,
+                height: 320.0,
+            },
+        );
+        let serialized = serde_json::to_value(&error).unwrap();
+
+        assert_eq!(serialized, expected_overlay_resize_partial_error());
+        assert_eq!(
+            serde_json::from_value::<OverlayResizePartialError>(serialized).unwrap(),
+            error
+        );
+    }
+
+    #[test]
+    fn overlay_resize_partial_reaches_invoke_rejection_as_an_object() {
+        let error = OverlayResizePartialError::new(
+            Some(73),
+            OverlayBounds {
+                x: 10.0,
+                y: 20.0,
+                width: 900.0,
+                height: 320.0,
+            },
+        );
+        let response: InvokeResponse =
+            Result::<(), CommandError>::Err(CommandError::from(error)).into();
+
+        let InvokeResponse::Err(InvokeError(value)) = response else {
+            panic!("partial overlay resize must reject the invoke");
+        };
+        assert_eq!(value, expected_overlay_resize_partial_error());
     }
 }
