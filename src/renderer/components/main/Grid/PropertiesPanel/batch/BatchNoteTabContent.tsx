@@ -204,6 +204,47 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             }
           />
         </PropertyRow>
+
+        {/* 노트 진행 방향 (미설정 = 전역·탭 설정 상속) */}
+        <PropertyRow label={t('keySetting.noteDirection') || '노트 방향'}>
+          {getMixedValue((pos) => pos.noteDirection ?? 'inherit', 'inherit')
+            .isMixed && (
+            <span className="text-fg-faint text-body italic">Mixed</span>
+          )}
+          <Dropdown
+            options={[
+              {
+                label: t('keySetting.noteDirectionInherit') || '설정 따름',
+                value: 'inherit',
+              },
+              { label: t('noteSetting.directionUp') || '위', value: 'up' },
+              {
+                label: t('noteSetting.directionDown') || '아래',
+                value: 'down',
+              },
+              {
+                label: t('noteSetting.directionLeft') || '왼쪽',
+                value: 'left',
+              },
+              {
+                label: t('noteSetting.directionRight') || '오른쪽',
+                value: 'right',
+              },
+            ]}
+            value={
+              getMixedValue((pos) => pos.noteDirection ?? 'inherit', 'inherit')
+                .value
+            }
+            onChange={(value) =>
+              handleBatchStyleChangeComplete(
+                'noteDirection',
+                value === 'inherit'
+                  ? undefined
+                  : (value as 'up' | 'down' | 'left' | 'right'),
+              )
+            }
+          />
+        </PropertyRow>
       </PropertySection>
 
       <PropertySection>

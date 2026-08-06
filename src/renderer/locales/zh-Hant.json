@@ -181,7 +181,9 @@
     "matchAnyHint": "按下任意一鍵即觸發",
     "matchAllHint": "需同時按住全部按鍵才觸發",
     "multiKeyEdit": "多鍵映射",
-    "multiKey": "綁定詳情"
+    "multiKey": "綁定詳情",
+    "noteDirection": "音符方向",
+    "noteDirectionInherit": "跟隨設定"
   },
   "imagePicker": {
     "idle": "閒置",
@@ -197,7 +199,14 @@
     "fade": "淡出",
     "reverseEffect": "反向鍵雨",
     "save": "應用",
-    "cancel": "取消"
+    "cancel": "取消",
+    "direction": "行進方向",
+    "directionUp": "上",
+    "directionDown": "下",
+    "directionLeft": "左",
+    "directionRight": "右",
+    "fadeFar": "遠端淡出",
+    "fadeNear": "鍵側淡出"
   },
   "editorConflict": {
     "message": "目前編輯與其他視窗或外掛程式的變更發生衝突。請選擇要保留的版本。\n「保留我的編輯」會重新套用本機變更，「接受外部變更」會捨棄尚未儲存的本機編輯。",

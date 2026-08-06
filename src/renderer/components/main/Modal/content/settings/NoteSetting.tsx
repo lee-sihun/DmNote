@@ -1,6 +1,7 @@
 import { usePressAction } from '@hooks/usePressAction';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Checkbox from '@components/main/common/Checkbox';
+import Dropdown from '@components/main/common/Dropdown';
 import TabSwitch from '@components/main/common/TabSwitch';
 import {
   PropertyRow,
@@ -12,7 +13,10 @@ import {
   NOTE_SETTINGS_CONSTRAINTS,
   clampValue,
 } from '../../../../../../types/settings/noteSettingsConstraints';
-import type { NoteSettings } from '../../../../../../types/settings/noteSettings';
+import type {
+  NoteDirection,
+  NoteSettings,
+} from '../../../../../../types/settings/noteSettings';
 import {
   toDisplayDelayMs,
   toEffectiveMinLengthPx,
@@ -64,6 +68,9 @@ const NoteSetting = ({
   );
   const [trackHeight, setTrackHeight] = useState<string>(
     String(sanitizeNumericValue(initial.trackHeight, 'trackHeight')),
+  );
+  const [direction, setDirection] = useState<NoteDirection>(
+    initial.direction ?? 'up',
   );
   const [reverse, setReverse] = useState<boolean>(
     Boolean(initial.reverse || false),
@@ -191,6 +198,7 @@ const NoteSetting = ({
       speed: sanitizeNumericValue(speed, 'speed'),
       trackHeight: sanitizeNumericValue(trackHeight, 'trackHeight'),
       reverse,
+      direction,
       fadeTopPx: sanitizeNumericValue(fadeTopPx, 'fadeTopPx'),
       fadeBottomPx: sanitizeNumericValue(fadeBottomPx, 'fadeBottomPx'),
       reverseFadeTopPx: sanitizeNumericValue(
@@ -272,6 +280,18 @@ const NoteSetting = ({
       </PropertySection>
 
       <PropertySection>
+        <PropertyRow label={t('noteSetting.direction')}>
+          <Dropdown
+            options={[
+              { label: t('noteSetting.directionUp'), value: 'up' },
+              { label: t('noteSetting.directionDown'), value: 'down' },
+              { label: t('noteSetting.directionLeft'), value: 'left' },
+              { label: t('noteSetting.directionRight'), value: 'right' },
+            ]}
+            value={direction}
+            onChange={(value) => setDirection(value as NoteDirection)}
+          />
+        </PropertyRow>
         <PropertyRow label={t('noteSetting.reverseEffect')}>
           <Checkbox
             checked={reverse}
@@ -296,6 +316,7 @@ const NoteSetting = ({
             </svg>
             <input
               type="number"
+              title={t('noteSetting.fadeFar')}
               min={NOTE_SETTINGS_CONSTRAINTS.fadeTopPx.min}
               max={NOTE_SETTINGS_CONSTRAINTS.fadeTopPx.max}
               value={reverse ? reverseFadeTopPx : fadeTopPx}
@@ -339,6 +360,7 @@ const NoteSetting = ({
             </svg>
             <input
               type="number"
+              title={t('noteSetting.fadeNear')}
               min={NOTE_SETTINGS_CONSTRAINTS.fadeBottomPx.min}
               max={NOTE_SETTINGS_CONSTRAINTS.fadeBottomPx.max}
               value={reverse ? reverseFadeBottomPx : fadeBottomPx}

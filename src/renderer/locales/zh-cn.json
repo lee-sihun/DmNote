@@ -181,7 +181,9 @@
     "matchAnyHint": "按下任意一键即触发",
     "matchAllHint": "需同时按住全部按键才触发",
     "multiKeyEdit": "多键映射",
-    "multiKey": "绑定详情"
+    "multiKey": "绑定详情",
+    "noteDirection": "音符方向",
+    "noteDirectionInherit": "跟随设置"
   },
   "imagePicker": {
     "idle": "闲置",
@@ -197,7 +199,14 @@
     "fade": "淡出",
     "reverseEffect": "反向键雨",
     "save": "应用",
-    "cancel": "取消"
+    "cancel": "取消",
+    "direction": "行进方向",
+    "directionUp": "上",
+    "directionDown": "下",
+    "directionLeft": "左",
+    "directionRight": "右",
+    "fadeFar": "远端淡出",
+    "fadeNear": "键侧淡出"
   },
   "editorConflict": {
     "message": "当前编辑与其他窗口或插件的更改发生冲突。请选择要保留的版本。\n“保留我的编辑”会重新应用本地更改，“接受外部更改”会放弃尚未保存的本地编辑。",

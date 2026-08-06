@@ -181,7 +181,9 @@
     "matchAnyHint": "하나만 눌러도 반응",
     "matchAllHint": "모두 동시에 눌러야 반응",
     "multiKeyEdit": "여러 키 매핑",
-    "multiKey": "매핑 상세"
+    "multiKey": "매핑 상세",
+    "noteDirection": "노트 방향",
+    "noteDirectionInherit": "설정 따름"
   },
   "imagePicker": {
     "idle": "대기",
@@ -197,7 +199,14 @@
     "fade": "페이드",
     "reverseEffect": "리버스 효과",
     "save": "저장",
-    "cancel": "취소"
+    "cancel": "취소",
+    "direction": "진행 방향",
+    "directionUp": "위",
+    "directionDown": "아래",
+    "directionLeft": "왼쪽",
+    "directionRight": "오른쪽",
+    "fadeFar": "끝쪽 페이드",
+    "fadeNear": "키쪽 페이드"
   },
   "editorConflict": {
     "message": "현재 편집 내용과 다른 창 또는 플러그인의 변경이 겹쳤습니다. 어느 내용을 남길지 선택해 주세요.\n'내 편집 유지'는 지금 편집한 내용을 다시 적용하고, '외부 변경 수용'은 저장되지 않은 내 편집을 취소합니다.",

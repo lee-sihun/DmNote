@@ -181,7 +181,9 @@
     "matchAnyHint": "Triggers when any key is pressed",
     "matchAllHint": "Triggers only while all keys are held",
     "multiKeyEdit": "Multi-key mapping",
-    "multiKey": "Binding details"
+    "multiKey": "Binding details",
+    "noteDirection": "Note direction",
+    "noteDirectionInherit": "Inherit"
   },
   "imagePicker": {
     "idle": "Idle",
@@ -197,7 +199,14 @@
     "fade": "Fade",
     "reverseEffect": "Reverse Effect",
     "save": "Apply",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "direction": "Direction",
+    "directionUp": "Up",
+    "directionDown": "Down",
+    "directionLeft": "Left",
+    "directionRight": "Right",
+    "fadeFar": "Fade (far end)",
+    "fadeNear": "Fade (key side)"
   },
   "editorConflict": {
     "message": "Your edit overlaps a change from another window or plugin. Choose which version to keep.\n'Keep My Edit' reapplies your local edit. 'Accept External Change' discards the unsaved local edit.",
