@@ -1832,6 +1832,15 @@ impl Default for GridSettings {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentMargins {
+    pub top: f64,
+    pub bottom: f64,
+    pub left: f64,
+    pub right: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayBounds {
@@ -1955,6 +1964,8 @@ pub struct AppStoreData {
     pub panel_bounds: Option<PanelBounds>,
     pub overlay_last_content_top_offset: Option<f64>,
     #[serde(default)]
+    pub overlay_last_content_margins: Option<ContentMargins>,
+    #[serde(default)]
     pub overlay_bounds_are_logical: bool,
     #[serde(default)]
     pub key_counter_enabled: bool,
@@ -2030,6 +2041,7 @@ impl Default for AppStoreData {
             overlay_bounds: None,
             panel_bounds: None,
             overlay_last_content_top_offset: None,
+            overlay_last_content_margins: None,
             overlay_bounds_are_logical: false,
             key_counter_enabled: false,
             grid_settings: GridSettings::default(),
@@ -2520,10 +2532,10 @@ pub struct SettingsPatch {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_canonical_rgba, FadePosition, GradientSpec, KeyCounterAlign, KeyCounterAlignMode,
-        KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings, KeyPosition,
-        KeySlot, NoteColor, NoteDirection, NoteSettings, SlotMatch, StatType, TabNoteSettings,
-        MAX_SLOT_KEYS,
+        compact_canonical_rgba, AppStoreData, ContentMargins, FadePosition, GradientSpec,
+        KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement,
+        KeyCounterSettings, KeyMappings, KeyPosition, KeySlot, NoteColor, NoteDirection,
+        NoteSettings, SlotMatch, StatType, TabNoteSettings, MAX_SLOT_KEYS,
     };
     use serde::Deserialize;
 
@@ -2615,6 +2627,33 @@ mod tests {
             let restored: StatType = serde_json::from_value(serialized).unwrap();
             assert_eq!(restored, stat_type);
         }
+    }
+
+    #[test]
+    fn content_margins_wire_shape_and_missing_store_default_are_stable() {
+        let margins = ContentMargins {
+            top: 1.0,
+            bottom: 2.0,
+            left: 3.0,
+            right: 4.0,
+        };
+        assert_eq!(
+            serde_json::to_value(margins).unwrap(),
+            serde_json::json!({
+                "top": 1.0,
+                "bottom": 2.0,
+                "left": 3.0,
+                "right": 4.0
+            })
+        );
+
+        let mut legacy = serde_json::to_value(AppStoreData::default()).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("overlayLastContentMargins");
+        let restored: AppStoreData = serde_json::from_value(legacy).unwrap();
+        assert_eq!(restored.overlay_last_content_margins, None);
     }
 
     #[test]

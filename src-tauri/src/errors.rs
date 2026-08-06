@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -163,6 +163,64 @@ impl std::fmt::Display for EditorCommitError {
 
 impl std::error::Error for EditorCommitError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum OverlayResizeErrorCode {
+    OverlayDimensionExceeded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayResizeErrorDetails {
+    pub desired_width: f64,
+    pub desired_height: f64,
+    pub max_width: f64,
+    pub max_height: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayResizeError {
+    pub error_code: OverlayResizeErrorCode,
+    pub details: OverlayResizeErrorDetails,
+    pub retryable: bool,
+}
+
+impl OverlayResizeError {
+    pub fn dimension_exceeded(
+        desired_width: f64,
+        desired_height: f64,
+        max_width: f64,
+        max_height: f64,
+    ) -> Self {
+        Self {
+            error_code: OverlayResizeErrorCode::OverlayDimensionExceeded,
+            details: OverlayResizeErrorDetails {
+                desired_width,
+                desired_height,
+                max_width,
+                max_height,
+            },
+            retryable: false,
+        }
+    }
+}
+
+impl std::fmt::Display for OverlayResizeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "overlay dimensions {}x{} exceed maximum {}x{}",
+            self.details.desired_width,
+            self.details.desired_height,
+            self.details.max_width,
+            self.details.max_height
+        )
+    }
+}
+
+impl std::error::Error for OverlayResizeError {}
+
 /// Tauri 커맨드 통합 에러 타입
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
@@ -183,6 +241,9 @@ pub enum CommandError {
 
     #[error(transparent)]
     Editor(#[from] EditorCommitError),
+
+    #[error(transparent)]
+    OverlayResize(#[from] OverlayResizeError),
 }
 
 impl CommandError {
@@ -193,7 +254,7 @@ impl CommandError {
 }
 
 // Tauri 커맨드는 에러 타입에 Serialize 필수
-// 프론트 호환성을 위해 문자열로 직렬화
+// 기존 오류는 문자열, 구조화 도메인 오류는 객체로 직렬화
 impl Serialize for CommandError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -201,6 +262,7 @@ impl Serialize for CommandError {
     {
         match self {
             Self::Editor(error) => error.serialize(serializer),
+            Self::OverlayResize(error) => error.serialize(serializer),
             _ => serializer.serialize_str(&self.to_string()),
         }
     }
@@ -208,3 +270,47 @@ impl Serialize for CommandError {
 
 /// 커맨드 반환 타입 별칭
 pub type CmdResult<T> = Result<T, CommandError>;
+
+#[cfg(test)]
+mod tests {
+    use super::{CommandError, OverlayResizeError};
+    use serde_json::json;
+    use tauri::ipc::{InvokeError, InvokeResponse};
+
+    fn expected_overlay_resize_error() -> serde_json::Value {
+        json!({
+            "errorCode": "OVERLAY_DIMENSION_EXCEEDED",
+            "details": {
+                "desiredWidth": 4097.0,
+                "desiredHeight": 5000.0,
+                "maxWidth": 4096.0,
+                "maxHeight": 4096.0
+            },
+            "retryable": false
+        })
+    }
+
+    #[test]
+    fn overlay_resize_error_round_trips_with_the_wire_contract() {
+        let error = OverlayResizeError::dimension_exceeded(4097.0, 5000.0, 4096.0, 4096.0);
+        let serialized = serde_json::to_value(error).unwrap();
+
+        assert_eq!(serialized, expected_overlay_resize_error());
+        assert_eq!(
+            serde_json::from_value::<OverlayResizeError>(serialized).unwrap(),
+            error
+        );
+    }
+
+    #[test]
+    fn overlay_resize_error_reaches_invoke_rejection_as_an_object() {
+        let error = OverlayResizeError::dimension_exceeded(4097.0, 5000.0, 4096.0, 4096.0);
+        let response: InvokeResponse =
+            Result::<(), CommandError>::Err(CommandError::from(error)).into();
+
+        let InvokeResponse::Err(InvokeError(value)) = response else {
+            panic!("overlay resize failure must reject the invoke");
+        };
+        assert_eq!(value, expected_overlay_resize_error());
+    }
+}

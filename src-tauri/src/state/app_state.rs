@@ -34,7 +34,7 @@ use super::{
 };
 #[cfg(debug_assertions)]
 use crate::audio::KeySoundDispatchTrace;
-use crate::errors::EditorCommitError;
+use crate::errors::{EditorCommitError, OverlayResizeError};
 use crate::{
     audio::{
         KeySoundEngine, KeySoundOutputBackend, KeySoundOutputDevices, KeySoundOutputState,
@@ -43,9 +43,9 @@ use crate::{
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
-        DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters, KeyMappings, KeySlot,
-        KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, PanelBounds,
-        SettingsDiff, SettingsState, TabCssOverrides,
+        ContentMargins, DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters,
+        KeyMappings, KeySlot, KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor,
+        PanelBounds, SettingsDiff, SettingsState, TabCssOverrides,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
     state::local_asset_path::path_identity_key,
@@ -61,6 +61,8 @@ const TRAY_MENU_SETTINGS_ID: &str = "tray-settings";
 const TRAY_MENU_QUIT_ID: &str = "tray-quit";
 const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
+const MIN_OVERLAY_DIMENSION: f64 = 100.0;
+const MAX_OVERLAY_DIMENSION: f64 = 4_096.0;
 const PANEL_WIDTH: f64 = 240.0;
 // 피커가 트리거 행 아래에 그대로 들어갈 세로 여유 - 이보다 낮으면 팝업이
 // 매번 위로 뒤집히거나 창 경계로 클램프됨. 늘리는 것만 허용
@@ -2067,20 +2069,63 @@ impl AppState {
         height: f64,
         anchor: Option<String>,
         content_top_offset: Option<f64>,
+        content_margins: Option<ContentMargins>,
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
-    ) -> Result<OverlayBounds> {
+    ) -> crate::errors::CmdResult<OverlayBounds> {
+        with_validated_overlay_dimensions(width, height, |width, height| {
+            self.resize_overlay_validated(
+                app,
+                width,
+                height,
+                anchor,
+                content_top_offset,
+                content_margins,
+                fixed_position_delta_x,
+                fixed_position_delta_y,
+            )
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn resize_overlay_validated(
+        &self,
+        app: &AppHandle,
+        width: f64,
+        height: f64,
+        anchor: Option<String>,
+        content_top_offset: Option<f64>,
+        content_margins: Option<ContentMargins>,
+        fixed_position_delta_x: Option<f64>,
+        fixed_position_delta_y: Option<f64>,
+    ) -> crate::errors::CmdResult<OverlayBounds> {
         // 오버레이가 이미 열려있을 때만 리사이즈 수행
         // 창 미존재 시 에러 반환 (자동 생성하지 않음)
         let window = app
             .get_webview_window(OVERLAY_LABEL)
             .ok_or_else(|| anyhow!("Overlay window is not open"))?;
+        let snapshot = self.store.snapshot();
         let anchor = anchor
             .and_then(|value| overlay_resize_anchor_from_str(&value))
-            .unwrap_or_else(|| self.store.snapshot().overlay_resize_anchor.clone());
-
-        let width = width.clamp(100.0, 2000.0).round();
-        let height = height.clamp(100.0, 2000.0).round();
+            .unwrap_or_else(|| snapshot.overlay_resize_anchor.clone());
+        let content_margins = content_margins.filter(content_margins_are_finite);
+        let legacy_content_top_offset = content_top_offset.filter(|value| value.is_finite());
+        let next_content_top_offset = content_margins
+            .map(|margins| margins.top)
+            .or(legacy_content_top_offset);
+        let content_margins_update = if content_margins.is_some() {
+            Some(content_margins)
+        } else if legacy_content_top_offset.is_some() {
+            Some(None)
+        } else {
+            None
+        };
+        let margin_transition = resolve_content_margin_transition(
+            content_margins,
+            legacy_content_top_offset,
+            snapshot.overlay_last_content_margins,
+            snapshot.overlay_last_content_top_offset,
+        );
 
         let scale_factor = window.scale_factor().unwrap_or(1.0);
         let position = window
@@ -2094,22 +2139,15 @@ impl AppState {
 
         let mut new_x = position.x;
         let mut new_y = position.y;
-        let mut next_content_top_offset = None;
 
         // 초기화 중(첫 resize)에는 anchor 기반 position 재계산을 건너뛰고
         // store에 저장된 위치를 사용 (빌더 position이 무시될 수 있으므로)
         let initializing = self.overlay_initializing.swap(false, Ordering::SeqCst);
         if initializing {
             // store에서 저장된 위치를 가져와 사용 (빌더 position이 무시될 수 있으므로)
-            if let Some(stored) = self.store.snapshot().overlay_bounds.as_ref() {
+            if let Some(stored) = snapshot.overlay_bounds.as_ref() {
                 new_x = stored.x;
                 new_y = stored.y;
-            }
-            // 초기화 중이라도 content_top_offset은 저장해야 다음 resize에서 delta 계산이 정확함
-            if let Some(offset) = content_top_offset {
-                if offset.is_finite() {
-                    next_content_top_offset = Some(offset);
-                }
             }
         } else {
             match anchor {
@@ -2127,33 +2165,19 @@ impl AppState {
                 OverlayResizeAnchor::TopLeft => {}
             }
 
-            if anchor == OverlayResizeAnchor::FixedPosition {
-                if let Some(delta_x) = fixed_position_delta_x.filter(|value| value.is_finite()) {
-                    new_x += delta_x;
-                }
-                if let Some(delta_y) = fixed_position_delta_y.filter(|value| value.is_finite()) {
-                    new_y += delta_y;
-                }
-            }
+            let fixed_adjustment =
+                fixed_position_adjustment(&anchor, fixed_position_delta_x, fixed_position_delta_y);
+            new_x += fixed_adjustment.x;
+            new_y += fixed_adjustment.y;
 
-            if let Some(offset) = content_top_offset {
-                if offset.is_finite() {
-                    let previous = self
-                        .store
-                        .snapshot()
-                        .overlay_last_content_top_offset
-                        .unwrap_or(offset);
-                    let delta = offset - previous;
-                    if delta != 0.0 {
-                        match anchor {
-                            OverlayResizeAnchor::Center => new_y -= delta / 2.0,
-                            OverlayResizeAnchor::BottomLeft | OverlayResizeAnchor::BottomRight => {}
-                            OverlayResizeAnchor::FixedPosition => new_y -= delta,
-                            _ => new_y -= delta,
-                        }
-                    }
-                    next_content_top_offset = Some(offset);
-                }
+            if let Some(transition) = margin_transition {
+                let adjustment = content_margin_position_adjustment(
+                    &anchor,
+                    transition.previous,
+                    transition.current,
+                );
+                new_x += adjustment.x;
+                new_y += adjustment.y;
             }
         }
 
@@ -2172,6 +2196,7 @@ impl AppState {
             &self.overlay_bounds_generation,
             bounds.clone(),
             next_content_top_offset,
+            content_margins_update,
         )?;
 
         log::debug!(
@@ -4986,6 +5011,7 @@ fn defer_overlay_bounds_from_window(
             height: size.height,
         },
         None,
+        None,
     )
 }
 
@@ -4994,12 +5020,16 @@ fn defer_overlay_bounds(
     generation: &Arc<AtomicU64>,
     bounds: OverlayBounds,
     content_top_offset: Option<f64>,
+    content_margins_update: Option<Option<ContentMargins>>,
 ) -> Result<()> {
     store.update_deferred(move |state| {
         state.overlay_bounds = Some(bounds);
         state.overlay_bounds_are_logical = true;
         if let Some(offset) = content_top_offset {
             state.overlay_last_content_top_offset = Some(offset);
+        }
+        if let Some(margins) = content_margins_update {
+            state.overlay_last_content_margins = margins;
         }
     })?;
     let scheduled_generation = generation.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
@@ -5063,6 +5093,135 @@ struct OverlayPosition {
     y: f64,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct OverlayPositionAdjustment {
+    x: f64,
+    y: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ContentMarginTransition {
+    previous: ContentMargins,
+    current: ContentMargins,
+}
+
+fn normalize_overlay_dimensions(
+    width: f64,
+    height: f64,
+) -> std::result::Result<(f64, f64), OverlayResizeError> {
+    if width > MAX_OVERLAY_DIMENSION || height > MAX_OVERLAY_DIMENSION {
+        return Err(OverlayResizeError::dimension_exceeded(
+            width,
+            height,
+            MAX_OVERLAY_DIMENSION,
+            MAX_OVERLAY_DIMENSION,
+        ));
+    }
+
+    Ok((
+        width.max(MIN_OVERLAY_DIMENSION).round(),
+        height.max(MIN_OVERLAY_DIMENSION).round(),
+    ))
+}
+
+fn with_validated_overlay_dimensions<T>(
+    width: f64,
+    height: f64,
+    operation: impl FnOnce(f64, f64) -> crate::errors::CmdResult<T>,
+) -> crate::errors::CmdResult<T> {
+    let (width, height) = normalize_overlay_dimensions(width, height)?;
+    operation(width, height)
+}
+
+fn content_margins_are_finite(margins: &ContentMargins) -> bool {
+    margins.top.is_finite()
+        && margins.bottom.is_finite()
+        && margins.left.is_finite()
+        && margins.right.is_finite()
+}
+
+fn resolve_content_margin_transition(
+    current_margins: Option<ContentMargins>,
+    current_top_offset: Option<f64>,
+    previous_margins: Option<ContentMargins>,
+    previous_top_offset: Option<f64>,
+) -> Option<ContentMarginTransition> {
+    if let Some(current) = current_margins {
+        let previous = previous_margins
+            .filter(content_margins_are_finite)
+            .unwrap_or(current);
+        return Some(ContentMarginTransition { previous, current });
+    }
+
+    let current_top = current_top_offset?;
+    let previous_top = previous_top_offset
+        .filter(|value| value.is_finite())
+        .unwrap_or(current_top);
+    Some(ContentMarginTransition {
+        previous: ContentMargins {
+            top: previous_top,
+            ..ContentMargins::default()
+        },
+        current: ContentMargins {
+            top: current_top,
+            ..ContentMargins::default()
+        },
+    })
+}
+
+fn content_margin_position_adjustment(
+    anchor: &OverlayResizeAnchor,
+    previous: ContentMargins,
+    current: ContentMargins,
+) -> OverlayPositionAdjustment {
+    let delta_top = current.top - previous.top;
+    let delta_bottom = current.bottom - previous.bottom;
+    let delta_left = current.left - previous.left;
+    let delta_right = current.right - previous.right;
+
+    match anchor {
+        OverlayResizeAnchor::TopLeft => OverlayPositionAdjustment {
+            x: -delta_left,
+            y: -delta_top,
+        },
+        OverlayResizeAnchor::TopRight => OverlayPositionAdjustment {
+            x: delta_right,
+            y: -delta_top,
+        },
+        OverlayResizeAnchor::BottomLeft => OverlayPositionAdjustment {
+            x: -delta_left,
+            y: delta_bottom,
+        },
+        OverlayResizeAnchor::BottomRight => OverlayPositionAdjustment {
+            x: delta_right,
+            y: delta_bottom,
+        },
+        OverlayResizeAnchor::Center => OverlayPositionAdjustment {
+            x: (delta_right - delta_left) / 2.0,
+            y: (delta_bottom - delta_top) / 2.0,
+        },
+        OverlayResizeAnchor::FixedPosition => OverlayPositionAdjustment {
+            x: -delta_left,
+            y: -delta_top,
+        },
+    }
+}
+
+fn fixed_position_adjustment(
+    anchor: &OverlayResizeAnchor,
+    delta_x: Option<f64>,
+    delta_y: Option<f64>,
+) -> OverlayPositionAdjustment {
+    if anchor != &OverlayResizeAnchor::FixedPosition {
+        return OverlayPositionAdjustment::default();
+    }
+
+    OverlayPositionAdjustment {
+        x: delta_x.filter(|value| value.is_finite()).unwrap_or(0.0),
+        y: delta_y.filter(|value| value.is_finite()).unwrap_or(0.0),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -5078,34 +5237,240 @@ mod tests {
         acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
         apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
         changed_panel_max_height, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
+        content_margin_position_adjustment, fixed_position_adjustment,
         frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
         global_css_watch_path, install_history_handshake, install_lifecycle_handshake,
-        key_state_payload, next_keyboard_recovery_plan, panel_bounds_from_sample,
-        panel_height_bounds, publish_panel_hidden_transition, publish_panel_visibility_transition,
-        publish_selection_snapshot, resolve_event_age_ms, resolve_panel_window_layout,
+        key_state_payload, next_keyboard_recovery_plan, normalize_overlay_dimensions,
+        panel_bounds_from_sample, panel_height_bounds, publish_panel_hidden_transition,
+        publish_panel_visibility_transition, publish_selection_snapshot,
+        resolve_content_margin_transition, resolve_event_age_ms, resolve_panel_window_layout,
         run_panel_close_timeout, should_create_overlay_on_startup, should_recover_keyboard_daemon,
         take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
-        take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
-        EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
-        FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
-        LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex, PanelBoundsChange,
+        take_targeted_panel_view_state, validate_selection_session,
+        with_validated_overlay_dimensions, EditorFlushAcknowledge, EditorFlushCompletion,
+        EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
+        FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData,
+        MonitorSpec, Mutex, OverlayPositionAdjustment, PanelBoundsChange,
         PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
         PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
         PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
         PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
         SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
         HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
-        KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
-        MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
-        OVERLAY_LABEL, PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
-        PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
+        KEYBOARD_RECOVERY_DELAYS_MS, MAX_OVERLAY_DIMENSION, MAX_SELECTION_ELEMENTS,
+        MAX_SELECTION_ELEMENT_TYPE_BYTES, MAX_SELECTION_FULL_ID_BYTES,
+        MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES, OVERLAY_LABEL, PANEL_ENTRYPOINT,
+        PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT, PANEL_WIDTH, RAW_INPUT_WINDOW_LABELS,
     };
     use crate::{
+        errors::{CommandError, OverlayResizeErrorCode},
         keyboard::KeyboardManager,
-        models::{AppStoreData, CustomCss, PanelBounds, TabCss},
+        models::{
+            AppStoreData, ContentMargins, CustomCss, OverlayBounds, OverlayResizeAnchor,
+            PanelBounds, TabCss,
+        },
         state::local_asset_path::path_identity_key,
     };
     use std::path::Path;
+
+    const ALL_OVERLAY_ANCHORS: [OverlayResizeAnchor; 6] = [
+        OverlayResizeAnchor::TopLeft,
+        OverlayResizeAnchor::TopRight,
+        OverlayResizeAnchor::BottomLeft,
+        OverlayResizeAnchor::BottomRight,
+        OverlayResizeAnchor::Center,
+        OverlayResizeAnchor::FixedPosition,
+    ];
+
+    fn assert_margin_adjustments(
+        previous: ContentMargins,
+        current: ContentMargins,
+        expected: [OverlayPositionAdjustment; 6],
+    ) {
+        for (anchor, expected) in ALL_OVERLAY_ANCHORS.into_iter().zip(expected) {
+            assert_eq!(
+                content_margin_position_adjustment(&anchor, previous, current),
+                expected,
+                "anchor {}",
+                anchor.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn top_margin_delta_adjusts_all_six_anchors() {
+        assert_margin_adjustments(
+            ContentMargins {
+                top: 100.0,
+                ..ContentMargins::default()
+            },
+            ContentMargins {
+                top: 130.0,
+                ..ContentMargins::default()
+            },
+            [
+                OverlayPositionAdjustment { x: 0.0, y: -30.0 },
+                OverlayPositionAdjustment { x: 0.0, y: -30.0 },
+                OverlayPositionAdjustment { x: 0.0, y: 0.0 },
+                OverlayPositionAdjustment { x: 0.0, y: 0.0 },
+                OverlayPositionAdjustment { x: 0.0, y: -15.0 },
+                OverlayPositionAdjustment { x: 0.0, y: -30.0 },
+            ],
+        );
+    }
+
+    #[test]
+    fn up_to_down_margin_transition_keeps_every_anchor_at_the_same_content_position() {
+        assert_margin_adjustments(
+            ContentMargins {
+                top: 300.0,
+                ..ContentMargins::default()
+            },
+            ContentMargins {
+                bottom: 300.0,
+                ..ContentMargins::default()
+            },
+            [OverlayPositionAdjustment { x: 0.0, y: 300.0 }; 6],
+        );
+    }
+
+    #[test]
+    fn mixed_left_right_and_vertical_margin_deltas_adjust_all_six_anchors() {
+        let previous = ContentMargins {
+            top: 40.0,
+            bottom: 10.0,
+            left: 80.0,
+            right: 20.0,
+        };
+        let current = ContentMargins {
+            top: 15.0,
+            bottom: 55.0,
+            left: 25.0,
+            right: 100.0,
+        };
+        assert_margin_adjustments(
+            previous,
+            current,
+            [
+                OverlayPositionAdjustment { x: 55.0, y: 25.0 },
+                OverlayPositionAdjustment { x: 80.0, y: 25.0 },
+                OverlayPositionAdjustment { x: 55.0, y: 45.0 },
+                OverlayPositionAdjustment { x: 80.0, y: 45.0 },
+                OverlayPositionAdjustment { x: 67.5, y: 35.0 },
+                OverlayPositionAdjustment { x: 55.0, y: 25.0 },
+            ],
+        );
+
+        let margin = content_margin_position_adjustment(
+            &OverlayResizeAnchor::FixedPosition,
+            previous,
+            current,
+        );
+        let fixed =
+            fixed_position_adjustment(&OverlayResizeAnchor::FixedPosition, Some(7.0), Some(-9.0));
+        assert_eq!(
+            OverlayPositionAdjustment {
+                x: margin.x + fixed.x,
+                y: margin.y + fixed.y,
+            },
+            OverlayPositionAdjustment { x: 62.0, y: 16.0 }
+        );
+    }
+
+    #[test]
+    fn missing_margins_use_legacy_top_offset_and_first_values_have_zero_delta() {
+        let legacy = resolve_content_margin_transition(None, Some(70.0), None, Some(40.0)).unwrap();
+        assert_margin_adjustments(
+            legacy.previous,
+            legacy.current,
+            [
+                OverlayPositionAdjustment { x: 0.0, y: -30.0 },
+                OverlayPositionAdjustment { x: 0.0, y: -30.0 },
+                OverlayPositionAdjustment { x: 0.0, y: 0.0 },
+                OverlayPositionAdjustment { x: 0.0, y: 0.0 },
+                OverlayPositionAdjustment { x: 0.0, y: -15.0 },
+                OverlayPositionAdjustment { x: 0.0, y: -30.0 },
+            ],
+        );
+
+        let first_legacy = resolve_content_margin_transition(None, Some(70.0), None, None).unwrap();
+        assert_margin_adjustments(
+            first_legacy.previous,
+            first_legacy.current,
+            [OverlayPositionAdjustment::default(); 6],
+        );
+
+        let current = ContentMargins {
+            top: 20.0,
+            bottom: 80.0,
+            left: 15.0,
+            right: 35.0,
+        };
+        let first_margins =
+            resolve_content_margin_transition(Some(current), None, None, None).unwrap();
+        assert_margin_adjustments(
+            first_margins.previous,
+            first_margins.current,
+            [OverlayPositionAdjustment::default(); 6],
+        );
+    }
+
+    #[test]
+    fn over_cap_resize_rejection_skips_all_window_and_store_state_changes() {
+        let stored_margins = ContentMargins {
+            top: 10.0,
+            bottom: 20.0,
+            left: 30.0,
+            right: 40.0,
+        };
+        let mut store_state = AppStoreData {
+            overlay_bounds: Some(OverlayBounds {
+                x: 31.0,
+                y: 47.0,
+                width: 640.0,
+                height: 480.0,
+            }),
+            overlay_last_content_top_offset: Some(stored_margins.top),
+            overlay_last_content_margins: Some(stored_margins),
+            ..AppStoreData::default()
+        };
+        let mut window_state = store_state.overlay_bounds.clone().unwrap();
+        let mut initializing = true;
+        let store_before = store_state.clone();
+        let window_before = window_state.clone();
+
+        let error = with_validated_overlay_dimensions(
+            MAX_OVERLAY_DIMENSION + 1.0,
+            480.0,
+            |width, height| {
+                initializing = false;
+                window_state.width = width;
+                window_state.height = height;
+                store_state.overlay_bounds = Some(window_state.clone());
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+        let CommandError::OverlayResize(error) = error else {
+            panic!("over-cap resize must return the structured resize error");
+        };
+        assert_eq!(
+            error.error_code,
+            OverlayResizeErrorCode::OverlayDimensionExceeded
+        );
+        assert_eq!(store_state, store_before);
+        assert_eq!(window_state, window_before);
+        assert!(initializing);
+    }
+
+    #[test]
+    fn overlay_dimension_cap_accepts_the_exact_limit() {
+        assert_eq!(
+            normalize_overlay_dimensions(MAX_OVERLAY_DIMENSION, MAX_OVERLAY_DIMENSION).unwrap(),
+            (MAX_OVERLAY_DIMENSION, MAX_OVERLAY_DIMENSION)
+        );
+    }
 
     #[test]
     fn startup_overlay_creation_covers_all_visibility_and_obs_combinations() {

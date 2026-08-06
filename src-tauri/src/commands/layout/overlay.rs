@@ -3,7 +3,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     errors::CmdResult,
-    models::{BootstrapOverlayState, OverlayBounds},
+    models::{BootstrapOverlayState, ContentMargins, OverlayBounds},
     state::AppState,
 };
 
@@ -16,6 +16,8 @@ pub struct OverlayResizeArgs {
     pub anchor: Option<String>,
     #[serde(default)]
     pub content_top_offset: Option<f64>,
+    #[serde(default)]
+    pub content_margins: Option<ContentMargins>,
     #[serde(default)]
     pub fixed_position_delta_x: Option<f64>,
     #[serde(default)]
@@ -62,13 +64,58 @@ pub fn overlay_resize(
     app: AppHandle,
     payload: OverlayResizeArgs,
 ) -> CmdResult<OverlayBounds> {
-    Ok(state.resize_overlay(
+    state.resize_overlay(
         &app,
         payload.width,
         payload.height,
         payload.anchor,
         payload.content_top_offset,
+        payload.content_margins,
         payload.fixed_position_delta_x,
         payload.fixed_position_delta_y,
-    )?)
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OverlayResizeArgs;
+    use crate::models::ContentMargins;
+
+    #[test]
+    fn resize_payload_accepts_legacy_top_offset_without_margins() {
+        let payload: OverlayResizeArgs = serde_json::from_value(serde_json::json!({
+            "width": 860,
+            "height": 320,
+            "contentTopOffset": 150
+        }))
+        .unwrap();
+
+        assert_eq!(payload.content_top_offset, Some(150.0));
+        assert_eq!(payload.content_margins, None);
+    }
+
+    #[test]
+    fn resize_payload_deserializes_all_content_margins() {
+        let payload: OverlayResizeArgs = serde_json::from_value(serde_json::json!({
+            "width": 860,
+            "height": 320,
+            "contentMargins": {
+                "top": 11,
+                "bottom": 22,
+                "left": 33,
+                "right": 44
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            payload.content_margins,
+            Some(ContentMargins {
+                top: 11.0,
+                bottom: 22.0,
+                left: 33.0,
+                right: 44.0,
+            })
+        );
+    }
 }
