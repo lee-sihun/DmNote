@@ -25,6 +25,8 @@ pub struct OverlayResizeArgs {
     #[serde(default)]
     pub fixed_position_delta_y: Option<f64>,
     #[serde(default)]
+    pub request_session: Option<u64>,
+    #[serde(default)]
     pub request_gen: Option<u64>,
 }
 
@@ -78,6 +80,7 @@ pub fn overlay_resize(
         payload.content_min,
         payload.fixed_position_delta_x,
         payload.fixed_position_delta_y,
+        payload.request_session,
         payload.request_gen,
     )
 }
@@ -99,6 +102,7 @@ mod tests {
         assert_eq!(payload.content_top_offset, Some(150.0));
         assert_eq!(payload.content_margins, None);
         assert_eq!(payload.content_min, None);
+        assert_eq!(payload.request_session, None);
         assert_eq!(payload.request_gen, None);
     }
 
@@ -117,6 +121,7 @@ mod tests {
                 "x": -12.5,
                 "y": 48
             },
+            "requestSession": 41,
             "requestGen": 73
         }))
         .unwrap();
@@ -131,6 +136,7 @@ mod tests {
             })
         );
         assert_eq!(payload.content_min, Some(ContentMin { x: -12.5, y: 48.0 }));
+        assert_eq!(payload.request_session, Some(41));
         assert_eq!(payload.request_gen, Some(73));
     }
 }

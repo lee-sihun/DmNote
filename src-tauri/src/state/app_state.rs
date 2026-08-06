@@ -883,27 +883,43 @@ fn run_panel_close_timeout(
     result.map(|()| true)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OverlayResizeGeneration {
+    session: u64,
+    gen: u64,
+}
+
 #[derive(Default)]
 struct OverlayResizeExecutionState {
-    last_executed_gen: Option<u64>,
+    last_executed: Option<OverlayResizeGeneration>,
 }
 
 impl OverlayResizeExecutionState {
-    fn is_stale(&self, request_gen: Option<u64>) -> bool {
-        request_gen.is_some_and(|request_gen| {
-            self.last_executed_gen
-                .is_some_and(|last_executed_gen| request_gen <= last_executed_gen)
-        })
+    fn request_generation(
+        request_session: Option<u64>,
+        request_gen: Option<u64>,
+    ) -> Option<OverlayResizeGeneration> {
+        request_session
+            .zip(request_gen)
+            .map(|(session, gen)| OverlayResizeGeneration { session, gen })
     }
 
-    fn mark_executed(&mut self, request_gen: Option<u64>) {
-        if let Some(request_gen) = request_gen {
-            self.last_executed_gen = Some(request_gen);
+    fn is_stale(&self, request_session: Option<u64>, request_gen: Option<u64>) -> bool {
+        let Some(request) = Self::request_generation(request_session, request_gen) else {
+            return false;
+        };
+        self.last_executed
+            .is_some_and(|last| request.session == last.session && request.gen <= last.gen)
+    }
+
+    fn mark_executed(&mut self, request_session: Option<u64>, request_gen: Option<u64>) {
+        if let Some(request) = Self::request_generation(request_session, request_gen) {
+            self.last_executed = Some(request);
         }
     }
 
     fn reset(&mut self) {
-        self.last_executed_gen = None;
+        self.last_executed = None;
     }
 }
 
@@ -2101,10 +2117,11 @@ impl AppState {
         content_min: Option<ContentMin>,
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
+        request_session: Option<u64>,
         request_gen: Option<u64>,
     ) -> crate::errors::CmdResult<OverlayResizeResponse> {
         let mut resize_execution = self.overlay_resize_lock.lock();
-        if resize_execution.is_stale(request_gen) {
+        if resize_execution.is_stale(request_session, request_gen) {
             return self.current_overlay_resize_response(app, request_gen);
         }
 
@@ -2119,6 +2136,7 @@ impl AppState {
                 content_min,
                 fixed_position_delta_x,
                 fixed_position_delta_y,
+                request_session,
                 request_gen,
                 &mut resize_execution,
             )
@@ -2163,6 +2181,7 @@ impl AppState {
         content_min: Option<ContentMin>,
         fixed_position_delta_x: Option<f64>,
         fixed_position_delta_y: Option<f64>,
+        request_session: Option<u64>,
         request_gen: Option<u64>,
         resize_execution: &mut OverlayResizeExecutionState,
     ) -> crate::errors::CmdResult<OverlayResizeResponse> {
@@ -2268,7 +2287,7 @@ impl AppState {
             width,
             height,
         };
-        resize_execution.mark_executed(request_gen);
+        resize_execution.mark_executed(request_session, request_gen);
         let native_exit = apply_native_overlay_resize_transaction(
             previous_observation,
             &bounds,
@@ -5775,6 +5794,23 @@ mod tests {
     }
 
     #[test]
+    fn request_generation_gate_restarts_for_a_new_session() {
+        let mut execution = OverlayResizeExecutionState::default();
+
+        assert!(!execution.is_stale(Some(100), Some(8)));
+        execution.mark_executed(Some(100), Some(8));
+        assert!(execution.is_stale(Some(100), Some(7)));
+
+        assert!(!execution.is_stale(Some(200), Some(1)));
+        execution.mark_executed(Some(200), Some(1));
+        assert_eq!(
+            execution.last_executed.map(|last| (last.session, last.gen)),
+            Some((200, 1))
+        );
+        assert!(execution.is_stale(Some(200), Some(1)));
+    }
+
+    #[test]
     fn reverse_request_generation_preserves_the_latest_semantic_baseline() {
         let previous_margins = ContentMargins {
             top: 10.0,
@@ -5804,6 +5840,7 @@ mod tests {
             height: 700.0,
         };
         let mut execution = OverlayResizeExecutionState::default();
+        let request_session = Some(100);
         let mut store = AppStoreData {
             overlay_last_content_top_offset: Some(previous_margins.top),
             overlay_last_content_margins: Some(previous_margins),
@@ -5812,11 +5849,11 @@ mod tests {
         };
         let mut position = OverlayPositionAdjustment { x: 100.0, y: 100.0 };
 
-        assert!(!execution.is_stale(Some(1)));
-        execution.mark_executed(Some(1));
+        assert!(!execution.is_stale(request_session, Some(1)));
+        execution.mark_executed(request_session, Some(1));
 
-        assert!(!execution.is_stale(Some(3)));
-        execution.mark_executed(Some(3));
+        assert!(!execution.is_stale(request_session, Some(3)));
+        execution.mark_executed(request_session, Some(3));
         let current_transition = resolve_content_margin_transition(
             Some(current_margins),
             None,
@@ -5881,10 +5918,13 @@ mod tests {
             },
             OverlayPositionAdjustment::default()
         );
-        assert!(execution.is_stale(Some(2)));
-        assert!(execution.is_stale(Some(3)));
+        assert!(execution.is_stale(request_session, Some(2)));
+        assert!(execution.is_stale(request_session, Some(3)));
 
-        assert_eq!(execution.last_executed_gen, Some(3));
+        assert_eq!(
+            execution.last_executed.map(|last| (last.session, last.gen)),
+            Some((100, 3))
+        );
         assert_eq!(position, position_after_gen_3);
         assert_eq!(
             (
@@ -5895,11 +5935,16 @@ mod tests {
             baseline_after_gen_3
         );
 
-        assert!(!execution.is_stale(None));
-        execution.mark_executed(None);
-        assert_eq!(execution.last_executed_gen, Some(3));
+        assert!(!execution.is_stale(None, Some(2)));
+        assert!(!execution.is_stale(request_session, None));
+        execution.mark_executed(None, Some(999));
+        execution.mark_executed(request_session, None);
+        assert_eq!(
+            execution.last_executed.map(|last| (last.session, last.gen)),
+            Some((100, 3))
+        );
         execution.reset();
-        assert!(!execution.is_stale(Some(1)));
+        assert!(!execution.is_stale(request_session, Some(1)));
     }
 
     #[test]

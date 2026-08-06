@@ -707,17 +707,38 @@ describe('overlay geometry transaction', () => {
 
   // 백엔드 멱등 모델: x=100에서 시작, contentMin 절대값을 저장 기준점과 비교해
   // 스스로 delta를 계산 (같은 요청 재수신 = delta 0). 창 이동은 fixed-position
-  // 앵커에서만, 기준점은 앵커와 무관하게 항상 원자 갱신. gen 에코
+  // 앵커에서만, 기준점은 앵커와 무관하게 항상 원자 갱신. gen 에코.
+  // (session, gen) 쌍 게이트 - 같은 세션의 역순 gen만 무시, 세션이 바뀌면
+  // gen 리셋(1부터)도 수용
   const createBackendModel = () => {
     const state = { x: 100, y: 100, width: 0, height: 0 };
     let referenceMin: { x: number; y: number } | null = null;
+    let lastSession: number | null = null;
+    let lastGen = 0;
     const apply = (payload: {
       width: number;
       height: number;
       anchor?: string;
       requestGen?: number;
+      requestSession?: number;
       contentMin?: { x: number; y: number };
     }) => {
+      const bounds = () => ({
+        x: state.x,
+        y: state.y,
+        width: state.width,
+        height: state.height,
+        requestGen: payload.requestGen,
+      });
+      if (typeof payload.requestGen === 'number') {
+        const session = payload.requestSession ?? null;
+        if (session === lastSession && payload.requestGen <= lastGen) {
+          // 같은 세션의 역순/재전송 - 현재 상태만 반환
+          return bounds();
+        }
+        lastSession = session;
+        lastGen = payload.requestGen;
+      }
       if (payload.contentMin) {
         if (referenceMin && payload.anchor === 'fixed-position') {
           state.x += payload.contentMin.x - referenceMin.x;
@@ -727,13 +748,7 @@ describe('overlay geometry transaction', () => {
       }
       state.width = payload.width;
       state.height = payload.height;
-      return {
-        x: state.x,
-        y: state.y,
-        width: state.width,
-        height: state.height,
-        requestGen: payload.requestGen,
-      };
+      return bounds();
     };
     return { state, apply };
   };
@@ -1105,7 +1120,7 @@ describe('overlay geometry transaction', () => {
     expect(backend.state.x).toBe(100);
   });
 
-  it('wire: contentMin을 항상 포함하고 구 delta 필드는 보내지 않는다', async () => {
+  it('wire: contentMin·requestSession을 항상 포함하고 구 delta 필드는 보내지 않는다', async () => {
     await act(async () => {
       useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
     });
@@ -1119,6 +1134,52 @@ describe('overlay geometry transaction', () => {
     expect(payload.contentMin).toEqual({ x: 0, y: 0 });
     expect('fixedPositionDeltaX' in payload).toBe(false);
     expect('fixedPositionDeltaY' in payload).toBe(false);
+    // 세션 ID: 모듈 로드 시 1회 생성된 양의 정수, 모든 발행에서 동일
+    expect(typeof payload.requestSession).toBe('number');
+    expect(Number.isInteger(payload.requestSession)).toBe(true);
+    expect(payload.requestSession as number).toBeGreaterThan(0);
+
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(2);
+    const second = mocks.resize.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(second.requestSession).toBe(payload.requestSession);
+  });
+
+  it('멱등 모델: 같은 세션의 역순 gen은 무시하고 새 세션은 gen 리셋도 수용한다', () => {
+    const backend = createBackendModel();
+    backend.apply({
+      width: 200,
+      height: 400,
+      requestGen: 5,
+      requestSession: 111,
+    });
+    expect(backend.state.width).toBe(200);
+
+    // 같은 세션의 낡은 gen - 무시
+    backend.apply({
+      width: 300,
+      height: 400,
+      requestGen: 1,
+      requestSession: 111,
+    });
+    expect(backend.state.width).toBe(200);
+
+    // 렌더러 재시작(새 세션) - gen 1부터 다시 수용
+    backend.apply({
+      width: 300,
+      height: 400,
+      requestGen: 1,
+      requestSession: 222,
+    });
+    expect(backend.state.width).toBe(300);
   });
 
   it('partial 오류 후에도 복귀 candidate가 재발행된다', async () => {

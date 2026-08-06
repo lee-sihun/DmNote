@@ -999,6 +999,8 @@ export interface DMNoteAPI {
       anchor?: string;
       // 적용 확인(응답·overlay:resized)과의 상관용 요청 gen
       requestGen?: number;
+      // 렌더러 세션 ID - 리로드 시 gen 리셋을 백엔드 (session, gen) 게이트가 수용
+      requestSession?: number;
       // 콘텐츠 bounds 최소점 절대값 - 백엔드가 fixed-position 위치를 멱등 계산
       contentMin?: { x: number; y: number };
       contentTopOffset?: number;

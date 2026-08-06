@@ -87,6 +87,15 @@ const normalizeOverlayDimension = (value: number): number =>
     Math.round(Math.max(MIN_OVERLAY_DIMENSION, value)),
   );
 
+// 렌더러 세션 ID (모듈 로드 시 1회, u64 범위 내 53비트 난수) - 리로드·OBS
+// 새로고침으로 gen이 리셋돼도 백엔드 (session, gen) 게이트가 신규 세션을 수용
+const OVERLAY_RESIZE_SESSION = (() => {
+  const words = new Uint32Array(2);
+  crypto.getRandomValues(words);
+  const value = (words[0] % 0x200000) * 0x100000000 + words[1];
+  return value === 0 ? 1 : value;
+})();
+
 // 폴백 배열 identity 안정화 (메모 체인 무효화 방지)
 const EMPTY_POSITIONS: KeyPosition[] = [];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1056,6 +1065,7 @@ export default function App() {
           contentTopOffset: dispatchParams.contentTopOffset,
           contentMargins: dispatchParams.contentMargins,
           requestGen: gen,
+          requestSession: OVERLAY_RESIZE_SESSION,
           // fixed-position 위치는 백엔드가 저장 기준점과 비교해 멱등 계산
           // (같은 요청 재수신 = delta 0). 다른 앵커에는 무해
           contentMin: { x: dispatchParams.minX, y: dispatchParams.minY },
