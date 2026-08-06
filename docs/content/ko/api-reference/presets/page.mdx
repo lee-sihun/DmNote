@@ -37,6 +37,26 @@ if (result.success) {
 }
 ```
 
+## 탭 프리셋
+
+### saveTab()
+
+현재 선택된 탭(키 매핑·레이아웃)만 탭 프리셋 파일로 저장합니다. 파일 저장
+다이얼로그가 열립니다.
+
+```javascript
+const result = await dmn.presets.saveTab();
+```
+
+### loadTab()
+
+탭 프리셋 파일을 현재 선택된 탭에 불러옵니다. 파일 선택 다이얼로그가
+열립니다.
+
+```javascript
+const result = await dmn.presets.loadTab();
+```
+
 ## 사용 예제
 
 ### 컨텍스트 메뉴에서 프리셋 관리
@@ -88,10 +108,12 @@ dmn.plugin.registerCleanup(() => {
 
 ```typescript
 interface PresetSnapshot {
+  // 항목은 KeySlot union(string | MultiKeySlot)
   keys: KeyMappings;
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   customTabs: CustomTab[];
   selectedKeyType: string;
   tabNoteOverrides: TabNoteOverrides;

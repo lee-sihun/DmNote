@@ -44,6 +44,14 @@ type EditorPatchV1 = {
 Each field included in an `EditorPatchV1` is the complete canonical value of
 that top-level collection. It is not an item-level diff.
 
+<Callout type="warning">
+  Since the multi-key update, `keys` entries in `EditorDocumentV1` (returned by
+  `get()`) and in `EditorPatchV1` (delivered by `onCommitted()`) use the
+  `KeySlot` union (`string | MultiKeySlot`), not plain strings. See the
+  [Keys API](/docs/api-reference/keys) for the slot shape and canonical
+  identifier rules.
+</Callout>
+
 ## Read the Current Document
 
 ### `dmn.editor.get(): Promise<EditorGetResult>`
@@ -87,6 +95,8 @@ interface EditorCommitRequest {
   mutationId: string;
   gestureId?: string;
   gestureIds?: string[];
+  // Declares multi-key slot support for commits that include `keys`
+  multiKey?: boolean;
   changes: EditorPatchV1;
 }
 
@@ -136,6 +146,7 @@ collections in the same commit. Their mode sets and lengths must match.
 await dmn.editor.commit({
   baseRevision,
   mutationId: crypto.randomUUID(),
+  multiKey: true,
   changes: {
     schemaVersion: 1,
     keys: nextKeys,
@@ -147,6 +158,11 @@ await dmn.editor.commit({
 A same-shape edit, such as changing a key label or a position property, may
 update only its own collection. A shape-changing `keys`-only or
 `keyPositions`-only request is rejected with `PAIRED_UPDATE_REQUIRED`.
+
+A commit that includes `keys` must also declare `multiKey: true` whenever the
+current mappings contain at least one multi-key slot. An undeclared write is
+rejected with `MULTI_KEY_UNSUPPORTED` (non-retryable) so that a plugin unaware
+of multi-key slots cannot destroy them by round-tripping mappings.
 
 When using the compatibility `dmn.keys` API, call
 `dmn.keys.updateWithPositions(keys, keyPositions)` for these structural
@@ -160,11 +176,15 @@ the human-readable `message`.
 ```typescript
 type EditorCommitErrorCode =
   | 'REVISION_CONFLICT'
+  | 'PLUGIN_REVISION_CONFLICT'
   | 'VALIDATION_FAILED'
   | 'TOO_MANY_GESTURE_IDS'
   | 'INVALID_GESTURE_ID'
   | 'PAIRED_UPDATE_REQUIRED'
+  | 'MULTI_KEY_UNSUPPORTED'
   | 'MUTATION_ID_REUSED'
+  | 'HISTORY_IN_PROGRESS'
+  | 'HISTORY_EPOCH_CONFLICT'
   | 'IO_ERROR';
 
 interface EditorCommitError {
@@ -174,6 +194,7 @@ interface EditorCommitError {
     currentRevision?: number;
     validationCode?: string;
     field?: string;
+    currentHistoryEpoch?: number;
   };
   retryable: boolean;
 }
@@ -182,15 +203,19 @@ interface EditorCommitError {
 | Code                     | Meaning                                                                   | `retryable` |
 | ------------------------ | ------------------------------------------------------------------------- | ----------- |
 | `REVISION_CONFLICT`      | `baseRevision` is stale; read, reconcile, and commit again                | `true`      |
+| `PLUGIN_REVISION_CONFLICT` | The plugin-scoped revision is stale; read, reconcile, and commit again  | `true`      |
 | `VALIDATION_FAILED`      | The completed document violates an editor validation rule                 | `false`     |
 | `TOO_MANY_GESTURE_IDS`   | `gestureIds` exceeds 32 entries or the combined unique set exceeds 32 IDs | `false`     |
 | `INVALID_GESTURE_ID`     | A gesture ID is not a UUID within the 64-byte limit                       | `false`     |
 | `PAIRED_UPDATE_REQUIRED` | A structural key change omitted its paired collection                     | `false`     |
+| `MULTI_KEY_UNSUPPORTED`  | A `keys` write did not declare `multiKey` while multi-key slots exist     | `false`     |
 | `MUTATION_ID_REUSED`     | The same mutation ID was used for a different request                     | `false`     |
 | `IO_ERROR`               | The document could not be persisted                                       | `true`      |
+| `HISTORY_IN_PROGRESS`    | An undo/redo barrier is in progress; retry after it settles               | `true`      |
+| `HISTORY_EPOCH_CONFLICT` | The observed history epoch is stale; re-read and commit again             | `true`      |
 
-`details.currentRevision`, `details.validationCode`, or `details.field` is
-included when it applies to the error.
+`details.currentRevision`, `details.validationCode`, `details.field`, or
+`details.currentHistoryEpoch` is included when it applies to the error.
 
 ## Subscribe to Committed Changes
 
@@ -208,6 +233,7 @@ interface EditorCommittedV1 {
   gestureIds?: string[];
   origin?: string;
   changedFields: EditorField[];
+  // patch.keys uses the KeySlot union (string | MultiKeySlot)
   patch: EditorPatchV1;
 }
 

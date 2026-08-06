@@ -22,9 +22,10 @@ Subscribes to state changes for registered keys.
 
 ```typescript
 interface KeyStateEvent {
-  key: string; // e.g., 'KeyA', 'MouseLeft'
+  // Canonical slot identifier, e.g. 'A', 'MOUSE1', 'F|NUMPAD 4'
+  key: string;
   state: 'UP' | 'DOWN';
-  mode: 'keyboard' | 'mouse';
+  mode: string; // current layout mode ID (e.g. '4key')
   // Elapsed time (ms) between input capture and event emit.
   // Recover the real input time with `performance.now() - eventAgeMs`.
   eventAgeMs?: number;
@@ -40,7 +41,7 @@ const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
 
 The returned function also exposes a `ready` promise that resolves once the
 subscription is actually registered with the backend. Events fired before
-`ready` resolves may not be delivered — await it when you need a guaranteed
+`ready` resolves may not be delivered, so await it when you need a guaranteed
 starting point (e.g. before requesting a snapshot):
 
 ```typescript
@@ -74,7 +75,7 @@ Subscribes to all raw input events (including unregistered keys).
 ```typescript
 interface RawInputEvent {
   device: 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
-  label: string; // e.g., 'A', 'LButton', 'HIDB:1ccf:101c:9:3'
+  label: string; // e.g., 'A', 'MOUSE1', 'HIDB:1ccf:101c:9:3'
   labels: string[]; // all candidate labels for this event
   state: 'DOWN' | 'UP';
 }
@@ -97,6 +98,7 @@ labels in the form `HIDB:vid:pid:usagePage:usage`. See the
 Returns the current cumulative key counter snapshot.
 
 ```typescript
+// Inner map keys are canonical slot identifiers
 type KeyCounters = Record<string, Record<string, number>>;
 
 const counters = await dmn.keys.getCounters();
@@ -112,7 +114,7 @@ Subscribes to counter changes.
 ```typescript
 interface CounterEvent {
   mode: string;
-  key: string;
+  key: string; // canonical slot identifier
   count: number;
   sessionId: string;
   revision: number;
@@ -138,11 +140,11 @@ reconciling a bootstrap snapshot with live events.
 
 ### `dmn.keys.onModeChanged(callback): Unsubscribe`
 
-Subscribes to input mode changes (keyboard/mouse).
+Subscribes to layout mode changes (`keys:mode-changed`).
 
 ```typescript
 interface ModeEvent {
-  mode: 'keyboard' | 'mouse';
+  mode: string; // current layout mode ID (e.g. '4key')
 }
 
 const unsub = dmn.keys.onModeChanged(({ mode }) => {
@@ -162,8 +164,8 @@ Returns the key mappings for all modes.
 type SlotMatch = 'all' | 'any';
 
 // A slot is either a single key string, or a multi-key binding:
-// - match: 'any' — the slot activates when any member key is pressed
-// - match: 'all' — the slot activates while all member keys are held together
+// - match: 'any': the slot activates when any member key is pressed
+// - match: 'all': the slot activates while all member keys are held together
 interface MultiKeySlot {
   keys: string[]; // 2 to 8 member keys
   match: SlotMatch;
@@ -182,13 +184,42 @@ console.log(mappings['4key']);
   updated before handling mappings that contain multi-key slots.
 </Callout>
 
+### Canonical slot identifiers
+
+Event and counter surfaces identify a slot by its canonical string:
+
+- A single-key slot is its key string, unchanged (e.g. `"D"`).
+- A `match: 'all'` slot joins its members with `+` in member order
+  (e.g. `"LEFT CTRL+Z"`).
+- A `match: 'any'` slot joins its members with `|` (e.g. `"F|NUMPAD 4"`).
+
+Canonical strings are for generation and equality comparison only. Do not
+parse them back into members; read the slot objects from `get()` instead.
+The display label of an `any` slot joins members with `/` (e.g. `Z/B`), which
+is a UI convention separate from the canonical `|`. Switching a slot between
+`all` and `any` changes its canonical identifier, so existing counters do not
+carry over between the two forms.
+
+Canonical identifiers appear in `onKeyState().key`, counter map keys
+(`getCounters()`, `onCounterChanged`, `onCountersChanged`),
+`resetSingleCounter(mode, key)`, and UI anchor and key menu `keyCode` values.
+Mapping surfaces (`get()`, `update()`, `onChanged`, editor documents, preset
+snapshots) carry the `KeySlot` union instead.
+
+Hand-crafted legacy data may contain a single-key slot whose string itself
+includes `+` or `|` (for example the one string `"A+B"`). Such a slot is
+preserved losslessly but is inert: no daemon input can activate it. It can
+cosmetically share a canonical identifier, and therefore a counter bucket,
+with a real multi-key slot; where both exist, note effects resolve to the
+real multi-key slot.
+
 ### `dmn.keys.update(mappings: KeyMappings, options?): Promise<KeyMappings>`
 
 Replaces the key mappings and returns the committed value.
 
 ```typescript
 const mappings = await dmn.keys.get();
-mappings['4key'][0] = 'KeyS';
+mappings['4key'][0] = 'S';
 const committed = await dmn.keys.update(mappings);
 ```
 
@@ -226,7 +257,7 @@ interface KeyPosition {
   activeBackgroundColor?: string;
   borderColor?: string;
   activeBorderColor?: string;
-  borderWidth?: number; // px, defaults to 1 when unset — 0 disables the border
+  borderWidth?: number; // px, defaults to 1 when unset. 0 disables the border
   backgroundGradient?: GradientSpec | null;
   activeBackgroundGradient?: GradientSpec | null;
   borderGradient?: GradientSpec | null;
@@ -243,7 +274,7 @@ interface KeyCounterSettings {
 }
 
 interface GradientSpec {
-  angle: number; // 0 (inclusive) to 360 (exclusive) — 360 normalizes to 0; CSS semantics (0 = up, clockwise)
+  angle: number; // 0 (inclusive) to 360 (exclusive). 360 normalizes to 0; CSS semantics (0 = up, clockwise)
   stops: { color: string; pos: number }[]; // 2–8 stops, pos 0–1 ascending
 }
 
@@ -285,7 +316,7 @@ const committed = await dmn.keys.updatePositions(positions);
   additions, removals, and reordering.
 </Callout>
 
-### `dmn.keys.updateWithPositions(mappings, positions): Promise<KeysWithPositionsResult>`
+### `dmn.keys.updateWithPositions(mappings, positions, options?): Promise<KeysWithPositionsResult>`
 
 Updates key mappings and their index-coupled positions in one atomic commit.
 The two values must have matching mode sets and array lengths. The committed
@@ -298,8 +329,15 @@ interface KeysWithPositionsResult {
   positions: KeyPositions;
 }
 
-const result = await dmn.keys.updateWithPositions(mappings, positions);
+const result = await dmn.keys.updateWithPositions(mappings, positions, {
+  multiKey: true,
+});
 ```
+
+The third `options` argument takes the same `{ multiKey?: boolean }`
+declaration as `update()`. Without it, the write is rejected with
+`MULTI_KEY_UNSUPPORTED` whenever the current mappings contain a multi-key
+slot.
 
 ### `dmn.keys.onChanged(callback): Unsubscribe`
 
@@ -333,29 +371,6 @@ const unsubscribe = dmn.keys.onPositionsChanged((positions) => {
 ## Custom Tab
 
 <Callout type="warning">Main window only.</Callout>
-
-### `dmn.keys.registerCustomTab(options): Unsubscribe`
-
-Registers a custom tab in the key settings panel.
-
-```typescript
-interface CustomTabOptions {
-  id: string;
-  label: string;
-  content: (container: HTMLElement) => void | (() => void);
-}
-
-const unsub = dmn.keys.registerCustomTab({
-  id: 'my-tab',
-  label: 'My Tab',
-  content: (container) => {
-    container.innerHTML = `<div>Custom tab content</div>`;
-    return () => {
-      /* cleanup */
-    };
-  },
-});
-```
 
 ### `dmn.keys.customTabs.restore(customTabs, selectedKeyType): Promise<void>`
 

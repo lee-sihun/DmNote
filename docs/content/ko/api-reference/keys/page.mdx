@@ -27,8 +27,8 @@ description: 키 매핑, 이벤트, 커스텀 탭 API
 type SlotMatch = 'all' | 'any';
 
 // 슬롯은 단일 키 문자열 또는 멀티 키 바인딩입니다:
-// - match: 'any' — 멤버 키 중 하나만 눌러도 슬롯 활성 (택일)
-// - match: 'all' — 멤버 키를 전부 동시에 눌러야 슬롯 활성 (동시)
+// - match: 'any': 멤버 키 중 하나만 눌러도 슬롯 활성 (택일)
+// - match: 'all': 멤버 키를 전부 동시에 눌러야 슬롯 활성 (동시)
 interface MultiKeySlot {
   keys: string[]; // 멤버 키 2~8개
   match: SlotMatch;
@@ -36,7 +36,7 @@ interface MultiKeySlot {
 
 type KeySlot = string | MultiKeySlot;
 type KeyMappings = Record<string, KeySlot[]>;
-// { "4key": ["KeyD", { keys: ["KeyF", "Numpad4"], match: "any" }, ...], ... }
+// { "4key": ["D", { keys: ["F", "NUMPAD 4"], match: "any" }, ...], ... }
 ```
 
 ```javascript
@@ -50,13 +50,39 @@ console.log('4key 매핑:', mappings['4key']);
   매핑을 다루기 전에 업데이트가 필요합니다.
 </Callout>
 
+### canonical 슬롯 식별자
+
+이벤트·카운터 표면은 슬롯을 canonical 문자열로 식별합니다:
+
+- 단일 키 슬롯은 키 문자열 그대로입니다 (예: `"D"`).
+- `match: 'all'` 슬롯은 멤버를 순서대로 `+`로 결합합니다
+  (예: `"LEFT CTRL+Z"`).
+- `match: 'any'` 슬롯은 멤버를 `|`로 결합합니다 (예: `"F|NUMPAD 4"`).
+
+canonical 문자열은 생성과 동등 비교 전용입니다. 멤버로 되파싱하지 말고 슬롯
+객체는 `get()`에서 읽으세요. `any` 슬롯의 표시 라벨은 `/`로 결합되는데(예:
+`Z/B`) 이는 canonical `|`와 별개인 UI 관례입니다. 슬롯을 `all`과 `any` 사이에서
+전환하면 canonical 식별자가 바뀌므로 기존 카운터는 이어지지 않습니다.
+
+canonical 식별자가 쓰이는 표면: `onKeyState()`의 `key`, 카운터 맵 키
+(`getCounters()`, `onCounterChanged`, `onCountersChanged`),
+`resetSingleCounter(mode, key)`, UI 앵커·키 메뉴의 `keyCode`. 매핑 표면
+(`get()`, `update()`, `onChanged`, 에디터 문서, 프리셋 스냅샷)은 반대로
+`KeySlot` union을 그대로 전달합니다.
+
+수제 레거시 데이터에는 문자열 자체에 `+`나 `|`가 포함된 단일 키 슬롯(예: 한
+문자열 `"A+B"`)이 있을 수 있습니다. 이런 슬롯은 무손실로 보존되지만 데몬
+입력으로 활성화될 수 없는 inert 슬롯입니다. 실제 멀티 키 슬롯과 canonical
+식별자(그리고 카운터 버킷)를 겉보기로 공유할 수 있으며, 둘이 공존하면 노트
+이펙트는 실제 멀티 키 슬롯을 우선합니다.
+
 ### update(mappings, options?)
 
 키 매핑을 업데이트합니다.
 
 ```javascript
 const current = await dmn.keys.get();
-current['4key'] = ['KeyS', 'KeyD', 'KeyJ', 'KeyK'];
+current['4key'] = ['S', 'D', 'J', 'K'];
 await dmn.keys.update(current);
 ```
 
@@ -104,7 +130,7 @@ interface KeyPosition {
   activeBackgroundColor?: string;
   borderColor?: string;
   activeBorderColor?: string;
-  borderWidth?: number; // px, 미지정 시 기본 1 — 0이면 테두리 없음
+  borderWidth?: number; // px, 미지정 시 기본 1. 0이면 테두리 없음
   backgroundGradient?: GradientSpec | null;
   activeBackgroundGradient?: GradientSpec | null;
   borderGradient?: GradientSpec | null;
@@ -121,7 +147,7 @@ interface KeyCounterSettings {
 }
 
 interface GradientSpec {
-  angle: number; // 0 이상 360 미만 — 360은 0으로 정규화 (CSS 기준, 0 = 위·시계 방향)
+  angle: number; // 0 이상 360 미만. 360은 0으로 정규화 (CSS 기준, 0 = 위·시계 방향)
   stops: { color: string; pos: number }[]; // 2–8개, pos는 0–1 오름차순
 }
 
@@ -160,7 +186,7 @@ current['4key'][0].dx = 100;
 await dmn.keys.updatePositions(current);
 ```
 
-### updateWithPositions(mappings, positions)
+### updateWithPositions(mappings, positions, options?)
 
 키 매핑과 인덱스로 결합된 위치 정보를 한 번의 원자적 커밋으로 갱신합니다.
 두 값의 모드 집합과 모드별 배열 길이는 같아야 합니다. 키를 추가·삭제·재정렬할
@@ -173,8 +199,14 @@ interface KeysWithPositionsResult {
   positions: KeyPositions;
 }
 
-const result = await dmn.keys.updateWithPositions(mappings, positions);
+const result = await dmn.keys.updateWithPositions(mappings, positions, {
+  multiKey: true,
+});
 ```
+
+세 번째 `options` 인자는 `update()`와 같은 `{ multiKey?: boolean }` 선언을
+받습니다. 선언 없이 쓰면 현재 매핑에 멀티 키 슬롯이 있을 때
+`MULTI_KEY_UNSUPPORTED`로 거절됩니다.
 
 ## 모드 관리
 
@@ -207,7 +239,8 @@ const reset = await dmn.keys.resetAll();
 
 ### getCounters()
 
-현재 누적 키 카운터 스냅샷을 조회합니다.
+현재 누적 키 카운터 스냅샷을 조회합니다. 내부 맵의 키는 canonical 슬롯
+식별자입니다.
 
 ```javascript
 const counters = await dmn.keys.getCounters();
@@ -220,7 +253,7 @@ console.log('4key 카운터:', counters['4key']);
 
 ```javascript
 await dmn.keys.setCounters({
-  '4key': { KeyD: 100, KeyF: 200, KeyJ: 150, KeyK: 180 },
+  '4key': { D: 100, F: 200, J: 150, K: 180 },
 });
 ```
 
@@ -245,7 +278,7 @@ await dmn.keys.resetCountersMode('4key');
 특정 모드의 특정 키 카운트만 초기화합니다.
 
 ```javascript
-await dmn.keys.resetSingleCounter('4key', 'KeyD');
+await dmn.keys.resetSingleCounter('4key', 'D');
 ```
 
 ## 이벤트 구독
@@ -258,7 +291,7 @@ await dmn.keys.resetSingleCounter('4key', 'KeyD');
 
 ```typescript
 interface KeyStatePayload {
-  key: string; // 키 코드 (예: "KeyD")
+  key: string; // canonical 슬롯 식별자 (예: "D", "F|NUMPAD 4")
   state: string; // "DOWN" | "UP"
   mode: string; // 현재 모드
   // 입력 수신~emit 경과 시간(ms).
@@ -311,7 +344,7 @@ dmn.keys.onKeysReset(({ reason }) => {
 ```typescript
 interface RawInputPayload {
   device: 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
-  label: string; // "KeyD", "MOUSE1", "HIDB:1ccf:101c:9:3" 등
+  label: string; // "D", "MOUSE1", "HIDB:1ccf:101c:9:3" 등
   labels: string[]; // 모든 레이블 목록
   state: string; // "DOWN" | "UP"
 }
@@ -361,7 +394,8 @@ const unsub = dmn.keys.onPositionsChanged((positions) => {
 
 ### onModeChanged(listener)
 
-키 모드 변경 이벤트를 구독합니다.
+레이아웃 모드 변경 이벤트(`keys:mode-changed`)를 구독합니다. `mode`는 `'4key'`
+같은 현재 레이아웃 모드 ID입니다.
 
 ```javascript
 const unsub = dmn.keys.onModeChanged(({ mode }) => {

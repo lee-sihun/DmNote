@@ -9,69 +9,56 @@ Save and load complete configuration presets.
 
 ## Preset Operations
 
-### `dmn.presets.save(name: string): Promise<void>`
+All preset operations open a native file dialog. They take no arguments and
+resolve with a `PresetOperationResult`.
 
-Saves current configuration as a preset.
-
-```javascript
-await dmn.presets.save("My Gaming Setup");
+```typescript
+type PresetOperationResult = { success: boolean; error?: string };
 ```
 
-### `dmn.presets.load(name: string): Promise<void>`
+### `dmn.presets.save(): Promise<PresetOperationResult>`
 
-Loads a preset by name.
+Saves the current configuration to a preset file. Opens a file save dialog.
 
 ```javascript
-await dmn.presets.load("My Gaming Setup");
+const result = await dmn.presets.save();
+if (result.success) {
+  console.log("Preset saved");
+} else {
+  console.error("Save failed:", result.error);
+}
 ```
 
-### `dmn.presets.delete(name: string): Promise<void>`
+### `dmn.presets.load(): Promise<PresetOperationResult>`
 
-Deletes a preset.
+Loads a preset file and applies it to the current configuration. Opens a file
+picker dialog.
 
 ```javascript
-await dmn.presets.delete("My Gaming Setup");
+const result = await dmn.presets.load();
+if (result.success) {
+  console.log("Preset loaded");
+} else {
+  console.error("Load failed:", result.error);
+}
 ```
 
-### `dmn.presets.list(): Promise<string[]>`
+### `dmn.presets.saveTab(): Promise<PresetOperationResult>`
 
-Returns list of all preset names.
+Saves only the currently selected tab (its key mappings and layout) as a tab
+preset file. Opens a file save dialog.
 
 ```javascript
-const presets = await dmn.presets.list();
-console.log(presets); // ['Default', 'Gaming', 'Streaming', ...]
+const result = await dmn.presets.saveTab();
 ```
 
-### `dmn.presets.export(name: string): Promise<string>`
+### `dmn.presets.loadTab(): Promise<PresetOperationResult>`
 
-Exports a preset as JSON string.
-
-```javascript
-const json = await dmn.presets.export("My Gaming Setup");
-console.log(json);
-```
-
-### `dmn.presets.import(json: string): Promise<void>`
-
-Imports a preset from JSON string.
+Loads a tab preset file into the currently selected tab. Opens a file picker
+dialog.
 
 ```javascript
-const json = `{ "name": "Imported", ... }`;
-await dmn.presets.import(json);
-```
-
----
-
-## Change Events
-
-### `dmn.presets.onChanged(callback): Unsubscribe`
-
-Subscribes to preset list changes.
-
-```javascript
-const unsub = dmn.presets.onChanged((presets) => {
-  console.log("Presets changed:", presets);
-});
+const result = await dmn.presets.loadTab();
 ```
 
 ---
@@ -84,10 +71,12 @@ Subscribes to preset load completions. Receives the full snapshot of applied dat
 
 ```typescript
 interface PresetSnapshot {
+  // Entries use the KeySlot union (string | MultiKeySlot)
   keys: KeyMappings;
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   customTabs: CustomTab[];
   selectedKeyType: string;
   tabNoteOverrides: TabNoteOverrides;
@@ -105,55 +94,43 @@ const unsub = dmn.presets.onSnapshot((snapshot) => {
 </Callout>
 
 ---
-
 ## Example Usage
 
 ```javascript
-// Preset manager panel
-dmn.plugin.defineElement({
-  name: "Preset Manager",
-  maxInstances: 1,
+// @id preset-manager
 
-  template: (state, settings, { html }) => {
-    const presets = state.presets ?? [];
-    return html`
-      <div>
-        <h3>Presets</h3>
-        <ul>
-          ${presets.map(
-            (name) => html`
-              <li>
-                <span>${name}</span>
-                <button @click=${() => dmn.presets.load(name)}>Load</button>
-                <button @click=${() => dmn.presets.delete(name)}>Delete</button>
-              </li>
-            `,
-          )}
-        </ul>
-        <button
-          @click=${() => {
-            const name = prompt("Preset name:");
-            if (name) dmn.presets.save(name);
-          }}
-        >
-          Save Current
-        </button>
-      </div>
-    `;
+if (dmn.window.type !== "main") return;
+
+// Save preset menu item
+dmn.ui.contextMenu.addGridMenuItem({
+  id: "save-preset",
+  label: "Save Preset",
+  onClick: async () => {
+    const result = await dmn.presets.save();
+    if (result.success) {
+      await dmn.ui.dialog.alert("Preset saved!");
+    }
   },
+});
 
-  onMount: ({ setState }) => {
-    // Load initial list
-    dmn.presets.list().then((presets) => {
-      setState({ presets });
-    });
-
-    // Watch changes
-    const unsub = dmn.presets.onChanged((presets) => {
-      setState({ presets });
-    });
-
-    return () => unsub();
+// Load preset menu item
+dmn.ui.contextMenu.addGridMenuItem({
+  id: "load-preset",
+  label: "Load Preset",
+  onClick: async () => {
+    const confirmed = await dmn.ui.dialog.confirm(
+      "This will overwrite the current configuration. Continue?"
+    );
+    if (confirmed) {
+      const result = await dmn.presets.load();
+      if (result.success) {
+        await dmn.ui.dialog.alert("Preset loaded!");
+      }
+    }
   },
+});
+
+dmn.plugin.registerCleanup(() => {
+  dmn.ui.contextMenu.clearMyMenuItems();
 });
 ```

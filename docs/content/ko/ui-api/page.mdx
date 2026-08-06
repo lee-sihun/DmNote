@@ -32,7 +32,7 @@ const menuId = dmn.ui.contextMenu.addKeyMenuItem({
 
 | 속성       | 타입        | 설명                 |
 | ---------- | ----------- | -------------------- |
-| `keyCode`  | string      | 키 코드 (예: "KeyD") |
+| `keyCode`  | string      | canonical 슬롯 식별자 (예: "D", "LEFT CTRL+Z", "F\|NUMPAD 4") |
 | `index`    | number      | 키 인덱스            |
 | `position` | KeyPosition | 키 위치 정보         |
 | `mode`     | string      | 현재 키 모드         |
@@ -193,11 +193,17 @@ dmn.ui.displayElement.add({
   html: `<div>→</div>`,
   position: { x: 0, y: 0 },
   anchor: {
-    keyCode: "KeyD",
+    keyCode: "D",
     offset: { x: 70, y: 0 },
   },
 });
 ```
+
+`anchor.keyCode`는 canonical 슬롯 식별자입니다. 멀티 키 슬롯에는 canonical
+문자열을 사용하세요 (`match: 'all'`은 `"LEFT CTRL+Z"`, `match: 'any'`는
+`"F|NUMPAD 4"` 형태).
+[canonical 슬롯 식별자](/docs/api-reference/keys#canonical-슬롯-식별자)를
+참고하세요.
 
 ### Shadow DOM
 
