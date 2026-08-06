@@ -1308,7 +1308,7 @@ mod tests {
             schema_version: EDITOR_SCHEMA_VERSION,
             keys: Some(std::collections::HashMap::from([(
                 "mode".to_string(),
-                vec![text.to_string()],
+                vec![text.into()],
             )])),
             ..EditorPatchV1::default()
         }
@@ -1726,7 +1726,7 @@ mod tests {
     fn barrier_drains_admitted_runtime_publication_before_restore_mapping() {
         let gate = Arc::new(HistoryAdmissionGate::default());
         let keyboard = KeyboardManager::new(
-            HashMap::from([("mode".to_string(), vec!["initial".to_string()])]),
+            HashMap::from([("mode".to_string(), vec!["initial".into()])]),
             "mode",
         );
         let admission = gate.admit_mutation().unwrap();
@@ -1738,7 +1738,7 @@ mod tests {
             store_committed_tx.send(()).unwrap();
             publish_rx.recv().unwrap();
             stale_keyboard.update_mappings_and_set_mode(
-                HashMap::from([("mode".to_string(), vec!["stale".to_string()])]),
+                HashMap::from([("mode".to_string(), vec!["stale".into()])]),
                 "mode",
             );
             drop(admission);
@@ -1753,7 +1753,7 @@ mod tests {
         let barrier = thread::spawn(move || {
             let lease = barrier_gate.close("history-operation").unwrap();
             restored_keyboard.update_mappings_and_set_mode(
-                HashMap::from([("mode".to_string(), vec!["restored".to_string()])]),
+                HashMap::from([("mode".to_string(), vec!["restored".into()])]),
                 "mode",
             );
             restored_tx.send(()).unwrap();

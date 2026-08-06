@@ -172,7 +172,16 @@
     "noteBorderColor": "Border Color",
     "borderSideAll": "All",
     "borderSideVertical": "Vertical",
-    "borderSideHorizontal": "Horizontal"
+    "borderSideHorizontal": "Horizontal",
+    "addKey": "Add key",
+    "removeKey": "Remove key",
+    "matchMode": "Trigger",
+    "matchAny": "Individual",
+    "matchAll": "Combined",
+    "matchAnyHint": "Triggers when any key is pressed",
+    "matchAllHint": "Triggers only while all keys are held",
+    "multiKeyEdit": "Multi-key mapping",
+    "multiKey": "Binding details"
   },
   "imagePicker": {
     "idle": "Idle",
@@ -574,7 +583,16 @@
     "selectedSound": "Selected Sound",
     "soundVolume": "Sound Volume",
     "import": "Import",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "addKey": "Add key",
+    "removeKey": "Remove key",
+    "matchMode": "Trigger",
+    "matchAny": "Individual",
+    "matchAll": "Combined",
+    "matchAnyHint": "Triggers when any key is pressed",
+    "matchAllHint": "Triggers only while all keys are held",
+    "multiKeyEdit": "Multi-key mapping",
+    "multiKey": "Mapping details"
   },
   "fontPicker": {
     "searchPlaceholder": "Search...",

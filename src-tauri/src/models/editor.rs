@@ -186,6 +186,8 @@ impl EditorPatchV1 {
 pub struct EditorCommitRequest {
     pub base_revision: u64,
     pub mutation_id: String,
+    #[serde(default)]
+    pub multi_key: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gesture_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

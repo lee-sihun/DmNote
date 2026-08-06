@@ -93,8 +93,10 @@ const Tracks = lazy(async () => {
 type NoteSubscriber = (event: any) => void;
 
 interface OverlaySceneProps {
-  // 키/위치 데이터
+  // 키/위치 데이터 (currentKeys = canonical 문자열)
   currentKeys: string[];
+  // 인덱스 정렬된 표시 라벨 (멀티 슬롯 합성 라벨용)
+  currentKeyLabels?: string[];
   displayPositions: KeyPosition[];
   currentPositions: KeyPosition[];
   displayStatPositions: Record<string, unknown>[];
@@ -125,6 +127,7 @@ interface OverlaySceneProps {
 
 const OverlayScene = ({
   currentKeys,
+  currentKeyLabels,
   displayPositions,
   currentPositions,
   displayStatPositions,
@@ -173,7 +176,9 @@ const OverlayScene = ({
       )}
 
       {currentKeys.map((key, index) => {
-        const { displayName } = getKeyInfoByGlobalKey(key);
+        // 멀티 슬롯은 합성 라벨, 단일 키는 기존 displayName
+        const displayName =
+          currentKeyLabels?.[index] ?? getKeyInfoByGlobalKey(key).displayName;
         const basePosition =
           displayPositions[index] ??
           currentPositions[index] ??

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { isMac } from '@utils/core/platform';
+import { slotCanonical } from '@utils/keySlot';
 import {
   PluginDisplayElementInternal,
   ElementResizeAnchor,
@@ -387,8 +388,9 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     if (element.anchor?.keyCode && positions && selectedKeyType) {
       const keyMappings = useKeyStore.getState().keyMappings;
       const modeKeys = keyMappings[selectedKeyType] || [];
+      // 앵커 keyCode는 canonical 문자열 (멀티 슬롯 포함 매칭)
       const keyIndex = modeKeys.findIndex(
-        (key) => key === element.anchor?.keyCode,
+        (key) => slotCanonical(key) === element.anchor?.keyCode,
       );
 
       if (keyIndex >= 0 && positions[selectedKeyType]?.[keyIndex]) {

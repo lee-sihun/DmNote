@@ -916,10 +916,16 @@ export interface DMNoteAPI {
   keys: {
     get(): Promise<KeyMappings>;
     getCounters(): Promise<KeyCounters>;
-    update(mappings: KeyMappings): Promise<KeyMappings>;
+    // multiKey: 멀티 키 슬롯 지원 선언. 현재 매핑에 멀티 슬롯이 있는데
+    // 선언 없이 쓰면 MULTI_KEY_UNSUPPORTED로 거절됨
+    update(
+      mappings: KeyMappings,
+      options?: { multiKey?: boolean },
+    ): Promise<KeyMappings>;
     updateWithPositions(
       mappings: KeyMappings,
       positions: KeyPositions,
+      options?: { multiKey?: boolean },
     ): Promise<{ keys: KeyMappings; positions: KeyPositions }>;
     getPositions(): Promise<KeyPositions>;
     updatePositions(positions: KeyPositions): Promise<KeyPositions>;

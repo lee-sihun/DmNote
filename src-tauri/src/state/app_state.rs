@@ -43,7 +43,7 @@ use crate::{
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
-        DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters, KeyMappings,
+        DefaultsPayload, HistoryStatus, KeyCounterSettings, KeyCounters, KeyMappings, KeySlot,
         KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, PanelBounds,
         SettingsDiff, SettingsState, TabCssOverrides,
     },
@@ -2431,6 +2431,7 @@ impl AppState {
                                     } else {
                                         crate::ipc::HookKeyState::Up
                                     },
+                                    physical_id: None,
                                     vk_code: None,
                                     scan_code: None,
                                     flags: None,
@@ -2472,156 +2473,174 @@ impl AppState {
                             }
 
                             let is_down = state == "DOWN";
-                            let Some((mode, key_label, state_changed)) = keyboard.match_and_register(
-                                message.labels.iter().map(|s| s.as_str()),
+                            let Some(outcome) = keyboard.match_and_register(
+                                message.physical_id.as_deref(),
+                                message.device,
+                                message.labels.iter().map(String::as_str),
                                 is_down,
-                            )
-                            else {
+                            ) else {
                                 continue;
                             };
-                            if is_down && state_changed {
-                                app_state.increment_key_counter_and_emit(
-                                    &app_handle,
-                                    &mode,
-                                    &key_label,
-                                );
-                            }
-                            if !state_changed {
-                                continue;
-                            }
-                            if message.device == crate::ipc::InputDeviceKind::Keyboard
-                                && state == "DOWN"
-                            {
-                                if let Some((sound_path, per_key_volume)) =
-                                    app_state.resolve_key_sound_binding(&mode, &key_label)
-                                {
-                                    #[cfg(debug_assertions)]
-                                    let key_sound_input_started_at = Instant::now();
-                                    #[cfg(debug_assertions)]
-                                    let key_sound_dispatch_started_at = Instant::now();
-                                    #[cfg(debug_assertions)]
-                                    let dispatch_ms =
-                                        key_sound_dispatch_started_at.elapsed().as_secs_f64()
-                                            * 1000.0;
-                                    #[cfg(debug_assertions)]
-                                    let trace = KeySoundDispatchTrace::new(
-                                        key_sound_input_started_at,
-                                        dispatch_ms,
-                                    );
-                                    app_state.key_sound.play_file(
-                                        &sound_path,
-                                        per_key_volume,
-                                        #[cfg(debug_assertions)]
-                                        Some(trace),
-                                        #[cfg(not(debug_assertions))]
-                                        None,
-                                    );
-                                    #[cfg(debug_assertions)]
-                                    if app_state.key_sound.latency_logging_enabled() {
-                                        log::debug!(
-                                            "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} volume={:.3} path={}",
-                                            mode,
-                                            key_label,
-                                            per_key_volume,
-                                            sound_path
-                                        );
-                                    }
-                                } else {
-                                    #[cfg(debug_assertions)]
-                                    let key_sound_input_started_at = Instant::now();
-                                    #[cfg(debug_assertions)]
-                                    let key_sound_dispatch_started_at = Instant::now();
-                                    #[cfg(debug_assertions)]
-                                    let dispatch_ms =
-                                        key_sound_dispatch_started_at.elapsed().as_secs_f64()
-                                            * 1000.0;
-                                    #[cfg(debug_assertions)]
-                                    let trace = KeySoundDispatchTrace::new(
-                                        key_sound_input_started_at,
-                                        dispatch_ms,
-                                    );
-                                    app_state
-                                        .key_sound
-                                        .play_labels(
-                                            &message.labels,
-                                            #[cfg(debug_assertions)]
-                                            Some(trace),
-                                            #[cfg(not(debug_assertions))]
-                                            None,
-                                        );
-                                    #[cfg(debug_assertions)]
-                                    if app_state.key_sound.latency_logging_enabled() {
-                                        log::debug!(
-                                            "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} source=soundpack",
-                                            mode,
-                                            key_label
-                                        );
-                                    }
+
+                            if let Some(pressed_label) = outcome.pressed_label.as_ref() {
+                                if let Err(err) = app_handle.emit(
+                                    "input:press",
+                                    &json!({ "label": pressed_label, "mode": &outcome.mode }),
+                                ) {
+                                    error!("failed to emit input:press: {err}");
                                 }
                             }
-                            // 데몬 캡처 시각부터 emit까지 경과 시간
+
                             let fallback_age_ms = recv_at.elapsed().as_secs_f64() * 1000.0;
                             let event_age_ms = resolve_event_age_ms(
                                 message.input_ts_ms,
                                 unix_epoch_ms(),
                                 fallback_age_ms,
                             );
-                            let payload = key_state_payload(
-                                &key_label,
-                                state,
-                                &mode,
-                                event_age_ms,
-                                is_down,
-                                message.hold_duration_ms,
-                            );
 
-                            let mut emitted = false;
-                            if let Some(overlay) = overlay_window.as_ref() {
-                                match overlay.emit("keys:state", &payload) {
-                                    Ok(_) => emitted = true,
-                                    Err(err) => {
-                                        error!("failed to emit keys:state to overlay: {err}");
-                                        overlay_window = None;
+                            for slot_event in outcome.events {
+                                if slot_event.press && is_down {
+                                    app_state.increment_key_counter_and_emit(
+                                        &app_handle,
+                                        &outcome.mode,
+                                        &slot_event.canonical,
+                                    );
+
+                                    if message.device == crate::ipc::InputDeviceKind::Keyboard {
+                                        if let Some((sound_path, per_key_volume)) = app_state
+                                            .resolve_key_sound_binding(
+                                                &outcome.mode,
+                                                &slot_event.slot_indices,
+                                            )
+                                        {
+                                            #[cfg(debug_assertions)]
+                                            let key_sound_input_started_at = Instant::now();
+                                            #[cfg(debug_assertions)]
+                                            let key_sound_dispatch_started_at = Instant::now();
+                                            #[cfg(debug_assertions)]
+                                            let dispatch_ms = key_sound_dispatch_started_at
+                                                .elapsed()
+                                                .as_secs_f64()
+                                                * 1000.0;
+                                            #[cfg(debug_assertions)]
+                                            let trace = KeySoundDispatchTrace::new(
+                                                key_sound_input_started_at,
+                                                dispatch_ms,
+                                            );
+                                            app_state.key_sound.play_file(
+                                                &sound_path,
+                                                per_key_volume,
+                                                #[cfg(debug_assertions)]
+                                                Some(trace),
+                                                #[cfg(not(debug_assertions))]
+                                                None,
+                                            );
+                                            #[cfg(debug_assertions)]
+                                            if app_state.key_sound.latency_logging_enabled() {
+                                                log::debug!(
+                                                    "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} volume={:.3} path={}",
+                                                    outcome.mode,
+                                                    slot_event.canonical,
+                                                    per_key_volume,
+                                                    sound_path
+                                                );
+                                            }
+                                        } else {
+                                            #[cfg(debug_assertions)]
+                                            let key_sound_input_started_at = Instant::now();
+                                            #[cfg(debug_assertions)]
+                                            let key_sound_dispatch_started_at = Instant::now();
+                                            #[cfg(debug_assertions)]
+                                            let dispatch_ms = key_sound_dispatch_started_at
+                                                .elapsed()
+                                                .as_secs_f64()
+                                                * 1000.0;
+                                            #[cfg(debug_assertions)]
+                                            let trace = KeySoundDispatchTrace::new(
+                                                key_sound_input_started_at,
+                                                dispatch_ms,
+                                            );
+                                            app_state.key_sound.play_labels(
+                                                &message.labels,
+                                                #[cfg(debug_assertions)]
+                                                Some(trace),
+                                                #[cfg(not(debug_assertions))]
+                                                None,
+                                            );
+                                            #[cfg(debug_assertions)]
+                                            if app_state.key_sound.latency_logging_enabled() {
+                                                log::debug!(
+                                                    "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} source=soundpack",
+                                                    outcome.mode,
+                                                    slot_event.canonical
+                                                );
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                            if !emitted {
-                                if overlay_window.is_none() {
-                                    overlay_window = app_handle.get_webview_window(OVERLAY_LABEL);
-                                    if let Some(overlay) = overlay_window.as_ref() {
-                                        if overlay.emit("keys:state", &payload).is_ok() {
-                                            emitted = true;
-                                        } else {
+
+                                let Some(is_active) = slot_event.transition else {
+                                    continue;
+                                };
+                                let transition_state = if is_active { "DOWN" } else { "UP" };
+                                let payload = key_state_payload(
+                                    &slot_event.canonical,
+                                    transition_state,
+                                    &outcome.mode,
+                                    event_age_ms,
+                                    is_active,
+                                    message.hold_duration_ms,
+                                );
+
+                                let mut emitted = false;
+                                if let Some(overlay) = overlay_window.as_ref() {
+                                    match overlay.emit("keys:state", &payload) {
+                                        Ok(_) => emitted = true,
+                                        Err(err) => {
+                                            error!("failed to emit keys:state to overlay: {err}");
                                             overlay_window = None;
                                         }
                                     }
                                 }
                                 if !emitted {
-                                    if app_state.is_obs_mode_active() {
-                                        app_state.obs_bridge.broadcast_tauri_event(
-                                            "keys:state".to_string(),
-                                            payload.clone(),
-                                        );
-                                        emitted = true;
-                                    } else if let Err(err) =
-                                        app_handle.emit("keys:state", &payload)
-                                    {
-                                        error!("failed to emit keys:state (fallback): {err}");
-                                    } else {
-                                        emitted = true;
+                                    if overlay_window.is_none() {
+                                        overlay_window =
+                                            app_handle.get_webview_window(OVERLAY_LABEL);
+                                        if let Some(overlay) = overlay_window.as_ref() {
+                                            if overlay.emit("keys:state", &payload).is_ok() {
+                                                emitted = true;
+                                            } else {
+                                                overlay_window = None;
+                                            }
+                                        }
+                                    }
+                                    if !emitted {
+                                        if app_state.is_obs_mode_active() {
+                                            app_state.obs_bridge.broadcast_tauri_event(
+                                                "keys:state".to_string(),
+                                                payload.clone(),
+                                            );
+                                            emitted = true;
+                                        } else if let Err(err) =
+                                            app_handle.emit("keys:state", &payload)
+                                        {
+                                            error!("failed to emit keys:state (fallback): {err}");
+                                        } else {
+                                            emitted = true;
+                                        }
                                     }
                                 }
-                            }
 
-                            if emitted {
-                                keys_state_emit_count += 1;
-                                if keys_state_emit_count.is_multiple_of(500) {
-                                    log::debug!(
-                                        "[AppState] emitted keys:state {} times (last key={}, state={})",
-                                        keys_state_emit_count,
-                                        key_label,
-                                        state
-                                    );
+                                if emitted {
+                                    keys_state_emit_count += 1;
+                                    if keys_state_emit_count.is_multiple_of(500) {
+                                        log::debug!(
+                                            "[AppState] emitted keys:state {} times (last key={}, state={})",
+                                            keys_state_emit_count,
+                                            slot_event.canonical,
+                                            transition_state
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -3804,9 +3823,13 @@ impl AppState {
         target.retain(|mode, _| keys.contains_key(mode));
         for (mode, key_list) in keys.iter() {
             let entry = target.entry(mode.clone()).or_default();
-            entry.retain(|key, _| key_list.contains(key));
-            for key in key_list.iter() {
-                entry.entry(key.clone()).or_insert(0);
+            let canonical_keys = key_list
+                .iter()
+                .map(KeySlot::canonical)
+                .collect::<HashSet<_>>();
+            entry.retain(|key, _| canonical_keys.contains(key));
+            for key in canonical_keys {
+                entry.entry(key).or_insert(0);
             }
         }
     }
@@ -3895,17 +3918,16 @@ impl AppState {
         self.key_sound.invalidate_file_cache(path);
     }
 
-    fn resolve_key_sound_binding(&self, mode: &str, key_label: &str) -> Option<(String, f32)> {
+    fn resolve_key_sound_binding(
+        &self,
+        mode: &str,
+        slot_indices: &[usize],
+    ) -> Option<(String, f32)> {
         self.store.with_state(|state| {
-            let mappings = state.keys.get(mode)?;
             let positions = state.key_positions.get(mode)?;
 
-            for (index, mapped_key) in mappings.iter().enumerate() {
-                if mapped_key != key_label {
-                    continue;
-                }
-
-                let Some(position) = positions.get(index) else {
+            for index in slot_indices {
+                let Some(position) = positions.get(*index) else {
                     continue;
                 };
 
@@ -5997,7 +6019,7 @@ mod tests {
     #[test]
     fn bootstrap_keyboard_state_includes_mode_and_registered_event_key_names() {
         let manager = KeyboardManager::new(
-            HashMap::from([("4key".to_string(), vec!["KeyD".to_string()])]),
+            HashMap::from([("4key".to_string(), vec!["KeyD".into()])]),
             "4key",
         );
 

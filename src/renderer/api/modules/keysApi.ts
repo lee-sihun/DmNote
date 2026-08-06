@@ -84,6 +84,8 @@ export const updatePositionsWithGesture = (
 export const keysApi = {
   get: () => invoke<KeyMappings>('keys_get'),
   getCounters: () => invoke<KeyCounters>('keys_get_counters'),
+  // 자사 UI 전용 경로. 플러그인 발신 keys 쓰기는 플러그인 프록시가
+  // pluginWriteGateway로 별도 라우팅한다 (계약 §10)
   update: (mappings: KeyMappings) =>
     enqueueEditorCompatibilityWrite(
       () => editorCoordinator.commitPatch({ schemaVersion: 1, keys: mappings }),

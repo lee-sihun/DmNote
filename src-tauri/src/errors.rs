@@ -9,6 +9,7 @@ pub enum EditorCommitErrorCode {
     TooManyGestureIds,
     InvalidGestureId,
     PairedUpdateRequired,
+    MultiKeyUnsupported,
     MutationIdReused,
     HistoryInProgress,
     HistoryEpochConflict,
@@ -101,6 +102,15 @@ impl EditorCommitError {
                 field: Some(field),
                 ..EditorCommitErrorDetails::default()
             }),
+            retryable: false,
+        }
+    }
+
+    pub fn multi_key_unsupported() -> Self {
+        Self {
+            error_code: EditorCommitErrorCode::MultiKeyUnsupported,
+            message: "multi-key mappings require an explicit multiKey capability".to_string(),
+            details: None,
             retryable: false,
         }
     }

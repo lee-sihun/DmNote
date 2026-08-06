@@ -36,6 +36,9 @@ pub struct HookMessage {
     pub state: HookKeyState,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    pub physical_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub vk_code: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -162,6 +165,7 @@ mod tests {
 
         assert_eq!(message.hold_duration_ms, None);
         assert_eq!(message.input_ts_ms, None);
+        assert_eq!(message.physical_id, None);
     }
 
     #[test]
@@ -170,6 +174,7 @@ mod tests {
             device: InputDeviceKind::Keyboard,
             labels: vec!["A".to_string()],
             state: HookKeyState::Down,
+            physical_id: None,
             vk_code: None,
             scan_code: None,
             flags: None,
@@ -188,6 +193,7 @@ mod tests {
             device: InputDeviceKind::Keyboard,
             labels: vec!["A".to_string()],
             state: HookKeyState::Up,
+            physical_id: Some("keyboard:test".to_string()),
             vk_code: None,
             scan_code: None,
             flags: None,
@@ -198,5 +204,6 @@ mod tests {
         let value = serde_json::to_value(message).unwrap();
         assert_eq!(value["hold_duration_ms"], 12.5);
         assert_eq!(value["input_ts_ms"], 1_500.25);
+        assert_eq!(value["physical_id"], "keyboard:test");
     }
 }

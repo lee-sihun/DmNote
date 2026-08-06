@@ -385,6 +385,7 @@ impl ObsBridgeService {
             "overlay:lock",
             "overlay:anchor",
             "input:raw",
+            "input:press",
             "input:axis",
             "css:use",
             "css:content",

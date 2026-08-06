@@ -424,6 +424,108 @@ export class EditorSaveCoordinator {
     );
   }
 
+  // 플러그인 발신 커밋을 gesture 커밋과 같은 단일 직렬 큐에 태운다.
+  // 별도 게이트를 두면 gesture 큐와 상호 대기 교착이 생기므로 큐는 하나만 유지
+  private enqueueSerialized<T>(task: () => Promise<T>): Promise<T> {
+    const previous = this.gestureCommitTail;
+    // 앞선 작업 실패가 다음 작업으로 전파되지 않게 양쪽 경로 모두 실행
+    const run = previous.then(task, task);
+    this.gestureCommitTail = run;
+    return run;
+  }
+
+  // 플러그인 발신 keys 쓰기 전용 격리 커밋 (계약 §10)
+  // 공유 snapshot 병합(queueSnapshot/drain)에 합류시키지 않고, 현재 드레인이
+  // 끝난 뒤 독점 요청 1건으로 직렬화한다. 자사 커밋 진입점들은
+  // waitForGestureCommits로 같은 큐를 기다리므로 multiKey provenance가
+  // false → true로 승격되는 병합 경로가 구조적으로 없다
+  commitIsolatedPluginPatch(
+    changes: EditorPatchV1,
+    options: { multiKey: boolean },
+  ): Promise<EditorDocumentV1> {
+    this.assertWritable();
+    return this.enqueueSerialized(() =>
+      this.commitIsolatedPluginPatchInner(changes, options),
+    );
+  }
+
+  private async commitIsolatedPluginPatchInner(
+    changes: EditorPatchV1,
+    options: { multiKey: boolean },
+  ): Promise<EditorDocumentV1> {
+    await this.start();
+    await this.drainUntilSettled();
+    await this.eventQueue;
+    if (this.conflict) {
+      throw this.error ?? new Error('editor conflict pending');
+    }
+
+    const canonicalChanges = canonicalizeEditorGradients(changes);
+    assertEditorPatch(canonicalChanges);
+    const baseDocument = clone(this.requireLastAck());
+    const target = applyEditorPatch(baseDocument, canonicalChanges);
+    const requestFields = EDITOR_FIELDS.filter(
+      (field) => canonicalChanges[field] !== undefined,
+    );
+    if (requestFields.length === 0) return clone(this.requireLastAck());
+
+    const baseRevision = this.requireRevision();
+    const mutationId = this.createMutationId();
+    const inFlight: InFlightCommit = {
+      mutationId,
+      baseRevision,
+      baseDocument,
+      target: clone(target),
+      localFields: getChangedEditorFields(baseDocument, target),
+      requestFields,
+      gestureIds: [],
+    };
+    this.inFlight = inFlight;
+    this.rememberOwnMutation(inFlight);
+    this.phase = 'saving';
+    this.notify();
+
+    try {
+      const result = await this.transport.commit({
+        baseRevision,
+        mutationId,
+        changes: patchForFields(target, requestFields),
+        // provenance 명시 전달 - 기본값 승격 경로 없음
+        multiKey: options.multiKey === true,
+      });
+      assertEditorCommitResult(result);
+      await this.applyCommitResult(inFlight, result);
+      // 실행 창의 로컬 문서도 canonical로 갱신 - 격리 커밋은 낙관 적용을
+      // 거치지 않으므로 여기서 반영하지 않으면 이후 flush가 낡은 로컬을
+      // 새 편집으로 계산해 방금 성공한 변경을 되돌린다
+      this.applyDocument(clone(this.requireLastAck()), 'localPatch');
+      this.error = null;
+      this.failureKind = null;
+      this.phase = 'idle';
+      this.notify();
+      return clone(this.requireLastAck());
+    } catch (error) {
+      // 거절돼도 코디네이터는 건강한 상태 유지 - 오류는 플러그인 호출자에게만
+      // 전파하고 pending은 보존하지 않음 (store·로컬 모두 불변)
+      if (!this.conflict && !this.stopped) this.phase = 'idle';
+      this.notify();
+      throw error;
+    } finally {
+      if (this.inFlight?.mutationId === mutationId) this.inFlight = null;
+    }
+  }
+
+  // 플러그인이 자체 envelope로 직접 editor_commit을 수행할 때도 같은 큐로
+  // 직렬화 (계약 §10: coordinator에 예약된 변경보다 먼저 lock을 잡는 경합 차단)
+  runSerializedPluginCommit<T>(task: () => Promise<T>): Promise<T> {
+    return this.enqueueSerialized(async () => {
+      await this.start();
+      await this.drainUntilSettled();
+      await this.eventQueue;
+      return task();
+    });
+  }
+
   commitGesture(
     changes: EditorPatchV1 | undefined,
     gestureId: string,

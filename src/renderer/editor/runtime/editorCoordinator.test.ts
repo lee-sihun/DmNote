@@ -24,6 +24,7 @@ import type {
   EditorDocumentV1,
   EditorGetResult,
 } from '@src/types/editor';
+import type { KeySlot } from '@src/types/key/keys';
 import type {
   EditorApplyReason,
   EditorCoordinatorOptions,
@@ -349,6 +350,67 @@ describe('editor document helpers', () => {
 });
 
 describe('EditorSaveCoordinator', () => {
+  it('settles same-tick gesture and isolated plugin commits without deadlock', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    // 같은 tick에 gesture 커밋 직후 플러그인 격리 커밋 - 상호 대기 교착 회귀 방지
+    const gesture = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': ['B'] } },
+      'gesture-a',
+      async (context) =>
+        harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          changes: context.editorChanges!,
+        }),
+    );
+    const isolated = harness.coordinator.commitIsolatedPluginPatch(
+      {
+        schemaVersion: 1,
+        keys: { '4key': [{ keys: ['C', 'D'], match: 'any' }] },
+      },
+      { multiKey: true },
+    );
+
+    await expect(gesture).resolves.toBeTruthy();
+    const isolatedDocument = await isolated;
+    expect(isolatedDocument.keys['4key']).toEqual([
+      { keys: ['C', 'D'], match: 'any' },
+    ]);
+
+    // 실행 창 로컬 문서도 canonical로 갱신됨 (이후 flush의 되돌림 방지)
+    expect(harness.getLocal().keys['4key']).toEqual([
+      { keys: ['C', 'D'], match: 'any' },
+    ]);
+
+    // 성공 후 코디네이터 상태 완전 정리 (inFlight 잔존 시 가짜 충돌 유발)
+    const stateAfterIsolated = harness.coordinator.getState();
+    expect(stateAfterIsolated.phase).toBe('idle');
+    expect(stateAfterIsolated.dirty).toBe(false);
+    expect(stateAfterIsolated.inFlightMutationId).toBeNull();
+
+    const callsAfterIsolated = harness.transport.commitMock.mock.calls.length;
+    await harness.coordinator.commitEditorState();
+    expect(harness.transport.commitMock.mock.calls.length).toBe(
+      callsAfterIsolated,
+    );
+
+    // 격리 커밋 envelope는 플러그인이 선언한 multiKey 값을 그대로 전달
+    const isolatedRequest = harness.transport.commitMock.mock.calls.at(-1)?.[0];
+    expect(isolatedRequest?.multiKey).toBe(true);
+
+    // 이후 자사 커밋도 정상 진행 (큐 고착 없음)
+    await expect(
+      harness.coordinator.commitPatch({
+        schemaVersion: 1,
+        keys: { '4key': ['E'] },
+      }),
+    ).resolves.toBeTruthy();
+    harness.coordinator.stop();
+  });
+
   it('keeps queued mixed gestures as separate ordered transactions', async () => {
     const base = makeDocument('A');
     const harness = createHarness(base);
@@ -358,7 +420,7 @@ describe('EditorSaveCoordinator', () => {
       gestureId: string;
       editorBaseRevision: number;
       mutationId: string;
-      keys: string[] | undefined;
+      keys: KeySlot[] | undefined;
     }> = [];
 
     const first = harness.coordinator.commitGesture(

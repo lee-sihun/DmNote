@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
-import type { ImageFit, KeyPosition } from '@src/types/key/keys';
+import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import {
   STAT_BASE_OPTIONS,
   STAT_KPS_OPTIONS,
@@ -1503,6 +1503,7 @@ interface SingleKeyStatPanelProps {
   singleKeyPosition: KeyPosition | null;
   singleStatPosition: StatItemPosition | null;
   singleKeyCode: string | null;
+  singleKeySlot: KeySlot | null;
   singleKeyInfo: KeyInfo | null;
   selectedKeyType: string;
   isRenaming: boolean;
@@ -1518,7 +1519,7 @@ interface SingleKeyStatPanelProps {
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
-  onKeyMappingChange?: (index: number, newKey: string) => void;
+  onKeyMappingChange?: (index: number, newSlot: KeySlot) => void;
   handleStatUpdate: (
     data: Partial<StatItemPosition> & { index: number },
   ) => void;
@@ -1526,8 +1527,6 @@ interface SingleKeyStatPanelProps {
     index: number,
     updates: Partial<StatItemPosition>,
   ) => void;
-  isListening: boolean;
-  handleKeyListen: () => void;
   localState: Partial<KeyPosition> & { dx?: number; dy?: number };
   setLocalState: React.Dispatch<
     React.SetStateAction<Partial<KeyPosition> & { dx?: number; dy?: number }>
@@ -1551,6 +1550,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   singleKeyPosition,
   singleStatPosition,
   singleKeyCode,
+  singleKeySlot,
   singleKeyInfo,
   selectedKeyType: _selectedKeyType,
   isRenaming,
@@ -1569,8 +1569,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onKeyMappingChange,
   handleStatUpdate,
   handleStatPreview,
-  isListening,
-  handleKeyListen,
   localState,
   setLocalState,
   handleSizeBlur,
@@ -1746,8 +1744,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
                 index: keyLikeIndex,
               }}
               onKeyMappingChange={isSingleStat ? undefined : onKeyMappingChange}
-              isListening={isListening}
-              onKeyListen={isSingleStat ? undefined : handleKeyListen}
+              keySlot={isSingleStat ? undefined : singleKeySlot}
               mappingControlLayout={mappingControlLayout}
               mappingLabel={
                 isSingleStat

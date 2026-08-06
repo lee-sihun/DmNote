@@ -1,4 +1,4 @@
-import type { KeyPosition } from '@src/types/key/keys';
+import type { KeyPosition, KeySlot } from '@src/types/key/keys';
 import type { ColorModeValue, GradientSpec } from '@src/types/color';
 import type {
   GradientCanvasAnchor,
@@ -34,7 +34,7 @@ export interface PropertiesPanelProps {
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
-  onKeyMappingChange?: (index: number, newKey: string) => void;
+  onKeyMappingChange?: (index: number, newSlot: KeySlot) => void;
 }
 
 export interface PropertyRowProps {
@@ -170,11 +170,10 @@ export interface SingleKeyContentProps {
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
-  onKeyMappingChange?: (index: number, newKey: string) => void;
+  onKeyMappingChange?: (index: number, newSlot: KeySlot) => void;
 
-  // 키 리스닝 상태 (옵션 - 개별 편집 모드에서는 사용하지 않음)
-  isListening?: boolean;
-  onKeyListen?: () => void;
+  // 편집 대상 슬롯 (칩 에디터용, 개별 편집 모드에서는 미사용)
+  keySlot?: KeySlot | null;
 
   // 이미지 픽커 상태 (옵션 - 개별 편집 모드에서는 사용하지 않음)
   showImagePicker?: boolean;
@@ -202,9 +201,9 @@ export interface StyleTabContentProps {
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
-  onKeyMappingChange?: (index: number, newKey: string) => void;
-  isListening?: boolean;
-  onKeyListen?: () => void;
+  onKeyMappingChange?: (index: number, newSlot: KeySlot) => void;
+  // 편집 대상 슬롯 (칩 에디터용)
+  keySlot?: KeySlot | null;
   // 키 매핑 UI를 대체하는 커스텀 컨트롤 (통계 요소 등)
   mappingControl?: React.ReactNode;
   // 키 매핑 영역을 통째로 대체하는 커스텀 레이아웃 (다중 라인 라벨 등)

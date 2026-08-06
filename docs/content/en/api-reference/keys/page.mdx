@@ -159,13 +159,30 @@ const unsub = dmn.keys.onModeChanged(({ mode }) => {
 Returns the key mappings for all modes.
 
 ```typescript
-type KeyMappings = Record<string, string[]>;
+type SlotMatch = 'all' | 'any';
+
+// A slot is either a single key string, or a multi-key binding:
+// - match: 'any' — the slot activates when any member key is pressed
+// - match: 'all' — the slot activates while all member keys are held together
+interface MultiKeySlot {
+  keys: string[]; // 2 to 8 member keys
+  match: SlotMatch;
+}
+
+type KeySlot = string | MultiKeySlot;
+type KeyMappings = Record<string, KeySlot[]>;
 
 const mappings = await dmn.keys.get();
 console.log(mappings['4key']);
 ```
 
-### `dmn.keys.update(mappings: KeyMappings): Promise<KeyMappings>`
+<Callout type="warning">
+  Since the multi-key update, a slot value can be an object (`MultiKeySlot`),
+  not just a string. Plugins that assume every slot is a string should be
+  updated before handling mappings that contain multi-key slots.
+</Callout>
+
+### `dmn.keys.update(mappings: KeyMappings, options?): Promise<KeyMappings>`
 
 Replaces the key mappings and returns the committed value.
 
@@ -174,6 +191,21 @@ const mappings = await dmn.keys.get();
 mappings['4key'][0] = 'KeyS';
 const committed = await dmn.keys.update(mappings);
 ```
+
+To write mappings while the current configuration contains multi-key slots,
+declare multi-key support explicitly:
+
+```typescript
+const committed = await dmn.keys.update(mappings, { multiKey: true });
+```
+
+Without the declaration, a write is rejected with the
+`MULTI_KEY_UNSUPPORTED` error code (non-retryable) whenever the current
+mappings contain at least one multi-key slot. This fail-closed gate protects
+user configurations from being destroyed by plugins that round-trip mappings
+without preserving multi-key slots. The same rule applies to
+`updateWithPositions()` and to `dmn.editor.commit()` requests that include
+`keys` (declare via `multiKey: true` on the commit request).
 
 ### `dmn.keys.getPositions(): Promise<KeyPositions>`
 

@@ -22,12 +22,12 @@ use crate::{
     },
     defaults::{default_keys, default_positions},
     models::{
-        AppStoreData, CounterAnimationPreset, CustomCss, CustomCssHistoryEntry, CustomFont,
-        CustomJs, CustomTab, FontType, GradientSpec, GraphPosition, GraphPositions, GraphStatType,
-        GraphType, GridSettings, JsPlugin, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
-        KnobPosition, KnobPositions, LayerGroupDef, LayerGroups, NoteSettings, OverlayBounds,
-        ShortcutsState, SoundLibraryEntry, StatPosition, StatPositions, StatType, TabCss,
-        TabNoteSettings,
+        normalize_key_slot, AppStoreData, CounterAnimationPreset, CustomCss, CustomCssHistoryEntry,
+        CustomFont, CustomJs, CustomTab, FontType, GradientSpec, GraphPosition, GraphPositions,
+        GraphStatType, GraphType, GridSettings, JsPlugin, KeyCounters, KeyMappings, KeyPosition,
+        KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroupDef, LayerGroups,
+        NoteSettings, OverlayBounds, ShortcutsState, SoundLibraryEntry, StatPosition,
+        StatPositions, StatType, TabCss, TabNoteSettings,
     },
 };
 
@@ -1075,7 +1075,7 @@ pub(crate) fn pad_key_position_lengths(
             );
             keys.entry(mode)
                 .or_default()
-                .resize(position_count, String::new());
+                .resize(position_count, KeySlot::default());
             changed = true;
         }
     }
@@ -1093,9 +1093,13 @@ fn key_position_lengths_mismatch(keys: &KeyMappings, positions: &KeyPositions) -
 fn merge_default_counters(target: &mut KeyCounters, keys: &KeyMappings) {
     for (mode, key_list) in keys.iter() {
         let entry = target.entry(mode.clone()).or_default();
-        entry.retain(|key, _| key_list.contains(key));
-        for key in key_list.iter() {
-            entry.entry(key.clone()).or_insert(0);
+        let canonical_keys = key_list
+            .iter()
+            .map(KeySlot::canonical)
+            .collect::<HashSet<_>>();
+        entry.retain(|key, _| canonical_keys.contains(key));
+        for key in canonical_keys {
+            entry.entry(key).or_insert(0);
         }
     }
 
@@ -1178,7 +1182,8 @@ fn repair_custom_tab_key_layout_pairs(
                     "[Store] Rebuilding invalid keys mode '{mode}' with {} unassigned entries during recovery",
                     positions.len()
                 );
-                data.keys.insert(mode, vec![String::new(); positions.len()]);
+                data.keys
+                    .insert(mode, vec![KeySlot::default(); positions.len()]);
                 repaired = true;
             }
             (Some(keys), None) => {
@@ -1312,15 +1317,9 @@ fn recover_key_mapping_entries(value: &Value) -> Option<Value> {
         let recovered_entries = match entries {
             Value::Array(entries) => entries
                 .iter()
-                .enumerate()
-                .map(|(index, entry)| match entry.as_str() {
-                    Some(key) => Value::String(key.to_string()),
-                    None => {
-                        log::warn!(
-                            "[Store] Replacing invalid keys entry '{mode}[{index}]' with an unassigned key during recovery"
-                        );
-                        Value::String(String::new())
-                    }
+                .map(|entry| {
+                    serde_json::to_value(normalize_key_slot(entry.clone()))
+                        .unwrap_or(Value::String(String::new()))
                 })
                 .collect(),
             _ => {
@@ -1329,7 +1328,11 @@ fn recover_key_mapping_entries(value: &Value) -> Option<Value> {
                 );
                 defaults
                     .get(mode)
-                    .map(|keys| keys.iter().cloned().map(Value::String).collect())
+                    .map(|keys| {
+                        keys.iter()
+                            .filter_map(|slot| serde_json::to_value(slot).ok())
+                            .collect()
+                    })
                     .unwrap_or_default()
             }
         };
@@ -1876,17 +1879,18 @@ struct LegacyOverlayPosition {
 mod tests {
     use super::{
         load_store_from_path, migrate_local_fonts_to_app_data, migrate_sound_library_enabled,
-        normalize_state, parse_portable_asset_reference, rehome_foreign_asset_references,
-        rgba_to_hex, AssetCategory, LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH,
-        LEGACY_PANEL_DETACH_ENABLED_KEY,
+        normalize_state, parse_portable_asset_reference, recover_key_mapping_entries,
+        rehome_foreign_asset_references, rgba_to_hex, AssetCategory, LEGACY_OVERLAY_HEIGHT,
+        LEGACY_OVERLAY_WIDTH, LEGACY_PANEL_DETACH_ENABLED_KEY,
     };
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
             AppStoreData, CustomCssHistoryEntry, CustomFont, CustomTab, FontType, GraphPosition,
             GraphStatType, GraphType, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor,
-            KeyCounterPlacement, KeyPosition, KnobPosition, LayerGroupDef, OverlayBounds,
-            SoundLibraryEntry, StatPosition, StatType, TabCss, TabNoteSettings,
+            KeyCounterPlacement, KeyMappings, KeyPosition, KeySlot, KnobPosition, LayerGroupDef,
+            OverlayBounds, SlotMatch, SoundLibraryEntry, StatPosition, StatType, TabCss,
+            TabNoteSettings,
         },
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -2168,14 +2172,14 @@ mod tests {
     #[serde(rename_all = "camelCase")]
     struct HistoricalTauri13Store {
         #[serde(default)]
-        keys: crate::models::KeyMappings,
+        keys: std::collections::HashMap<String, Vec<String>>,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct HistoricalTauri14PlusStore {
         #[serde(default)]
-        keys: crate::models::KeyMappings,
+        keys: std::collections::HashMap<String, Vec<String>>,
         #[serde(default, flatten)]
         plugin_data: std::collections::HashMap<String, serde_json::Value>,
     }
@@ -2339,6 +2343,91 @@ mod tests {
     }
 
     #[test]
+    fn reverse_downgrade_multi_key_fixture_enters_legacy_recovery_path() {
+        let fixture = serde_json::json!({
+            "keys": {
+                "4key": [
+                    { "keys": ["A", "B"], "match": "any" },
+                    "C"
+                ]
+            }
+        });
+
+        assert!(serde_json::from_value::<HistoricalTauri13Store>(fixture.clone()).is_err());
+        assert!(serde_json::from_value::<HistoricalTauri14PlusStore>(fixture).is_err());
+    }
+
+    #[test]
+    fn key_mapping_recovery_normalizes_in_place_without_compacting_slots() {
+        let raw = serde_json::json!({
+            "mode": [
+                { "keys": ["A", "B"], "match": "any" },
+                { "keys": ["Z"], "match": "all" },
+                { "keys": ["A", 7, "A", "B+C", "C"], "match": "all" },
+                { "keys": ["A", "B"] },
+                null
+            ]
+        });
+
+        let recovered = recover_key_mapping_entries(&raw).unwrap();
+        let mappings: KeyMappings = serde_json::from_value(recovered).unwrap();
+
+        assert_eq!(mappings["mode"].len(), 5);
+        assert_eq!(
+            mappings["mode"],
+            vec![
+                KeySlot::Multi {
+                    keys: vec!["A".to_string(), "B".to_string()],
+                    match_mode: SlotMatch::Any,
+                },
+                KeySlot::Single("Z".to_string()),
+                KeySlot::Multi {
+                    keys: vec!["A".to_string(), "C".to_string()],
+                    match_mode: SlotMatch::All,
+                },
+                KeySlot::default(),
+                KeySlot::default(),
+            ]
+        );
+    }
+
+    #[test]
+    fn normalize_state_keeps_single_count_and_separates_any_all_counters() {
+        let keys = vec![
+            KeySlot::Single("A".to_string()),
+            KeySlot::Multi {
+                keys: vec!["A".to_string(), "B".to_string()],
+                match_mode: SlotMatch::Any,
+            },
+            KeySlot::Multi {
+                keys: vec!["A".to_string(), "B".to_string()],
+                match_mode: SlotMatch::All,
+            },
+        ];
+        let data = normalize_state(AppStoreData {
+            keys: KeyMappings::from([("4key".to_string(), keys)]),
+            key_positions: crate::models::KeyPositions::from([(
+                "4key".to_string(),
+                vec![KeyPosition::default(); 3],
+            )]),
+            key_counters: crate::models::KeyCounters::from([(
+                "4key".to_string(),
+                std::collections::HashMap::from([
+                    ("A".to_string(), 9),
+                    ("A|B".to_string(), 4),
+                    ("stale".to_string(), 7),
+                ]),
+            )]),
+            ..AppStoreData::default()
+        });
+
+        assert_eq!(data.key_counters["4key"]["A"], 9);
+        assert_eq!(data.key_counters["4key"]["A|B"], 4);
+        assert_eq!(data.key_counters["4key"]["A+B"], 0);
+        assert!(!data.key_counters["4key"].contains_key("stale"));
+    }
+
+    #[test]
     fn load_repairs_unsafe_editor_revision_without_touching_editor_data() {
         let path = std::env::temp_dir().join(format!(
             "dmnote-unsafe-editor-revision-{}.json",
@@ -2468,7 +2557,7 @@ mod tests {
             key_positions: default_positions().clone(),
             ..AppStoreData::default()
         };
-        data.keys.get_mut("4key").unwrap().push("F5".to_string());
+        data.keys.get_mut("4key").unwrap().push("F5".into());
         let preserved_position = KeyPosition {
             dx: 987.0,
             ..KeyPosition::default()
@@ -2477,10 +2566,8 @@ mod tests {
             .get_mut("5key")
             .unwrap()
             .push(preserved_position.clone());
-        data.keys.insert(
-            "keys-only".to_string(),
-            vec!["A".to_string(), "B".to_string()],
-        );
+        data.keys
+            .insert("keys-only".to_string(), vec!["A".into(), "B".into()]);
         data.key_positions.insert(
             "positions-only".to_string(),
             vec![preserved_position.clone()],
@@ -2499,7 +2586,7 @@ mod tests {
             loaded.data.key_positions["5key"].last().unwrap(),
             &preserved_position
         );
-        assert!(loaded.data.keys["5key"].last().unwrap().is_empty());
+        assert!(loaded.data.keys["5key"].last().unwrap().is_unassigned());
         assert_eq!(loaded.data.key_positions["keys-only"].len(), 2);
         assert_eq!(loaded.data.keys["positions-only"], vec![String::new()]);
 
@@ -3424,7 +3511,7 @@ mod tests {
         };
         fixture
             .keys
-            .insert("ghost-tab".to_string(), vec!["G".to_string()]);
+            .insert("ghost-tab".to_string(), vec!["G".into()]);
         std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
 
         let loaded = load_store_from_path(&path).unwrap();

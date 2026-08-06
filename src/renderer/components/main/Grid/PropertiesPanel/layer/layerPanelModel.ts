@@ -3,7 +3,7 @@
  * LayerTabContent에서 사용하는 layerItems / displayItems 생성
  */
 
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { slotDisplayName } from '@utils/keySlot';
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
@@ -41,9 +41,8 @@ export function buildLayerItems({
   const currentPositions = positions[selectedKeyType] || [];
   const currentKeyMappings = keyMappings[selectedKeyType] || [];
   currentPositions.forEach((pos, index) => {
-    const keyCode = currentKeyMappings[index] || '';
-    const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
-    const defaultName = keyInfo?.displayName || keyCode || `Key ${index + 1}`;
+    const slot = currentKeyMappings[index] ?? '';
+    const defaultName = slotDisplayName(slot) || `Key ${index + 1}`;
     items.push({
       type: 'key',
       id: `key-${index}`,

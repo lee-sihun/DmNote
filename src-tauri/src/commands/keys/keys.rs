@@ -54,7 +54,7 @@ fn zeroed_counters(keys: &KeyMappings) -> KeyCounters {
         .map(|(mode, mode_keys)| {
             (
                 mode.clone(),
-                mode_keys.iter().map(|key| (key.clone(), 0)).collect(),
+                mode_keys.iter().map(|key| (key.canonical(), 0)).collect(),
             )
         })
         .collect()
@@ -151,7 +151,10 @@ fn reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKind) {
     let mode_keys = store.keys.get(mode).cloned().unwrap_or_default();
     store.key_counters.insert(
         mode.to_string(),
-        mode_keys.into_iter().map(|key| (key, 0)).collect(),
+        mode_keys
+            .into_iter()
+            .map(|key| (key.canonical(), 0))
+            .collect(),
     );
 }
 
@@ -943,8 +946,8 @@ mod tests {
         defaults::{default_keys, default_positions},
         keyboard::KeyboardManager,
         models::{
-            AppStoreData, CustomTab, GraphPosition, GraphStatType, GraphType, KnobPosition,
-            LayerGroupDef, StatPosition, StatType, TabCss, TabNoteSettings,
+            AppStoreData, CustomTab, GraphPosition, GraphStatType, GraphType, KeySlot,
+            KnobPosition, LayerGroupDef, StatPosition, StatType, TabCss, TabNoteSettings,
         },
     };
     use std::cell::Cell;
@@ -974,7 +977,7 @@ mod tests {
         };
         store
             .keys
-            .insert(TARGET_TAB.to_string(), vec!["KeyD".to_string()]);
+            .insert(TARGET_TAB.to_string(), vec![KeySlot::from("KeyD")]);
         store
             .key_positions
             .insert(TARGET_TAB.to_string(), vec![position.clone()]);
@@ -1103,7 +1106,7 @@ mod tests {
         };
         store
             .keys
-            .insert("ghost-mode".to_string(), vec!["KeyA".to_string()]);
+            .insert("ghost-mode".to_string(), vec![KeySlot::from("KeyA")]);
         let keyboard = KeyboardManager::new(store.keys.clone(), "8key");
         let commit_calls = Cell::new(0);
         let emit_calls = Cell::new(0);

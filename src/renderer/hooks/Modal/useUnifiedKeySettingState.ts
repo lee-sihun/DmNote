@@ -1,12 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { isGradientColor, normalizeColorInput } from '@utils/color/colorUtils';
+import { slotMembers, slotUiMode, buildSlot } from '@utils/keySlot';
+import type { KeySlotUiMode } from '@utils/keySlot';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
 } from '@src/types/key/keys';
-import type { NoteColor, KeyCounterSettings } from '@src/types/key/keys';
+import type {
+  NoteColor,
+  KeyCounterSettings,
+  KeySlot,
+} from '@src/types/key/keys';
 import { toCompactRgba } from '@src/types/color';
 
 // ============================================================================
@@ -42,7 +47,7 @@ export const toGradient = (top: string, bottom: string): GradientColor => ({
 
 // 키 데이터 타입
 export interface KeyData {
-  key: string;
+  key: KeySlot;
   activeImage?: string;
   inactiveImage?: string;
   activeTransparent?: boolean;
@@ -62,9 +67,10 @@ export interface KeyData {
 
 // 키 탭 상태 타입
 export interface KeyTabState {
-  key: string;
-  displayKey: string;
-  isListening: boolean;
+  // 슬롯 멤버 키 목록 (칩 UI), 빈 배열 = 미할당
+  members: string[];
+  // 입력 방식: 단일 / 개별(any) / 동시(all)
+  mode: KeySlotUiMode;
   activeImage: string;
   inactiveImage: string;
   width: number | string;
@@ -73,8 +79,6 @@ export interface KeyTabState {
   activeTransparent: boolean;
   className: string;
   showImagePicker: boolean;
-  widthFocused: boolean;
-  heightFocused: boolean;
 }
 
 // 노트 탭 상태 타입
@@ -167,7 +171,7 @@ export type PreviewData =
 
 // 저장 데이터 타입
 export interface SaveData {
-  key: string;
+  key: KeySlot;
   activeImage: string;
   inactiveImage: string;
   width: number;
@@ -192,9 +196,8 @@ export interface SaveData {
 
 export function createInitialKeyState(keyData: KeyData): KeyTabState {
   return {
-    key: keyData.key,
-    displayKey: getKeyInfoByGlobalKey(keyData.key).displayName,
-    isListening: false,
+    members: slotMembers(keyData.key),
+    mode: slotUiMode(keyData.key),
     activeImage: keyData.activeImage || '',
     inactiveImage: keyData.inactiveImage || '',
     width: keyData.width || 60,
@@ -203,8 +206,6 @@ export function createInitialKeyState(keyData: KeyData): KeyTabState {
     activeTransparent: keyData.activeTransparent || false,
     className: keyData.className || '',
     showImagePicker: false,
-    widthFocused: false,
-    heightFocused: false,
   };
 }
 
@@ -425,8 +426,13 @@ export function useUnifiedKeySettingState({
         : noteState.glowColor;
 
     onSave({
-      // 키 데이터
-      key: keyState.key,
+      // 키 데이터 - 단일 모드는 첫 키만 유지
+      key: buildSlot(
+        keyState.mode === 'single'
+          ? keyState.members.slice(0, 1)
+          : keyState.members,
+        keyState.mode === 'all' ? 'all' : 'any',
+      ),
       activeImage: keyState.activeImage,
       inactiveImage: keyState.inactiveImage,
       width:

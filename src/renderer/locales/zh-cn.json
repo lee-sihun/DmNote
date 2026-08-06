@@ -172,7 +172,16 @@
     "noteBorderColor": "边框颜色",
     "borderSideAll": "全部",
     "borderSideVertical": "垂直",
-    "borderSideHorizontal": "水平"
+    "borderSideHorizontal": "水平",
+    "addKey": "添加按键",
+    "removeKey": "移除按键",
+    "matchMode": "触发方式",
+    "matchAny": "单独输入",
+    "matchAll": "同时输入",
+    "matchAnyHint": "按下任意一键即触发",
+    "matchAllHint": "需同时按住全部按键才触发",
+    "multiKeyEdit": "多键映射",
+    "multiKey": "绑定详情"
   },
   "imagePicker": {
     "idle": "闲置",
@@ -574,7 +583,16 @@
     "selectedSound": "已选音频",
     "soundVolume": "音量",
     "import": "导入",
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "addKey": "添加按键",
+    "removeKey": "移除按键",
+    "matchMode": "触发方式",
+    "matchAny": "单独输入",
+    "matchAll": "同时输入",
+    "matchAnyHint": "按下任意一键即触发",
+    "matchAllHint": "需同时按住全部按键才触发",
+    "multiKeyEdit": "多键映射",
+    "multiKey": "映射详情"
   },
   "fontPicker": {
     "searchPlaceholder": "搜索",

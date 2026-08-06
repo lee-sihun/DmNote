@@ -8,6 +8,7 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -459,31 +460,38 @@ describe('PropertiesPanel plugin settings Escape contract', () => {
   });
 });
 
-describe('PropertiesPanel key mapping listening contract', () => {
-  let mounted: MountedPanel;
+describe('useKeySlotCapture listening contract', () => {
   let originalApi: typeof window.api;
   let rawListener: ((payload: Record<string, unknown>) => void) | null;
   let rawUnsubscribe: ReturnType<typeof vi.fn>;
-  let onKeyMappingChange: ReturnType<
-    typeof vi.fn<(index: number, newKey: string) => void>
+  let onCapture: ReturnType<
+    typeof vi.fn<(globalKey: string, listenIndex: number | null) => void>
   >;
+  let harness: { root: Root; container: HTMLDivElement };
+  let latest: {
+    isListening: boolean;
+    startListen: (index: number | null) => void;
+  } | null;
+
+  const CaptureHarness = () => {
+    // 캡처 훅 상태를 테스트에서 관찰하기 위한 최소 하네스
+    const capture = useKeySlotCapture({ onCapture, escapeCancels: true });
+    React.useEffect(() => {
+      latest = capture;
+    });
+    return null;
+  };
 
   const startListening = () => {
-    const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
-      handleKeyListen: () => void;
-    };
-    act(() => props.handleKeyListen());
-    expect(
-      (singleKeyStatPropsMock.mock.lastCall?.[0] as { isListening: boolean })
-        .isListening,
-    ).toBe(true);
+    act(() => latest?.startListen(null));
+    expect(latest?.isListening).toBe(true);
   };
 
   beforeEach(() => {
-    resetStores();
     rawListener = null;
     rawUnsubscribe = vi.fn();
-    onKeyMappingChange = vi.fn<(index: number, newKey: string) => void>();
+    onCapture =
+      vi.fn<(globalKey: string, listenIndex: number | null) => void>();
     originalApi = window.api;
     window.api = {
       ...originalApi,
@@ -496,31 +504,21 @@ describe('PropertiesPanel key mapping listening contract', () => {
       },
     } as typeof window.api;
 
-    const position = {
-      dx: 0,
-      dy: 0,
-      width: 60,
-      height: 60,
-    } as never;
-    useKeyStore.setState({
-      keyMappings: { '4key': ['Z'] },
-      positions: { '4key': [position] },
-      canonicalPositions: { '4key': [position] },
-    });
-    useGridSelectionStore.setState({
-      selectedElements: [{ type: 'key', id: 'key-0', index: 0 }],
-      selectedGroupIds: [],
-    });
-    mounted = mountPanel(true, onKeyMappingChange);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => root.render(<CaptureHarness />));
+    harness = { root, container };
   });
 
   afterEach(() => {
-    act(() => mounted.root.unmount());
-    mounted.container.remove();
+    act(() => harness.root.unmount());
+    harness.container.remove();
     window.api = originalApi;
+    latest = null;
   });
 
-  it('plain Escape cancels listening without changing the mapping', () => {
+  it('plain Escape cancels listening without capturing', () => {
     startListening();
     const event = new KeyboardEvent('keydown', {
       key: 'Escape',
@@ -531,11 +529,8 @@ describe('PropertiesPanel key mapping listening contract', () => {
     act(() => window.dispatchEvent(event));
 
     expect(event.defaultPrevented).toBe(true);
-    expect(onKeyMappingChange).not.toHaveBeenCalled();
-    expect(
-      (singleKeyStatPropsMock.mock.lastCall?.[0] as { isListening: boolean })
-        .isListening,
-    ).toBe(false);
+    expect(onCapture).not.toHaveBeenCalled();
+    expect(latest?.isListening).toBe(false);
     expect(rawUnsubscribe).toHaveBeenCalledOnce();
   });
 
@@ -551,14 +546,11 @@ describe('PropertiesPanel key mapping listening contract', () => {
       }),
     );
 
-    expect(onKeyMappingChange).not.toHaveBeenCalled();
-    expect(
-      (singleKeyStatPropsMock.mock.lastCall?.[0] as { isListening: boolean })
-        .isListening,
-    ).toBe(false);
+    expect(onCapture).not.toHaveBeenCalled();
+    expect(latest?.isListening).toBe(false);
   });
 
-  it('assigns one normal raw key and stops listening', () => {
+  it('captures one normal raw key and stops listening', () => {
     startListening();
 
     act(() =>
@@ -570,11 +562,25 @@ describe('PropertiesPanel key mapping listening contract', () => {
       }),
     );
 
-    expect(onKeyMappingChange).toHaveBeenCalledOnce();
-    expect(onKeyMappingChange).toHaveBeenCalledWith(0, 'A');
-    expect(
-      (singleKeyStatPropsMock.mock.lastCall?.[0] as { isListening: boolean })
-        .isListening,
-    ).toBe(false);
+    expect(onCapture).toHaveBeenCalledOnce();
+    expect(onCapture).toHaveBeenCalledWith('A', null);
+    expect(latest?.isListening).toBe(false);
+  });
+
+  it('captures into a replace target index', () => {
+    act(() => latest?.startListen(1));
+    expect(latest?.isListening).toBe(true);
+
+    act(() =>
+      rawListener?.({
+        label: 'B',
+        labels: ['B'],
+        state: 'DOWN',
+        device: 'keyboard',
+      }),
+    );
+
+    expect(onCapture).toHaveBeenCalledWith('B', 1);
+    expect(latest?.isListening).toBe(false);
   });
 });

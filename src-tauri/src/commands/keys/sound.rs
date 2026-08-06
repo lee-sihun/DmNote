@@ -1293,8 +1293,7 @@ mod tests {
         let mut data = AppStoreData::default();
         data.sound_library
             .insert(path_key.to_string(), Default::default());
-        data.keys
-            .insert("4key".to_string(), vec!["KeyA".to_string()]);
+        data.keys.insert("4key".to_string(), vec!["KeyA".into()]);
         data.key_positions
             .insert("4key".to_string(), vec![position_with_sound(path_key)]);
         data.stat_positions.insert(

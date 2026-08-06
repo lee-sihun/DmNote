@@ -61,11 +61,13 @@ import type {
   KeyMappings,
   KeyPositions,
   KeyPosition,
+  KeySlot,
   NoteColor,
   KeyCounterSettings,
   CounterAnimationBezier,
   ImageFit,
 } from '@src/types/key/keys';
+import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
@@ -110,7 +112,7 @@ type ToolbarAddRequest = {
 } | null;
 
 interface SelectedKeyInfo {
-  key: string;
+  key: KeySlot;
   index: number;
 }
 
@@ -945,7 +947,7 @@ const Grid = ({
           key={`${selectedKeyType}-${index}`}
           index={index}
           position={position}
-          keyName={keyMappings[selectedKeyType]?.[index] || ''}
+          keyName={slotDisplayName(keyMappings[selectedKeyType]?.[index] ?? '')}
           onPositionChange={onPositionChange}
           zIndex={position.zIndex ?? index}
           onClick={() => {
@@ -1128,9 +1130,8 @@ const Grid = ({
           onMultiDragEnd={commitSelectedElementsDrag}
           activeTool={activeTool}
           onEraserClick={() => {
-            const globalKey = keyMappings[selectedKeyType]?.[index] || '';
-            const displayName =
-              getKeyInfoByGlobalKey(globalKey)?.displayName || globalKey;
+            const slot = keyMappings[selectedKeyType]?.[index] ?? '';
+            const displayName = slotDisplayName(slot);
             showConfirm(
               t('confirm.removeKey', { name: displayName }),
               () => onKeyDelete(index),
@@ -2059,7 +2060,10 @@ const Grid = ({
                 positions[selectedKeyType]?.[contextIndex];
               if (!positionForContext) return;
               const context = {
-                keyCode: keyMappings[selectedKeyType]?.[contextIndex] || '',
+                // 플러그인 메뉴 표면은 canonical 문자열 유지
+                keyCode: slotCanonical(
+                  keyMappings[selectedKeyType]?.[contextIndex] ?? '',
+                ),
                 index: contextIndex,
                 position: positionForContext,
                 mode: selectedKeyType,
@@ -2089,18 +2093,17 @@ const Grid = ({
 
             // 기본 메뉴 처리
             if (id === 'delete') {
-              const globalKey =
-                keyMappings[selectedKeyType]?.[contextIndex] || '';
-              const displayName =
-                getKeyInfoByGlobalKey(globalKey)?.displayName || globalKey;
+              const slot = keyMappings[selectedKeyType]?.[contextIndex] ?? '';
+              const displayName = slotDisplayName(slot);
               showConfirm(
                 t('confirm.removeKey', { name: displayName }),
                 () => onKeyDelete(contextIndex),
                 { confirmText: t('confirm.remove') },
               );
             } else if (id === 'duplicate') {
-              const keyCode =
-                keyMappings[selectedKeyType]?.[contextIndex] || '';
+              const keyCode = slotDisplayName(
+                keyMappings[selectedKeyType]?.[contextIndex] ?? '',
+              );
               const position =
                 positions[selectedKeyType]?.[contextIndex] || null;
               if (position) {
@@ -2148,10 +2151,10 @@ const Grid = ({
                 setDuplicateCursor(initialCursor);
               }
             } else if (id === 'counterReset') {
-              const globalKey =
-                keyMappings[selectedKeyType]?.[contextIndex] || '';
-              const displayName =
-                getKeyInfoByGlobalKey(globalKey)?.displayName || globalKey;
+              const slot = keyMappings[selectedKeyType]?.[contextIndex] ?? '';
+              // 카운터 리셋 커맨드의 key 인자 = canonical (계약 §7)
+              const globalKey = slotCanonical(slot);
+              const displayName = slotDisplayName(slot);
               showConfirm(
                 t('confirm.resetKeyCounter', { name: displayName }),
                 async () => {

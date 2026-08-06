@@ -18,11 +18,11 @@ use crate::{
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
-        AppStoreData, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, EditorCommitOrigin,
-        EditorField, FontSettings, FontType, GradientSpec, GraphPositions, KeyMappings,
-        KeyPosition, KeyPositions, KnobPositions, LayerGroups, NoteSettings, NoteSettingsPatch,
-        SettingsPatchInput, StatPositions, TabCss, TabCssOverrides, TabNoteSettings,
-        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        normalize_key_mappings, AppStoreData, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch,
+        EditorCommitOrigin, EditorField, FontSettings, FontType, GradientSpec, GraphPositions,
+        KeyMappings, KeyPosition, KeyPositions, KeySlot, KnobPositions, LayerGroups, NoteSettings,
+        NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCss, TabCssOverrides,
+        TabNoteSettings, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
     services::settings::apply_patch_to_store,
     state::AppState,
@@ -235,6 +235,7 @@ pub fn preset_load(
     let resolved_settings = resolve_full_preset_settings(&mut preset, &current);
 
     let mut keys = preset.keys.unwrap_or_else(|| default_keys().clone());
+    normalize_key_mappings(&mut keys);
     let mut positions = preset
         .key_positions
         .unwrap_or_else(|| default_positions().clone());
@@ -497,7 +498,8 @@ pub fn preset_load_tab(
         .store
         .with_state(|store| (store.selected_key_type.clone(), store.font_settings.clone()));
 
-    let imported_keys = keys.unwrap_or_default();
+    let mut imported_keys = keys.unwrap_or_default();
+    normalize_key_mappings(&mut imported_keys);
     let source_tab_id = choose_tab_preset_source_tab(
         &imported_keys,
         selected_key_type.as_deref(),
@@ -867,9 +869,9 @@ fn choose_tab_preset_source_tab(
     Err(CommandError::msg("tab-preset-ambiguous-source"))
 }
 
-fn align_imported_key_pair(keys: &mut Vec<String>, positions: &mut Vec<KeyPosition>) {
+fn align_imported_key_pair(keys: &mut Vec<KeySlot>, positions: &mut Vec<KeyPosition>) {
     if keys.len() < positions.len() {
-        keys.resize(positions.len(), String::new());
+        keys.resize(positions.len(), KeySlot::default());
     } else if positions.len() < keys.len() {
         positions.resize(keys.len(), KeyPosition::default());
     }
@@ -891,7 +893,7 @@ fn align_imported_key_collections(keys: &mut KeyMappings, positions: &mut KeyPos
 fn merge_tab_preset_key_pair(
     store: &mut AppStoreData,
     current_tab_id: &str,
-    mut keys: Vec<String>,
+    mut keys: Vec<KeySlot>,
     imported_positions: Option<Vec<KeyPosition>>,
 ) {
     let mut positions = imported_positions.unwrap_or_else(|| {
@@ -2039,6 +2041,39 @@ mod tests {
     }
 
     #[test]
+    fn legacy_and_multi_key_preset_slots_share_the_normalization_path() {
+        let preset: PresetFile = serde_json::from_value(serde_json::json!({
+            "keys": {
+                "4key": [
+                    "Q",
+                    { "keys": ["A", "B"], "match": "any" },
+                    { "keys": ["Z"], "match": "all" }
+                ]
+            }
+        }))
+        .unwrap();
+        let keys = preset.keys.unwrap();
+
+        assert_eq!(keys["4key"][0], KeySlot::Single("Q".to_string()));
+        assert_eq!(
+            keys["4key"][1],
+            KeySlot::Multi {
+                keys: vec!["A".to_string(), "B".to_string()],
+                match_mode: crate::models::SlotMatch::Any,
+            }
+        );
+        assert_eq!(keys["4key"][2], KeySlot::Single("Z".to_string()));
+        assert_eq!(
+            serde_json::to_value(keys).unwrap()["4key"],
+            serde_json::json!([
+                "Q",
+                { "keys": ["A", "B"], "match": "any" },
+                "Z"
+            ])
+        );
+    }
+
+    #[test]
     fn tauri_161_literal_imports_its_plugin_list_exactly() {
         let mut current = AppStoreData::default();
         current.custom_js.plugins.push(JsPlugin {
@@ -2139,8 +2174,8 @@ mod tests {
     #[test]
     fn historical_full_preset_without_groups_starts_each_imported_mode_ungrouped() {
         let keys = KeyMappings::from([
-            ("4key".to_string(), vec!["A".to_string()]),
-            ("custom-old".to_string(), vec!["B".to_string()]),
+            ("4key".to_string(), vec![KeySlot::from("A")]),
+            ("custom-old".to_string(), vec![KeySlot::from("B")]),
         ]);
 
         let groups = resolve_full_preset_layer_groups(None, &keys);
@@ -2215,7 +2250,7 @@ mod tests {
         let untouched_keys = store.keys["5key"].clone();
         let untouched_positions = store.key_positions["5key"].clone();
 
-        merge_tab_preset_key_pair(&mut store, "4key", vec!["Imported".to_string()], None);
+        merge_tab_preset_key_pair(&mut store, "4key", vec![KeySlot::from("Imported")], None);
 
         assert_eq!(store.keys["5key"], untouched_keys);
         assert_eq!(store.key_positions["5key"], untouched_positions);
@@ -2227,8 +2262,8 @@ mod tests {
     #[test]
     fn preset_import_alignment_repairs_each_mode_without_dropping_values() {
         let mut keys = KeyMappings::from([
-            ("keys-only".to_string(), vec!["A".to_string()]),
-            ("positions-long".to_string(), vec!["B".to_string()]),
+            ("keys-only".to_string(), vec![KeySlot::from("A")]),
+            ("positions-long".to_string(), vec![KeySlot::from("B")]),
         ]);
         let mut positions = KeyPositions::from([
             (
@@ -2246,11 +2281,14 @@ mod tests {
 
         align_imported_key_collections(&mut keys, &mut positions);
 
-        assert_eq!(keys["keys-only"], vec!["A".to_string()]);
+        assert_eq!(keys["keys-only"], vec![KeySlot::from("A")]);
         assert_eq!(positions["keys-only"], vec![KeyPosition::default()]);
-        assert_eq!(keys["positions-only"], vec![String::new()]);
+        assert_eq!(keys["positions-only"], vec![KeySlot::default()]);
         assert_eq!(positions["positions-only"][0].dx, 123.0);
-        assert_eq!(keys["positions-long"], vec!["B".to_string(), String::new()]);
+        assert_eq!(
+            keys["positions-long"],
+            vec![KeySlot::from("B"), KeySlot::default()]
+        );
         assert_eq!(
             keys["positions-long"].len(),
             positions["positions-long"].len()

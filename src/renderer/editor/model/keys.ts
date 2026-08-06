@@ -7,6 +7,7 @@ import type {
   KeyMappings,
   KeyPositions,
   KeyPosition,
+  KeySlot,
   NoteColor,
   KeyCounterSettings,
   CounterAnimationBezier,
@@ -329,11 +330,11 @@ export function updateKeyMapping(
   mappings: KeyMappings,
   mode: string,
   index: number,
-  newKey: string,
+  newSlot: KeySlot,
 ): KeyMappings {
   const mapping = mappings[mode] || [];
   return {
     ...mappings,
-    [mode]: mapping.map((key, i) => (i === index ? newKey : key)),
+    [mode]: mapping.map((key, i) => (i === index ? newSlot : key)),
   };
 }

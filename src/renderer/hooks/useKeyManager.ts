@@ -18,6 +18,7 @@ import { removeDisplayElementsInternal } from '@plugins/runtime/displayElement/d
 import type {
   KeyMappings,
   KeyPositions,
+  KeySlot,
   NoteColor,
   KeyCounterSettings,
   ImageFit,
@@ -53,10 +54,10 @@ import {
   persistPositionsWithFlag,
 } from '@src/renderer/editor/runtime/persistState';
 
-type SelectedKey = { key: string; index: number } | null;
+type SelectedKey = { key: KeySlot; index: number } | null;
 
 type KeyUpdatePayload = {
-  key: string;
+  key: KeySlot;
   activeImage?: string;
   inactiveImage?: string;
   activeTransparent?: boolean;
@@ -521,12 +522,12 @@ export function useKeyManager() {
   // 키 스타일 업데이트 (속성 패널)
   // ────────────────────────────────────────────────────────────────────────
 
-  const handleKeyMappingChange = (index: number, newKey: string) => {
+  const handleKeyMappingChange = (index: number, newSlot: KeySlot) => {
     const updatedMappings = updateKeyMapping(
       keyMappings,
       selectedKeyType,
       index,
-      newKey,
+      newSlot,
     );
     setKeyMappings(updatedMappings);
     window.api.keys.update(updatedMappings).catch((error) => {

@@ -24,8 +24,19 @@ description: 키 매핑, 이벤트, 커스텀 탭 API
 모든 키 모드의 키 매핑을 조회합니다.
 
 ```typescript
-type KeyMappings = Record<string, string[]>;
-// { "4key": ["KeyD", "KeyF", "KeyJ", "KeyK"], ... }
+type SlotMatch = 'all' | 'any';
+
+// 슬롯은 단일 키 문자열 또는 멀티 키 바인딩입니다:
+// - match: 'any' — 멤버 키 중 하나만 눌러도 슬롯 활성 (택일)
+// - match: 'all' — 멤버 키를 전부 동시에 눌러야 슬롯 활성 (동시)
+interface MultiKeySlot {
+  keys: string[]; // 멤버 키 2~8개
+  match: SlotMatch;
+}
+
+type KeySlot = string | MultiKeySlot;
+type KeyMappings = Record<string, KeySlot[]>;
+// { "4key": ["KeyD", { keys: ["KeyF", "Numpad4"], match: "any" }, ...], ... }
 ```
 
 ```javascript
@@ -33,7 +44,13 @@ const mappings = await dmn.keys.get();
 console.log('4key 매핑:', mappings['4key']);
 ```
 
-### update(mappings)
+<Callout type="warning">
+  멀티 키 업데이트 이후 슬롯 값은 문자열뿐 아니라 객체(`MultiKeySlot`)일 수
+  있습니다. 모든 슬롯이 문자열이라고 가정하는 플러그인은 멀티 키 슬롯이 포함된
+  매핑을 다루기 전에 업데이트가 필요합니다.
+</Callout>
+
+### update(mappings, options?)
 
 키 매핑을 업데이트합니다.
 
@@ -42,6 +59,20 @@ const current = await dmn.keys.get();
 current['4key'] = ['KeyS', 'KeyD', 'KeyJ', 'KeyK'];
 await dmn.keys.update(current);
 ```
+
+현재 설정에 멀티 키 슬롯이 존재하는 상태에서 매핑을 쓰려면 멀티 키 지원을
+명시적으로 선언해야 합니다:
+
+```javascript
+await dmn.keys.update(current, { multiKey: true });
+```
+
+선언 없이 쓰면 현재 매핑에 멀티 키 슬롯이 하나라도 있을 때
+`MULTI_KEY_UNSUPPORTED` 오류 코드(비 retryable)로 거절됩니다. 멀티 키 슬롯을
+보존하지 않는 플러그인의 왕복 쓰기가 사용자 설정을 파괴하는 것을 막는
+fail-closed 게이트입니다. 같은 규칙이 `updateWithPositions()`와, `keys`를
+포함한 `dmn.editor.commit()` 요청(커밋 요청의 `multiKey: true`로 선언)에도
+적용됩니다.
 
 ### getPositions()
 
