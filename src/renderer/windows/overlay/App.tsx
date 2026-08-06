@@ -73,6 +73,18 @@ const MAX_EVENT_AGE_MS = 250;
 
 // 백엔드 상한과 동기 (초과는 OVERLAY_DIMENSION_EXCEEDED로 원자 거부됨)
 const MAX_OVERLAY_DIMENSION = 4096;
+// 백엔드 최소 크기와 동기 (normalize_overlay_dimensions)
+const MIN_OVERLAY_DIMENSION = 100;
+// in-flight resize 응답 상한 - 초과 시 낙관 승격으로 큐 봉쇄 해제
+const RESIZE_INFLIGHT_TIMEOUT_MS = 5000;
+
+// 백엔드 정규화 규칙과 동일 (min 100, round, max 4096 포화)
+// dispatch payload와 no-op 비교가 같은 값을 쓰도록 프론트에서 선적용
+const normalizeOverlayDimension = (value: number): number =>
+  Math.min(
+    MAX_OVERLAY_DIMENSION,
+    Math.round(Math.max(MIN_OVERLAY_DIMENSION, value)),
+  );
 
 // 폴백 배열 identity 안정화 (메모 체인 무효화 방지)
 const EMPTY_POSITIONS: KeyPosition[] = [];
@@ -98,7 +110,8 @@ interface OverlayGeometrySnapshot {
   selectedKeyType: string;
   noteSettings: NoteSettings;
   trackHeight: number;
-  directionSignature: string;
+  // 활성 노트 정리 판정용 트랙별 유효 방향 (trackKey → direction)
+  trackDirections: Map<string, string>;
   resizeParams: OverlayResizeParams | null;
 }
 
@@ -890,6 +903,10 @@ export default function App() {
         minY: bounds.minY,
       };
     }
+    const trackDirections = new Map<string, string>();
+    for (const track of webglTracks) {
+      if (track) trackDirections.set(track.trackKey, track.direction);
+    }
     return {
       layout,
       currentKeys,
@@ -898,9 +915,7 @@ export default function App() {
       selectedKeyType,
       noteSettings,
       trackHeight,
-      directionSignature: webglTracks
-        .map((track) => `${track?.trackKey}:${track?.direction}`)
-        .join('|'),
+      trackDirections,
       resizeParams,
     };
   }, [
@@ -921,6 +936,18 @@ export default function App() {
   const nativeParamsRef = useRef<OverlayResizeParams | null>(null);
   const inFlightRef = useRef<OverlayGeometrySnapshot | null>(null);
   const queuedLatestRef = useRef<OverlayGeometrySnapshot | null>(null);
+  // single-flight라 타이머도 최대 1개 - 언마운트 시 정리
+  const inFlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (inFlightTimerRef.current !== null) {
+        clearTimeout(inFlightTimerRef.current);
+        inFlightTimerRef.current = null;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const promote = (snapshot: OverlayGeometrySnapshot) => {
@@ -952,9 +979,13 @@ export default function App() {
       }
       // 상한 초과는 거부 대신 포화(saturate) - 창은 상한으로 클램프해 요청하고
       // 콘텐츠는 전체 레이아웃 기준으로 항상 렌더 (계약 §4 v2.6, 잘린 viewport 수용)
-      const width = Math.min(params.width, MAX_OVERLAY_DIMENSION);
-      const height = Math.min(params.height, MAX_OVERLAY_DIMENSION);
-      if (width !== params.width || height !== params.height) {
+      // min·round도 백엔드 정규화와 동일하게 선적용해 no-op 비교 기준을 일치시킴
+      const width = normalizeOverlayDimension(params.width);
+      const height = normalizeOverlayDimension(params.height);
+      if (
+        params.width > MAX_OVERLAY_DIMENSION ||
+        params.height > MAX_OVERLAY_DIMENSION
+      ) {
         console.warn(
           `Overlay dimension exceeds limit (${params.width}x${params.height} > ${MAX_OVERLAY_DIMENSION}); saturating window size`,
         );
@@ -976,6 +1007,23 @@ export default function App() {
           ? dispatchParams.minY - nativeParams.minY
           : 0;
       inFlightRef.current = snapshot;
+      const clearInFlightTimer = () => {
+        if (inFlightTimerRef.current !== null) {
+          clearTimeout(inFlightTimerRef.current);
+          inFlightTimerRef.current = null;
+        }
+      };
+      // 응답 없는 IPC가 큐를 영구 봉쇄하지 않도록 타임아웃 시 낙관 승격 + settle
+      // nativeParams는 미갱신이라 다음 candidate가 재시도 가능
+      inFlightTimerRef.current = setTimeout(() => {
+        if (inFlightRef.current !== snapshot) return;
+        inFlightTimerRef.current = null;
+        console.warn(
+          'Overlay resize timed out; rendering without window resize',
+        );
+        promote(snapshot);
+        settle();
+      }, RESIZE_INFLIGHT_TIMEOUT_MS);
       window.api.overlay
         .resize({
           width: dispatchParams.width,
@@ -991,6 +1039,9 @@ export default function App() {
             : undefined,
         })
         .then((bounds) => {
+          // 타임아웃·언마운트 후 늦게 도착한 응답은 최신 상태를 덮지 않음
+          if (inFlightRef.current !== snapshot) return;
+          clearInFlightTimer();
           // no-op 판정 기준은 백엔드 실적용 크기 (반올림·보정 반영)
           nativeParamsRef.current = {
             ...dispatchParams,
@@ -1006,6 +1057,8 @@ export default function App() {
           settle();
         })
         .catch((error) => {
+          if (inFlightRef.current !== snapshot) return;
+          clearInFlightTimer();
           if (isOverlayDimensionExceeded(error)) {
             // 백엔드 원자 거부는 안전망 - 렌더러 포화로 정상 경로에선 도달하지 않음
             console.warn(
@@ -1036,19 +1089,26 @@ export default function App() {
   }, [applied, updateTrackLayouts]);
 
   // 유효 방향 전환 시 활성 노트 정리 (계약 §7, 첫 마운트 제외)
-  // 스냅샷 좌표가 새 좌표계와 어긋나는 아티팩트 방지 - 전역·탭·키별 어느
-  // 계층 변경이든 directionSignature 변화로 수렴
-  const lastDirectionSignatureRef = useRef<string | null>(null);
+  // 스냅샷 좌표가 새 좌표계와 어긋나는 아티팩트 방지 - 양쪽에 존재하는 트랙의
+  // 방향이 실제로 바뀐 경우에만 정리 (키 추가·삭제·탭 전환은 자연 퇴장 유지)
+  const lastTrackDirectionsRef = useRef<Map<string, string> | null>(null);
   useEffect(() => {
     if (!applied) return;
-    const signature = applied.directionSignature;
-    if (
-      lastDirectionSignatureRef.current !== null &&
-      lastDirectionSignatureRef.current !== signature
-    ) {
-      clearAllNotes();
+    const current = applied.trackDirections;
+    const previous = lastTrackDirectionsRef.current;
+    if (previous) {
+      for (const [trackKey, direction] of current) {
+        const previousDirection = previous.get(trackKey);
+        if (
+          previousDirection !== undefined &&
+          previousDirection !== direction
+        ) {
+          clearAllNotes();
+          break;
+        }
+      }
     }
-    lastDirectionSignatureRef.current = signature;
+    lastTrackDirectionsRef.current = current;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applied]);
 

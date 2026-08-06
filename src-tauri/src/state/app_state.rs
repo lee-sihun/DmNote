@@ -2191,14 +2191,6 @@ impl AppState {
             height,
         };
 
-        defer_overlay_bounds(
-            &self.store,
-            &self.overlay_bounds_generation,
-            bounds.clone(),
-            next_content_top_offset,
-            content_margins_update,
-        )?;
-
         log::debug!(
             "[IPC] resize_overlay: emit overlay:resized ({}x{} at {}, {})",
             bounds.width,
@@ -2206,17 +2198,30 @@ impl AppState {
             bounds.x,
             bounds.y
         );
-        app.emit(
-            "overlay:resized",
-            &json!({
-                "x": bounds.x,
-                "y": bounds.y,
-                "width": bounds.width,
-                "height": bounds.height,
-            }),
-        )?;
-
-        Ok(bounds)
+        complete_overlay_resize_after_native_apply(
+            bounds,
+            |applied_bounds| {
+                defer_overlay_bounds(
+                    &self.store,
+                    &self.overlay_bounds_generation,
+                    applied_bounds.clone(),
+                    next_content_top_offset,
+                    content_margins_update,
+                )
+            },
+            |applied_bounds| {
+                app.emit(
+                    "overlay:resized",
+                    &json!({
+                        "x": applied_bounds.x,
+                        "y": applied_bounds.y,
+                        "width": applied_bounds.width,
+                        "height": applied_bounds.height,
+                    }),
+                )?;
+                Ok(())
+            },
+        )
     }
 
     pub fn start_keyboard_hook(&self, app: AppHandle) -> Result<()> {
@@ -5049,6 +5054,24 @@ fn defer_overlay_bounds(
     Ok(())
 }
 
+fn complete_overlay_resize_after_native_apply(
+    bounds: OverlayBounds,
+    record_bounds: impl FnOnce(&OverlayBounds) -> Result<()>,
+    emit_resized: impl FnOnce(&OverlayBounds) -> Result<()>,
+) -> crate::errors::CmdResult<OverlayBounds> {
+    if let Err(error) = record_bounds(&bounds) {
+        log::warn!(
+            "failed to record applied overlay bounds; native resize remains authoritative: {error:#}"
+        );
+    }
+    if let Err(error) = emit_resized(&bounds) {
+        log::warn!(
+            "failed to emit applied overlay resize; native resize remains authoritative: {error:#}"
+        );
+    }
+    Ok(bounds)
+}
+
 fn flush_deferred_overlay_bounds(store: &Arc<AppStore>, generation: &Arc<AtomicU64>) -> Result<()> {
     generation.fetch_add(1, Ordering::SeqCst);
     store.flush()
@@ -5237,16 +5260,16 @@ mod tests {
         acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
         apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
         changed_panel_max_height, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
-        content_margin_position_adjustment, fixed_position_adjustment,
-        frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
-        global_css_watch_path, install_history_handshake, install_lifecycle_handshake,
-        key_state_payload, next_keyboard_recovery_plan, normalize_overlay_dimensions,
-        panel_bounds_from_sample, panel_height_bounds, publish_panel_hidden_transition,
-        publish_panel_visibility_transition, publish_selection_snapshot,
-        resolve_content_margin_transition, resolve_event_age_ms, resolve_panel_window_layout,
-        run_panel_close_timeout, should_create_overlay_on_startup, should_recover_keyboard_daemon,
-        take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
-        take_targeted_panel_view_state, validate_selection_session,
+        complete_overlay_resize_after_native_apply, content_margin_position_adjustment,
+        fixed_position_adjustment, frontend_history_mutation_blocked,
+        frontend_lifecycle_restore_labels, global_css_watch_path, install_history_handshake,
+        install_lifecycle_handshake, key_state_payload, next_keyboard_recovery_plan,
+        normalize_overlay_dimensions, panel_bounds_from_sample, panel_height_bounds,
+        publish_panel_hidden_transition, publish_panel_visibility_transition,
+        publish_selection_snapshot, resolve_content_margin_transition, resolve_event_age_ms,
+        resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
+        should_recover_keyboard_daemon, take_cancelable_editor_flush_handshake,
+        take_editor_flush_handshake, take_targeted_panel_view_state, validate_selection_session,
         with_validated_overlay_dimensions, EditorFlushAcknowledge, EditorFlushCompletion,
         EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction, FrontendHistoryFlushPhase,
         FrontendHistoryFlushReady, FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData,
@@ -5470,6 +5493,37 @@ mod tests {
             normalize_overlay_dimensions(MAX_OVERLAY_DIMENSION, MAX_OVERLAY_DIMENSION).unwrap(),
             (MAX_OVERLAY_DIMENSION, MAX_OVERLAY_DIMENSION)
         );
+    }
+
+    #[test]
+    fn post_apply_failures_return_exact_applied_overlay_bounds() {
+        let expected = OverlayBounds {
+            x: 41.5,
+            y: 82.25,
+            width: 900.0,
+            height: 450.0,
+        };
+        let record_called = AtomicBool::new(false);
+        let emit_called = AtomicBool::new(false);
+
+        let returned = complete_overlay_resize_after_native_apply(
+            expected.clone(),
+            |bounds| {
+                record_called.store(true, Ordering::SeqCst);
+                assert_eq!(bounds, &expected);
+                Err(anyhow::anyhow!("injected bounds record failure"))
+            },
+            |bounds| {
+                emit_called.store(true, Ordering::SeqCst);
+                assert_eq!(bounds, &expected);
+                Err(anyhow::anyhow!("injected resize event failure"))
+            },
+        )
+        .unwrap();
+
+        assert!(record_called.load(Ordering::SeqCst));
+        assert!(emit_called.load(Ordering::SeqCst));
+        assert_eq!(returned, expected);
     }
 
     #[test]

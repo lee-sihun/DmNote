@@ -483,6 +483,180 @@ describe('overlay geometry transaction', () => {
     expect(lastSceneProps()?.displayPositions).toHaveLength(2);
   });
 
+  it('all-up 탭 전환과 키 추가에는 clearAllNotes를 호출하지 않는다', async () => {
+    await act(async () => {
+      useKeyStore.setState(
+        bootLikeState('8key', {
+          '4key': [pos(0, 0)],
+          '8key': [pos(0, 0), pos(100, 0)],
+        }),
+      );
+    });
+    await flushAsync();
+
+    // 탭 전환 (모두 up)
+    await act(async () => {
+      useKeyStore.setState({ selectedKeyType: '4key' });
+    });
+    await flushAsync();
+    expect(lastSceneProps()?.selectedKeyType).toBe('4key');
+
+    // 같은 탭에서 키 추가 (모두 up)
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        keyMappings: {
+          ...state.keyMappings,
+          '4key': ['Key4key-0', 'Key4key-1'],
+        },
+        positions: { ...state.positions, '4key': [pos(0, 0), pos(200, 0)] },
+      }));
+    });
+    await flushAsync();
+    expect(lastSceneProps()?.displayPositions).toHaveLength(2);
+
+    expect(mocks.clearAllNotes).not.toHaveBeenCalled();
+  });
+
+  it('양쪽에 존재하는 트랙의 방향이 바뀐 경우에만 clearAllNotes를 호출한다', async () => {
+    await act(async () => {
+      useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+    });
+    await flushAsync();
+    expect(mocks.clearAllNotes).not.toHaveBeenCalled();
+
+    // 같은 트랙의 방향 변경: up → down
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: {
+          ...state.positions,
+          '8key': [pos(0, 0, { noteDirection: 'down' })],
+        },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.clearAllNotes).toHaveBeenCalledTimes(1);
+  });
+
+  it('영구 pending resize는 타임아웃 후 낙관 승격되고 큐가 복구된다', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      const never = deferred<{
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>();
+      const second = deferred<{
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>();
+      mocks.resize
+        .mockReturnValueOnce(never.promise)
+        .mockReturnValueOnce(second.promise);
+
+      // A: 응답이 오지 않는 in-flight
+      await act(async () => {
+        useKeyStore.setState(bootLikeState('8key', { '8key': [pos(0, 0)] }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(1);
+
+      // B: in-flight 중 도착한 최신 candidate는 큐에만 저장
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(1);
+
+      // 타임아웃: A 낙관 승격 + B 재디스패치 (큐 봉쇄 해제)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('timed out'),
+      );
+      expect(mocks.resize).toHaveBeenCalledTimes(2);
+      expect(lastSceneProps()?.displayPositions).toHaveLength(1);
+
+      await act(async () => {
+        second.resolve({ x: 0, y: 0, width: 220, height: 420 });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(lastSceneProps()?.displayPositions).toHaveLength(2);
+
+      // 늦게 도착한 A 응답은 토큰 가드로 무시 - B 상태를 덮지 않음
+      await act(async () => {
+        never.resolve({ x: 0, y: 0, width: 120, height: 420 });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(lastSceneProps()?.displayPositions).toHaveLength(2);
+
+      // nativeParams가 A로 오염되지 않았는지: B와 동일 params candidate는 no-op
+      await act(async () => {
+        useKeyStore.setState((state) => ({
+          positions: { ...state.positions, '8key': [pos(0, 0), pos(100, 0)] },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(mocks.resize).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('백엔드 최소 크기 미만 요청은 100으로 정규화해 보내고 동일 candidate 재발행 시 IPC를 생략한다', async () => {
+    await act(async () => {
+      useKeyStore.setState(
+        bootLikeState('8key', {
+          '8key': [pos(0, 0, { width: 30, height: 30 })],
+        }),
+      );
+    });
+    await flushAsync();
+
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
+    expect(lastResizePayload().width).toBe(100);
+
+    // 동일 값의 새 candidate: 응답(100)과 정규화 요청(100)이 일치해 no-op
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: {
+          ...state.positions,
+          '8key': [pos(0, 0, { width: 30, height: 30 })],
+        },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
+    expect(lastSceneProps()?.displayPositions).toHaveLength(1);
+  });
+
+  it('소수 치수는 백엔드와 동일하게 반올림해 재-IPC를 막는다', async () => {
+    await act(async () => {
+      useKeyStore.setState(
+        bootLikeState('8key', { '8key': [pos(0, 0, { width: 60.5 })] }),
+      );
+    });
+    await flushAsync();
+
+    // 120.5 → 121 (round half away from zero, 백엔드 f64::round와 동일)
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
+    expect(lastResizePayload().width).toBe(121);
+
+    await act(async () => {
+      useKeyStore.setState((state) => ({
+        positions: { ...state.positions, '8key': [pos(0, 0, { width: 60.5 })] },
+      }));
+    });
+    await flushAsync();
+    expect(mocks.resize).toHaveBeenCalledTimes(1);
+  });
+
   it('비유한 지오메트리는 native 호출 없이 렌더만 승격한다', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
