@@ -127,7 +127,6 @@ const ShadowPicker = ({
       {/* 상태 전환 — 눌림 상태가 없는 요소는 대기만 */}
       {showActiveState ? (
         <TabSwitch
-          commitStrategy="after-paint"
           tabs={[
             { id: 'idle', label: t('propertiesPanel.shadowIdle') || '대기' },
             {

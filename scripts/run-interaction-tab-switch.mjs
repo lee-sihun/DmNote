@@ -171,7 +171,7 @@ const experimentBlock = `<!-- BASE-07:EXPERIMENT:START -->
 | 필드 | 내용 |
 | --- | --- |
 | 항목 ID | BASE-07 |
-| 적용 범위 | 키 슬롯, 색상 상태·형식, 이미지 상태, 통합 키 설정, 그림자 상태, 노트 설정의 7개 탭 전환 |
+| 적용 범위 | 키 슬롯, 색상 상태·형식, 이미지 상태, 통합 키 설정, 노트 설정의 6개 탭 전환 |
 | 변경 내용 | 활성 인디케이터와 \`aria-pressed\`를 먼저 반영하고 탭 콘텐츠 상태 변경을 첫 paint 뒤 커밋 |
 | 적용 기법 | 낙관적 상태 투영·메인 스레드 양보·연속 탭 선택 병합 |
 | 커밋·PR | \`${improved.commit.slice(0, 8)}\` |
@@ -228,14 +228,6 @@ const partialRows = [
     '`ad22c019`, 상태 탭 전환만 적용',
   ],
   [
-    'PICK-09',
-    '그림자 상태·수치·색상',
-    'P0/P1',
-    'F95 ms/frame',
-    '실험',
-    '`ad22c019`, 상태 탭 전환만 적용',
-  ],
-  [
     'MODAL-02',
     '키·노트·카운터 설정 전체',
     'P1/P2',
@@ -250,6 +242,10 @@ for (const [id, label, priority, metric, status, evidence] of partialRows) {
     `| ${id} | ${label} | ${priority} | ${metric} | — | — | — | ${status} | ${evidence} |`,
   );
 }
+tracker = tracker.replace(
+  /^\| PICK-09\s+\|.*$/m,
+  '| PICK-09 | 그림자 상태·수치·색상 | P0/P1 | F95 ms/frame | — | — | — | 대기 | 상태 전환 직후 편집의 동기 계약 유지 |',
+);
 
 const replaceOrInsert = (start, end, block, before) => {
   const expression = new RegExp(`${start}[\\s\\S]*?${end}`);
