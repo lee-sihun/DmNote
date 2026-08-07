@@ -1111,21 +1111,45 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     setContextMenuOpen(true);
   };
 
-  const deletePluginElement = () => {
-    // onDelete 핸들러 호출 (자동 래핑되어 있음)
-    if (element.onDelete && typeof element.onDelete === 'string') {
-      const handler = (window as unknown as Record<string, unknown>)[
-        element.onDelete
-      ];
-      if (typeof handler === 'function') {
-        (handler as () => void)();
-      }
+  const deleteInFlightRef = useRef(false);
+  const observePluginAction = (result: unknown, label: string) => {
+    if (
+      typeof result === 'object' &&
+      result !== null &&
+      'then' in result &&
+      typeof result.then === 'function'
+    ) {
+      void Promise.resolve(result).catch((error) =>
+        console.error(`[PluginElement] ${label} failed`, error),
+      );
     }
+  };
 
-    if (window.api?.ui?.displayElement) {
-      window.api.ui.displayElement.remove(element.fullId);
-    } else {
-      usePluginDisplayElementStore.getState().removeElement(element.fullId);
+  const deletePluginElement = () => {
+    if (deleteInFlightRef.current) return;
+    deleteInFlightRef.current = true;
+    // onDelete 핸들러 호출 (자동 래핑되어 있음)
+    try {
+      if (element.onDelete && typeof element.onDelete === 'string') {
+        const handler = (window as unknown as Record<string, unknown>)[
+          element.onDelete
+        ];
+        if (typeof handler === 'function') {
+          observePluginAction(handler(), 'onDelete');
+        }
+      }
+    } catch (error) {
+      console.error('[PluginElement] onDelete failed', error);
+    }
+    try {
+      if (window.api?.ui?.displayElement) {
+        window.api.ui.displayElement.remove(element.fullId);
+      } else {
+        usePluginDisplayElementStore.getState().removeElement(element.fullId);
+      }
+    } catch (error) {
+      deleteInFlightRef.current = false;
+      console.error('[PluginElement] remove failed', error);
     }
   };
 
@@ -1432,10 +1456,20 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       const customItem = element.contextMenu?.customItems?.[index];
       if (customItem) {
         // 커스텀 메뉴 실행 (자동 래핑되어 있음)
-        customItem.onClick({
-          element,
-          actions: createActionsProxy(element.fullId),
-        });
+        try {
+          observePluginAction(
+            customItem.onClick({
+              element,
+              actions: createActionsProxy(element.fullId),
+            }),
+            `context action ${index}`,
+          );
+        } catch (error) {
+          console.error(
+            `[PluginElement] context action ${index} failed`,
+            error,
+          );
+        }
       }
     }
   };
