@@ -781,14 +781,11 @@ export default function App() {
     ],
   );
 
+  // updateTrackLayouts는 useNoteSystem이 마운트 1회 고정 참조를 보장하므로
+  // deps 포함이 재실행을 유발하지 않으며, 훅이 updater를 교체하는 미래 변경에도 안전
   useEffect(() => {
     updateTrackLayouts(webglTracks);
-    // updateTrackLayouts는 useNoteSystem이 마운트 1회 고정 참조를 보장하므로
-    // deps에서 배제 - 공급자 identity 흔들림이 트랙 재업로드로 전파되지 않게 함.
-    // 단순 계약 의존이 아니라 App 측 독립 계약 - deps에 되돌리면
-    // App.test.tsx의 적대 모킹(매 렌더 새 identity) 기반 메모이제이션 테스트가 깨짐
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [webglTracks]);
+  }, [webglTracks, updateTrackLayouts]);
 
   // 이전 resize 값을 추적하여 실제로 변경되었을 때만 resize 호출
   const lastResizeParams = useRef<{

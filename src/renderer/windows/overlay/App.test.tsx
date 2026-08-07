@@ -59,9 +59,11 @@ vi.mock('@hooks/overlay/useBuiltinStatsSubscription', () => ({
   useBuiltinStatsSubscription: vi.fn(),
 }));
 vi.mock('@hooks/overlay/useNoteSystem', () => ({
-  // 실제 훅이 불안정 참조를 반환해도 App이 재구독·리셋하지 않아야 한다는
-  // 계약(#111)을 검증하기 위해 의도적으로 매 렌더 새 identity를 반환.
-  // 안정 참조(mocks.handleKeyDown 직접 전달)로 되돌리지 말 것
+  // 키 이벤트 핸들러들은 의도적으로 매 렌더 새 identity 반환 - 실제 훅이
+  // 불안정 참조를 반환해도 App이 재구독·리셋하지 않아야 한다는 계약(#111) 검증.
+  // 안정 참조(mocks.handleKeyDown 직접 전달)로 되돌리지 말 것.
+  // updateTrackLayouts는 반대로 안정 참조 - 훅의 마운트 1회 고정 계약을 반영하며
+  // App effect deps([webglTracks, updateTrackLayouts])가 이 안정성에 의존
   useNoteSystem: () => ({
     notesRef: mocks.notesRef,
     subscribe: (cb: (event: unknown) => void) => mocks.subscribe(cb),
@@ -71,8 +73,7 @@ vi.mock('@hooks/overlay/useNoteSystem', () => ({
     reconcileActiveNotes: (...args: unknown[]) =>
       mocks.reconcileActiveNotes(...args),
     noteBuffer: mocks.noteBuffer,
-    updateTrackLayouts: (...args: unknown[]) =>
-      mocks.updateTrackLayouts(...args),
+    updateTrackLayouts: mocks.updateTrackLayouts,
   }),
 }));
 vi.mock('@stores/data/useStatItemStore', () => ({
