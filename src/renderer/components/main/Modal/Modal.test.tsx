@@ -22,6 +22,7 @@ describe('Modal focus contract', () => {
     await act(async () => root.unmount());
     host.remove();
     document.body.innerHTML = '';
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -134,6 +135,45 @@ describe('Modal focus contract', () => {
     expect(document.activeElement?.getAttribute('aria-label')).toBe(
       'Preferred',
     );
+  });
+
+  it('after-paint 전략은 dialog shell을 먼저 표시한 뒤 콘텐츠를 mount한다', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
+
+    await act(async () => {
+      root.render(
+        <Modal
+          ariaLabel="Deferred dialog"
+          animate={false}
+          contentMountStrategy="after-paint"
+        >
+          <button type="button">Deferred action</button>
+        </Modal>,
+      );
+    });
+
+    const dialog = document.querySelector<HTMLElement>(
+      '[aria-label="Deferred dialog"]',
+    );
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).not.toContain('Deferred action');
+    expect(document.activeElement).toBe(dialog);
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    const action = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Deferred action',
+    );
+    expect(action).not.toBeUndefined();
+    expect(document.activeElement).toBe(action);
   });
 
   it('yields keyboard ownership while a popup layer is open', async () => {

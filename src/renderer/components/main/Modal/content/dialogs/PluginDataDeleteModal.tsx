@@ -21,7 +21,11 @@ export function PluginDataDeleteModal({
   if (!isOpen) return null;
 
   return (
-    <Modal onClick={onClose} ariaLabel={t('settings.pluginDataDeleteTitle')}>
+    <Modal
+      onClick={onClose}
+      ariaLabel={t('settings.pluginDataDeleteTitle')}
+      contentMountStrategy="after-paint"
+    >
       <div
         className="flex flex-col w-[380px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px] gap-[12px]"
         onClick={(event) => event.stopPropagation()}

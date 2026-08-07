@@ -190,6 +190,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
       onClick={handleClose}
       animate={!initialSkipRef.current}
       ariaLabel={t('keySetting.title')}
+      contentMountStrategy="after-paint"
     >
       <div
         className="flex flex-col min-w-[264px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"

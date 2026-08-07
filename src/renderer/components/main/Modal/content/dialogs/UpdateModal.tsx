@@ -80,7 +80,11 @@ const UpdateModal = ({
   const publishedLabel = formatDate(updateInfo.publishedAt);
 
   return (
-    <Modal onClick={handleClose} ariaLabel={t('update.title')}>
+    <Modal
+      onClick={handleClose}
+      ariaLabel={t('update.title')}
+      contentMountStrategy="after-paint"
+    >
       <div
         className="flex flex-col w-[300px] p-[14px] gap-[12px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3"
         onClick={(e) => e.stopPropagation()}

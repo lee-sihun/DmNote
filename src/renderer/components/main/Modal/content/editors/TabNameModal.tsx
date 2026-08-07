@@ -67,7 +67,11 @@ const TabNameModal = ({
   if (!isOpen) return null;
 
   return (
-    <Modal onClick={onClose} ariaLabel={t('tabs.createTitle')}>
+    <Modal
+      onClick={onClose}
+      ariaLabel={t('tabs.createTitle')}
+      contentMountStrategy="after-paint"
+    >
       <div
         className="flex flex-col w-[280px] p-[14px] gap-[12px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3"
         onClick={(e) => e.stopPropagation()}

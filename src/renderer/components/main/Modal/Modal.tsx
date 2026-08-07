@@ -1,5 +1,6 @@
-import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { getFocusableElements } from '@utils/focusableElements';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
 
@@ -11,6 +12,8 @@ interface ModalProps {
   ariaLabel?: string;
   /** 중앙 카드 대신 크롬 사이 영역을 통째로 덮는 전면 시트 */
   fullSurface?: boolean;
+  /** 모달 shell을 먼저 표시하고 무거운 children mount를 첫 paint 뒤로 분리 */
+  contentMountStrategy?: CommitStrategy;
 }
 
 const Modal = ({
@@ -19,6 +22,7 @@ const Modal = ({
   animate = true,
   ariaLabel,
   fullSurface = false,
+  contentMountStrategy = 'sync',
 }: ModalProps) => {
   const scrimAnimClass = animate ? 'animate-modal-scrim' : '';
   // 전면 시트는 등장 애니메이션 없이 즉시 표시
@@ -26,9 +30,24 @@ const Modal = ({
   const closeFromBackdropRef = useRef(false);
   const backdropRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClick);
+  const [deferredContentMounted, setDeferredContentMounted] = useState(false);
+  const contentReady =
+    contentMountStrategy === 'sync' || deferredContentMounted;
   useEffect(() => {
     onCloseRef.current = onClick;
   });
+
+  useEffect(() => {
+    if (contentMountStrategy === 'sync') return;
+    let timer: number | null = null;
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => setDeferredContentMounted(true), 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [contentMountStrategy]);
 
   // 열기 전 포커스를 첫 렌더 시점에 캡처 — passive effect는 자식 autoFocus·
   // 자식 effect 이후에 실행돼 opener 대신 모달 내부 요소를 잡는 오염이 생긴다.
@@ -60,10 +79,17 @@ const Modal = ({
   // 자식 autoFocus를 존중하고, 지정이 없으면 첫 조작 요소로 포커스 이동
   useLayoutEffect(() => {
     const backdrop = backdropRef.current;
-    if (!backdrop || backdrop.contains(document.activeElement)) return;
+    if (!backdrop) return;
+    if (
+      contentReady &&
+      document.activeElement !== backdrop &&
+      backdrop.contains(document.activeElement)
+    ) {
+      return;
+    }
     const initialTarget = getFocusableElements(backdrop)[0] ?? backdrop;
     initialTarget.focus();
-  }, []);
+  }, [contentReady]);
 
   // 닫힐 때 열기 전 포커스 복원 (요소가 아직 문서에 연결된 경우만)
   useEffect(() => {
@@ -183,7 +209,7 @@ const Modal = ({
           fullSurface ? 'absolute inset-0' : 'relative'
         } ${contentAnimClass}`}
       >
-        {children}
+        {contentReady ? children : null}
       </div>
     </div>,
     document.body,

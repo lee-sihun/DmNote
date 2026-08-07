@@ -72,6 +72,7 @@ const Alert = ({
     <Modal
       onClick={onCancel}
       ariaLabel={isCustom ? t('common.dialog') : message}
+      contentMountStrategy="after-paint"
     >
       <div
         className="flex flex-col min-w-[264px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"

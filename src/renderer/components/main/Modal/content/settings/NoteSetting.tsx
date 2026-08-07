@@ -456,7 +456,11 @@ const NoteSetting = ({
   const cancelPress = usePressAction(onClose);
 
   return (
-    <Modal onClick={onClose} ariaLabel={title ?? t('keySetting.tabNote')}>
+    <Modal
+      onClick={onClose}
+      ariaLabel={title ?? t('keySetting.tabNote')}
+      contentMountStrategy="after-paint"
+    >
       <div
         className="flex flex-col w-[264px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(e) => e.stopPropagation()}

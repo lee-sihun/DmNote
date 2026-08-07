@@ -33,7 +33,12 @@ const FullSurfaceModalLayout = ({
   const cancelPress = usePressAction(onClose);
 
   return (
-    <Modal fullSurface onClick={onClose} ariaLabel={title}>
+    <Modal
+      fullSurface
+      onClick={onClose}
+      ariaLabel={title}
+      contentMountStrategy="after-paint"
+    >
       <div
         className={`w-full h-full flex flex-col ${FULL_SURFACE_MATERIAL_CLASS}`}
         onClick={(event) => event.stopPropagation()}

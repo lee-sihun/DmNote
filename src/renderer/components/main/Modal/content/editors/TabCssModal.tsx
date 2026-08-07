@@ -240,7 +240,11 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   const canExport = Boolean(tabCss?.content) && !isExporting;
 
   return (
-    <Modal onClick={handleCancel} ariaLabel={t('tabCss.enableCss')}>
+    <Modal
+      onClick={handleCancel}
+      ariaLabel={t('tabCss.enableCss')}
+      contentMountStrategy="after-paint"
+    >
       <div
         className="flex flex-col w-[288px] p-[14px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 gap-[12px]"
         onClick={(e) => e.stopPropagation()}
