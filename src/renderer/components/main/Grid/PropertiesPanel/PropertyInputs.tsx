@@ -52,6 +52,31 @@ export const PropertySection: React.FC<{ children: React.ReactNode }> = ({
 // 숫자 입력
 // ============================================================================
 
+// 숫자 입력 셸 - 외형과 타이포는 label 래퍼가 소유, input은 투명 flex 자식.
+// label 위임으로 프리픽스·여백 클릭도 입력 포커스로 이어지고,
+// 긴 값은 input 내부 스크롤로 처리되어 고정폭에서도 잘리지 않음
+const NumberInputShell: React.FC<{
+  prefix?: string;
+  width: string;
+  focused: boolean;
+  children: React.ReactNode;
+}> = ({ prefix, width, focused, children }) => (
+  <label
+    className={`flex items-center gap-[4px] h-[23px] px-[6px] bg-inset rounded-md cursor-text ${
+      focused ? 'shadow-focus-ring' : ''
+    }`}
+    style={{ width }}
+  >
+    {prefix && (
+      <span className="shrink-0 text-fg-muted text-body">{prefix}</span>
+    )}
+    {children}
+  </label>
+);
+
+const NUMBER_FIELD_CLASS =
+  'flex-1 min-w-0 h-full bg-transparent text-body tabular-nums text-center text-ellipsis';
+
 export const NumberInput: React.FC<NumberInputProps> = ({
   value,
   onChange,
@@ -69,7 +94,6 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   isMixed = false,
   mixedPlaceholder = 'Mixed',
 }) => {
-  const hasSuffix = !!suffix;
   const resolvedDecimalScale = allowDecimal
     ? Math.max(0, Math.floor(decimalScale))
     : 0;
@@ -126,16 +150,14 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     return normalizePrecision(clamped);
   };
 
-  const getDisplayValue = (val: number | string, focused: boolean): string => {
+  // blur 표시값에만 단위를 붙여 값과 함께 가운데 정렬 (포커스 시 숫자만)
+  const getDisplayValue = (val: number | string): string => {
     const normalized = typeof val === 'number' ? normalizePrecision(val) : val;
-    if (hasSuffix && !focused) {
-      return `${normalized}${suffix}`;
-    }
-    return String(normalized);
+    return suffix ? `${normalized}${suffix}` : String(normalized);
   };
 
   const [localValue, setLocalValue] = useState<string>(
-    isMixed ? '' : getDisplayValue(value, false),
+    isMixed ? '' : getDisplayValue(value),
   );
   const [isFocused, setIsFocused] = useState(false);
   const [hasUserInput, setHasUserInput] = useState(false);
@@ -144,7 +166,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   useEffect(() => {
     if (!isFocused) {
-      setLocalValue(isMixed ? '' : getDisplayValue(value, false));
+      setLocalValue(isMixed ? '' : getDisplayValue(value));
       setHasUserInput(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -248,7 +270,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     // Escape는 확정 없이 표시값 원복
     if (escapedRef.current) {
       escapedRef.current = false;
-      setLocalValue(isMixed ? '' : getDisplayValue(value, false));
+      setLocalValue(isMixed ? '' : getDisplayValue(value));
       setHasUserInput(false);
       // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
       onCancel?.();
@@ -267,9 +289,9 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
     const clamped = parseAndClamp(numericValue);
     if (clamped === null) {
-      setLocalValue(isMixed ? '' : getDisplayValue(value, false));
+      setLocalValue(isMixed ? '' : getDisplayValue(value));
     } else {
-      setLocalValue(getDisplayValue(clamped, false));
+      setLocalValue(getDisplayValue(clamped));
       onChange(clamped);
     }
     setHasUserInput(false);
@@ -279,8 +301,12 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   // Mixed 상태일 때 placeholder 표시 여부
   const showMixedPlaceholder = isMixed && !isFocused && localValue === '';
 
-  if (hasSuffix) {
-    return (
+  return (
+    <NumberInputShell
+      prefix={showMixedPlaceholder ? undefined : prefix}
+      width={width}
+      focused={isFocused}
+    >
       <input
         type="text"
         inputMode={supportsDecimal ? 'decimal' : 'numeric'}
@@ -290,50 +316,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
-        className={`text-center h-[23px] bg-inset rounded-md ${
-          isFocused ? 'shadow-focus-ring' : ''
-        } text-body tabular-nums ${
+        className={`${NUMBER_FIELD_CLASS} ${
           showMixedPlaceholder
             ? 'text-fg-faint italic placeholder:text-fg-faint placeholder:italic'
             : 'text-fg'
         }`}
-        style={{ width }}
       />
-    );
-  }
-
-  return (
-    <div
-      className={`relative h-[23px] bg-inset rounded-md ${
-        isFocused ? 'shadow-focus-ring' : ''
-      }`}
-      style={{ width }}
-    >
-      {prefix && !showMixedPlaceholder && (
-        <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
-          {prefix}
-        </span>
-      )}
-      <input
-        type="text"
-        inputMode={supportsDecimal ? 'decimal' : 'numeric'}
-        value={localValue}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
-        className={`absolute ${
-          prefix && !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
-        } top-0 h-[23px] ${
-          prefix && !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
-        } bg-transparent text-body tabular-nums ${
-          showMixedPlaceholder
-            ? 'text-fg-faint italic placeholder:text-fg-faint placeholder:italic'
-            : 'text-fg'
-        } text-center`}
-      />
-    </div>
+    </NumberInputShell>
   );
 };
 
@@ -359,7 +348,6 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   isMixed = false,
   mixedPlaceholder = 'Mixed',
 }) => {
-  const hasSuffix = !!suffix;
   const resolvedDecimalScale = allowDecimal
     ? Math.max(0, Math.floor(decimalScale))
     : 0;
@@ -403,17 +391,15 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     return `${sign}${integerPart}.${fractionalPart}`;
   };
 
-  const getDisplayValue = (val: number, focused: boolean): string => {
+  // blur 표시값에만 단위를 붙여 값과 함께 가운데 정렬 (포커스 시 숫자만)
+  const getDisplayValue = (val: number): string => {
     const normalized = normalizePrecision(val);
-    if (hasSuffix && !focused) {
-      return `${normalized}${suffix}`;
-    }
-    return String(normalized);
+    return suffix ? `${normalized}${suffix}` : String(normalized);
   };
 
   const [localValue, setLocalValue] = useState<string>(() => {
     if (isMixed || value == null) return '';
-    return getDisplayValue(value, false);
+    return getDisplayValue(value);
   });
   const [isFocused, setIsFocused] = useState(false);
   const [hasUserInput, setHasUserInput] = useState(false);
@@ -425,7 +411,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       if (isMixed || value == null) {
         setLocalValue('');
       } else {
-        setLocalValue(getDisplayValue(value, false));
+        setLocalValue(getDisplayValue(value));
       }
       setHasUserInput(false);
     }
@@ -512,7 +498,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       if (isMixed || value == null) {
         setLocalValue('');
       } else {
-        setLocalValue(getDisplayValue(value, false));
+        setLocalValue(getDisplayValue(value));
       }
       setHasUserInput(false);
       // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
@@ -546,7 +532,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 
     const numValue = Number(cleaned);
     const clamped = normalizePrecision(Math.min(Math.max(numValue, min), max));
-    setLocalValue(getDisplayValue(clamped, false));
+    setLocalValue(getDisplayValue(clamped));
     onChange(clamped);
     setHasUserInput(false);
     onBlur?.();
@@ -562,40 +548,12 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     : '';
   const textClass = showMixedPlaceholder ? 'text-fg-faint italic' : 'text-fg';
 
-  if (prefix) {
-    return (
-      <div
-        className={`relative h-[23px] bg-inset rounded-md ${
-          isFocused ? 'shadow-focus-ring' : ''
-        }`}
-        style={{ width }}
-      >
-        {!showMixedPlaceholder && (
-          <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
-            {prefix}
-          </span>
-        )}
-        <input
-          type="text"
-          inputMode={inputMode}
-          value={localValue}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          placeholder={effectivePlaceholder}
-          className={`absolute ${
-            !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
-          } top-0 h-[23px] ${
-            !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
-          } bg-transparent text-body tabular-nums ${textClass} ${placeholderClass} text-center`}
-        />
-      </div>
-    );
-  }
-
-  if (hasSuffix) {
-    return (
+  return (
+    <NumberInputShell
+      prefix={showMixedPlaceholder ? undefined : prefix}
+      width={width}
+      focused={isFocused}
+    >
       <input
         type="text"
         inputMode={inputMode}
@@ -605,29 +563,9 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={effectivePlaceholder}
-        className={`text-center h-[23px] bg-inset rounded-md ${
-          isFocused ? 'shadow-focus-ring' : ''
-        } text-body tabular-nums ${textClass} ${placeholderClass}`}
-        style={{ width }}
+        className={`${NUMBER_FIELD_CLASS} ${textClass} ${placeholderClass}`}
       />
-    );
-  }
-
-  return (
-    <input
-      type="text"
-      inputMode={inputMode}
-      value={localValue}
-      onChange={handleChange}
-      onKeyDown={handleKeyDown}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      placeholder={effectivePlaceholder}
-      className={`text-center h-[23px] bg-inset rounded-md ${
-        isFocused ? 'shadow-focus-ring' : ''
-      } text-body tabular-nums ${textClass} ${placeholderClass}`}
-      style={{ width }}
-    />
+    </NumberInputShell>
   );
 };
 
