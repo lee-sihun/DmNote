@@ -13,7 +13,6 @@ import type {
   TextInputProps,
   ColorInputProps,
   ToggleSwitchProps,
-  TabButtonProps,
   TabsProps,
   FontStyleToggleProps,
 } from './types';
@@ -31,6 +30,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import { registerEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
 import { useAfterPaintValueCommit } from '@hooks/useAfterPaintValueCommit';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
+import TabSwitch from '@components/main/common/TabSwitch';
 
 // ============================================================================
 // 속성 행
@@ -1238,17 +1238,6 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
 // 탭 버튼 & 탭
 // ============================================================================
 
-const TabButton: React.FC<TabButtonProps> = ({ active, onClick, children }) => (
-  <button
-    onClick={onClick}
-    className={`relative z-10 w-full h-full rounded-[8px] text-body transition-colors duration-base ${
-      active ? 'text-fg' : 'text-fg-muted hover:text-fg'
-    }`}
-  >
-    {children}
-  </button>
-);
-
 export const Tabs: React.FC<TabsProps> = ({
   activeTab,
   onTabChange,
@@ -1265,28 +1254,13 @@ export const Tabs: React.FC<TabsProps> = ({
     [TABS.COUNTER]: t('propertiesPanel.tabCounter') || '카운터',
   };
 
-  const activeIndex = Math.max(0, tabs.indexOf(activeTab));
-
   return (
-    <div className="relative flex w-full h-[30px] bg-inset rounded-surface items-center p-[2px]">
-      <div
-        aria-hidden
-        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
-        style={{
-          width: `calc((100% - 4px) / ${tabs.length})`,
-          transform: `translateX(${activeIndex * 100}%)`,
-        }}
-      />
-      {tabs.map((tab) => (
-        <TabButton
-          key={tab}
-          active={activeTab === tab}
-          onClick={() => onTabChange(tab)}
-        >
-          {labels[tab]}
-        </TabButton>
-      ))}
-    </div>
+    <TabSwitch
+      tabs={tabs.map((tab) => ({ id: tab, label: labels[tab] }))}
+      activeTab={activeTab}
+      onTabChange={onTabChange}
+      commitStrategy="after-paint"
+    />
   );
 };
 
