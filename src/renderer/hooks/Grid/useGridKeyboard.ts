@@ -39,6 +39,7 @@ interface UseGridKeyboardParams {
   onMoveForward?: () => void;
   onMoveBackward?: () => void;
   newGroupLabel?: string;
+  continuousInputStrategy?: 'sync' | 'frame';
 }
 
 /**
@@ -56,6 +57,7 @@ export function useGridKeyboard({
   onMoveForward,
   onMoveBackward,
   newGroupLabel = 'New Group',
+  continuousInputStrategy = 'frame',
 }: UseGridKeyboardParams): void {
   const lastArrowKeyTime = useRef(0);
   const arrowGestureId = useRef<string | null>(null);
@@ -64,11 +66,54 @@ export function useGridKeyboard({
     selectedElements.map(({ type, id, index }) => ({ type, id, index })),
   );
   const macOS = isMac();
+  const pendingArrowMove = useRef<{
+    deltaX: number;
+    deltaY: number;
+    gestureId: string;
+  } | null>(null);
+  const arrowMoveFrame = useRef<number | null>(null);
 
   useHistoryShortcuts({ onUndo, onRedo });
 
   // 선택 요소 키보드 조작
   useEffect(() => {
+    const flushArrowMove = () => {
+      if (arrowMoveFrame.current !== null) {
+        cancelAnimationFrame(arrowMoveFrame.current);
+        arrowMoveFrame.current = null;
+      }
+      const pending = pendingArrowMove.current;
+      pendingArrowMove.current = null;
+      if (pending) {
+        moveSelectedElements(pending.deltaX, pending.deltaY, pending.gestureId);
+      }
+    };
+
+    const scheduleArrowMove = (
+      deltaX: number,
+      deltaY: number,
+      gestureId: string,
+    ) => {
+      if (continuousInputStrategy === 'sync') {
+        moveSelectedElements(deltaX, deltaY, gestureId);
+        return;
+      }
+
+      const pending = pendingArrowMove.current;
+      pendingArrowMove.current = pending
+        ? {
+            deltaX: pending.deltaX + deltaX,
+            deltaY: pending.deltaY + deltaY,
+            gestureId,
+          }
+        : { deltaX, deltaY, gestureId };
+      if (arrowMoveFrame.current !== null) return;
+      arrowMoveFrame.current = requestAnimationFrame(() => {
+        arrowMoveFrame.current = null;
+        flushArrowMove();
+      });
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isHistoryEditorFlushLocked()) return;
       if (typeof window !== 'undefined' && window.__dmn_isKeyListening) {
@@ -163,7 +208,7 @@ export function useGridKeyboard({
         lastArrowKeyTime.current = now;
         lastArrowSelectionSignature.current = selectionSignature;
 
-        moveSelectedElements(deltaX, deltaY, arrowGestureId.current);
+        scheduleArrowMove(deltaX, deltaY, arrowGestureId.current);
         return;
       }
 
@@ -196,8 +241,17 @@ export function useGridKeyboard({
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key.startsWith('Arrow')) flushArrowMove();
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      flushArrowMove();
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [
     macOS,
     selectedElements,
@@ -210,5 +264,6 @@ export function useGridKeyboard({
     onMoveBackward,
     newGroupLabel,
     selectionSignature,
+    continuousInputStrategy,
   ]);
 }

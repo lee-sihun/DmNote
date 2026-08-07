@@ -43,11 +43,13 @@ const position = (): KeyPosition =>
 interface HarnessProps {
   includePlugin?: boolean;
   selectedIndex?: number;
+  continuousInputStrategy?: 'sync' | 'frame';
 }
 
 const Harness = ({
   includePlugin = false,
   selectedIndex = 0,
+  continuousInputStrategy = 'sync',
 }: HarnessProps) => {
   const selectedElements = [
     { type: 'key' as const, id: `key-${selectedIndex}`, index: selectedIndex },
@@ -69,6 +71,7 @@ const Harness = ({
     clearSelection: vi.fn(),
     copySelectedElements: vi.fn(),
     pasteElements: vi.fn(),
+    continuousInputStrategy,
   });
 
   return null;
@@ -198,5 +201,57 @@ describe('useGridKeyboard arrow history burst', () => {
 
     expect(committedGestureIds()).toEqual([firstGestureId]);
     expect(rotateSessionMock).toHaveBeenCalledWith('plugin-a', firstGestureId);
+  });
+
+  it('같은 프레임의 방향키 burst를 누적해 한 번만 이동한다', async () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 1;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = nextFrameId++;
+      callbacks.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
+    await act(async () => {
+      root.render(<Harness continuousInputStrategy="frame" />);
+    });
+
+    pressArrow('ArrowRight');
+    pressArrow('ArrowRight');
+    pressArrow('ArrowDown');
+    expect(commitPatchMock).not.toHaveBeenCalled();
+    expect(callbacks).toHaveLength(1);
+
+    act(() => {
+      const callback = [...callbacks.values()][0];
+      callbacks.clear();
+      callback(performance.now());
+    });
+    expect(commitPatchMock).toHaveBeenCalledOnce();
+    expect(useKeyStore.getState().positions['4key']?.[0]).toMatchObject({
+      dx: 2,
+      dy: 1,
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('방향키를 떼면 대기 이동을 프레임 전에 flush한다', async () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callbacks.set(1, callback);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
+    await act(async () => {
+      root.render(<Harness continuousInputStrategy="frame" />);
+    });
+
+    pressArrow('ArrowLeft');
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' }));
+    });
+    expect(commitPatchMock).toHaveBeenCalledOnce();
+    expect(callbacks).toHaveLength(0);
+    vi.unstubAllGlobals();
   });
 });
