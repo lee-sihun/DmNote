@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "GRID-05",
+  "variant": "legacy-baseline",
+  "strategy": "legacy",
+  "measuredAt": "2026-08-07T11:22:08.074Z",
+  "commit": "19f6590331c308cde9759ea56694a304c2a40b72",
+  "runtime": {
+    "kind": "vitest-jsdom-middle-pan-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.2665420000000722,
+        "p95": 0.3804169999999658,
+        "max": 0.3964169999999285
+      },
+      "visualDomCommitMs": {
+        "p50": 0.47700000000008913,
+        "p95": 0.6369169999999258,
+        "max": 0.6488329999999678
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.020793000000253414,
+        "p95": 0.028417999999874155,
+        "max": 0.03162499999973534
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.21041600000000926,
+        "p95": 0.28633400000001075,
+        "max": 0.29520800000000236
+      },
+      "visualDomCommitMs": {
+        "p50": 2.5100419999999986,
+        "p95": 2.881416999999942,
+        "max": 2.9927089999999907
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.19283500000017284,
+        "p95": 0.23291999999969448,
+        "max": 0.2445369999995819
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.21687500000007276,
+        "p95": 0.30579199999988305,
+        "max": 0.33683399999995345
+      },
+      "visualDomCommitMs": {
+        "p50": 6.846042000000125,
+        "p95": 11.655291999999918,
+        "max": 12.983375000000024
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.8625310000047648,
+        "p95": 1.3624369999956798,
+        "max": 1.5769270000002962
+      }
+    }
+  ]
+}

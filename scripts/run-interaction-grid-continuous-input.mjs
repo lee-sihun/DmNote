@@ -10,13 +10,9 @@ const variants = [
   [
     'legacy',
     'legacy-baseline',
-    'benchmarks/results/grid-04-continuous-input-baseline.json',
+    'benchmarks/results/grid-05-middle-pan-baseline.json',
   ],
-  [
-    'frame',
-    'improved',
-    'benchmarks/results/grid-04-continuous-input-improved.json',
-  ],
+  ['frame', 'improved', 'benchmarks/results/grid-05-middle-pan-improved.json'],
 ];
 
 for (const [strategy, variant, output] of variants) {
@@ -48,7 +44,7 @@ const baseline = await readResult(variants[0][2]);
 const improved = await readResult(variants[1][2]);
 const beforeCase = baseline.cases.at(-1);
 const afterCase = improved.cases.at(-1);
-if (!beforeCase || !afterCase) throw new Error('GRID-04 측정 case 누락');
+if (!beforeCase || !afterCase) throw new Error('GRID-05 측정 case 누락');
 const improvement = (before, after) =>
   before === 0 ? null : ((before - after) / before) * 100;
 const ms = (value) => value.toFixed(3);
@@ -60,7 +56,7 @@ const before = beforeCase.eventBlockingMs.p95;
 const after = afterCase.eventBlockingMs.p95;
 const gain = improvement(before, after);
 if (gain === null || gain <= 0) {
-  throw new Error(`GRID-04 event P95 미개선: ${ms(before)}ms → ${ms(after)}ms`);
+  throw new Error(`GRID-05 event P95 미개선: ${ms(before)}ms → ${ms(after)}ms`);
 }
 const correctness = spawnSync(
   npxCommand,
@@ -89,14 +85,14 @@ const implementation = execFileSync(
 const short = implementation.slice(0, 8);
 const date = improved.measuredAt.slice(0, 10);
 const runtime = `${improved.runtime.kind}, ${improved.runtime.platform} ${improved.runtime.arch}, ${improved.runtime.node}`;
-const resultBlock = `<!-- GRID-04:RESULT:START -->
-#### GRID-04 휠·트랙패드 연속 입력 최신 자동 측정
+const resultBlock = `<!-- GRID-05:RESULT:START -->
+#### GRID-05 미들 버튼 팬 연속 입력 최신 자동 측정
 
 | 조건 | 값 |
 | --- | --- |
-| 측정 경로 | 실제 useGridZoomPan + 렌더 DOM ${beforeCase.itemCount}개, wheel ${
-  beforeCase.burstSize
-}회 burst |
+| 측정 경로 | 실제 useGridZoomPan + 렌더 DOM ${
+  beforeCase.itemCount
+}개, mousemove ${beforeCase.burstSize}회 burst |
 | 반복 | 기준선 ${beforeCase.iterations}회 / 개선 ${
   afterCase.iterations
 }회, 워밍업 각 ${beforeCase.warmupIterations}회 |
@@ -129,25 +125,25 @@ const resultBlock = `<!-- GRID-04:RESULT:START -->
 
 - 원시 결과: [기준선](../${variants[0][2]}) · [개선](../${variants[1][2]})
 - 정확성 게이트: wheel delta 누적·미들 팬 최신 좌표·드래그 프레임 병합 테스트 통과
-<!-- GRID-04:RESULT:END -->`;
+<!-- GRID-05:RESULT:END -->`;
 const session = (id, stage, result, data, output) =>
-  `| ${id} | ${date} | GRID-04 | ${stage} | \`${result.commit.slice(
+  `| ${id} | ${date} | GRID-05 | ${stage} | \`${result.commit.slice(
     0,
     8,
-  )}\` | ${runtime} | DOM ${data.itemCount}개·wheel ${data.burstSize}회 | ${
+  )}\` | ${runtime} | DOM ${data.itemCount}개·mousemove ${data.burstSize}회 | ${
     data.iterations
   } | ${ms(data.eventBlockingMs.p50)} | ${ms(data.eventBlockingMs.p95)} | ${ms(
     data.eventBlockingMs.max,
   )} | DOM P95 ${ms(data.visualDomCommitMs.p95)}ms·React P95 ${ms(
     data.reactCommitDurationMs.p95,
-  )}ms | [JSON](../${output}) | wheel burst proxy |`;
-const sessionsBlock = `<!-- GRID-04:SESSIONS:START -->
+  )}ms | [JSON](../${output}) | pointer burst proxy |`;
+const sessionsBlock = `<!-- GRID-05:SESSIONS:START -->
 | 세션 ID | 날짜 | 항목 ID | 단계 | 빌드·커밋 | 환경 | 시나리오·데이터 크기 | 반복 | P50 | P95 | 최대 | 보조 지표 | 원시 자료 | 비고 |
 | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |
-${session('GRID-04-LEGACY', '기준선', baseline, beforeCase, variants[0][2])}
-${session('GRID-04-FRAME', '개선', improved, afterCase, variants[1][2])}
-<!-- GRID-04:SESSIONS:END -->`;
-const experimentBlock = `<!-- GRID-04:EXPERIMENT:START -->
+${session('GRID-05-LEGACY', '기준선', baseline, beforeCase, variants[0][2])}
+${session('GRID-05-FRAME', '개선', improved, afterCase, variants[1][2])}
+<!-- GRID-05:SESSIONS:END -->`;
+const experimentBlock = `<!-- GRID-05:EXPERIMENT:START -->
 ### EXP-016: Grid 연속 이동 입력 프레임 병합
 
 | 필드 | 내용 |
@@ -158,7 +154,7 @@ const experimentBlock = `<!-- GRID-04:EXPERIMENT:START -->
 | P95 변화 | ${ms(before)}ms → ${ms(after)}ms (${pct(gain)}) |
 | 정확성 검증 | 입력 손실 없는 delta 누적·mouseup flush·기존 단일·다중 드래그 병합 테스트 통과 |
 | 결론 | jsdom burst proxy 검증, 실제 WebView F95 측정 전까지 검증 상태 유지 |
-<!-- GRID-04:EXPERIMENT:END -->`;
+<!-- GRID-05:EXPERIMENT:END -->`;
 
 let tracker = await readFile(trackerPath, 'utf8');
 const rows = [
@@ -170,11 +166,11 @@ for (const [id, label] of rows) {
   tracker = tracker.replace(
     new RegExp(`^\\| ${id}\\s+\\|.*$`, 'm'),
     `| ${id} | ${label} | P0 | F95 ms/frame | ${
-      id === 'GRID-04' ? ms(before) : '—'
-    } | ${id === 'GRID-04' ? ms(after) : '—'} | ${
-      id === 'GRID-04' ? pct(gain) : '—'
+      id === 'GRID-05' ? ms(before) : '—'
+    } | ${id === 'GRID-05' ? ms(after) : '—'} | ${
+      id === 'GRID-05' ? pct(gain) : '—'
     } | ${
-      id === 'GRID-04' ? '검증' : '실험'
+      id === 'GRID-05' ? '검증' : '실험'
     } | \`${short}\`, frame coalescing 적용 |`,
   );
 }
@@ -185,20 +181,20 @@ const upsert = (start, end, block, beforeText) => {
     : tracker.replace(beforeText, `${block}\n\n${beforeText}`);
 };
 tracker = upsert(
-  '<!-- GRID-04:RESULT:START -->',
-  '<!-- GRID-04:RESULT:END -->',
+  '<!-- GRID-05:RESULT:START -->',
+  '<!-- GRID-05:RESULT:END -->',
   resultBlock,
   '### 5.1 파일럿·공통 기반',
 );
 tracker = upsert(
-  '<!-- GRID-04:SESSIONS:START -->',
-  '<!-- GRID-04:SESSIONS:END -->',
+  '<!-- GRID-05:SESSIONS:START -->',
+  '<!-- GRID-05:SESSIONS:END -->',
   sessionsBlock,
   '### 6.1 실제 브라우저 세션',
 );
 tracker = upsert(
-  '<!-- GRID-04:EXPERIMENT:START -->',
-  '<!-- GRID-04:EXPERIMENT:END -->',
+  '<!-- GRID-05:EXPERIMENT:START -->',
+  '<!-- GRID-05:EXPERIMENT:END -->',
   experimentBlock,
   '## 8. 완료 게이트',
 );
@@ -222,5 +218,5 @@ const formatted = spawnSync(npxCommand, ['prettier', '--write', trackerPath], {
 });
 if (formatted.status !== 0) process.exit(formatted.status ?? 1);
 console.info(
-  `GRID-04 event P95: ${ms(before)}ms → ${ms(after)}ms (${pct(gain)})`,
+  `GRID-05 event P95: ${ms(before)}ms → ${ms(after)}ms (${pct(gain)})`,
 );

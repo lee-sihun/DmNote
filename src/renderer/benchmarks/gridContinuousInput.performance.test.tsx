@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, vi } from 'vitest';
 
 import { useGridViewStore } from '@stores/grid/useGridViewStore';
 import {
@@ -19,7 +19,7 @@ const benchmarkDescribe =
     : describe.skip;
 const OUTPUT_PATH =
   process.env.DMN_BENCHMARK_OUTPUT ??
-  'benchmarks/results/grid-04-continuous-input-latest.json';
+  'benchmarks/results/grid-05-middle-pan-latest.json';
 const VARIANT = process.env.DMN_BENCHMARK_VARIANT ?? 'local';
 const ITERATIONS = Number(process.env.DMN_BENCHMARK_ITERATIONS ?? 30);
 const WARMUP_ITERATIONS = Number(process.env.DMN_BENCHMARK_WARMUP ?? 5);
@@ -31,7 +31,7 @@ const BURST_SIZE = Number(process.env.DMN_BENCHMARK_BURST_SIZE ?? 20);
 const STRATEGY =
   process.env.DMN_BENCHMARK_STRATEGY === 'legacy' ? 'legacy' : 'frame';
 
-benchmarkDescribe('GRID-04 연속 입력 성능', () => {
+benchmarkDescribe('GRID-05 미들 팬 연속 입력 성능', () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -57,7 +57,7 @@ benchmarkDescribe('GRID-04 연속 입력 성능', () => {
     vi.unstubAllGlobals();
   });
 
-  it('wheel burst의 event blocking과 DOM commit 분포를 기록한다', async () => {
+  it('mousemove burst의 event blocking과 DOM commit 분포를 기록한다', async () => {
     const cases = [];
     for (const itemCount of ITEM_COUNTS) {
       const renderDurations: number[] = [];
@@ -80,7 +80,7 @@ benchmarkDescribe('GRID-04 연속 입력 성능', () => {
         iteration += 1
       ) {
         const before = Number(container.dataset.panX);
-        const target = before - (STRATEGY === 'legacy' ? 1 : BURST_SIZE);
+        const target = before + BURST_SIZE;
         const renderStart = renderDurations.length;
         const startedAt = performance.now();
         const visualCommit = waitForAttribute(
@@ -91,18 +91,27 @@ benchmarkDescribe('GRID-04 연속 입력 성능', () => {
         );
         let eventFinishedAt = startedAt;
         act(() => {
+          container.dispatchEvent(
+            new MouseEvent('mousedown', {
+              button: 1,
+              clientX: 0,
+              clientY: 0,
+              bubbles: true,
+              cancelable: true,
+            }),
+          );
           for (let index = 0; index < BURST_SIZE; index += 1) {
-            container.dispatchEvent(
-              new WheelEvent('wheel', {
-                deltaX: 1,
-                deltaY: 0,
-                cancelable: true,
+            document.dispatchEvent(
+              new MouseEvent('mousemove', {
+                clientX: index + 1,
+                clientY: 0,
               }),
             );
           }
           eventFinishedAt = performance.now();
         });
         const visualDomCommitMs = await visualCommit;
+        act(() => document.dispatchEvent(new MouseEvent('mouseup')));
         if (iteration >= WARMUP_ITERATIONS) {
           results.push({
             eventBlockingMs: eventFinishedAt - startedAt,
@@ -147,7 +156,7 @@ benchmarkDescribe('GRID-04 연속 입력 성능', () => {
       `${JSON.stringify(
         {
           schemaVersion: 1,
-          benchmarkId: 'GRID-04',
+          benchmarkId: 'GRID-05',
           variant: VARIANT,
           strategy: STRATEGY,
           measuredAt: new Date().toISOString(),
@@ -155,7 +164,7 @@ benchmarkDescribe('GRID-04 연속 입력 성능', () => {
             encoding: 'utf8',
           }).trim(),
           runtime: {
-            kind: 'vitest-jsdom-wheel-burst-proxy',
+            kind: 'vitest-jsdom-middle-pan-burst-proxy',
             node: process.version,
             platform: process.platform,
             arch: process.arch,

@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 97개    |
+| 대기                             | 94개    |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 68개    |
+| 실험·검증 중                     | 71개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -325,6 +325,29 @@
 - 실제 WebView click-to-paint 값은 macOS WKWebView·Windows WebView2에서 별도 검증한다.
 <!-- BASE-09:RESULT:END -->
 
+<!-- GRID-05:RESULT:START -->
+
+#### GRID-05 미들 버튼 팬 연속 입력 최신 자동 측정
+
+| 조건           | 값                                                         |
+| -------------- | ---------------------------------------------------------- |
+| 측정 경로      | 실제 useGridZoomPan + 렌더 DOM 500개, mousemove 20회 burst |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회                     |
+| 구현 코드 커밋 | `9c90cae8fe9bbcc1f23a7e3b3ae47b07c86ac171`                 |
+| 측정 코드 커밋 | `19f6590331c308cde9759ea56694a304c2a40b72`                 |
+| 비교 전략      | `legacy` → `frame`                                         |
+| 환경           | darwin arm64, v25.2.1                                      |
+
+| P95 지표              |   legacy | frame coalescing | 개선율 |
+| --------------------- | -------: | ---------------: | -----: |
+| burst event blocking  |  0.306ms |          0.225ms |  26.3% |
+| 최종 DOM commit       | 11.655ms |         11.384ms |   2.3% |
+| React commit duration |  1.362ms |          1.067ms |  21.7% |
+
+- 원시 결과: [기준선](../benchmarks/results/grid-05-middle-pan-baseline.json) · [개선](../benchmarks/results/grid-05-middle-pan-improved.json)
+- 정확성 게이트: wheel delta 누적·미들 팬 최신 좌표·드래그 프레임 병합 테스트 통과
+<!-- GRID-05:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                                 |
@@ -394,9 +417,9 @@
 | -------- | --------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | -------------------------------------------- |
 | GRID-01  | 단일 요소 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 가이드 on/off 별도                           |
 | GRID-02  | 다중 선택 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정                               |
-| GRID-03  | Grid 패닝             | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport transform                           |
-| GRID-04  | 휠·핀치 줌            | P0       | F95 ms/frame |        — |        — |      — | 대기 | 이벤트 coalescing                            |
-| GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |        — |        — |      — | 대기 | 전역 이벤트 경로                             |
+| GRID-03  | Grid 패닝             | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용            |
+| GRID-04  | 휠·핀치 줌            | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용            |
+| GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |    0.306 |    0.225 |  26.3% | 검증 | `9c90cae8`, frame coalescing 적용            |
 | GRID-06  | 단일 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | preview·commit                               |
 | GRID-07  | 그룹 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정                               |
 | GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |        — |        — |      — | 대기 | 캔버스 preview                               |
@@ -590,6 +613,15 @@
 | BASE-09-PAINT | 2026-08-07 | BASE-09 | 개선   | `a9598cdd` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 본문 DOM 500개       |   30 |  1.167 |  4.308 |  4.336 | content P95 14.451ms·event P95 0.133ms | [JSON](../benchmarks/results/base-09-modal-improved.json) | DOM commit proxy |
 
 <!-- BASE-09:SESSIONS:END -->
+
+<!-- GRID-05:SESSIONS:START -->
+
+| 세션 ID        | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                       | 시나리오·데이터 크기     | 반복 |   P50 |   P95 |  최대 | 보조 지표                          | 원시 자료                                                      | 비고                |
+| -------------- | ---------- | ------- | ------ | ---------- | ---------------------------------------------------------- | ------------------------ | ---: | ----: | ----: | ----: | ---------------------------------- | -------------------------------------------------------------- | ------------------- |
+| GRID-05-LEGACY | 2026-08-07 | GRID-05 | 기준선 | `19f65903` | vitest-jsdom-middle-pan-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·mousemove 20회 |   30 | 0.217 | 0.306 | 0.337 | DOM P95 11.655ms·React P95 1.362ms | [JSON](../benchmarks/results/grid-05-middle-pan-baseline.json) | pointer burst proxy |
+| GRID-05-FRAME  | 2026-08-07 | GRID-05 | 개선   | `19f65903` | vitest-jsdom-middle-pan-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·mousemove 20회 |   30 | 0.185 | 0.225 | 0.251 | DOM P95 11.384ms·React P95 1.067ms | [JSON](../benchmarks/results/grid-05-middle-pan-improved.json) | pointer burst proxy |
+
+<!-- GRID-05:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -850,6 +882,21 @@
 | 결론        | jsdom DOM proxy에서 검증, 실제 WebView 측정 전까지 검증 상태 유지              |
 
 <!-- BASE-09:EXPERIMENT:END -->
+
+<!-- GRID-05:EXPERIMENT:START -->
+
+### EXP-016: Grid 연속 이동 입력 프레임 병합
+
+| 필드        | 내용                                                                           |
+| ----------- | ------------------------------------------------------------------------------ |
+| 항목 ID     | GRID-03~05                                                                     |
+| 변경 내용   | 휠·트랙패드 delta를 누적하고 미들 팬 최신 좌표를 프레임당 한 번 Store에 반영   |
+| 구현 커밋   | `9c90cae8`                                                                     |
+| P95 변화    | 0.306ms → 0.225ms (26.3%)                                                      |
+| 정확성 검증 | 입력 손실 없는 delta 누적·mouseup flush·기존 단일·다중 드래그 병합 테스트 통과 |
+| 결론        | jsdom burst proxy 검증, 실제 WebView F95 측정 전까지 검증 상태 유지            |
+
+<!-- GRID-05:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 

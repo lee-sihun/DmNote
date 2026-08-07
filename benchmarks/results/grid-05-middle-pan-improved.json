@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "GRID-05",
+  "variant": "improved",
+  "strategy": "frame",
+  "measuredAt": "2026-08-07T11:22:10.162Z",
+  "commit": "19f6590331c308cde9759ea56694a304c2a40b72",
+  "runtime": {
+    "kind": "vitest-jsdom-middle-pan-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.2249580000000151,
+        "p95": 0.37195900000006077,
+        "max": 0.5792920000000095
+      },
+      "visualDomCommitMs": {
+        "p50": 1.8286249999999882,
+        "p95": 2.321333999999979,
+        "max": 2.63575000000003
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.024997999999868625,
+        "p95": 0.07716699999991761,
+        "max": 0.15420999999969354
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.18887500000005275,
+        "p95": 0.2604590000000826,
+        "max": 0.3313750000000937
+      },
+      "visualDomCommitMs": {
+        "p50": 3.8128750000000764,
+        "p95": 4.319665999999984,
+        "max": 8.310416000000032
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.20374700000002122,
+        "p95": 0.2743629999999939,
+        "max": 0.7980089999973643
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.18495900000016263,
+        "p95": 0.22529099999997015,
+        "max": 0.2508330000000569
+      },
+      "visualDomCommitMs": {
+        "p50": 8.234875000000102,
+        "p95": 11.383749999999964,
+        "max": 11.717292000000043
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.8834480000011808,
+        "p95": 1.0674130000065816,
+        "max": 1.1518079999987094
+      }
+    }
+  ]
+}
