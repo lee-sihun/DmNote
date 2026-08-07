@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 107개   |
+| 대기                             | 101개   |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 58개    |
+| 실험·검증 중                     | 64개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -277,27 +277,51 @@
 - 실제 WebView click-to-paint 값은 macOS WKWebView·Windows WebView2에서 별도 검증한다.
 <!-- BASE-06:RESULT:END -->
 
+<!-- BASE-08:RESULT:START -->
+
+#### BASE-08 ListPopup·FloatingPopup 최신 자동 측정
+
+| 조건           | 값                                              |
+| -------------- | ----------------------------------------------- |
+| 측정 경로      | 공통 FloatingPopup + 메뉴 DOM 500개 mount proxy |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회          |
+| 구현 코드 커밋 | `fd24b34569f1fd74b50df0a58fb31f495c75f06b`      |
+| 측정 코드 커밋 | `264725fb8873a99b1ce8ba4d457404ef7df02866`      |
+| 비교 전략      | `sync` → `after-paint`                          |
+| 환경           | darwin arm64, v25.2.1                           |
+
+| P95 지표                | sync 기준선 | after-paint | 개선율 |
+| ----------------------- | ----------: | ----------: | -----: |
+| opener·shell DOM commit |    23.983ms |    10.642ms |  55.6% |
+| popup content mount     |    24.057ms |    21.149ms |  12.1% |
+| React commit duration   |    11.017ms |     6.826ms |  38.0% |
+
+- 원시 결과: [기준선](../benchmarks/results/base-08-floating-popup-baseline.json) · [개선](../benchmarks/results/base-08-floating-popup-improved.json)
+- 정확성 게이트: FloatingPopup 포커스·계층 소유권과 ListPopup 키보드 계약 테스트 통과
+- 실제 WebView click-to-paint 값은 macOS WKWebView·Windows WebView2에서 별도 검증한다.
+<!-- BASE-08:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
-| ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                             |
-| -------- | ---------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    5.946 |    0.509 |  91.4% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json)                         |
-| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    8.385 |    0.550 |  93.4% | 검증 | [기준선](../benchmarks/results/pilot-02-baseline.json) · [개선](../benchmarks/results/pilot-02-improved.json)                         |
-| BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 실험 | `useOptimisticBooleanCommit`·선택적 `commitStrategy` 제공, PILOT-01·02 검증                                                           |
-| BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 실험 | `05c02e43`, 선택적 `after-paint`·설정 토글 적용                                                                                       |
-| BASE-03  | Dropdown                           | 기반     | DOM P95 ms   |   10.981 |    0.336 |  96.9% | 검증 | [기준선](../benchmarks/results/base-03-dropdown-baseline.json) · [개선](../benchmarks/results/base-03-dropdown-improved.json)         |
-| BASE-04  | NumberInput·OptionalNumberInput    | P0/P1    | DOM P95 ms   |   12.316 |    0.323 |  97.4% | 검증 | [기준선](../benchmarks/results/base-04-number-input-baseline.json) · [개선](../benchmarks/results/base-04-number-input-improved.json) |
-| BASE-05  | TextInput·SearchField              | P1       | DOM P95 ms   |   14.968 |    0.445 |  97.0% | 검증 | [기준선](../benchmarks/results/base-05-text-input-baseline.json) · [개선](../benchmarks/results/base-05-text-input-improved.json)     |
-| BASE-06  | ColorInput·ColorSwatchButton       | P0/P1    | DOM P95 ms   |   10.828 |    0.268 |  97.5% | 검증 | [기준선](../benchmarks/results/base-06-color-input-baseline.json) · [개선](../benchmarks/results/base-06-color-input-improved.json)   |
-| BASE-07  | TabSwitch                          | P3       | DOM P95 ms   |   10.851 |    0.492 |  95.5% | 검증 | [기준선](../benchmarks/results/base-07-tab-switch-baseline.json) · [개선](../benchmarks/results/base-07-tab-switch-improved.json)     |
-| BASE-08  | ListPopup·FloatingPopup            | 기반     | CTP ms       |        — |        — |      — | 대기 | 메뉴·피커 표면                                                                                                                        |
-| BASE-09  | Modal                              | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·닫기·포커스 복원                                                                                                                 |
-| BASE-10  | TooltipGroup                       | P3       | CTP ms       |        — |        — |      — | 대기 | 의도된 hover delay는 별도 기록                                                                                                        |
-| BASE-11  | PanelToggleButton                  | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 mount·render 포함                                                                                                                |
-| BASE-12  | 패널 내부 PickerSurface·내비게이션 | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 위치 계산과 첫 paint                                                                                                                  |
-| BASE-13  | 프로퍼티 패널 smooth scroll        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Lenis RAF 6개 영향 측정                                                                                                               |
-| BASE-14  | IconSwap·EyeToggleIcon             | 기반     | CTP ms       |        — |        — |      — | 대기 | 180ms 모션과 상태 반영 분리                                                                                                           |
-| BASE-15  | usePressAction·usePressGatedSwap   | 기반     | CTP ms       |        — |        — |      — | 대기 | pressed 피드백과 300ms gate                                                                                                           |
+| ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                                 |
+| -------- | ---------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    5.946 |    0.509 |  91.4% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json)                             |
+| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    8.385 |    0.550 |  93.4% | 검증 | [기준선](../benchmarks/results/pilot-02-baseline.json) · [개선](../benchmarks/results/pilot-02-improved.json)                             |
+| BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 실험 | `useOptimisticBooleanCommit`·선택적 `commitStrategy` 제공, PILOT-01·02 검증                                                               |
+| BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 실험 | `05c02e43`, 선택적 `after-paint`·설정 토글 적용                                                                                           |
+| BASE-03  | Dropdown                           | 기반     | DOM P95 ms   |   10.981 |    0.336 |  96.9% | 검증 | [기준선](../benchmarks/results/base-03-dropdown-baseline.json) · [개선](../benchmarks/results/base-03-dropdown-improved.json)             |
+| BASE-04  | NumberInput·OptionalNumberInput    | P0/P1    | DOM P95 ms   |   12.316 |    0.323 |  97.4% | 검증 | [기준선](../benchmarks/results/base-04-number-input-baseline.json) · [개선](../benchmarks/results/base-04-number-input-improved.json)     |
+| BASE-05  | TextInput·SearchField              | P1       | DOM P95 ms   |   14.968 |    0.445 |  97.0% | 검증 | [기준선](../benchmarks/results/base-05-text-input-baseline.json) · [개선](../benchmarks/results/base-05-text-input-improved.json)         |
+| BASE-06  | ColorInput·ColorSwatchButton       | P0/P1    | DOM P95 ms   |   10.828 |    0.268 |  97.5% | 검증 | [기준선](../benchmarks/results/base-06-color-input-baseline.json) · [개선](../benchmarks/results/base-06-color-input-improved.json)       |
+| BASE-07  | TabSwitch                          | P3       | DOM P95 ms   |   10.851 |    0.492 |  95.5% | 검증 | [기준선](../benchmarks/results/base-07-tab-switch-baseline.json) · [개선](../benchmarks/results/base-07-tab-switch-improved.json)         |
+| BASE-08  | ListPopup·FloatingPopup            | P1/P3    | DOM P95 ms   |   23.983 |   10.642 |  55.6% | 검증 | [기준선](../benchmarks/results/base-08-floating-popup-baseline.json) · [개선](../benchmarks/results/base-08-floating-popup-improved.json) |
+| BASE-09  | Modal                              | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·닫기·포커스 복원                                                                                                                     |
+| BASE-10  | TooltipGroup                       | P3       | CTP ms       |        — |        — |      — | 대기 | 의도된 hover delay는 별도 기록                                                                                                            |
+| BASE-11  | PanelToggleButton                  | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 mount·render 포함                                                                                                                    |
+| BASE-12  | 패널 내부 PickerSurface·내비게이션 | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 위치 계산과 첫 paint                                                                                                                      |
+| BASE-13  | 프로퍼티 패널 smooth scroll        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Lenis RAF 6개 영향 측정                                                                                                                   |
+| BASE-14  | IconSwap·EyeToggleIcon             | 기반     | CTP ms       |        — |        — |      — | 대기 | 180ms 모션과 상태 반영 분리                                                                                                               |
+| BASE-15  | usePressAction·usePressGatedSwap   | 기반     | CTP ms       |        — |        — |      — | 대기 | pressed 피드백과 300ms gate                                                                                                               |
 
 ### 5.2 설정·Grid·프로퍼티 토글
 
@@ -342,43 +366,43 @@
 
 ### 5.3 Grid·레이어 연속 입력과 편집 액션
 
-| ID       | 항목                  | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거          |
-| -------- | --------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------ |
-| GRID-01  | 단일 요소 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 가이드 on/off 별도 |
-| GRID-02  | 다중 선택 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정     |
-| GRID-03  | Grid 패닝             | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport transform |
-| GRID-04  | 휠·핀치 줌            | P0       | F95 ms/frame |        — |        — |      — | 대기 | 이벤트 coalescing  |
-| GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |        — |        — |      — | 대기 | 전역 이벤트 경로   |
-| GRID-06  | 단일 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | preview·commit     |
-| GRID-07  | 그룹 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정     |
-| GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |        — |        — |      — | 대기 | 캔버스 preview     |
-| GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | 요소 수별 측정     |
-| GRID-10  | 미니맵 클릭 이동      | P1       | CTP ms       |        — |        — |      — | 대기 | viewport 반영      |
-| GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport 반영      |
-| GRID-12  | 요소 단일·다중 선택   | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 교체 포함     |
-| GRID-13  | Shift 범위 선택       | P1       | CTP ms       |        — |        — |      — | 대기 | 요소 수별 측정     |
-| GRID-14  | 더블클릭 편집         | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 모달 첫 paint      |
-| GRID-15  | Grid 컨텍스트 메뉴    | P3       | CTP ms       |        — |        — |      — | 대기 | 메뉴 첫 paint      |
-| GRID-16  | 요소 추가             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC    |
-| GRID-17  | 삭제·지우개           | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC    |
-| GRID-18  | 복제·복사·붙여넣기    | P1       | CTP ms       |        — |        — |      — | 대기 | 다중 요소 시나리오 |
-| GRID-19  | z-order 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 배열·zIndex 갱신   |
-| GRID-20  | 그룹화·그룹 해제      | P1       | CTP ms       |        — |        — |      — | 대기 | 관계·문서 변경     |
-| GRID-21  | 방향키 이동           | P0       | F95 ms/frame |        — |        — |      — | 대기 | 500ms gesture 병합 |
-| GRID-22  | Undo·Redo             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서·Store 동기화  |
-| GRID-23  | 키 카운터 초기화      | P2       | ETC ms       |        — |        — |      — | 대기 | IPC 완료           |
-| LAYER-01 | 레이어·Grid 탭 전환   | P3       | CTP ms       |        — |        — |      — | 대기 | 콘텐츠 paint       |
-| LAYER-02 | 레이어 단일·다중 선택 | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 동기화      |
-| LAYER-03 | 그룹 접기·펼치기      | P3       | CTP ms       |        — |        — |      — | 대기 | 목록 reflow        |
-| LAYER-04 | 이름 변경             | P1/P2    | CTP ms       |        — |        — |      — | 대기 | blur commit ETC    |
-| LAYER-05 | 표시·숨김             | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 paint       |
-| LAYER-06 | 잠금·잠금 해제        | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 상태        |
-| LAYER-07 | 위·아래 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 목록·캔버스 순서   |
-| LAYER-08 | 드래그 순서 변경      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | local preview      |
-| LAYER-09 | 그룹 드래그·중첩      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | hit-test           |
-| LAYER-10 | 레이어 컨텍스트 메뉴  | P3       | CTP ms       |        — |        — |      — | 대기 | 메뉴 첫 paint      |
-| LAYER-11 | 패널 detach·reattach  | P2       | ETC ms       |        — |        — |      — | 대기 | 창 handoff         |
-| LAYER-12 | 분리 패널 창 이동     | P0       | F95 ms/frame |        — |        — |      — | 대기 | 네이티브 drag      |
+| ID       | 항목                  | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                   |
+| -------- | --------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------------------- |
+| GRID-01  | 단일 요소 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 가이드 on/off 별도                          |
+| GRID-02  | 다중 선택 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정                              |
+| GRID-03  | Grid 패닝             | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport transform                          |
+| GRID-04  | 휠·핀치 줌            | P0       | F95 ms/frame |        — |        — |      — | 대기 | 이벤트 coalescing                           |
+| GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |        — |        — |      — | 대기 | 전역 이벤트 경로                            |
+| GRID-06  | 단일 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | preview·commit                              |
+| GRID-07  | 그룹 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정                              |
+| GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |        — |        — |      — | 대기 | 캔버스 preview                              |
+| GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | 요소 수별 측정                              |
+| GRID-10  | 미니맵 클릭 이동      | P1       | CTP ms       |        — |        — |      — | 대기 | viewport 반영                               |
+| GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport 반영                               |
+| GRID-12  | 요소 단일·다중 선택   | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 교체 포함                              |
+| GRID-13  | Shift 범위 선택       | P1       | CTP ms       |        — |        — |      — | 대기 | 요소 수별 측정                              |
+| GRID-14  | 더블클릭 편집         | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 모달 첫 paint                               |
+| GRID-15  | Grid 컨텍스트 메뉴    | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용 |
+| GRID-16  | 요소 추가             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC                             |
+| GRID-17  | 삭제·지우개           | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC                             |
+| GRID-18  | 복제·복사·붙여넣기    | P1       | CTP ms       |        — |        — |      — | 대기 | 다중 요소 시나리오                          |
+| GRID-19  | z-order 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 배열·zIndex 갱신                            |
+| GRID-20  | 그룹화·그룹 해제      | P1       | CTP ms       |        — |        — |      — | 대기 | 관계·문서 변경                              |
+| GRID-21  | 방향키 이동           | P0       | F95 ms/frame |        — |        — |      — | 대기 | 500ms gesture 병합                          |
+| GRID-22  | Undo·Redo             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서·Store 동기화                           |
+| GRID-23  | 키 카운터 초기화      | P2       | ETC ms       |        — |        — |      — | 대기 | IPC 완료                                    |
+| LAYER-01 | 레이어·Grid 탭 전환   | P3       | CTP ms       |        — |        — |      — | 대기 | 콘텐츠 paint                                |
+| LAYER-02 | 레이어 단일·다중 선택 | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 동기화                               |
+| LAYER-03 | 그룹 접기·펼치기      | P3       | CTP ms       |        — |        — |      — | 대기 | 목록 reflow                                 |
+| LAYER-04 | 이름 변경             | P1/P2    | CTP ms       |        — |        — |      — | 대기 | blur commit ETC                             |
+| LAYER-05 | 표시·숨김             | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 paint                                |
+| LAYER-06 | 잠금·잠금 해제        | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 상태                                 |
+| LAYER-07 | 위·아래 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 목록·캔버스 순서                            |
+| LAYER-08 | 드래그 순서 변경      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | local preview                               |
+| LAYER-09 | 그룹 드래그·중첩      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | hit-test                                    |
+| LAYER-10 | 레이어 컨텍스트 메뉴  | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용 |
+| LAYER-11 | 패널 detach·reattach  | P2       | ETC ms       |        — |        — |      — | 대기 | 창 handoff                                  |
+| LAYER-12 | 분리 패널 창 이동     | P0       | F95 ms/frame |        — |        — |      — | 대기 | 네이티브 drag                               |
 
 ### 5.4 프로퍼티 입력·편집기·피커
 
@@ -435,11 +459,11 @@
 | SET-13   | 전체 초기화                          | P2       | ETC ms       |        — |        — |      — | 대기 | 전체 재부트스트랩                                           |
 | SET-14   | 업데이트 확인                        | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight                                               |
 | TOOL-01  | 이동·지우개 도구 선택                | P3       | CTP ms       |        — |        — |      — | 대기 | 선택 표시                                                   |
-| TOOL-02  | 키·통계·그래프·노브 추가 메뉴        | P1       | CTP ms       |        — |        — |      — | 대기 | 메뉴·추가 분리                                              |
-| TOOL-03  | 팔레트 열기                          | P3       | CTP ms       |        — |        — |      — | 대기 | 지연 mount                                                  |
+| TOOL-02  | 키·통계·그래프·노브 추가 메뉴        | P1       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                 |
+| TOOL-03  | 팔레트 열기                          | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                 |
 | TOOL-04  | 현재 탭·카운터 초기화                | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·동기화                                                 |
 | TOOL-05  | 기본 키 탭 전환                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | stale 응답 차단                                             |
-| TOOL-06  | 커스텀 탭 팝업                       | P2/P3    | CTP ms       |        — |        — |      — | 대기 | 목록·파일 작업                                              |
+| TOOL-06  | 커스텀 탭 팝업                       | P2/P3    | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                 |
 | TOOL-07  | 프리셋 전체·탭 저장                  | P2       | ETC ms       |        — |        — |      — | 대기 | 진행·완료                                                   |
 | TOOL-08  | 프리셋 전체·탭 불러오기              | P2       | ETC ms       |        — |        — |      — | 대기 | bootstrap 완료                                              |
 | TOOL-09  | 오버레이 표시                        | P2       | CTP ms       |        — |        — |      — | 대기 | 기존 optimistic+rollback                                    |
@@ -524,6 +548,15 @@
 | BASE-06-PAINT | 2026-08-07 | BASE-06 | 개선   | `14d7427b` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 피커 DOM 500개       |   30 | 0.189 |  0.268 |  0.279 | picker P95 14.353ms·event P95 0.114ms | [JSON](../benchmarks/results/base-06-color-input-improved.json) | DOM commit proxy |
 
 <!-- BASE-06:SESSIONS:END -->
+
+<!-- BASE-08:SESSIONS:START -->
+
+| 세션 ID       | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                 | 시나리오·데이터 크기 | 반복 |    P50 |    P95 |   최대 | 보조 지표                              | 원시 자료                                                          | 비고             |
+| ------------- | ---------- | ------- | ------ | ---------- | ---------------------------------------------------- | -------------------- | ---: | -----: | -----: | -----: | -------------------------------------- | ------------------------------------------------------------------ | ---------------- |
+| BASE-08-SYNC  | 2026-08-07 | BASE-08 | 기준선 | `264725fb` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 메뉴 DOM 500개       |   30 | 17.430 | 23.983 | 24.954 | content P95 24.057ms·event P95 0.078ms | [JSON](../benchmarks/results/base-08-floating-popup-baseline.json) | DOM commit proxy |
+| BASE-08-PAINT | 2026-08-07 | BASE-08 | 개선   | `264725fb` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 메뉴 DOM 500개       |   30 |  7.464 | 10.642 | 11.100 | content P95 21.149ms·event P95 0.098ms | [JSON](../benchmarks/results/base-08-floating-popup-improved.json) | DOM commit proxy |
+
+<!-- BASE-08:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -750,6 +783,23 @@
 | 결론        | jsdom DOM proxy에서 검증, 실제 WebView 측정 전까지 검증 상태 유지                           |
 
 <!-- BASE-06:EXPERIMENT:END -->
+
+<!-- BASE-08:EXPERIMENT:START -->
+
+### EXP-014: 공통 팝업 콘텐츠 표시 분리
+
+| 필드        | 내용                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| 항목 ID     | BASE-08                                                                                      |
+| 적용 범위   | 공통 ListPopup 전체와 팔레트·커스텀 탭 FloatingPopup                                         |
+| 변경 내용   | opener aria-expanded·빈 popup shell을 먼저 반영하고 무거운 children mount를 첫 paint 뒤 실행 |
+| 적용 기법   | 시각 피드백 분리·지연 mount·예약 취소·초기 포커스 인계                                       |
+| 구현 커밋   | `fd24b345`                                                                                   |
+| P95 변화    | 23.983ms → 10.642ms (55.6%)                                                                  |
+| 정확성 검증 | sync 호환·예약 취소·첫 항목 포커스·키보드·중첩 팝업 계층 계약 테스트 통과                    |
+| 결론        | jsdom DOM proxy에서 검증, 실제 WebView 측정 전까지 검증 상태 유지                            |
+
+<!-- BASE-08:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 
