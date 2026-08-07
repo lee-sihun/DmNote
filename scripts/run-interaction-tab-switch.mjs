@@ -278,16 +278,21 @@ tracker = replaceOrInsert(
 
 const trackingStart = tracker.indexOf('## 5. 전수 성능 추적표');
 const trackingEnd = tracker.indexOf('## 6. 측정 세션');
+const summaryStart = tracker.indexOf('## 4. 핵심 현황');
 const trackingRows = tracker.slice(trackingStart, trackingEnd);
 const pendingCount = (trackingRows.match(/\| 대기 \|/g) ?? []).length;
 const validatingCount = (trackingRows.match(/\| (?:실험|검증) \|/g) ?? [])
   .length;
-tracker = tracker
+const summary = tracker
+  .slice(summaryStart, trackingStart)
   .replace(/^\| 대기\s+\|.*$/m, `| 대기 | ${pendingCount}개 |`)
   .replace(
     /^\| 실험·검증 중\s+\|.*$/m,
     `| 실험·검증 중 | ${validatingCount}개 |`,
   );
+tracker = `${tracker.slice(0, summaryStart)}${summary}${tracker.slice(
+  trackingStart,
+)}`;
 
 await writeFile(trackerPath, tracker, 'utf8');
 const formatResult = spawnSync(
