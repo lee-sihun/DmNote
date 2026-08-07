@@ -3,15 +3,25 @@ import Close from '@assets/svgs/close.svg';
 import Minimize from '@assets/svgs/minimize.svg';
 import Logo from '@assets/svgs/logo.svg';
 import { isMac } from '@utils/core/platform';
+import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 
 const TitleBar = (): React.ReactElement => {
   const isMacOS: boolean = isMac();
-  const handleMinimize = (): void => {
-    window.api.window.minimize();
+  const { run: minimize, pending: minimizing } = useSingleFlightAction(() =>
+    window.api.window.minimize(),
+  );
+  const { run: close, pending: closing } = useSingleFlightAction(() =>
+    window.api.window.close(),
+  );
+  const handleMinimize = () => {
+    void minimize().catch((error) =>
+      console.error('Failed to minimize window', error),
+    );
   };
-
-  const handleClose = (): void => {
-    window.api.window.close();
+  const handleClose = () => {
+    void close().catch((error) =>
+      console.error('Failed to close window', error),
+    );
   };
 
   return (
@@ -34,12 +44,14 @@ const TitleBar = (): React.ReactElement => {
         >
           <button
             onClick={handleMinimize}
+            disabled={minimizing || closing}
             className="w-[38px] h-full flex justify-center items-center text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
           >
             <Minimize className="scale-[0.8] pointer-events-none" />
           </button>
           <button
             onClick={handleClose}
+            disabled={closing}
             className="w-[38px] h-full flex justify-center items-center text-fg-muted hover:bg-danger hover:text-white active:bg-danger-active transition-colors duration-fast rounded-tr-[8px]"
           >
             <Close className="scale-[0.7] pointer-events-none" />

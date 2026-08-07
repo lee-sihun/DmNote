@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
+import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 
 interface UpdateInfo {
   currentVersion: string;
@@ -34,6 +35,19 @@ const UpdateModal = ({
 }: UpdateModalProps) => {
   const { t } = useTranslation();
   const [skipChecked, setSkipChecked] = useState(false);
+  const { run: runPrimaryAction, pending: primaryActionPending } =
+    useSingleFlightAction(async () => {
+      if (primaryActionDisabled) return;
+      try {
+        if (onPrimaryAction) {
+          await onPrimaryAction();
+          return;
+        }
+        await window.api.app.openExternal(updateInfo.releaseUrl);
+      } catch (error) {
+        console.error('Failed to run update primary action:', error);
+      }
+    });
 
   // 모달 열릴 때 체크박스 상태 리셋
   React.useEffect(() => {
@@ -66,15 +80,6 @@ const UpdateModal = ({
     const date = new Date(dateString);
     if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleDateString();
-  };
-
-  const handlePrimaryClick = async () => {
-    if (primaryActionDisabled) return;
-    if (onPrimaryAction) {
-      await onPrimaryAction();
-      return;
-    }
-    await handleGoToRelease();
   };
 
   const publishedLabel = formatDate(updateInfo.publishedAt);
@@ -168,8 +173,8 @@ const UpdateModal = ({
             {/* 버튼들 */}
             <div className="flex gap-[8px]">
               <button
-                onClick={handlePrimaryClick}
-                disabled={primaryActionDisabled}
+                onClick={() => void runPrimaryAction()}
+                disabled={primaryActionDisabled || primaryActionPending}
                 className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {primaryActionLabel || t('update.goToRelease')}

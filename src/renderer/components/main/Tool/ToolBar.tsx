@@ -8,6 +8,7 @@ import { TooltipGroup } from '../Modal/TooltipGroup';
 import { useTranslation } from '@contexts/useTranslation';
 import FloatingTooltip from '../Modal/FloatingTooltip';
 import { useSettingsStore } from '@stores/useSettingsStore';
+import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 
 interface ToolBarProps {
   onAddItem: (type: 'key' | 'stat' | 'graph' | 'knob') => void;
@@ -41,8 +42,12 @@ const ToolBar = ({
   primaryButtonRef,
 }: ToolBarProps) => {
   const { t } = useTranslation();
-  const handleClick = (link: string) => {
-    window.api.app.openExternal(link);
+  const { run: openExternal, pending: isOpeningExternal } =
+    useSingleFlightAction((link: string) => window.api.app.openExternal(link));
+  const handleExternal = (link: string) => {
+    void openExternal(link).catch((error) =>
+      console.error('Failed to open external link', error),
+    );
   };
 
   return (
@@ -56,8 +61,9 @@ const ToolBar = ({
               <FloatingTooltip content={t('tooltip.github')}>
                 <button
                   onClick={() =>
-                    handleClick('https://github.com/DmNote-App/DmNote')
+                    handleExternal('https://github.com/DmNote-App/DmNote')
                   }
+                  disabled={isOpeningExternal}
                   className="flex items-center justify-center w-[30px] h-[30px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
                 >
                   <Github className="flex-shrink-0 mb-[3px]" />
@@ -66,8 +72,11 @@ const ToolBar = ({
               <FloatingTooltip content={t('tooltip.issue')}>
                 <button
                   onClick={() =>
-                    handleClick('https://github.com/DmNote-App/DmNote/issues')
+                    handleExternal(
+                      'https://github.com/DmNote-App/DmNote/issues',
+                    )
                   }
+                  disabled={isOpeningExternal}
                   className="flex items-center justify-center gap-[8px] h-[30px] px-[12px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
                 >
                   <Bug className="flex-shrink-0" />
