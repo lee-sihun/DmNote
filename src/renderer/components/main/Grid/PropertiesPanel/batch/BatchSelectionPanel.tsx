@@ -696,6 +696,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                               'Show Average Line'}
                           </p>
                           <Checkbox
+                            commitStrategy="after-paint"
                             checked={showAvgLineState.value}
                             onChange={() =>
                               handleGraphBatchSharedSetting({
@@ -767,6 +768,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                             </span>
                           ) : null}
                           <Checkbox
+                            commitStrategy="after-paint"
                             checked={graphAnimationState.value}
                             onChange={() =>
                               handleGraphBatchSharedSetting({
@@ -1236,6 +1238,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                           'Show Average Line'}
                       </p>
                       <Checkbox
+                        commitStrategy="after-paint"
                         checked={showAvgLineState.value}
                         onChange={() =>
                           handleGraphBatchSharedSetting({
@@ -1301,6 +1304,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                         </span>
                       ) : null}
                       <Checkbox
+                        commitStrategy="after-paint"
                         checked={graphAnimationState.value}
                         onChange={() =>
                           handleGraphBatchSharedSetting({
@@ -1597,6 +1601,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                         </span>
                       ) : null}
                       <Checkbox
+                        commitStrategy="after-paint"
                         checked={reverseState.value}
                         onChange={() =>
                           handleKnobBatchSharedSetting({

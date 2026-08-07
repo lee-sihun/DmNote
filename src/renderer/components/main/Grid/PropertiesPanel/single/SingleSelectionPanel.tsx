@@ -481,6 +481,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                       'Show Average Line'}
                   </p>
                   <Checkbox
+                    commitStrategy="after-paint"
                     checked={singleGraphPosition.showAvgLine ?? true}
                     onChange={() =>
                       handleGraphUpdate({
@@ -534,6 +535,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
                 </p>
                 <Checkbox
+                  commitStrategy="after-paint"
                   checked={singleGraphPosition.graphAnimationEnabled ?? true}
                   onChange={() =>
                     handleGraphUpdate({
@@ -665,6 +667,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                       '인라인 스타일 우선'}
                   </p>
                   <Checkbox
+                    commitStrategy="after-paint"
                     checked={singleGraphPosition.useInlineStyles ?? false}
                     onChange={() =>
                       handleGraphUpdate({
@@ -1237,6 +1240,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   {t('propertiesPanel.knobReverse') || '방향 반전'}
                 </p>
                 <Checkbox
+                  commitStrategy="after-paint"
                   checked={singleKnobPosition.reverse ?? false}
                   onChange={() =>
                     handleKnobUpdate({
@@ -1346,6 +1350,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                         '인라인 스타일 우선'}
                     </p>
                     <Checkbox
+                      commitStrategy="after-paint"
                       checked={singleKnobPosition.useInlineStyles ?? false}
                       onChange={() =>
                         handleKnobUpdate({
