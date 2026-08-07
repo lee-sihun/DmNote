@@ -26,6 +26,8 @@ interface ColorTrackProps {
   color: ColorObject;
   onChange: (color: ColorObject) => void;
   onChangeComplete?: (color: ColorObject) => void;
+  /** 성능 계측용 비교 전략. 제품 경로는 프레임당 최신 입력만 반영한다. */
+  continuousInputStrategy?: ContinuousInputStrategy;
 }
 
 const clampRatio = (value: number): number =>
@@ -176,6 +178,7 @@ export const SaturationArea = ({
   height = SATURATION_HEIGHT,
   onChange,
   onChangeComplete,
+  continuousInputStrategy,
 }: SaturationAreaProps) => {
   const session = usePointerSession((x, y, final) => {
     const next = hsvToColorObject({
@@ -185,7 +188,7 @@ export const SaturationArea = ({
     });
     onChange(next);
     if (final) onChangeComplete?.(next);
-  });
+  }, continuousInputStrategy);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? PAGE_STEP : 1;
@@ -267,12 +270,13 @@ export const HueSlider = ({
   color,
   onChange,
   onChangeComplete,
+  continuousInputStrategy,
 }: ColorTrackProps) => {
   const session = usePointerSession((x, _y, final) => {
     const next = hsvToColorObject({ ...color.hsv, h: x * 360 });
     onChange(next);
     if (final) onChangeComplete?.(next);
-  });
+  }, continuousInputStrategy);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? HUE_PAGE_STEP : 1;
@@ -339,12 +343,13 @@ export const AlphaSlider = ({
   color,
   onChange,
   onChangeComplete,
+  continuousInputStrategy,
 }: ColorTrackProps) => {
   const session = usePointerSession((x, _y, final) => {
     const next = hsvToColorObject({ ...color.hsv, a: x });
     onChange(next);
     if (final) onChangeComplete?.(next);
-  });
+  }, continuousInputStrategy);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = (event.shiftKey ? PAGE_STEP : 1) / 100;
