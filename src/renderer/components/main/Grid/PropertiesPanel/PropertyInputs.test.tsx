@@ -38,6 +38,7 @@ vi.mock('@hooks/pickers/useGradientColorState', () => ({
 
 import {
   ColorInput,
+  FontStyleToggle,
   NumberInput,
   OptionalNumberInput,
   TextInput,
@@ -526,5 +527,54 @@ describe('ColorInput deferred picker mount', () => {
 
     expect(container.querySelector('[data-testid="color-picker"]')).toBeNull();
     expect(button.className).not.toContain('shadow-focus-ring');
+  });
+});
+
+describe('FontStyleToggle visual-first commit', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    vi.unstubAllGlobals();
+    container.remove();
+  });
+
+  it('스타일 버튼을 즉시 표시하고 부모 commit은 paint 뒤 실행한다', async () => {
+    const onBoldChange = vi.fn();
+    act(() =>
+      root.render(
+        <FontStyleToggle
+          isBold={false}
+          isItalic={false}
+          isUnderline={false}
+          isStrikethrough={false}
+          onBoldChange={onBoldChange}
+          onItalicChange={() => {}}
+          onUnderlineChange={() => {}}
+          onStrikethroughChange={() => {}}
+        />,
+      ),
+    );
+    const bold = container.querySelector<HTMLButtonElement>('[title="Bold"]')!;
+
+    act(() => bold.click());
+
+    expect(bold.getAttribute('aria-pressed')).toBe('true');
+    expect(onBoldChange).not.toHaveBeenCalled();
+    await flushAfterPaintCommit();
+    expect(onBoldChange).toHaveBeenCalledWith(true);
   });
 });

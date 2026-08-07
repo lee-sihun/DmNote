@@ -33,6 +33,7 @@ import {
 } from './LayerIcons';
 import { useLayerActions } from './useLayerActions';
 import { useLayerDnD } from './useLayerDnD';
+import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
 
 function layerItemToSelectedElement(item: LayerItem): SelectedElement {
   return {
@@ -41,6 +42,42 @@ function layerItemToSelectedElement(item: LayerItem): SelectedElement {
     ...(item.index !== undefined ? { index: item.index } : {}),
   };
 }
+
+interface LayerGroupDisclosureProps {
+  collapsed: boolean;
+  onToggle: () => void;
+}
+
+const LayerGroupDisclosure = ({
+  collapsed,
+  onToggle,
+}: LayerGroupDisclosureProps) => {
+  const { value: visualCollapsed, toggle } = useOptimisticBooleanCommit({
+    canonicalValue: collapsed,
+    onCommit: onToggle,
+  });
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={!visualCollapsed}
+        className="absolute left-0 top-0 bottom-0 w-[34px] flex items-center pl-[1px] cursor-pointer z-[1]"
+        onClick={(event) => {
+          event.stopPropagation();
+          toggle();
+        }}
+      >
+        <span className="opacity-0 group-hover/panel:opacity-60 hover:!opacity-100">
+          <ChevronIcon collapsed={visualCollapsed} />
+        </span>
+      </button>
+      <div className="flex-shrink-0">
+        <FolderIcon open={!visualCollapsed} />
+      </div>
+    </>
+  );
+};
 
 // ============================================================================
 // 레이어 탭 콘텐츠 Props
@@ -552,23 +589,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       dnd.draggedGroupId !== gh.groupId && (
                         <div className="absolute left-0 right-0 top-0 h-[2px] bg-accent z-10" />
                       )}
-                    {/* 접기/펼치기 토글 */}
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-[34px] flex items-center pl-[1px] cursor-pointer z-[1]"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleCollapsed(gh.groupId);
-                      }}
-                    >
-                      <div className="opacity-0 group-hover/panel:opacity-60 hover:!opacity-100">
-                        <ChevronIcon collapsed={gh.isCollapsed} />
-                      </div>
-                    </div>
-
-                    {/* 폴더 아이콘 */}
-                    <div className="flex-shrink-0">
-                      <FolderIcon open={!gh.isCollapsed} />
-                    </div>
+                    <LayerGroupDisclosure
+                      collapsed={gh.isCollapsed}
+                      onToggle={() => toggleCollapsed(gh.groupId)}
+                    />
 
                     {/* 그룹 이름 */}
                     {isRenamingGroup ? (

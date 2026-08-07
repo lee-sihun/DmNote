@@ -41,6 +41,7 @@ import KnobItem from '../layers/KnobItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
+  type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
 import { useUIStore } from '@stores/useUIStore';
@@ -844,8 +845,9 @@ const Grid = ({
       setIsContextOpen(false);
       setContextPosition(null);
     }
-    clearSelection();
-    toggleSelection({ type, id: `${type}-${index}`, index });
+    const nextSelection: SelectedElement[] = [
+      { type, id: `${type}-${index}`, index },
+    ];
 
     // 그룹 ID 조회
     let groupId: string | undefined;
@@ -869,31 +871,33 @@ const Grid = ({
       // 같은 그룹의 모든 요소 선택
       (positions[selectedKeyType] || []).forEach((p, i) => {
         if (p?.groupId === groupId && !(type === 'key' && i === index)) {
-          toggleSelection({ type: 'key', id: `key-${i}`, index: i });
+          nextSelection.push({ type: 'key', id: `key-${i}`, index: i });
         }
       });
       const statPos =
         useStatItemStore.getState().positions[selectedKeyType] || [];
       statPos.forEach((p, i) => {
         if (p?.groupId === groupId && !(type === 'stat' && i === index)) {
-          toggleSelection({ type: 'stat', id: `stat-${i}`, index: i });
+          nextSelection.push({ type: 'stat', id: `stat-${i}`, index: i });
         }
       });
       const graphPos =
         useGraphItemStore.getState().positions[selectedKeyType] || [];
       graphPos.forEach((p, i) => {
         if (p?.groupId === groupId && !(type === 'graph' && i === index)) {
-          toggleSelection({ type: 'graph', id: `graph-${i}`, index: i });
+          nextSelection.push({ type: 'graph', id: `graph-${i}`, index: i });
         }
       });
       const knobPos =
         useKnobItemStore.getState().positions[selectedKeyType] || [];
       knobPos.forEach((p, i) => {
         if (p?.groupId === groupId && !(type === 'knob' && i === index)) {
-          toggleSelection({ type: 'knob', id: `knob-${i}`, index: i });
+          nextSelection.push({ type: 'knob', id: `knob-${i}`, index: i });
         }
       });
     }
+    // 그룹 멤버 수와 무관하게 선택 Store 알림·React render를 1회로 유지
+    setSelectedElements(nextSelection);
   };
 
   // 더블클릭 편집 진입 — 대상이 다중 선택의 멤버면 선택을 보존해 배치 편집으로,

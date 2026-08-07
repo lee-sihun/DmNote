@@ -30,6 +30,7 @@ import { gradientToCss } from '@src/types/color';
 import { useTranslation } from '@contexts/useTranslation';
 import { registerEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
 import { useAfterPaintValueCommit } from '@hooks/useAfterPaintValueCommit';
+import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
 
 // ============================================================================
 // 속성 행
@@ -1159,6 +1160,40 @@ const StrikethroughIcon: React.FC = () => (
 // 글꼴 스타일 토글
 // ============================================================================
 
+interface FontStyleButtonProps {
+  active: boolean;
+  title: string;
+  onChange: (active: boolean) => void;
+  children: React.ReactNode;
+}
+
+const FontStyleButton = ({
+  active,
+  title,
+  onChange,
+  children,
+}: FontStyleButtonProps) => {
+  const { value: visualActive, toggle } = useOptimisticBooleanCommit({
+    canonicalValue: active,
+    onCommit: onChange,
+  });
+  const buttonClass = visualActive
+    ? 'bg-fill-active text-fg'
+    : 'text-fg-faint hover:bg-surface-hover hover:text-fg-muted';
+
+  return (
+    <button
+      type="button"
+      aria-pressed={visualActive}
+      onClick={toggle}
+      className={`w-[24px] h-[21px] flex items-center justify-center transition-colors duration-fast ${buttonClass}`}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+};
+
 export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
   isBold,
   isItalic,
@@ -1169,43 +1204,32 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
   onUnderlineChange,
   onStrikethroughChange,
 }) => {
-  const buttonClass = (active: boolean) =>
-    `w-[24px] h-[21px] flex items-center justify-center transition-colors duration-fast ${
-      active
-        ? 'bg-fill-active text-fg'
-        : 'text-fg-faint hover:bg-surface-hover hover:text-fg-muted'
-    }`;
-
   return (
     <div className="flex items-center h-[23px] bg-inset rounded-md overflow-hidden">
-      <button
-        onClick={() => onBoldChange(!isBold)}
-        className={buttonClass(isBold)}
-        title="Bold"
-      >
+      <FontStyleButton active={isBold} onChange={onBoldChange} title="Bold">
         <BoldIcon />
-      </button>
-      <button
-        onClick={() => onItalicChange(!isItalic)}
-        className={buttonClass(isItalic)}
+      </FontStyleButton>
+      <FontStyleButton
+        active={isItalic}
+        onChange={onItalicChange}
         title="Italic"
       >
         <ItalicIcon />
-      </button>
-      <button
-        onClick={() => onUnderlineChange(!isUnderline)}
-        className={buttonClass(isUnderline)}
+      </FontStyleButton>
+      <FontStyleButton
+        active={isUnderline}
+        onChange={onUnderlineChange}
         title="Underline"
       >
         <UnderlineIcon />
-      </button>
-      <button
-        onClick={() => onStrikethroughChange(!isStrikethrough)}
-        className={buttonClass(isStrikethrough)}
+      </FontStyleButton>
+      <FontStyleButton
+        active={isStrikethrough}
+        onChange={onStrikethroughChange}
         title="Strikethrough"
       >
         <StrikethroughIcon />
-      </button>
+      </FontStyleButton>
     </div>
   );
 };
