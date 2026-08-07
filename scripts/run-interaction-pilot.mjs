@@ -131,7 +131,7 @@ const generatedExperiment = `<!-- PILOT-01:EXPERIMENT:START -->
   canonicalAfter,
 )}ms (${formatPercent(canonicalImprovement)}) |
 | 정확성 검증 | 마지막 의도 병합·paint 전 unmount 의도 보존·접근성 checked 상태 단위 테스트 통과 |
-| 플랫폼 검증 | jsdom proxy 완료·macOS WKWebView 및 Windows WebView2 대기 |
+| 플랫폼 검증 | jsdom proxy 완료·실제 Chromium 세션은 6.1 참조·macOS WKWebView 및 Windows WebView2 대기 |
 | 결론 | WebView 실측 전까지 검증 상태로 유지 |
 | 후속 작업 | 실제 WebView CTP 측정 후 PILOT-02와 공통 정책 후보로 확대 |
 <!-- PILOT-01:EXPERIMENT:END -->`;

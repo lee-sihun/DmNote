@@ -104,26 +104,41 @@
 | 측정 경로      | 실제 `updateKeyStyle` + 요소 그림자 CSS 렌더의 jsdom DOM commit proxy |
 | 요소 수        | 500개                                                                 |
 | 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회                                |
-| 측정 코드 커밋 | `45cbb96e8c979f9c40dd5e64877bb517d2c371e3`                            |
+| 측정 코드 커밋 | `809f8fe11f076acf987b4746edf5dd09eb9cebd4`                            |
 | 비교 전략      | `sync` → `after-paint`                                                |
 | 환경           | darwin arm64, v25.2.1                                                 |
 
 | P95 지표              | sync 기준선 | after-paint | 개선율 |
 | --------------------- | ----------: | ----------: | -----: |
-| 시각 DOM commit       |     5.842ms |     0.464ms |  92.1% |
-| canonical DOM commit  |     5.844ms |     8.706ms | -49.0% |
-| React commit duration |     0.676ms |     0.973ms | -44.0% |
+| 시각 DOM commit       |     6.305ms |     0.407ms |  93.5% |
+| canonical DOM commit  |     6.311ms |     8.674ms | -37.5% |
+| React commit duration |     0.668ms |     0.815ms | -22.1% |
 
 - 원시 결과: [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json)
 - 정확성 게이트: `npm run test:interaction:pilot` 통과
 - 실제 WebView click-to-paint 값은 브라우저 또는 Tauri 자동화 표면에서 별도 검증 전까지 기록하지 않는다.
 <!-- PILOT-01:RESULT:END -->
 
+#### PILOT-01 Chromium 실제 렌더 경로 검증
+
+커밋 `809f8fe1`, Google Chrome 151.0.7922.77, 500개 요소, 40회 반복과 5회 워밍업 조건이다. 새 Vite 프로세스에서 두 전략을 같은 순서로 실행했으며 Computer Use가 완료 후 창 제목에 노출된 P95를 수집했다.
+
+| P95 지표              | sync 기준선 | after-paint |  변화율 |
+| --------------------- | ----------: | ----------: | ------: |
+| 시각 DOM commit       |    11.300ms |     3.100ms |   72.6% |
+| canonical DOM commit  |    11.300ms |    27.400ms | -142.5% |
+| paint opportunity     |    34.100ms |    34.200ms |   -0.3% |
+| React commit duration |     2.300ms |     2.900ms |  -26.1% |
+
+- 원시 결과: [Chromium P95](../benchmarks/results/pilot-01-chromium-p95.json)
+- 해석: 시각 DOM 반영은 빨라졌고 paint opportunity는 같은 프레임 구간을 유지했다. canonical commit 증가는 첫 paint 뒤로 작업을 옮긴 의도된 교환관계다.
+- 제한: macOS WKWebView와 Windows WebView2 실측은 아직 완료되지 않았다.
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                     |
 | -------- | ---------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------------------------------------------------------------------------------------- |
-| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    5.842 |    0.464 |  92.1% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json) |
+| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    6.305 |    0.407 |  93.5% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json) |
 | PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | CTP ms       |        — |        — |      — | 대기 | 파일럿 확장                                                                                                   |
 | BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 대기 | 직접 사용처와 SettingToggleRow                                                                                |
 | BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 대기 | 행 전체 토글                                                                                                  |
@@ -315,12 +330,19 @@
 
 <!-- PILOT-01:SESSIONS:START -->
 
-| 세션 ID        | 날짜       | 항목 ID  | 단계   | 빌드·커밋  | 환경                                                 | 시나리오·데이터 크기      | 반복 |   P50 |   P95 |   최대 | 보조 지표                               | 원시 자료                                            | 비고             |
-| -------------- | ---------- | -------- | ------ | ---------- | ---------------------------------------------------- | ------------------------- | ---: | ----: | ----: | -----: | --------------------------------------- | ---------------------------------------------------- | ---------------- |
-| PILOT-01-SYNC  | 2026-08-07 | PILOT-01 | 기준선 | `45cbb96e` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 1.975 | 5.842 | 11.662 | canonical P95 5.844ms·React P95 0.676ms | [JSON](../benchmarks/results/pilot-01-baseline.json) | DOM commit proxy |
-| PILOT-01-PAINT | 2026-08-07 | PILOT-01 | 개선   | `45cbb96e` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 0.322 | 0.464 |  0.823 | canonical P95 8.706ms·React P95 0.973ms | [JSON](../benchmarks/results/pilot-01-improved.json) | DOM commit proxy |
+| 세션 ID        | 날짜       | 항목 ID  | 단계   | 빌드·커밋  | 환경                                                 | 시나리오·데이터 크기      | 반복 |   P50 |   P95 |  최대 | 보조 지표                               | 원시 자료                                            | 비고             |
+| -------------- | ---------- | -------- | ------ | ---------- | ---------------------------------------------------- | ------------------------- | ---: | ----: | ----: | ----: | --------------------------------------- | ---------------------------------------------------- | ---------------- |
+| PILOT-01-SYNC  | 2026-08-07 | PILOT-01 | 기준선 | `809f8fe1` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 5.270 | 6.305 | 6.362 | canonical P95 6.311ms·React P95 0.668ms | [JSON](../benchmarks/results/pilot-01-baseline.json) | DOM commit proxy |
+| PILOT-01-PAINT | 2026-08-07 | PILOT-01 | 개선   | `809f8fe1` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 0.271 | 0.407 | 0.810 | canonical P95 8.674ms·React P95 0.815ms | [JSON](../benchmarks/results/pilot-01-improved.json) | DOM commit proxy |
 
 <!-- PILOT-01:SESSIONS:END -->
+
+### 6.1 실제 브라우저 세션
+
+| 세션 ID               | 날짜       | 항목 ID  | 단계   | 빌드·커밋  | 환경                     | 시나리오·데이터 크기  | 반복 | P50 |    P95 | 최대 | 보조 지표          | 원시 자료                                                | 비고                    |
+| --------------------- | ---------- | -------- | ------ | ---------- | ------------------------ | --------------------- | ---: | --: | -----: | ---: | ------------------ | -------------------------------------------------------- | ----------------------- |
+| PILOT-01-CHROME-SYNC  | 2026-08-07 | PILOT-01 | 기준선 | `809f8fe1` | Chrome 151, darwin-arm64 | 단일 선택, 요소 500개 |   40 |   — | 11.300 |    — | paint P95 34.100ms | [JSON](../benchmarks/results/pilot-01-chromium-p95.json) | 실제 Chromium 렌더 경로 |
+| PILOT-01-CHROME-PAINT | 2026-08-07 | PILOT-01 | 개선   | `809f8fe1` | Chrome 151, darwin-arm64 | 단일 선택, 요소 500개 |   40 |   — |  3.100 |    — | paint P95 34.200ms | [JSON](../benchmarks/results/pilot-01-chromium-p95.json) | 실제 Chromium 렌더 경로 |
 
 ## 7. 실험 기록
 
@@ -336,14 +358,14 @@
 | 가설               | 무거운 문서 상태 커밋을 첫 paint 뒤로 미루면 토글의 시각 반응이 선택 요소 수와 무관하게 빨라진다.                              |
 | 변경 내용          | 로컬 checked를 먼저 반영하고 `requestAnimationFrame` 다음 태스크에서 canonical 상태를 커밋한다. 연타는 마지막 의도로 병합한다. |
 | 적용 기법          | 낙관적 상태 투영·메인 스레드 양보·입력 병합                                                                                    |
-| 커밋·PR            | `45cbb96e`                                                                                                                     |
+| 커밋·PR            | `809f8fe1`                                                                                                                     |
 | 기준선 세션        | PILOT-01-SYNC                                                                                                                  |
 | 개선 후 세션       | PILOT-01-PAINT                                                                                                                 |
-| P50 변화           | 1.975ms → 0.322ms (83.7%)                                                                                                      |
-| P95 변화           | 5.842ms → 0.464ms (92.1%)                                                                                                      |
-| canonical P95 변화 | 5.844ms → 8.706ms (-49.0%)                                                                                                     |
+| P50 변화           | 5.270ms → 0.271ms (94.9%)                                                                                                      |
+| P95 변화           | 6.305ms → 0.407ms (93.5%)                                                                                                      |
+| canonical P95 변화 | 6.311ms → 8.674ms (-37.5%)                                                                                                     |
 | 정확성 검증        | 마지막 의도 병합·paint 전 unmount 의도 보존·접근성 checked 상태 단위 테스트 통과                                               |
-| 플랫폼 검증        | jsdom proxy 완료·macOS WKWebView 및 Windows WebView2 대기                                                                      |
+| 플랫폼 검증        | jsdom proxy 완료·실제 Chromium 세션은 6.1 참조·macOS WKWebView 및 Windows WebView2 대기                                        |
 | 결론               | WebView 실측 전까지 검증 상태로 유지                                                                                           |
 | 후속 작업          | 실제 WebView CTP 측정 후 PILOT-02와 공통 정책 후보로 확대                                                                      |
 

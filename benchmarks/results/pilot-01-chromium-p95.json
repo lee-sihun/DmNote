@@ -1,0 +1,36 @@
+{
+  "benchmark": "PILOT-01-shadow-toggle",
+  "kind": "browser-render-path-p95",
+  "measuredAt": "2026-08-07T05:12:00Z",
+  "commit": "809f8fe11f076acf987b4746edf5dd09eb9cebd4",
+  "runtime": {
+    "browser": "Google Chrome 151.0.7922.77",
+    "platform": "darwin",
+    "arch": "arm64",
+    "collection": "Computer Use accessibility window title"
+  },
+  "scenario": {
+    "elementCount": 500,
+    "iterations": 40,
+    "warmupIterations": 5,
+    "server": "fresh Vite development server"
+  },
+  "cases": [
+    {
+      "enabledCommitStrategy": "sync",
+      "eventBlockingMs": { "p95": 0.4 },
+      "visualDomCommitMs": { "p95": 11.3 },
+      "canonicalDomCommitMs": { "p95": 11.3 },
+      "clickToPaintOpportunityMs": { "p95": 34.1 },
+      "reactCommitDurationMs": { "p95": 2.3 }
+    },
+    {
+      "enabledCommitStrategy": "after-paint",
+      "eventBlockingMs": { "p95": 0.4 },
+      "visualDomCommitMs": { "p95": 3.1 },
+      "canonicalDomCommitMs": { "p95": 27.4 },
+      "clickToPaintOpportunityMs": { "p95": 34.2 },
+      "reactCommitDurationMs": { "p95": 2.9 }
+    }
+  ]
+}
