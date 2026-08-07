@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 87개    |
+| 대기                             | 73개    |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 78개    |
+| 실험·검증 중                     | 92개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -487,51 +487,51 @@
 
 ### 5.2 설정·Grid·프로퍼티 토글
 
-| ID     | 항목                                       | 우선순위 | 주 지표 | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                          |
-| ------ | ------------------------------------------ | -------- | ------- | -------: | -------: | -----: | ---- | ---------------------------------- |
-| TOG-01 | 오버레이 잠금                              | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, CTP·ETC 측정 대기      |
-| TOG-02 | 항상 위                                    | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 재동기화 검증 대기     |
-| TOG-03 | 전역 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, WebView 측정 대기      |
-| TOG-04 | 전역 키 카운터                             | P1       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, WebView 측정 대기      |
-| TOG-05 | 트레이 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, CTP·ETC 측정 대기      |
-| TOG-06 | OBS 모드                                   | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 서비스 ETC 측정 대기   |
-| TOG-07 | 자동 업데이트                              | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 저장 실패 검증 대기    |
-| TOG-08 | 개발자 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, DevTools ETC 측정 대기 |
-| TOG-09 | 커스텀 CSS                                 | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 스타일 CTP 측정 대기   |
-| TOG-10 | 커스텀 JS                                  | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 런타임 ETC 측정 대기   |
-| TOG-11 | Grid 미니맵 표시                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기      |
-| TOG-12 | Grid 정렬 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기   |
-| TOG-13 | Grid 간격 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기   |
-| TOG-14 | Grid 크기 일치 가이드                      | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 리사이즈 F95 측정 대기 |
-| TOG-15 | 단일 인라인 스타일 우선                    | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기      |
-| TOG-16 | 단일 키 사운드 사용                        | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기      |
-| TOG-17 | 단일 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기      |
-| TOG-18 | 단일 Y축 자동 보정                         | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기      |
-| TOG-19 | 단일 글로우                                | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기      |
-| TOG-20 | 단일 카운터 사용                           | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기      |
-| TOG-21 | 단일 카운터 애니메이션                     | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기      |
-| TOG-22 | 그래프 평균선                              | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기      |
-| TOG-23 | 그래프 애니메이션                          | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기      |
-| TOG-24 | 그래프 인라인 스타일                       | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기      |
-| TOG-25 | 노브 방향 반전                             | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기      |
-| TOG-26 | 노브 인라인 스타일                         | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기      |
-| TOG-27 | 배치 인라인 스타일·사운드                  | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기    |
-| TOG-28 | 배치 노트 효과·Y 보정·글로우               | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기    |
-| TOG-29 | 배치 카운터·애니메이션                     | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기    |
-| TOG-30 | 배치 그래프·노브 토글                      | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 중복 표면 측정 대기    |
-| TOG-31 | 탭 CSS 사용                                | P2       | CTP ms  |        — |        — |      — | 실험 | `c9c10ee7`, CTP·ETC 측정 대기      |
-| TOG-32 | 이미지 투명화                              | P1       | CTP ms  |        — |        — |      — | 실험 | `e923a837`, 이미지 CTP 측정 대기   |
-| TOG-33 | 설정 모달의 카운터·노트 토글               | P1/P3    | CTP ms  |        — |        — |      — | 실험 | `e923a837`, preview 측정 대기      |
-| TOG-34 | 플러그인 boolean 설정                      | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `e923a837`, 저장 병합 검증 대기    |
-| TOG-35 | 업데이트 버전 건너뛰기                     | P2       | CTP ms  |        — |        — |      — | 대기 | 저장 상태                          |
-| TOG-36 | Display Element·커스텀 다이얼로그 체크박스 | P1/P2    | CTP ms  |        — |        — |      — | 대기 | React 공통 토글과 별도 경로        |
+| ID     | 항목                                       | 우선순위 | 주 지표 | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                            |
+| ------ | ------------------------------------------ | -------- | ------- | -------: | -------: | -----: | ---- | ------------------------------------ |
+| TOG-01 | 오버레이 잠금                              | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
+| TOG-02 | 항상 위                                    | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
+| TOG-03 | 전역 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
+| TOG-04 | 전역 키 카운터                             | P1       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
+| TOG-05 | 트레이 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
+| TOG-06 | OBS 모드                                   | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, single-flight·rollback   |
+| TOG-07 | 자동 업데이트                              | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
+| TOG-08 | 개발자 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
+| TOG-09 | 커스텀 CSS                                 | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
+| TOG-10 | 커스텀 JS                                  | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
+| TOG-11 | Grid 미니맵 표시                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
+| TOG-12 | Grid 정렬 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기     |
+| TOG-13 | Grid 간격 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기     |
+| TOG-14 | Grid 크기 일치 가이드                      | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 리사이즈 F95 측정 대기   |
+| TOG-15 | 단일 인라인 스타일 우선                    | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
+| TOG-16 | 단일 키 사운드 사용                        | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
+| TOG-17 | 단일 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
+| TOG-18 | 단일 Y축 자동 보정                         | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
+| TOG-19 | 단일 글로우                                | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
+| TOG-20 | 단일 카운터 사용                           | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
+| TOG-21 | 단일 카운터 애니메이션                     | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
+| TOG-22 | 그래프 평균선                              | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
+| TOG-23 | 그래프 애니메이션                          | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
+| TOG-24 | 그래프 인라인 스타일                       | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
+| TOG-25 | 노브 방향 반전                             | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
+| TOG-26 | 노브 인라인 스타일                         | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
+| TOG-27 | 배치 인라인 스타일·사운드                  | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기      |
+| TOG-28 | 배치 노트 효과·Y 보정·글로우               | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기      |
+| TOG-29 | 배치 카운터·애니메이션                     | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기      |
+| TOG-30 | 배치 그래프·노브 토글                      | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 중복 표면 측정 대기      |
+| TOG-31 | 탭 CSS 사용                                | P2       | CTP ms  |        — |        — |      — | 실험 | `c9c10ee7`, CTP·ETC 측정 대기        |
+| TOG-32 | 이미지 투명화                              | P1       | CTP ms  |        — |        — |      — | 실험 | `e923a837`, 이미지 CTP 측정 대기     |
+| TOG-33 | 설정 모달의 카운터·노트 토글               | P1/P3    | CTP ms  |        — |        — |      — | 실험 | `e923a837`, preview 측정 대기        |
+| TOG-34 | 플러그인 boolean 설정                      | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `e923a837`, 저장 병합 검증 대기      |
+| TOG-35 | 업데이트 버전 건너뛰기                     | P2       | CTP ms  |        — |        — |      — | 대기 | 저장 상태                            |
+| TOG-36 | Display Element·커스텀 다이얼로그 체크박스 | P1/P2    | CTP ms  |        — |        — |      — | 대기 | React 공통 토글과 별도 경로          |
 
 ### 5.3 Grid·레이어 연속 입력과 편집 액션
 
 | ID       | 항목                  | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                           |
 | -------- | --------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | --------------------------------------------------- |
-| GRID-01  | 단일 요소 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 가이드 on/off 별도                                  |
-| GRID-02  | 다중 선택 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정                                      |
+| GRID-01  | 단일 요소 드래그      | P0       | F95 ms/frame |        — |        — |      — | 실험 | `e9a800cc`, latest pointer·pointerup flush          |
+| GRID-02  | 다중 선택 드래그      | P0       | F95 ms/frame |        — |        — |      — | 실험 | `e9a800cc`, latest pointer·pointerup flush          |
 | GRID-03  | Grid 패닝             | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용                   |
 | GRID-04  | 휠·핀치 줌            | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용                   |
 | GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |    0.306 |    0.225 |  26.3% | 검증 | `9c90cae8`, frame coalescing 적용                   |
@@ -560,8 +560,8 @@
 | LAYER-05 | 표시·숨김             | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 paint                                        |
 | LAYER-06 | 잠금·잠금 해제        | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 상태                                         |
 | LAYER-07 | 위·아래 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 목록·캔버스 순서                                    |
-| LAYER-08 | 드래그 순서 변경      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | local preview                                       |
-| LAYER-09 | 그룹 드래그·중첩      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | hit-test                                            |
+| LAYER-08 | 드래그 순서 변경      | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `d4643d58`, drop hit-test frame coalescing          |
+| LAYER-09 | 그룹 드래그·중첩      | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `d4643d58`, group hit-test frame coalescing         |
 | LAYER-10 | 레이어 컨텍스트 메뉴  | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용         |
 | LAYER-11 | 패널 detach·reattach  | P2       | ETC ms       |        — |        — |      — | 대기 | 창 handoff                                          |
 | LAYER-12 | 분리 패널 창 이동     | P0       | F95 ms/frame |        — |        — |      — | 대기 | 네이티브 drag                                       |
@@ -586,10 +586,10 @@
 | EDIT-01 | 색상 saturation·hue·alpha 드래그 | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                |
 | EDIT-02 | 색상 텍스트·퍼센트 입력          | P1       | CTP ms       |        — |        — |      — | 대기 | validation                                               |
 | EDIT-03 | 그라데이션 stop 편집·형식 전환   | P0       | F95 ms/frame |    0.405 |    0.137 |  66.2% | 검증 | `23582b9a`, stop 드래그 병합·형식 탭 즉시 반영           |
-| EDIT-04 | 카운터 bezier point 드래그       | P0       | F95 ms/frame |        — |        — |      — | 대기 | animation editor                                         |
-| EDIT-05 | 카운터 미리보기 scrub·wheel·play | P0       | F95 ms/frame |        — |        — |      — | 대기 | precompute                                               |
-| EDIT-06 | 사운드 파형 pan·zoom·trim        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Worker 후보                                              |
-| EDIT-07 | 사운드 재생·정지·seek            | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | media event coalescing                                   |
+| EDIT-04 | 카운터 bezier point 드래그       | P0       | F95 ms/frame |        — |        — |      — | 실험 | `22f3301b`, drag·pan·pinch frame coalescing              |
+| EDIT-05 | 카운터 미리보기 scrub·wheel·play | P0       | F95 ms/frame |        — |        — |      — | 실험 | `22f3301b`, canvas pointer 경로 병합·play rAF 유지       |
+| EDIT-06 | 사운드 파형 pan·zoom·trim        | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ff766d3c`, wheel delta 누적·pan/trim frame coalescing   |
+| EDIT-07 | 사운드 재생·정지·seek            | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `ff766d3c`, playback rAF·trim 종료 flush                 |
 | EDIT-08 | 사운드 처리 저장                 | P2       | ETC ms       |        — |        — |      — | 대기 | progress·취소                                            |
 | PICK-01 | 사운드 선택·검색·필터            | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4` 필터 Dropdown·`8c66281b` 검색 적용            |
 | PICK-02 | 사운드 추가·삭제·이름·숨김       | P2       | ETC ms       |        — |        — |      — | 대기 | 파일 작업                                                |
@@ -611,8 +611,8 @@
 | SET-03   | 리사이즈 앵커                        | P2       | CTP ms       |        — |        — |      — | 대기 | 설정 저장                                                   |
 | SET-04   | 언어 변경                            | P1       | CTP ms       |        — |        — |      — | 대기 | 전체 번역 rerender                                          |
 | SET-05   | 렌더러·ANGLE 모드                    | P2       | ETC ms       |        — |        — |      — | 대기 | 재시작 상태                                                 |
-| SET-06   | 플러그인 추가·재로드                 | P2       | ETC ms       |        — |        — |      — | 대기 | 진행·중복 실행                                              |
-| SET-07   | 플러그인 활성화                      | P2       | CTP ms       |        — |        — |      — | 대기 | ETC·rollback                                                |
+| SET-06   | 플러그인 추가·재로드                 | P2       | ETC ms       |        — |        — |      — | 실험 | `6d4c6b18`, ref 기반 single-flight                          |
+| SET-07   | 플러그인 활성화                      | P2       | CTP ms       |        — |        — |      — | 실험 | `6d4c6b18`, ref 기반 single-flight                          |
 | SET-08   | 플러그인 삭제·데이터 삭제            | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·목록 조정                                              |
 | SET-09   | CSS 파일 로드·활성화·삭제            | P2       | ETC ms       |        — |        — |      — | 대기 | 목록 projection                                             |
 | SET-10   | 단축키 캡처·삭제                     | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 저장 ETC                                                    |
@@ -626,9 +626,9 @@
 | TOOL-04  | 현재 탭·카운터 초기화                | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·동기화                                                 |
 | TOOL-05  | 기본 키 탭 전환                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | stale 응답 차단                                             |
 | TOOL-06  | 커스텀 탭 팝업                       | P2/P3    | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                 |
-| TOOL-07  | 프리셋 전체·탭 저장                  | P2       | ETC ms       |        — |        — |      — | 대기 | 진행·완료                                                   |
-| TOOL-08  | 프리셋 전체·탭 불러오기              | P2       | ETC ms       |        — |        — |      — | 대기 | bootstrap 완료                                              |
-| TOOL-09  | 오버레이 표시                        | P2       | CTP ms       |        — |        — |      — | 대기 | 기존 optimistic+rollback                                    |
+| TOOL-07  | 프리셋 전체·탭 저장                  | P2       | ETC ms       |        — |        — |      — | 실험 | `6d4c6b18`, 공통 single-flight                              |
+| TOOL-08  | 프리셋 전체·탭 불러오기              | P2       | ETC ms       |        — |        — |      — | 실험 | `6d4c6b18`, 공통 single-flight                              |
+| TOOL-09  | 오버레이 표시                        | P2       | CTP ms       |        — |        — |      — | 실험 | `6d4c6b18`, optimistic+rollback+single-flight               |
 | TOOL-10  | 설정 화면 열기·뒤로                  | P1       | CTP ms       |        — |        — |      — | 대기 | 큰 화면 전환                                                |
 | TOOL-11  | 노트 트랙 설정 열기                  | P3       | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용                |
 | TOOL-12  | 외부 링크·창 최소화·닫기             | P2       | ETC ms       |        — |        — |      — | 대기 | 네이티브 호출                                               |
@@ -643,7 +643,7 @@
 | PLUG-01  | Promise plugin button handler        | P2       | ETC ms       |        — |        — |      — | 대기 | pending·오류 격리                                           |
 | PLUG-02  | plugin input onInput                 | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | handler duration                                            |
 | PLUG-03  | plugin dropdown                      | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 전역 listener                                               |
-| PLUG-04  | Display Element 선택·드래그·리사이즈 | P0       | F95 ms/frame |        — |        — |      — | 대기 | 호스트 Grid와 비교                                          |
+| PLUG-04  | Display Element 선택·드래그·리사이즈 | P0       | F95 ms/frame |        — |        — |      — | 실험 | `e9a800cc` drag·`78fb15eb` resize 공통 경로 적용            |
 | PLUG-05  | plugin remove·context action         | P2       | ETC ms       |        — |        — |      — | 대기 | 실패 조정                                                   |
 | WIN-01   | 모드 전환 단축키                     | P1/P2    | CTP ms       |        — |        — |      — | 대기 | generation                                                  |
 | WIN-02   | 프로퍼티 패널 토글 단축키            | P1       | CTP ms       |        — |        — |      — | 대기 | handoff 포함                                                |
