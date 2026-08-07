@@ -69,3 +69,9 @@ console.info(
     afterCase.handlerInvocations.p95
   }회`,
 );
+const tracking = spawnSync(
+  process.execPath,
+  ['scripts/update-interaction-continuation-results.mjs'],
+  { cwd: root, stdio: 'inherit' },
+);
+if (tracking.status !== 0) process.exit(tracking.status ?? 1);

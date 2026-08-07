@@ -2,7 +2,7 @@
 
 > 작성일: 2026-08-07
 >
-> 상태: 그림자 토글 파일럿 자동 측정·WebView 검증 중
+> 상태: 전수 구현·감사 완료, 실제 WebView 검증 중
 >
 > 원칙: 실측값만 기록하며 추정값이나 임의의 성능 수치를 입력하지 않는다.
 >
@@ -79,17 +79,18 @@
 
 수치는 실제 측정이 시작되면 갱신한다.
 
-| 지표                             | 현재 값 |
-| -------------------------------- | ------- |
-| 전체 추적 항목                   | 165개   |
-| 대기                             | 73개    |
-| 완료                             | 0개     |
-| 실험·검증 중                     | 92개    |
-| 회귀                             | 0개     |
-| P0 완료율                        | —       |
-| 측정 완료 항목의 P95 중앙 개선율 | —       |
-| 가장 큰 개선                     | —       |
-| 가장 큰 회귀                     | —       |
+| 지표                             | 현재 값       |
+| -------------------------------- | ------------- |
+| 전체 추적 항목                   | 165개         |
+| 대기                             | 0개           |
+| 완료                             | 0개           |
+| 실험·검증 중                     | 163개         |
+| 보류                             | 2개           |
+| 회귀                             | 0개           |
+| P0 완료율                        | 0%            |
+| 측정 완료 항목의 P95 중앙 개선율 | 66.2%         |
+| 가장 큰 개선                     | BASE-06 97.5% |
+| 가장 큰 회귀                     | —             |
 
 ## 5. 전수 성능 추적표
 
@@ -463,6 +464,66 @@
 - 정확성 게이트: 최신 비율 병합·pointerup 최종 commit·중복 완료 방지 테스트 통과
 <!-- EDIT-01:RESULT:END -->
 
+<!-- BASE-11:RESULT:START -->
+
+#### BASE-11 패널 토글 최신 자동 측정
+
+| 조건           | 값                                             |
+| -------------- | ---------------------------------------------- |
+| 측정 경로      | PanelToggleButton + 패널 DOM 500개 mount proxy |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회         |
+| 구현 코드 커밋 | `bfb072b4ab5388e2437674efa93f7429345a7e35`     |
+| 측정 코드 커밋 | `384324f533853ce9329021e6f670245f56387890`     |
+| 측정 대상 커밋 | `9f5872b685029e9f1bc57d06b4f35a5d1197835b`     |
+| 비교 전략      | `sync` → `after-paint`                         |
+| 환경           | darwin arm64, v25.2.1                          |
+
+| P95 지표               |     sync | after-paint |  개선율 |
+| ---------------------- | -------: | ----------: | ------: |
+| 버튼 시각 DOM commit   | 13.280ms |     0.531ms |   96.0% |
+| 패널 콘텐츠 DOM commit | 13.404ms |    27.194ms | -102.9% |
+| React commit duration  |  7.979ms |    17.632ms | -121.0% |
+
+- 원시 결과: [기준선](../benchmarks/results/base-11-panel-toggle-baseline.json) · [개선](../benchmarks/results/base-11-panel-toggle-improved.json)
+- 해석: 콘텐츠 총 작업은 유지하면서 버튼 피드백만 첫 paint 앞으로 분리했다.
+- 정확성 게이트: 시각 선반영·동일 프레임 상쇄 테스트 통과
+<!-- BASE-11:RESULT:END -->
+
+<!-- GRID-21:RESULT:START -->
+
+#### GRID-21 방향키 burst 최신 자동 측정
+
+DOM 500개와 `keydown` 20회 burst, 기준선·개선 각 30회와 워밍업 5회 조건이다.
+
+| P95 지표              |     sync | frame coalescing | 개선율 |
+| --------------------- | -------: | ---------------: | -----: |
+| burst event blocking  |  0.435ms |          0.198ms |  54.5% |
+| 최종 DOM commit       | 10.727ms |         11.801ms | -10.0% |
+| React commit duration |  0.680ms |          0.623ms |   8.4% |
+
+- 구현 코드 커밋: `a63705a4edf4a7902d450095a7e0f7962d6e8653`, 측정 코드 커밋: `384324f533853ce9329021e6f670245f56387890`, 측정 대상 커밋: `9f5872b685029e9f1bc57d06b4f35a5d1197835b`
+- 원시 결과: [기준선](../benchmarks/results/grid-21-keyboard-baseline.json) · [개선](../benchmarks/results/grid-21-keyboard-improved.json)
+- 해석: 입력 이벤트 점유를 줄이고 최종 이동은 다음 프레임에 합산 반영한다.
+- 정확성 게이트: delta 합산·keyup flush·history gesture 보존 테스트 통과
+<!-- GRID-21:RESULT:END -->
+
+<!-- PLUG-02:RESULT:START -->
+
+#### PLUG-02 플러그인 입력 burst 최신 자동 측정
+
+handler workload 500개와 `input` 100회 burst, 기준선·개선 각 30회와 워밍업 5회 조건이다.
+
+| P95 지표             |    sync | frame coalescing | 개선율 |
+| -------------------- | ------: | ---------------: | -----: |
+| burst event blocking | 0.727ms |          0.198ms |  72.8% |
+| handler 완료         | 0.727ms |          1.378ms | -89.5% |
+| handler 호출 수      |   100회 |              1회 |  99.0% |
+
+- 구현 코드 커밋: `3503b2b206fcbdad644e679dcb3c88fc4bec057c`, 측정 코드 커밋: `3503b2b206fcbdad644e679dcb3c88fc4bec057c`, 측정 대상 커밋: `9f5872b685029e9f1bc57d06b4f35a5d1197835b`
+- 원시 결과: [기준선](../benchmarks/results/plug-02-input-baseline.json) · [개선](../benchmarks/results/plug-02-input-improved.json)
+- 정확성 게이트: 최신 이벤트 보존·change 선행 flush·Promise action single-flight 테스트 통과
+<!-- PLUG-02:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                                 |
@@ -478,180 +539,180 @@
 | BASE-07  | TabSwitch                          | P3       | DOM P95 ms   |   10.851 |    0.492 |  95.5% | 검증 | [기준선](../benchmarks/results/base-07-tab-switch-baseline.json) · [개선](../benchmarks/results/base-07-tab-switch-improved.json)         |
 | BASE-08  | ListPopup·FloatingPopup            | P1/P3    | DOM P95 ms   |   23.983 |   10.642 |  55.6% | 검증 | [기준선](../benchmarks/results/base-08-floating-popup-baseline.json) · [개선](../benchmarks/results/base-08-floating-popup-improved.json) |
 | BASE-09  | Modal                              | 기반     | DOM P95 ms   |   13.454 |    4.308 |  68.0% | 검증 | [기준선](../benchmarks/results/base-09-modal-baseline.json) · [개선](../benchmarks/results/base-09-modal-improved.json)                   |
-| BASE-10  | TooltipGroup                       | P3       | CTP ms       |        — |        — |      — | 대기 | 의도된 hover delay는 별도 기록                                                                                                            |
-| BASE-11  | PanelToggleButton                  | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 mount·render 포함                                                                                                                    |
-| BASE-12  | 패널 내부 PickerSurface·내비게이션 | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 위치 계산과 첫 paint                                                                                                                      |
-| BASE-13  | 프로퍼티 패널 smooth scroll        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Lenis RAF 6개 영향 측정                                                                                                                   |
-| BASE-14  | IconSwap·EyeToggleIcon             | 기반     | CTP ms       |        — |        — |      — | 대기 | 180ms 모션과 상태 반영 분리                                                                                                               |
-| BASE-15  | usePressAction·usePressGatedSwap   | 기반     | CTP ms       |        — |        — |      — | 대기 | pressed 피드백과 300ms gate                                                                                                               |
+| BASE-10  | TooltipGroup                       | P3       | CTP ms       |        — |        — |      — | 보류 | 500ms는 의도된 hover 발견성 지연, 그룹 이동은 잔여 지연 재사용                                                                            |
+| BASE-11  | PanelToggleButton                  | P1       | CTP ms       |   13.280 |    0.531 |  96.0% | 검증 | `bfb072b4`·`384324f5`, 버튼 시각 상태와 패널 mount 분리                                                                                   |
+| BASE-12  | 패널 내부 PickerSurface·내비게이션 | P1/P3    | CTP ms       |        — |        — |      — | 실험 | `d19dabdc`·BASE-08, 측정 전 숨김·공통 popup after-paint                                                                                   |
+| BASE-13  | 프로퍼티 패널 smooth scroll        | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9dd0bb67`, Lenis 인스턴스 N개의 RAF를 전역 1개로 병합                                                                                    |
+| BASE-14  | IconSwap·EyeToggleIcon             | 기반     | CTP ms       |        — |        — |      — | 실험 | `cb08a858`, 상태 즉시 반영과 180ms 장식 모션 분리                                                                                         |
+| BASE-15  | usePressAction·usePressGatedSwap   | 기반     | CTP ms       |        — |        — |      — | 실험 | `98da8337`·`cb08a858`, click 유실 fallback·직접 press 판정 테스트                                                                         |
 
 ### 5.2 설정·Grid·프로퍼티 토글
 
-| ID     | 항목                                       | 우선순위 | 주 지표 | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                            |
-| ------ | ------------------------------------------ | -------- | ------- | -------: | -------: | -----: | ---- | ------------------------------------ |
-| TOG-01 | 오버레이 잠금                              | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
-| TOG-02 | 항상 위                                    | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
-| TOG-03 | 전역 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
-| TOG-04 | 전역 키 카운터                             | P1       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
-| TOG-05 | 트레이 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
-| TOG-06 | OBS 모드                                   | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, single-flight·rollback   |
-| TOG-07 | 자동 업데이트                              | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
-| TOG-08 | 개발자 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
-| TOG-09 | 커스텀 CSS                                 | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
-| TOG-10 | 커스텀 JS                                  | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강 |
-| TOG-11 | Grid 미니맵 표시                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
-| TOG-12 | Grid 정렬 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기     |
-| TOG-13 | Grid 간격 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기     |
-| TOG-14 | Grid 크기 일치 가이드                      | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 리사이즈 F95 측정 대기   |
-| TOG-15 | 단일 인라인 스타일 우선                    | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
-| TOG-16 | 단일 키 사운드 사용                        | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
-| TOG-17 | 단일 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
-| TOG-18 | 단일 Y축 자동 보정                         | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
-| TOG-19 | 단일 글로우                                | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
-| TOG-20 | 단일 카운터 사용                           | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
-| TOG-21 | 단일 카운터 애니메이션                     | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기        |
-| TOG-22 | 그래프 평균선                              | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
-| TOG-23 | 그래프 애니메이션                          | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
-| TOG-24 | 그래프 인라인 스타일                       | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
-| TOG-25 | 노브 방향 반전                             | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
-| TOG-26 | 노브 인라인 스타일                         | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기        |
-| TOG-27 | 배치 인라인 스타일·사운드                  | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기      |
-| TOG-28 | 배치 노트 효과·Y 보정·글로우               | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기      |
-| TOG-29 | 배치 카운터·애니메이션                     | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기      |
-| TOG-30 | 배치 그래프·노브 토글                      | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 중복 표면 측정 대기      |
-| TOG-31 | 탭 CSS 사용                                | P2       | CTP ms  |        — |        — |      — | 실험 | `c9c10ee7`, CTP·ETC 측정 대기        |
-| TOG-32 | 이미지 투명화                              | P1       | CTP ms  |        — |        — |      — | 실험 | `e923a837`, 이미지 CTP 측정 대기     |
-| TOG-33 | 설정 모달의 카운터·노트 토글               | P1/P3    | CTP ms  |        — |        — |      — | 실험 | `e923a837`, preview 측정 대기        |
-| TOG-34 | 플러그인 boolean 설정                      | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `e923a837`, 저장 병합 검증 대기      |
-| TOG-35 | 업데이트 버전 건너뛰기                     | P2       | CTP ms  |        — |        — |      — | 대기 | 저장 상태                            |
-| TOG-36 | Display Element·커스텀 다이얼로그 체크박스 | P1/P2    | CTP ms  |        — |        — |      — | 대기 | React 공통 토글과 별도 경로          |
+| ID     | 항목                                       | 우선순위 | 주 지표 | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                  |
+| ------ | ------------------------------------------ | -------- | ------- | -------: | -------: | -----: | ---- | ---------------------------------------------------------- |
+| TOG-01 | 오버레이 잠금                              | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강                       |
+| TOG-02 | 항상 위                                    | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강                       |
+| TOG-03 | 전역 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강                       |
+| TOG-04 | 전역 키 카운터                             | P1       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강                       |
+| TOG-05 | 트레이 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강                       |
+| TOG-06 | OBS 모드                                   | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, single-flight·rollback                         |
+| TOG-07 | 자동 업데이트                              | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강                       |
+| TOG-08 | 개발자 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강                       |
+| TOG-09 | 커스텀 CSS                                 | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강                       |
+| TOG-10 | 커스텀 JS                                  | P2       | CTP ms  |        — |        — |      — | 실험 | `6d4c6b18`, optimistic rollback 보강                       |
+| TOG-11 | Grid 미니맵 표시                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기                              |
+| TOG-12 | Grid 정렬 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기                           |
+| TOG-13 | Grid 간격 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기                           |
+| TOG-14 | Grid 크기 일치 가이드                      | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 리사이즈 F95 측정 대기                         |
+| TOG-15 | 단일 인라인 스타일 우선                    | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기                              |
+| TOG-16 | 단일 키 사운드 사용                        | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기                              |
+| TOG-17 | 단일 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기                              |
+| TOG-18 | 단일 Y축 자동 보정                         | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기                              |
+| TOG-19 | 단일 글로우                                | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기                              |
+| TOG-20 | 단일 카운터 사용                           | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기                              |
+| TOG-21 | 단일 카운터 애니메이션                     | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, WebView 측정 대기                              |
+| TOG-22 | 그래프 평균선                              | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기                              |
+| TOG-23 | 그래프 애니메이션                          | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기                              |
+| TOG-24 | 그래프 인라인 스타일                       | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기                              |
+| TOG-25 | 노브 방향 반전                             | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기                              |
+| TOG-26 | 노브 인라인 스타일                         | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기                              |
+| TOG-27 | 배치 인라인 스타일·사운드                  | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기                            |
+| TOG-28 | 배치 노트 효과·Y 보정·글로우               | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기                            |
+| TOG-29 | 배치 카운터·애니메이션                     | P1       | CTP ms  |        — |        — |      — | 실험 | `07976df8`, 선택 수별 측정 대기                            |
+| TOG-30 | 배치 그래프·노브 토글                      | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 중복 표면 측정 대기                            |
+| TOG-31 | 탭 CSS 사용                                | P2       | CTP ms  |        — |        — |      — | 실험 | `c9c10ee7`, CTP·ETC 측정 대기                              |
+| TOG-32 | 이미지 투명화                              | P1       | CTP ms  |        — |        — |      — | 실험 | `e923a837`, 이미지 CTP 측정 대기                           |
+| TOG-33 | 설정 모달의 카운터·노트 토글               | P1/P3    | CTP ms  |        — |        — |      — | 실험 | `e923a837`, preview 측정 대기                              |
+| TOG-34 | 플러그인 boolean 설정                      | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `e923a837`, 저장 병합 검증 대기                            |
+| TOG-35 | 업데이트 버전 건너뛰기                     | P2       | CTP ms  |        — |        — |      — | 실험 | `36957404`, 모달 primary action single-flight·즉시 dismiss |
+| TOG-36 | Display Element·커스텀 다이얼로그 체크박스 | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `c1531435`, 플러그인 이벤트 병합·React 토글 경로 감사      |
 
 ### 5.3 Grid·레이어 연속 입력과 편집 액션
 
-| ID       | 항목                  | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                           |
-| -------- | --------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | --------------------------------------------------- |
-| GRID-01  | 단일 요소 드래그      | P0       | F95 ms/frame |        — |        — |      — | 실험 | `e9a800cc`, latest pointer·pointerup flush          |
-| GRID-02  | 다중 선택 드래그      | P0       | F95 ms/frame |        — |        — |      — | 실험 | `e9a800cc`, latest pointer·pointerup flush          |
-| GRID-03  | Grid 패닝             | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용                   |
-| GRID-04  | 휠·핀치 줌            | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용                   |
-| GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |    0.306 |    0.225 |  26.3% | 검증 | `9c90cae8`, frame coalescing 적용                   |
-| GRID-06  | 단일 리사이즈         | P0       | F95 ms/frame |    0.155 |    0.144 |   7.2% | 검증 | `78fb15eb`, latest bounds frame coalescing          |
-| GRID-07  | 그룹 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 실험 | `78fb15eb`, 공통 scheduler 적용·선택 수별 측정 대기 |
-| GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |    0.405 |    0.137 |  66.2% | 검증 | `23582b9a`, latest pointer frame coalescing         |
-| GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |    0.261 |    0.139 |  47.0% | 검증 | `f96cdd57`, 최신 좌표 frame coalescing              |
-| GRID-10  | 미니맵 클릭 이동      | P1       | CTP ms       |        — |        — |      — | 대기 | viewport 반영                                       |
-| GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |    0.711 |    0.569 |  19.9% | 검증 | `25a0c0a3`, latest mouse frame coalescing           |
-| GRID-12  | 요소 단일·다중 선택   | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 교체 포함                                      |
-| GRID-13  | Shift 범위 선택       | P1       | CTP ms       |        — |        — |      — | 대기 | 요소 수별 측정                                      |
-| GRID-14  | 더블클릭 편집         | P1/P3    | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용        |
-| GRID-15  | Grid 컨텍스트 메뉴    | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용         |
-| GRID-16  | 요소 추가             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC                                     |
-| GRID-17  | 삭제·지우개           | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC                                     |
-| GRID-18  | 복제·복사·붙여넣기    | P1       | CTP ms       |        — |        — |      — | 대기 | 다중 요소 시나리오                                  |
-| GRID-19  | z-order 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 배열·zIndex 갱신                                    |
-| GRID-20  | 그룹화·그룹 해제      | P1       | CTP ms       |        — |        — |      — | 대기 | 관계·문서 변경                                      |
-| GRID-21  | 방향키 이동           | P0       | F95 ms/frame |        — |        — |      — | 대기 | 500ms gesture 병합                                  |
-| GRID-22  | Undo·Redo             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서·Store 동기화                                   |
-| GRID-23  | 키 카운터 초기화      | P2       | ETC ms       |        — |        — |      — | 대기 | IPC 완료                                            |
-| LAYER-01 | 레이어·Grid 탭 전환   | P3       | CTP ms       |        — |        — |      — | 대기 | 콘텐츠 paint                                        |
-| LAYER-02 | 레이어 단일·다중 선택 | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 동기화                                       |
-| LAYER-03 | 그룹 접기·펼치기      | P3       | CTP ms       |        — |        — |      — | 대기 | 목록 reflow                                         |
-| LAYER-04 | 이름 변경             | P1/P2    | CTP ms       |        — |        — |      — | 대기 | blur commit ETC                                     |
-| LAYER-05 | 표시·숨김             | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 paint                                        |
-| LAYER-06 | 잠금·잠금 해제        | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 상태                                         |
-| LAYER-07 | 위·아래 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 목록·캔버스 순서                                    |
-| LAYER-08 | 드래그 순서 변경      | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `d4643d58`, drop hit-test frame coalescing          |
-| LAYER-09 | 그룹 드래그·중첩      | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `d4643d58`, group hit-test frame coalescing         |
-| LAYER-10 | 레이어 컨텍스트 메뉴  | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용         |
-| LAYER-11 | 패널 detach·reattach  | P2       | ETC ms       |        — |        — |      — | 대기 | 창 handoff                                          |
-| LAYER-12 | 분리 패널 창 이동     | P0       | F95 ms/frame |        — |        — |      — | 대기 | 네이티브 drag                                       |
+| ID       | 항목                  | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                   |
+| -------- | --------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ----------------------------------------------------------- |
+| GRID-01  | 단일 요소 드래그      | P0       | F95 ms/frame |        — |        — |      — | 실험 | `e9a800cc`, latest pointer·pointerup flush                  |
+| GRID-02  | 다중 선택 드래그      | P0       | F95 ms/frame |        — |        — |      — | 실험 | `e9a800cc`, latest pointer·pointerup flush                  |
+| GRID-03  | Grid 패닝             | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용                           |
+| GRID-04  | 휠·핀치 줌            | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용                           |
+| GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |    0.306 |    0.225 |  26.3% | 검증 | `9c90cae8`, frame coalescing 적용                           |
+| GRID-06  | 단일 리사이즈         | P0       | F95 ms/frame |    0.155 |    0.144 |   7.2% | 검증 | `78fb15eb`, latest bounds frame coalescing                  |
+| GRID-07  | 그룹 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 실험 | `78fb15eb`, 공통 scheduler 적용·선택 수별 측정 대기         |
+| GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |    0.405 |    0.137 |  66.2% | 검증 | `23582b9a`, latest pointer frame coalescing                 |
+| GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |    0.261 |    0.139 |  47.0% | 검증 | `f96cdd57`, 최신 좌표 frame coalescing                      |
+| GRID-10  | 미니맵 클릭 이동      | P1       | CTP ms       |        — |        — |      — | 실험 | `25a0c0a3`, 단일 viewport 갱신·드래그와 scheduler 공유      |
+| GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |    0.711 |    0.569 |  19.9% | 검증 | `25a0c0a3`, latest mouse frame coalescing                   |
+| GRID-12  | 요소 단일·다중 선택   | P1       | CTP ms       |        — |        — |      — | 실험 | `94d99e8d`, 그룹 선택 Store 알림을 1회로 원자화             |
+| GRID-13  | Shift 범위 선택       | P1       | CTP ms       |        — |        — |      — | 실험 | `94d99e8d`, 단일 순회 후 선택 배열 1회 반영                 |
+| GRID-14  | 더블클릭 편집         | P1/P3    | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용                |
+| GRID-15  | Grid 컨텍스트 메뉴    | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                 |
+| GRID-16  | 요소 추가             | P1       | CTP ms       |        — |        — |      — | 실험 | Store 선반영 후 editor coordinator commit                   |
+| GRID-17  | 삭제·지우개           | P1       | CTP ms       |        — |        — |      — | 실험 | 선택 해제·배치 Store 선반영 후 atomic commit                |
+| GRID-18  | 복제·복사·붙여넣기    | P1       | CTP ms       |        — |        — |      — | 실험 | 다중 요소 projection 1회·단일 editor commit                 |
+| GRID-19  | z-order 이동          | P1       | CTP ms       |        — |        — |      — | 실험 | Store 선반영·editor commit, 플러그인 세션 회전              |
+| GRID-20  | 그룹화·그룹 해제      | P1       | CTP ms       |        — |        — |      — | 실험 | 낙관 Store 변경·editor rollback 계약                        |
+| GRID-21  | 방향키 이동           | P0       | F95 ms/frame |    0.435 |    0.198 |  54.5% | 검증 | `a63705a4`·`384324f5`, 20회 burst를 프레임당 1회 병합       |
+| GRID-22  | Undo·Redo             | P1       | CTP ms       |        — |        — |      — | 실험 | `useKeyManager`, ref 기반 history action single-flight      |
+| GRID-23  | 키 카운터 초기화      | P2       | ETC ms       |        — |        — |      — | 실험 | `f80edb1c`, confirm 비동기 액션 single-flight               |
+| LAYER-01 | 레이어·Grid 탭 전환   | P3       | CTP ms       |        — |        — |      — | 실험 | `9f5872b6`, 공통 TabSwitch after-paint                      |
+| LAYER-02 | 레이어 단일·다중 선택 | P1       | CTP ms       |        — |        — |      — | 실험 | 단일 `setFullSelection`·캔버스 Store 공유                   |
+| LAYER-03 | 그룹 접기·펼치기      | P3       | CTP ms       |        — |        — |      — | 실험 | `94d99e8d`, 헤더 시각 선반영 후 목록 reflow                 |
+| LAYER-04 | 이름 변경             | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `aa325924`, 낙관 변경·최신 상태 조건부 rollback             |
+| LAYER-05 | 표시·숨김             | P1       | CTP ms       |        — |        — |      — | 실험 | `aa325924`, 단일·그룹 낙관 변경·조건부 rollback             |
+| LAYER-06 | 잠금·잠금 해제        | P1       | CTP ms       |        — |        — |      — | 실험 | 로컬 lock Store 즉시 반영 경로 감사                         |
+| LAYER-07 | 위·아래 이동          | P1       | CTP ms       |        — |        — |      — | 실험 | `aa325924`, 낙관 순서 변경·실패 조정                        |
+| LAYER-08 | 드래그 순서 변경      | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `d4643d58`, drop hit-test frame coalescing                  |
+| LAYER-09 | 그룹 드래그·중첩      | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `d4643d58`, group hit-test frame coalescing                 |
+| LAYER-10 | 레이어 컨텍스트 메뉴  | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                 |
+| LAYER-11 | 패널 detach·reattach  | P2       | ETC ms       |        — |        — |      — | 실험 | `98da8337`, write barrier·single-flight·실패 시 lease 복원  |
+| LAYER-12 | 분리 패널 창 이동     | P0       | F95 ms/frame |        — |        — |      — | 보류 | OS 네이티브 `startDragging` 경로로 JS 프레임 최적화 범위 밖 |
 
 ### 5.4 프로퍼티 입력·편집기·피커
 
-| ID      | 항목                             | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                |
-| ------- | -------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | -------------------------------------------------------- |
-| PROP-01 | 숫자 입력                        | P0/P1    | CTP ms       |        — |        — |      — | 실험 | `1b8945cf`, 공통 숫자 입력 62곳 적용                     |
-| PROP-02 | 텍스트 입력                      | P1       | CTP ms       |        — |        — |      — | 실험 | `8c66281b`, 공통 TextInput 8곳 적용                      |
-| PROP-03 | 색상 입력                        | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                |
-| PROP-04 | 그라데이션 입력                  | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                |
-| PROP-05 | 드롭다운 속성 변경               | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4`, 로컬 선택 after-paint 적용                   |
-| PROP-06 | 폰트 스타일 버튼                 | P1       | CTP ms       |        — |        — |      — | 대기 | batch 포함                                               |
-| PROP-07 | 키 매핑·실입력 캡처              | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `ad22c019`, 판정 탭 전환만 적용                          |
-| PROP-08 | 이미지 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | decode ETC                                               |
-| PROP-09 | 사운드 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 파일·오디오 ETC                                          |
-| PROP-10 | 단일·다중 선택 탭 전환           | P1       | CTP ms       |        — |        — |      — | 대기 | keepalive 범위                                           |
-| PROP-11 | 플러그인 설정 color              | P0/P1    | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 ColorInput pointer 병합                 |
-| PROP-12 | 플러그인 설정 number·text·select | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4` select·`1b8945cf` number·`8c66281b` text 적용 |
-| PROP-13 | 플러그인 설정 전체 저장          | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight                                            |
-| EDIT-01 | 색상 saturation·hue·alpha 드래그 | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                |
-| EDIT-02 | 색상 텍스트·퍼센트 입력          | P1       | CTP ms       |        — |        — |      — | 대기 | validation                                               |
-| EDIT-03 | 그라데이션 stop 편집·형식 전환   | P0       | F95 ms/frame |    0.405 |    0.137 |  66.2% | 검증 | `23582b9a`, stop 드래그 병합·형식 탭 즉시 반영           |
-| EDIT-04 | 카운터 bezier point 드래그       | P0       | F95 ms/frame |        — |        — |      — | 실험 | `22f3301b`, drag·pan·pinch frame coalescing              |
-| EDIT-05 | 카운터 미리보기 scrub·wheel·play | P0       | F95 ms/frame |        — |        — |      — | 실험 | `22f3301b`, canvas pointer 경로 병합·play rAF 유지       |
-| EDIT-06 | 사운드 파형 pan·zoom·trim        | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ff766d3c`, wheel delta 누적·pan/trim frame coalescing   |
-| EDIT-07 | 사운드 재생·정지·seek            | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `ff766d3c`, playback rAF·trim 종료 flush                 |
-| EDIT-08 | 사운드 처리 저장                 | P2       | ETC ms       |        — |        — |      — | 대기 | progress·취소                                            |
-| PICK-01 | 사운드 선택·검색·필터            | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4` 필터 Dropdown·`8c66281b` 검색 적용            |
-| PICK-02 | 사운드 추가·삭제·이름·숨김       | P2       | ETC ms       |        — |        — |      — | 대기 | 파일 작업                                                |
-| PICK-03 | 폰트 선택·검색·필터              | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4` 필터 Dropdown·`8c66281b` 검색 적용            |
-| PICK-04 | 폰트 추가·삭제·이름 변경         | P2       | ETC ms       |        — |        — |      — | 대기 | 파일·검증                                                |
-| PICK-05 | 카운터 애니메이션 선택·삭제      | P2       | ETC ms       |        — |        — |      — | 실험 | `2b9b6cf4`, 선택만 적용                                  |
-| PICK-06 | 카운터 애니메이션 생성·편집      | P0/P2    | F95 ms/frame |        — |        — |      — | 실험 | `1b8945cf` 숫자·`8c66281b` 텍스트 필드 적용              |
-| PICK-07 | 이미지 idle·active 로드          | P2       | ETC ms       |        — |        — |      — | 대기 | decode 포함                                              |
-| PICK-08 | 이미지 reset·fit·투명도          | P1       | CTP ms       |        — |        — |      — | 실험 | `ad22c019` 상태 탭·`2b9b6cf4` fit 선택 적용              |
-| PICK-09 | 그림자 상태·수치·색상            | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `1b8945cf`, 그림자 수치 필드만 적용                      |
-| PICK-10 | 팔레트 색상 선택·편집            | P1       | CTP ms       |        — |        — |      — | 대기 | 저장 ETC 별도                                            |
+| ID      | 항목                             | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                 |
+| ------- | -------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | --------------------------------------------------------- |
+| PROP-01 | 숫자 입력                        | P0/P1    | CTP ms       |        — |        — |      — | 실험 | `1b8945cf`, 공통 숫자 입력 62곳 적용                      |
+| PROP-02 | 텍스트 입력                      | P1       | CTP ms       |        — |        — |      — | 실험 | `8c66281b`, 공통 TextInput 8곳 적용                       |
+| PROP-03 | 색상 입력                        | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                 |
+| PROP-04 | 그라데이션 입력                  | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                 |
+| PROP-05 | 드롭다운 속성 변경               | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4`, 로컬 선택 after-paint 적용                    |
+| PROP-06 | 폰트 스타일 버튼                 | P1       | CTP ms       |        — |        — |      — | 실험 | `94d99e8d`, 단일·배치 버튼 시각 선반영                    |
+| PROP-07 | 키 매핑·실입력 캡처              | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `ad22c019`, 판정 탭 전환만 적용                           |
+| PROP-08 | 이미지 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `b39708ea`, 이미지 로드 same-tick guard·피커 시각 우선    |
+| PROP-09 | 사운드 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `b39708ea`, 리소스 낙관 변경·저장 single-flight           |
+| PROP-10 | 단일·다중 선택 탭 전환           | P1       | CTP ms       |        — |        — |      — | 실험 | `9f5872b6`, keepalive 콘텐츠와 탭 인디케이터 커밋 분리    |
+| PROP-11 | 플러그인 설정 color              | P0/P1    | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 ColorInput pointer 병합                  |
+| PROP-12 | 플러그인 설정 number·text·select | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4` select·`1b8945cf` number·`8c66281b` text 적용  |
+| PROP-13 | 플러그인 설정 전체 저장          | P2       | ETC ms       |        — |        — |      — | 실험 | `4f2ab7d1`, ref 기반 저장 single-flight·pending disable   |
+| EDIT-01 | 색상 saturation·hue·alpha 드래그 | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                 |
+| EDIT-02 | 색상 텍스트·퍼센트 입력          | P1       | CTP ms       |        — |        — |      — | 실험 | 로컬 draft 즉시 echo·blur/Enter validation commit         |
+| EDIT-03 | 그라데이션 stop 편집·형식 전환   | P0       | F95 ms/frame |    0.405 |    0.137 |  66.2% | 검증 | `23582b9a`, stop 드래그 병합·형식 탭 즉시 반영            |
+| EDIT-04 | 카운터 bezier point 드래그       | P0       | F95 ms/frame |        — |        — |      — | 실험 | `22f3301b`, drag·pan·pinch frame coalescing               |
+| EDIT-05 | 카운터 미리보기 scrub·wheel·play | P0       | F95 ms/frame |        — |        — |      — | 실험 | `22f3301b`, canvas pointer 경로 병합·play rAF 유지        |
+| EDIT-06 | 사운드 파형 pan·zoom·trim        | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ff766d3c`, wheel delta 누적·pan/trim frame coalescing    |
+| EDIT-07 | 사운드 재생·정지·seek            | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `ff766d3c`, playback rAF·trim 종료 flush                  |
+| EDIT-08 | 사운드 처리 저장                 | P2       | ETC ms       |        — |        — |      — | 실험 | `b39708ea`, ref single-flight·저장 중 UI 잠금·상태 피드백 |
+| PICK-01 | 사운드 선택·검색·필터            | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4` 필터 Dropdown·`8c66281b` 검색 적용             |
+| PICK-02 | 사운드 추가·삭제·이름·숨김       | P2       | ETC ms       |        — |        — |      — | 실험 | `b39708ea`, 항목별 guard·낙관 변경·authoritative rollback |
+| PICK-03 | 폰트 선택·검색·필터              | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4` 필터 Dropdown·`8c66281b` 검색 적용             |
+| PICK-04 | 폰트 추가·삭제·이름 변경         | P2       | ETC ms       |        — |        — |      — | 실험 | `b39708ea`, latest-state 직렬 저장·실패 재동기화          |
+| PICK-05 | 카운터 애니메이션 선택·삭제      | P2       | ETC ms       |        — |        — |      — | 실험 | `2b9b6cf4`, 선택만 적용                                   |
+| PICK-06 | 카운터 애니메이션 생성·편집      | P0/P2    | F95 ms/frame |        — |        — |      — | 실험 | `1b8945cf` 숫자·`8c66281b` 텍스트 필드 적용               |
+| PICK-07 | 이미지 idle·active 로드          | P2       | ETC ms       |        — |        — |      — | 실험 | `b39708ea`, 파일 선택 same-tick 중복 차단                 |
+| PICK-08 | 이미지 reset·fit·투명도          | P1       | CTP ms       |        — |        — |      — | 실험 | `ad22c019` 상태 탭·`2b9b6cf4` fit 선택 적용               |
+| PICK-09 | 그림자 상태·수치·색상            | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `1b8945cf`, 그림자 수치 필드만 적용                       |
+| PICK-10 | 팔레트 색상 선택·편집            | P1       | CTP ms       |        — |        — |      — | 실험 | `b39708ea`, 로컬 draft·frame latest commit·blur flush     |
 
 ### 5.5 설정·툴바·모달·플러그인·전역
 
-| ID       | 항목                                 | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                   |
-| -------- | ------------------------------------ | -------- | ------------ | -------: | -------: | -----: | ---- | ----------------------------------------------------------- |
-| SET-01   | 키 사운드 출력 변경                  | P2       | ETC ms       |        — |        — |      — | 대기 | 장치 적용                                                   |
-| SET-02   | ASIO 버퍼 변경                       | P2       | ETC ms       |        — |        — |      — | 대기 | 적용·복구                                                   |
-| SET-03   | 리사이즈 앵커                        | P2       | CTP ms       |        — |        — |      — | 대기 | 설정 저장                                                   |
-| SET-04   | 언어 변경                            | P1       | CTP ms       |        — |        — |      — | 대기 | 전체 번역 rerender                                          |
-| SET-05   | 렌더러·ANGLE 모드                    | P2       | ETC ms       |        — |        — |      — | 대기 | 재시작 상태                                                 |
-| SET-06   | 플러그인 추가·재로드                 | P2       | ETC ms       |        — |        — |      — | 실험 | `6d4c6b18`, ref 기반 single-flight                          |
-| SET-07   | 플러그인 활성화                      | P2       | CTP ms       |        — |        — |      — | 실험 | `6d4c6b18`, ref 기반 single-flight                          |
-| SET-08   | 플러그인 삭제·데이터 삭제            | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·목록 조정                                              |
-| SET-09   | CSS 파일 로드·활성화·삭제            | P2       | ETC ms       |        — |        — |      — | 대기 | 목록 projection                                             |
-| SET-10   | 단축키 캡처·삭제                     | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 저장 ETC                                                    |
-| SET-11   | OBS URL 복사                         | P2       | CTP ms       |        — |        — |      — | 대기 | 완료 피드백                                                 |
-| SET-12   | OBS 토큰 재생성                      | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·결과                                                   |
-| SET-13   | 전체 초기화                          | P2       | ETC ms       |        — |        — |      — | 대기 | 전체 재부트스트랩                                           |
-| SET-14   | 업데이트 확인                        | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight                                               |
-| TOOL-01  | 이동·지우개 도구 선택                | P3       | CTP ms       |        — |        — |      — | 대기 | 선택 표시                                                   |
-| TOOL-02  | 키·통계·그래프·노브 추가 메뉴        | P1       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                 |
-| TOOL-03  | 팔레트 열기                          | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                 |
-| TOOL-04  | 현재 탭·카운터 초기화                | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·동기화                                                 |
-| TOOL-05  | 기본 키 탭 전환                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | stale 응답 차단                                             |
-| TOOL-06  | 커스텀 탭 팝업                       | P2/P3    | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                 |
-| TOOL-07  | 프리셋 전체·탭 저장                  | P2       | ETC ms       |        — |        — |      — | 실험 | `6d4c6b18`, 공통 single-flight                              |
-| TOOL-08  | 프리셋 전체·탭 불러오기              | P2       | ETC ms       |        — |        — |      — | 실험 | `6d4c6b18`, 공통 single-flight                              |
-| TOOL-09  | 오버레이 표시                        | P2       | CTP ms       |        — |        — |      — | 실험 | `6d4c6b18`, optimistic+rollback+single-flight               |
-| TOOL-10  | 설정 화면 열기·뒤로                  | P1       | CTP ms       |        — |        — |      — | 대기 | 큰 화면 전환                                                |
-| TOOL-11  | 노트 트랙 설정 열기                  | P3       | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용                |
-| TOOL-12  | 외부 링크·창 최소화·닫기             | P2       | ETC ms       |        — |        — |      — | 대기 | 네이티브 호출                                               |
-| MODAL-01 | 통합 키 설정 저장·취소               | P2       | ETC ms       |        — |        — |      — | 대기 | atomic commit                                               |
-| MODAL-02 | 키·노트·카운터 설정 전체             | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `ad22c019` 탭·`2b9b6cf4` Dropdown·`1b8945cf` 숫자 입력 적용 |
-| MODAL-03 | 탭 CSS 로드·이력·저장                | P2       | ETC ms       |        — |        — |      — | 대기 | authoritative 재조회                                        |
-| MODAL-04 | 탭 이름 변경                         | P2       | ETC ms       |        — |        — |      — | 대기 | validation                                                  |
-| MODAL-05 | 커스텀 탭 생성·선택·삭제             | P1/P2    | ETC ms       |        — |        — |      — | 대기 | generation                                                  |
-| MODAL-06 | 업데이트 다운로드·릴리스·건너뛰기    | P2       | ETC ms       |        — |        — |      — | 대기 | progress·재시도                                             |
-| MODAL-07 | 플러그인 데이터 삭제                 | P2       | ETC ms       |        — |        — |      — | 대기 | 위험 액션                                                   |
-| MODAL-08 | Alert·Confirm·Custom Dialog          | 기반/P3  | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용                |
-| PLUG-01  | Promise plugin button handler        | P2       | ETC ms       |        — |        — |      — | 대기 | pending·오류 격리                                           |
-| PLUG-02  | plugin input onInput                 | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | handler duration                                            |
-| PLUG-03  | plugin dropdown                      | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 전역 listener                                               |
-| PLUG-04  | Display Element 선택·드래그·리사이즈 | P0       | F95 ms/frame |        — |        — |      — | 실험 | `e9a800cc` drag·`78fb15eb` resize 공통 경로 적용            |
-| PLUG-05  | plugin remove·context action         | P2       | ETC ms       |        — |        — |      — | 대기 | 실패 조정                                                   |
-| WIN-01   | 모드 전환 단축키                     | P1/P2    | CTP ms       |        — |        — |      — | 대기 | generation                                                  |
-| WIN-02   | 프로퍼티 패널 토글 단축키            | P1       | CTP ms       |        — |        — |      — | 대기 | handoff 포함                                                |
-| WIN-03   | 키 슬롯·단축키 실입력 캡처           | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 이벤트 격리                                                 |
-| WIN-04   | 분리 패널 Cmd·Ctrl+W                 | P2       | ETC ms       |        — |        — |      — | 대기 | reattach                                                    |
-| WIN-05   | 오버레이 컨텍스트 메뉴               | P2       | CTP ms       |        — |        — |      — | 대기 | native menu 생성                                            |
-| WIN-06   | 편집 flush 입력 잠금                 | 기반     | ETC ms       |        — |        — |      — | 대기 | 잠금 시간·피드백                                            |
-| WIN-07   | focus·visibility 재동기화            | 기반     | ETC ms       |        — |        — |      — | 대기 | 사용자 입력과 경쟁 여부                                     |
+| ID       | 항목                                 | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                     |
+| -------- | ------------------------------------ | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------------------------------------- |
+| SET-01   | 키 사운드 출력 변경                  | P2       | ETC ms       |        — |        — |      — | 실험 | `621bdf75`, 낙관 requested 상태·latest-intent 직렬 큐         |
+| SET-02   | ASIO 버퍼 변경                       | P2       | ETC ms       |        — |        — |      — | 실험 | `621bdf75`, 최신 요청 보존·최종 실패 authoritative resync     |
+| SET-03   | 리사이즈 앵커                        | P2       | CTP ms       |        — |        — |      — | 실험 | `a755dbac`, 낙관 상태·latest-intent 큐·실패 rollback          |
+| SET-04   | 언어 변경                            | P1       | CTP ms       |        — |        — |      — | 실험 | `a755dbac`, Dropdown 시각 선반영·번역 rerender transition     |
+| SET-05   | 렌더러·ANGLE 모드                    | P2       | ETC ms       |        — |        — |      — | 실험 | `a755dbac`, confirm 생명주기 포함 single-flight               |
+| SET-06   | 플러그인 추가·재로드                 | P2       | ETC ms       |        — |        — |      — | 실험 | `6d4c6b18`, ref 기반 single-flight                            |
+| SET-07   | 플러그인 활성화                      | P2       | CTP ms       |        — |        — |      — | 실험 | `6d4c6b18`, ref 기반 single-flight                            |
+| SET-08   | 플러그인 삭제·데이터 삭제            | P2       | ETC ms       |        — |        — |      — | 실험 | `621bdf75`, hasData·삭제 경로 ref guard                       |
+| SET-09   | CSS 파일 로드·활성화·삭제            | P2       | ETC ms       |        — |        — |      — | 실험 | `621bdf75`, load·activate·remove ref guard                    |
+| SET-10   | 단축키 캡처·삭제                     | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `621bdf75`, 캡처 격리·latest pending shortcuts 저장 큐        |
+| SET-11   | OBS URL 복사                         | P2       | CTP ms       |        — |        — |      — | 실험 | clipboard 완료·실패 fallback alert 피드백                     |
+| SET-12   | OBS 토큰 재생성                      | P2       | ETC ms       |        — |        — |      — | 실험 | `621bdf75`·`f80edb1c`, confirm/ref single-flight              |
+| SET-13   | 전체 초기화                          | P2       | ETC ms       |        — |        — |      — | 실험 | `621bdf75`·`f80edb1c`, 위험 액션 single-flight                |
+| SET-14   | 업데이트 확인                        | P2       | ETC ms       |        — |        — |      — | 실험 | update store `isChecking` single-flight·버튼 pending 표시     |
+| TOOL-01  | 이동·지우개 도구 선택                | P3       | CTP ms       |        — |        — |      — | 실험 | 로컬 activeTool 단일 상태 갱신·즉시 selected 스타일           |
+| TOOL-02  | 키·통계·그래프·노브 추가 메뉴        | P1       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                   |
+| TOOL-03  | 팔레트 열기                          | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                   |
+| TOOL-04  | 현재 탭·카운터 초기화                | P2       | ETC ms       |        — |        — |      — | 실험 | `f80edb1c`, 공통 confirm async single-flight                  |
+| TOOL-05  | 기본 키 탭 전환                      | P1/P2    | CTP ms       |        — |        — |      — | 실험 | key store generation으로 stale 응답 차단                      |
+| TOOL-06  | 커스텀 탭 팝업                       | P2/P3    | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용                   |
+| TOOL-07  | 프리셋 전체·탭 저장                  | P2       | ETC ms       |        — |        — |      — | 실험 | `6d4c6b18`, 공통 single-flight                                |
+| TOOL-08  | 프리셋 전체·탭 불러오기              | P2       | ETC ms       |        — |        — |      — | 실험 | `6d4c6b18`, 공통 single-flight                                |
+| TOOL-09  | 오버레이 표시                        | P2       | CTP ms       |        — |        — |      — | 실험 | `6d4c6b18`, optimistic+rollback+single-flight                 |
+| TOOL-10  | 설정 화면 열기·뒤로                  | P1       | CTP ms       |        — |        — |      — | 실험 | `a755dbac`, 툴바 시각 상태와 큰 화면 mount 분리               |
+| TOOL-11  | 노트 트랙 설정 열기                  | P3       | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용                  |
+| TOOL-12  | 외부 링크·창 최소화·닫기             | P2       | ETC ms       |        — |        — |      — | 실험 | `36957404`, 공통 async single-flight·pending disable          |
+| MODAL-01 | 통합 키 설정 저장·취소               | P2       | ETC ms       |        — |        — |      — | 실험 | `usePressAction`, key·note·counter 단일 payload atomic commit |
+| MODAL-02 | 키·노트·카운터 설정 전체             | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `ad22c019` 탭·`2b9b6cf4` Dropdown·`1b8945cf` 숫자 입력 적용   |
+| MODAL-03 | 탭 CSS 로드·이력·저장                | P2       | ETC ms       |        — |        — |      — | 실험 | `a755dbac`, generation·ref guards·pending flush·원본 복원     |
+| MODAL-04 | 탭 이름 변경                         | P2       | ETC ms       |        — |        — |      — | 실험 | `1b188f95`, submit ref guard·validation·pending disable       |
+| MODAL-05 | 커스텀 탭 생성·선택·삭제             | P1/P2    | ETC ms       |        — |        — |      — | 실험 | `1b188f95`, generation 선택·낙관 삭제 rollback                |
+| MODAL-06 | 업데이트 다운로드·릴리스·건너뛰기    | P2       | ETC ms       |        — |        — |      — | 실험 | `36957404`, primary action single-flight·진행 상태            |
+| MODAL-07 | 플러그인 데이터 삭제                 | P2       | ETC ms       |        — |        — |      — | 실험 | `621bdf75`·`f80edb1c`, 위험 액션 ref/confirm single-flight    |
+| MODAL-08 | Alert·Confirm·Custom Dialog          | 기반/P3  | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용                  |
+| PLUG-01  | Promise plugin button handler        | P2       | ETC ms       |        — |        — |      — | 실험 | `c1531435`, pending disable·aria-busy·오류 격리               |
+| PLUG-02  | plugin input onInput                 | P0/P1    | F95 ms/frame |    0.727 |    0.198 |  72.8% | 검증 | `3503b2b2`·`3503b2b2`, 100회 입력을 frame당 최신 1회로 병합   |
+| PLUG-03  | plugin dropdown                      | P1/P3    | CTP ms       |        — |        — |      — | 실험 | `d6fd38ed`, root N개가 document listener·observer 1세트 공유  |
+| PLUG-04  | Display Element 선택·드래그·리사이즈 | P0       | F95 ms/frame |        — |        — |      — | 실험 | `e9a800cc` drag·`78fb15eb` resize 공통 경로 적용              |
+| PLUG-05  | plugin remove·context action         | P2       | ETC ms       |        — |        — |      — | 실험 | `15f0bba3`, delete single-flight·handler 오류 격리            |
+| WIN-01   | 모드 전환 단축키                     | P1/P2    | CTP ms       |        — |        — |      — | 실험 | key store generation으로 stale 모드 응답 차단                 |
+| WIN-02   | 프로퍼티 패널 토글 단축키            | P1       | CTP ms       |        — |        — |      — | 실험 | `bfb072b4`, 동일 패널 토글 시각 우선 경로 공유                |
+| WIN-03   | 키 슬롯·단축키 실입력 캡처           | P1/P2    | CTP ms       |        — |        — |      — | 실험 | raw input 단일 구독·브라우저 이벤트 격리·지연 플래그 해제     |
+| WIN-04   | 분리 패널 Cmd·Ctrl+W                 | P2       | ETC ms       |        — |        — |      — | 실험 | panel transition single-flight·write barrier                  |
+| WIN-05   | 오버레이 컨텍스트 메뉴               | P2       | CTP ms       |        — |        — |      — | 실험 | `7b1ad26b`, 네이티브 메뉴 생성·표시 single-flight             |
+| WIN-06   | 편집 flush 입력 잠금                 | 기반     | ETC ms       |        — |        — |      — | 실험 | `7b1ad26b`, inert·capture 차단·aria-busy 피드백               |
+| WIN-07   | focus·visibility 재동기화            | 기반     | ETC ms       |        — |        — |      — | 실험 | editor coordinator `syncPromise` 공유·revision stale 차단     |
 
 ## 6. 측정 세션
 
@@ -782,6 +843,33 @@
 | EDIT-01-FRAME  | 2026-08-07 | EDIT-01 | 개선   | `6b121431` | vitest-jsdom-color-track-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·pointermove 500회 |   30 | 5.594 | 6.074 | 8.506 | DOM P95 11.094ms·React P95 0.808ms | [JSON](../benchmarks/results/edit-01-color-track-improved.json) | color track proxy |
 
 <!-- EDIT-01:SESSIONS:END -->
+
+<!-- BASE-11:SESSIONS:START -->
+
+| 세션 ID       | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                 | 시나리오·데이터 크기 | 반복 |    P50 |    P95 |   최대 | 보조 지표                               | 원시 자료                                                        | 비고             |
+| ------------- | ---------- | ------- | ------ | ---------- | ---------------------------------------------------- | -------------------- | ---: | -----: | -----: | -----: | --------------------------------------- | ---------------------------------------------------------------- | ---------------- |
+| BASE-11-SYNC  | 2026-08-07 | BASE-11 | 기준선 | `9f5872b6` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 패널 DOM 500개       |   30 | 11.184 | 13.280 | 13.550 | content P95 13.404ms·React P95 7.979ms  | [JSON](../benchmarks/results/base-11-panel-toggle-baseline.json) | DOM commit proxy |
+| BASE-11-PAINT | 2026-08-07 | BASE-11 | 개선   | `9f5872b6` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 패널 DOM 500개       |   30 |  0.302 |  0.531 |  0.668 | content P95 27.194ms·React P95 17.632ms | [JSON](../benchmarks/results/base-11-panel-toggle-improved.json) | DOM commit proxy |
+
+<!-- BASE-11:SESSIONS:END -->
+
+<!-- GRID-21:SESSIONS:START -->
+
+| 세션 ID       | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                    | 시나리오·데이터 크기   | 반복 |   P50 |   P95 |  최대 | 보조 지표                          | 원시 자료                                                    | 비고                 |
+| ------------- | ---------- | ------- | ------ | ---------- | ------------------------------------------------------- | ---------------------- | ---: | ----: | ----: | ----: | ---------------------------------- | ------------------------------------------------------------ | -------------------- |
+| GRID-21-SYNC  | 2026-08-07 | GRID-21 | 기준선 | `9f5872b6` | vitest-jsdom-keydown-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·keydown 20회 |   30 | 0.306 | 0.435 | 0.499 | DOM P95 10.727ms·React P95 0.680ms | [JSON](../benchmarks/results/grid-21-keyboard-baseline.json) | keyboard burst proxy |
+| GRID-21-FRAME | 2026-08-07 | GRID-21 | 개선   | `9f5872b6` | vitest-jsdom-keydown-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·keydown 20회 |   30 | 0.160 | 0.198 | 0.203 | DOM P95 11.801ms·React P95 0.623ms | [JSON](../benchmarks/results/grid-21-keyboard-improved.json) | keyboard burst proxy |
+
+<!-- GRID-21:SESSIONS:END -->
+
+<!-- PLUG-02:SESSIONS:START -->
+
+| 세션 ID       | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                         | 시나리오·데이터 크기      | 반복 |   P50 |   P95 |  최대 | 보조 지표                      | 원시 자료                                                 | 비고                |
+| ------------- | ---------- | ------- | ------ | ---------- | ------------------------------------------------------------ | ------------------------- | ---: | ----: | ----: | ----: | ------------------------------ | --------------------------------------------------------- | ------------------- |
+| PLUG-02-SYNC  | 2026-08-07 | PLUG-02 | 기준선 | `9f5872b6` | vitest-jsdom-plugin-input-burst-proxy, darwin arm64, v25.2.1 | handler 500개·input 100회 |   30 | 0.659 | 0.727 | 1.626 | handler P95 0.727ms·100회 호출 | [JSON](../benchmarks/results/plug-02-input-baseline.json) | handler burst proxy |
+| PLUG-02-FRAME | 2026-08-07 | PLUG-02 | 개선   | `9f5872b6` | vitest-jsdom-plugin-input-burst-proxy, darwin arm64, v25.2.1 | handler 500개·input 100회 |   30 | 0.166 | 0.198 | 0.208 | handler P95 1.378ms·1회 호출   | [JSON](../benchmarks/results/plug-02-input-improved.json) | handler burst proxy |
+
+<!-- PLUG-02:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -1132,6 +1220,99 @@
 | 결론        | 공통 pointer session 사용 색상 편집 경로 전체 적용                                                  |
 
 <!-- EDIT-01:EXPERIMENT:END -->
+
+### EXP-022: 플러그인 입력·액션 디스패처
+
+| 필드        | 내용                                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| 항목 ID     | PLUG-01·02, TOG-36                                                                                      |
+| 변경 내용   | input 최신 이벤트 프레임 병합, change/click 전 flush, Promise click single-flight·`aria-busy`·오류 격리 |
+| 구현 커밋   | `c1531435`                                                                                              |
+| P95 변화    | PLUG-02 0.727ms → 0.198ms (72.8%), handler 100회 → 1회                                                  |
+| 정확성 검증 | 최신 input·순서 보존·중복 click 차단 테스트 통과                                                        |
+| 결론        | jsdom burst proxy 검증, 실제 WebView F95 측정 대기                                                      |
+
+### EXP-023: 방향키 이동 프레임 병합
+
+| 필드        | 내용                                                                              |
+| ----------- | --------------------------------------------------------------------------------- |
+| 항목 ID     | GRID-21                                                                           |
+| 변경 내용   | 같은 프레임 방향키 delta 합산, keyup·unmount 전 flush, 500ms history gesture 유지 |
+| 구현 커밋   | `a63705a4`                                                                        |
+| P95 변화    | 0.435ms → 0.198ms (54.5%)                                                         |
+| 정확성 검증 | burst·keyup flush·gesture 경계 7개 테스트 통과                                    |
+| 결론        | 자동 회귀 게이트 포함 검증 완료                                                   |
+
+### EXP-024: 설정·리소스 최신 의도 보존
+
+| 필드        | 내용                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| 항목 ID     | SET-01·02·08~10·12·13, PICK-02·04·07·10, MODAL-04·05·07                                          |
+| 변경 내용   | latest-intent 직렬 큐, 낙관 projection, 최종 실패 authoritative resync, 파일·위험 액션 ref guard |
+| 구현 커밋   | `621bdf75`·`b39708ea`·`1b188f95`                                                                 |
+| 정확성 검증 | Palette·탭 generation·리소스 편집 관련 테스트와 타입·린트 통과                                   |
+| 결론        | 코드 계약 실험 완료, 실제 장치·파일 ETC 측정 대기                                                |
+
+### EXP-025: 전역 리스너·패널 토글 비용 분리
+
+| 필드      | 내용                                                                                                     |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| 항목 ID   | BASE-11·13, PLUG-03, WIN-02                                                                              |
+| 변경 내용 | 패널 버튼과 콘텐츠 mount 분리, Lenis RAF 전역 1개, plugin dropdown document listener·observer 전역 1세트 |
+| 구현 커밋 | `bfb072b4`·`9dd0bb67`·`d6fd38ed`                                                                         |
+| P95 변화  | BASE-11 13.280ms → 0.531ms (96.0%)                                                                       |
+| 구조 검증 | 다중 인스턴스 RAF·listener 수와 cleanup 테스트 통과                                                      |
+| 결론      | 패널 토글 자동 검증, 구조 최적화는 실제 WebView 프로파일 대기                                            |
+
+### EXP-026: 비동기 액션 공통 single-flight
+
+| 필드        | 내용                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------- |
+| 항목 ID     | TOOL-04·12, MODAL-06·08, PROP-13, PLUG-05                                                          |
+| 변경 내용   | 공통 single-flight 훅, pending disable, confirm 비동기 중복 차단, 플러그인 삭제·컨텍스트 오류 격리 |
+| 구현 커밋   | `36957404`·`4f2ab7d1`·`15f0bba3`·`f80edb1c`                                                        |
+| 정확성 검증 | hook·Alert·플러그인 handler 테스트와 타입·린트 통과                                                |
+| 결론        | 중복 요청·무응답 오류 경로 제거, 네이티브 ETC 측정 대기                                            |
+
+### EXP-027: 레이어·선택 원자화와 실패 조정
+
+| 필드        | 내용                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| 항목 ID     | GRID-12·13·16~20, LAYER-02~07                                                                                      |
+| 변경 내용   | 그룹 선택 Store 알림 1회, Shift 선택 단일 projection, 레이어 변경 최신 상태 조건부 rollback, 접기 헤더 시각 선반영 |
+| 구현 커밋   | `aa325924`·`94d99e8d`                                                                                              |
+| 정확성 검증 | 기존 editor coordinator·레이어·Grid 테스트와 타입·린트 통과                                                        |
+| 결론        | 구현 실험 완료, 요소 수별 실제 CTP 측정 대기                                                                       |
+
+### EXP-028: 설정 화면·CSS 모달 종료 경계
+
+| 필드        | 내용                                                                                                           |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 항목 ID     | SET-03~05, TOOL-10, MODAL-03                                                                                   |
+| 변경 내용   | 설정 버튼 상태와 큰 화면 mount 분리, 언어 transition, 앵커 latest-intent, CSS 작업 Set 추적·flush 후 저장/복원 |
+| 구현 커밋   | `a755dbac`                                                                                                     |
+| 정확성 검증 | async optimistic flush 테스트와 타입·린트 통과                                                                 |
+| 결론        | stale 응답·same-tick 중복·닫기 경합 제거, WebView CTP·IPC ETC 측정 대기                                        |
+
+### EXP-029: 프로퍼티 탭·폰트 스타일 시각 우선
+
+| 필드        | 내용                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------- |
+| 항목 ID     | LAYER-01·03, PROP-06·10                                                                           |
+| 변경 내용   | 중복 탭 구현을 공통 after-paint TabSwitch로 교체하고 폰트 스타일·그룹 disclosure를 시각 우선 처리 |
+| 구현 커밋   | `94d99e8d`·`9f5872b6`                                                                             |
+| 정확성 검증 | TabSwitch·PropertyInputs 포함 24개 테스트와 타입·린트 통과                                        |
+| 결론        | 공통 BASE-07 수치가 적용되는 구조로 통합, 사용처별 WebView 측정 대기                              |
+
+### EXP-030: 창 전역 상호작용 생명주기
+
+| 필드        | 내용                                                                                                                 |
+| ----------- | -------------------------------------------------------------------------------------------------------------------- |
+| 항목 ID     | WIN-04~07, LAYER-11·12                                                                                               |
+| 변경 내용   | 네이티브 context menu single-flight, flush lock `inert`+`aria-busy`, panel handoff·focus resync 기존 coalescing 감사 |
+| 구현 커밋   | `7b1ad26b`                                                                                                           |
+| 정확성 검증 | flush lock·overlay App 22개 테스트 통과                                                                              |
+| 결론        | JS 경로 감사 완료, OS 네이티브 창 drag는 최적화 범위 밖으로 보류                                                     |
 
 ## 8. 완료 게이트
 
