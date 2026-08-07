@@ -2,6 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGridViewStore } from '@stores/grid/useGridViewStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import {
+  createRafLatestScheduler,
+  type ContinuousInputStrategy,
+} from '@utils/animation/rafLatestScheduler';
 
 interface Position {
   dx: number;
@@ -32,6 +36,8 @@ interface GridMinimapProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetZoom: () => void;
+  /** 성능 계측용 비교 전략. 제품 경로는 프레임당 최신 입력만 반영한다. */
+  continuousInputStrategy?: ContinuousInputStrategy;
 }
 
 const MINIMAP_WIDTH = 120;
@@ -86,6 +92,7 @@ const GridMinimap = ({
   onZoomIn,
   onZoomOut,
   onResetZoom,
+  continuousInputStrategy = 'frame',
 }: GridMinimapProps) => {
   const { setPan } = useGridViewStore();
   const [isDragging, setIsDragging] = useState(false);
@@ -317,15 +324,23 @@ const GridMinimap = ({
 
     const minimapRect = e.currentTarget.getBoundingClientRect();
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const applyMouseMove = (moveEvent: MouseEvent) => {
       const clickX = moveEvent.clientX - minimapRect.left;
       const clickY = moveEvent.clientY - minimapRect.top;
 
       const { panX: newPanX, panY: newPanY } = minimapToGridPan(clickX, clickY);
       setPan(mode, newPanX, newPanY);
     };
+    const moveScheduler = createRafLatestScheduler(
+      applyMouseMove,
+      continuousInputStrategy,
+    );
+    const handleMouseMove = (moveEvent: MouseEvent) =>
+      moveScheduler.push(moveEvent);
 
     const handleMouseUp = () => {
+      moveScheduler.flush();
+      moveScheduler.cancel();
       setIsDragging(false);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -472,6 +487,7 @@ const GridMinimap = ({
       </div>
       {/* 미니맵 */}
       <div
+        data-grid-minimap-surface="true"
         className="relative cursor-pointer"
         style={{
           width: '100%',
