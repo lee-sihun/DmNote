@@ -2,10 +2,15 @@ import { usePressAction } from '@hooks/usePressAction';
 import React, { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePressGatedSwap } from '@hooks/usePressGatedSwap';
+import {
+  useOptimisticBooleanCommit,
+  type CommitStrategy,
+} from '@hooks/useOptimisticBooleanCommit';
 
 interface PanelToggleButtonProps {
   open: boolean;
   onClick: () => void;
+  commitStrategy?: CommitStrategy;
 }
 
 // tokens.css의 --ui-duration-base / --ui-ease-out과 동기 (WAAPI는 CSS 변수 참조 불가)
@@ -21,10 +26,19 @@ const CHIP_HIDDEN = '0';
 // 칩은 opacity 페이드 — backdrop-filter가 없는 재질이라 안전
 // (블러+opacity 조합은 WKWebView에서 블러 레이어가 점멸).
 // 눈 토글과 같은 규칙: FROM 상태를 정적으로 고정하고 TO 커밋은 onfinish에서
-const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
+const PanelToggleButton = ({
+  open,
+  onClick,
+  commitStrategy = 'after-paint',
+}: PanelToggleButtonProps) => {
   const { t } = useTranslation();
+  const { value: visualOpen, toggle } = useOptimisticBooleanCommit({
+    canonicalValue: open,
+    onCommit: onClick,
+    strategy: commitStrategy,
+  });
   // 버튼에 data-instant 부여 — 외부 개폐 시 divider/lines transition도 차단
-  const { ref, isInstant } = usePressGatedSwap<HTMLButtonElement>(open);
+  const { ref, isInstant } = usePressGatedSwap<HTMLButtonElement>(visualOpen);
   const chipRef = useRef<HTMLSpanElement>(null);
   const mountedRef = useRef(false);
   const animRef = useRef<Animation | null>(null);
@@ -37,7 +51,7 @@ const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
     chip.style.transform = '';
 
     // 초기 마운트는 정적 상태 그대로 — 페이드 연출 없음
-    const restState = open ? CHIP_HIDDEN : CHIP_SHOWN;
+    const restState = visualOpen ? CHIP_HIDDEN : CHIP_SHOWN;
     if (!mountedRef.current) {
       mountedRef.current = true;
       chip.style.opacity = restState;
@@ -56,7 +70,7 @@ const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
       return;
     }
 
-    const from = open ? CHIP_SHOWN : CHIP_HIDDEN;
+    const from = visualOpen ? CHIP_SHOWN : CHIP_HIDDEN;
     chip.style.opacity = from;
     const anim = chip.animate([{ opacity: from }, { opacity: restState }], {
       duration: FADE_MS,
@@ -66,14 +80,14 @@ const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
       chip.style.opacity = restState;
     };
     animRef.current = anim;
-  }, [open, isInstant]);
+  }, [visualOpen, isInstant]);
 
-  const label = open
+  const label = visualOpen
     ? t('propertiesPanel.closePanel') || '속성 패널 닫기'
     : t('propertiesPanel.openPanel') || '속성 패널 열기';
 
   // 설정 세션 중에는 cancel terminal action - 입력 blur와의 click 경합 방어
-  const togglePress = usePressAction(() => onClick());
+  const togglePress = usePressAction(toggle);
 
   return (
     <div className="absolute top-0 right-0 z-30 w-[48px] h-[48px] flex items-center justify-center pointer-events-none">
@@ -81,10 +95,10 @@ const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
         ref={ref}
         {...togglePress}
         className="dmn-panel-toggle pointer-events-auto relative w-[32px] h-[32px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-        data-open={open ? 'true' : 'false'}
+        data-open={visualOpen ? 'true' : 'false'}
         title={label}
         aria-label={label}
-        aria-expanded={open}
+        aria-expanded={visualOpen}
       >
         <span
           ref={chipRef}
