@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "GRID-21",
+  "variant": "sync-baseline",
+  "strategy": "sync",
+  "measuredAt": "2026-08-07T12:27:12.844Z",
+  "commit": "f80edb1c12d28280ac63ea8a2d0230b39472c4a3",
+  "runtime": {
+    "kind": "vitest-jsdom-keydown-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.21987500000000182,
+        "p95": 0.3100839999999607,
+        "max": 0.3337500000000091
+      },
+      "visualDomCommitMs": {
+        "p50": 0.3984580000000051,
+        "p95": 0.6218750000000455,
+        "max": 0.6701249999999845
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.00916600000005019,
+        "p95": 0.02008399999976973,
+        "max": 0.023000999999908345
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.22033299999998235,
+        "p95": 0.25549999999998363,
+        "max": 0.258666000000062
+      },
+      "visualDomCommitMs": {
+        "p50": 2.568875000000048,
+        "p95": 2.792583000000036,
+        "max": 2.894333999999958
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.10545199999990018,
+        "p95": 0.14528400000028796,
+        "max": 0.1506999999993468
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.3234170000000631,
+        "p95": 0.5785840000000917,
+        "max": 0.7908750000001419
+      },
+      "visualDomCommitMs": {
+        "p50": 10.053417000000081,
+        "p95": 11.133417000000009,
+        "max": 11.419999999999845
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.5239920000076381,
+        "p95": 0.6402269999900909,
+        "max": 0.7155369999991308
+      }
+    }
+  ]
+}
