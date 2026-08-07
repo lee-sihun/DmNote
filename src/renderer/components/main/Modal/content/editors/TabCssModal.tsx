@@ -12,6 +12,7 @@ import {
 import { FORM_ROW_CLASS, FORM_LABEL_CLASS } from '@utils/cardRecipes';
 import { useTranslation } from '@contexts/useTranslation';
 import { useLenis } from '@hooks/useLenis';
+import { useOptimisticAsyncBooleanCommit } from '@hooks/useOptimisticAsyncBooleanCommit';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { pathBaseName } from '@utils/core/pathDisplay';
 import { cssHistoryStatusLabel } from '@utils/cssHistoryStatus';
@@ -130,23 +131,29 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     }
   };
 
-  const handleToggleCss = async () => {
-    const newEnabled = !(tabCss?.enabled ?? true);
-    try {
-      const result = await invokeTracked(() =>
-        window.api.css.tab.toggle(selectedKeyType, newEnabled),
-      );
-      if (result.success) {
-        setTabCss((prev) =>
-          prev
-            ? { ...prev, enabled: result.enabled }
-            : { path: null, content: '', enabled: result.enabled },
-        );
-      }
-    } catch (error) {
-      console.error('Failed to toggle tab CSS:', error);
+  const commitCssEnabled = async (enabled: boolean) => {
+    const result = await invokeTracked(() =>
+      window.api.css.tab.toggle(selectedKeyType, enabled),
+    );
+    if (!result.success) {
+      throw new Error('Failed to toggle tab CSS');
     }
+
+    setTabCss((prev) =>
+      prev
+        ? { ...prev, enabled: result.enabled }
+        : { path: null, content: '', enabled: result.enabled },
+    );
   };
+
+  const { value: visualCssEnabled, toggle: handleToggleCss } =
+    useOptimisticAsyncBooleanCommit({
+      canonicalValue: tabCss?.enabled ?? true,
+      onCommit: commitCssEnabled,
+      onError: (error) => {
+        console.error('Failed to toggle tab CSS:', error);
+      },
+    });
 
   // 글로벌 히스토리 항목을 현재 탭 CSS로 적용
   const handleApplyHistory = async (item: CustomCssHistoryItem) => {
@@ -230,7 +237,6 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   if (!isOpen) return null;
 
   const hasTabCss = Boolean(tabCss && tabCss.path);
-  const cssEnabled = tabCss?.enabled ?? true;
   const canExport = Boolean(tabCss?.content) && !isExporting;
 
   return (
@@ -245,14 +251,14 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
           <button
             type="button"
             role="switch"
-            aria-checked={cssEnabled}
+            aria-checked={visualCssEnabled}
             onClick={handleToggleCss}
             data-dmn-press-scope=""
             className={`${FORM_ROW_CLASS} cursor-pointer`}
           >
             <span className={FORM_LABEL_CLASS}>{t('tabCss.enableCss')}</span>
             <span aria-hidden="true" className="pointer-events-none">
-              <Checkbox checked={cssEnabled} onChange={handleToggleCss} />
+              <Checkbox checked={visualCssEnabled} onChange={handleToggleCss} />
             </span>
           </button>
           <div className={FORM_ROW_CLASS}>
