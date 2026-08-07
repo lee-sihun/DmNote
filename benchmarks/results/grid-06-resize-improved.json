@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "GRID-06",
+  "variant": "improved",
+  "strategy": "frame",
+  "measuredAt": "2026-08-07T11:29:01.197Z",
+  "commit": "d092017a5ec3dd0b9a4a9fb9449465a24dd42742",
+  "runtime": {
+    "kind": "vitest-jsdom-resize-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.14274999999997817,
+        "p95": 0.20400000000006457,
+        "max": 0.20745900000008533
+      },
+      "visualDomCommitMs": {
+        "p50": 2.11587499999996,
+        "p95": 2.493832999999995,
+        "max": 2.494374999999991
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.5845059999994646,
+        "p95": 0.8680869999994911,
+        "max": 0.8768240000003971
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.12087499999995543,
+        "p95": 0.17762499999992087,
+        "max": 0.1944580000000542
+      },
+      "visualDomCommitMs": {
+        "p50": 3.366957999999954,
+        "p95": 4.189791000000014,
+        "max": 4.3436249999999745
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.6286999999996397,
+        "p95": 0.794824000001995,
+        "max": 0.7949720000008256
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.1142499999998563,
+        "p95": 0.14420900000004622,
+        "max": 0.15833400000019537
+      },
+      "visualDomCommitMs": {
+        "p50": 4.8633330000000115,
+        "p95": 8.69900000000007,
+        "max": 8.744916999999987
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.8132140000036543,
+        "p95": 1.3900929999942946,
+        "max": 1.4498360000040975
+      }
+    }
+  ]
+}

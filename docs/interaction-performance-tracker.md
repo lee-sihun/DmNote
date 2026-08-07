@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 93개    |
+| 대기                             | 91개    |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 72개    |
+| 실험·검증 중                     | 74개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -371,6 +371,29 @@
 - 정확성 게이트: 최신 좌표 병합·mouseup 최종 좌표 flush 테스트 통과
 <!-- GRID-09:RESULT:END -->
 
+<!-- GRID-06:RESULT:START -->
+
+#### GRID-06 단일 리사이즈 최신 자동 측정
+
+| 조건           | 값                                                        |
+| -------------- | --------------------------------------------------------- |
+| 측정 경로      | 실제 ResizeHandles + 렌더 DOM 500개, mousemove 20회 burst |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회                    |
+| 구현 코드 커밋 | `78fb15eb36f007c3c691c8af51b2fc87a1bd1f77`                |
+| 측정 코드 커밋 | `d092017a5ec3dd0b9a4a9fb9449465a24dd42742`                |
+| 비교 전략      | `legacy` → `frame`                                        |
+| 환경           | darwin arm64, v25.2.1                                     |
+
+| P95 지표              |  legacy | frame coalescing | 개선율 |
+| --------------------- | ------: | ---------------: | -----: |
+| burst event blocking  | 0.155ms |          0.144ms |   7.2% |
+| 최종 DOM commit       | 7.589ms |          8.699ms | -14.6% |
+| React commit duration | 1.154ms |          1.390ms | -20.5% |
+
+- 원시 결과: [기준선](../benchmarks/results/grid-06-resize-baseline.json) · [개선](../benchmarks/results/grid-06-resize-improved.json)
+- 정확성 게이트: 최신 bounds 병합·mouseup flush·resize commit 테스트 통과
+<!-- GRID-06:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                                 |
@@ -436,43 +459,43 @@
 
 ### 5.3 Grid·레이어 연속 입력과 편집 액션
 
-| ID       | 항목                  | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                    |
-| -------- | --------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | -------------------------------------------- |
-| GRID-01  | 단일 요소 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 가이드 on/off 별도                           |
-| GRID-02  | 다중 선택 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정                               |
-| GRID-03  | Grid 패닝             | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용            |
-| GRID-04  | 휠·핀치 줌            | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용            |
-| GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |    0.306 |    0.225 |  26.3% | 검증 | `9c90cae8`, frame coalescing 적용            |
-| GRID-06  | 단일 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | preview·commit                               |
-| GRID-07  | 그룹 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정                               |
-| GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |        — |        — |      — | 대기 | 캔버스 preview                               |
-| GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |    0.261 |    0.139 |  47.0% | 검증 | `f96cdd57`, 최신 좌표 frame coalescing       |
-| GRID-10  | 미니맵 클릭 이동      | P1       | CTP ms       |        — |        — |      — | 대기 | viewport 반영                                |
-| GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport 반영                                |
-| GRID-12  | 요소 단일·다중 선택   | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 교체 포함                               |
-| GRID-13  | Shift 범위 선택       | P1       | CTP ms       |        — |        — |      — | 대기 | 요소 수별 측정                               |
-| GRID-14  | 더블클릭 편집         | P1/P3    | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용 |
-| GRID-15  | Grid 컨텍스트 메뉴    | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용  |
-| GRID-16  | 요소 추가             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC                              |
-| GRID-17  | 삭제·지우개           | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC                              |
-| GRID-18  | 복제·복사·붙여넣기    | P1       | CTP ms       |        — |        — |      — | 대기 | 다중 요소 시나리오                           |
-| GRID-19  | z-order 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 배열·zIndex 갱신                             |
-| GRID-20  | 그룹화·그룹 해제      | P1       | CTP ms       |        — |        — |      — | 대기 | 관계·문서 변경                               |
-| GRID-21  | 방향키 이동           | P0       | F95 ms/frame |        — |        — |      — | 대기 | 500ms gesture 병합                           |
-| GRID-22  | Undo·Redo             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서·Store 동기화                            |
-| GRID-23  | 키 카운터 초기화      | P2       | ETC ms       |        — |        — |      — | 대기 | IPC 완료                                     |
-| LAYER-01 | 레이어·Grid 탭 전환   | P3       | CTP ms       |        — |        — |      — | 대기 | 콘텐츠 paint                                 |
-| LAYER-02 | 레이어 단일·다중 선택 | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 동기화                                |
-| LAYER-03 | 그룹 접기·펼치기      | P3       | CTP ms       |        — |        — |      — | 대기 | 목록 reflow                                  |
-| LAYER-04 | 이름 변경             | P1/P2    | CTP ms       |        — |        — |      — | 대기 | blur commit ETC                              |
-| LAYER-05 | 표시·숨김             | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 paint                                 |
-| LAYER-06 | 잠금·잠금 해제        | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 상태                                  |
-| LAYER-07 | 위·아래 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 목록·캔버스 순서                             |
-| LAYER-08 | 드래그 순서 변경      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | local preview                                |
-| LAYER-09 | 그룹 드래그·중첩      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | hit-test                                     |
-| LAYER-10 | 레이어 컨텍스트 메뉴  | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용  |
-| LAYER-11 | 패널 detach·reattach  | P2       | ETC ms       |        — |        — |      — | 대기 | 창 handoff                                   |
-| LAYER-12 | 분리 패널 창 이동     | P0       | F95 ms/frame |        — |        — |      — | 대기 | 네이티브 drag                                |
+| ID       | 항목                  | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                           |
+| -------- | --------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | --------------------------------------------------- |
+| GRID-01  | 단일 요소 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 가이드 on/off 별도                                  |
+| GRID-02  | 다중 선택 드래그      | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정                                      |
+| GRID-03  | Grid 패닝             | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용                   |
+| GRID-04  | 휠·핀치 줌            | P0       | F95 ms/frame |        — |        — |      — | 실험 | `9c90cae8`, frame coalescing 적용                   |
+| GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |    0.306 |    0.225 |  26.3% | 검증 | `9c90cae8`, frame coalescing 적용                   |
+| GRID-06  | 단일 리사이즈         | P0       | F95 ms/frame |    0.155 |    0.144 |   7.2% | 검증 | `78fb15eb`, latest bounds frame coalescing          |
+| GRID-07  | 그룹 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 실험 | `78fb15eb`, 공통 scheduler 적용·선택 수별 측정 대기 |
+| GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |        — |        — |      — | 대기 | 캔버스 preview                                      |
+| GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |    0.261 |    0.139 |  47.0% | 검증 | `f96cdd57`, 최신 좌표 frame coalescing              |
+| GRID-10  | 미니맵 클릭 이동      | P1       | CTP ms       |        — |        — |      — | 대기 | viewport 반영                                       |
+| GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport 반영                                       |
+| GRID-12  | 요소 단일·다중 선택   | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 교체 포함                                      |
+| GRID-13  | Shift 범위 선택       | P1       | CTP ms       |        — |        — |      — | 대기 | 요소 수별 측정                                      |
+| GRID-14  | 더블클릭 편집         | P1/P3    | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용        |
+| GRID-15  | Grid 컨텍스트 메뉴    | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용         |
+| GRID-16  | 요소 추가             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC                                     |
+| GRID-17  | 삭제·지우개           | P1       | CTP ms       |        — |        — |      — | 대기 | 문서 commit ETC                                     |
+| GRID-18  | 복제·복사·붙여넣기    | P1       | CTP ms       |        — |        — |      — | 대기 | 다중 요소 시나리오                                  |
+| GRID-19  | z-order 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 배열·zIndex 갱신                                    |
+| GRID-20  | 그룹화·그룹 해제      | P1       | CTP ms       |        — |        — |      — | 대기 | 관계·문서 변경                                      |
+| GRID-21  | 방향키 이동           | P0       | F95 ms/frame |        — |        — |      — | 대기 | 500ms gesture 병합                                  |
+| GRID-22  | Undo·Redo             | P1       | CTP ms       |        — |        — |      — | 대기 | 문서·Store 동기화                                   |
+| GRID-23  | 키 카운터 초기화      | P2       | ETC ms       |        — |        — |      — | 대기 | IPC 완료                                            |
+| LAYER-01 | 레이어·Grid 탭 전환   | P3       | CTP ms       |        — |        — |      — | 대기 | 콘텐츠 paint                                        |
+| LAYER-02 | 레이어 단일·다중 선택 | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 동기화                                       |
+| LAYER-03 | 그룹 접기·펼치기      | P3       | CTP ms       |        — |        — |      — | 대기 | 목록 reflow                                         |
+| LAYER-04 | 이름 변경             | P1/P2    | CTP ms       |        — |        — |      — | 대기 | blur commit ETC                                     |
+| LAYER-05 | 표시·숨김             | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 paint                                        |
+| LAYER-06 | 잠금·잠금 해제        | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 상태                                         |
+| LAYER-07 | 위·아래 이동          | P1       | CTP ms       |        — |        — |      — | 대기 | 목록·캔버스 순서                                    |
+| LAYER-08 | 드래그 순서 변경      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | local preview                                       |
+| LAYER-09 | 그룹 드래그·중첩      | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | hit-test                                            |
+| LAYER-10 | 레이어 컨텍스트 메뉴  | P3       | CTP ms       |        — |        — |      — | 실험 | `fd24b345`, 공통 popup shell 우선 표시 적용         |
+| LAYER-11 | 패널 detach·reattach  | P2       | ETC ms       |        — |        — |      — | 대기 | 창 handoff                                          |
+| LAYER-12 | 분리 패널 창 이동     | P0       | F95 ms/frame |        — |        — |      — | 대기 | 네이티브 drag                                       |
 
 ### 5.4 프로퍼티 입력·편집기·피커
 
@@ -654,6 +677,15 @@
 | GRID-09-FRAME  | 2026-08-07 | GRID-09 | 개선   | `a9d8d465` | vitest-jsdom-marquee-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·mousemove 20회 |   30 | 0.111 | 0.139 | 0.139 | DOM P95 5.033ms·React P95 0.932ms | [JSON](../benchmarks/results/grid-09-marquee-improved.json) | marquee burst proxy |
 
 <!-- GRID-09:SESSIONS:END -->
+
+<!-- GRID-06:SESSIONS:START -->
+
+| 세션 ID        | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                   | 시나리오·데이터 크기     | 반복 |   P50 |   P95 |  최대 | 보조 지표                         | 원시 자료                                                  | 비고               |
+| -------------- | ---------- | ------- | ------ | ---------- | ------------------------------------------------------ | ------------------------ | ---: | ----: | ----: | ----: | --------------------------------- | ---------------------------------------------------------- | ------------------ |
+| GRID-06-LEGACY | 2026-08-07 | GRID-06 | 기준선 | `d092017a` | vitest-jsdom-resize-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·mousemove 20회 |   30 | 0.119 | 0.155 | 0.162 | DOM P95 7.589ms·React P95 1.154ms | [JSON](../benchmarks/results/grid-06-resize-baseline.json) | resize burst proxy |
+| GRID-06-FRAME  | 2026-08-07 | GRID-06 | 개선   | `d092017a` | vitest-jsdom-resize-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·mousemove 20회 |   30 | 0.114 | 0.144 | 0.158 | DOM P95 8.699ms·React P95 1.390ms | [JSON](../benchmarks/results/grid-06-resize-improved.json) | resize burst proxy |
+
+<!-- GRID-06:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -944,6 +976,21 @@
 | 결론        | jsdom burst proxy 검증, 실제 WebView F95 측정 전까지 검증 상태 유지                  |
 
 <!-- GRID-09:EXPERIMENT:END -->
+
+<!-- GRID-06:EXPERIMENT:START -->
+
+### EXP-018: Grid 리사이즈 입력 프레임 병합
+
+| 필드        | 내용                                                                              |
+| ----------- | --------------------------------------------------------------------------------- |
+| 항목 ID     | GRID-06~07                                                                        |
+| 변경 내용   | 단일·그룹 mousemove 최신 bounds만 프레임당 한 번 계산·preview하고 종료 전에 flush |
+| 구현 커밋   | `78fb15eb`                                                                        |
+| P95 변화    | 0.155ms → 0.144ms (7.2%)                                                          |
+| 정확성 검증 | 공통 scheduler·최신 bounds·mouseup flush·resize commit 테스트 통과                |
+| 결론        | 단일 경로 jsdom 검증, 그룹 선택 수별 WebView 측정 전까지 GRID-07은 실험 상태 유지 |
+
+<!-- GRID-06:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 

@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "GRID-06",
+  "variant": "legacy-baseline",
+  "strategy": "legacy",
+  "measuredAt": "2026-08-07T11:28:59.223Z",
+  "commit": "d092017a5ec3dd0b9a4a9fb9449465a24dd42742",
+  "runtime": {
+    "kind": "vitest-jsdom-resize-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.21304200000008677,
+        "p95": 0.7545840000000226,
+        "max": 1.669791000000032
+      },
+      "visualDomCommitMs": {
+        "p50": 0.8263329999999769,
+        "p95": 1.629709000000048,
+        "max": 2.316291000000092
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.5898780000005672,
+        "p95": 0.7959930000002942,
+        "max": 0.9782909999995582
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.13474999999993997,
+        "p95": 0.19262500000002092,
+        "max": 0.20037500000000819
+      },
+      "visualDomCommitMs": {
+        "p50": 1.8929170000000113,
+        "p95": 2.3708339999999453,
+        "max": 2.7259169999999813
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.6113669999998592,
+        "p95": 0.8720020000005206,
+        "max": 1.0823270000000775
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.11904200000003584,
+        "p95": 0.15541600000005928,
+        "max": 0.1621660000000702
+      },
+      "visualDomCommitMs": {
+        "p50": 3.4366670000000568,
+        "p95": 7.588624999999865,
+        "max": 7.649208000000044
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.8337459999993371,
+        "p95": 1.1537319999979445,
+        "max": 1.1594579999950838
+      }
+    }
+  ]
+}
