@@ -8,15 +8,21 @@ vi.mock('@contexts/useTranslation', () => ({
 
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   default: ({ footerSlot }: { footerSlot?: React.ReactNode }) => (
-    <div>{footerSlot}</div>
+    <div data-testid="color-picker">{footerSlot}</div>
   ),
 }));
 
 vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
   ColorSwatchButton: React.forwardRef<
     HTMLButtonElement,
-    React.ButtonHTMLAttributes<HTMLButtonElement>
-  >((props, ref) => <button ref={ref} {...props} />),
+    React.ButtonHTMLAttributes<HTMLButtonElement> & { open?: boolean }
+  >(({ open, className, ...props }, ref) => (
+    <button
+      ref={ref}
+      className={`${open ? 'shadow-focus-ring' : ''} ${className ?? ''}`}
+      {...props}
+    />
+  )),
 }));
 
 vi.mock('@hooks/pickers/useGradientColorState', () => ({
@@ -451,5 +457,74 @@ describe('ColorInput detached gradient guidance', () => {
     expect(container.textContent).toContain(
       'propertiesPanel.detachedGradientHint',
     );
+  });
+});
+
+describe('ColorInput deferred picker mount', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    vi.unstubAllGlobals();
+    container.remove();
+  });
+
+  it('기본 전략은 스와치 열림 표시를 먼저 반영하고 피커 mount를 미룬다', async () => {
+    act(() => root.render(<ColorInput value="#ffffff" onChange={() => {}} />));
+    const button = container.querySelector('button')!;
+
+    act(() => button.click());
+
+    expect(button.className).toContain('shadow-focus-ring');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('[data-testid="color-picker"]')).toBeNull();
+    await flushAfterPaintCommit();
+    expect(
+      container.querySelector('[data-testid="color-picker"]'),
+    ).not.toBeNull();
+  });
+
+  it('sync 전략은 클릭 이벤트에서 피커를 즉시 mount한다', () => {
+    act(() =>
+      root.render(
+        <ColorInput
+          value="#ffffff"
+          onChange={() => {}}
+          pickerMountStrategy="sync"
+        />,
+      ),
+    );
+    const button = container.querySelector('button')!;
+
+    act(() => button.click());
+
+    expect(
+      container.querySelector('[data-testid="color-picker"]'),
+    ).not.toBeNull();
+  });
+
+  it('mount 예약 중 다시 닫으면 피커를 만들지 않는다', async () => {
+    act(() => root.render(<ColorInput value="#ffffff" onChange={() => {}} />));
+    const button = container.querySelector('button')!;
+
+    act(() => button.click());
+    act(() => button.click());
+    await flushAfterPaintCommit();
+
+    expect(container.querySelector('[data-testid="color-picker"]')).toBeNull();
+    expect(button.className).not.toContain('shadow-focus-ring');
   });
 });

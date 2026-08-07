@@ -63,11 +63,24 @@ const findFirstSwatch = (host: HTMLElement) =>
     button.className.includes('w-[23px]'),
   );
 
+const flushPickerMount = async () => {
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  });
+};
+
 describe('단일 통계 active 색 편집 차단', () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
     captured.colorPickerProps = null;
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -76,10 +89,11 @@ describe('단일 통계 active 색 편집 차단', () => {
 
   afterEach(() => {
     act(() => root.unmount());
+    vi.unstubAllGlobals();
     host.remove();
   });
 
-  it('StyleTabContent는 키에서 통계로 바뀌면 피커를 닫고 idle 필드만 기록한다', () => {
+  it('StyleTabContent는 키에서 통계로 바뀌면 피커를 닫고 idle 필드만 기록한다', async () => {
     const onKeyUpdate = vi.fn();
     const renderStyle = (showActiveState: boolean) =>
       root.render(
@@ -100,6 +114,7 @@ describe('단일 통계 active 색 편집 차단', () => {
 
     act(() => renderStyle(true));
     act(() => findFirstSwatch(host)?.click());
+    await flushPickerMount();
     act(() => captured.colorPickerProps?.onStateModeChange?.('active'));
     expect(captured.colorPickerProps?.stateMode).toBe('active');
 
@@ -107,6 +122,7 @@ describe('단일 통계 active 색 편집 차단', () => {
     expect(host.querySelector('[data-testid="color-picker"]')).toBeNull();
 
     act(() => findFirstSwatch(host)?.click());
+    await flushPickerMount();
     expect(captured.colorPickerProps?.stateMode).toBeUndefined();
     expect(captured.colorPickerProps?.color).toBe('#111111');
     act(() => captured.colorPickerProps?.onColorChangeComplete('#abcdef'));
@@ -116,7 +132,7 @@ describe('단일 통계 active 색 편집 차단', () => {
     expect(update).not.toHaveProperty('activeBackgroundColor');
   });
 
-  it('CounterTabContent는 키에서 통계로 바뀌면 피커를 닫고 idle 쌍만 바꾼다', () => {
+  it('CounterTabContent는 키에서 통계로 바뀌면 피커를 닫고 idle 쌍만 바꾼다', async () => {
     const onKeyUpdate = vi.fn();
     const renderCounter = (isStat: boolean) =>
       root.render(
@@ -133,6 +149,7 @@ describe('단일 통계 active 색 편집 차단', () => {
 
     act(() => renderCounter(false));
     act(() => findFirstSwatch(host)?.click());
+    await flushPickerMount();
     act(() => captured.colorPickerProps?.onStateModeChange?.('active'));
     expect(captured.colorPickerProps?.stateMode).toBe('active');
 
@@ -140,6 +157,7 @@ describe('단일 통계 active 색 편집 차단', () => {
     expect(host.querySelector('[data-testid="color-picker"]')).toBeNull();
 
     act(() => findFirstSwatch(host)?.click());
+    await flushPickerMount();
     expect(captured.colorPickerProps?.stateMode).toBeUndefined();
     expect(captured.colorPickerProps?.color).toBe('#112233');
     act(() => captured.colorPickerProps?.onColorChangeComplete('#abcdef'));

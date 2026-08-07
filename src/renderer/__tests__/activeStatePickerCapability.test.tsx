@@ -64,6 +64,7 @@ describe('상태별 피커 capability 전환', () => {
           onChange={onChange}
           onActiveChange={onActiveChange}
           showStateTabs={showStateTabs}
+          pickerMountStrategy="sync"
         />,
       );
 

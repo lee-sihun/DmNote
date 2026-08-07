@@ -1,5 +1,11 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, {
+  useCallback,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from 'react';
 import type {
   PropertyRowProps,
   NumberInputProps,
@@ -735,6 +741,7 @@ export const TextInput: React.FC<TextInputProps> = ({
 export const ColorInput: React.FC<ColorInputProps> = ({
   value,
   onChange,
+  pickerMountStrategy = 'after-paint',
   onChangeComplete,
   activeValue,
   onActiveChange,
@@ -760,6 +767,50 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? externalIsOpen : internalOpen;
+  const [internalPickerMounted, setInternalPickerMounted] = useState(false);
+  const pickerMountFrameRef = useRef<number | null>(null);
+  const pickerMountTimerRef = useRef<number | null>(null);
+
+  const cancelPendingPickerMount = useCallback(() => {
+    if (pickerMountFrameRef.current !== null) {
+      cancelAnimationFrame(pickerMountFrameRef.current);
+      pickerMountFrameRef.current = null;
+    }
+    if (pickerMountTimerRef.current !== null) {
+      window.clearTimeout(pickerMountTimerRef.current);
+      pickerMountTimerRef.current = null;
+    }
+  }, []);
+
+  const schedulePickerMount = useCallback(() => {
+    cancelPendingPickerMount();
+    if (pickerMountStrategy === 'sync') {
+      setInternalPickerMounted(true);
+      return;
+    }
+    pickerMountFrameRef.current = requestAnimationFrame(() => {
+      pickerMountFrameRef.current = null;
+      pickerMountTimerRef.current = window.setTimeout(() => {
+        pickerMountTimerRef.current = null;
+        setInternalPickerMounted(true);
+      }, 0);
+    });
+  }, [cancelPendingPickerMount, pickerMountStrategy]);
+
+  const closeInternalPicker = useCallback(() => {
+    cancelPendingPickerMount();
+    setInternalPickerMounted(false);
+    setInternalOpen(false);
+  }, [cancelPendingPickerMount]);
+
+  useEffect(
+    () => () => {
+      cancelPendingPickerMount();
+    },
+    [cancelPendingPickerMount],
+  );
+
+  const pickerMounted = isControlled ? open : internalPickerMounted;
 
   const isStateControlled =
     externalStateMode !== undefined && externalOnStateModeChange !== undefined;
@@ -776,9 +827,9 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   useEffect(() => {
     if (!showStateTabs) {
       setInternalStateMode('idle');
-      if (!isControlled) setInternalOpen(false);
+      if (!isControlled) closeInternalPicker();
     }
-  }, [showStateTabs, isControlled]);
+  }, [closeInternalPicker, showStateTabs, isControlled]);
 
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -805,8 +856,11 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   const handleToggle = () => {
     if (isControlled) {
       externalOnToggle();
+    } else if (internalOpen) {
+      closeInternalPicker();
     } else {
-      setInternalOpen((prev) => !prev);
+      setInternalOpen(true);
+      schedulePickerMount();
     }
   };
 
@@ -814,7 +868,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     if (isControlled) {
       externalOnToggle();
     } else {
-      setInternalOpen(false);
+      closeInternalPicker();
     }
   };
 
@@ -884,7 +938,9 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     // 분리 창에서는 온캔버스 그라디언트 핸들 비활성 - 캔버스는 메인 창에 있고
     // 편집 세션 콜백이 창 경계를 넘을 수 없음 (Phase E 계약 E5)
     canvasAnchor:
-      open && window.__dmn_window_type !== 'panel' ? canvasAnchor : undefined,
+      pickerMounted && window.__dmn_window_type !== 'panel'
+        ? canvasAnchor
+        : undefined,
     canvasSurface: gradientSurface,
     canvasState: stateMode,
     onPreview: (modeValue) => {
@@ -907,6 +963,8 @@ export const ColorInput: React.FC<ColorInputProps> = ({
         ref={buttonRef}
         onClick={handleToggle}
         open={open}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className="w-[23px] h-[23px] rounded-md cursor-pointer transition-shadow flex-shrink-0"
         surfaceClassName="rounded-md"
         color={getDisplayColor(
@@ -920,9 +978,9 @@ export const ColorInput: React.FC<ColorInputProps> = ({
             : undefined
         }
       />
-      {open && (
+      {pickerMounted && (
         <ColorPicker
-          open={open}
+          open={pickerMounted}
           referenceRef={buttonRef}
           panelElement={panelElement}
           color={

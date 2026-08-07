@@ -90,6 +90,8 @@ export interface OptionalNumberInputProps {
 export interface ColorInputProps {
   value: string;
   onChange: (value: string) => void;
+  /** 내부 ColorPicker mount를 첫 paint 뒤로 미뤄 스와치 피드백을 우선 반영 */
+  pickerMountStrategy?: CommitStrategy;
   onChangeComplete?: (value: string) => void;
   activeValue?: string;
   onActiveChange?: (value: string) => void;
