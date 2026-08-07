@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "PILOT-01",
+  "variant": "baseline",
+  "measuredAt": "2026-08-07T04:52:28.361Z",
+  "commit": "d57270316c4a21a20edbda3f67533b07366ec337",
+  "runtime": {
+    "kind": "vitest-jsdom-dom-commit-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "elementCount": 1,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "visualCommitMs": {
+        "p50": 0.5027079999999842,
+        "p95": 0.6702920000000177,
+        "max": 0.7943330000000515
+      },
+      "canonicalCommitMs": {
+        "p50": 0.503832999999986,
+        "p95": 0.6715000000000373,
+        "max": 0.7966250000000628
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.16066699999987577,
+        "p95": 0.32833400000015445,
+        "max": 0.3688710000003539
+      }
+    },
+    {
+      "elementCount": 100,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "visualCommitMs": {
+        "p50": 1.3424580000000788,
+        "p95": 1.5529999999999973,
+        "max": 1.654374999999959
+      },
+      "canonicalCommitMs": {
+        "p50": 1.343541000000073,
+        "p95": 1.5541660000000093,
+        "max": 1.6556659999999965
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.2209980000000087,
+        "p95": 0.3364060000013751,
+        "max": 0.3394159999999147
+      }
+    },
+    {
+      "elementCount": 500,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "visualCommitMs": {
+        "p50": 2.0494160000000647,
+        "p95": 5.703333000000043,
+        "max": 5.933458000000087
+      },
+      "canonicalCommitMs": {
+        "p50": 2.0509160000000293,
+        "p95": 5.7048750000000155,
+        "max": 5.935000000000059
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.473165999999992,
+        "p95": 0.642534999998361,
+        "max": 0.715769000000023
+      }
+    }
+  ]
+}

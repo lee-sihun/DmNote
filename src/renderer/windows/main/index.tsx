@@ -2,19 +2,38 @@ import '@styles/tokens.css';
 import '@styles/global.css';
 import '@styles/main.css';
 
-window.__dmn_window_type = 'main';
-window.__dmn_runtime = 'tauri';
+const isLocalDevServer =
+  import.meta.env.DEV &&
+  window.location.protocol.startsWith('http') &&
+  ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const benchmarkName = isLocalDevServer
+  ? new URLSearchParams(window.location.search).get('benchmark')
+  : null;
 
-// 브라우저 컨텍스트 메뉴 비활성화
-document.addEventListener(
-  'contextmenu',
-  (e) => {
-    e.preventDefault();
-  },
-  { capture: true },
-);
+const bootstrapBenchmark = async (): Promise<boolean> => {
+  if (benchmarkName !== 'shadow-toggle') return false;
+  const { mountShadowToggleBenchmark } = await import(
+    '../../benchmarks/shadowToggleBenchmark'
+  );
+  mountShadowToggleBenchmark();
+  return true;
+};
 
 async function bootstrap() {
+  if (await bootstrapBenchmark()) return;
+
+  window.__dmn_window_type = 'main';
+  window.__dmn_runtime = 'tauri';
+
+  // 브라우저 컨텍스트 메뉴 비활성화
+  document.addEventListener(
+    'contextmenu',
+    (e) => {
+      e.preventDefault();
+    },
+    { capture: true },
+  );
+
   await import('@api/dmnoteApi');
   const [{ createRoot }, { I18nProvider }, { default: App }] =
     await Promise.all([
