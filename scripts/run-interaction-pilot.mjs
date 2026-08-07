@@ -218,7 +218,8 @@ if (summaryStart === -1 || trackingStart === -1 || trackingEnd === -1) {
 }
 const trackingRows = tracker.slice(trackingStart, trackingEnd);
 const pendingCount = (trackingRows.match(/\| 대기 \|/g) ?? []).length;
-const validatingCount = (trackingRows.match(/\| 검증 \|/g) ?? []).length;
+const validatingCount = (trackingRows.match(/\| (?:실험|검증) \|/g) ?? [])
+  .length;
 const summary = tracker
   .slice(summaryStart, trackingStart)
   .replace(/^\| 대기\s+\|.*$/m, `| 대기 | ${pendingCount}개 |`)
