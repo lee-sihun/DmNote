@@ -106,6 +106,15 @@ You can implement a press effect where the key moves when pressed:
   in active state to create a natural press effect.
 </Callout>
 
+<Callout type="warning">
+  The overlay window does not receive mouse input directly, so the `:hover`
+  selector does not work in the overlay. The grabbable mouse area is also
+  measured when the key layout or CSS changes, and is not re-measured on key
+  press state transitions. If a style like `[data-state='active']`
+  significantly moves or resizes a key based on input state, the visible key
+  and the grabbable area can diverge by that amount while that state lasts.
+</Callout>
+
 ## Specific Key Styles
 
 Use class names to apply different styles to specific keys.

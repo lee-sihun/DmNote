@@ -167,6 +167,12 @@ dmn.ui.displayElement.add({
 });
 ```
 
+<Callout type="warning">
+  오버레이 창은 마우스 입력을 요소에 전달하지 않으므로, `onClick` 같은 마우스
+  기반 이벤트와 `:hover`는 메인 창에서만 동작합니다. `pointer-events` 스타일을
+  직접 지정해도 오버레이에서는 마우스 이벤트를 받을 수 없습니다.
+</Callout>
+
 ### 인스턴스 메서드
 
 | 메서드                              | 설명                            |

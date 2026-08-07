@@ -168,6 +168,13 @@ dmn.ui.displayElement.add({
 });
 ```
 
+<Callout type="warning">
+  The overlay window does not deliver mouse input to elements, so mouse-based
+  events like `onClick` and `:hover` only work in the main window. Setting the
+  `pointer-events` style directly does not make the overlay receive mouse
+  events either.
+</Callout>
+
 ### Instance Methods
 
 | Method                              | Description                         |
