@@ -23,6 +23,7 @@ import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { gradientToCss } from '@src/types/color';
 import { useTranslation } from '@contexts/useTranslation';
 import { registerEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
+import { useAfterPaintValueCommit } from '@hooks/useAfterPaintValueCommit';
 
 // ============================================================================
 // 속성 행
@@ -80,6 +81,7 @@ const NUMBER_FIELD_CLASS =
 export const NumberInput: React.FC<NumberInputProps> = ({
   value,
   onChange,
+  commitStrategy = 'after-paint',
   onBlur,
   onPreview,
   onCancel,
@@ -163,6 +165,12 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   const [hasUserInput, setHasUserInput] = useState(false);
   // Escape로 blur된 경우 확정 없이 원복
   const escapedRef = useRef(false);
+  const liveCommit = onPreview ?? onChange;
+  const { scheduleCommit, flushPendingCommit, cancelPendingCommit } =
+    useAfterPaintValueCommit<number>({
+      onCommit: liveCommit,
+      strategy: commitStrategy,
+    });
 
   useEffect(() => {
     if (!isFocused) {
@@ -244,8 +252,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
     const clamped = parseAndClamp(newValue);
     if (clamped !== null) {
-      // 게스처 모드에서는 타이핑이 preview로만 흐름
-      (onPreview ?? onChange)(clamped);
+      // 로컬 echo를 먼저 반영하고 부모 preview·commit은 첫 paint 뒤 실행
+      scheduleCommit(clamped);
     }
   };
 
@@ -270,6 +278,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     // Escape는 확정 없이 표시값 원복
     if (escapedRef.current) {
       escapedRef.current = false;
+      cancelPendingCommit();
       setLocalValue(isMixed ? '' : getDisplayValue(value));
       setHasUserInput(false);
       // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
@@ -281,6 +290,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
     if (isMixed && !hasUserInput) {
+      cancelPendingCommit();
       setLocalValue('');
       setHasUserInput(false);
       onBlur?.();
@@ -289,8 +299,11 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
     const clamped = parseAndClamp(numericValue);
     if (clamped === null) {
+      // 마지막 문자가 중간 입력이면 직전 유효값까지는 기존 계약대로 보존
+      flushPendingCommit();
       setLocalValue(isMixed ? '' : getDisplayValue(value));
     } else {
+      cancelPendingCommit();
       setLocalValue(getDisplayValue(clamped));
       onChange(clamped);
     }
@@ -333,6 +346,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   value,
   onChange,
+  commitStrategy = 'after-paint',
   onBlur,
   onPreview,
   onCancel,
@@ -405,6 +419,13 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   const [hasUserInput, setHasUserInput] = useState(false);
   // Escape로 blur된 경우 확정 없이 원복
   const escapedRef = useRef(false);
+  const liveCommit = onPreview ?? onChange;
+  const { scheduleCommit, cancelPendingCommit } = useAfterPaintValueCommit<
+    number | undefined
+  >({
+    onCommit: liveCommit,
+    strategy: commitStrategy,
+  });
 
   useEffect(() => {
     if (!isFocused) {
@@ -461,10 +482,9 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     setLocalValue(newValue);
     setHasUserInput(true);
 
-    const emit = onPreview ?? onChange;
     // 빈 값만 unset, 부호·소수점만 남은 중간 상태는 commit하지 않고 입력 유지
     if (newValue === '') {
-      emit(undefined);
+      scheduleCommit(undefined);
       return;
     }
     if (newValue === '-' || newValue === '.' || newValue === '-.') {
@@ -475,7 +495,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     if (!Number.isFinite(numValue)) return;
 
     const clamped = Math.min(Math.max(numValue, min), max);
-    emit(normalizePrecision(clamped));
+    scheduleCommit(normalizePrecision(clamped));
   };
 
   const handleFocus = () => {
@@ -495,6 +515,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     // Escape는 확정 없이 표시값 원복
     if (escapedRef.current) {
       escapedRef.current = false;
+      cancelPendingCommit();
       if (isMixed || value == null) {
         setLocalValue('');
       } else {
@@ -507,6 +528,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     }
 
     const cleaned = sanitizeInput(localValue);
+    cancelPendingCommit();
 
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
     if (isMixed && !hasUserInput) {

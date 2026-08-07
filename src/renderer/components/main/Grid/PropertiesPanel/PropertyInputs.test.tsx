@@ -30,7 +30,12 @@ vi.mock('@hooks/pickers/useGradientColorState', () => ({
   }),
 }));
 
-import { ColorInput, TextInput } from './PropertyInputs';
+import {
+  ColorInput,
+  NumberInput,
+  OptionalNumberInput,
+  TextInput,
+} from './PropertyInputs';
 import { finalizeEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -43,6 +48,201 @@ const setInputValue = (input: HTMLInputElement, value: string) => {
   setter?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
+
+const flushAfterPaintCommit = async () => {
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  });
+};
+
+describe('NumberInput visual-first commit', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    vi.unstubAllGlobals();
+    container.remove();
+  });
+
+  it('기본 전략은 입력 echo를 먼저 반영하고 부모 commit을 미룬다', async () => {
+    const commit = vi.fn();
+    act(() => root.render(<NumberInput value={1} onChange={commit} />));
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, '25');
+    });
+
+    expect(input.value).toBe('25');
+    expect(input.getAttribute('value')).toBe('25');
+    expect(commit).not.toHaveBeenCalled();
+    await flushAfterPaintCommit();
+    expect(commit).toHaveBeenCalledWith(25);
+  });
+
+  it('sync 전략은 기존처럼 입력 이벤트 안에서 즉시 commit한다', () => {
+    const commit = vi.fn();
+    act(() =>
+      root.render(
+        <NumberInput value={1} onChange={commit} commitStrategy="sync" />,
+      ),
+    );
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, '25');
+    });
+
+    expect(commit).toHaveBeenCalledWith(25);
+  });
+
+  it('연속 입력은 마지막 유효값 하나로 병합한다', async () => {
+    const commit = vi.fn();
+    act(() => root.render(<NumberInput value={1} onChange={commit} />));
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, '2');
+      setInputValue(input, '25');
+    });
+    await flushAfterPaintCommit();
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith(25);
+  });
+
+  it('입력 중 unmount되면 예약된 마지막 값을 유실하지 않는다', () => {
+    const commit = vi.fn();
+    act(() => root.render(<NumberInput value={1} onChange={commit} />));
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, '25');
+    });
+    act(() => root.render(null));
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith(25);
+  });
+
+  it('유효하지 않은 중간 문자로 blur해도 직전 유효값은 보존한다', () => {
+    const commit = vi.fn();
+    act(() => root.render(<NumberInput value={1} onChange={commit} />));
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, '2');
+      setInputValue(input, '-');
+    });
+    act(() => input.blur());
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith(2);
+  });
+
+  it('blur는 예약된 preview를 취소하고 최종값을 먼저 commit한다', async () => {
+    const preview = vi.fn();
+    const commit = vi.fn();
+    const blur = vi.fn(() => {
+      expect(commit).toHaveBeenCalledWith(25);
+    });
+    act(() =>
+      root.render(
+        <NumberInput
+          value={1}
+          onChange={commit}
+          onPreview={preview}
+          onBlur={blur}
+        />,
+      ),
+    );
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, '25');
+    });
+    act(() => input.blur());
+    await flushAfterPaintCommit();
+
+    expect(preview).not.toHaveBeenCalled();
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(blur).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape는 예약된 preview를 폐기하고 취소 콜백만 실행한다', async () => {
+    const preview = vi.fn();
+    const commit = vi.fn();
+    const cancel = vi.fn();
+    act(() =>
+      root.render(
+        <NumberInput
+          value={1}
+          onChange={commit}
+          onPreview={preview}
+          onCancel={cancel}
+        />,
+      ),
+    );
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, '25');
+    });
+    act(() => {
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await flushAfterPaintCommit();
+
+    expect(preview).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('Optional 입력의 빈 값도 paint 뒤 undefined로 전달한다', async () => {
+    const commit = vi.fn();
+    act(() =>
+      root.render(<OptionalNumberInput value={25} onChange={commit} />),
+    );
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, '');
+    });
+
+    expect(input.value).toBe('');
+    expect(commit).not.toHaveBeenCalled();
+    await flushAfterPaintCommit();
+    expect(commit).toHaveBeenCalledWith(undefined);
+  });
+});
 
 describe('TextInput preview commit', () => {
   let container: HTMLDivElement;
