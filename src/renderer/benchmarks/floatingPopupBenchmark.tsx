@@ -38,16 +38,15 @@ export const FloatingPopupBenchmarkSurface = ({
         fixedY={0}
         animate={false}
         referenceRef={openerRef}
+        initialFocus="surface"
         contentMountStrategy={commitStrategy}
         onClose={() => setOpen(false)}
         onMenuTab={() => undefined}
       >
         <div data-benchmark-popup-content="true">
           {Array.from({ length: itemCount }, (_, index) => (
-            <button
+            <div
               key={index}
-              type="button"
-              role="menuitem"
               style={{
                 transform: `translate3d(${index % 20}px, ${Math.floor(
                   index / 20,
@@ -56,7 +55,7 @@ export const FloatingPopupBenchmarkSurface = ({
               }}
             >
               popup-{index}
-            </button>
+            </div>
           ))}
         </div>
       </FloatingPopup>
