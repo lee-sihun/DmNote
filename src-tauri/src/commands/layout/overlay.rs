@@ -4,6 +4,7 @@ use tauri::{AppHandle, State, WebviewWindow};
 use crate::{
     errors::CmdResult,
     models::{BootstrapOverlayState, ContentMargins, ContentMin, OverlayResizeResponse},
+    services::overlay_hit::OverlayHitRect,
     state::AppState,
 };
 
@@ -30,6 +31,13 @@ pub struct OverlayResizeArgs {
     pub request_gen: Option<u64>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlaySyncHitRegionsArgs {
+    pub rects: Vec<OverlayHitRect>,
+    pub revision: u64,
+}
+
 #[tauri::command]
 pub fn overlay_get(state: State<'_, AppState>) -> CmdResult<BootstrapOverlayState> {
     Ok(state.overlay_status())
@@ -53,6 +61,19 @@ pub async fn overlay_set_visible(
 #[tauri::command]
 pub fn overlay_set_lock(state: State<'_, AppState>, app: AppHandle, locked: bool) -> CmdResult<()> {
     Ok(state.set_overlay_lock(&app, locked, true)?)
+}
+
+#[tauri::command]
+pub fn overlay_sync_hit_regions(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    window: WebviewWindow,
+    payload: OverlaySyncHitRegionsArgs,
+) -> CmdResult<()> {
+    if window.label() != "overlay" {
+        return Err(anyhow::anyhow!("overlay hit regions can only be synced from overlay").into());
+    }
+    Ok(state.sync_overlay_hit_regions(&app, payload.rects, payload.revision)?)
 }
 
 #[tauri::command]
@@ -89,7 +110,7 @@ pub fn overlay_resize(
 
 #[cfg(test)]
 mod tests {
-    use super::OverlayResizeArgs;
+    use super::{OverlayResizeArgs, OverlaySyncHitRegionsArgs};
     use crate::models::{ContentMargins, ContentMin};
 
     #[test]
@@ -140,5 +161,20 @@ mod tests {
         assert_eq!(payload.content_min, Some(ContentMin { x: -12.5, y: 48.0 }));
         assert_eq!(payload.request_session, Some(41));
         assert_eq!(payload.request_gen, Some(73));
+    }
+
+    #[test]
+    fn hit_region_payload_matches_overlay_contract() {
+        let payload: OverlaySyncHitRegionsArgs = serde_json::from_value(serde_json::json!({
+            "rects": [{ "x": 1.5, "y": 2.5, "width": 30, "height": 40 }],
+            "revision": 73
+        }))
+        .unwrap();
+
+        assert_eq!(payload.revision, 73);
+        assert_eq!(payload.rects[0].x, 1.5);
+        assert_eq!(payload.rects[0].y, 2.5);
+        assert_eq!(payload.rects[0].width, 30.0);
+        assert_eq!(payload.rects[0].height, 40.0);
     }
 }

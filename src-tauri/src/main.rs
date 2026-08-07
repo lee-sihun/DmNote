@@ -276,6 +276,7 @@ fn main() {
             commands::layout::overlay::overlay_get,
             commands::layout::overlay::overlay_set_visible,
             commands::layout::overlay::overlay_set_lock,
+            commands::layout::overlay::overlay_sync_hit_regions,
             commands::layout::overlay::overlay_set_anchor,
             commands::layout::overlay::overlay_resize,
             commands::layout::panel::panel_window_show,

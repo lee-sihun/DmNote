@@ -96,6 +96,7 @@
           "overlay_set_anchor",
           "overlay_set_lock",
           "overlay_set_visible",
+          "overlay_sync_hit_regions",
           "panel_window_close",
           "panel_window_close_ack",
           "panel_window_is_open",
