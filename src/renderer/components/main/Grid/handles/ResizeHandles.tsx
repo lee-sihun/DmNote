@@ -7,6 +7,10 @@ import {
   setCustomCursorHover,
   unlockCustomCursor,
 } from '@utils/grid/cursorUtils';
+import {
+  createRafLatestScheduler,
+  type ContinuousInputStrategy,
+} from '@utils/animation/rafLatestScheduler';
 
 /**
  * 8방향 리사이즈 핸들을 표시하는 컴포넌트
@@ -67,6 +71,7 @@ interface ResizeHandlesProps {
     width: number;
     height: number;
   }[];
+  continuousInputStrategy?: ContinuousInputStrategy;
 }
 
 interface ResizeState {
@@ -175,6 +180,7 @@ const Handle = ({ handle, centerX, centerY, onMouseDown }: HandleProps) => {
 
   return (
     <div
+      data-resize-handle={handle.id}
       style={{
         position: 'absolute',
         left: hitX,
@@ -215,6 +221,7 @@ const ResizeHandles = ({
   onResizeEnd,
   elementId: _elementId, // 스마트 가이드용 요소 ID
   getOtherElements: _getOtherElements, // 스마트 가이드용 다른 요소 가져오기 함수
+  continuousInputStrategy = 'frame',
 }: ResizeHandlesProps) => {
   const resizeRef = useRef<ResizeState>({
     isResizing: false,
@@ -256,7 +263,7 @@ const ResizeHandles = ({
     let resizeStarted = false;
     let resizeFinished = false;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const applyMouseMove = (moveEvent: MouseEvent) => {
       if (!resizeRef.current.isResizing) return;
 
       const {
@@ -383,9 +390,17 @@ const ResizeHandles = ({
       }
       if (resizeStarted) onResize?.(result);
     };
+    const moveScheduler = createRafLatestScheduler(
+      applyMouseMove,
+      continuousInputStrategy,
+    );
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      moveScheduler.push(moveEvent);
+    };
 
     const handleMouseUp = () => {
       if (resizeFinished) return;
+      moveScheduler.flush();
       resizeFinished = true;
       resizeRef.current.isResizing = false;
       activeResizeCleanupRef.current = null;
@@ -395,6 +410,7 @@ const ResizeHandles = ({
       window.removeEventListener('pointercancel', handleMouseUp);
       unlockCustomCursor();
       if (resizeStarted) onResizeEnd?.();
+      moveScheduler.cancel();
     };
 
     activeResizeCleanupRef.current = handleMouseUp;

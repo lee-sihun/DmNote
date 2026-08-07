@@ -16,6 +16,10 @@ import {
   setCustomCursorHover,
   unlockCustomCursor,
 } from '@utils/grid/cursorUtils';
+import {
+  createRafLatestScheduler,
+  type ContinuousInputStrategy,
+} from '@utils/animation/rafLatestScheduler';
 import type { KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
@@ -74,6 +78,7 @@ interface GroupResizeHandlesProps {
   }) => void;
   onGroupResizeEnd?: () => void;
   getOtherElements?: (excludeIds: string[]) => SmartGuideElementBounds[];
+  continuousInputStrategy?: ContinuousInputStrategy;
 }
 
 interface ResizeState {
@@ -189,6 +194,7 @@ const Handle = ({
 
   return (
     <div
+      data-group-resize-handle={handle.id}
       style={{
         position: 'absolute',
         left: hitX,
@@ -233,6 +239,7 @@ const GroupResizeHandles = ({
   onGroupResize,
   onGroupResizeEnd,
   getOtherElements,
+  continuousInputStrategy = 'frame',
 }: GroupResizeHandlesProps): React.ReactElement | null => {
   const resizeRef = useRef<ResizeState>({
     isResizing: false,
@@ -354,7 +361,7 @@ const GroupResizeHandles = ({
     let resizeStarted = false;
     let resizeFinished = false;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const applyMouseMove = (moveEvent: MouseEvent) => {
       if (!resizeRef.current.isResizing) return;
 
       const {
@@ -739,9 +746,17 @@ const GroupResizeHandles = ({
       }
       if (resizeStarted) onGroupResize?.(result);
     };
+    const moveScheduler = createRafLatestScheduler(
+      applyMouseMove,
+      continuousInputStrategy,
+    );
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      moveScheduler.push(moveEvent);
+    };
 
     const handleMouseUp = () => {
       if (resizeFinished) return;
+      moveScheduler.flush();
       resizeFinished = true;
       resizeRef.current.isResizing = false;
       activeResizeCleanupRef.current = null;
@@ -753,6 +768,7 @@ const GroupResizeHandles = ({
       window.removeEventListener('pointercancel', handleMouseUp);
       unlockCustomCursor();
       if (resizeStarted) onGroupResizeEnd?.();
+      moveScheduler.cancel();
     };
 
     activeResizeCleanupRef.current = handleMouseUp;
