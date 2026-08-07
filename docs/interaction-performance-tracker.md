@@ -2,7 +2,7 @@
 
 > 작성일: 2026-08-07
 >
-> 상태: 전수 구현·감사 완료, 실제 WebView 검증 중
+> 상태: 전수 구현·감사·macOS WKWebView 파일럿 검증 완료, Windows WebView2 대기
 >
 > 원칙: 실측값만 기록하며 추정값이나 임의의 성능 수치를 입력하지 않는다.
 >
@@ -524,12 +524,38 @@ handler workload 500개와 `input` 100회 burst, 기준선·개선 각 30회와 
 - 정확성 게이트: 최신 이벤트 보존·change 선행 flush·Promise action single-flight 테스트 통과
 <!-- PLUG-02:RESULT:END -->
 
+<!-- MACOS-WEBVIEW:RESULT:START -->
+
+#### macOS WKWebView 실제 렌더 경로 자동 측정
+
+| 조건           | 값                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| 실행 명령      | `npm run benchmark:interaction:webview:macos`                                            |
+| 실행 경로      | Tauri 격리 benchmark 모드·WKWebView·Vite dev server                                      |
+| 시나리오       | 단일·다중 선택 그림자 토글, DOM 500개                                                    |
+| 반복           | 각 case 40회, 워밍업 5회                                                                 |
+| 측정 대상 커밋 | `e28a21677fd56dfb87a19e359a1aee0b9d6318ee`                                               |
+| 환경           | macOS 26.6·Apple M2·16GB                                                                 |
+| 엔진           | Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) |
+
+| 선택 | P95 지표          |     sync | after-paint | 개선율 |
+| ---- | ----------------- | -------: | ----------: | -----: |
+| 단일 | visual DOM commit |  8.000ms |     2.000ms |  75.0% |
+| 단일 | paint opportunity | 34.000ms |    34.000ms |   0.0% |
+| 다중 | visual DOM commit |  8.000ms |     2.000ms |  75.0% |
+| 다중 | paint opportunity | 34.000ms |    34.000ms |   0.0% |
+
+- 원시 결과: [JSON](../benchmarks/results/pilot-macos-wkwebview.json)
+- 게이트: WKWebView user agent·case 순서·반복 수·단일/다중 visual P95 개선 자동 검증
+- 남은 플랫폼: Windows WebView2
+<!-- MACOS-WEBVIEW:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                                 |
 | -------- | ---------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    5.946 |    0.509 |  91.4% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json)                             |
-| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    8.385 |    0.550 |  93.4% | 검증 | [기준선](../benchmarks/results/pilot-02-baseline.json) · [개선](../benchmarks/results/pilot-02-improved.json)                             |
+| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    5.946 |    0.509 |  91.4% | 검증 | macOS WKWebView 8.000ms → 2.000ms (75.0%), Windows 대기                                                                                   |
+| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    8.385 |    0.550 |  93.4% | 검증 | macOS WKWebView 8.000ms → 2.000ms (75.0%), Windows 대기                                                                                   |
 | BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 실험 | `useOptimisticBooleanCommit`·선택적 `commitStrategy` 제공, PILOT-01·02 검증                                                               |
 | BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 실험 | `05c02e43`, 선택적 `after-paint`·설정 토글 적용                                                                                           |
 | BASE-03  | Dropdown                           | 기반     | DOM P95 ms   |   10.981 |    0.336 |  96.9% | 검증 | [기준선](../benchmarks/results/base-03-dropdown-baseline.json) · [개선](../benchmarks/results/base-03-dropdown-improved.json)             |
@@ -877,6 +903,17 @@ handler workload 500개와 `input` 100회 burst, 기준선·개선 각 30회와 
 | --------------------- | ---------- | -------- | ------ | ---------- | ------------------------ | --------------------- | ---: | --: | -----: | ---: | ------------------ | -------------------------------------------------------- | ----------------------- |
 | PILOT-01-CHROME-SYNC  | 2026-08-07 | PILOT-01 | 기준선 | `809f8fe1` | Chrome 151, darwin-arm64 | 단일 선택, 요소 500개 |   40 |   — | 11.300 |    — | paint P95 34.100ms | [JSON](../benchmarks/results/pilot-01-chromium-p95.json) | 실제 Chromium 렌더 경로 |
 | PILOT-01-CHROME-PAINT | 2026-08-07 | PILOT-01 | 개선   | `809f8fe1` | Chrome 151, darwin-arm64 | 단일 선택, 요소 500개 |   40 |   — |  3.100 |    — | paint P95 34.200ms | [JSON](../benchmarks/results/pilot-01-chromium-p95.json) | 실제 Chromium 렌더 경로 |
+
+<!-- MACOS-WEBVIEW:SESSIONS:START -->
+
+| 세션 ID           | 날짜       | 항목 ID  | 단계   | 빌드·커밋  | 환경                                  | 시나리오·데이터 크기 | 반복 |   P50 |   P95 |  최대 | 보조 지표                            | 원시 자료                                                | 비고                     |
+| ----------------- | ---------- | -------- | ------ | ---------- | ------------------------------------- | -------------------- | ---: | ----: | ----: | ----: | ------------------------------------ | -------------------------------------------------------- | ------------------------ |
+| PILOT-01-WK-SYNC  | 2026-08-07 | PILOT-01 | 기준선 | `e28a2167` | Tauri WKWebView, macOS 26.6, Apple M2 | 단일 선택·DOM 500개  |   40 | 4.000 | 8.000 | 9.000 | paint P95 34.000ms·React P95 1.000ms | [JSON](../benchmarks/results/pilot-macos-wkwebview.json) | 실제 WKWebView 렌더 경로 |
+| PILOT-01-WK-PAINT | 2026-08-07 | PILOT-01 | 개선   | `e28a2167` | Tauri WKWebView, macOS 26.6, Apple M2 | 단일 선택·DOM 500개  |   40 | 1.000 | 2.000 | 2.000 | paint P95 34.000ms·React P95 2.000ms | [JSON](../benchmarks/results/pilot-macos-wkwebview.json) | 실제 WKWebView 렌더 경로 |
+| PILOT-02-WK-SYNC  | 2026-08-07 | PILOT-02 | 기준선 | `e28a2167` | Tauri WKWebView, macOS 26.6, Apple M2 | 다중 선택·DOM 500개  |   40 | 4.000 | 8.000 | 8.000 | paint P95 34.000ms·React P95 1.000ms | [JSON](../benchmarks/results/pilot-macos-wkwebview.json) | 실제 WKWebView 렌더 경로 |
+| PILOT-02-WK-PAINT | 2026-08-07 | PILOT-02 | 개선   | `e28a2167` | Tauri WKWebView, macOS 26.6, Apple M2 | 다중 선택·DOM 500개  |   40 | 1.000 | 2.000 | 2.000 | paint P95 34.000ms·React P95 2.000ms | [JSON](../benchmarks/results/pilot-macos-wkwebview.json) | 실제 WKWebView 렌더 경로 |
+
+<!-- MACOS-WEBVIEW:SESSIONS:END -->
 
 <!-- PILOT-02:SESSIONS:START -->
 

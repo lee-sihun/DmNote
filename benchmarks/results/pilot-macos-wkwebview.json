@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "MACOS-WEBVIEW-PILOT",
+  "kind": "tauri-wkwebview-render-path",
+  "measuredAt": "2026-08-07T13:43:37.602Z",
+  "commit": "e28a21677fd56dfb87a19e359a1aee0b9d6318ee",
+  "runtime": {
+    "engine": "WKWebView",
+    "platform": "darwin",
+    "arch": "arm64",
+    "osVersion": "26.6",
+    "cpuModel": "Apple M2",
+    "memoryBytes": 17179869184,
+    "launchMode": "tauri-dev-isolated-benchmark",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+  },
+  "scenario": {
+    "elementCount": 500,
+    "iterations": 40,
+    "warmupIterations": 5
+  },
+  "cases": [
+    {
+      "benchmark": "PILOT-01-shadow-toggle",
+      "kind": "browser-render-path",
+      "selectionMode": "single",
+      "enabledCommitStrategy": "sync",
+      "iterations": 40,
+      "warmupIterations": 5,
+      "elementCount": 500,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 8,
+        "max": 9
+      },
+      "canonicalDomCommitMs": {
+        "p50": 4,
+        "p95": 8,
+        "max": 9
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 33,
+        "p95": 34,
+        "max": 34
+      },
+      "reactCommitDurationMs": {
+        "p50": 1,
+        "p95": 1.0000000000004547,
+        "max": 2.0000000000009095
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T13:43:28.351Z"
+    },
+    {
+      "benchmark": "PILOT-01-shadow-toggle",
+      "kind": "browser-render-path",
+      "selectionMode": "single",
+      "enabledCommitStrategy": "after-paint",
+      "iterations": 40,
+      "warmupIterations": 5,
+      "elementCount": 500,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "visualDomCommitMs": {
+        "p50": 1,
+        "p95": 2,
+        "max": 2
+      },
+      "canonicalDomCommitMs": {
+        "p50": 20,
+        "p95": 23,
+        "max": 27
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 33,
+        "p95": 34,
+        "max": 34.000000000000455
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.9999999999995453,
+        "p95": 2,
+        "max": 2.0000000000002274
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T13:43:31.416Z"
+    },
+    {
+      "benchmark": "PILOT-02-batch-shadow-toggle",
+      "kind": "browser-render-path",
+      "selectionMode": "batch",
+      "enabledCommitStrategy": "sync",
+      "iterations": 40,
+      "warmupIterations": 5,
+      "elementCount": 500,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 8,
+        "max": 8
+      },
+      "canonicalDomCommitMs": {
+        "p50": 4,
+        "p95": 8,
+        "max": 8
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 33,
+        "p95": 34,
+        "max": 37
+      },
+      "reactCommitDurationMs": {
+        "p50": 1,
+        "p95": 1.0000000000004547,
+        "max": 1.0000000000004547
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T13:43:34.467Z"
+    },
+    {
+      "benchmark": "PILOT-02-batch-shadow-toggle",
+      "kind": "browser-render-path",
+      "selectionMode": "batch",
+      "enabledCommitStrategy": "after-paint",
+      "iterations": 40,
+      "warmupIterations": 5,
+      "elementCount": 500,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1.0000000000004547
+      },
+      "visualDomCommitMs": {
+        "p50": 1,
+        "p95": 2,
+        "max": 2
+      },
+      "canonicalDomCommitMs": {
+        "p50": 20,
+        "p95": 21.999999999999545,
+        "max": 22.999999999999943
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 33,
+        "p95": 34,
+        "max": 34.000000000000455
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 2,
+        "max": 2
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T13:43:37.517Z"
+    }
+  ]
+}

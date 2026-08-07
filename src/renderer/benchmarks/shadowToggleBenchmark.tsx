@@ -16,7 +16,7 @@ export interface Distribution {
   max: number;
 }
 
-interface ShadowToggleBrowserBenchmarkResult {
+export interface ShadowToggleBrowserBenchmarkResult {
   benchmark: 'PILOT-01-shadow-toggle' | 'PILOT-02-batch-shadow-toggle';
   kind: 'browser-render-path';
   selectionMode: 'single' | 'batch';
@@ -300,6 +300,29 @@ const BenchmarkApp = () => {
         `paint=${result.clickToPaintOpportunityMs.p95.toFixed(3)}`,
         `react=${result.reactCommitDurationMs.p95.toFixed(3)}`,
       ].join('|');
+
+      const reportUrl = query.get('report');
+      if (reportUrl) {
+        const response = await fetch(reportUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify(result),
+        });
+        if (!response.ok) {
+          throw new Error(`benchmark report 실패: ${response.status}`);
+        }
+        const control = (await response.json()) as {
+          complete?: boolean;
+          nextSearch?: string;
+        };
+        if (control.nextSearch) {
+          window.location.search = control.nextSearch;
+          return;
+        }
+        if (control.complete) {
+          document.title = `DMN-WEBVIEW-BENCHMARK|COMPLETE|${result.userAgent}`;
+        }
+      }
     };
 
     void run().catch((error) => {

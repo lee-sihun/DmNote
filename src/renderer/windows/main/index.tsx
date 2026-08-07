@@ -2,13 +2,9 @@ import '@styles/tokens.css';
 import '@styles/global.css';
 import '@styles/main.css';
 
-const isLocalDevServer =
-  import.meta.env.DEV &&
-  window.location.protocol.startsWith('http') &&
-  ['localhost', '127.0.0.1'].includes(window.location.hostname);
-const benchmarkName = isLocalDevServer
-  ? new URLSearchParams(window.location.search).get('benchmark')
-  : null;
+const benchmarkName = new URLSearchParams(window.location.search).get(
+  'benchmark',
+);
 
 const bootstrapBenchmark = async (): Promise<boolean> => {
   if (benchmarkName !== 'shadow-toggle') return false;

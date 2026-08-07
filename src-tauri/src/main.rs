@@ -31,7 +31,15 @@ use dm_note::{compute_compensating_zoom, should_apply_compensating_zoom};
 
 use state::{AppState, AppStore, PANEL_LABEL};
 
+const INTERACTION_BENCHMARK_ENV: &str = "DMN_INTERACTION_WEBVIEW_BENCHMARK";
+
+fn is_interaction_benchmark_mode() -> bool {
+    std::env::var_os(INTERACTION_BENCHMARK_ENV).is_some()
+}
+
 fn main() {
+    let interaction_benchmark = is_interaction_benchmark_mode();
+
     #[cfg(target_os = "windows")]
     {
         // WebView2 투명 오버레이 이슈 방지 — 번들된 Fixed 런타임 우선 적용
@@ -66,7 +74,7 @@ fn main() {
 
     // macOS: 접근성 권한 확인 및 미부여 시 시스템 노브로그 표시
     #[cfg(target_os = "macos")]
-    {
+    if !interaction_benchmark {
         request_accessibility_permission();
     }
 
@@ -105,7 +113,7 @@ fn main() {
                 let _ = window.set_focus();
             }
         }))
-        .setup(|app| {
+        .setup(move |app| {
             // dev 빌드에서만 remote URL capability 등록 (릴리즈에서는 local:true만 사용)
             if cfg!(debug_assertions) {
                 register_dev_capability(app)?;
@@ -113,6 +121,15 @@ fn main() {
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            if interaction_benchmark {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.center();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+                return Ok(());
+            }
 
             // macOS: 네이티브 Edit 메뉴 추가 — WKWebView 편집 단축키(Cmd+Z/X/C/V/A) 활성화
             #[cfg(target_os = "macos")]
