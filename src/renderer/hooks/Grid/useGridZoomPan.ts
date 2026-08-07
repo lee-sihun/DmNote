@@ -15,6 +15,8 @@ interface UseGridZoomPanOptions {
   mode: string;
   containerRef: React.RefObject<HTMLDivElement>;
   contentRef: React.RefObject<HTMLDivElement>;
+  /** benchmark에서 제거 전 이벤트 처리 경로를 재현 */
+  continuousInputStrategy?: 'legacy' | 'frame';
 }
 
 interface GridCoords {
@@ -26,6 +28,7 @@ export function useGridZoomPan({
   mode,
   containerRef,
   contentRef,
+  continuousInputStrategy = 'frame',
 }: UseGridZoomPanOptions) {
   const { getViewState, setZoom, setPan, resetView } = useGridViewStore();
   const viewState = getViewState(mode);
@@ -34,6 +37,7 @@ export function useGridZoomPan({
   const macOS = isMac();
 
   const wheelFrameRef = useRef<number | null>(null);
+  const legacyWheelFrameRef = useRef<number | null>(null);
   const pendingWheelRef = useRef<{
     clientX: number;
     clientY: number;
@@ -161,27 +165,15 @@ export function useGridZoomPan({
     const isWheelZoomModifierPressed = macOS
       ? e.metaKey || e.ctrlKey // macOS: Cmd+휠, 그리고 트랙패드 핀치(ctrlKey=true)도 줌으로 유지
       : e.ctrlKey; // Windows/Linux: Ctrl+휠
-    const pending = pendingWheelRef.current;
-    pendingWheelRef.current = {
+    const nextWheel = {
       clientX: e.clientX,
       clientY: e.clientY,
-      deltaX:
-        pending?.zoomModifier === isWheelZoomModifierPressed
-          ? pending.deltaX + e.deltaX
-          : e.deltaX,
-      deltaY:
-        pending?.zoomModifier === isWheelZoomModifierPressed
-          ? pending.deltaY + e.deltaY
-          : e.deltaY,
+      deltaX: e.deltaX,
+      deltaY: e.deltaY,
       shiftKey: e.shiftKey,
       zoomModifier: isWheelZoomModifierPressed,
     };
-    if (wheelFrameRef.current !== null) return;
-    wheelFrameRef.current = requestAnimationFrame(() => {
-      wheelFrameRef.current = null;
-      const next = pendingWheelRef.current;
-      pendingWheelRef.current = null;
-      if (!next) return;
+    const applyWheel = (next: typeof nextWheel) => {
       if (next.zoomModifier) {
         const delta = next.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
         zoomAtPoint(next.clientX, next.clientY, zoom + delta);
@@ -193,6 +185,34 @@ export function useGridZoomPan({
       } else {
         pan(-next.deltaX, -next.deltaY);
       }
+    };
+    if (continuousInputStrategy === 'legacy') {
+      if (legacyWheelFrameRef.current !== null) return;
+      applyWheel(nextWheel);
+      legacyWheelFrameRef.current = requestAnimationFrame(() => {
+        legacyWheelFrameRef.current = null;
+      });
+      return;
+    }
+    const pending = pendingWheelRef.current;
+    pendingWheelRef.current = {
+      ...nextWheel,
+      deltaX:
+        pending?.zoomModifier === isWheelZoomModifierPressed
+          ? pending.deltaX + e.deltaX
+          : e.deltaX,
+      deltaY:
+        pending?.zoomModifier === isWheelZoomModifierPressed
+          ? pending.deltaY + e.deltaY
+          : e.deltaY,
+    };
+    if (wheelFrameRef.current !== null) return;
+    wheelFrameRef.current = requestAnimationFrame(() => {
+      wheelFrameRef.current = null;
+      const next = pendingWheelRef.current;
+      pendingWheelRef.current = null;
+      if (!next) return;
+      applyWheel(next);
     });
   };
 
@@ -288,6 +308,10 @@ export function useGridZoomPan({
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       pendingPoint = { x: moveEvent.clientX, y: moveEvent.clientY };
+      if (continuousInputStrategy === 'legacy') {
+        applyPendingPan();
+        return;
+      }
       if (panFrame !== null) return;
       panFrame = requestAnimationFrame(() => {
         panFrame = null;
@@ -378,6 +402,10 @@ export function useGridZoomPan({
         cancelAnimationFrame(wheelFrameRef.current);
         wheelFrameRef.current = null;
         pendingWheelRef.current = null;
+      }
+      if (legacyWheelFrameRef.current !== null) {
+        cancelAnimationFrame(legacyWheelFrameRef.current);
+        legacyWheelFrameRef.current = null;
       }
       if (transformIdleTimerRef.current !== null) {
         window.clearTimeout(transformIdleTimerRef.current);
