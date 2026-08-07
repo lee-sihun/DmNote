@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 109개   |
+| 대기                             | 107개   |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 56개    |
+| 실험·검증 중                     | 58개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -253,6 +253,30 @@
 - 실제 WebView 키 입력-to-paint 값은 macOS WKWebView·Windows WebView2에서 별도 검증한다.
 <!-- BASE-05:RESULT:END -->
 
+<!-- BASE-06:RESULT:START -->
+
+#### BASE-06 ColorInput·ColorSwatchButton 최신 자동 측정
+
+| 조건           | 값                                           |
+| -------------- | -------------------------------------------- |
+| 측정 경로      | 공통 ColorInput + 피커 DOM 500개 mount proxy |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회       |
+| 구현 코드 커밋 | `cb3335bd6ca76cdcf9fc19521964a604a9b05c7f`   |
+| 측정 코드 커밋 | `14d7427bff8ba75e40e27abf0cda8feaa72b39e7`   |
+| 비교 전략      | `sync` → `after-paint`                       |
+| 환경           | darwin arm64, v25.2.1                        |
+
+| P95 지표               | sync 기준선 | after-paint | 개선율 |
+| ---------------------- | ----------: | ----------: | -----: |
+| 스와치 열림 DOM commit |    10.828ms |     0.268ms |  97.5% |
+| 피커 mount DOM commit  |    10.898ms |    14.353ms | -31.7% |
+| React commit duration  |     9.957ms |    10.759ms |  -8.0% |
+
+- 원시 결과: [기준선](../benchmarks/results/base-06-color-input-baseline.json) · [개선](../benchmarks/results/base-06-color-input-improved.json)
+- 정확성 게이트: ColorInput mount·상태 capability 테스트 통과
+- 실제 WebView click-to-paint 값은 macOS WKWebView·Windows WebView2에서 별도 검증한다.
+<!-- BASE-06:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                             |
@@ -264,7 +288,7 @@
 | BASE-03  | Dropdown                           | 기반     | DOM P95 ms   |   10.981 |    0.336 |  96.9% | 검증 | [기준선](../benchmarks/results/base-03-dropdown-baseline.json) · [개선](../benchmarks/results/base-03-dropdown-improved.json)         |
 | BASE-04  | NumberInput·OptionalNumberInput    | P0/P1    | DOM P95 ms   |   12.316 |    0.323 |  97.4% | 검증 | [기준선](../benchmarks/results/base-04-number-input-baseline.json) · [개선](../benchmarks/results/base-04-number-input-improved.json) |
 | BASE-05  | TextInput·SearchField              | P1       | DOM P95 ms   |   14.968 |    0.445 |  97.0% | 검증 | [기준선](../benchmarks/results/base-05-text-input-baseline.json) · [개선](../benchmarks/results/base-05-text-input-improved.json)     |
-| BASE-06  | ColorInput·ColorSwatchButton       | P0/P1    | CTP ms       |        — |        — |      — | 대기 | 피커 첫 표시 포함                                                                                                                     |
+| BASE-06  | ColorInput·ColorSwatchButton       | P0/P1    | DOM P95 ms   |   10.828 |    0.268 |  97.5% | 검증 | [기준선](../benchmarks/results/base-06-color-input-baseline.json) · [개선](../benchmarks/results/base-06-color-input-improved.json)   |
 | BASE-07  | TabSwitch                          | P3       | DOM P95 ms   |   10.851 |    0.492 |  95.5% | 검증 | [기준선](../benchmarks/results/base-07-tab-switch-baseline.json) · [개선](../benchmarks/results/base-07-tab-switch-improved.json)     |
 | BASE-08  | ListPopup·FloatingPopup            | 기반     | CTP ms       |        — |        — |      — | 대기 | 메뉴·피커 표면                                                                                                                        |
 | BASE-09  | Modal                              | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·닫기·포커스 복원                                                                                                                 |
@@ -362,7 +386,7 @@
 | ------- | -------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | -------------------------------------------------------- |
 | PROP-01 | 숫자 입력                        | P0/P1    | CTP ms       |        — |        — |      — | 실험 | `1b8945cf`, 공통 숫자 입력 62곳 적용                     |
 | PROP-02 | 텍스트 입력                      | P1       | CTP ms       |        — |        — |      — | 실험 | `8c66281b`, 공통 TextInput 8곳 적용                      |
-| PROP-03 | 색상 입력                        | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ad22c019`, 상태 탭 전환만 적용                          |
+| PROP-03 | 색상 입력                        | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ad22c019` 상태 탭·`cb3335bd` 피커 mount 분리 적용       |
 | PROP-04 | 그라데이션 입력                  | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ad22c019`, 형식 탭 전환만 적용                          |
 | PROP-05 | 드롭다운 속성 변경               | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4`, 로컬 선택 after-paint 적용                   |
 | PROP-06 | 폰트 스타일 버튼                 | P1       | CTP ms       |        — |        — |      — | 대기 | batch 포함                                               |
@@ -370,7 +394,7 @@
 | PROP-08 | 이미지 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | decode ETC                                               |
 | PROP-09 | 사운드 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 파일·오디오 ETC                                          |
 | PROP-10 | 단일·다중 선택 탭 전환           | P1       | CTP ms       |        — |        — |      — | 대기 | keepalive 범위                                           |
-| PROP-11 | 플러그인 설정 color              | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | handler 격리                                             |
+| PROP-11 | 플러그인 설정 color              | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `cb3335bd`, 공통 ColorInput 피커 mount 분리 적용         |
 | PROP-12 | 플러그인 설정 number·text·select | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4` select·`1b8945cf` number·`8c66281b` text 적용 |
 | PROP-13 | 플러그인 설정 전체 저장          | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight                                            |
 | EDIT-01 | 색상 saturation·hue·alpha 드래그 | P0       | F95 ms/frame |        — |        — |      — | 대기 | picker 전체                                              |
@@ -491,6 +515,15 @@
 | BASE-05-PAINT | 2026-08-07 | BASE-05 | 개선   | `02b6bd36` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 부모 콘텐츠 500개    |   30 | 0.225 |  0.445 |  0.792 | canonical P95 19.173ms·event P95 0.434ms  | [JSON](../benchmarks/results/base-05-text-input-improved.json) | DOM commit proxy |
 
 <!-- BASE-05:SESSIONS:END -->
+
+<!-- BASE-06:SESSIONS:START -->
+
+| 세션 ID       | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                 | 시나리오·데이터 크기 | 반복 |   P50 |    P95 |   최대 | 보조 지표                             | 원시 자료                                                       | 비고             |
+| ------------- | ---------- | ------- | ------ | ---------- | ---------------------------------------------------- | -------------------- | ---: | ----: | -----: | -----: | ------------------------------------- | --------------------------------------------------------------- | ---------------- |
+| BASE-06-SYNC  | 2026-08-07 | BASE-06 | 기준선 | `14d7427b` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 피커 DOM 500개       |   30 | 7.109 | 10.828 | 17.636 | picker P95 10.898ms·event P95 0.085ms | [JSON](../benchmarks/results/base-06-color-input-baseline.json) | DOM commit proxy |
+| BASE-06-PAINT | 2026-08-07 | BASE-06 | 개선   | `14d7427b` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 피커 DOM 500개       |   30 | 0.189 |  0.268 |  0.279 | picker P95 14.353ms·event P95 0.114ms | [JSON](../benchmarks/results/base-06-color-input-improved.json) | DOM commit proxy |
+
+<!-- BASE-06:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -700,6 +733,23 @@
 | 결론        | jsdom DOM proxy에서 검증, 실제 WebView 측정 전까지 검증 상태 유지             |
 
 <!-- BASE-05:EXPERIMENT:END -->
+
+<!-- BASE-06:EXPERIMENT:START -->
+
+### EXP-013: 공통 색상 피커 표시 분리
+
+| 필드        | 내용                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| 항목 ID     | BASE-06                                                                                     |
+| 적용 범위   | 프로퍼티 패널 ColorInput 10곳과 공통 ColorSwatchButton 표면                                 |
+| 변경 내용   | 스와치 focus ring·aria-expanded를 먼저 반영하고 무거운 ColorPicker mount는 첫 paint 뒤 실행 |
+| 적용 기법   | 시각 피드백 분리·지연 mount·예약 취소·동기 외부 제어 호환                                   |
+| 구현 커밋   | `cb3335bd`                                                                                  |
+| P95 변화    | 10.828ms → 0.268ms (97.5%)                                                                  |
+| 정확성 검증 | sync 호환·예약 취소·상태 capability·분리 패널 계약 테스트 통과                              |
+| 결론        | jsdom DOM proxy에서 검증, 실제 WebView 측정 전까지 검증 상태 유지                           |
+
+<!-- BASE-06:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 
