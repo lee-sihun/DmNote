@@ -420,6 +420,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [pluginPanelSettings, setPluginPanelSettings] = useState<
     Record<string, unknown>
   >({});
+  const [isPluginSettingsSaving, setIsPluginSettingsSaving] = useState(false);
+  const pluginSettingsSavingRef = useRef(false);
 
   // 레이어 이름 변경 상태
   const [isRenaming, setIsRenaming] = useState(false);
@@ -882,6 +884,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     if (pluginSettingsPanel) {
       setPluginPanelSettings(pluginSettingsPanel.settings || {});
+      setIsPluginSettingsSaving(false);
+      pluginSettingsSavingRef.current = false;
     }
   }, [pluginSettingsPanel]);
 
@@ -1148,7 +1152,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   const handlePluginSettingsPanelConfirm = async () => {
-    if (!pluginSettingsPanel) return;
+    if (!pluginSettingsPanel || pluginSettingsSavingRef.current) return;
+    pluginSettingsSavingRef.current = true;
+    setIsPluginSettingsSaving(true);
     try {
       await pluginSettingsPanel.onConfirm(
         pluginPanelSettings,
@@ -1159,13 +1165,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       console.error('[Plugin Settings] Failed to apply settings:', error);
       pluginSettingsPanel.resolve(false);
     } finally {
+      pluginSettingsSavingRef.current = false;
+      setIsPluginSettingsSaving(false);
       closePluginSettingsPanel();
     }
   };
 
   const handlePluginSettingsPanelCancelImpl = useRef<() => void>(() => {});
   handlePluginSettingsPanelCancelImpl.current = () => {
-    if (!pluginSettingsPanel) return;
+    if (!pluginSettingsPanel || pluginSettingsSavingRef.current) return;
     try {
       pluginSettingsPanel.onCancel(pluginSettingsPanel.originalSettings);
     } catch (error) {
@@ -2445,6 +2453,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           pluginPanelSettings={pluginPanelSettings}
           handlePluginSettingsPanelChange={handlePluginSettingsPanelChange}
           handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
+          isSaving={isPluginSettingsSaving}
           setPluginScrollRef={setPluginScrollRef}
           renderPluginSettingsForm={renderPluginSettingsForm}
           reportNormalizationError={reportPluginNormalizationError}

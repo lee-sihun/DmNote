@@ -21,6 +21,7 @@ interface PluginSettingsPanelViewProps {
     value: PluginSettingValue,
   ) => void;
   handlePluginSettingsPanelConfirm: () => void;
+  isSaving: boolean;
   setPluginScrollRef: (node: HTMLDivElement | null) => void;
   renderPluginSettingsForm: (
     schema: Record<string, PluginSettingSchema> | undefined,
@@ -45,6 +46,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
   pluginPanelSettings,
   handlePluginSettingsPanelChange,
   handlePluginSettingsPanelConfirm,
+  isSaving,
   setPluginScrollRef,
   renderPluginSettingsForm,
   reportNormalizationError,
@@ -107,6 +109,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
       <div className="p-[12px] shrink-0">
         <button
           {...confirmPress}
+          disabled={isSaving}
           className="w-full h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
         >
           {t('common.save') || '저장'}
