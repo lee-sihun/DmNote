@@ -34,6 +34,8 @@ SettingToolProps) => {
   const [isExportImportOpenLocal, setIsExportImportOpenLocal] = useState(false);
   // const [isExtrasOpen, setIsExtrasOpenLocal] = useState(false);
   const exportImportRef = useRef<HTMLButtonElement | null>(null);
+  const overlayTogglingRef = useRef(false);
+  const presetActionRef = useRef(false);
   // const extrasRef = useRef<HTMLButtonElement | null>(null);
   // const { noteEffect } = useSettingsStore();
   // const setExtrasPopupOpen = useUIStore((state) => state.setExtrasPopupOpen);
@@ -103,18 +105,36 @@ SettingToolProps) => {
   // ];
 
   const toggleOverlay = () => {
+    if (overlayTogglingRef.current) return;
+    overlayTogglingRef.current = true;
     const next = !isOverlayVisible;
     setIsOverlayVisible(next);
-    window.api.overlay.setVisible(next).catch((error) => {
-      // 실패 시 낙관적 갱신 롤백 — 백엔드 상태는 무변경이므로 이전 값이 진실
-      setIsOverlayVisible(!next);
-      console.error('Failed to toggle overlay', error);
-    });
+    window.api.overlay
+      .setVisible(next)
+      .catch((error) => {
+        // 실패 시 낙관적 갱신 롤백 — 백엔드 상태는 무변경이므로 이전 값이 진실
+        setIsOverlayVisible(!next);
+        console.error('Failed to toggle overlay', error);
+      })
+      .finally(() => {
+        overlayTogglingRef.current = false;
+      });
+  };
+
+  const runPresetAction = async <T,>(action: () => Promise<T>) => {
+    if (presetActionRef.current) return null;
+    presetActionRef.current = true;
+    try {
+      return await action();
+    } finally {
+      presetActionRef.current = false;
+    }
   };
 
   const handlePresetSave = async () => {
     try {
-      const result = await window.api.presets.save();
+      const result = await runPresetAction(() => window.api.presets.save());
+      if (!result) return;
       showAlert?.(
         result?.success ? t('preset.saveSuccess') : t('preset.saveFail'),
       );
@@ -126,7 +146,8 @@ SettingToolProps) => {
 
   const handlePresetLoad = async () => {
     try {
-      const result = await window.api.presets.load();
+      const result = await runPresetAction(() => window.api.presets.load());
+      if (!result) return;
       if (result?.success) {
         useGridSelectionStore.getState().clearSelection();
       }
@@ -141,7 +162,8 @@ SettingToolProps) => {
 
   const handlePresetSaveTab = async () => {
     try {
-      const result = await window.api.presets.saveTab();
+      const result = await runPresetAction(() => window.api.presets.saveTab());
+      if (!result) return;
       showAlert?.(
         result?.success ? t('preset.saveTabSuccess') : t('preset.saveTabFail'),
       );
@@ -179,7 +201,8 @@ SettingToolProps) => {
 
   const handlePresetLoadTab = async () => {
     try {
-      const result = await window.api.presets.loadTab();
+      const result = await runPresetAction(() => window.api.presets.loadTab());
+      if (!result) return;
       if (result?.success) {
         useGridSelectionStore.getState().clearSelection();
       }

@@ -164,6 +164,9 @@ const Settings = ({
   const [isReloadingPlugins, setIsReloadingPlugins] = useState<boolean>(false);
   const [isAddingPlugins, setIsAddingPlugins] = useState<boolean>(false);
   const [pendingPluginId, setPendingPluginId] = useState<string | null>(null);
+  const reloadingPluginsRef = useRef(false);
+  const addingPluginsRef = useRef(false);
+  const pendingPluginRef = useRef<string | null>(null);
 
   // OBS 모드
   const [obsStatus, setObsStatus] = useState<ObsStatus>({
@@ -341,6 +344,7 @@ const Settings = ({
     try {
       await window.api.settings.update({ alwaysOnTop: next });
     } catch (error) {
+      setAlwaysOnTop(!next);
       console.error('Failed to toggle always-on-top', error);
     }
   };
@@ -351,6 +355,7 @@ const Settings = ({
     try {
       await window.api.overlay.setLock(next);
     } catch (error) {
+      setOverlayLocked(!next);
       console.error('Failed to toggle overlay lock', error);
     }
   };
@@ -361,6 +366,7 @@ const Settings = ({
     try {
       await window.api.css.toggle(next);
     } catch (error) {
+      setUseCustomCSS(!next);
       console.error('Failed to toggle custom CSS', error);
     }
   };
@@ -371,6 +377,7 @@ const Settings = ({
     try {
       await window.api.js.toggle(next);
     } catch (error) {
+      setUseCustomJS(!next);
       console.error('Failed to toggle custom JS', error);
     }
   };
@@ -383,12 +390,13 @@ const Settings = ({
   );
 
   const handleReloadPlugins = async (): Promise<void> => {
-    if (isReloadingPlugins) return;
+    if (reloadingPluginsRef.current) return;
     if (jsPlugins.length === 0) {
       showAlert?.(t('settings.jsReloadNoPlugins'));
       return;
     }
     const startTime: number = performance.now();
+    reloadingPluginsRef.current = true;
     setIsReloadingPlugins(true);
     try {
       const result: JsReloadResult = await window.api.js.reload();
@@ -414,6 +422,7 @@ const Settings = ({
       console.error('Failed to reload JS plugins', error);
       showAlert?.(`${t('settings.jsReloadFailed')}${error}`);
     } finally {
+      reloadingPluginsRef.current = false;
       const elapsed: number = performance.now() - startTime;
       const MIN_SPINNER_MS = 250;
       if (elapsed < MIN_SPINNER_MS) {
@@ -428,7 +437,8 @@ const Settings = ({
   };
 
   const handleAddPlugins = async (): Promise<void> => {
-    if (isAddingPlugins) return;
+    if (addingPluginsRef.current) return;
+    addingPluginsRef.current = true;
     setIsAddingPlugins(true);
     try {
       const result: JsLoadResult = await window.api.js.load();
@@ -453,6 +463,7 @@ const Settings = ({
       console.error('Failed to add JS plugins', error);
       showAlert?.(`${t('settings.jsAddFailed')}${error}`);
     } finally {
+      addingPluginsRef.current = false;
       setIsAddingPlugins(false);
     }
   };
@@ -461,7 +472,8 @@ const Settings = ({
     pluginId: string,
     nextState: boolean,
   ): Promise<void> => {
-    if (pendingPluginId) return;
+    if (pendingPluginRef.current) return;
+    pendingPluginRef.current = pluginId;
     setPendingPluginId(pluginId);
     try {
       const result: JsPluginUpdateResult = await window.api.js.setPluginEnabled(
@@ -475,6 +487,7 @@ const Settings = ({
       console.error('Failed to toggle JS plugin', error);
       showAlert?.(t('settings.jsPluginToggleFailed'));
     } finally {
+      pendingPluginRef.current = null;
       setPendingPluginId(null);
     }
   };
@@ -589,6 +602,7 @@ const Settings = ({
     try {
       await window.api.settings.update({ noteEffect: next });
     } catch (error) {
+      setNoteEffect(!next);
       console.error('Failed to toggle note effect', error);
     }
   };
@@ -635,6 +649,7 @@ const Settings = ({
     try {
       await window.api.settings.update({ trayEnabled: next });
     } catch (error) {
+      setTrayEnabled(!next);
       console.error('Failed to toggle tray mode', error);
     }
   };
@@ -645,14 +660,15 @@ const Settings = ({
     try {
       await window.api.settings.update({ autoUpdateEnabled: next });
     } catch (error) {
+      setAutoUpdateEnabled(!next);
       console.error('Failed to toggle auto update', error);
     }
   };
 
   const handleObsToggle = async (): Promise<void> => {
+    if (obsTogglingRef.current) return;
     const next = !obsStatus.running;
     setObsStatus((prev) => ({ ...prev, running: next }));
-    if (obsTogglingRef.current) return;
     obsTogglingRef.current = true;
     try {
       const status = next ? await obsApi.start() : await obsApi.stop();
@@ -708,6 +724,7 @@ const Settings = ({
         } catch {}
       }
     } catch (error) {
+      setDeveloperModeEnabled(!next);
       console.error('Failed to toggle developer mode', error);
     }
   };
@@ -718,6 +735,7 @@ const Settings = ({
     try {
       await window.api.settings.update({ keyCounterEnabled: next });
     } catch (error) {
+      setKeyCounterEnabled(!next);
       console.error('Failed to toggle key counter', error);
     }
   };
