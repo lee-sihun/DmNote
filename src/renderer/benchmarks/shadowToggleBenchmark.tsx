@@ -19,6 +19,7 @@ export interface Distribution {
 interface ShadowToggleBrowserBenchmarkResult {
   benchmark: 'PILOT-01-shadow-toggle';
   kind: 'browser-render-path';
+  enabledCommitStrategy: 'after-paint' | 'sync';
   iterations: number;
   warmupIterations: number;
   elementCount: number;
@@ -113,11 +114,13 @@ export const afterPaintOpportunity = async (): Promise<void> => {
 
 interface ShadowToggleBenchmarkSurfaceProps {
   elementCount: number;
+  enabledCommitStrategy?: 'after-paint' | 'sync';
   onRender?: (durationMs: number) => void;
 }
 
 export const ShadowToggleBenchmarkSurface = ({
   elementCount,
+  enabledCommitStrategy = 'after-paint',
   onRender = () => undefined,
 }: ShadowToggleBenchmarkSurfaceProps) => {
   const [positions, setPositions] = useState<KeyPositions>(() =>
@@ -148,6 +151,7 @@ export const ShadowToggleBenchmarkSurface = ({
           activeShadow={activeShadow}
           onChange={() => undefined}
           onEnabledChange={handleEnabledChange}
+          enabledCommitStrategy={enabledCommitStrategy}
           t={(key) => key.split('.').at(-1)}
         />
         <div aria-hidden="true">
@@ -174,6 +178,8 @@ const BenchmarkApp = () => {
   const iterations = Math.max(5, Number(query.get('iterations')) || 40);
   const warmupIterations = Math.max(1, Number(query.get('warmup')) || 5);
   const elementCount = Math.max(1, Number(query.get('elements')) || 100);
+  const enabledCommitStrategy =
+    query.get('strategy') === 'sync' ? 'sync' : 'after-paint';
   const renderDurationsRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -237,6 +243,7 @@ const BenchmarkApp = () => {
       const result: ShadowToggleBrowserBenchmarkResult = {
         benchmark: 'PILOT-01-shadow-toggle',
         kind: 'browser-render-path',
+        enabledCommitStrategy,
         iterations,
         warmupIterations,
         elementCount,
@@ -269,13 +276,14 @@ const BenchmarkApp = () => {
     return () => {
       cancelled = true;
     };
-  }, [elementCount, iterations, warmupIterations]);
+  }, [elementCount, enabledCommitStrategy, iterations, warmupIterations]);
 
   return (
     <main className="min-h-screen bg-app text-fg p-[24px]">
       <div className="w-[320px] rounded-panel bg-panel p-[12px]">
         <ShadowToggleBenchmarkSurface
           elementCount={elementCount}
+          enabledCommitStrategy={enabledCommitStrategy}
           onRender={(duration) => renderDurationsRef.current.push(duration)}
         />
       </div>

@@ -20,6 +20,8 @@ interface ShadowControlsProps {
   ) => void;
   /** 대기·입력 양쪽 enabled를 한 번에 갱신 (마스터 토글) */
   onEnabledChange: (enabled: boolean) => void;
+  /** benchmark·호환성 검증용 — 실제 UI는 after-paint 사용 */
+  enabledCommitStrategy?: 'after-paint' | 'sync';
   /** 눌림 상태가 없는 요소(통계)는 대기만 편집 */
   showActiveState?: boolean;
   panelElement?: HTMLElement | null;
@@ -34,6 +36,7 @@ const ShadowControls = ({
   anyEnabled: anyEnabledProp,
   onChange,
   onEnabledChange,
+  enabledCommitStrategy = 'after-paint',
   showActiveState = true,
   panelElement,
   t,
@@ -83,6 +86,12 @@ const ShadowControls = ({
     const current = pendingEnabledRef.current ?? canonicalEnabled;
     const next = !current;
     if (!next) setPickerOpen(false);
+
+    if (enabledCommitStrategy === 'sync') {
+      onEnabledChangeRef.current(next);
+      return;
+    }
+
     pendingEnabledRef.current = next;
     setOptimisticEnabled(next);
 

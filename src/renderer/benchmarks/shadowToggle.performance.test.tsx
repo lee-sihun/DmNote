@@ -23,6 +23,8 @@ const ELEMENT_COUNTS = (process.env.DMN_BENCHMARK_ELEMENT_COUNTS ?? '1,100,500')
   .split(',')
   .map(Number)
   .filter((value) => Number.isInteger(value) && value > 0);
+const ENABLED_COMMIT_STRATEGY =
+  process.env.DMN_BENCHMARK_STRATEGY === 'sync' ? 'sync' : 'after-paint';
 
 interface IterationResult {
   eventBlockingMs: number;
@@ -83,6 +85,7 @@ benchmarkDescribe('PILOT-01 그림자 토글 성능', () => {
         root.render(
           <ShadowToggleBenchmarkSurface
             elementCount={elementCount}
+            enabledCommitStrategy={ENABLED_COMMIT_STRATEGY}
             onRender={(duration) => renderDurations.push(duration)}
           />,
         );
@@ -117,16 +120,22 @@ benchmarkDescribe('PILOT-01 그림자 토글 성능', () => {
         );
 
         let eventFinishedAt = startedAt;
-        let visualDomCommitMs = 0;
-        let canonicalDomCommitMs = 0;
-        await act(async () => {
+        act(() => {
           toggle!.click();
           eventFinishedAt = performance.now();
-          [visualDomCommitMs, canonicalDomCommitMs] = await Promise.all([
-            visualCommit,
-            canonicalCommit,
-          ]);
         });
+        const visualDomCommitMs = await visualCommit;
+        if (ENABLED_COMMIT_STRATEGY === 'after-paint') {
+          await act(async () => {
+            await new Promise((resolvePromise) =>
+              window.setTimeout(resolvePromise, 0),
+            );
+            await new Promise((resolvePromise) =>
+              window.setTimeout(resolvePromise, 0),
+            );
+          });
+        }
+        const canonicalDomCommitMs = await canonicalCommit;
 
         if (iteration >= WARMUP_ITERATIONS) {
           results.push({
@@ -171,6 +180,7 @@ benchmarkDescribe('PILOT-01 그림자 토글 성능', () => {
           schemaVersion: 1,
           benchmarkId: 'PILOT-01',
           variant: VARIANT,
+          enabledCommitStrategy: ENABLED_COMMIT_STRATEGY,
           measuredAt: new Date().toISOString(),
           commit: execFileSync('git', ['rev-parse', 'HEAD'], {
             encoding: 'utf8',
