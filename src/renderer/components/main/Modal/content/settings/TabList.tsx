@@ -79,61 +79,59 @@ const TabList = () => {
 
   return (
     <div className="flex flex-col gap-[6px] w-[216px] p-[8px] bg-glass backdrop-glass-popup rounded-popup shadow-elevation-2">
-      {/* 그룹 카드, 동심 라운딩: 카드 10 = 행 6 + 패딩 4 */}
+      {/* 탭 리스트 - 드롭다운 메뉴와 같은 플랫 행 문법, 팝업 표면에 바로 배치 */}
       {customTabs.length > 0 && (
-        <div className="bg-fill-faint rounded-surface p-[4px] flex flex-col">
-          <div
-            ref={scrollRef}
-            className="flex flex-col w-full gap-[4px] overflow-y-auto modal-content-scroll dmn-scroll-fade"
-            style={{ maxHeight: `${TAB_LIST_MAX_HEIGHT}px` }}
-          >
-            {visibleTabs
-              .slice()
-              .reverse()
-              .map((tab) => {
-                const isSelected = selectedKeyType === tab.id;
-                // 인터랙티브 요소 중첩 금지 — 행 래퍼는 비인터랙티브,
-                // 선택은 행 전체를 덮는 스트레치드 버튼, 삭제는 형제 button
-                return (
-                  <div
-                    key={tab.id}
-                    className={`group relative w-full h-[28px] shrink-0 flex items-center gap-[4px] px-[8px] rounded-md text-body cursor-pointer transition-colors duration-fast ${
-                      isSelected
-                        ? 'bg-accent-muted text-fg'
-                        : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
-                    }`}
+        <div
+          ref={scrollRef}
+          className="flex flex-col w-full gap-[4px] overflow-y-auto modal-content-scroll dmn-scroll-fade"
+          style={{ maxHeight: `${TAB_LIST_MAX_HEIGHT}px` }}
+        >
+          {visibleTabs
+            .slice()
+            .reverse()
+            .map((tab) => {
+              const isSelected = selectedKeyType === tab.id;
+              // 인터랙티브 요소 중첩 금지 — 행 래퍼는 비인터랙티브,
+              // 선택은 행 전체를 덮는 스트레치드 버튼, 삭제는 형제 button
+              return (
+                <div
+                  key={tab.id}
+                  className={`group relative w-full h-[28px] shrink-0 flex items-center gap-[4px] px-[8px] rounded-md text-body cursor-pointer transition-colors duration-fast ${
+                    isSelected
+                      ? 'bg-accent-muted text-fg'
+                      : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    aria-label={tab.name}
+                    aria-current={isSelected || undefined}
+                    className="absolute inset-0 rounded-md"
+                    onClick={() => handleSelect(tab.id)}
+                  />
+                  <span className="relative flex-1 min-w-0 truncate text-left pointer-events-none">
+                    {tab.name}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t('tabs.delete')}
+                    className="relative w-[18px] h-[18px] -mr-[4px] shrink-0 flex items-center justify-center rounded-[4px] text-fg-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-fg transition-all duration-fast"
+                    onClick={() =>
+                      setDeleteTarget({ id: tab.id, name: tab.name })
+                    }
                   >
-                    <button
-                      type="button"
-                      aria-label={tab.name}
-                      aria-current={isSelected || undefined}
-                      className="absolute inset-0 rounded-md"
-                      onClick={() => handleSelect(tab.id)}
-                    />
-                    <span className="relative flex-1 min-w-0 truncate text-left pointer-events-none">
-                      {tab.name}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={t('tabs.delete')}
-                      className="relative w-[18px] h-[18px] -mr-[4px] shrink-0 flex items-center justify-center rounded-[4px] text-fg-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-danger-fg transition-all duration-fast"
-                      onClick={() =>
-                        setDeleteTarget({ id: tab.id, name: tab.name })
-                      }
-                    >
-                      <TrashIcon className="w-[10px] h-[11px]" />
-                    </button>
-                  </div>
-                );
-              })}
+                    <TrashIcon className="w-[10px] h-[11px]" />
+                  </button>
+                </div>
+              );
+            })}
 
-            {/* 검색 결과 없음 */}
-            {normalizedQuery && visibleTabs.length === 0 && (
-              <div className="h-[28px] shrink-0 flex items-center px-[8px] text-body text-fg-faint select-none">
-                {t('tabs.search.empty')}
-              </div>
-            )}
-          </div>
+          {/* 검색 결과 없음 */}
+          {normalizedQuery && visibleTabs.length === 0 && (
+            <div className="h-[28px] shrink-0 flex items-center px-[8px] text-body text-fg-faint select-none">
+              {t('tabs.search.empty')}
+            </div>
+          )}
         </div>
       )}
 
