@@ -1,0 +1,2221 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "MACOS-WEBVIEW-INTERACTION-MATRIX",
+  "kind": "tauri-wkwebview-render-path",
+  "measuredAt": "2026-08-07T22:44:26.964Z",
+  "commit": "5af5eb7e607fb8c91a872a8ad0730dc9941f6338",
+  "runtime": {
+    "engine": "WKWebView",
+    "platform": "darwin",
+    "arch": "arm64",
+    "osVersion": "26.6",
+    "cpuModel": "Apple M2",
+    "memoryBytes": 17179869184,
+    "launchMode": "tauri-dev-isolated-benchmark",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+  },
+  "scenario": {
+    "itemCount": 500,
+    "burstSize": 100,
+    "iterations": 2,
+    "iterationsPerRound": 2,
+    "warmupIterationsPerRound": 1,
+    "rounds": 1
+  },
+  "frameDriver": "timer-0ms",
+  "comparisons": [
+    {
+      "id": "BASE-03",
+      "name": "Dropdown",
+      "kind": "discrete",
+      "metric": "visualDomCommitMs",
+      "beforeStrategy": "sync",
+      "afterStrategy": "after-paint",
+      "beforeP95": 4,
+      "afterP95": 1,
+      "improvementPercent": 75
+    },
+    {
+      "id": "BASE-04",
+      "name": "NumberInput",
+      "kind": "discrete",
+      "metric": "visualDomCommitMs",
+      "beforeStrategy": "sync",
+      "afterStrategy": "after-paint",
+      "beforeP95": 4.999999999999986,
+      "afterP95": 1,
+      "improvementPercent": 79.99999999999994
+    },
+    {
+      "id": "BASE-05",
+      "name": "TextInput",
+      "kind": "discrete",
+      "metric": "visualDomCommitMs",
+      "beforeStrategy": "sync",
+      "afterStrategy": "after-paint",
+      "beforeP95": 4.000000000000014,
+      "afterP95": 0,
+      "improvementPercent": 100
+    },
+    {
+      "id": "BASE-06",
+      "name": "ColorInput",
+      "kind": "discrete",
+      "metric": "visualDomCommitMs",
+      "beforeStrategy": "sync",
+      "afterStrategy": "after-paint",
+      "beforeP95": 2.999999999999986,
+      "afterP95": 0,
+      "improvementPercent": 100
+    },
+    {
+      "id": "BASE-07",
+      "name": "TabSwitch",
+      "kind": "discrete",
+      "metric": "visualDomCommitMs",
+      "beforeStrategy": "sync",
+      "afterStrategy": "after-paint",
+      "beforeP95": 4,
+      "afterP95": 1,
+      "improvementPercent": 75
+    },
+    {
+      "id": "BASE-08",
+      "name": "FloatingPopup",
+      "kind": "discrete",
+      "metric": "visualDomCommitMs",
+      "beforeStrategy": "sync",
+      "afterStrategy": "after-paint",
+      "beforeP95": 11,
+      "afterP95": 1,
+      "improvementPercent": 90.9090909090909
+    },
+    {
+      "id": "BASE-09",
+      "name": "Modal",
+      "kind": "discrete",
+      "metric": "visualDomCommitMs",
+      "beforeStrategy": "sync",
+      "afterStrategy": "after-paint",
+      "beforeP95": 4,
+      "afterP95": 1,
+      "improvementPercent": 75
+    },
+    {
+      "id": "BASE-11",
+      "name": "PanelToggleButton",
+      "kind": "discrete",
+      "metric": "visualDomCommitMs",
+      "beforeStrategy": "sync",
+      "afterStrategy": "after-paint",
+      "beforeP95": 4,
+      "afterP95": 0,
+      "improvementPercent": 100
+    },
+    {
+      "id": "GRID-05",
+      "name": "미들 버튼 팬",
+      "kind": "continuous",
+      "metric": "eventBlockingMs",
+      "beforeStrategy": "legacy",
+      "afterStrategy": "frame",
+      "beforeP95": 2.9999999999997726,
+      "afterP95": 0.9999999999995453,
+      "improvementPercent": 66.66666666667929
+    },
+    {
+      "id": "GRID-06",
+      "name": "단일 리사이즈",
+      "kind": "continuous",
+      "metric": "eventBlockingMs",
+      "beforeStrategy": "legacy",
+      "afterStrategy": "frame",
+      "beforeP95": 3,
+      "afterP95": 1,
+      "improvementPercent": 66.66666666666666
+    },
+    {
+      "id": "GRID-21",
+      "name": "방향키 이동",
+      "kind": "keyboard",
+      "metric": "eventBlockingMs",
+      "beforeStrategy": "sync",
+      "afterStrategy": "frame",
+      "beforeP95": 10,
+      "afterP95": 0,
+      "improvementPercent": 100
+    }
+  ],
+  "cases": [
+    {
+      "benchmark": "BASE-03",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 11,
+        "p95": 1787.9999999999995,
+        "max": 1787.9999999999995
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:46.158Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-03",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 5,
+        "p95": 5.999999999999943,
+        "max": 5.999999999999943
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 5.999999999999943,
+        "max": 5.999999999999943
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:46.474Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-04",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 3.999999999999986,
+        "p95": 4,
+        "max": 4
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4.999999999999986,
+        "max": 4.999999999999986
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4.999999999999986,
+        "max": 4.999999999999986
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 12.999999999999986,
+        "p95": 1576,
+        "max": 1576
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:48.180Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-04",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "visualDomCommitMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 5,
+        "p95": 5,
+        "max": 5
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:48.440Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-05",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 4,
+        "p95": 4.000000000000014,
+        "max": 4.000000000000014
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4.000000000000014,
+        "max": 4.000000000000014
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 5.000000000000014,
+        "max": 5.000000000000014
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 12,
+        "p95": 1593,
+        "max": 1593
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:50.156Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-05",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "completionDomCommitMs": {
+        "p50": 5,
+        "p95": 6,
+        "max": 6
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 6,
+        "max": 6
+      },
+      "reactCommitDurationMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:50.619Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-06",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 2,
+        "p95": 2.999999999999986,
+        "max": 2.999999999999986
+      },
+      "completionDomCommitMs": {
+        "p50": 2,
+        "p95": 2.999999999999986,
+        "max": 2.999999999999986
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 3.999999999999986,
+        "p95": 1451,
+        "max": 1451
+      },
+      "reactCommitDurationMs": {
+        "p50": 1.9999999999999858,
+        "p95": 2,
+        "max": 2
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:52.177Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-06",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 1742.0000000000002,
+        "max": 1742.0000000000002
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 4,
+        "p95": 1719,
+        "max": 1719
+      },
+      "reactCommitDurationMs": {
+        "p50": 2,
+        "p95": 11.999999999999773,
+        "max": 11.999999999999773
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:54.208Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-07",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 7,
+        "p95": 1452,
+        "max": 1452
+      },
+      "reactCommitDurationMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:56.177Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-07",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 5,
+        "p95": 1749,
+        "max": 1749
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 5,
+        "p95": 1717,
+        "max": 1717
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 4,
+        "max": 4
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:58.206Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-08",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "visualDomCommitMs": {
+        "p50": 10,
+        "p95": 11,
+        "max": 11
+      },
+      "completionDomCommitMs": {
+        "p50": 10,
+        "p95": 11,
+        "max": 11
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 14,
+        "p95": 1644,
+        "max": 1644
+      },
+      "reactCommitDurationMs": {
+        "p50": 3.0000000000000284,
+        "p95": 4.000000000000227,
+        "max": 4.000000000000227
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:00.195Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-08",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 3,
+        "p95": 5,
+        "max": 5
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "reactCommitDurationMs": {
+        "p50": 2,
+        "p95": 4.999999999999972,
+        "max": 4.999999999999972
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:00.464Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-09",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 10,
+        "p95": 1417.0000000000002,
+        "max": 1417.0000000000002
+      },
+      "reactCommitDurationMs": {
+        "p50": 3,
+        "p95": 4.000000000000227,
+        "max": 4.000000000000227
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:01.993Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-09",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 3.9999999999999716,
+        "p95": 5.000000000000028,
+        "max": 5.000000000000028
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "reactCommitDurationMs": {
+        "p50": 2.9999999999999716,
+        "p95": 3.0000000000000284,
+        "max": 3.0000000000000284
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:02.221Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-11",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 3,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 3,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 9,
+        "p95": 1857,
+        "max": 1857
+      },
+      "reactCommitDurationMs": {
+        "p50": 3,
+        "p95": 3,
+        "max": 3
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:04.184Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "BASE-11",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "reactCommitDurationMs": {
+        "p50": 2,
+        "p95": 3,
+        "max": 3
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:04.417Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "GRID-05",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "legacy",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 1,
+        "p95": 2.9999999999997726,
+        "max": 2.9999999999997726
+      },
+      "visualDomCommitMs": {
+        "p50": 3,
+        "p95": 24,
+        "max": 24
+      },
+      "completionDomCommitMs": {
+        "p50": 3,
+        "p95": 24,
+        "max": 24
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 8,
+        "p95": 1799.9999999999998,
+        "max": 1799.9999999999998
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 2,
+        "max": 2
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:07.982Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "GRID-05",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "frame",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0.9999999999995453,
+        "max": 0.9999999999995453
+      },
+      "visualDomCommitMs": {
+        "p50": 7,
+        "p95": 1020,
+        "max": 1020
+      },
+      "completionDomCommitMs": {
+        "p50": 7,
+        "p95": 1020,
+        "max": 1020
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 9,
+        "p95": 1881.9999999999995,
+        "max": 1881.9999999999995
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 5.000000000000455,
+        "max": 5.000000000000455
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:12.060Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "GRID-06",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "legacy",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 3,
+        "max": 3
+      },
+      "visualDomCommitMs": {
+        "p50": 2,
+        "p95": 90,
+        "max": 90
+      },
+      "completionDomCommitMs": {
+        "p50": 2,
+        "p95": 90,
+        "max": 90
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 11.000000000000028,
+        "p95": 1944,
+        "max": 1944
+      },
+      "reactCommitDurationMs": {
+        "p50": 1,
+        "p95": 3.9999999999995453,
+        "max": 3.9999999999995453
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:16.137Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "GRID-06",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "frame",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "visualDomCommitMs": {
+        "p50": 10,
+        "p95": 13,
+        "max": 13
+      },
+      "completionDomCommitMs": {
+        "p50": 10,
+        "p95": 13,
+        "max": 13
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 8,
+        "p95": 10,
+        "max": 10
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:16.777Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "GRID-21",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 2,
+        "p95": 10,
+        "max": 10
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 33,
+        "max": 33
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 33,
+        "max": 33
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 6,
+        "p95": 2033,
+        "max": 2033
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 4,
+        "max": 4
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:26.650Z",
+      "rounds": 1
+    },
+    {
+      "benchmark": "GRID-21",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "frame",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 3,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 3,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:26.918Z",
+      "rounds": 1
+    }
+  ],
+  "runs": [
+    {
+      "benchmark": "BASE-03",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 11,
+        "p95": 1787.9999999999995,
+        "max": 1787.9999999999995
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:46.158Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 11,
+          "reactCommitDurationMs": 1
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 1787.9999999999995,
+          "reactCommitDurationMs": 0
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-03",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 5,
+        "p95": 5.999999999999943,
+        "max": 5.999999999999943
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 5.999999999999943,
+        "max": 5.999999999999943
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:46.474Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 0,
+          "completionDomCommitMs": 5.999999999999943,
+          "clickToPaintOpportunityMs": 5.999999999999943,
+          "reactCommitDurationMs": 0
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 1,
+          "completionDomCommitMs": 5,
+          "clickToPaintOpportunityMs": 1,
+          "reactCommitDurationMs": 0
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-04",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 3.999999999999986,
+        "p95": 4,
+        "max": 4
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4.999999999999986,
+        "max": 4.999999999999986
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4.999999999999986,
+        "max": 4.999999999999986
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 12.999999999999986,
+        "p95": 1576,
+        "max": 1576
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:48.180Z",
+      "samples": [
+        {
+          "eventBlockingMs": 3.999999999999986,
+          "visualDomCommitMs": 4.999999999999986,
+          "completionDomCommitMs": 4.999999999999986,
+          "clickToPaintOpportunityMs": 12.999999999999986,
+          "reactCommitDurationMs": 0
+        },
+        {
+          "eventBlockingMs": 4,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 1576,
+          "reactCommitDurationMs": 0
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-04",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "visualDomCommitMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 5,
+        "p95": 5,
+        "max": 5
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:48.440Z",
+      "samples": [
+        {
+          "eventBlockingMs": 1,
+          "visualDomCommitMs": 1,
+          "completionDomCommitMs": 5,
+          "clickToPaintOpportunityMs": 1,
+          "reactCommitDurationMs": 0
+        },
+        {
+          "eventBlockingMs": 1,
+          "visualDomCommitMs": 1,
+          "completionDomCommitMs": 5,
+          "clickToPaintOpportunityMs": 1,
+          "reactCommitDurationMs": 0
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-05",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 4,
+        "p95": 4.000000000000014,
+        "max": 4.000000000000014
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4.000000000000014,
+        "max": 4.000000000000014
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 5.000000000000014,
+        "max": 5.000000000000014
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 12,
+        "p95": 1593,
+        "max": 1593
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:50.156Z",
+      "samples": [
+        {
+          "eventBlockingMs": 4.000000000000014,
+          "visualDomCommitMs": 4.000000000000014,
+          "completionDomCommitMs": 5.000000000000014,
+          "clickToPaintOpportunityMs": 12,
+          "reactCommitDurationMs": 0
+        },
+        {
+          "eventBlockingMs": 4,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 1593,
+          "reactCommitDurationMs": 0
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-05",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "completionDomCommitMs": {
+        "p50": 5,
+        "p95": 6,
+        "max": 6
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 6,
+        "max": 6
+      },
+      "reactCommitDurationMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:50.619Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 0,
+          "completionDomCommitMs": 5,
+          "clickToPaintOpportunityMs": 1,
+          "reactCommitDurationMs": 1
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 0,
+          "completionDomCommitMs": 6,
+          "clickToPaintOpportunityMs": 6,
+          "reactCommitDurationMs": 1
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-06",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 2,
+        "p95": 2.999999999999986,
+        "max": 2.999999999999986
+      },
+      "completionDomCommitMs": {
+        "p50": 2,
+        "p95": 2.999999999999986,
+        "max": 2.999999999999986
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 3.999999999999986,
+        "p95": 1451,
+        "max": 1451
+      },
+      "reactCommitDurationMs": {
+        "p50": 1.9999999999999858,
+        "p95": 2,
+        "max": 2
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:52.177Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 2.999999999999986,
+          "completionDomCommitMs": 2.999999999999986,
+          "clickToPaintOpportunityMs": 3.999999999999986,
+          "reactCommitDurationMs": 1.9999999999999858
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 2,
+          "completionDomCommitMs": 2,
+          "clickToPaintOpportunityMs": 1451,
+          "reactCommitDurationMs": 2
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-06",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 1742.0000000000002,
+        "max": 1742.0000000000002
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 4,
+        "p95": 1719,
+        "max": 1719
+      },
+      "reactCommitDurationMs": {
+        "p50": 2,
+        "p95": 11.999999999999773,
+        "max": 11.999999999999773
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:54.208Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 0,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 4,
+          "reactCommitDurationMs": 2
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 0,
+          "completionDomCommitMs": 1742.0000000000002,
+          "clickToPaintOpportunityMs": 1719,
+          "reactCommitDurationMs": 11.999999999999773
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-07",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 7,
+        "p95": 1452,
+        "max": 1452
+      },
+      "reactCommitDurationMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:56.177Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 7,
+          "reactCommitDurationMs": 1
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 1452,
+          "reactCommitDurationMs": 1
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-07",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 5,
+        "p95": 1749,
+        "max": 1749
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 5,
+        "p95": 1717,
+        "max": 1717
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 4,
+        "max": 4
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:43:58.206Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 1,
+          "completionDomCommitMs": 5,
+          "clickToPaintOpportunityMs": 5,
+          "reactCommitDurationMs": 0
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 0,
+          "completionDomCommitMs": 1749,
+          "clickToPaintOpportunityMs": 1717,
+          "reactCommitDurationMs": 4
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-08",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "visualDomCommitMs": {
+        "p50": 10,
+        "p95": 11,
+        "max": 11
+      },
+      "completionDomCommitMs": {
+        "p50": 10,
+        "p95": 11,
+        "max": 11
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 14,
+        "p95": 1644,
+        "max": 1644
+      },
+      "reactCommitDurationMs": {
+        "p50": 3.0000000000000284,
+        "p95": 4.000000000000227,
+        "max": 4.000000000000227
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:00.195Z",
+      "samples": [
+        {
+          "eventBlockingMs": 1,
+          "visualDomCommitMs": 11,
+          "completionDomCommitMs": 11,
+          "clickToPaintOpportunityMs": 14,
+          "reactCommitDurationMs": 3.0000000000000284
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 10,
+          "completionDomCommitMs": 10,
+          "clickToPaintOpportunityMs": 1644,
+          "reactCommitDurationMs": 4.000000000000227
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-08",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 3,
+        "p95": 5,
+        "max": 5
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "reactCommitDurationMs": {
+        "p50": 2,
+        "p95": 4.999999999999972,
+        "max": 4.999999999999972
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:00.464Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 1,
+          "completionDomCommitMs": 5,
+          "clickToPaintOpportunityMs": 1,
+          "reactCommitDurationMs": 4.999999999999972
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 0,
+          "completionDomCommitMs": 3,
+          "clickToPaintOpportunityMs": 1,
+          "reactCommitDurationMs": 2
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-09",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 10,
+        "p95": 1417.0000000000002,
+        "max": 1417.0000000000002
+      },
+      "reactCommitDurationMs": {
+        "p50": 3,
+        "p95": 4.000000000000227,
+        "max": 4.000000000000227
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:01.993Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 10,
+          "reactCommitDurationMs": 3
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 1417.0000000000002,
+          "reactCommitDurationMs": 4.000000000000227
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-09",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "completionDomCommitMs": {
+        "p50": 3.9999999999999716,
+        "p95": 5.000000000000028,
+        "max": 5.000000000000028
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "reactCommitDurationMs": {
+        "p50": 2.9999999999999716,
+        "p95": 3.0000000000000284,
+        "max": 3.0000000000000284
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:02.221Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 1,
+          "completionDomCommitMs": 5.000000000000028,
+          "clickToPaintOpportunityMs": 1,
+          "reactCommitDurationMs": 3.0000000000000284
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 1,
+          "completionDomCommitMs": 3.9999999999999716,
+          "clickToPaintOpportunityMs": 1,
+          "reactCommitDurationMs": 2.9999999999999716
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-11",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 3,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 3,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 9,
+        "p95": 1857,
+        "max": 1857
+      },
+      "reactCommitDurationMs": {
+        "p50": 3,
+        "p95": 3,
+        "max": 3
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:04.184Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 9,
+          "reactCommitDurationMs": 3
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 3,
+          "completionDomCommitMs": 3,
+          "clickToPaintOpportunityMs": 1857,
+          "reactCommitDurationMs": 3
+        }
+      ]
+    },
+    {
+      "benchmark": "BASE-11",
+      "kind": "browser-render-path",
+      "interactionKind": "discrete",
+      "strategy": "after-paint",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": null,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 4,
+        "p95": 4,
+        "max": 4
+      },
+      "reactCommitDurationMs": {
+        "p50": 2,
+        "p95": 3,
+        "max": 3
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:04.417Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 0,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 4,
+          "reactCommitDurationMs": 3
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 0,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 4,
+          "reactCommitDurationMs": 2
+        }
+      ]
+    },
+    {
+      "benchmark": "GRID-05",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "legacy",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 1,
+        "p95": 2.9999999999997726,
+        "max": 2.9999999999997726
+      },
+      "visualDomCommitMs": {
+        "p50": 3,
+        "p95": 24,
+        "max": 24
+      },
+      "completionDomCommitMs": {
+        "p50": 3,
+        "p95": 24,
+        "max": 24
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 8,
+        "p95": 1799.9999999999998,
+        "max": 1799.9999999999998
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 2,
+        "max": 2
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:07.982Z",
+      "samples": [
+        {
+          "eventBlockingMs": 1,
+          "visualDomCommitMs": 3,
+          "completionDomCommitMs": 3,
+          "clickToPaintOpportunityMs": 8,
+          "reactCommitDurationMs": 0
+        },
+        {
+          "eventBlockingMs": 2.9999999999997726,
+          "visualDomCommitMs": 24,
+          "completionDomCommitMs": 24,
+          "clickToPaintOpportunityMs": 1799.9999999999998,
+          "reactCommitDurationMs": 2
+        }
+      ]
+    },
+    {
+      "benchmark": "GRID-05",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "frame",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0.9999999999995453,
+        "max": 0.9999999999995453
+      },
+      "visualDomCommitMs": {
+        "p50": 7,
+        "p95": 1020,
+        "max": 1020
+      },
+      "completionDomCommitMs": {
+        "p50": 7,
+        "p95": 1020,
+        "max": 1020
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 9,
+        "p95": 1881.9999999999995,
+        "max": 1881.9999999999995
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 5.000000000000455,
+        "max": 5.000000000000455
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:12.060Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 7,
+          "completionDomCommitMs": 7,
+          "clickToPaintOpportunityMs": 9,
+          "reactCommitDurationMs": 0
+        },
+        {
+          "eventBlockingMs": 0.9999999999995453,
+          "visualDomCommitMs": 1020,
+          "completionDomCommitMs": 1020,
+          "clickToPaintOpportunityMs": 1881.9999999999995,
+          "reactCommitDurationMs": 5.000000000000455
+        }
+      ]
+    },
+    {
+      "benchmark": "GRID-06",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "legacy",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 3,
+        "max": 3
+      },
+      "visualDomCommitMs": {
+        "p50": 2,
+        "p95": 90,
+        "max": 90
+      },
+      "completionDomCommitMs": {
+        "p50": 2,
+        "p95": 90,
+        "max": 90
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 11.000000000000028,
+        "p95": 1944,
+        "max": 1944
+      },
+      "reactCommitDurationMs": {
+        "p50": 1,
+        "p95": 3.9999999999995453,
+        "max": 3.9999999999995453
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:16.137Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 2,
+          "completionDomCommitMs": 2,
+          "clickToPaintOpportunityMs": 11.000000000000028,
+          "reactCommitDurationMs": 1
+        },
+        {
+          "eventBlockingMs": 3,
+          "visualDomCommitMs": 90,
+          "completionDomCommitMs": 90,
+          "clickToPaintOpportunityMs": 1944,
+          "reactCommitDurationMs": 3.9999999999995453
+        }
+      ]
+    },
+    {
+      "benchmark": "GRID-06",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "frame",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "visualDomCommitMs": {
+        "p50": 10,
+        "p95": 13,
+        "max": 13
+      },
+      "completionDomCommitMs": {
+        "p50": 10,
+        "p95": 13,
+        "max": 13
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 8,
+        "p95": 10,
+        "max": 10
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:16.777Z",
+      "samples": [
+        {
+          "eventBlockingMs": 1,
+          "visualDomCommitMs": 13,
+          "completionDomCommitMs": 13,
+          "clickToPaintOpportunityMs": 10,
+          "reactCommitDurationMs": 1
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 10,
+          "completionDomCommitMs": 10,
+          "clickToPaintOpportunityMs": 8,
+          "reactCommitDurationMs": 0
+        }
+      ]
+    },
+    {
+      "benchmark": "GRID-21",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "sync",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 2,
+        "p95": 10,
+        "max": 10
+      },
+      "visualDomCommitMs": {
+        "p50": 4,
+        "p95": 33,
+        "max": 33
+      },
+      "completionDomCommitMs": {
+        "p50": 4,
+        "p95": 33,
+        "max": 33
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 6,
+        "p95": 2033,
+        "max": 2033
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 4,
+        "max": 4
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:26.650Z",
+      "samples": [
+        {
+          "eventBlockingMs": 2,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 6,
+          "reactCommitDurationMs": 0
+        },
+        {
+          "eventBlockingMs": 10,
+          "visualDomCommitMs": 33,
+          "completionDomCommitMs": 33,
+          "clickToPaintOpportunityMs": 2033,
+          "reactCommitDurationMs": 4
+        }
+      ]
+    },
+    {
+      "benchmark": "GRID-21",
+      "kind": "browser-render-path",
+      "interactionKind": "continuous",
+      "strategy": "frame",
+      "iterations": 2,
+      "warmupIterations": 1,
+      "itemCount": 500,
+      "burstSize": 100,
+      "frameDriver": "timer-0ms",
+      "round": 1,
+      "eventBlockingMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "visualDomCommitMs": {
+        "p50": 3,
+        "p95": 4,
+        "max": 4
+      },
+      "completionDomCommitMs": {
+        "p50": 3,
+        "p95": 4,
+        "max": 4
+      },
+      "clickToPaintOpportunityMs": {
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "reactCommitDurationMs": {
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      "measuredAt": "2026-08-07T22:44:26.918Z",
+      "samples": [
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 4,
+          "completionDomCommitMs": 4,
+          "clickToPaintOpportunityMs": 0,
+          "reactCommitDurationMs": 0
+        },
+        {
+          "eventBlockingMs": 0,
+          "visualDomCommitMs": 3,
+          "completionDomCommitMs": 3,
+          "clickToPaintOpportunityMs": 0,
+          "reactCommitDurationMs": 1
+        }
+      ]
+    }
+  ]
+}

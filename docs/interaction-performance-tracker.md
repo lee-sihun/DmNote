@@ -2,7 +2,7 @@
 
 > 작성일: 2026-08-07
 >
-> 상태: 전수 구현·감사·macOS WKWebView 파일럿 검증 완료, Windows WebView2 대기
+> 상태: 전수 구현·감사·macOS WKWebView 주요 비토글 상호작용 검증 완료, Windows WebView2 대기
 >
 > 원칙: 실측값만 기록하며 추정값이나 임의의 성능 수치를 입력하지 않는다.
 >
@@ -549,6 +549,44 @@ handler workload 500개와 `input` 100회 burst, 기준선·개선 각 30회와 
 - 게이트: WKWebView user agent·case 순서·반복 수·단일/다중 visual P95 개선 자동 검증
 - 남은 플랫폼: Windows WebView2
 <!-- MACOS-WEBVIEW:RESULT:END -->
+
+<!-- MACOS-WEBVIEW-MATRIX:RESULT:START -->
+
+#### macOS WKWebView 주요 비토글 상호작용 스모크 매트릭스
+
+| 조건            | 값                                                        |
+| --------------- | --------------------------------------------------------- |
+| 실행 명령       | `npm run benchmark:interaction:webview:matrix:macos`      |
+| 실행 경로       | Tauri 격리 benchmark 모드·WKWebView·Vite dev server       |
+| 프레임 드라이버 | 0ms timer 기반 rAF — 무인 macOS 창의 native rAF 정지 방지 |
+| 범위            | 클릭형 8개·포인터 연속 입력 2개·키보드 연속 입력 1개      |
+| 부하            | 일반 DOM 500개·연속 입력 100회                            |
+| 반복            | 각 전략 2회 (2회 × 1개 자동 재로드), 재로드당 워밍업 1회  |
+| 측정 대상 커밋  | `5af5eb7e607fb8c91a872a8ad0730dc9941f6338`                |
+| 환경            | macOS 26.6·Apple M2·16GB                                  |
+
+| ID      | 상호작용          | 주 지표            |         기준선 |                개선 | 개선율 |
+| ------- | ----------------- | ------------------ | -------------: | ------------------: | -----: |
+| BASE-03 | Dropdown          | visual DOM P95     |   sync 4.000ms | after-paint 1.000ms |  75.0% |
+| BASE-04 | NumberInput       | visual DOM P95     |   sync 5.000ms | after-paint 1.000ms |  80.0% |
+| BASE-05 | TextInput         | visual DOM P95     |   sync 4.000ms | after-paint 0.000ms | 100.0% |
+| BASE-06 | ColorInput        | visual DOM P95     |   sync 3.000ms | after-paint 0.000ms | 100.0% |
+| BASE-07 | TabSwitch         | visual DOM P95     |   sync 4.000ms | after-paint 1.000ms |  75.0% |
+| BASE-08 | FloatingPopup     | visual DOM P95     |  sync 11.000ms | after-paint 1.000ms |  90.9% |
+| BASE-09 | Modal             | visual DOM P95     |   sync 4.000ms | after-paint 1.000ms |  75.0% |
+| BASE-11 | PanelToggleButton | visual DOM P95     |   sync 4.000ms | after-paint 0.000ms | 100.0% |
+| GRID-05 | 미들 버튼 팬      | event blocking P95 | legacy 3.000ms |       frame 1.000ms |  66.7% |
+| GRID-06 | 단일 리사이즈     | event blocking P95 | legacy 3.000ms |       frame 1.000ms |  66.7% |
+| GRID-21 | 방향키 이동       | event blocking P95 |  sync 10.000ms |       frame 0.000ms | 100.0% |
+
+- 원시 결과: [JSON](../benchmarks/results/interaction-macos-wkwebview-matrix.json)
+- 정확성 게이트: WKWebView user agent·case 순서·전략 쌍·반복 수·DOM 최종 상태 자동 검증
+- 수치 해석: 클릭형은 즉시 보이는 DOM 반영, 연속 입력은 event burst 차단 시간을 주 지표로 사용
+- paint opportunity는 자동 실행용 프레임 드라이버 수치이므로 성능 판정에서 제외
+- 전략당 2표본의 실제 엔진 스모크 검증이며 통계적 판정은 각 항목의 jsdom 30회 결과를 사용
+- 제외: GRID-08·09·11·EDIT-01은 WKWebView가 무인 합성 drag를 안정적으로 처리하지 않아 기존 jsdom burst 측정을 유지
+- 남은 플랫폼: Windows WebView2
+<!-- MACOS-WEBVIEW-MATRIX:RESULT:END -->
 
 ### 5.1 파일럿·공통 기반
 
