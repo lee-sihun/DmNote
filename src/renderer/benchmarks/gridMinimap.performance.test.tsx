@@ -25,7 +25,7 @@ const ITEM_COUNTS = (process.env.DMN_BENCHMARK_ITEM_COUNTS ?? '1,100,500')
   .split(',')
   .map(Number)
   .filter((value) => Number.isInteger(value) && value > 0);
-const BURST_SIZE = Number(process.env.DMN_BENCHMARK_BURST_SIZE ?? 20);
+const BURST_SIZE = Number(process.env.DMN_BENCHMARK_BURST_SIZE ?? 100);
 const STRATEGY =
   process.env.DMN_BENCHMARK_STRATEGY === 'legacy' ? 'legacy' : 'frame';
 
@@ -102,7 +102,7 @@ benchmarkDescribe('GRID-11 미니맵 드래그 성능', () => {
         const visualCommit = waitForAttribute(
           output,
           'data-pan-x',
-          '100',
+          String(200 - 5 * BURST_SIZE),
           startedAt,
         );
         let eventFinishedAt = startedAt;
