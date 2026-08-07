@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { usePressAction } from '@hooks/usePressAction';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Modal from '../../Modal';
 import { useTranslation } from '@contexts/useTranslation';
 
@@ -22,11 +22,15 @@ const TabNameModal = ({
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
       setName('');
       setError(null);
+      setIsSubmitting(false);
+      submittingRef.current = false;
     }
   }, [isOpen]);
 
@@ -42,22 +46,33 @@ const TabNameModal = ({
   })();
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
     const err = validate(name.trim());
     if (err) {
       setError(err);
       return;
     }
-    const res = await onSubmit(name.trim());
-    if (res && typeof res === 'object' && 'error' in res && res.error) {
-      const map: Record<string, string> = {
-        'max-reached': t('tabs.errors.max'),
-        'duplicate-name': t('tabs.name.duplicate'),
-        'invalid-name': t('tabs.errors.invalid'),
-      };
-      setError(map[res.error] || t('tabs.errors.createFail'));
-      return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const res = await onSubmit(name.trim());
+      if (res && typeof res === 'object' && 'error' in res && res.error) {
+        const map: Record<string, string> = {
+          'max-reached': t('tabs.errors.max'),
+          'duplicate-name': t('tabs.name.duplicate'),
+          'invalid-name': t('tabs.errors.invalid'),
+        };
+        setError(map[res.error] || t('tabs.errors.createFail'));
+        return;
+      }
+      onClose();
+    } catch (submitError) {
+      console.error('Failed to create custom tab', submitError);
+      setError(t('tabs.errors.createFail'));
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
     }
-    onClose();
   };
 
   // IME 조합 종료·onChange flush와의 경합으로 첫 click이 유실되는 것을 방어
@@ -93,12 +108,14 @@ const TabNameModal = ({
         </div>
         <div className="flex gap-[8px]">
           <button
+            disabled={isSubmitting}
             className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
             {...submitPress}
           >
             {t('tabs.create')}
           </button>
           <button
+            disabled={isSubmitting}
             className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             {...cancelPress}
           >

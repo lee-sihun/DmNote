@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import TrashIcon from '@assets/svgs/trash.svg';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -19,6 +19,7 @@ const TabList = () => {
   const customTabs = useKeyStore((state) => state.customTabs) ?? [];
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const setSelectedKeyType = useKeyStore((state) => state.setSelectedKeyType);
+  const setCustomTabs = useKeyStore((state) => state.setCustomTabs);
   const { t } = useTranslation();
 
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -27,6 +28,7 @@ const TabList = () => {
   } | null>(null);
   const [showNameModal, setShowNameModal] = useState(false);
   const [query, setQuery] = useState('');
+  const deletingTabsRef = useRef(new Set<string>());
 
   const { scrollContainerRef: scrollRef, lenisInstance } = useLenis();
 
@@ -51,29 +53,33 @@ const TabList = () => {
     return result;
   };
 
-  const handleSelect = async (id: string) => {
-    try {
-      const result = await window.api.keys.customTabs.select(id);
-      if (result?.success) {
-        setSelectedKeyType(result.selected);
-      }
-      return result;
-    } catch (error) {
-      console.error('Failed to select custom tab', error);
-      return { success: false };
-    }
+  const handleSelect = (id: string) => {
+    if (selectedKeyType === id) return;
+    // 공통 mode action이 즉시 표시·generation·실패 재동기화를 담당한다.
+    // custom_tabs_select 후 setMode를 다시 호출하던 중복 IPC 경로 제거.
+    setSelectedKeyType(id);
   };
 
   // 탭 삭제는 의도적으로 Undo 경계를 만들지 않음 — 확인창이 방어선 (1.2.x부터)
   // 다른 편집의 Undo 스냅샷에는 탭이 포함돼 결합 복원됨 (1.6.0부터) — 기록 누락 버그로 오판 금지
   const handleDelete = async (id: string) => {
+    if (deletingTabsRef.current.has(id)) return;
+    deletingTabsRef.current.add(id);
+    const previousTabs = useKeyStore.getState().customTabs;
+    setCustomTabs(previousTabs.filter((tab) => tab.id !== id));
     try {
       const result = await window.api.keys.customTabs.delete(id);
       if (!result?.success) {
         console.warn('Failed to delete custom tab', result?.error);
+        setCustomTabs(previousTabs);
+      } else {
+        useKeyStore.setState({ selectedKeyType: result.selected });
       }
     } catch (error) {
+      setCustomTabs(previousTabs);
       console.error('Failed to delete custom tab', error);
+    } finally {
+      deletingTabsRef.current.delete(id);
     }
   };
 
