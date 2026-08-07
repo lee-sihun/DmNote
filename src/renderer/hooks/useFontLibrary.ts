@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore, syncFontCSS } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/settings/fonts';
@@ -13,31 +13,51 @@ import {
 export const useFontLibrary = () => {
   const { t } = useTranslation();
   const { setAll } = useFontStore();
-  const [isAdding, setIsAdding] = useState(false);
+  const isAddingRef = useRef(false);
+  const pendingFontsRef = useRef<CustomFont[] | null>(null);
+  const isPersistingRef = useRef(false);
 
   const persistFonts = (nextFonts: CustomFont[]) => {
-    const prevFonts = useFontStore.getState().customFonts;
     setAll(nextFonts);
-    window.api.settings
-      .update({ fontSettings: { customFonts: nextFonts } })
-      .catch(async (error) => {
-        console.error('Failed to persist font settings:', error);
-        // 저장 실패 시 백엔드 실제 상태로 재조정 (디스크 실패여도 백엔드
-        // 메모리에는 반영됐을 수 있어 단순 롤백으로는 어긋날 수 있음)
+    pendingFontsRef.current = nextFonts;
+    if (isPersistingRef.current) return;
+
+    isPersistingRef.current = true;
+    void (async () => {
+      while (pendingFontsRef.current) {
+        const pending = pendingFontsRef.current;
+        pendingFontsRef.current = null;
         try {
-          const settings = await window.api.settings.get();
-          useFontStore.getState().setAll(settings.fontSettings.customFonts);
-        } catch {
-          useFontStore.getState().setAll(prevFonts);
+          await window.api.settings.update({
+            fontSettings: { customFonts: pending },
+          });
+        } catch (error) {
+          console.error('Failed to persist font settings:', error);
+          // 최신 저장 실패만 authoritative 상태로 조정. 뒤에 더 최신 의도가
+          // 대기 중이면 먼저 적용해 이전 실패가 새 선택을 되덮지 않게 한다.
+          if (!pendingFontsRef.current) {
+            try {
+              const settings = await window.api.settings.get();
+              if (!pendingFontsRef.current) {
+                useFontStore
+                  .getState()
+                  .setAll(settings.fontSettings.customFonts);
+                syncFontCSS();
+              }
+            } catch (syncError) {
+              console.error('Failed to resync font settings:', syncError);
+            }
+            void window.api.ui.dialog
+              .alert(
+                t('fontPicker.saveFailed') || '폰트 설정 저장에 실패했습니다.',
+                { confirmText: t('common.ok') || '확인' },
+              )
+              .catch(() => {});
+          }
         }
-        syncFontCSS();
-        void window.api.ui.dialog
-          .alert(
-            t('fontPicker.saveFailed') || '폰트 설정 저장에 실패했습니다.',
-            { confirmText: t('common.ok') || '확인' },
-          )
-          .catch(() => {});
-      });
+      }
+      isPersistingRef.current = false;
+    })();
   };
 
   const isDuplicateFontFamily = (
@@ -69,8 +89,8 @@ export const useFontLibrary = () => {
   };
 
   const addLocalFont = async () => {
-    if (isAdding) return;
-    setIsAdding(true);
+    if (isAddingRef.current) return;
+    isAddingRef.current = true;
     try {
       const result = await window.api.font.load();
 
@@ -96,7 +116,7 @@ export const useFontLibrary = () => {
     } catch (error) {
       console.error('Failed to add local font:', error);
     } finally {
-      setIsAdding(false);
+      isAddingRef.current = false;
     }
   };
 

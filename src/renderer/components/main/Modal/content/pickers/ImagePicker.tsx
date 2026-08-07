@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
 import Checkbox from '@components/main/common/Checkbox';
@@ -63,6 +63,7 @@ const ImagePicker = ({
     (typeof STATE_MODES)[keyof typeof STATE_MODES]
   >(STATE_MODES.idle);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(false);
+  const loadingImageRef = useRef(false);
   const effectiveMode = showActiveState ? mode : STATE_MODES.idle;
 
   useEffect(() => {
@@ -70,7 +71,8 @@ const ImagePicker = ({
   }, [showActiveState]);
 
   const handleImageClick = async (stateMode: string): Promise<void> => {
-    if (isLoadingImage) return;
+    if (loadingImageRef.current) return;
+    loadingImageRef.current = true;
     setIsLoadingImage(true);
     try {
       const result = await window.api.image.load();
@@ -85,6 +87,7 @@ const ImagePicker = ({
     } catch (error) {
       console.error('Failed to load image', error);
     } finally {
+      loadingImageRef.current = false;
       setIsLoadingImage(false);
     }
   };

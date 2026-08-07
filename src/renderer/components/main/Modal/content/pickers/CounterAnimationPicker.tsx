@@ -81,6 +81,7 @@ const CounterAnimationPicker = ({
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const loadRequestRef = useRef(0);
   const isOpenRef = useRef(open);
+  const pendingPresetActionsRef = useRef(new Set<string>());
   const menu = usePickerItemMenu<string>();
 
   const loadLibrary = async () => {
@@ -176,27 +177,43 @@ const CounterAnimationPicker = ({
   };
 
   const handleDeletePreset = async (preset: CounterAnimationPreset) => {
-    const confirmed = await window.api.ui.dialog.confirm(
-      t('counterSetting.deleteAnimationConfirm') ||
-        '애니메이션을 삭제하시겠습니까?',
-      {
-        confirmText: t('contextMenu.delete') || '삭제',
-        cancelText: t('common.cancel') || '취소',
-        danger: true,
-      },
-    );
-
-    if (!confirmed) return;
+    if (pendingPresetActionsRef.current.has(preset.id)) return;
+    pendingPresetActionsRef.current.add(preset.id);
 
     try {
+      const confirmed = await window.api.ui.dialog.confirm(
+        t('counterSetting.deleteAnimationConfirm') ||
+          '애니메이션을 삭제하시겠습니까?',
+        {
+          confirmText: t('contextMenu.delete') || '삭제',
+          cancelText: t('common.cancel') || '취소',
+          danger: true,
+        },
+      );
+      if (!confirmed) return;
+
+      loadRequestRef.current += 1;
+      setLibrary((current) => {
+        const next = {
+          ...current,
+          userPresets: current.userPresets.filter(
+            (candidate) => candidate.id !== preset.id,
+          ),
+        };
+        counterAnimationLibraryCache = next;
+        return next;
+      });
       await window.api.counterAnimation.remove(preset.id);
       await loadLibrary();
     } catch (error) {
       console.error('Failed to delete counter animation preset', error);
+      await loadLibrary();
       setErrorText(
         t('counterSetting.deleteAnimationFailed') ||
           '애니메이션 삭제에 실패했습니다.',
       );
+    } finally {
+      pendingPresetActionsRef.current.delete(preset.id);
     }
   };
 

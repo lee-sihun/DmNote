@@ -215,6 +215,7 @@ const CounterAnimationEditorModal = ({
   const [viewScale, setViewScale] = useState(1);
 
   const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
   const [errorText, setErrorText] = useState('');
 
   const [previewCount, setPreviewCount] = useState(0);
@@ -839,7 +840,8 @@ const CounterAnimationEditorModal = ({
   const canSave = !isSaving && nameInput.trim().length > 0;
 
   const handleSave = async () => {
-    if (!canSave) return;
+    if (!canSave || savingRef.current) return;
+    savingRef.current = true;
 
     const normalizedBezier: CounterAnimationBezier = [
       localBezierRef.current[0],
@@ -878,6 +880,7 @@ const CounterAnimationEditorModal = ({
         t('counterSetting.saveAnimationFailed') || '모션 저장에 실패했습니다.',
       );
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   };

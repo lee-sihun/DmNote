@@ -339,6 +339,7 @@ const SoundTrimModal = ({
   const [endRatio, setEndRatio] = useState(1);
   const [isDecoding, setIsDecoding] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [viewZoom, setViewZoom] = useState(1);
@@ -559,6 +560,7 @@ const SoundTrimModal = ({
     setViewZoom(1);
     setViewPanRatio(0);
     setIsDecoding(false);
+    savingRef.current = false;
     setIsSaving(false);
     setErrorText('');
     dragTargetRef.current = null;
@@ -1005,7 +1007,8 @@ const SoundTrimModal = ({
   };
 
   const handleSave = async () => {
-    if (!audioBuffer || isSaving || isDecoding) return;
+    if (!audioBuffer || savingRef.current || isDecoding) return;
+    savingRef.current = true;
     stopPlayback();
     setErrorText('');
     setIsSaving(true);
@@ -1062,6 +1065,7 @@ const SoundTrimModal = ({
       console.error('Failed to save processed sound:', error);
       setErrorText(t('soundTrimModal.saveErrorFailed'));
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   };

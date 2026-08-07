@@ -54,6 +54,7 @@ const SoundPicker = ({
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const loadRequestRef = useRef(0);
   const isOpenRef = useRef(open);
+  const pendingSoundActionsRef = useRef(new Set<string>());
   const menu = usePickerItemMenu<string>();
 
   const normalizedSelectedSound = (selectedSound || '').trim();
@@ -184,19 +185,29 @@ const SoundPicker = ({
   };
 
   const handleDelete = async (item: SoundListItem) => {
-    const confirmed = await window.api.ui.dialog.confirm(
-      t('soundPicker.deleteConfirm') ||
-        '사운드를 삭제하시겠습니까? 파일이 삭제되고 이 사운드를 사용하는 모든 요소에서 해제됩니다.',
-      {
-        confirmText: t('contextMenu.delete') || '삭제',
-        cancelText: t('common.cancel') || '취소',
-        danger: true,
-      },
-    );
-
-    if (!confirmed) return;
+    if (pendingSoundActionsRef.current.has(item.soundPath)) return;
+    pendingSoundActionsRef.current.add(item.soundPath);
 
     try {
+      const confirmed = await window.api.ui.dialog.confirm(
+        t('soundPicker.deleteConfirm') ||
+          '사운드를 삭제하시겠습니까? 파일이 삭제되고 이 사운드를 사용하는 모든 요소에서 해제됩니다.',
+        {
+          confirmText: t('contextMenu.delete') || '삭제',
+          cancelText: t('common.cancel') || '취소',
+          danger: true,
+        },
+      );
+      if (!confirmed) return;
+
+      loadRequestRef.current += 1;
+      setSounds((current) => {
+        const next = current.filter(
+          (candidate) => candidate.soundPath !== item.soundPath,
+        );
+        soundListCache = next;
+        return next;
+      });
       await window.api.sound.remove(item.soundPath);
       if (normalizedSelectedSound === item.soundPath) {
         onSoundSelect(null);
@@ -207,6 +218,8 @@ const SoundPicker = ({
       // loadSounds가 loadError를 초기화하므로 reload 후에 실패 메시지 설정
       await loadSounds();
       setLoadError(t('soundPicker.deleteFailed') || '사운드 삭제 실패');
+    } finally {
+      pendingSoundActionsRef.current.delete(item.soundPath);
     }
   };
 
@@ -214,7 +227,19 @@ const SoundPicker = ({
     const trimmed = renameValue.trim();
     setRenamingPath(null);
     if (!trimmed || trimmed === (item.displayName || item.fileName)) return;
+    if (pendingSoundActionsRef.current.has(item.soundPath)) return;
+    pendingSoundActionsRef.current.add(item.soundPath);
     try {
+      loadRequestRef.current += 1;
+      setSounds((current) => {
+        const next = current.map((candidate) =>
+          candidate.soundPath === item.soundPath
+            ? { ...candidate, displayName: trimmed }
+            : candidate,
+        );
+        soundListCache = next;
+        return next;
+      });
       await window.api.sound.rename(item.soundPath, trimmed);
       await loadSounds();
     } catch (error) {
@@ -222,18 +247,35 @@ const SoundPicker = ({
       // loadSounds가 loadError를 초기화하므로 reload 후에 실패 메시지 설정
       await loadSounds();
       setLoadError(t('soundPicker.renameFailed') || '사운드 이름 변경 실패');
+    } finally {
+      pendingSoundActionsRef.current.delete(item.soundPath);
     }
   };
 
   const handleToggleHidden = async (item: SoundListItem) => {
+    if (pendingSoundActionsRef.current.has(item.soundPath)) return;
+    pendingSoundActionsRef.current.add(item.soundPath);
     try {
-      await window.api.sound.setHidden(item.soundPath, !item.hidden);
+      const nextHidden = !item.hidden;
+      loadRequestRef.current += 1;
+      setSounds((current) => {
+        const next = current.map((candidate) =>
+          candidate.soundPath === item.soundPath
+            ? { ...candidate, hidden: nextHidden }
+            : candidate,
+        );
+        soundListCache = next;
+        return next;
+      });
+      await window.api.sound.setHidden(item.soundPath, nextHidden);
       await loadSounds();
     } catch (error) {
       console.error('Failed to toggle sound hidden', error);
       // loadSounds가 loadError를 초기화하므로 reload 후에 실패 메시지 설정
       await loadSounds();
       setLoadError(t('soundPicker.hideFailed') || '사운드 숨김 변경 실패');
+    } finally {
+      pendingSoundActionsRef.current.delete(item.soundPath);
     }
   };
 

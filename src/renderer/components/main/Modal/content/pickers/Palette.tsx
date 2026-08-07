@@ -1,16 +1,17 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   parseHexColor,
   buildGradient,
   isGradientColor,
 } from '@utils/color/colorUtils';
 import { ColorSwatchButton } from './ColorSwatch';
+import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
+
+type PaletteValue = string | { type: 'gradient'; top: string; bottom: string };
 
 interface PaletteProps {
   color: string;
-  onColorChange: (
-    color: string | { type: 'gradient'; top: string; bottom: string },
-  ) => void;
+  onColorChange: (color: PaletteValue) => void;
 }
 
 interface ColorProps {
@@ -18,7 +19,38 @@ interface ColorProps {
   onClick: () => void;
 }
 
+const normalizePaletteValue = (next: PaletteValue): PaletteValue => {
+  if (typeof next === 'string') {
+    return parseHexColor(next)?.hex ?? next;
+  }
+  return isGradientColor(next) ? buildGradient(next.top, next.bottom) : next;
+};
+
 const Palette = ({ color, onColorChange }: PaletteProps) => {
+  const [draftColor, setDraftColor] = useState(color);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const textSchedulerRef = useRef<ReturnType<
+    typeof createRafLatestScheduler<string>
+  > | null>(null);
+
+  useEffect(() => {
+    const scheduler = createRafLatestScheduler((next: string) =>
+      onColorChange(normalizePaletteValue(next)),
+    );
+    textSchedulerRef.current = scheduler;
+    return () => {
+      scheduler.flush();
+      textSchedulerRef.current = null;
+    };
+  }, [onColorChange]);
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 비포커스 controlled 값 동기화
+      setDraftColor(color);
+    }
+  }, [color]);
+
   const colors = [
     '#D9E3F0',
     '#F47373',
@@ -32,23 +64,10 @@ const Palette = ({ color, onColorChange }: PaletteProps) => {
     'transparent',
   ];
 
-  const handleColorChange = (
-    next: string | { type: 'gradient'; top: string; bottom: string },
-  ): void => {
-    if (typeof next === 'string') {
-      const parsed = parseHexColor(next);
-      if (!parsed) {
-        onColorChange(next);
-        return;
-      }
-      onColorChange(parsed.hex);
-      return;
-    }
-    if (isGradientColor(next)) {
-      onColorChange(buildGradient(next.top, next.bottom));
-      return;
-    }
-    onColorChange(next);
+  const handleColorChange = (next: PaletteValue): void => {
+    textSchedulerRef.current?.flush();
+    if (typeof next === 'string') setDraftColor(next);
+    onColorChange(normalizePaletteValue(next));
   };
 
   return (
@@ -66,10 +85,19 @@ const Palette = ({ color, onColorChange }: PaletteProps) => {
         ))}
       </div>
       <input
+        ref={inputRef}
         type="text"
         placeholder="#FFFFFF"
-        value={color}
-        onChange={(e) => handleColorChange(e.target.value)}
+        value={draftColor}
+        onChange={(event) => {
+          const next = event.target.value;
+          setDraftColor(next);
+          textSchedulerRef.current?.push(next);
+        }}
+        onBlur={() => textSchedulerRef.current?.flush()}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') textSchedulerRef.current?.flush();
+        }}
         className="w-[142px] h-[22px] mt-[10px] rounded-md bg-inset focus:shadow-focus-ring px-[10px] flex items-center text-body text-fg"
       />
     </div>
