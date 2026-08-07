@@ -25,6 +25,9 @@ const ELEMENT_COUNTS = (process.env.DMN_BENCHMARK_ELEMENT_COUNTS ?? '1,100,500')
   .filter((value) => Number.isInteger(value) && value > 0);
 const ENABLED_COMMIT_STRATEGY =
   process.env.DMN_BENCHMARK_STRATEGY === 'sync' ? 'sync' : 'after-paint';
+const SELECTION_MODE =
+  process.env.DMN_BENCHMARK_SELECTION_MODE === 'batch' ? 'batch' : 'single';
+const BENCHMARK_ID = process.env.DMN_BENCHMARK_ID ?? 'PILOT-01';
 
 interface IterationResult {
   eventBlockingMs: number;
@@ -86,6 +89,7 @@ benchmarkDescribe('PILOT-01 그림자 토글 성능', () => {
           <ShadowToggleBenchmarkSurface
             elementCount={elementCount}
             enabledCommitStrategy={ENABLED_COMMIT_STRATEGY}
+            selectionMode={SELECTION_MODE}
             onRender={(duration) => renderDurations.push(duration)}
           />,
         );
@@ -178,9 +182,10 @@ benchmarkDescribe('PILOT-01 그림자 토글 성능', () => {
       `${JSON.stringify(
         {
           schemaVersion: 1,
-          benchmarkId: 'PILOT-01',
+          benchmarkId: BENCHMARK_ID,
           variant: VARIANT,
           enabledCommitStrategy: ENABLED_COMMIT_STRATEGY,
+          selectionMode: SELECTION_MODE,
           measuredAt: new Date().toISOString(),
           commit: execFileSync('git', ['rev-parse', 'HEAD'], {
             encoding: 'utf8',

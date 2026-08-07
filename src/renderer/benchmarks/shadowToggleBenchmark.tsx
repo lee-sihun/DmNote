@@ -17,8 +17,9 @@ export interface Distribution {
 }
 
 interface ShadowToggleBrowserBenchmarkResult {
-  benchmark: 'PILOT-01-shadow-toggle';
+  benchmark: 'PILOT-01-shadow-toggle' | 'PILOT-02-batch-shadow-toggle';
   kind: 'browser-render-path';
+  selectionMode: 'single' | 'batch';
   enabledCommitStrategy: 'after-paint' | 'sync';
   iterations: number;
   warmupIterations: number;
@@ -115,12 +116,14 @@ export const afterPaintOpportunity = async (): Promise<void> => {
 interface ShadowToggleBenchmarkSurfaceProps {
   elementCount: number;
   enabledCommitStrategy?: 'after-paint' | 'sync';
+  selectionMode?: 'single' | 'batch';
   onRender?: (durationMs: number) => void;
 }
 
 export const ShadowToggleBenchmarkSurface = ({
   elementCount,
   enabledCommitStrategy = 'after-paint',
+  selectionMode = 'single',
   onRender = () => undefined,
 }: ShadowToggleBenchmarkSurfaceProps) => {
   const [positions, setPositions] = useState<KeyPositions>(() =>
@@ -132,12 +135,28 @@ export const ShadowToggleBenchmarkSurface = ({
   const canonicalEnabled = idleShadow.enabled || activeShadow.enabled;
 
   const handleEnabledChange = (enabled: boolean) => {
-    setPositions((current) =>
-      updateKeyStyle(current, 'benchmark', 0, {
-        shadow: { ...idleShadow, enabled },
-        activeShadow: { ...activeShadow, enabled },
-      }),
-    );
+    setPositions((current) => {
+      if (selectionMode === 'single') {
+        return updateKeyStyle(current, 'benchmark', 0, {
+          shadow: { ...idleShadow, enabled },
+          activeShadow: { ...activeShadow, enabled },
+        });
+      }
+      return {
+        ...current,
+        benchmark: current.benchmark.map((position) => ({
+          ...position,
+          shadow: {
+            ...(position.shadow ?? DISABLED_IDLE_SHADOW),
+            enabled,
+          },
+          activeShadow: {
+            ...(position.activeShadow ?? DISABLED_ACTIVE_SHADOW),
+            enabled,
+          },
+        })),
+      };
+    });
   };
 
   return (
@@ -180,6 +199,7 @@ const BenchmarkApp = () => {
   const elementCount = Math.max(1, Number(query.get('elements')) || 100);
   const enabledCommitStrategy =
     query.get('strategy') === 'sync' ? 'sync' : 'after-paint';
+  const selectionMode = query.get('selection') === 'batch' ? 'batch' : 'single';
   const renderDurationsRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -243,8 +263,12 @@ const BenchmarkApp = () => {
       }
 
       const result: ShadowToggleBrowserBenchmarkResult = {
-        benchmark: 'PILOT-01-shadow-toggle',
+        benchmark:
+          selectionMode === 'batch'
+            ? 'PILOT-02-batch-shadow-toggle'
+            : 'PILOT-01-shadow-toggle',
         kind: 'browser-render-path',
+        selectionMode,
         enabledCommitStrategy,
         iterations,
         warmupIterations,
@@ -267,7 +291,8 @@ const BenchmarkApp = () => {
       resultElement.dataset.status = 'complete';
       resultElement.textContent = JSON.stringify(result, null, 2);
       document.title = [
-        'PILOT-01',
+        selectionMode === 'batch' ? 'PILOT-02' : 'PILOT-01',
+        selectionMode,
         enabledCommitStrategy,
         `event=${result.eventBlockingMs.p95.toFixed(3)}`,
         `visual=${result.visualDomCommitMs.p95.toFixed(3)}`,
@@ -287,7 +312,13 @@ const BenchmarkApp = () => {
     return () => {
       cancelled = true;
     };
-  }, [elementCount, enabledCommitStrategy, iterations, warmupIterations]);
+  }, [
+    elementCount,
+    enabledCommitStrategy,
+    iterations,
+    selectionMode,
+    warmupIterations,
+  ]);
 
   return (
     <main className="min-h-screen bg-app text-fg p-[24px]">
@@ -295,6 +326,7 @@ const BenchmarkApp = () => {
         <ShadowToggleBenchmarkSurface
           elementCount={elementCount}
           enabledCommitStrategy={enabledCommitStrategy}
+          selectionMode={selectionMode}
           onRender={(duration) => renderDurationsRef.current.push(duration)}
         />
       </div>
