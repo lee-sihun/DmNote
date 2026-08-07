@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 89개    |
+| 대기                             | 88개    |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 76개    |
+| 실험·검증 중                     | 77개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -417,6 +417,29 @@
 - 정확성 게이트: 최신 좌표 병합·pointerup flush·세션 세대 격리 테스트 통과
 <!-- GRID-08:RESULT:END -->
 
+<!-- GRID-11:RESULT:START -->
+
+#### GRID-11 미니맵 드래그 최신 자동 측정
+
+| 조건           | 값                                                       |
+| -------------- | -------------------------------------------------------- |
+| 측정 경로      | 실제 GridMinimap + SVG 요소 500개, mousemove 100회 burst |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회                   |
+| 구현 코드 커밋 | `25a0c0a32a41acc5112c3c1e2f3176a7fdf28639`               |
+| 측정 코드 커밋 | `1ca338796ad3431ff5b9b5877d6dd23a9f3ff397`               |
+| 비교 전략      | `legacy` → `frame`                                       |
+| 환경           | darwin arm64, v25.2.1                                    |
+
+| P95 지표              |  legacy | frame coalescing | 개선율 |
+| --------------------- | ------: | ---------------: | -----: |
+| burst event blocking  | 0.711ms |          0.569ms |  19.9% |
+| 최종 DOM commit       | 3.864ms |          4.783ms | -23.8% |
+| React commit duration | 2.740ms |          2.503ms |   8.7% |
+
+- 원시 결과: [기준선](../benchmarks/results/grid-11-minimap-baseline.json) · [개선](../benchmarks/results/grid-11-minimap-improved.json)
+- 정확성 게이트: 최신 좌표 병합·mouseup flush·최종 pan 테스트 통과
+<!-- GRID-11:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                                 |
@@ -494,7 +517,7 @@
 | GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |    0.405 |    0.137 |  66.2% | 검증 | `23582b9a`, latest pointer frame coalescing         |
 | GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |    0.261 |    0.139 |  47.0% | 검증 | `f96cdd57`, 최신 좌표 frame coalescing              |
 | GRID-10  | 미니맵 클릭 이동      | P1       | CTP ms       |        — |        — |      — | 대기 | viewport 반영                                       |
-| GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport 반영                                       |
+| GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |    0.711 |    0.569 |  19.9% | 검증 | `25a0c0a3`, latest mouse frame coalescing           |
 | GRID-12  | 요소 단일·다중 선택   | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 교체 포함                                      |
 | GRID-13  | Shift 범위 선택       | P1       | CTP ms       |        — |        — |      — | 대기 | 요소 수별 측정                                      |
 | GRID-14  | 더블클릭 편집         | P1/P3    | CTP ms       |        — |        — |      — | 실험 | `9f9631c1`, 공통 dialog shell 우선 표시 적용        |
@@ -718,6 +741,15 @@
 | GRID-08-FRAME  | 2026-08-07 | GRID-08 | 개선   | `50147d66` | vitest-jsdom-gradient-stop-burst-proxy, darwin arm64, v25.2.1 | preview 구독 500개·pointermove 20회 |   30 | 0.114 | 0.137 | 0.163 | DOM P95 4.391ms·React P95 2.220ms | [JSON](../benchmarks/results/grid-08-gradient-axis-improved.json) | gradient stop burst proxy |
 
 <!-- GRID-08:SESSIONS:END -->
+
+<!-- GRID-11:SESSIONS:START -->
+
+| 세션 ID        | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                         | 시나리오·데이터 크기      | 반복 |   P50 |   P95 |  최대 | 보조 지표                         | 원시 자료                                                   | 비고               |
+| -------------- | ---------- | ------- | ------ | ---------- | ------------------------------------------------------------ | ------------------------- | ---: | ----: | ----: | ----: | --------------------------------- | ----------------------------------------------------------- | ------------------ |
+| GRID-11-LEGACY | 2026-08-07 | GRID-11 | 기준선 | `1ca33879` | vitest-jsdom-minimap-drag-burst-proxy, darwin arm64, v25.2.1 | SVG 500개·mousemove 100회 |   30 | 0.564 | 0.711 | 0.835 | DOM P95 3.864ms·React P95 2.740ms | [JSON](../benchmarks/results/grid-11-minimap-baseline.json) | minimap drag proxy |
+| GRID-11-FRAME  | 2026-08-07 | GRID-11 | 개선   | `1ca33879` | vitest-jsdom-minimap-drag-burst-proxy, darwin arm64, v25.2.1 | SVG 500개·mousemove 100회 |   30 | 0.471 | 0.569 | 0.985 | DOM P95 4.783ms·React P95 2.503ms | [JSON](../benchmarks/results/grid-11-minimap-improved.json) | minimap drag proxy |
+
+<!-- GRID-11:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -1038,6 +1070,21 @@
 | 결론        | GRID-08 검증 완료, EDIT-03의 stop 드래그 경로 적용·형식 전환은 공통 탭 즉시 반영 기반 사용    |
 
 <!-- GRID-08:EXPERIMENT:END -->
+
+<!-- GRID-11:EXPERIMENT:START -->
+
+### EXP-020: 미니맵 드래그 입력 프레임 병합
+
+| 필드        | 내용                                                                   |
+| ----------- | ---------------------------------------------------------------------- |
+| 항목 ID     | GRID-11                                                                |
+| 변경 내용   | mousemove 최신 좌표만 프레임당 한 번 pan에 반영하고 mouseup 전에 flush |
+| 구현 커밋   | `25a0c0a3`                                                             |
+| P95 변화    | 0.711ms → 0.569ms (19.9%)                                              |
+| 정확성 검증 | 프레임 최신 좌표·mouseup flush·최종 pan 테스트 통과                    |
+| 결론        | 자동 회귀 게이트 포함 검증 완료                                        |
+
+<!-- GRID-11:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 

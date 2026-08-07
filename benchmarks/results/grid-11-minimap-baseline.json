@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "GRID-11",
+  "variant": "legacy-baseline",
+  "strategy": "legacy",
+  "measuredAt": "2026-08-07T11:38:46.923Z",
+  "commit": "1ca338796ad3431ff5b9b5877d6dd23a9f3ff397",
+  "runtime": {
+    "kind": "vitest-jsdom-minimap-drag-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 100,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.5391670000000204,
+        "p95": 0.7755419999999731,
+        "max": 1.6564579999999296
+      },
+      "visualDomCommitMs": {
+        "p50": 0.9242920000000368,
+        "p95": 1.3802919999999403,
+        "max": 2.3129169999999704
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.5305399999998599,
+        "p95": 0.8170030000003408,
+        "max": 0.9881580000010217
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 100,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.6131249999999682,
+        "p95": 0.7907079999999951,
+        "max": 2.215332999999987
+      },
+      "visualDomCommitMs": {
+        "p50": 1.3673749999999245,
+        "p95": 2.9821249999999964,
+        "max": 3.256167000000005
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.5947119999992765,
+        "p95": 3.2470150000001468,
+        "max": 3.2549100000002227
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 100,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.5642499999999018,
+        "p95": 0.7106659999999465,
+        "max": 0.8352919999999813
+      },
+      "visualDomCommitMs": {
+        "p50": 3.082542000000103,
+        "p95": 3.8636670000000777,
+        "max": 5.29383299999995
+      },
+      "reactCommitDurationMs": {
+        "p50": 2.184807999999066,
+        "p95": 2.7400009999985286,
+        "max": 4.335419999998976
+      }
+    }
+  ]
+}
