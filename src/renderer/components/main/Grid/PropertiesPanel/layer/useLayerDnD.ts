@@ -14,6 +14,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import type { LayerItem, DisplayItem } from '../types';
+import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
 
 // ============================================================================
 // 파라미터 타입
@@ -684,7 +685,7 @@ export function useLayerDnD({
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const applyMouseMove = (moveEvent: MouseEvent) => {
       if (
         !dragStateRef.current ||
         !scrollElementRef.current ||
@@ -766,8 +767,13 @@ export function useLayerDnD({
       setDragOverItemDisplayIndex(dropTarget.indicatorDisplayIndex);
       setDragOverHeaderBottomGroupId(dropTarget.indicatorHeaderBottomGroupId);
     };
+    const moveScheduler = createRafLatestScheduler(applyMouseMove);
+    const handleMouseMove = (moveEvent: MouseEvent) =>
+      moveScheduler.push(moveEvent);
 
     const handleMouseUp = () => {
+      moveScheduler.flush();
+      moveScheduler.cancel();
       if (dragStateRef.current && isDraggingRef.current) {
         const target = dragStateRef.current.currentDropTarget;
 
@@ -815,7 +821,7 @@ export function useLayerDnD({
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const applyMouseMove = (moveEvent: MouseEvent) => {
       if (
         !groupDragStateRef.current ||
         !scrollElementRef.current ||
@@ -860,8 +866,13 @@ export function useLayerDnD({
       groupDragStateRef.current.currentOverIndex = newIndex;
       setDragOverDisplayIndex(newIndex);
     };
+    const moveScheduler = createRafLatestScheduler(applyMouseMove);
+    const handleMouseMove = (moveEvent: MouseEvent) =>
+      moveScheduler.push(moveEvent);
 
     const handleMouseUp = () => {
+      moveScheduler.flush();
+      moveScheduler.cancel();
       if (groupDragStateRef.current && isDraggingRef.current) {
         const targetIdx = groupDragStateRef.current.currentOverIndex;
         if (targetIdx !== null) {
