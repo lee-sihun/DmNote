@@ -2,7 +2,7 @@
  * Grid 마퀴(범위 선택) 관련 로직 훅
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   useGridSelectionStore,
   isElementInMarquee,
@@ -26,6 +26,8 @@ interface UseGridMarqueeParams {
     clientX: number,
     clientY: number,
   ) => { x: number; y: number } | null;
+  /** benchmark에서 제거 전 이벤트 처리 경로를 재현 */
+  continuousInputStrategy?: 'legacy' | 'frame';
 }
 
 interface UseGridMarqueeReturn {
@@ -48,6 +50,7 @@ export function useGridMarquee({
   selectedKeyType,
   pluginElements,
   clientToGridCoords,
+  continuousInputStrategy = 'frame',
 }: UseGridMarqueeParams): UseGridMarqueeReturn {
   const isMarqueeSelecting = useGridSelectionStore(
     (state) => state.isMarqueeSelecting,
@@ -67,22 +70,48 @@ export function useGridMarquee({
     (state) => state.setSelectedElements,
   );
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
+  const frameRef = useRef<number | null>(null);
+  const pendingClientPointRef = useRef<{ x: number; y: number } | null>(null);
 
-  // 마퀴 선택 중 마우스 이동 핸들러
-  const handleMarqueeMouseMove = (e: MouseEvent) => {
-    if (!isMarqueeSelecting) return;
-
-    const gridCoords = clientToGridCoords(e.clientX, e.clientY);
+  const applyPendingMarquee = () => {
+    const point = pendingClientPointRef.current;
+    pendingClientPointRef.current = null;
+    if (!point) return;
+    const gridCoords = clientToGridCoords(point.x, point.y);
     if (gridCoords) {
       updateMarqueeSelection(gridCoords.x, gridCoords.y);
     }
   };
 
+  // 마퀴 선택 중 마우스 이동 핸들러
+  const handleMarqueeMouseMove = (e: MouseEvent) => {
+    if (!isMarqueeSelecting) return;
+    pendingClientPointRef.current = { x: e.clientX, y: e.clientY };
+    if (continuousInputStrategy === 'legacy') {
+      applyPendingMarquee();
+      return;
+    }
+    if (frameRef.current !== null) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null;
+      applyPendingMarquee();
+    });
+  };
+
   // 마퀴 선택 완료 시 요소 선택 처리
   const handleMarqueeMouseUp = () => {
     if (!isMarqueeSelecting) return;
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      applyPendingMarquee();
+    }
 
-    const rect = getMarqueeRect(marqueeStart, marqueeEnd);
+    const selectionState = useGridSelectionStore.getState();
+    const rect = getMarqueeRect(
+      selectionState.marqueeStart,
+      selectionState.marqueeEnd,
+    );
 
     // 마퀴 영역이 충분히 크면 범위 내 요소 선택
     if (rect && rect.width > 5 && rect.height > 5) {
@@ -200,6 +229,11 @@ export function useGridMarquee({
       document.addEventListener('mouseup', handleMarqueeMouseUp);
 
       return () => {
+        if (frameRef.current !== null) {
+          cancelAnimationFrame(frameRef.current);
+          frameRef.current = null;
+        }
+        pendingClientPointRef.current = null;
         document.removeEventListener('mousemove', handleMarqueeMouseMove);
         document.removeEventListener('mouseup', handleMarqueeMouseUp);
       };
