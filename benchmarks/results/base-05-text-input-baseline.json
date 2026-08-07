@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "BASE-05",
+  "variant": "sync-baseline",
+  "commitStrategy": "sync",
+  "measuredAt": "2026-08-07T10:57:50.931Z",
+  "commit": "02b6bd36d4d92e4a81183ca8bd4737b312d8911f",
+  "runtime": {
+    "kind": "vitest-jsdom-dom-commit-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.2613340000000335,
+        "p95": 0.44299999999998363,
+        "max": 0.4622079999999187
+      },
+      "visualDomCommitMs": {
+        "p50": 0.2685830000000351,
+        "p95": 0.4541659999999865,
+        "max": 0.47433299999988776
+      },
+      "canonicalDomCommitMs": {
+        "p50": 0.2698330000000624,
+        "p95": 0.45562500000005457,
+        "max": 0.4762080000000424
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.0351269999998749,
+        "p95": 0.05695899999955145,
+        "max": 0.059833000000708125
+      }
+    },
+    {
+      "itemCount": 100,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 2.6973749999999654,
+        "p95": 5.058291999999938,
+        "max": 5.089082999999846
+      },
+      "visualDomCommitMs": {
+        "p50": 2.7112499999998363,
+        "p95": 5.069541999999956,
+        "max": 5.107416999999941
+      },
+      "canonicalDomCommitMs": {
+        "p50": 2.71287499999994,
+        "p95": 5.070917000000009,
+        "max": 5.109207999999853
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.15949600000180908,
+        "p95": 0.23288300000172057,
+        "max": 0.296645999995917
+      }
+    },
+    {
+      "itemCount": 500,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 7.291334000000006,
+        "p95": 14.927374999999984,
+        "max": 19.76537499999995
+      },
+      "visualDomCommitMs": {
+        "p50": 7.3093750000000455,
+        "p95": 14.967624999999998,
+        "max": 19.800874999999905
+      },
+      "canonicalDomCommitMs": {
+        "p50": 7.311083999999937,
+        "p95": 14.970167000000174,
+        "max": 19.804124999999885
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.6390689999982442,
+        "p95": 1.2329309999945508,
+        "max": 1.2334020000002965
+      }
+    }
+  ]
+}
