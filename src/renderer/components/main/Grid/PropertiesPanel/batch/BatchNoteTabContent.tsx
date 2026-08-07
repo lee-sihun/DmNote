@@ -85,6 +85,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             {t('keySetting.noteEffectEnabled') || '노트 효과 표시'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={getMixedValue((pos) => pos.noteEffectEnabled, true).value}
             onChange={() => {
               const currentValue = getMixedValue(
@@ -105,6 +106,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             {t('keySetting.noteAutoYCorrection') || 'Y축 자동 보정'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={
               getMixedValue((pos) => pos.noteAutoYCorrection, true).value
             }
@@ -386,6 +388,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             {t('keySetting.noteGlow') || '글로우 효과'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={getMixedValue((pos) => pos.noteGlowEnabled, false).value}
             onChange={() => {
               const currentValue = getMixedValue(

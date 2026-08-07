@@ -417,6 +417,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             {t('keySetting.noteEffectEnabled') || '노트 효과 표시'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={keyPosition.noteEffectEnabled ?? true}
             onChange={() =>
               handleStyleChangeComplete(
@@ -433,6 +434,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             {t('keySetting.noteAutoYCorrection') || 'Y축 자동 보정'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={keyPosition.noteAutoYCorrection ?? true}
             onChange={() =>
               handleStyleChangeComplete(
@@ -698,6 +700,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             {t('keySetting.noteGlow') || '글로우 효과'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={keyPosition.noteGlowEnabled ?? false}
             onChange={() =>
               handleStyleChangeComplete(

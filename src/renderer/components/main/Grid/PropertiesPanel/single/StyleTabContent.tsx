@@ -1018,6 +1018,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               {t('propertiesPanel.useInlineStyles') || '인라인 스타일 우선'}
             </p>
             <Checkbox
+              commitStrategy="after-paint"
               checked={keyPosition.useInlineStyles ?? false}
               onChange={() =>
                 handleStyleChangeComplete(
@@ -1048,6 +1049,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             label={t('propertiesPanel.keySoundEnabled') || '키 사운드 활성화'}
           >
             <Checkbox
+              commitStrategy="after-paint"
               checked={keyPosition.soundEnabled ?? false}
               onChange={() => {
                 const nextEnabled = !(keyPosition.soundEnabled ?? false);

@@ -243,6 +243,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             {t('counterSetting.counterEnabled') || '카운터 표시'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={counterSettings.enabled}
             onChange={() =>
               handleCounterUpdate({ enabled: !counterSettings.enabled })
@@ -426,6 +427,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             {t('counterSetting.animationEnabled') || '카운터 애니메이션'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={counterSettings.animation.enabled}
             onChange={() =>
               handleCounterUpdate({

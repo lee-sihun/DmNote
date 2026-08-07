@@ -83,6 +83,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             {t('counterSetting.counterEnabled') || '카운터 표시'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={batchCounterSettings.enabled}
             onChange={() =>
               handleBatchCounterUpdate({
@@ -274,6 +275,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             {t('counterSetting.animationEnabled') || '카운터 애니메이션'}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={batchCounterSettings.animation.enabled}
             onChange={() =>
               handleBatchCounterUpdate({

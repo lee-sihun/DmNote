@@ -1117,6 +1117,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               {t('propertiesPanel.useInlineStyles') || '인라인 스타일 우선'}
             </p>
             <Checkbox
+              commitStrategy="after-paint"
               checked={getMixedValue((pos) => pos.useInlineStyles, false).value}
               onChange={() => {
                 const currentValue = getMixedValue(
@@ -1172,6 +1173,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
                 <Checkbox
+                  commitStrategy="after-paint"
                   checked={
                     soundMixedValue((pos) => pos.soundEnabled, false).value
                   }
