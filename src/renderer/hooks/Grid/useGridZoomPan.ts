@@ -33,8 +33,15 @@ export function useGridZoomPan({
 
   const macOS = isMac();
 
-  // 휠 이벤트 누적 방지용 ref
-  const isWheelProcessingRef = useRef(false);
+  const wheelFrameRef = useRef<number | null>(null);
+  const pendingWheelRef = useRef<{
+    clientX: number;
+    clientY: number;
+    deltaX: number;
+    deltaY: number;
+    shiftKey: boolean;
+    zoomModifier: boolean;
+  } | null>(null);
   const [isTransforming, setIsTransforming] = useState(false);
   const isTransformingRef = useRef(false);
   const transformIdleTimerRef = useRef<number | null>(null);
@@ -150,36 +157,43 @@ export function useGridZoomPan({
    * 휠 이벤트 핸들러
    */
   const handleWheel = (e: WheelEvent) => {
-    // 기본 스크롤 방지
     e.preventDefault();
-
-    // 빠른 연속 휠 이벤트 방지
-    if (isWheelProcessingRef.current) return;
-    isWheelProcessingRef.current = true;
-    requestAnimationFrame(() => {
-      isWheelProcessingRef.current = false;
-    });
-
     const isWheelZoomModifierPressed = macOS
       ? e.metaKey || e.ctrlKey // macOS: Cmd+휠, 그리고 트랙패드 핀치(ctrlKey=true)도 줌으로 유지
       : e.ctrlKey; // Windows/Linux: Ctrl+휠
-
-    if (isWheelZoomModifierPressed) {
-      // (Ctrl/Cmd) + 휠: 줌
-      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      zoomAtPoint(e.clientX, e.clientY, zoom + delta);
-    } else {
-      // 휠/트랙패드 2손가락: 패닝
-      // - 트랙패드는 deltaX/deltaY가 같이 들어오므로 수평/대각 이동 지원
-      // - 일부 마우스 휠은 deltaX=0만 오기 때문에 기존 Shift+휠 수평 패닝도 유지
-      const hasHorizontalDelta = Math.abs(e.deltaX) > 0.01;
-
-      if (e.shiftKey && !hasHorizontalDelta) {
-        pan(-e.deltaY, 0);
-      } else {
-        pan(-e.deltaX, -e.deltaY);
+    const pending = pendingWheelRef.current;
+    pendingWheelRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      deltaX:
+        pending?.zoomModifier === isWheelZoomModifierPressed
+          ? pending.deltaX + e.deltaX
+          : e.deltaX,
+      deltaY:
+        pending?.zoomModifier === isWheelZoomModifierPressed
+          ? pending.deltaY + e.deltaY
+          : e.deltaY,
+      shiftKey: e.shiftKey,
+      zoomModifier: isWheelZoomModifierPressed,
+    };
+    if (wheelFrameRef.current !== null) return;
+    wheelFrameRef.current = requestAnimationFrame(() => {
+      wheelFrameRef.current = null;
+      const next = pendingWheelRef.current;
+      pendingWheelRef.current = null;
+      if (!next) return;
+      if (next.zoomModifier) {
+        const delta = next.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+        zoomAtPoint(next.clientX, next.clientY, zoom + delta);
+        return;
       }
-    }
+      const hasHorizontalDelta = Math.abs(next.deltaX) > 0.01;
+      if (next.shiftKey && !hasHorizontalDelta) {
+        pan(-next.deltaY, 0);
+      } else {
+        pan(-next.deltaX, -next.deltaY);
+      }
+    });
   };
 
   /**
@@ -261,15 +275,32 @@ export function useGridZoomPan({
     const startY = e.clientY;
     const startPanX = panX;
     const startPanY = panY;
+    let panFrame: number | null = null;
+    let pendingPoint: { x: number; y: number } | null = null;
+
+    const applyPendingPan = () => {
+      const point = pendingPoint;
+      pendingPoint = null;
+      if (!point) return;
+      touchTransforming();
+      setPan(mode, startPanX + point.x - startX, startPanY + point.y - startY);
+    };
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const deltaY = moveEvent.clientY - startY;
-      touchTransforming();
-      setPan(mode, startPanX + deltaX, startPanY + deltaY);
+      pendingPoint = { x: moveEvent.clientX, y: moveEvent.clientY };
+      if (panFrame !== null) return;
+      panFrame = requestAnimationFrame(() => {
+        panFrame = null;
+        applyPendingPan();
+      });
     };
 
     const handleMouseUp = () => {
+      if (panFrame !== null) {
+        cancelAnimationFrame(panFrame);
+        panFrame = null;
+        applyPendingPan();
+      }
       if (transformIdleTimerRef.current !== null) {
         window.clearTimeout(transformIdleTimerRef.current);
         transformIdleTimerRef.current = null;
@@ -343,6 +374,11 @@ export function useGridZoomPan({
 
   useEffect(() => {
     return () => {
+      if (wheelFrameRef.current !== null) {
+        cancelAnimationFrame(wheelFrameRef.current);
+        wheelFrameRef.current = null;
+        pendingWheelRef.current = null;
+      }
       if (transformIdleTimerRef.current !== null) {
         window.clearTimeout(transformIdleTimerRef.current);
         transformIdleTimerRef.current = null;
