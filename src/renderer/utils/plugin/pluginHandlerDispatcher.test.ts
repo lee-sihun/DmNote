@@ -37,6 +37,18 @@ describe('plugin handler dispatcher', () => {
     expect(handler).toHaveBeenCalledWith(last);
   });
 
+  it('sync 전략은 기준선 측정을 위해 모든 input 이벤트를 즉시 전달한다', () => {
+    const dispatcher = createPluginHandlerDispatcher('sync');
+    const input = document.createElement('input');
+    const handler = vi.fn();
+
+    dispatcher.dispatch(input, handler, new Event('input'));
+    dispatcher.dispatch(input, handler, new Event('input'));
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(callbacks).toHaveLength(0);
+  });
+
   it('change는 대기 input을 먼저 flush한다', () => {
     const dispatcher = createPluginHandlerDispatcher();
     const input = document.createElement('input');

@@ -12,7 +12,9 @@ interface PendingInput {
   event: Event;
 }
 
-export const createPluginHandlerDispatcher = () => {
+export const createPluginHandlerDispatcher = (
+  inputStrategy: 'sync' | 'frame' = 'frame',
+) => {
   const pendingInputs = new Map<HTMLElement, PendingInput>();
   const pendingActions = new WeakSet<HTMLElement>();
   let frame: number | null = null;
@@ -51,6 +53,19 @@ export const createPluginHandlerDispatcher = () => {
     event: Event,
   ) => {
     if (event.type === 'input') {
+      if (inputStrategy === 'sync') {
+        try {
+          const result = handler(event);
+          if (isPromiseLike(result)) {
+            void Promise.resolve(result).catch((error) =>
+              console.error('Plugin input handler failed', error),
+            );
+          }
+        } catch (error) {
+          console.error('Plugin input handler failed', error);
+        }
+        return;
+      }
       scheduleInput({ element, handler, event });
       return;
     }

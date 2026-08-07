@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "PLUG-02",
+  "variant": "improved",
+  "strategy": "frame",
+  "measuredAt": "2026-08-07T12:35:01.184Z",
+  "commit": "94d99e8d2ebec9a4b4f184e186a6087a56520fbc",
+  "runtime": {
+    "kind": "vitest-jsdom-plugin-input-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 100,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.17541700000003857,
+        "p95": 0.24295899999992798,
+        "max": 0.3027080000000524
+      },
+      "handlerCompleteMs": {
+        "p50": 1.352292000000034,
+        "p95": 1.4218329999999924,
+        "max": 1.5709170000000086
+      },
+      "handlerInvocations": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 100,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.1791249999999991,
+        "p95": 0.2394170000000031,
+        "max": 0.24441699999999855
+      },
+      "handlerCompleteMs": {
+        "p50": 1.3510420000000067,
+        "p95": 1.4279170000000931,
+        "max": 1.4349999999999454
+      },
+      "handlerInvocations": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 100,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.16004099999997834,
+        "p95": 0.2021670000000313,
+        "max": 0.2117920000000595
+      },
+      "handlerCompleteMs": {
+        "p50": 1.33400000000006,
+        "p95": 1.3571669999998903,
+        "max": 1.3657500000000482
+      },
+      "handlerInvocations": {
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      }
+    }
+  ]
+}
