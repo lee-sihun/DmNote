@@ -258,6 +258,33 @@ describe('useDraggable pointer contract', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it('한 프레임의 연속 이동에서 최신 좌표를 사용한다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointermove', { clientX: 11 });
+      dispatchPointer(element, 'pointermove', { clientX: 21 });
+      flushRaf();
+      dispatchPointer(element, 'pointerup', { clientX: 21 });
+    });
+
+    expect(onPositionChange).toHaveBeenCalledWith(20, 0);
+  });
+
+  it('프레임 전에 pointerup해도 대기 중인 최종 위치를 커밋한다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointermove', { clientX: 11 });
+      dispatchPointer(element, 'pointerup', { clientX: 11 });
+    });
+
+    expect(rafCallbacks).toHaveLength(0);
+    expect(onPositionChange).toHaveBeenCalledWith(10, 0);
+  });
+
   it('ignores an additional press while the active pointer owns the session', async () => {
     const element = await renderHarness();
     const setPointerCapture = vi.spyOn(element, 'setPointerCapture');

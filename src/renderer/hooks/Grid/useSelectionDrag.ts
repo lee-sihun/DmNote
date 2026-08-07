@@ -98,6 +98,8 @@ export const useSelectionDrag = ({
     let lastSnappedDeltaX = 0;
     let lastSnappedDeltaY = 0;
     let rafId: number | null = null;
+    let latestMoveEvent: PointerEvent | null = null;
+    let pendingFrameCallback: (() => void) | null = null;
     let dragEnded = false;
     let actuallyDragging = false;
     let finishGesture: (() => void) | null = null;
@@ -114,14 +116,18 @@ export const useSelectionDrag = ({
       if (dragEnded || moveEvent.pointerId !== activePointerIdRef.current) {
         return;
       }
+      latestMoveEvent = moveEvent;
       if (rafId !== null) return;
 
-      rafId = requestAnimationFrame(() => {
+      pendingFrameCallback = () => {
         rafId = null;
-        if (dragEnded) return;
+        pendingFrameCallback = null;
+        const frameEvent = latestMoveEvent;
+        latestMoveEvent = null;
+        if (dragEnded || !frameEvent) return;
 
-        const rawDeltaX = (moveEvent.clientX - startClientX) / zoom;
-        const rawDeltaY = (moveEvent.clientY - startClientY) / zoom;
+        const rawDeltaX = (frameEvent.clientX - startClientX) / zoom;
+        const rawDeltaY = (frameEvent.clientY - startClientY) / zoom;
         const newX = startX + rawDeltaX;
         const newY = startY + rawDeltaY;
         const gridSettings = useSettingsStore.getState().gridSettings;
@@ -259,11 +265,19 @@ export const useSelectionDrag = ({
           lastPressMovedRef.current = true;
           onMultiDrag?.(moveDeltaX, moveDeltaY);
         }
-      });
+      };
+      rafId = requestAnimationFrame(pendingFrameCallback);
     };
 
     const finishDrag = () => {
       if (dragEnded) return;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+        const flush = pendingFrameCallback;
+        pendingFrameCallback = null;
+        flush?.();
+      }
       dragEnded = true;
       activePointerIdRef.current = null;
       activeCleanupRef.current = null;
@@ -271,10 +285,6 @@ export const useSelectionDrag = ({
 
       if (dragTarget.hasPointerCapture(pointerId)) {
         dragTarget.releasePointerCapture(pointerId);
-      }
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
       }
       dragTarget.removeEventListener('pointermove', handlePointerMove);
       dragTarget.removeEventListener('pointerup', handlePointerEnd);

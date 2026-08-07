@@ -220,6 +220,8 @@ export const useDraggable = ({
     const initialPosition = { dx, dy };
 
     let rafId: number | null = null;
+    let latestMoveEvent: PointerEvent | null = null;
+    let pendingFrameCallback: (() => void) | null = null;
     let finishGesture: (() => void) | null = null;
     // 드래그 종료 플래그 (rAF 콜백에서 체크)
     let dragEnded = false;
@@ -260,16 +262,20 @@ export const useDraggable = ({
 
       if (!actuallyDragging) return;
 
+      latestMoveEvent = moveEvent;
       if (rafId) return;
-      rafId = requestAnimationFrame(() => {
+      pendingFrameCallback = () => {
         rafId = null;
+        pendingFrameCallback = null;
+        const frameEvent = latestMoveEvent;
+        latestMoveEvent = null;
 
         // 드래그가 종료되었으면 rAF 콜백에서도 무시
-        if (dragEnded) return;
+        if (dragEnded || !frameEvent) return;
 
         // 줌 레벨을 고려한 좌표 계산
-        let newDx = (moveEvent.clientX - startPos.x) / currentZoom;
-        let newDy = (moveEvent.clientY - startPos.y) / currentZoom;
+        let newDx = (frameEvent.clientX - startPos.x) / currentZoom;
+        let newDy = (frameEvent.clientY - startPos.y) / currentZoom;
 
         // Shift 키로 축이 고정된 경우 해당 축만 이동
         if (lockedAxis === 'x') {
@@ -392,13 +398,21 @@ export const useDraggable = ({
 
         lastSnappedRef.current = { dx: snappedX, dy: snappedY };
         setOffset({ dx: snappedX, dy: snappedY });
-      });
+      };
+      rafId = requestAnimationFrame(pendingFrameCallback);
     };
 
     const finishDrag = () => {
       if (dragEnded) return;
 
-      // 드래그 종료 플래그 설정 (pending rAF 콜백이 실행되지 않도록)
+      // 마지막 프레임 대기 입력을 커밋 전에 동기 반영
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+        const flush = pendingFrameCallback;
+        pendingFrameCallback = null;
+        flush?.();
+      }
       dragEnded = true;
       const pointerId = activePointerIdRef.current;
       activeDragRef.current = false;
@@ -409,12 +423,6 @@ export const useDraggable = ({
         dragTarget.releasePointerCapture(pointerId);
       }
       restoreBodyCursor();
-
-      // pending rAF가 있으면 취소
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
 
       dragTarget.removeEventListener('pointermove', handlePointerMove);
       dragTarget.removeEventListener('pointerup', handlePointerEnd);

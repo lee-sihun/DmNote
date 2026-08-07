@@ -260,6 +260,35 @@ describe('useSelectionDrag', () => {
     expect(onMovedCheck).toHaveBeenCalledWith(true);
   });
 
+  it('한 프레임의 연속 이동에서 최신 좌표를 사용한다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 3 }));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 12 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 12 }));
+    });
+
+    expect(onMultiDrag).toHaveBeenCalledTimes(1);
+    expect(onMultiDrag).toHaveBeenCalledWith(10, 0);
+  });
+
+  it('프레임 전에 pointerup해도 대기 중인 이동을 반영한다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 7 }));
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 7 }));
+    });
+
+    expect(rafCallbacks).toHaveLength(0);
+    expect(onMultiDrag).toHaveBeenCalledWith(5, 0);
+    expect(onMultiDragEnd).toHaveBeenCalledOnce();
+  });
+
   it('keeps pointerdown uncanceled so compatibility click remains available', async () => {
     const element = await renderHarness();
     const down = pointerEvent('pointerdown');
