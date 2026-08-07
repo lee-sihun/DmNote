@@ -104,15 +104,15 @@
 | 측정 경로      | 실제 `updateKeyStyle` + 요소 그림자 CSS 렌더의 jsdom DOM commit proxy |
 | 요소 수        | 500개                                                                 |
 | 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회                                |
-| 측정 코드 커밋 | `17e5baaa47ab7b561d2b237694988b1f91cfd870`                            |
+| 측정 코드 커밋 | `123e5878915d0809ab416b59774fa86fa17901be`                            |
 | 비교 전략      | `sync` → `after-paint`                                                |
 | 환경           | darwin arm64, v25.2.1                                                 |
 
 | P95 지표              | sync 기준선 | after-paint | 개선율 |
 | --------------------- | ----------: | ----------: | -----: |
-| 시각 DOM commit       |     7.563ms |     0.431ms |  94.3% |
-| canonical DOM commit  |     7.565ms |     8.345ms | -10.3% |
-| React commit duration |     0.972ms |     0.950ms |   2.3% |
+| 시각 DOM commit       |     5.946ms |     0.509ms |  91.4% |
+| canonical DOM commit  |     5.947ms |     8.847ms | -48.8% |
+| React commit duration |     0.723ms |     0.971ms | -34.3% |
 
 - 원시 결과: [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json)
 - 정확성 게이트: `npm run test:interaction:pilot` 통과
@@ -143,15 +143,15 @@
 | 측정 경로         | 전체 선택 요소 shadow 쌍 배치 변환 + 요소 그림자 CSS 렌더의 jsdom DOM commit proxy |
 | 선택·렌더 요소 수 | 500개                                                                              |
 | 반복              | 기준선 30회 / 개선 30회, 워밍업 각 5회                                             |
-| 측정 코드 커밋    | `17e5baaa47ab7b561d2b237694988b1f91cfd870`                                         |
+| 측정 코드 커밋    | `123e5878915d0809ab416b59774fa86fa17901be`                                         |
 | 비교 전략         | `sync` → `after-paint`                                                             |
 | 환경              | darwin arm64, v25.2.1                                                              |
 
 | P95 지표              | sync 기준선 | after-paint | 개선율 |
 | --------------------- | ----------: | ----------: | -----: |
-| 시각 DOM commit       |     7.576ms |     0.454ms |  94.0% |
-| canonical DOM commit  |     7.578ms |    10.455ms | -38.0% |
-| React commit duration |     0.623ms |     0.889ms | -42.6% |
+| 시각 DOM commit       |     8.385ms |     0.550ms |  93.4% |
+| canonical DOM commit  |     8.387ms |    10.648ms | -27.0% |
+| React commit duration |     0.810ms |     1.009ms | -24.7% |
 
 - 원시 결과: [기준선](../benchmarks/results/pilot-02-baseline.json) · [개선](../benchmarks/results/pilot-02-improved.json)
 - 정확성 게이트: `npm run test:interaction:pilot` 통과
@@ -162,8 +162,8 @@
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                     |
 | -------- | ---------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------------------------------------------------------------------------------------- |
-| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    7.563 |    0.431 |  94.3% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json) |
-| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    7.576 |    0.454 |  94.0% | 검증 | [기준선](../benchmarks/results/pilot-02-baseline.json) · [개선](../benchmarks/results/pilot-02-improved.json) |
+| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    5.946 |    0.509 |  91.4% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json) |
+| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    8.385 |    0.550 |  93.4% | 검증 | [기준선](../benchmarks/results/pilot-02-baseline.json) · [개선](../benchmarks/results/pilot-02-improved.json) |
 | BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 실험 | `useOptimisticBooleanCommit`·선택적 `commitStrategy` 제공, PILOT-01·02 검증                                   |
 | BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 실험 | `05c02e43`, 선택적 `after-paint`·설정 토글 적용                                                               |
 | BASE-03  | Dropdown                           | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·선택·닫기                                                                                                |
@@ -356,8 +356,8 @@
 
 | 세션 ID        | 날짜       | 항목 ID  | 단계   | 빌드·커밋  | 환경                                                 | 시나리오·데이터 크기      | 반복 |   P50 |   P95 |  최대 | 보조 지표                               | 원시 자료                                            | 비고             |
 | -------------- | ---------- | -------- | ------ | ---------- | ---------------------------------------------------- | ------------------------- | ---: | ----: | ----: | ----: | --------------------------------------- | ---------------------------------------------------- | ---------------- |
-| PILOT-01-SYNC  | 2026-08-07 | PILOT-01 | 기준선 | `17e5baaa` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 3.542 | 7.563 | 9.545 | canonical P95 7.565ms·React P95 0.972ms | [JSON](../benchmarks/results/pilot-01-baseline.json) | DOM commit proxy |
-| PILOT-01-PAINT | 2026-08-07 | PILOT-01 | 개선   | `17e5baaa` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 0.303 | 0.431 | 0.443 | canonical P95 8.345ms·React P95 0.950ms | [JSON](../benchmarks/results/pilot-01-improved.json) | DOM commit proxy |
+| PILOT-01-SYNC  | 2026-08-07 | PILOT-01 | 기준선 | `123e5878` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 3.041 | 5.946 | 6.719 | canonical P95 5.947ms·React P95 0.723ms | [JSON](../benchmarks/results/pilot-01-baseline.json) | DOM commit proxy |
+| PILOT-01-PAINT | 2026-08-07 | PILOT-01 | 개선   | `123e5878` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 0.345 | 0.509 | 0.649 | canonical P95 8.847ms·React P95 0.971ms | [JSON](../benchmarks/results/pilot-01-improved.json) | DOM commit proxy |
 
 <!-- PILOT-01:SESSIONS:END -->
 
@@ -372,8 +372,8 @@
 
 | 세션 ID        | 날짜       | 항목 ID  | 단계   | 빌드·커밋  | 환경                                                 | 시나리오·데이터 크기      | 반복 |   P50 |   P95 |  최대 | 보조 지표                                | 원시 자료                                            | 비고                   |
 | -------------- | ---------- | -------- | ------ | ---------- | ---------------------------------------------------- | ------------------------- | ---: | ----: | ----: | ----: | ---------------------------------------- | ---------------------------------------------------- | ---------------------- |
-| PILOT-02-SYNC  | 2026-08-07 | PILOT-02 | 기준선 | `17e5baaa` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 다중 선택·렌더 요소 500개 |   30 | 3.937 | 7.576 | 7.762 | canonical P95 7.578ms·React P95 0.623ms  | [JSON](../benchmarks/results/pilot-02-baseline.json) | batch DOM commit proxy |
-| PILOT-02-PAINT | 2026-08-07 | PILOT-02 | 개선   | `17e5baaa` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 다중 선택·렌더 요소 500개 |   30 | 0.298 | 0.454 | 0.477 | canonical P95 10.455ms·React P95 0.889ms | [JSON](../benchmarks/results/pilot-02-improved.json) | batch DOM commit proxy |
+| PILOT-02-SYNC  | 2026-08-07 | PILOT-02 | 기준선 | `123e5878` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 다중 선택·렌더 요소 500개 |   30 | 3.760 | 8.385 | 8.660 | canonical P95 8.387ms·React P95 0.810ms  | [JSON](../benchmarks/results/pilot-02-baseline.json) | batch DOM commit proxy |
+| PILOT-02-PAINT | 2026-08-07 | PILOT-02 | 개선   | `123e5878` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 다중 선택·렌더 요소 500개 |   30 | 0.361 | 0.550 | 0.556 | canonical P95 10.648ms·React P95 1.009ms | [JSON](../benchmarks/results/pilot-02-improved.json) | batch DOM commit proxy |
 
 <!-- PILOT-02:SESSIONS:END -->
 
@@ -391,12 +391,12 @@
 | 가설               | 무거운 문서 상태 커밋을 첫 paint 뒤로 미루면 토글의 시각 반응이 선택 요소 수와 무관하게 빨라진다.                              |
 | 변경 내용          | 로컬 checked를 먼저 반영하고 `requestAnimationFrame` 다음 태스크에서 canonical 상태를 커밋한다. 연타는 마지막 의도로 병합한다. |
 | 적용 기법          | 낙관적 상태 투영·메인 스레드 양보·입력 병합                                                                                    |
-| 커밋·PR            | `17e5baaa`                                                                                                                     |
+| 커밋·PR            | `123e5878`                                                                                                                     |
 | 기준선 세션        | PILOT-01-SYNC                                                                                                                  |
 | 개선 후 세션       | PILOT-01-PAINT                                                                                                                 |
-| P50 변화           | 3.542ms → 0.303ms (91.4%)                                                                                                      |
-| P95 변화           | 7.563ms → 0.431ms (94.3%)                                                                                                      |
-| canonical P95 변화 | 7.565ms → 8.345ms (-10.3%)                                                                                                     |
+| P50 변화           | 3.041ms → 0.345ms (88.6%)                                                                                                      |
+| P95 변화           | 5.946ms → 0.509ms (91.4%)                                                                                                      |
+| canonical P95 변화 | 5.947ms → 8.847ms (-48.8%)                                                                                                     |
 | 정확성 검증        | 마지막 의도 병합·paint 전 unmount 의도 보존·접근성 checked 상태 단위 테스트 통과                                               |
 | 플랫폼 검증        | jsdom proxy 완료·실제 Chromium 세션은 6.1 참조·macOS WKWebView 및 Windows WebView2 대기                                        |
 | 결론               | WebView 실측 전까지 검증 상태로 유지                                                                                           |
@@ -414,11 +414,11 @@
 | 가설               | 공통 컨트롤의 로컬 checked 반영은 전체 선택 요소의 배치 변환보다 먼저 표시된다. |
 | 변경 내용          | PILOT-01에서 적용한 공통 `ShadowControls` 계약을 다중 선택 경로에서 재사용한다. |
 | 적용 기법          | 낙관적 상태 투영·메인 스레드 양보·입력 병합                                     |
-| 커밋·PR            | `17e5baaa`                                                                      |
+| 커밋·PR            | `123e5878`                                                                      |
 | 기준선 세션        | PILOT-02-SYNC                                                                   |
 | 개선 후 세션       | PILOT-02-PAINT                                                                  |
-| P95 변화           | 7.576ms → 0.454ms (94.0%)                                                       |
-| canonical P95 변화 | 7.578ms → 10.455ms (-38.0%)                                                     |
+| P95 변화           | 8.385ms → 0.550ms (93.4%)                                                       |
+| canonical P95 변화 | 8.387ms → 10.648ms (-27.0%)                                                     |
 | 정확성 검증        | 요소별 그림자 값 보존·통계 activeShadow 차단·연타 마지막 의도 보존 테스트 통과  |
 | 플랫폼 검증        | jsdom batch proxy 완료·실제 WebView 대기                                        |
 | 결론               | 공통 최적화가 다중 선택에도 유효하며 WebView 실측 전까지 검증 상태로 유지       |
