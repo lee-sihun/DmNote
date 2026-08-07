@@ -7,12 +7,39 @@ const benchmarkName = new URLSearchParams(window.location.search).get(
 );
 
 const bootstrapBenchmark = async (): Promise<boolean> => {
-  if (benchmarkName !== 'shadow-toggle') return false;
-  const { mountShadowToggleBenchmark } = await import(
-    '../../benchmarks/shadowToggleBenchmark'
-  );
-  mountShadowToggleBenchmark();
-  return true;
+  if (benchmarkName === 'shadow-toggle') {
+    const { mountShadowToggleBenchmark } = await import(
+      '../../benchmarks/shadowToggleBenchmark'
+    );
+    mountShadowToggleBenchmark();
+    return true;
+  }
+  if (benchmarkName === 'webview-interactions') {
+    const query = new URLSearchParams(window.location.search);
+    const reportUrl = query.get('report');
+    const reportFailure = (error: unknown) => {
+      if (!reportUrl) return;
+      void fetch(reportUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({
+          benchmark: query.get('scenario'),
+          strategy: query.get('strategy'),
+          error: String(error),
+        }),
+      });
+    };
+    window.addEventListener('error', (event) => reportFailure(event.error));
+    window.addEventListener('unhandledrejection', (event) =>
+      reportFailure(event.reason),
+    );
+    const { mountWebViewInteractionBenchmark } = await import(
+      '../../benchmarks/webviewInteractionBenchmark'
+    );
+    mountWebViewInteractionBenchmark();
+    return true;
+  }
+  return false;
 };
 
 async function bootstrap() {
