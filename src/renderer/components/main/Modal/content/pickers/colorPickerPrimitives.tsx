@@ -1,6 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { hsvToColorObject, type ColorObject } from '@utils/color/colorUtils';
 import { CHECKER_PATTERN, CHECKER_SIZE } from './ColorSwatch';
+import {
+  createRafLatestScheduler,
+  type ContinuousInputStrategy,
+} from '@utils/animation/rafLatestScheduler';
 
 // 디자인 조절점 — 내부 폭 148px 기준 비율 ≈1.42:1
 const SATURATION_HEIGHT = 104;
@@ -40,6 +44,7 @@ const useLatest = <T,>(value: T) => {
 // eslint-disable-next-line react-refresh/only-export-components
 export const usePointerSession = (
   emit: (ratioX: number, ratioY: number, final: boolean) => void,
+  continuousInputStrategy: ContinuousInputStrategy = 'frame',
 ) => {
   const emitRef = useLatest(emit);
   const activePointerRef = useRef<number | null>(null);
@@ -47,6 +52,9 @@ export const usePointerSession = (
   const rectRef = useRef<DOMRect | null>(null);
   const lastRatioRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const blurCleanupRef = useRef<(() => void) | null>(null);
+  const previewSchedulerRef = useRef<ReturnType<
+    typeof createRafLatestScheduler<true>
+  > | null>(null);
 
   // 좌표를 0~1 비율로 갱신 — 세션 시작 시 rect 유효성이 보장됨
   const updateRatio = (clientX: number, clientY: number) => {
@@ -64,12 +72,22 @@ export const usePointerSession = (
     emitRef.current(x, y, final);
   };
 
+  const schedulePreview = () => {
+    previewSchedulerRef.current ??= createRafLatestScheduler(
+      () => emitLast(false),
+      continuousInputStrategy,
+    );
+    previewSchedulerRef.current.push(true);
+  };
+
   // 세션 해제 — 어떤 종료 경로로 와도 1회만 동작
   const teardown = () => {
     const pointerId = activePointerRef.current;
     if (pointerId === null) return;
     activePointerRef.current = null;
     rectRef.current = null;
+    previewSchedulerRef.current?.cancel();
+    previewSchedulerRef.current = null;
     blurCleanupRef.current?.();
     blurCleanupRef.current = null;
     const target = targetRef.current;
@@ -111,7 +129,7 @@ export const usePointerSession = (
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerId !== activePointerRef.current) return;
     updateRatio(event.clientX, event.clientY);
-    emitLast(false);
+    schedulePreview();
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
