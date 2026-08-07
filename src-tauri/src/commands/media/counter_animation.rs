@@ -409,9 +409,7 @@ mod tests {
 
     fn counter_store(key_bound: bool, stat_bound: bool, graph_bound: bool) -> AppStoreData {
         let mut store = AppStoreData::default();
-        store
-            .keys
-            .insert(MODE.to_string(), vec!["KeyA".to_string()]);
+        store.keys.insert(MODE.to_string(), vec!["KeyA".into()]);
         store
             .key_positions
             .insert(MODE.to_string(), vec![position(key_bound)]);

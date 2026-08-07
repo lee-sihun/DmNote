@@ -13,6 +13,7 @@ import type { NoteSettings } from '@src/types/settings/noteSettings';
 import type { PluginLayoutElement } from '@utils/plugin/pluginLayoutElements';
 
 interface LayoutInput {
+  // canonical 슬롯 식별자 배열 (slotCanonical 결과, 원본 KeySlot 아님)
   currentKeys: string[];
   currentPositions: KeyPosition[];
   currentStatPositions: StatItemPosition[];

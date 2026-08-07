@@ -10,6 +10,11 @@ import {
 } from '../context';
 import { createDefineElement } from './defineElement';
 import { createDefineSettings } from './defineSettings';
+import {
+  pluginEditorCommit,
+  pluginKeysUpdate,
+  pluginKeysUpdateWithPositions,
+} from './pluginWriteGateway';
 
 interface CreatePluginApiProxyOptions {
   pluginId: string;
@@ -57,6 +62,30 @@ export const createPluginApiProxy = (
 
   const proxiedApi = {
     ...wrappedApi,
+    // 플러그인 발신 keys·editor 쓰기는 게이트웨이로 명시 라우팅 (계약 §10)
+    // provenance를 전역 상태가 아니라 프록시 클로저로 결정
+    keys: {
+      ...((wrappedApi.keys as Record<string, unknown>) ?? {}),
+      update: wrapWithContext((...args: unknown[]) =>
+        pluginKeysUpdate(
+          args[0] as Parameters<typeof pluginKeysUpdate>[0],
+          args[1] as Parameters<typeof pluginKeysUpdate>[1],
+        ),
+      ),
+      updateWithPositions: wrapWithContext((...args: unknown[]) =>
+        pluginKeysUpdateWithPositions(
+          args[0] as Parameters<typeof pluginKeysUpdateWithPositions>[0],
+          args[1] as Parameters<typeof pluginKeysUpdateWithPositions>[1],
+          args[2] as Parameters<typeof pluginKeysUpdateWithPositions>[2],
+        ),
+      ),
+    },
+    editor: {
+      ...((wrappedApi.editor as Record<string, unknown>) ?? {}),
+      commit: wrapWithContext((...args: unknown[]) =>
+        pluginEditorCommit(args[0] as Parameters<typeof pluginEditorCommit>[0]),
+      ),
+    },
     window: {
       ...(wrappedApi.window ?? {}),
       type: window.__dmn_window_type as 'main' | 'overlay',

@@ -8,6 +8,7 @@ import { LogicalPosition, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { Menu } from '@tauri-apps/api/menu';
 import { useTranslation } from '@contexts/useTranslation';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
+import { MAX_EVENT_AGE_MS } from '@constants/inputTiming';
 import { mergeNoteSettings } from '@src/types/settings/noteSettings';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
@@ -33,6 +34,13 @@ import {
 } from '@utils/plugin/pluginLayoutElements';
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
+import {
+  buildCanonicalIndexMap,
+  isSlotAssigned,
+  slotCanonical,
+  slotDisplayName,
+} from '@utils/keySlot';
+import type { KeySlot } from '@src/types/key/keys';
 
 type KeyDelayTimerHandle = ReturnType<typeof setTimeout>;
 type KeyDelayTimerEntry = {
@@ -68,15 +76,11 @@ const flushKeyDelayTimers = (
   });
 };
 
-// 입력 시각 보정용 age 상한(ms). 백엔드 stall/클럭 이상으로 비정상적으로 큰
-// 값이 와도 노트가 화면 위로 튀지 않도록 제한
-const MAX_EVENT_AGE_MS = 250;
+const validKeySet = (slots: readonly KeySlot[]) =>
+  new Set(slots.filter(isSlotAssigned).map((slot) => slotCanonical(slot)));
 
-const validKeySet = (keys: readonly string[]) =>
-  new Set(keys.filter((key) => key.length > 0));
-
-const validKeySignature = (keys: readonly string[]) =>
-  JSON.stringify([...validKeySet(keys)].sort());
+const validKeySignature = (slots: readonly KeySlot[]) =>
+  JSON.stringify([...validKeySet(slots)].sort());
 
 export default function App() {
   const isBootstrapped = useKeyStore((state) => state.isBootstrapped);
@@ -527,9 +531,11 @@ export default function App() {
 
               if (isDown) {
                 // 개별 키의 noteEffectEnabled는 DOWN에만 적용
-                const currentKeys = keyMappings[selectedKeyType] ?? [];
+                // canonical → 대표 슬롯 인덱스 (Multi 우선, 계약 §11)
+                const currentSlots = keyMappings[selectedKeyType] ?? [];
                 const currentPositions = positions[selectedKeyType] ?? [];
-                const keyIndex = currentKeys.indexOf(key);
+                const keyIndex =
+                  buildCanonicalIndexMap(currentSlots).get(key) ?? -1;
                 const keyPosition = currentPositions[keyIndex];
                 if (keyPosition?.noteEffectEnabled !== false) {
                   handleKeyDown(key, timing);
@@ -693,8 +699,16 @@ export default function App() {
     // 콜백이 읽는 값은 keyEventContextRef로 공급 - 구독은 창 수명과 동일
   }, []);
 
-  const currentKeys = keyMappings[selectedKeyType] ?? EMPTY_SLICE;
-  const currentValidKeySignature = validKeySignature(currentKeys);
+  const currentSlots = keyMappings[selectedKeyType] ?? EMPTY_SLICE;
+  // 시그널·트랙 키는 canonical, 표시는 합성 라벨 (계약 §3, §11)
+  const { currentKeys, currentKeyLabels, currentValidKeySignature } = useMemo(
+    () => ({
+      currentKeys: currentSlots.map((slot) => slotCanonical(slot)),
+      currentKeyLabels: currentSlots.map((slot) => slotDisplayName(slot)),
+      currentValidKeySignature: validKeySignature(currentSlots),
+    }),
+    [currentSlots],
+  );
 
   // 탭·현재 키 집합 전환 시 예약 타이머와 눌림 신호를 권위 상태로 정합
   // positions와 다른 탭의 매핑 변경은 signature가 같아 이 effect를 건드리지 않음
@@ -863,6 +877,7 @@ export default function App() {
   return (
     <OverlayScene
       currentKeys={currentKeys}
+      currentKeyLabels={currentKeyLabels}
       displayPositions={displayPositions}
       currentPositions={currentPositions}
       displayStatPositions={displayStatPositions}

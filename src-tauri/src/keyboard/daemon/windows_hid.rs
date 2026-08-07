@@ -215,28 +215,28 @@ impl HidProcessor {
 
         for (page, usage) in down {
             let label = button_label(vid, pid, page, usage);
-            let labels = self.hold_tracker.press(
-                super::windows_hid_physical_id(key, page, usage),
-                captured.instant,
-                vec![label],
-            );
+            let physical_id = super::windows_hid_physical_id(key, page, usage);
+            let labels = self
+                .hold_tracker
+                .press(physical_id, captured.instant, vec![label]);
             output.send(super::DaemonOutput::Hook(button_msg(
                 labels,
                 HookKeyState::Down,
+                physical_id.opaque(),
                 None,
                 captured.input_ts_ms,
             )));
         }
         for (page, usage) in up {
             let label = button_label(vid, pid, page, usage);
-            let release = self.hold_tracker.release(
-                super::windows_hid_physical_id(key, page, usage),
-                captured.instant,
-                vec![label],
-            );
+            let physical_id = super::windows_hid_physical_id(key, page, usage);
+            let release = self
+                .hold_tracker
+                .release(physical_id, captured.instant, vec![label]);
             output.send(super::DaemonOutput::Hook(button_msg(
                 release.labels,
                 HookKeyState::Up,
+                physical_id.opaque(),
                 release.hold_duration_ms,
                 captured.input_ts_ms,
             )));
@@ -272,6 +272,7 @@ fn axis_label(vid: u16, pid: u16, page: u16, usage: u16) -> String {
 fn button_msg(
     labels: Vec<String>,
     state: HookKeyState,
+    physical_id: String,
     hold_duration_ms: Option<f64>,
     input_ts_ms: Option<f64>,
 ) -> HookMessage {
@@ -279,6 +280,7 @@ fn button_msg(
         device: InputDeviceKind::Gamepad,
         labels,
         state,
+        physical_id: Some(physical_id),
         vk_code: None,
         scan_code: None,
         flags: None,

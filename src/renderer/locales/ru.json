@@ -172,7 +172,16 @@
     "noteBorderColor": "Цвет обводки",
     "borderSideAll": "Все",
     "borderSideVertical": "Вертикально",
-    "borderSideHorizontal": "Горизонтально"
+    "borderSideHorizontal": "Горизонтально",
+    "addKey": "Добавить клавишу",
+    "removeKey": "Удалить клавишу",
+    "matchMode": "Срабатывание",
+    "matchAny": "Отдельно",
+    "matchAll": "Вместе",
+    "matchAnyHint": "Срабатывает при нажатии любой клавиши",
+    "matchAllHint": "Срабатывает, только когда зажаты все клавиши",
+    "multiKeyEdit": "Несколько клавиш",
+    "multiKey": "Детали привязки"
   },
   "imagePicker": {
     "idle": "Покой",
@@ -574,7 +583,16 @@
     "selectedSound": "Выбранный звук",
     "soundVolume": "Громкость",
     "import": "Импорт",
-    "loading": "Загрузка..."
+    "loading": "Загрузка...",
+    "addKey": "Добавить клавишу",
+    "removeKey": "Удалить клавишу",
+    "matchMode": "Срабатывание",
+    "matchAny": "Отдельно",
+    "matchAll": "Вместе",
+    "matchAnyHint": "Срабатывает при нажатии любой клавиши",
+    "matchAllHint": "Срабатывает, только когда зажаты все клавиши",
+    "multiKeyEdit": "Несколько клавиш",
+    "multiKey": "Детали привязки"
   },
   "fontPicker": {
     "searchPlaceholder": "Поиск...",

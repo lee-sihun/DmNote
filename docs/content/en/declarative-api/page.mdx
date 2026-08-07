@@ -537,6 +537,12 @@ onMount: ({ onHook, setState }) => {
 },
 ```
 
+The `"key"` hook receives the same canonical payload as
+`dmn.keys.onKeyState`. On `UP`, `holdDurationMs` is present only when the same
+physical input produced both canonical transitions; otherwise it is omitted.
+Track the matching canonical `DOWN` and `UP` timestamps when the full active
+duration is required.
+
 ### Settings Change Detection (onSettingsChange)
 
 Use this when you need to react to settings changes immediately.

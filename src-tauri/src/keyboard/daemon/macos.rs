@@ -9,6 +9,15 @@ enum MacPhysicalInputId {
     MouseButton(rdev::Button),
 }
 
+impl MacPhysicalInputId {
+    fn opaque(self) -> String {
+        match self {
+            Self::Keyboard(key) => format!("macos:keyboard:{key:?}"),
+            Self::MouseButton(button) => format!("macos:mouse:{button:?}"),
+        }
+    }
+}
+
 fn mac_keyboard_physical_id(key: rdev::Key) -> MacPhysicalInputId {
     MacPhysicalInputId::Keyboard(key)
 }
@@ -382,13 +391,14 @@ fn run_macos_listen(output: super::OutputSender) -> Result<()> {
                 if labels.is_empty() {
                     return;
                 }
-                let labels =
-                    hold_tracker.press(mac_keyboard_physical_id(key), captured.instant, labels);
+                let physical_id = mac_keyboard_physical_id(key);
+                let labels = hold_tracker.press(physical_id, captured.instant, labels);
 
                 let message = HookMessage {
                     device: InputDeviceKind::Keyboard,
                     labels,
                     state: HookKeyState::Down,
+                    physical_id: Some(physical_id.opaque()),
                     vk_code: None,
                     scan_code: None,
                     flags: None,
@@ -401,8 +411,9 @@ fn run_macos_listen(output: super::OutputSender) -> Result<()> {
                 let key_name = format!("{:?}", key).to_ascii_lowercase();
                 let _ = hotkey_state.update(&key_name, false);
 
+                let physical_id = mac_keyboard_physical_id(key);
                 let release = hold_tracker.release(
-                    mac_keyboard_physical_id(key),
+                    physical_id,
                     captured.instant,
                     mac_key_labels(key, event.name.as_deref()),
                 );
@@ -414,6 +425,7 @@ fn run_macos_listen(output: super::OutputSender) -> Result<()> {
                     device: InputDeviceKind::Keyboard,
                     labels: release.labels,
                     state: HookKeyState::Up,
+                    physical_id: Some(physical_id.opaque()),
                     vk_code: None,
                     scan_code: None,
                     flags: None,
@@ -424,15 +436,13 @@ fn run_macos_listen(output: super::OutputSender) -> Result<()> {
             }
             EventType::ButtonPress(button) => {
                 if let Some(label) = mac_mouse_label(button) {
-                    let labels = hold_tracker.press(
-                        mac_mouse_physical_id(button),
-                        captured.instant,
-                        vec![label],
-                    );
+                    let physical_id = mac_mouse_physical_id(button);
+                    let labels = hold_tracker.press(physical_id, captured.instant, vec![label]);
                     output.send(super::DaemonOutput::Hook(HookMessage {
                         device: InputDeviceKind::Mouse,
                         labels,
                         state: HookKeyState::Down,
+                        physical_id: Some(physical_id.opaque()),
                         vk_code: None,
                         scan_code: None,
                         flags: None,
@@ -443,15 +453,13 @@ fn run_macos_listen(output: super::OutputSender) -> Result<()> {
             }
             EventType::ButtonRelease(button) => {
                 if let Some(label) = mac_mouse_label(button) {
-                    let release = hold_tracker.release(
-                        mac_mouse_physical_id(button),
-                        captured.instant,
-                        vec![label],
-                    );
+                    let physical_id = mac_mouse_physical_id(button);
+                    let release = hold_tracker.release(physical_id, captured.instant, vec![label]);
                     output.send(super::DaemonOutput::Hook(HookMessage {
                         device: InputDeviceKind::Mouse,
                         labels: release.labels,
                         state: HookKeyState::Up,
+                        physical_id: Some(physical_id.opaque()),
                         vk_code: None,
                         scan_code: None,
                         flags: None,
@@ -503,6 +511,18 @@ mod tests {
         assert_ne!(
             mac_mouse_physical_id(rdev::Button::Left),
             mac_mouse_physical_id(rdev::Button::Right)
+        );
+        assert_eq!(
+            mac_mouse_physical_id(rdev::Button::Left).opaque(),
+            "macos:mouse:Left"
+        );
+    }
+
+    #[test]
+    fn mac_keyboard_opaque_id_preserves_rdev_variant() {
+        assert_eq!(
+            mac_keyboard_physical_id(rdev::Key::Unknown(42)).opaque(),
+            "macos:keyboard:Unknown(42)"
         );
     }
 }

@@ -7,6 +7,7 @@ import type {
   KeyMappings,
   KeyPositions,
   KeyPosition,
+  KeySlot,
   NoteColor,
   KeyCounterSettings,
   CounterAnimationBezier,
@@ -15,6 +16,7 @@ import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
 } from '@src/types/key/keys';
+import { cloneSlot } from '@utils/keySlot';
 
 // ----------------------------------------------------------------------------
 // 기본 키 포지션 생성
@@ -171,7 +173,7 @@ export function duplicateKey(
   return {
     mappings: {
       ...mappings,
-      [mode]: [...mapping, sourceKey],
+      [mode]: [...mapping, cloneSlot(sourceKey)],
     },
     positions: {
       ...positions,
@@ -329,11 +331,11 @@ export function updateKeyMapping(
   mappings: KeyMappings,
   mode: string,
   index: number,
-  newKey: string,
+  newSlot: KeySlot,
 ): KeyMappings {
   const mapping = mappings[mode] || [];
   return {
     ...mappings,
-    [mode]: mapping.map((key, i) => (i === index ? newKey : key)),
+    [mode]: mapping.map((key, i) => (i === index ? newSlot : key)),
   };
 }

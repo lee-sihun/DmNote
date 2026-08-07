@@ -491,6 +491,24 @@ describe('note timing payload and loss recovery', () => {
     expect(timing.displayTime - timing.physTime).toBeCloseTo(250, 0);
   });
 
+  it('UP payload에 holdDurationMs가 없으면 optional 값으로 전달한다', async () => {
+    await act(async () => {
+      mocks.keyEventListener?.({
+        key: 'KeyJ',
+        state: 'UP',
+        mode: '4key',
+        eventAgeMs: 30,
+      });
+    });
+
+    expect(mocks.handleKeyUp).toHaveBeenCalledTimes(1);
+    const [, timing] = mocks.handleKeyUp.mock.calls[0] as [
+      string,
+      { holdDurationMs?: number },
+    ];
+    expect(timing.holdDurationMs).toBeUndefined();
+  });
+
   it('keys:reset 수신 시 활성 노트를 강제 완료하고 눌림 상태를 재수화한다', async () => {
     mocks.bootstrap.mockResolvedValue({ activeKeys: ['KeyJ'] });
 

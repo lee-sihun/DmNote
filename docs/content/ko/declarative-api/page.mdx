@@ -535,6 +535,11 @@ onMount: ({ onHook, setState }) => {
 },
 ```
 
+`"key"` 훅은 `dmn.keys.onKeyState`와 같은 canonical payload를 받습니다. `UP`의
+`holdDurationMs`는 같은 물리 입력이 canonical 전환 양쪽을 만든 경우에만 포함되고,
+그 외에는 생략됩니다. 전체 활성 시간이 필요하면 같은 canonical의 `DOWN`과 `UP`
+시각을 직접 추적하세요.
+
 ### 설정 변경 감지 (onSettingsChange)
 
 설정 변경에 즉시 반응해야 할 때 사용합니다.

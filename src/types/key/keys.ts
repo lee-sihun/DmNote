@@ -207,6 +207,24 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
 
 export const keySchema = z.string();
 
+// 슬롯 판정 방식: all = 동시 입력, any = 택일
+export const slotMatchSchema = z.union([z.literal('all'), z.literal('any')]);
+export type SlotMatch = z.infer<typeof slotMatchSchema>;
+
+export const multiKeySlotSchema = z.object({
+  keys: z.array(z.string().min(1)).min(2).max(8),
+  match: slotMatchSchema,
+});
+// z.infer가 match를 optional로 추론하지 않도록 명시 선언
+export interface MultiKeySlot {
+  keys: string[];
+  match: SlotMatch;
+}
+
+// 단일 키는 문자열 그대로 유지 (하위 호환)
+export const keySlotSchema = z.union([keySchema, multiKeySlotSchema]);
+export type KeySlot = string | MultiKeySlot;
+
 export const keyModeSchema = z.union([
   z.literal('4key'),
   z.literal('5key'),
@@ -216,8 +234,8 @@ export const keyModeSchema = z.union([
 
 export type KeyMode = z.infer<typeof keyModeSchema> | string;
 
-export const keyMappingSchema = z.record(z.string(), z.array(keySchema));
-export type KeyMappings = Record<string, string[]>;
+export const keyMappingSchema = z.record(z.string(), z.array(keySlotSchema));
+export type KeyMappings = Record<string, KeySlot[]>;
 
 const gradientNoteColorSchema = z.object({
   type: z.literal('gradient'),

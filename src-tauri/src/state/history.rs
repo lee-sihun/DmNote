@@ -1295,7 +1295,10 @@ impl Drop for HistoryBarrierLease {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{keyboard::KeyboardManager, models::EDITOR_SCHEMA_VERSION};
+    use crate::{
+        keyboard::KeyboardManager,
+        models::{KeySlot, EDITOR_SCHEMA_VERSION},
+    };
     use std::{
         collections::HashMap,
         sync::mpsc,
@@ -1308,7 +1311,7 @@ mod tests {
             schema_version: EDITOR_SCHEMA_VERSION,
             keys: Some(std::collections::HashMap::from([(
                 "mode".to_string(),
-                vec![text.to_string()],
+                vec![text.into()],
             )])),
             ..EditorPatchV1::default()
         }
@@ -1422,7 +1425,7 @@ mod tests {
         assert!(matches!(
             history.past.back().map(|entry| &entry.before),
             Some(HistorySnapshot::Editor { before, .. })
-                if before.keys.as_ref().unwrap()["mode"] == ["repeated"]
+                if before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("repeated")]
         ));
     }
 
@@ -1469,7 +1472,7 @@ mod tests {
                 HistorySnapshot::PluginElements(plugin),
                 HistorySnapshot::Editor { before, .. }
             ] if plugin.plugin_id == "plugin-b"
-                && before.keys.as_ref().unwrap()["mode"] == ["before"]
+                && before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("before")]
         ));
     }
 
@@ -1515,7 +1518,7 @@ mod tests {
         assert!(matches!(
             &latest.before,
             HistorySnapshot::Editor { before, .. }
-                if before.keys.as_ref().unwrap()["mode"] == ["after-intervening-editor"]
+                if before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("after-intervening-editor")]
         ));
 
         let intervening = undo_order.next().unwrap();
@@ -1523,7 +1526,7 @@ mod tests {
         assert!(matches!(
             &intervening.before,
             HistorySnapshot::Editor { before, .. }
-                if before.keys.as_ref().unwrap()["mode"] == ["before-intervening-editor"]
+                if before.keys.as_ref().unwrap()["mode"] == [KeySlot::from("before-intervening-editor")]
         ));
     }
 
@@ -1726,7 +1729,7 @@ mod tests {
     fn barrier_drains_admitted_runtime_publication_before_restore_mapping() {
         let gate = Arc::new(HistoryAdmissionGate::default());
         let keyboard = KeyboardManager::new(
-            HashMap::from([("mode".to_string(), vec!["initial".to_string()])]),
+            HashMap::from([("mode".to_string(), vec!["initial".into()])]),
             "mode",
         );
         let admission = gate.admit_mutation().unwrap();
@@ -1738,7 +1741,7 @@ mod tests {
             store_committed_tx.send(()).unwrap();
             publish_rx.recv().unwrap();
             stale_keyboard.update_mappings_and_set_mode(
-                HashMap::from([("mode".to_string(), vec!["stale".to_string()])]),
+                HashMap::from([("mode".to_string(), vec!["stale".into()])]),
                 "mode",
             );
             drop(admission);
@@ -1753,7 +1756,7 @@ mod tests {
         let barrier = thread::spawn(move || {
             let lease = barrier_gate.close("history-operation").unwrap();
             restored_keyboard.update_mappings_and_set_mode(
-                HashMap::from([("mode".to_string(), vec!["restored".to_string()])]),
+                HashMap::from([("mode".to_string(), vec!["restored".into()])]),
                 "mode",
             );
             restored_tx.send(()).unwrap();

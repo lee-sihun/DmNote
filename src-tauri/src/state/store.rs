@@ -9,12 +9,12 @@ use std::{
 
 use crate::errors::{EditorCommitError, EditorCommitErrorCode};
 use crate::models::{
-    AppStoreData, CommittedEditorChange, CustomCssPatch, CustomJsPatch, EditorCommitOrigin,
-    EditorCommitRequest, EditorCommitResult, EditorCommittedV1, EditorDocumentV1, EditorField,
-    EditorGetResult, EditorTransactionResult, FontType, GestureCommitRequest, GestureCommitResult,
-    HistoryStatus, KeyCounters, KeyPosition, NoteSettingsPatch, PluginInstancesCommitRequest,
-    PluginInstancesReconcileRequest, SavedPluginInstance, SettingsDiff, SettingsPatchInput,
-    SettingsState, EDITOR_SCHEMA_VERSION,
+    key_mappings_contain_multi, normalize_key_mappings, AppStoreData, CommittedEditorChange,
+    CustomCssPatch, CustomJsPatch, EditorCommitOrigin, EditorCommitRequest, EditorCommitResult,
+    EditorCommittedV1, EditorDocumentV1, EditorField, EditorGetResult, EditorTransactionResult,
+    FontType, GestureCommitRequest, GestureCommitResult, HistoryStatus, KeyCounters, KeyPosition,
+    NoteSettingsPatch, PluginInstancesCommitRequest, PluginInstancesReconcileRequest,
+    SavedPluginInstance, SettingsDiff, SettingsPatchInput, SettingsState, EDITOR_SCHEMA_VERSION,
 };
 use anyhow::{anyhow, Context, Result};
 use parking_lot::{Mutex, RwLock, RwLockWriteGuard};
@@ -804,9 +804,12 @@ impl AppStore {
 
     fn commit_editor_document_inner(
         &self,
-        request: EditorCommitRequest,
+        mut request: EditorCommitRequest,
         admission: &HistoryAdmissionLease,
     ) -> std::result::Result<CommittedEditorChange, EditorCommitError> {
+        if let Some(keys) = request.changes.keys.as_mut() {
+            normalize_key_mappings(keys);
+        }
         validate_request_envelope(&request)?;
         let fingerprint = request_fingerprint(&request)?;
         let mut guard = self
@@ -840,6 +843,13 @@ impl AppStore {
             return Err(EditorCommitError::revision_conflict(
                 guard.data.editor_revision,
             ));
+        }
+
+        if request.changes.keys.is_some()
+            && key_mappings_contain_multi(&guard.data.keys)
+            && !request.multi_key
+        {
+            return Err(EditorCommitError::multi_key_unsupported());
         }
 
         let gesture_id = request.history_gesture_id();
@@ -2761,6 +2771,7 @@ fn editor_error_outcome(code: EditorCommitErrorCode) -> &'static str {
         EditorCommitErrorCode::TooManyGestureIds => "too_many_gesture_ids",
         EditorCommitErrorCode::InvalidGestureId => "invalid_gesture_id",
         EditorCommitErrorCode::PairedUpdateRequired => "paired_update_required",
+        EditorCommitErrorCode::MultiKeyUnsupported => "multi_key_unsupported",
         EditorCommitErrorCode::MutationIdReused => "mutation_id_reused",
         EditorCommitErrorCode::HistoryInProgress => "history_in_progress",
         EditorCommitErrorCode::HistoryEpochConflict => "history_epoch_conflict",
@@ -3991,11 +4002,11 @@ mod tests {
             AppStoreData, CommittedEditorChange, CustomCss, CustomFont, CustomTab,
             EditorCommitOrigin, EditorCommitRequest, EditorDocumentV1, EditorField, EditorPatchV1,
             FontSettings, FontType, GestureCommitRequest, GesturePluginInstancesChange,
-            GraphPosition, GraphStatType, GraphType, JsPlugin, KeyCounters, KeyPosition,
+            GraphPosition, GraphStatType, GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot,
             KnobPosition, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
             PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
-            SavedPluginInstance, SettingsPatchInput, SoundLibraryEntry, SoundSource, StatPosition,
-            StatType, TabCss, TabNoteSettings,
+            SavedPluginInstance, SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource,
+            StatPosition, StatType, TabCss, TabNoteSettings,
         },
         services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
         state::{
@@ -4102,6 +4113,7 @@ mod tests {
         EditorCommitRequest {
             base_revision,
             mutation_id: mutation_id.into(),
+            multi_key: false,
             gesture_id: None,
             gesture_ids: Vec::new(),
             changes,
@@ -5822,9 +5834,9 @@ mod tests {
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let persist_count = store.writer.persist_count();
         let before = store.snapshot();
-        let old_key = before.keys["4key"][0].clone();
+        let old_key = before.keys["4key"][0].canonical();
         let mut keys = before.keys.clone();
-        keys.get_mut("4key").unwrap()[0] = "StrictKey".to_string();
+        keys.get_mut("4key").unwrap()[0] = "StrictKey".into();
         let first_gesture_id = uuid::Uuid::new_v4().to_string();
         let gesture_id = uuid::Uuid::new_v4().to_string();
         let mut request = editor_request(
@@ -5858,7 +5870,7 @@ mod tests {
         assert_eq!(store.writer.persist_count(), persist_count + 1);
         let snapshot = store.snapshot();
         assert_eq!(snapshot.editor_revision, 1);
-        assert_eq!(snapshot.keys["4key"][0], "StrictKey");
+        assert_eq!(snapshot.keys["4key"][0], KeySlot::from("StrictKey"));
         assert_eq!(snapshot.key_counters["4key"]["StrictKey"], 0);
         assert!(!snapshot.key_counters["4key"].contains_key(&old_key));
         assert_eq!(change.history_status.unwrap().history_revision, 1);
@@ -5870,7 +5882,80 @@ mod tests {
             .unwrap()
             .data;
         assert_eq!(reloaded.editor_revision, 1);
-        assert_eq!(reloaded.keys["4key"][0], "StrictKey");
+        assert_eq!(reloaded.keys["4key"][0], KeySlot::from("StrictKey"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn strict_editor_commit_rechecks_multi_key_capability_under_store_lock() {
+        let dir = test_directory("multi-key-capability-gate-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get().document;
+
+        let mut legacy_keys = initial.keys.clone();
+        legacy_keys.get_mut("4key").unwrap()[0] = KeySlot::Single("Legacy".to_string());
+        let legacy_request = editor_request(
+            1,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                keys: Some(legacy_keys),
+                ..EditorPatchV1::default()
+            },
+        );
+
+        let mut multi_keys = initial.keys;
+        multi_keys.get_mut("4key").unwrap()[0] = KeySlot::Multi {
+            keys: vec!["A".to_string(), "B".to_string()],
+            match_mode: SlotMatch::Any,
+        };
+        let mut capable_request = editor_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1 {
+                keys: Some(multi_keys),
+                ..EditorPatchV1::default()
+            },
+        );
+        capable_request.multi_key = true;
+        store.commit_editor_document(capable_request).unwrap();
+        let committed_keys = serde_json::to_vec(&store.snapshot().keys).unwrap();
+        let committed_disk = std::fs::read(dir.join("store.json")).unwrap();
+        let persist_count = store.writer.persist_count();
+
+        let error = store.commit_editor_document(legacy_request).unwrap_err();
+
+        assert_eq!(error.error_code, EditorCommitErrorCode::MultiKeyUnsupported);
+        assert_eq!(
+            serde_json::to_value(&error).unwrap()["errorCode"],
+            "MULTI_KEY_UNSUPPORTED"
+        );
+        assert!(!error.retryable);
+        assert_eq!(store.snapshot().editor_revision, 1);
+        assert_eq!(
+            serde_json::to_vec(&store.snapshot().keys).unwrap(),
+            committed_keys
+        );
+        assert_eq!(store.writer.persist_count(), persist_count);
+        assert_eq!(
+            std::fs::read(dir.join("store.json")).unwrap(),
+            committed_disk
+        );
+
+        let position_change = store
+            .commit_editor_document(editor_request(
+                1,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, 321.0),
+            ))
+            .unwrap();
+        assert_eq!(position_change.result.revision, 2);
+        assert_eq!(
+            serde_json::to_vec(&store.snapshot().keys).unwrap(),
+            committed_keys
+        );
+
+        store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -6541,7 +6626,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let mode = store.snapshot().selected_key_type;
-        let original_key = store.snapshot().keys[&mode][0].clone();
+        let original_key = store.snapshot().keys[&mode][0].canonical();
         let initial_plugin = JsPlugin {
             id: "initial-plugin".to_string(),
             name: "Initial Plugin".to_string(),
@@ -6628,7 +6713,7 @@ mod tests {
                 &[EditorField::Keys],
                 runtime_counters,
                 |data| {
-                    data.keys.get_mut(&mode).unwrap()[0] = preset_key.clone();
+                    data.keys.get_mut(&mode).unwrap()[0] = preset_key.clone().into();
                     data.use_custom_css = true;
                     data.custom_css = CustomCss {
                         path: Some(dir.join("preset.css").to_string_lossy().to_string()),
@@ -6914,10 +6999,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let before = store.snapshot();
-        let old_key = before.keys["4key"][0].clone();
+        let old_key = before.keys["4key"][0].canonical();
         let new_key = "HistoryCounterScopeKey".to_string();
         let mut keys = before.keys;
-        keys.get_mut("4key").unwrap()[0] = new_key.clone();
+        keys.get_mut("4key").unwrap()[0] = new_key.clone().into();
         let commit = editor_request(
             0,
             uuid::Uuid::new_v4().to_string(),
@@ -6946,7 +7031,7 @@ mod tests {
         drop(barrier);
 
         let restored = store.snapshot();
-        assert_eq!(restored.keys["4key"][0], old_key);
+        assert_eq!(restored.keys["4key"][0].canonical(), old_key);
         assert_eq!(restored.key_counters, counters_after_commit);
 
         store.flush_and_shutdown().unwrap();
@@ -7251,10 +7336,10 @@ mod tests {
             Arc::new(AppState::initialize(AppStore::initialize_in_dir(&dir).unwrap()).unwrap());
         let initial = state.store.snapshot();
         let mode = initial.selected_key_type.clone();
-        let original_key = initial.keys[&mode][0].clone();
+        let original_key = initial.keys[&mode][0].canonical();
 
         let mut strict_keys = initial.keys.clone();
-        strict_keys.get_mut(&mode).unwrap()[0] = "StrictHistoryKey".to_string();
+        strict_keys.get_mut(&mode).unwrap()[0] = "StrictHistoryKey".into();
         state
             .store
             .commit_editor_document(editor_request(
@@ -7269,7 +7354,7 @@ mod tests {
 
         let legacy_key = "LegacyPublishedKey".to_string();
         let mut legacy_keys = state.store.snapshot().keys;
-        legacy_keys.get_mut(&mode).unwrap()[0] = legacy_key.clone();
+        legacy_keys.get_mut(&mode).unwrap()[0] = legacy_key.clone().into();
         let transaction = state
             .store
             .commit_legacy_editor_transaction(
@@ -7366,7 +7451,10 @@ mod tests {
         let outcome = undo.join().unwrap();
 
         assert_eq!(outcome.change.unwrap().result.revision, 3);
-        assert_eq!(state.store.snapshot().keys[&mode][0], original_key);
+        assert_eq!(
+            state.store.snapshot().keys[&mode][0].canonical(),
+            original_key
+        );
         assert_eq!(state.snapshot_key_counters(), expected_counters);
         assert!(state.keyboard.register_key_down(&mode, &original_key));
         assert!(!state.keyboard.register_key_down(&mode, &legacy_key));
@@ -7391,10 +7479,10 @@ mod tests {
         let state = AppState::initialize(AppStore::initialize_in_dir(&dir).unwrap()).unwrap();
         let initial = state.store.snapshot();
         let mode = initial.selected_key_type.clone();
-        let old_key = initial.keys[&mode][0].clone();
+        let old_key = initial.keys[&mode][0].canonical();
         let new_key = "PublicationOrderedKey".to_string();
         let mut changed_keys = initial.keys;
-        changed_keys.get_mut(&mode).unwrap()[0] = new_key.clone();
+        changed_keys.get_mut(&mode).unwrap()[0] = new_key.clone().into();
 
         let stale_transaction = state
             .store
@@ -7438,6 +7526,8 @@ mod tests {
 
         assert_eq!(state.snapshot_key_counters()[&mode][&new_key], 9);
         assert_eq!(state.store.snapshot().key_counters[&mode][&new_key], 9);
+        assert_eq!(state.keyboard.pressed_keys(), vec![new_key.clone()]);
+        assert!(state.keyboard.register_key_up(&mode, &new_key));
         assert!(state.keyboard.register_key_down(&mode, &new_key));
         assert!(!state.keyboard.register_key_down(&mode, &old_key));
         assert!(events.lock().unwrap().is_empty());
@@ -7727,7 +7817,7 @@ mod tests {
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let before = store.snapshot();
         let mut keys = before.keys.clone();
-        keys.get_mut("4key").unwrap().push("F5".to_string());
+        keys.get_mut("4key").unwrap().push("F5".into());
         let error = store
             .commit_editor_document(editor_request(
                 0,
@@ -7951,7 +8041,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let mut data = super::initialize_default_state();
         data.keys
-            .insert("ghost".to_string(), vec!["GhostKey".to_string()]);
+            .insert("ghost".to_string(), vec!["GhostKey".into()]);
         data.key_positions
             .insert("ghost".to_string(), vec![KeyPosition::default()]);
         let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
@@ -7965,7 +8055,7 @@ mod tests {
             .unwrap();
 
         let snapshot = store.snapshot();
-        assert_eq!(snapshot.keys["ghost"], vec!["GhostKey".to_string()]);
+        assert_eq!(snapshot.keys["ghost"], vec![KeySlot::from("GhostKey")]);
         assert_eq!(
             snapshot.key_positions["ghost"],
             vec![KeyPosition::default()]
@@ -8033,8 +8123,7 @@ mod tests {
                         id: custom_mode.clone(),
                         name: "Custom".to_string(),
                     });
-                    data.keys
-                        .insert(custom_mode.clone(), vec!["KeyA".to_string()]);
+                    data.keys.insert(custom_mode.clone(), vec!["KeyA".into()]);
                     data.key_positions
                         .insert(custom_mode.clone(), vec![KeyPosition::default()]);
                     data.selected_key_type = custom_mode.clone();
@@ -8082,8 +8171,8 @@ mod tests {
         let before = store.snapshot();
         let disk_before = std::fs::read(dir.join("store.json")).unwrap();
         let mut mappings = before.keys.clone();
-        mappings.get_mut("4key").unwrap().push("F5".to_string());
-        mappings.get_mut("5key").unwrap().push(String::new());
+        mappings.get_mut("4key").unwrap().push("F5".into());
+        mappings.get_mut("5key").unwrap().push(KeySlot::default());
         let mut positions = before.key_positions.clone();
         positions
             .get_mut("4key")
@@ -8122,9 +8211,9 @@ mod tests {
         let keys = change.document.keys;
         let positions = change.document.key_positions;
         assert_eq!(store.writer.persist_count(), persist_count + 1);
-        assert_eq!(keys["4key"].last().unwrap(), "F5");
+        assert_eq!(keys["4key"].last().unwrap(), &KeySlot::from("F5"));
         assert_eq!(positions["4key"].last().unwrap(), &KeyPosition::default());
-        assert!(keys["5key"].last().unwrap().is_empty());
+        assert!(keys["5key"].last().unwrap().is_unassigned());
         assert_eq!(keys["4key"].len(), positions["4key"].len());
         assert_eq!(keys["5key"].len(), positions["5key"].len());
 
@@ -8141,7 +8230,7 @@ mod tests {
 
         let before = store.snapshot();
         let mut mappings = before.keys.clone();
-        mappings.get_mut("4key").unwrap().push("F5".to_string());
+        mappings.get_mut("4key").unwrap().push("F5".into());
         assert!(
             legacy_editor_commit(&store, &[EditorField::Keys], move |data| {
                 data.keys = mappings;
@@ -8305,7 +8394,7 @@ mod tests {
         let before_mode = state.keyboard.current_mode();
         let before_counters = state.snapshot_key_counters();
         let mut keys = before_store.keys.clone();
-        keys.get_mut("4key").unwrap()[0] = "PresetKey".to_string();
+        keys.get_mut("4key").unwrap()[0] = "PresetKey".into();
 
         state.store.writer.fail_next_persist();
         let result = state.store.commit_legacy_editor_transaction(
@@ -8766,7 +8855,7 @@ mod tests {
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let snapshot = store.snapshot();
         let mode = snapshot.selected_key_type.clone();
-        let key = snapshot.keys[&mode][0].clone();
+        let key = snapshot.keys[&mode][0].canonical();
         let mut counters = snapshot.key_counters;
         counters
             .entry(mode.clone())
@@ -8797,7 +8886,7 @@ mod tests {
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let snapshot = store.snapshot();
         let mode = snapshot.selected_key_type.clone();
-        let key = snapshot.keys[&mode][0].clone();
+        let key = snapshot.keys[&mode][0].canonical();
         store
             .update(|data| {
                 data.key_counter_enabled = true;
@@ -8879,7 +8968,7 @@ mod tests {
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let snapshot = store.snapshot();
         let mode = snapshot.selected_key_type.clone();
-        let key = snapshot.keys[&mode][0].clone();
+        let key = snapshot.keys[&mode][0].canonical();
         store
             .update(|data| {
                 data.key_counter_enabled = true;
@@ -9616,7 +9705,7 @@ mod tests {
         assert!(!store.skip_asset_sweep);
         let snapshot = store.snapshot();
         assert_eq!(snapshot.custom_tabs.len(), 1);
-        assert_eq!(snapshot.keys[tab_id], vec!["F5"]);
+        assert_eq!(snapshot.keys[tab_id], vec![KeySlot::from("F5")]);
         assert_eq!(snapshot.key_positions[tab_id].len(), 1);
         assert_eq!(snapshot.stat_positions[tab_id].len(), 1);
         assert_eq!(snapshot.graph_positions[tab_id].len(), 1);
@@ -9644,7 +9733,7 @@ mod tests {
         let reloaded = crate::state::migration::load_store_from_path(&store_path).unwrap();
         assert!(!reloaded.repaired);
         assert_eq!(reloaded.data.custom_tabs.len(), 1);
-        assert_eq!(reloaded.data.keys[tab_id], vec!["F5"]);
+        assert_eq!(reloaded.data.keys[tab_id], vec![KeySlot::from("F5")]);
         assert_eq!(reloaded.data.key_positions[tab_id].len(), 1);
         assert_eq!(reloaded.data.stat_positions[tab_id].len(), 1);
         assert_eq!(reloaded.data.graph_positions[tab_id].len(), 1);

@@ -19,6 +19,7 @@ class KeyStatsService {
   private listeners: Set<KeyStatsListener> = new Set();
   private initialized = false;
   private unlistenKeyState: (() => void) | null = null;
+  private unlistenInputPress: (() => void) | null = null;
   private unlistenCounterChanged: (() => void) | null = null;
   private unlistenCountersChanged: (() => void) | null = null;
   private unlistenModeChanged: (() => void) | null = null;
@@ -57,6 +58,15 @@ class KeyStatsService {
         'keys:state',
         ({ payload }) => {
           this.handleKeyState(payload);
+        },
+      );
+
+      // 물리 press 이벤트 구독 (KPS 집계, 계약 §6)
+      // 한 물리 입력이 여러 슬롯을 트리거해도 1회만 발행됨
+      this.unlistenInputPress = await listen<{ label: string; mode: string }>(
+        'input:press',
+        () => {
+          this.timestamps.push(Date.now());
         },
       );
 
@@ -142,12 +152,9 @@ class KeyStatsService {
   private handleKeyState(payload: KeyStatePayload) {
     const { key, state } = payload;
 
+    // KPS 집계는 input:press가 담당, 여기서는 홀드 상태만 추적
     if (state === 'DOWN') {
-      // 키가 이미 눌려있지 않은 경우에만 카운팅 (홀드 방지)
-      if (!this.pressedKeys.has(key)) {
-        this.pressedKeys.add(key);
-        this.timestamps.push(Date.now());
-      }
+      this.pressedKeys.add(key);
     } else if (state === 'UP') {
       this.pressedKeys.delete(key);
     }
@@ -343,6 +350,11 @@ class KeyStatsService {
     if (this.unlistenKeyState) {
       this.unlistenKeyState();
       this.unlistenKeyState = null;
+    }
+
+    if (this.unlistenInputPress) {
+      this.unlistenInputPress();
+      this.unlistenInputPress = null;
     }
 
     if (this.unlistenCounterChanged) {

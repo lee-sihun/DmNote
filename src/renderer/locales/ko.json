@@ -172,7 +172,16 @@
     "noteBorderColor": "테두리 색상",
     "borderSideAll": "전체",
     "borderSideVertical": "수직",
-    "borderSideHorizontal": "수평"
+    "borderSideHorizontal": "수평",
+    "addKey": "키 추가",
+    "removeKey": "키 제거",
+    "matchMode": "반응 방식",
+    "matchAny": "개별 입력",
+    "matchAll": "동시 입력",
+    "matchAnyHint": "하나만 눌러도 반응",
+    "matchAllHint": "모두 동시에 눌러야 반응",
+    "multiKeyEdit": "여러 키 매핑",
+    "multiKey": "매핑 상세"
   },
   "imagePicker": {
     "idle": "대기",
@@ -574,7 +583,16 @@
     "selectedSound": "선택 파일",
     "soundVolume": "사운드 볼륨",
     "import": "가져오기",
-    "loading": "로딩..."
+    "loading": "로딩...",
+    "addKey": "키 추가",
+    "removeKey": "키 제거",
+    "matchMode": "반응 방식",
+    "matchAny": "개별 입력",
+    "matchAll": "동시 입력",
+    "matchAnyHint": "하나만 눌러도 반응",
+    "matchAllHint": "모두 동시에 눌러야 반응",
+    "multiKeyEdit": "여러 키 매핑",
+    "multiKey": "매핑 상세"
   },
   "fontPicker": {
     "searchPlaceholder": "검색",

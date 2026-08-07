@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/purity */
 import { useRef, useEffect } from 'react';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
+import { MAX_FALLBACK_CLOCK_SKEW_MS } from '@constants/inputTiming';
 import {
   createNoteBuffer,
   NoteBuffer,
@@ -87,6 +88,32 @@ interface UseNoteSystemReturn {
   noteBuffer: NoteBuffer;
   updateTrackLayouts: (layouts: TrackLayoutInput[]) => void;
 }
+
+interface CanonicalFallbackTiming {
+  displayDownTime?: number;
+  displayReleaseTime: number;
+  physicalDownTime?: number;
+  physicalReleaseTime: number;
+}
+
+export const resolveCanonicalFallbackHoldMs = ({
+  displayDownTime,
+  displayReleaseTime,
+  physicalDownTime,
+  physicalReleaseTime,
+}: CanonicalFallbackTiming): number => {
+  const displayHold =
+    displayDownTime == null
+      ? 0
+      : Math.max(0, displayReleaseTime - displayDownTime);
+  const physicalHold =
+    physicalDownTime == null
+      ? displayHold
+      : Math.max(0, physicalReleaseTime - physicalDownTime);
+
+  // 비클램프 event age의 시계 이상만 제한하고 정상적인 장시간 hold는 보존
+  return Math.min(physicalHold, displayHold + MAX_FALLBACK_CLOCK_SKEW_MS);
+};
 
 // 렌더마다 재생성되는 내부 구현 중 안정 래퍼가 위임하는 대상
 type LatestNoteSystemFns = Pick<
@@ -495,8 +522,12 @@ export function useNoteSystem({
     // 판정용 물리 hold: 데몬 authoritative 값 우선, 없으면 비클램프 보정 시각 차 폴백
     const physDown = state.physDownTime ?? state.downTime;
     const physRelease = state.physReleaseTime ?? releaseTime;
-    const fallbackHold =
-      physDown != null ? Math.max(0, physRelease - physDown) : 0;
+    const fallbackHold = resolveCanonicalFallbackHoldMs({
+      displayDownTime: state.downTime,
+      displayReleaseTime: releaseTime,
+      physicalDownTime: physDown,
+      physicalReleaseTime: physRelease,
+    });
     const holdMs = state.holdDurationMs ?? fallbackHold;
     // 데몬 hold와 press 시점 정책으로만 길이 결정
     const computedNoteLengthMs = computeNoteLengthMs(

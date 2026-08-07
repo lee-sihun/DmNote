@@ -8,6 +8,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::AppStore;
+use crate::models::KeySlot;
 use crate::{
     commands::preset::{
         load::read_preset_file_for_simulation, save::write_preset_file_for_simulation, PresetFile,
@@ -733,7 +734,7 @@ fn simulation_5_inline_legacy_preset_imports_without_gradients() {
         .expect("gradient-free legacy preset must pass the import parser");
     let imported = import_editor_preset(&directory.path().join("imported"), preset);
     let position = &imported.key_positions["4key"][0];
-    assert_eq!(imported.keys["4key"], vec!["KeyQ"]);
+    assert_eq!(imported.keys["4key"], vec![KeySlot::from("KeyQ")]);
     assert_eq!(position.background_color.as_deref(), Some("#123456"));
     assert_eq!(position.active_background_color.as_deref(), Some("#234567"));
     assert_eq!(position.border_color.as_deref(), Some("#345678"));

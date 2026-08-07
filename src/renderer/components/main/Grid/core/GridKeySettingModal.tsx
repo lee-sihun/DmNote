@@ -5,6 +5,7 @@ import { editGestureController } from '@src/renderer/editor/runtime/editGestureC
 import type {
   KeyPosition,
   KeyCounterSettings,
+  KeySlot,
   NoteColor,
 } from '@src/types/key/keys';
 import type {
@@ -17,7 +18,7 @@ import type {
 // ============================================================================
 
 interface SelectedKeyInfo {
-  key: string;
+  key: KeySlot;
   index: number;
 }
 

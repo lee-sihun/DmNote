@@ -197,6 +197,22 @@ pub(super) enum WindowsKeyboardPhysicalId {
 }
 
 #[cfg(any(target_os = "windows", test))]
+impl WindowsKeyboardPhysicalId {
+    pub(super) fn opaque(self) -> String {
+        match self {
+            Self::ScanCode {
+                device,
+                scan_code,
+                extension_flags,
+            } => format!("windows:keyboard:scan:{device}:{scan_code}:{extension_flags}"),
+            Self::VirtualKey { device, vk_code } => {
+                format!("windows:keyboard:vk:{device}:{vk_code}")
+            }
+        }
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
 pub(super) fn windows_keyboard_physical_id(
     device: usize,
     scan_code: u32,
@@ -216,10 +232,37 @@ pub(super) fn windows_keyboard_physical_id(
 
 #[cfg(any(target_os = "windows", test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) enum WindowsPhysicalInputId {
+    Keyboard(WindowsKeyboardPhysicalId),
+    MouseButton(u8),
+}
+
+#[cfg(any(target_os = "windows", test))]
+impl WindowsPhysicalInputId {
+    pub(super) fn opaque(self) -> String {
+        match self {
+            Self::Keyboard(id) => id.opaque(),
+            Self::MouseButton(button) => format!("windows:mouse:button:{button}"),
+        }
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) struct WindowsHidPhysicalId {
     device: usize,
     usage_page: u16,
     usage: u16,
+}
+
+#[cfg(any(target_os = "windows", test))]
+impl WindowsHidPhysicalId {
+    pub(super) fn opaque(self) -> String {
+        format!(
+            "windows:hid:{}:{}:{}",
+            self.device, self.usage_page, self.usage
+        )
+    }
 }
 
 #[cfg(any(target_os = "windows", test))]
@@ -265,6 +308,7 @@ mod tests {
     use super::{
         start_output_writer, wait_for_parent_disconnect, windows_hid_physical_id,
         windows_keyboard_physical_id, DaemonOutput, HoldTracker, WindowsKeyboardPhysicalId,
+        WindowsPhysicalInputId,
     };
     use crate::ipc::{DaemonCommand, HidAxisMessage, HookKeyState, HookMessage, InputDeviceKind};
 
@@ -317,6 +361,7 @@ mod tests {
             device: InputDeviceKind::Keyboard,
             labels: vec!["A".to_string()],
             state: HookKeyState::Down,
+            physical_id: Some("windows:keyboard:scan:1:30:0".to_string()),
             vk_code: None,
             scan_code: None,
             flags: None,
@@ -340,6 +385,7 @@ mod tests {
 
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[0]["labels"], serde_json::json!(["A"]));
+        assert_eq!(lines[0]["physical_id"], "windows:keyboard:scan:1:30:0");
         assert_eq!(lines[1]["type"], "toggle_overlay");
         assert_eq!(lines[2]["axis_id"], "axis");
     }
@@ -418,13 +464,41 @@ mod tests {
                 vk_code: 0xA2,
             }
         );
+        assert_eq!(base.opaque(), "windows:keyboard:scan:7:29:0".to_string());
+        assert_eq!(
+            extended.opaque(),
+            "windows:keyboard:scan:7:29:1".to_string()
+        );
+        assert_eq!(fallback.opaque(), "windows:keyboard:vk:7:162".to_string());
+    }
+
+    #[test]
+    fn windows_main_and_numpad_enter_and_mouse_have_distinct_opaque_ids() {
+        let main_enter = WindowsPhysicalInputId::Keyboard(windows_keyboard_physical_id(
+            1, 28, false, false, 0x0d,
+        ));
+        let numpad_enter = WindowsPhysicalInputId::Keyboard(windows_keyboard_physical_id(
+            1, 28, true, false, 0x0d,
+        ));
+        let mouse = WindowsPhysicalInputId::MouseButton(1);
+
+        assert_ne!(main_enter.opaque(), numpad_enter.opaque());
+        assert_eq!(mouse.opaque(), "windows:mouse:button:1");
     }
 
     #[test]
     fn windows_physical_ids_include_device_handle() {
         assert_ne!(
+            windows_keyboard_physical_id(1, 30, false, false, 0x41).opaque(),
+            windows_keyboard_physical_id(2, 30, false, false, 0x41).opaque()
+        );
+        assert_ne!(
             windows_keyboard_physical_id(1, 30, false, false, 0x41),
             windows_keyboard_physical_id(2, 30, false, false, 0x41)
+        );
+        assert_ne!(
+            windows_hid_physical_id(1, 9, 1).opaque(),
+            windows_hid_physical_id(2, 9, 1).opaque()
         );
         assert_ne!(
             windows_hid_physical_id(1, 9, 1),
@@ -437,6 +511,10 @@ mod tests {
         assert_ne!(
             windows_hid_physical_id(1, 9, 1),
             windows_hid_physical_id(1, 9, 2)
+        );
+        assert_eq!(
+            windows_hid_physical_id(1, 9, 1).opaque(),
+            "windows:hid:1:9:1"
         );
     }
 }

@@ -19,7 +19,7 @@ description: 앱 부팅, 재시작, 윈도우 제어 API
 ```typescript
 interface BootstrapPayload {
   settings: SettingsState;
-  keys: KeyMappings;
+  keys: KeyMappings; // KeySlot union(string | MultiKeySlot) 항목
   positions: KeyPositions;
   customTabs: CustomTab[];
   selectedKeyType: string;
@@ -34,6 +34,10 @@ interface BootstrapPayload {
   keyCountersRevision: number;
 }
 ```
+
+`keys`는 `dmn.keys.get()`과 같은 `KeySlot` union(`string | MultiKeySlot`)을
+전달합니다. 슬롯을 순수 문자열로 가정하는 소비자는 두 형태를 모두 처리해야
+합니다. [Keys API](/docs/api-reference/keys)를 참고하세요.
 
 `keyCountersRevision`은 반환된 `keyCounters` 스냅샷의 순서를 나타내는 읽기
 전용 단조 증가 watermark입니다. 같은 `keyCountersSessionId` 안에서 bootstrap

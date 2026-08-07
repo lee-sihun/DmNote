@@ -22,13 +22,18 @@ Returns app bootstrap data (settings, keys, presets, etc.)
 const bootstrap = await dmn.app.bootstrap();
 
 // Bootstrap properties
-console.log(bootstrap.selectedKeyType); // 'keyboard' | 'mouse'
+console.log(bootstrap.selectedKeyType); // current layout mode ID (e.g. '4key')
 console.log(bootstrap.settings); // app settings object
-console.log(bootstrap.keys.keyboard); // key mapping
+console.log(bootstrap.keys['4key']); // key mapping (KeySlot union entries)
 console.log(bootstrap.keyCounters); // counter state
 console.log(bootstrap.keyCountersSessionId); // counter stream session
 console.log(bootstrap.keyCountersRevision); // counter snapshot revision
 ```
+
+`bootstrap.keys` carries the same `KeySlot` union
+(`string | MultiKeySlot`) as `dmn.keys.get()`. Consumers that assume plain
+string slots should handle both shapes - see the
+[Keys API](/docs/api-reference/keys).
 
 `keyCountersRevision` is a read-only, monotonically increasing watermark for
 the returned `keyCounters` snapshot. It is intended for ordering bootstrap

@@ -10,13 +10,14 @@ use crate::{
     errors::EditorCommitError,
     models::{
         AppStoreData, CustomTab, EditorCommitRequest, EditorDocumentV1, EditorField,
-        ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition, EDITOR_SCHEMA_VERSION,
+        ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition, KeySlot, EDITOR_SCHEMA_VERSION,
     },
 };
 
 pub(crate) const MAX_SAFE_EDITOR_REVISION: u64 = 9_007_199_254_740_991;
 pub(crate) const MUTATION_ACK_CAPACITY: usize = 32;
 pub(crate) const MAX_CUSTOM_TABS: usize = 30;
+pub(crate) const MAX_SLOTS_PER_MEMBER: usize = 16;
 
 const MAX_MUTATION_ID_BYTES: usize = 64;
 const MAX_GESTURE_ID_BYTES: usize = 64;
@@ -45,6 +46,7 @@ pub(crate) type RequestFingerprint = [u8; 32];
 #[serde(rename_all = "camelCase")]
 struct FingerprintPayload<'a> {
     base_revision: u64,
+    multi_key: bool,
     gesture_id: Option<&'a str>,
     gesture_ids: &'a [String],
     changes: &'a crate::models::EditorPatchV1,
@@ -216,6 +218,7 @@ pub(crate) fn request_fingerprint(
 ) -> Result<RequestFingerprint, EditorCommitError> {
     canonical_request_fingerprint(&FingerprintPayload {
         base_revision: request.base_revision,
+        multi_key: request.multi_key,
         gesture_id: request.gesture_id.as_deref(),
         gesture_ids: &request.gesture_ids,
         changes: &request.changes,
@@ -618,6 +621,7 @@ fn validate_metric_limits(
     )?;
 
     validate_collection_limits("keys", &current.keys, &candidate.keys)?;
+    validate_key_member_fanout(&current.keys, &candidate.keys)?;
     validate_collection_limits(
         "keyPositions",
         &current.key_positions,
@@ -673,19 +677,22 @@ fn validate_metric_limits(
     }
 
     for (mode, keys) in &candidate.keys {
-        for (index, key) in keys.iter().enumerate() {
-            let current_len = current
-                .keys
-                .get(mode)
-                .and_then(|values| values.get(index))
-                .map_or(0, String::len);
-            validate_count_limit(
-                "KEY_LABEL_TOO_LONG",
-                &format!("key label {mode}[{index}] byte length"),
-                current_len,
-                key.len(),
-                MAX_KEY_LABEL_BYTES,
-            )?;
+        for (slot_index, slot) in keys.iter().enumerate() {
+            for (member_index, member) in slot.members().enumerate() {
+                let current_len = current
+                    .keys
+                    .get(mode)
+                    .and_then(|values| values.get(slot_index))
+                    .and_then(|slot| slot.members().nth(member_index))
+                    .map_or(0, String::len);
+                validate_count_limit(
+                    "KEY_LABEL_TOO_LONG",
+                    &format!("key label {mode}[{slot_index}].members[{member_index}] byte length"),
+                    current_len,
+                    member.len(),
+                    MAX_KEY_LABEL_BYTES,
+                )?;
+            }
         }
     }
 
@@ -822,6 +829,40 @@ fn validate_collection_limits<T>(
         )?;
     }
     Ok(())
+}
+
+fn validate_key_member_fanout(
+    current: &KeyMappings,
+    candidate: &KeyMappings,
+) -> Result<(), EditorCommitError> {
+    for (mode, slots) in candidate {
+        let current_counts = current
+            .get(mode)
+            .map(|slots| member_slot_counts(slots))
+            .unwrap_or_default();
+        for (member, count) in member_slot_counts(slots) {
+            validate_count_limit(
+                "TOO_MANY_SLOTS_PER_MEMBER",
+                &format!("key member '{member}' slot count in mode '{mode}'"),
+                current_counts.get(&member).copied().unwrap_or_default(),
+                count,
+                MAX_SLOTS_PER_MEMBER,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn member_slot_counts(slots: &[KeySlot]) -> HashMap<String, usize> {
+    let mut counts = HashMap::new();
+    for member in slots
+        .iter()
+        .flat_map(KeySlot::members)
+        .filter(|member| !member.is_empty())
+    {
+        *counts.entry(member.clone()).or_default() += 1;
+    }
+    counts
 }
 
 fn validate_count_limit(
@@ -1010,9 +1051,13 @@ fn collect_group_reference_violations(
 pub(crate) fn sync_key_counters(counters: &mut KeyCounters, keys: &KeyMappings) {
     for (mode, key_list) in keys {
         let entry = counters.entry(mode.clone()).or_default();
-        entry.retain(|key, _| key_list.contains(key));
-        for key in key_list {
-            entry.entry(key.clone()).or_insert(0);
+        let canonical_keys = key_list
+            .iter()
+            .map(KeySlot::canonical)
+            .collect::<HashSet<_>>();
+        entry.retain(|key, _| canonical_keys.contains(key));
+        for key in canonical_keys {
+            entry.entry(key).or_insert(0);
         }
     }
 
@@ -1054,6 +1099,7 @@ mod tests {
         EditorCommitRequest {
             base_revision: 0,
             mutation_id: Uuid::new_v4().to_string(),
+            multi_key: false,
             gesture_id: None,
             gesture_ids: Vec::new(),
             changes: EditorPatchV1 {
@@ -1140,17 +1186,139 @@ mod tests {
     #[test]
     fn canonical_fingerprint_ignores_hash_map_insertion_order() {
         let mut left = HashMap::new();
-        left.insert("4key".to_string(), vec!["A".to_string()]);
-        left.insert("5key".to_string(), vec!["B".to_string()]);
+        left.insert("4key".to_string(), vec![KeySlot::from("A")]);
+        left.insert("5key".to_string(), vec![KeySlot::from("B")]);
 
         let mut right = HashMap::new();
-        right.insert("5key".to_string(), vec!["B".to_string()]);
-        right.insert("4key".to_string(), vec!["A".to_string()]);
+        right.insert("5key".to_string(), vec![KeySlot::from("B")]);
+        right.insert("4key".to_string(), vec![KeySlot::from("A")]);
 
         assert_eq!(
             request_fingerprint(&request(left)).unwrap(),
             request_fingerprint(&request(right)).unwrap()
         );
+    }
+
+    #[test]
+    fn canonical_fingerprint_includes_multi_key_capability() {
+        let mut legacy = request(KeyMappings::new());
+        let mut capable = legacy.clone();
+        capable.multi_key = true;
+
+        assert_ne!(
+            request_fingerprint(&legacy).unwrap(),
+            request_fingerprint(&capable).unwrap()
+        );
+
+        legacy.multi_key = true;
+        assert_eq!(
+            request_fingerprint(&legacy).unwrap(),
+            request_fingerprint(&capable).unwrap()
+        );
+    }
+
+    #[test]
+    fn commit_envelope_defaults_multi_key_to_false() {
+        let request = request(KeyMappings::new());
+        let mut wire = serde_json::to_value(request).unwrap();
+        wire.as_object_mut().unwrap().remove("multiKey");
+
+        let decoded: EditorCommitRequest = serde_json::from_value(wire).unwrap();
+
+        assert!(!decoded.multi_key);
+        let mut capable = decoded;
+        capable.multi_key = true;
+        assert_eq!(serde_json::to_value(capable).unwrap()["multiKey"], true);
+    }
+
+    #[test]
+    fn member_fanout_limit_accepts_sixteen_and_rejects_new_excess() {
+        let store = default_editor_store();
+        let current = EditorDocumentV1::from_store(&store);
+        let mut at_limit = current.clone();
+        at_limit
+            .keys
+            .get_mut("4key")
+            .unwrap()
+            .extend((0..MAX_SLOTS_PER_MEMBER).map(|index| KeySlot::Multi {
+                keys: vec!["SHARED".to_string(), format!("K{index}")],
+                match_mode: crate::models::SlotMatch::Any,
+            }));
+        at_limit
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .extend(vec![KeyPosition::default(); MAX_SLOTS_PER_MEMBER]);
+        let mut at_limit_store = store.clone();
+        at_limit.apply_to_store(&mut at_limit_store);
+
+        validate_document_transition(&current, &at_limit, &store, &at_limit_store).unwrap();
+
+        let mut over_limit = at_limit.clone();
+        over_limit
+            .keys
+            .get_mut("4key")
+            .unwrap()
+            .push(KeySlot::Multi {
+                keys: vec!["SHARED".to_string(), "EXTRA".to_string()],
+                match_mode: crate::models::SlotMatch::Any,
+            });
+        over_limit
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .push(KeyPosition::default());
+        let mut over_limit_store = at_limit_store.clone();
+        over_limit.apply_to_store(&mut over_limit_store);
+
+        let error = validate_document_transition(
+            &at_limit,
+            &over_limit,
+            &at_limit_store,
+            &over_limit_store,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("TOO_MANY_SLOTS_PER_MEMBER")
+        );
+
+        validate_document_transition(
+            &over_limit,
+            &over_limit,
+            &over_limit_store,
+            &over_limit_store,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn counter_sync_uses_canonical_and_separates_any_from_all() {
+        let keys = HashMap::from([(
+            "mode".to_string(),
+            vec![
+                KeySlot::Single("A".to_string()),
+                KeySlot::Multi {
+                    keys: vec!["A".to_string(), "B".to_string()],
+                    match_mode: crate::models::SlotMatch::Any,
+                },
+                KeySlot::Multi {
+                    keys: vec!["A".to_string(), "B".to_string()],
+                    match_mode: crate::models::SlotMatch::All,
+                },
+            ],
+        )]);
+        let mut counters = HashMap::from([(
+            "mode".to_string(),
+            HashMap::from([("A".to_string(), 7), ("stale".to_string(), 3)]),
+        )]);
+
+        sync_key_counters(&mut counters, &keys);
+
+        assert_eq!(counters["mode"]["A"], 7);
+        assert_eq!(counters["mode"]["A|B"], 0);
+        assert_eq!(counters["mode"]["A+B"], 0);
+        assert!(!counters["mode"].contains_key("stale"));
     }
 
     #[test]
@@ -1162,7 +1330,7 @@ mod tests {
             .keys
             .entry("4key".to_string())
             .or_default()
-            .push("A".to_string());
+            .push(KeySlot::from("A"));
 
         let error = validate_paired_update(&current, &candidate, true, false).unwrap_err();
         assert_eq!(
@@ -1176,13 +1344,13 @@ mod tests {
         let mut store = AppStoreData::default();
         store
             .keys
-            .insert("ghost".to_string(), vec!["A".to_string()]);
+            .insert("ghost".to_string(), vec![KeySlot::from("A")]);
         store
             .key_positions
             .insert("ghost".to_string(), vec![KeyPosition::default()]);
         let current = EditorDocumentV1::from_store(&store);
         let mut candidate = current.clone();
-        candidate.keys.get_mut("ghost").unwrap()[0] = "B".to_string();
+        candidate.keys.get_mut("ghost").unwrap()[0] = KeySlot::from("B");
 
         validate_document_transition(&current, &candidate, &store, &store).unwrap();
     }
@@ -1194,7 +1362,7 @@ mod tests {
         let mut candidate = current.clone();
         candidate
             .keys
-            .insert("ghost".to_string(), vec!["A".to_string()]);
+            .insert("ghost".to_string(), vec![KeySlot::from("A")]);
         candidate
             .key_positions
             .insert("ghost".to_string(), vec![KeyPosition::default()]);
@@ -1217,7 +1385,7 @@ mod tests {
         });
         candidate_store
             .keys
-            .insert("custom".to_string(), vec!["A".to_string()]);
+            .insert("custom".to_string(), vec![KeySlot::from("A")]);
         candidate_store
             .key_positions
             .insert("custom".to_string(), vec![KeyPosition::default()]);
@@ -1231,7 +1399,7 @@ mod tests {
         let mut store = AppStoreData::default();
         store
             .keys
-            .insert("custom".to_string(), vec!["A".to_string()]);
+            .insert("custom".to_string(), vec![KeySlot::from("A")]);
         store
             .key_positions
             .insert("custom".to_string(), vec![KeyPosition::default()]);
@@ -1425,7 +1593,9 @@ mod tests {
         let mut store = store_with_custom_modes(1);
         store.keys.insert(
             "custom-0".to_string(),
-            (0..514).map(|index| format!("Key{index}")).collect(),
+            (0..514)
+                .map(|index| KeySlot::from(format!("Key{index}")))
+                .collect(),
         );
         store
             .key_positions
@@ -1445,7 +1615,7 @@ mod tests {
             .keys
             .get_mut("custom-0")
             .unwrap()
-            .push("Extra".to_string());
+            .push(KeySlot::from("Extra"));
         increased
             .key_positions
             .get_mut("custom-0")
@@ -1532,7 +1702,9 @@ mod tests {
         let mut collection_at_limit = collection_empty.clone();
         collection_at_limit.keys.insert(
             "custom-0".to_string(),
-            (0..512).map(|index| format!("Key{index}")).collect(),
+            (0..512)
+                .map(|index| KeySlot::from(format!("Key{index}")))
+                .collect(),
         );
         collection_at_limit
             .key_positions
@@ -1551,7 +1723,7 @@ mod tests {
             .keys
             .get_mut("custom-0")
             .unwrap()
-            .push("Extra".to_string());
+            .push(KeySlot::from("Extra"));
         collection_too_large
             .key_positions
             .get_mut("custom-0")
@@ -1574,7 +1746,7 @@ mod tests {
             let mode = format!("custom-{index}");
             render_at_limit
                 .keys
-                .insert(mode.clone(), vec![String::new(); 512]);
+                .insert(mode.clone(), vec![KeySlot::default(); 512]);
             render_at_limit
                 .key_positions
                 .insert(mode, vec![KeyPosition::default(); 512]);
@@ -1657,6 +1829,7 @@ mod tests {
         let invalid = EditorCommitRequest {
             base_revision: 0,
             mutation_id: "not-a-uuid".to_string(),
+            multi_key: false,
             gesture_id: None,
             gesture_ids: Vec::new(),
             changes: EditorPatchV1::default(),
@@ -1707,7 +1880,7 @@ mod tests {
             let mode = format!("custom-{index}");
             render_store
                 .keys
-                .insert(mode.clone(), vec![String::new(); 512]);
+                .insert(mode.clone(), vec![KeySlot::default(); 512]);
             render_store
                 .key_positions
                 .insert(mode, vec![KeyPosition::default(); 512]);
@@ -1853,7 +2026,7 @@ mod tests {
     fn compact_request_size_boundaries_are_exact() {
         fn sized_request(target_bytes: usize) -> EditorCommitRequest {
             let mut empty_keys = KeyMappings::new();
-            empty_keys.insert("4key".to_string(), vec![String::new()]);
+            empty_keys.insert("4key".to_string(), vec![KeySlot::default()]);
             let empty = request(empty_keys);
             let overhead = serde_json::to_vec(&empty).unwrap().len();
             assert!(target_bytes >= overhead);
@@ -1861,7 +2034,7 @@ mod tests {
             let mut keys = KeyMappings::new();
             keys.insert(
                 "4key".to_string(),
-                vec!["x".repeat(target_bytes - overhead)],
+                vec![KeySlot::from("x".repeat(target_bytes - overhead))],
             );
             let request = EditorCommitRequest {
                 mutation_id: empty.mutation_id,

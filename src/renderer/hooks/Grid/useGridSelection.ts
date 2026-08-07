@@ -21,7 +21,9 @@ import type {
   KeyMappings,
   KeyPositions,
   KeyPosition,
+  KeySlot,
 } from '@src/types/key/keys';
+import { cloneSlot } from '@utils/keySlot';
 import type {
   StatItemPosition,
   StatItemPositions,
@@ -506,7 +508,7 @@ export function useGridSelection({
         if (keyCode && position) {
           clipboardItems.push({
             type: 'key',
-            keyCode,
+            keyCode: cloneSlot(keyCode),
             position: { ...position },
           });
         }
@@ -632,7 +634,7 @@ export function useGridSelection({
       return modeGroups.some((g) => g.id === groupId) ? groupId : undefined;
     };
 
-    const keysToAdd: { keyCode: string; position: KeyPosition }[] = [];
+    const keysToAdd: { keyCode: KeySlot; position: KeyPosition }[] = [];
     const statsToAdd: { position: StatItemPosition }[] = [];
     const graphsToAdd: { position: GraphItemPosition }[] = [];
     const knobsToAdd: { position: KnobItemPosition }[] = [];
@@ -641,7 +643,7 @@ export function useGridSelection({
     for (const item of currentClipboard) {
       if (item.type === 'key') {
         keysToAdd.push({
-          keyCode: item.keyCode,
+          keyCode: cloneSlot(item.keyCode),
           position: {
             ...item.position,
             groupId: remapGroupId(item.position.groupId),

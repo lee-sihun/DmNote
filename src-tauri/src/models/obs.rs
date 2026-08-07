@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// WS 프로토콜 버전
-pub const OBS_PROTOCOL_VERSION: u32 = 1;
+/// WS 프로토콜 버전 (v2: 키 슬롯 와이어 형식이 KeySlot union으로 확장됨)
+pub const OBS_PROTOCOL_VERSION: u32 = 2;
 
 /// 기본 OBS 포트
 pub const DEFAULT_OBS_PORT: u16 = 34891;

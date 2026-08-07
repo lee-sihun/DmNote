@@ -1,6 +1,7 @@
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import {
   keyPositionSchema,
+  keySlotSchema,
   type KeyMappings,
   type KeyPositions,
 } from '@src/types/key/keys';
@@ -47,6 +48,9 @@ export interface EditorCommitRequest {
   gestureId?: string;
   // 한 요청으로 합쳐진 프리뷰 세션 전체
   gestureIds?: string[];
+  // 멀티 키 슬롯 지원 선언. keys를 포함한 커밋에서 현재 매핑에 멀티 슬롯이
+  // 존재하는데 이 선언이 없으면 백엔드가 MULTI_KEY_UNSUPPORTED로 거절
+  multiKey?: boolean;
 }
 
 export interface EditorCommitResult {
@@ -90,12 +94,15 @@ export type EditorCommitErrorCode =
   // undo/redo barrier 진행 중, retryable
   | 'HISTORY_IN_PROGRESS'
   // observedHistoryEpoch가 낡음, retryable
-  | 'HISTORY_EPOCH_CONFLICT';
+  | 'HISTORY_EPOCH_CONFLICT'
+  // 멀티 키 슬롯 존재 + multiKey 미선언 keys 쓰기, 비 retryable
+  | 'MULTI_KEY_UNSUPPORTED';
 
 export interface EditorCommitErrorDetails {
   currentRevision?: number;
   validationCode?: string;
   field?: string;
+  currentHistoryEpoch?: number;
 }
 
 export interface EditorCommitError {
@@ -116,6 +123,7 @@ const EDITOR_ERROR_CODES = new Set<EditorCommitErrorCode>([
   'IO_ERROR',
   'HISTORY_IN_PROGRESS',
   'HISTORY_EPOCH_CONFLICT',
+  'MULTI_KEY_UNSUPPORTED',
 ]);
 
 const EDITOR_FIELD_SET = new Set<string>(EDITOR_FIELDS);
@@ -209,8 +217,12 @@ function assertModeRecord(
 
 const assertKeyMappings = (value: unknown, label: string): void => {
   assertModeRecord(value, label, (item, itemLabel) => {
-    if (typeof item !== 'string') {
-      throw new EditorProtocolError(`${itemLabel} must be a string`);
+    // 슬롯은 문자열 또는 멀티 키 객체 (KeySlot union)
+    if (typeof item === 'string') return;
+    if (!keySlotSchema.safeParse(item).success) {
+      throw new EditorProtocolError(
+        `${itemLabel} must be a string or a multi-key slot`,
+      );
     }
   });
 };

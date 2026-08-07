@@ -40,12 +40,12 @@ import type {
   PluginSettingSchema,
   PluginMessages,
   PluginDefinitionInternal,
-  RawInputPayload,
 } from '@src/types/plugin/api';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
 } from '@src/types/key/keys';
+import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { useLenis } from '@hooks/useLenis';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
@@ -319,13 +319,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleKeyIndex !== null
       ? positions[selectedKeyType]?.[singleKeyIndex]
       : null;
-  const singleKeyCode =
+  const singleKeySlot =
     singleKeyIndex !== null
-      ? keyMappings[selectedKeyType]?.[singleKeyIndex]
+      ? keyMappings[selectedKeyType]?.[singleKeyIndex] ?? null
       : null;
-  const singleKeyInfo = singleKeyCode
-    ? getKeyInfoByGlobalKey(singleKeyCode)
-    : null;
+  const singleKeyCode =
+    singleKeySlot != null ? slotCanonical(singleKeySlot) : null;
+  const singleKeyInfo =
+    singleKeySlot != null && singleKeyCode
+      ? typeof singleKeySlot === 'string'
+        ? getKeyInfoByGlobalKey(singleKeySlot)
+        : {
+            browserKey: singleKeyCode,
+            globalKey: singleKeyCode,
+            displayName: slotDisplayName(singleKeySlot),
+          }
+      : null;
 
   // 단일 통계 요소 선택인 경우의 데이터
   const singleStatIndex =
@@ -419,13 +428,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const renameCancelledRef = useRef(false);
   const renameRequestSignal = usePropertiesPanelStore(
     (state) => state.renameRequestSignal,
-  );
-
-  // 키 리스닝 상태
-  const [isListening, setIsListening] = useState(false);
-  const justAssignedRef = useRef(false);
-  const listeningFlagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
   );
 
   // 이미지 픽커 상태
@@ -934,7 +936,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setShowImagePicker(false);
     setShowGraphImagePicker(false);
     setShowBatchImagePicker(false);
-    setIsListening(false);
     closePage();
   }, [
     singleKeyIndex,
@@ -1052,132 +1053,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedElements.length,
     setIsPanelVisible,
   ]);
-
-  // 키 리스닝 상태를 전역으로 노출
-  useEffect(() => {
-    if (listeningFlagTimerRef.current !== null) {
-      clearTimeout(listeningFlagTimerRef.current);
-      listeningFlagTimerRef.current = null;
-    }
-
-    if (isListening) {
-      window.__dmn_isKeyListening = true;
-    } else {
-      listeningFlagTimerRef.current = setTimeout(() => {
-        window.__dmn_isKeyListening = false;
-        listeningFlagTimerRef.current = null;
-      }, 150);
-    }
-
-    return () => {
-      if (listeningFlagTimerRef.current !== null) {
-        clearTimeout(listeningFlagTimerRef.current);
-        listeningFlagTimerRef.current = null;
-      }
-    };
-  }, [isListening]);
-
-  // 컴포넌트 언마운트 시 반드시 플래그 해제
-  useEffect(() => {
-    return () => {
-      window.__dmn_isKeyListening = false;
-      if (listeningFlagTimerRef.current !== null) {
-        clearTimeout(listeningFlagTimerRef.current);
-        listeningFlagTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  // 키 리스닝 중 브라우저 기본 동작 차단
-  useEffect(() => {
-    if (!isListening) return undefined;
-
-    const blockKeyboardEvents = (e: KeyboardEvent) => {
-      if (
-        e.key === 'Escape' &&
-        !e.metaKey &&
-        !e.ctrlKey &&
-        !e.altKey &&
-        !e.shiftKey
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsListening(false);
-        return;
-      }
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    const blockMouseEvents = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    const blockContextMenu = (e: Event) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    window.addEventListener('keydown', blockKeyboardEvents, true);
-    window.addEventListener('keyup', blockKeyboardEvents, true);
-    window.addEventListener('keypress', blockKeyboardEvents, true);
-    window.addEventListener('mousedown', blockMouseEvents, true);
-    window.addEventListener('contextmenu', blockContextMenu, true);
-
-    return () => {
-      window.removeEventListener('keydown', blockKeyboardEvents, true);
-      window.removeEventListener('keyup', blockKeyboardEvents, true);
-      window.removeEventListener('keypress', blockKeyboardEvents, true);
-      window.removeEventListener('mousedown', blockMouseEvents, true);
-      window.removeEventListener('contextmenu', blockContextMenu, true);
-    };
-  }, [isListening]);
-
-  // 키 리스닝 effect
-  useEffect(() => {
-    if (!isListening) return undefined;
-    if (typeof window === 'undefined' || !window.api?.keys?.onRawInput) {
-      return undefined;
-    }
-
-    const unsubscribe = window.api.keys.onRawInput(
-      (payload: RawInputPayload) => {
-        if (isHistoryEditorFlushLocked()) return;
-        if (!payload || payload.state !== 'DOWN') return;
-        const targetLabel =
-          payload.label ||
-          (Array.isArray(payload.labels) ? payload.labels[0] : null);
-        if (!targetLabel) return;
-
-        const info = getKeyInfoByGlobalKey(targetLabel);
-
-        if (info.globalKey === 'ESCAPE') {
-          setIsListening(false);
-          return;
-        }
-
-        justAssignedRef.current = true;
-        setTimeout(() => {
-          justAssignedRef.current = false;
-        }, 100);
-
-        setIsListening(false);
-
-        if (singleKeyIndex !== null && onKeyMappingChange) {
-          onKeyMappingChange(singleKeyIndex, info.globalKey);
-        }
-      },
-    );
-
-    return () => {
-      try {
-        unsubscribe?.();
-      } catch (error) {
-        console.error('Failed to unsubscribe raw input listener', error);
-      }
-    };
-  }, [isListening, singleKeyIndex, onKeyMappingChange]);
 
   // ============================================================================
   // 핸들러
@@ -1316,11 +1191,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
     handleTogglePanel();
   });
-
-  const handleKeyListen = () => {
-    if (justAssignedRef.current) return;
-    setIsListening(true);
-  };
 
   const handleStatUpdate = (
     data: Partial<StatItemPosition> & { index: number },
@@ -1651,8 +1521,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const index = el.index!;
         if (el.type === 'key') {
           const position = positions[selectedKeyType]?.[index];
-          const keyCode = keyMappings[selectedKeyType]?.[index] ?? null;
-          const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
+          const slot = keyMappings[selectedKeyType]?.[index] ?? null;
+          const keyCode = slot != null ? slotCanonical(slot) : null;
+          const keyInfo =
+            slot != null && keyCode
+              ? typeof slot === 'string'
+                ? getKeyInfoByGlobalKey(slot)
+                : {
+                    browserKey: keyCode,
+                    globalKey: keyCode,
+                    displayName: slotDisplayName(slot),
+                  }
+              : null;
           return { index, position, keyCode, keyInfo };
         }
         const position = statItemPositions[selectedKeyType]?.[index];
@@ -1697,8 +1577,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const index = el.index!;
         if (el.type === 'key') {
           const position = positions[selectedKeyType]?.[index];
-          const keyCode = keyMappings[selectedKeyType]?.[index] ?? null;
-          const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
+          const slot = keyMappings[selectedKeyType]?.[index] ?? null;
+          const keyCode = slot != null ? slotCanonical(slot) : null;
+          const keyInfo =
+            slot != null && keyCode
+              ? typeof slot === 'string'
+                ? getKeyInfoByGlobalKey(slot)
+                : {
+                    browserKey: keyCode,
+                    globalKey: keyCode,
+                    displayName: slotDisplayName(slot),
+                  }
+              : null;
           return { index, position, keyCode, keyInfo };
         }
         if (el.type === 'stat') {
@@ -2910,6 +2800,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         singleKeyPosition={singleKeyPosition}
         singleStatPosition={singleStatPosition}
         singleKeyCode={singleKeyCode}
+        singleKeySlot={singleKeySlot}
         singleKeyInfo={singleKeyInfo}
         selectedKeyType={selectedKeyType}
         isRenaming={isRenaming}
@@ -2928,8 +2819,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         onKeyMappingChange={onKeyMappingChange}
         handleStatUpdate={handleStatUpdate}
         handleStatPreview={handleStatPreview}
-        isListening={isListening}
-        handleKeyListen={handleKeyListen}
         localState={localState}
         setLocalState={setLocalState}
         handleSizeBlur={handleSizeBlur}

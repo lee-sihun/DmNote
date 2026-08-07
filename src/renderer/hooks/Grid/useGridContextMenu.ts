@@ -8,7 +8,8 @@ import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
-import type { KeyPosition } from '@src/types/key/keys';
+import type { KeyMappings, KeyPosition } from '@src/types/key/keys';
+import { slotCanonical } from '@utils/keySlot';
 import type {
   PluginMenuItemInternal,
   KeyMenuContext,
@@ -37,7 +38,7 @@ interface GridContext {
 
 interface UseGridContextMenuParams {
   selectedKeyType: string;
-  keyMappings: Record<string, string[]>;
+  keyMappings: KeyMappings;
   positions: Record<string, KeyPosition[]>;
   locale: string;
   t: (key: string) => string;
@@ -118,7 +119,10 @@ export function useGridContextMenu({
     const context: KeyContext | null =
       contextIndex !== null && keyPosition
         ? {
-            keyCode: keyMappings[selectedKeyType]?.[contextIndex] || '',
+            // 플러그인 메뉴 표면은 canonical 문자열 유지
+            keyCode: slotCanonical(
+              keyMappings[selectedKeyType]?.[contextIndex] ?? '',
+            ),
             index: contextIndex,
             position: keyPosition,
             mode: selectedKeyType,

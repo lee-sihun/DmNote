@@ -26,6 +26,7 @@ pub(crate) fn validate_gesture_commit_request(
     let editor_envelope = EditorCommitRequest {
         base_revision: request.editor_base_revision,
         mutation_id: request.mutation_id.clone(),
+        multi_key: false,
         gesture_id: Some(request.gesture_id.clone()),
         gesture_ids: Vec::new(),
         changes: request.editor_changes.clone().unwrap_or_default(),

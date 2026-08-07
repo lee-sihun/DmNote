@@ -6,7 +6,6 @@ import { useSignals } from '@preact/signals-react/runtime';
 import { isMac } from '@utils/core/platform';
 import { useDraggable } from '@hooks/Grid';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
@@ -103,7 +102,8 @@ const DraggableKey = React.memo(
     useSignals();
 
     const macOS = isMac();
-    const { displayName } = getKeyInfoByGlobalKey(keyName);
+    // keyName은 호출부에서 합성이 끝난 표시 라벨
+    const displayName = keyName;
     const { dx, dy, width, height = 60, className, counter } = position;
 
     const counterSettings = normalizeCounterSettings(

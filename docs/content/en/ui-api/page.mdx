@@ -32,7 +32,7 @@ const menuId = dmn.ui.contextMenu.addKeyMenuItem({
 
 | Property   | Type        | Description             |
 | ---------- | ----------- | ----------------------- |
-| `keyCode`  | string      | Key code (e.g., "KeyD") |
+| `keyCode`  | string      | Canonical slot identifier (e.g. "D", "LEFT CTRL+Z", "F\|NUMPAD 4") |
 | `index`    | number      | Key index               |
 | `position` | KeyPosition | Key position info       |
 | `mode`     | string      | Current key mode        |
@@ -184,6 +184,26 @@ dmn.ui.displayElement.add({
 | `query(selector)`                   | Find element (including Shadow DOM) |
 | `update(config)`                    | Update metadata                     |
 | `remove()`                          | Remove element                      |
+
+### Anchor
+
+Pins an element to a specific key:
+
+```javascript
+dmn.ui.displayElement.add({
+  html: `<div>→</div>`,
+  position: { x: 0, y: 0 },
+  anchor: {
+    keyCode: "D",
+    offset: { x: 70, y: 0 },
+  },
+});
+```
+
+`anchor.keyCode` is a canonical slot identifier. For a multi-key slot, use its
+canonical string (e.g. `"LEFT CTRL+Z"` for `match: 'all'`, `"F|NUMPAD 4"`
+for `match: 'any'`). See
+[Canonical slot identifiers](/docs/api-reference/keys#canonical-slot-identifiers).
 
 ## Dialog
 

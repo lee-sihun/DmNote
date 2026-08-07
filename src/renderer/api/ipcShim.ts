@@ -325,11 +325,21 @@ export function initIpcShim(wsUrl: string, token: string): Promise<void> {
 
         if (envelope.type === 'error') {
           const payload = envelope.payload as Record<string, unknown>;
-          if (payload?.code === 'AUTH_FAILED') {
+          // 종단 오류: 재접속으로 해소되지 않으므로 재시도 없이 즉시 중단
+          if (
+            payload?.code === 'AUTH_FAILED' ||
+            payload?.code === 'PROTOCOL_MISMATCH'
+          ) {
             disposed = true;
             if (!resolved) {
               resolved = true;
-              reject(new Error('OBS auth failed'));
+              reject(
+                new Error(
+                  payload.code === 'AUTH_FAILED'
+                    ? 'OBS auth failed'
+                    : 'OBS protocol mismatch - refresh the browser source',
+                ),
+              );
             }
           }
           return;

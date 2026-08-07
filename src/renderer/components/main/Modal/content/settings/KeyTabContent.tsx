@@ -1,17 +1,20 @@
 import React, {
   useRef,
-  useEffect,
+  useState,
   useImperativeHandle,
   forwardRef,
 } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
+  NumberInput,
   PropertyRow,
   PropertySection,
 } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
-import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { MAX_SLOT_KEYS, buildSlot, slotCompactParts } from '@utils/keySlot';
+import type { KeySlotUiMode } from '@utils/keySlot';
+import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
+import KeySlotPicker from '@components/main/common/KeySlotPicker';
 import type {
   KeyTabState,
   KeyPreviewData,
@@ -40,10 +43,6 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
     const { t } = useTranslation();
     const { useCustomCSS } = useSettingsStore();
     const imageButtonRef = useRef<HTMLButtonElement>(null);
-    const justAssignedRef = useRef<boolean>(false);
-    const listeningFlagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-      null,
-    );
 
     // ref를 통해 imageButtonRef 노출
     useImperativeHandle(
@@ -54,123 +53,70 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       [],
     );
 
-    // 키 리스닝 플래그를 전역으로 노출 (Grid 단축키 등에서 체크)
-    useEffect(() => {
-      // 이전 타이머 정리
-      if (listeningFlagTimerRef.current !== null) {
-        clearTimeout(listeningFlagTimerRef.current);
-        listeningFlagTimerRef.current = null;
-      }
+    // 캡처 완료 시 멤버 교체 또는 추가 (중복·상한 초과는 무시)
+    const { isListening, listenIndex, startListen, stopListen } =
+      useKeySlotCapture({
+        escapeCancels: true,
+        onCapture: (captured, target) => {
+          setState((prev) => {
+            const members = [...prev.members];
+            const duplicateAt = members.indexOf(captured);
 
-      if (state.isListening) {
-        window.__dmn_isKeyListening = true;
-      } else {
-        // macOS: raw input이 브라우저 keydown보다 먼저 도착할 수 있어 지연 해제
-        listeningFlagTimerRef.current = setTimeout(() => {
-          window.__dmn_isKeyListening = false;
-          listeningFlagTimerRef.current = null;
-        }, 150);
-      }
-
-      return () => {
-        if (listeningFlagTimerRef.current !== null) {
-          clearTimeout(listeningFlagTimerRef.current);
-          listeningFlagTimerRef.current = null;
-        }
-      };
-    }, [state.isListening]);
-
-    // 컴포넌트 언마운트 시 반드시 플래그 해제
-    useEffect(() => {
-      return () => {
-        window.__dmn_isKeyListening = false;
-        if (listeningFlagTimerRef.current !== null) {
-          clearTimeout(listeningFlagTimerRef.current);
-          listeningFlagTimerRef.current = null;
-        }
-      };
-    }, []);
-
-    // 키 리스닝 중 브라우저 기본 동작 차단
-    useEffect(() => {
-      if (!state.isListening) return undefined;
-
-      const blockKeyboardEvents = (e: KeyboardEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-
-      const blockMouseEvents = (e: MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-
-      const blockContextMenu = (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-
-      // 캡처 단계에서 모든 키보드/마우스 이벤트 차단
-      window.addEventListener('keydown', blockKeyboardEvents, true);
-      window.addEventListener('keyup', blockKeyboardEvents, true);
-      window.addEventListener('keypress', blockKeyboardEvents, true);
-      window.addEventListener('mousedown', blockMouseEvents, true);
-      window.addEventListener('contextmenu', blockContextMenu, true);
-
-      return () => {
-        window.removeEventListener('keydown', blockKeyboardEvents, true);
-        window.removeEventListener('keyup', blockKeyboardEvents, true);
-        window.removeEventListener('keypress', blockKeyboardEvents, true);
-        window.removeEventListener('mousedown', blockMouseEvents, true);
-        window.removeEventListener('contextmenu', blockContextMenu, true);
-      };
-    }, [state.isListening]);
-
-    // 키 리스닝 effect
-    useEffect(() => {
-      if (!state.isListening) return undefined;
-      if (typeof window === 'undefined' || !window.api?.keys?.onRawInput) {
-        return undefined;
-      }
-
-      const unsubscribe = window.api.keys.onRawInput((payload) => {
-        if (isHistoryEditorFlushLocked()) return;
-        if (!payload || payload.state !== 'DOWN') return;
-        const targetLabel =
-          payload.label ||
-          (Array.isArray(payload.labels) ? payload.labels[0] : null);
-        if (!targetLabel) return;
-
-        const info = getKeyInfoByGlobalKey(targetLabel);
-
-        // 마우스 클릭으로 할당 시 버튼 재클릭 방지를 위한 플래그
-        justAssignedRef.current = true;
-        setTimeout(() => {
-          justAssignedRef.current = false;
-        }, 100);
-
-        setState((prev) => ({
-          ...prev,
-          key: info.globalKey,
-          displayKey: info.displayName,
-          isListening: false,
-        }));
+            if (target !== null) {
+              // 리스닝 중 제거로 인덱스가 밀린 경우 방어
+              if (target >= members.length) return prev;
+              if (duplicateAt !== -1 && duplicateAt !== target) return prev;
+              members[target] = captured;
+            } else {
+              if (duplicateAt !== -1 || members.length >= MAX_SLOT_KEYS) {
+                return prev;
+              }
+              members.push(captured);
+              // 단일 상태에서 키가 늘면 개별 판정으로 승격
+              if (prev.mode === 'single') {
+                return { ...prev, members, mode: 'any' };
+              }
+            }
+            return { ...prev, members };
+          });
+        },
       });
 
-      return () => {
-        try {
-          unsubscribe?.();
-        } catch (error) {
-          console.error('Failed to unsubscribe raw input listener', error);
-        }
-      };
-    }, [state.isListening, setState]);
+    // 멤버 제거 (진행 중 리스닝 취소)
+    const handleRemoveMember = (index: number) => {
+      stopListen();
+      setState((prev) => ({
+        ...prev,
+        members: prev.members.filter((_, i) => i !== index),
+      }));
+    };
 
-    // 키 리스닝 핸들러
-    const handleKeyListen = () => {
-      // 방금 키가 할당된 직후라면 무시 (마우스 클릭 할당 시 버튼 재클릭 방지)
-      if (justAssignedRef.current) return;
-      setState((prev) => ({ ...prev, isListening: true }));
+    // 입력 방식 변경 - 단일로 바꾸면 첫 키만 유지
+    const handleModeChange = (mode: KeySlotUiMode) => {
+      setState((prev) => ({
+        ...prev,
+        mode,
+        members: mode === 'single' ? prev.members.slice(0, 1) : prev.members,
+      }));
+    };
+
+    // 멀티 키 편집 팝업
+    const [slotPickerOpen, setSlotPickerOpen] = useState(false);
+    const slotEditButtonRef = useRef<HTMLButtonElement>(null);
+    const slotParts = slotCompactParts(
+      buildSlot(state.members, state.mode === 'all' ? 'all' : 'any'),
+    );
+    // 팝업이 닫혀 있을 때의 리스닝 = 행 버튼 빠른 재지정
+    const quickListening = isListening && !slotPickerOpen;
+
+    // 행 버튼: 기존처럼 즉시 캡처 (멀티 슬롯이면 첫 키 교체)
+    const handleMainSlotClick = () => {
+      startListen(state.members.length === 0 ? null : 0);
+    };
+
+    const closeSlotPicker = () => {
+      setSlotPickerOpen(false);
+      stopListen();
     };
 
     // 이미지 변경 핸들러
@@ -182,35 +128,6 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
     const _handleActiveImageChange = (imageUrl: string) => {
       setState((prev) => ({ ...prev, activeImage: imageUrl }));
       onPreview({ activeImage: imageUrl });
-    };
-
-    // 크기 변경 핸들러
-    const handleWidthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value;
-      if (newValue === '') {
-        setState((prev) => ({ ...prev, width: '' }));
-      } else {
-        const numValue = parseInt(newValue, 10);
-        if (!Number.isNaN(numValue)) {
-          const clamped = Math.min(Math.max(numValue, 1), 999);
-          setState((prev) => ({ ...prev, width: clamped }));
-          onPreview({ width: clamped });
-        }
-      }
-    };
-
-    const handleHeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value;
-      if (newValue === '') {
-        setState((prev) => ({ ...prev, height: '' }));
-      } else {
-        const numValue = parseInt(newValue, 10);
-        if (!Number.isNaN(numValue)) {
-          const clamped = Math.min(Math.max(numValue, 1), 999);
-          setState((prev) => ({ ...prev, height: clamped }));
-          onPreview({ height: clamped });
-        }
-      }
     };
 
     // 투명 토글 핸들러
@@ -237,85 +154,87 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         <PropertySection>
           <PropertyRow label={t('keySetting.keyMapping')}>
             <button
-              onClick={handleKeyListen}
-              className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
-                state.isListening ? 'shadow-focus-ring' : ''
+              onClick={handleMainSlotClick}
+              className={`flex items-center justify-center h-[23px] min-w-[0px] max-w-[120px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
+                quickListening ? 'shadow-focus-ring' : ''
               } text-fg text-label`}
             >
-              {state.isListening
-                ? t('keySetting.pressAnyKey')
-                : state.displayKey || t('keySetting.clickToSet')}
+              <span className="truncate">
+                {quickListening
+                  ? t('keySetting.pressAnyKey')
+                  : slotParts.label || t('keySetting.clickToSet')}
+              </span>
+              {!quickListening && slotParts.extra && (
+                // case 피처: +를 숫자 중심에 맞춘 글리프로 치환.
+                // tracking은 +와 숫자 사이 0.25px 확보용, 끝 글자 뒤 여분은 -mr로 상쇄 (배지는 한 자리 전제)
+                <span className="pl-[3px] tracking-[0.25px] -mr-[0.25px] text-fg-faint [font-feature-settings:'case']">
+                  {slotParts.extra}
+                </span>
+              )}
             </button>
           </PropertyRow>
 
+          {/* 다중 키·판정 방식 편집 - 그림자 행과 같은 설정하기 패턴 */}
+          <PropertyRow label={t('keySetting.multiKey')}>
+            <button
+              ref={slotEditButtonRef}
+              onClick={() => setSlotPickerOpen((prev) => !prev)}
+              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                slotPickerOpen ? 'shadow-focus-ring' : ''
+              } text-fg text-body`}
+            >
+              {t('keySetting.configure')}
+            </button>
+          </PropertyRow>
+
+          <KeySlotPicker
+            open={slotPickerOpen}
+            referenceRef={slotEditButtonRef}
+            onClose={closeSlotPicker}
+            members={state.members}
+            mode={state.mode}
+            isListening={isListening}
+            listenIndex={listenIndex}
+            onChipClick={(index) => startListen(index)}
+            onAddClick={() => startListen(null)}
+            onRemove={handleRemoveMember}
+            onModeChange={handleModeChange}
+            labels={{
+              title: t('keySetting.multiKeyEdit'),
+              modeAny: t('keySetting.matchAny'),
+              modeAll: t('keySetting.matchAll'),
+              pressAnyKey: t('keySetting.pressAnyKey'),
+              addKey: t('keySetting.addKey'),
+              removeKey: t('keySetting.removeKey'),
+            }}
+          />
+
           {/* 키 사이즈 */}
-          <div className="flex justify-between items-center w-full min-h-[32px]">
-            <p className="text-fg-muted text-label">
-              {t('keySetting.keySize')}
-            </p>
-            <div className="flex items-center gap-[10.5px]">
-              <div
-                className={`relative w-[54px] h-[23px] bg-inset rounded-md ${
-                  state.widthFocused ? 'shadow-focus-ring' : ''
-                }`}
-              >
-                <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
-                  X
-                </span>
-                <input
-                  type="number"
-                  value={state.width}
-                  onChange={handleWidthChange}
-                  onFocus={() =>
-                    setState((prev) => ({ ...prev, widthFocused: true }))
-                  }
-                  onBlur={(e) => {
-                    setState((prev) => {
-                      const val = e.target.value;
-                      const finalVal =
-                        val === '' || Number.isNaN(parseInt(val, 10))
-                          ? 60
-                          : parseInt(val, 10);
-                      return { ...prev, width: finalVal, widthFocused: false };
-                    });
-                  }}
-                  className="absolute left-[20px] top-0 h-[23px] w-[26px] bg-transparent text-body tabular-nums text-fg text-left"
-                />
-              </div>
-              <div
-                className={`relative w-[54px] h-[23px] bg-inset rounded-md ${
-                  state.heightFocused ? 'shadow-focus-ring' : ''
-                }`}
-              >
-                <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
-                  Y
-                </span>
-                <input
-                  type="number"
-                  value={state.height}
-                  onChange={handleHeightChange}
-                  onFocus={() =>
-                    setState((prev) => ({ ...prev, heightFocused: true }))
-                  }
-                  onBlur={(e) => {
-                    setState((prev) => {
-                      const val = e.target.value;
-                      const finalVal =
-                        val === '' || Number.isNaN(parseInt(val, 10))
-                          ? 60
-                          : parseInt(val, 10);
-                      return {
-                        ...prev,
-                        height: finalVal,
-                        heightFocused: false,
-                      };
-                    });
-                  }}
-                  className="absolute left-[20px] top-0 h-[23px] w-[26px] bg-transparent text-body tabular-nums text-fg text-left"
-                />
-              </div>
-            </div>
-          </div>
+          <PropertyRow label={t('keySetting.keySize')}>
+            <NumberInput
+              value={state.width}
+              min={1}
+              max={999}
+              prefix="X"
+              onChange={(value) => {
+                setState((prev) => ({ ...prev, width: value }));
+                onPreview({ width: value });
+              }}
+              // Escape 시 값 원복 후 이벤트 전파 - 모달 닫힘 경로 유지
+              onCancel={() => {}}
+            />
+            <NumberInput
+              value={state.height}
+              min={1}
+              max={999}
+              prefix="Y"
+              onChange={(value) => {
+                setState((prev) => ({ ...prev, height: value }));
+                onPreview({ height: value });
+              }}
+              onCancel={() => {}}
+            />
+          </PropertyRow>
         </PropertySection>
 
         {/* 외형 커스터마이징 카드 */}

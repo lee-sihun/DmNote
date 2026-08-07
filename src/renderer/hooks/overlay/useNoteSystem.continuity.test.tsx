@@ -146,6 +146,7 @@ describe('노트 길이 연속성 계약 독립 검증', () => {
     h: number,
     s: Settings,
     upBeforeStart: boolean,
+    includeDaemonHold = true,
   ) => {
     const down = nowMs;
     result.handleKeyDown(key, { displayTime: down, physTime: down });
@@ -157,7 +158,7 @@ describe('노트 길이 연속성 계약 독립 검증', () => {
     result.handleKeyUp(key, {
       displayTime: down + h,
       physTime: down + h,
-      holdDurationMs: h,
+      ...(includeDaemonHold ? { holdDurationMs: h } : {}),
     });
     // 완료될 때까지만 전진 - 더 가면 cleanup이 노트를 회수한다
     const cap =
@@ -281,6 +282,15 @@ describe('노트 길이 연속성 계약 독립 검증', () => {
       root = createRoot(container);
       nowMs += 1000;
     }
+  });
+
+  it('holdDurationMs가 생략되면 canonical DOWN·UP 시각으로 같은 길이를 계산한다', async () => {
+    await render(USER);
+    const h = 150;
+    const result = await play('FALLBACK', h, USER, false, false);
+
+    expect(result).not.toBeNull();
+    expect(result!.end - result!.start).toBeCloseTo(oracle(USER).L(h), 3);
   });
 
   it('실수 D와 동일한 램프 폭을 보존한다', () => {

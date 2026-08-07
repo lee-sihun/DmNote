@@ -44,6 +44,13 @@ type EditorPatchV1 = {
 `EditorPatchV1`에 포함한 각 필드는 해당 최상위 컬렉션의 canonical 전체
 값입니다. 항목 하나만 표현하는 diff가 아닙니다.
 
+<Callout type="warning">
+  멀티 키 업데이트부터 `get()`이 반환하는 `EditorDocumentV1`의 `keys`와
+  `onCommitted()`가 전달하는 `EditorPatchV1`의 `keys`는 순수 문자열이 아니라
+  `KeySlot` union(`string | MultiKeySlot`)을 사용합니다. 슬롯 형태와 canonical
+  식별자 규칙은 [Keys API](/docs/api-reference/keys)를 참고하세요.
+</Callout>
+
 ## 현재 문서 조회
 
 ### `dmn.editor.get(): Promise<EditorGetResult>`
@@ -86,6 +93,8 @@ interface EditorCommitRequest {
   mutationId: string;
   gestureId?: string;
   gestureIds?: string[];
+  // keys를 포함한 커밋의 멀티 키 슬롯 지원 선언
+  multiKey?: boolean;
   changes: EditorPatchV1;
 }
 
@@ -133,6 +142,7 @@ ID를 다른 요청에 재사용하면 거절됩니다.
 await dmn.editor.commit({
   baseRevision,
   mutationId: crypto.randomUUID(),
+  multiKey: true,
   changes: {
     schemaVersion: 1,
     keys: nextKeys,
@@ -144,6 +154,11 @@ await dmn.editor.commit({
 키 이름이나 위치 속성처럼 구조와 길이가 그대로인 변경은 해당 컬렉션 하나만
 갱신해도 됩니다. 구조를 바꾸면서 `keys` 또는 `keyPositions` 하나만 제출하면
 `PAIRED_UPDATE_REQUIRED`로 거절됩니다.
+
+현재 매핑에 멀티 키 슬롯이 하나라도 있으면 `keys`를 포함한 커밋은 요청에
+`multiKey: true`를 함께 선언해야 합니다. 선언 없는 쓰기는
+`MULTI_KEY_UNSUPPORTED`(재시도 불가)로 거절됩니다. 멀티 키 슬롯을 모르는
+플러그인이 매핑을 왕복시키며 파괴하는 것을 막는 fail-closed 게이트입니다.
 
 호환용 `dmn.keys` API를 사용할 때 이런 구조 변경은
 `dmn.keys.updateWithPositions(keys, keyPositions)`로 제출하세요. `update()`와
@@ -157,11 +172,15 @@ await dmn.editor.commit({
 ```typescript
 type EditorCommitErrorCode =
   | 'REVISION_CONFLICT'
+  | 'PLUGIN_REVISION_CONFLICT'
   | 'VALIDATION_FAILED'
   | 'TOO_MANY_GESTURE_IDS'
   | 'INVALID_GESTURE_ID'
   | 'PAIRED_UPDATE_REQUIRED'
+  | 'MULTI_KEY_UNSUPPORTED'
   | 'MUTATION_ID_REUSED'
+  | 'HISTORY_IN_PROGRESS'
+  | 'HISTORY_EPOCH_CONFLICT'
   | 'IO_ERROR';
 
 interface EditorCommitError {
@@ -171,6 +190,7 @@ interface EditorCommitError {
     currentRevision?: number;
     validationCode?: string;
     field?: string;
+    currentHistoryEpoch?: number;
   };
   retryable: boolean;
 }
@@ -179,15 +199,19 @@ interface EditorCommitError {
 | 코드                     | 의미                                                      | `retryable` |
 | ------------------------ | --------------------------------------------------------- | ----------- |
 | `REVISION_CONFLICT`      | `baseRevision`이 오래됨. 다시 조회·조정한 뒤 커밋         | `true`      |
+| `PLUGIN_REVISION_CONFLICT` | 플러그인 범위 revision이 오래됨. 다시 조회한 뒤 커밋    | `true`      |
 | `VALIDATION_FAILED`      | 완성된 문서가 에디터 검증 규칙을 위반함                   | `false`     |
 | `TOO_MANY_GESTURE_IDS`   | `gestureIds`가 32개를 넘거나 합친 고유 ID가 32개를 초과함 | `false`     |
 | `INVALID_GESTURE_ID`     | gesture ID가 UUID가 아니거나 64바이트를 초과함            | `false`     |
 | `PAIRED_UPDATE_REQUIRED` | 키 구조 변경에 짝 컬렉션이 빠짐                           | `false`     |
+| `MULTI_KEY_UNSUPPORTED`  | 멀티 키 슬롯이 있는데 `multiKey` 선언 없이 `keys`를 씀    | `false`     |
 | `MUTATION_ID_REUSED`     | 같은 mutation ID를 다른 요청에 재사용함                   | `false`     |
 | `IO_ERROR`               | 문서를 디스크에 저장하지 못함                             | `true`      |
+| `HISTORY_IN_PROGRESS`    | undo/redo 진행 중. 끝난 뒤 재시도                         | `true`      |
+| `HISTORY_EPOCH_CONFLICT` | 관측한 history epoch이 오래됨. 다시 조회한 뒤 커밋        | `true`      |
 
 오류에 해당할 때 `details.currentRevision`, `details.validationCode`,
-`details.field`가 함께 제공됩니다.
+`details.field`, `details.currentHistoryEpoch`가 함께 제공됩니다.
 
 ## 커밋된 변경 구독
 
@@ -205,6 +229,7 @@ interface EditorCommittedV1 {
   gestureIds?: string[];
   origin?: string;
   changedFields: EditorField[];
+  // patch.keys는 KeySlot union(string | MultiKeySlot)
   patch: EditorPatchV1;
 }
 

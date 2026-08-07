@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { KeyPosition } from '@src/types/key/keys';
+import type { KeyPosition, KeySlot } from '@src/types/key/keys';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
@@ -35,7 +35,7 @@ export interface SelectedElement {
 // 클립보드에 저장되는 키 데이터
 export interface ClipboardKeyData {
   type: 'key';
-  keyCode: string;
+  keyCode: KeySlot;
   position: KeyPosition;
 }
 

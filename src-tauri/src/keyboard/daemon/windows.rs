@@ -7,11 +7,7 @@ use super::super::labels::{
 use crate::ipc::{pipe_client_connect, DaemonCommand, HookKeyState, HookMessage, InputDeviceKind};
 use crate::models::ShortcutBinding;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum WindowsPhysicalInputId {
-    Keyboard(super::WindowsKeyboardPhysicalId),
-    MouseButton(u8),
-}
+use super::WindowsPhysicalInputId;
 
 /// 글로벌 단축키 상태 추적기
 struct HotkeyState {
@@ -496,6 +492,7 @@ pub(super) fn run_raw_input() -> Result<()> {
                                 is_e1,
                                 vk_norm,
                             ));
+                        let opaque_physical_id = physical_id.opaque();
                         let current_labels = build_key_labels(&event);
                         let (labels, hold_duration_ms) = match state {
                             HookKeyState::Down => {
@@ -532,6 +529,7 @@ pub(super) fn run_raw_input() -> Result<()> {
                             device: InputDeviceKind::Keyboard,
                             labels,
                             state,
+                            physical_id: Some(opaque_physical_id),
                             vk_code: event.vk_code,
                             scan_code: event.scan_code,
                             flags: event.flags,
@@ -583,6 +581,7 @@ pub(super) fn run_raw_input() -> Result<()> {
 
                         for (button, label, state) in events {
                             let physical_id = WindowsPhysicalInputId::MouseButton(button);
+                            let opaque_physical_id = physical_id.opaque();
                             let current_labels = vec![label];
                             let (labels, hold_duration_ms) = match state {
                                 HookKeyState::Down => (
@@ -606,6 +605,7 @@ pub(super) fn run_raw_input() -> Result<()> {
                                 device: InputDeviceKind::Mouse,
                                 labels,
                                 state,
+                                physical_id: Some(opaque_physical_id),
                                 vk_code: None,
                                 scan_code: None,
                                 flags: None,
