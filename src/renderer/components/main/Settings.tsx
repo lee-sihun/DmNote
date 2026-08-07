@@ -167,6 +167,9 @@ const Settings = ({
   const reloadingPluginsRef = useRef(false);
   const addingPluginsRef = useRef(false);
   const pendingPluginRef = useRef<string | null>(null);
+  const removingPluginRef = useRef<string | null>(null);
+  const resetAllRef = useRef(false);
+  const regeneratingObsTokenRef = useRef(false);
 
   // OBS 모드
   const [obsStatus, setObsStatus] = useState<ObsStatus>({
@@ -184,6 +187,8 @@ const Settings = ({
   const [asioDriversLoaded, setAsioDriversLoaded] = useState(
     cachedAsioDriversLoaded,
   );
+  const pendingKeySoundOutputRef = useRef<KeySoundOutputBackend | null>(null);
+  const applyingKeySoundOutputRef = useRef(false);
 
   const setKeySoundOutput = (state: KeySoundOutputState) => {
     cachedKeySoundOutput = state;
@@ -203,7 +208,12 @@ const Settings = ({
         cachedAsioDriversLoaded = true;
         setAsioDrivers(devices.asio);
         setAsioDriversLoaded(true);
-        setKeySoundOutput(state);
+        if (
+          !applyingKeySoundOutputRef.current &&
+          !pendingKeySoundOutputRef.current
+        ) {
+          setKeySoundOutput(state);
+        }
       } catch (error) {
         console.error('Failed to load key sound output state', error);
       }
@@ -213,37 +223,69 @@ const Settings = ({
     };
   }, []);
 
-  const handleKeySoundOutputChange = async (val: string) => {
-    const backend: KeySoundOutputBackend = val.startsWith('asio:')
-      ? {
-          kind: 'asio',
-          driverName: val.slice('asio:'.length),
-          // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
-          bufferSize: DEFAULT_ASIO_BUFFER,
+  const enqueueKeySoundOutput = (backend: KeySoundOutputBackend) => {
+    pendingKeySoundOutputRef.current = backend;
+    setKeySoundOutputRaw((current) => {
+      if (!current) return current;
+      const optimistic = {
+        ...current,
+        requested: backend,
+        error: null,
+        errorCode: null,
+      };
+      cachedKeySoundOutput = optimistic;
+      return optimistic;
+    });
+    if (applyingKeySoundOutputRef.current) return;
+
+    applyingKeySoundOutputRef.current = true;
+    void (async () => {
+      while (pendingKeySoundOutputRef.current) {
+        const requested = pendingKeySoundOutputRef.current;
+        pendingKeySoundOutputRef.current = null;
+        try {
+          const result = await keySoundOutputApi.setBackend(requested);
+          if (!pendingKeySoundOutputRef.current) setKeySoundOutput(result);
+        } catch (error) {
+          console.error('Failed to set key sound output backend', error);
+          if (!pendingKeySoundOutputRef.current) {
+            try {
+              const authoritative = await keySoundOutputApi.getState();
+              if (!pendingKeySoundOutputRef.current) {
+                setKeySoundOutput(authoritative);
+              }
+            } catch (syncError) {
+              console.error('Failed to resync key sound output', syncError);
+            }
+          }
         }
-      : { kind: 'defaultDevice' };
-    try {
-      const next = await keySoundOutputApi.setBackend(backend);
-      setKeySoundOutput(next);
-    } catch (error) {
-      console.error('Failed to set key sound output backend', error);
-    }
+      }
+      applyingKeySoundOutputRef.current = false;
+    })();
+  };
+
+  const handleKeySoundOutputChange = (val: string) => {
+    enqueueKeySoundOutput(
+      val.startsWith('asio:')
+        ? {
+            kind: 'asio',
+            driverName: val.slice('asio:'.length),
+            // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
+            bufferSize: DEFAULT_ASIO_BUFFER,
+          }
+        : { kind: 'defaultDevice' },
+    );
   };
 
   // ASIO 버퍼 크기 변경 (게임과 동일 버퍼로 맞춰야 ASIO 공존 가능)
-  const handleAsioBufferChange = async (val: string) => {
+  const handleAsioBufferChange = (val: string) => {
     const requested = keySoundOutput?.requested;
     if (requested?.kind !== 'asio') return;
-    try {
-      const next = await keySoundOutputApi.setBackend({
-        kind: 'asio',
-        driverName: requested.driverName,
-        bufferSize: Number(val),
-      });
-      setKeySoundOutput(next);
-    } catch (error) {
-      console.error('Failed to set ASIO buffer size', error);
-    }
+    enqueueKeySoundOutput({
+      kind: 'asio',
+      driverName: requested.driverName,
+      bufferSize: Number(val),
+    });
   };
 
   // Lenis smooth scroll 적용 (전역 설정 사용)
@@ -493,12 +535,13 @@ const Settings = ({
   };
 
   const handlePluginRemove = async (pluginId: string): Promise<void> => {
-    if (pendingPluginId) return;
-
     const plugin: JsPlugin | undefined = jsPlugins.find(
-      (p: JsPlugin) => p.id === pluginId,
+      (candidate: JsPlugin) => candidate.id === pluginId,
     );
     if (!plugin) return;
+    if (removingPluginRef.current || pendingPluginRef.current) return;
+    removingPluginRef.current = pluginId;
+    setPendingPluginId(pluginId);
 
     try {
       // 실제 플러그인 네임스페이스 추출 (@id 또는 파일명 기반)
@@ -527,15 +570,22 @@ const Settings = ({
         });
         setDataDeleteModalOpen(true);
       } else {
+        removingPluginRef.current = null;
+        setPendingPluginId(null);
         await removePluginOnly(pluginId);
       }
     } catch (error) {
       console.error('Failed to check plugin data', error);
       showAlert?.(t('settings.jsPluginRemoveFailed'));
+    } finally {
+      removingPluginRef.current = null;
+      setPendingPluginId(null);
     }
   };
 
   const removePluginOnly = async (pluginId: string): Promise<void> => {
+    if (removingPluginRef.current) return;
+    removingPluginRef.current = pluginId;
     setPendingPluginId(pluginId);
     try {
       const result: JsRemoveResult = await window.api.js.remove(pluginId);
@@ -546,6 +596,7 @@ const Settings = ({
       console.error('Failed to remove JS plugin', error);
       showAlert?.(t('settings.jsPluginRemoveFailed'));
     } finally {
+      removingPluginRef.current = null;
       setPendingPluginId(null);
       setDataDeleteModalOpen(false);
       setPluginToDelete(null);
@@ -553,6 +604,8 @@ const Settings = ({
   };
 
   const removePluginWithData = async (pluginId: string): Promise<void> => {
+    if (removingPluginRef.current) return;
+    removingPluginRef.current = pluginId;
     setPendingPluginId(pluginId);
     try {
       const plugin: JsPlugin | undefined = jsPlugins.find(
@@ -580,6 +633,7 @@ const Settings = ({
       console.error('Failed to remove JS plugin with data', error);
       showAlert?.(t('settings.jsPluginRemoveFailed'));
     } finally {
+      removingPluginRef.current = null;
       setPendingPluginId(null);
       setDataDeleteModalOpen(false);
       setPluginToDelete(null);
@@ -698,6 +752,8 @@ const Settings = ({
   };
 
   const handleObsRegenerateToken = (): void => {
+    if (regeneratingObsTokenRef.current) return;
+    regeneratingObsTokenRef.current = true;
     showConfirm(
       t('settings.obsTokenRegenMessage'),
       async () => {
@@ -706,9 +762,16 @@ const Settings = ({
           setObsStatus(status);
         } catch (error) {
           console.error('Failed to regenerate OBS token', error);
+        } finally {
+          regeneratingObsTokenRef.current = false;
         }
       },
-      { confirmText: t('settings.obsTokenRegenConfirm') },
+      {
+        confirmText: t('settings.obsTokenRegenConfirm'),
+        onCancel: () => {
+          regeneratingObsTokenRef.current = false;
+        },
+      },
     );
   };
 
@@ -755,6 +818,8 @@ const Settings = ({
   };
 
   const handleResetAll = (): void => {
+    if (resetAllRef.current) return;
+    resetAllRef.current = true;
     const reset = async (): Promise<void> => {
       try {
         const result: KeysResetAllResponse = await window.api.keys.resetAll();
@@ -772,12 +837,17 @@ const Settings = ({
         }
       } catch (error) {
         console.error('Failed to reset presets', error);
+      } finally {
+        resetAllRef.current = false;
       }
     };
 
     if (showConfirm) {
       showConfirm(t('settings.resetAllConfirm'), reset, {
         confirmText: t('settings.initialize'),
+        onCancel: () => {
+          resetAllRef.current = false;
+        },
       });
     } else {
       reset();

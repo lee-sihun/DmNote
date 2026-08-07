@@ -168,13 +168,29 @@ const ShortcutsPanelContent = ({
   ] as const;
 
   // 저장 중 겹침 방지 - 연속 확정은 순서대로 하나씩만
-  const applyShortcuts = async (next: ShortcutsState): Promise<void> => {
+  const pendingShortcutsRef = React.useRef<ShortcutsState | null>(null);
+  const savingRef = React.useRef(false);
+  const applyShortcuts = (next: ShortcutsState): void => {
+    pendingShortcutsRef.current = next;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
-    try {
-      await onApply(next);
-    } finally {
-      setIsSaving(false);
-    }
+    void (async () => {
+      try {
+        while (pendingShortcutsRef.current) {
+          const pending = pendingShortcutsRef.current;
+          pendingShortcutsRef.current = null;
+          try {
+            await onApply(pending);
+          } catch (error) {
+            console.error('Failed to apply shortcuts', error);
+          }
+        }
+      } finally {
+        savingRef.current = false;
+        setIsSaving(false);
+      }
+    })();
   };
 
   // 의도적으로 deps 미지정 - 매 렌더 재등록으로 listeningKey·shortcuts의
@@ -214,7 +230,7 @@ const ShortcutsPanelContent = ({
         setListeningKey(null);
         if (cur[target].key) {
           setNotice(null);
-          void applyShortcuts({ ...cur, [target]: { key: '' } });
+          applyShortcuts({ ...cur, [target]: { key: '' } });
         }
         return;
       }
@@ -245,7 +261,7 @@ const ShortcutsPanelContent = ({
       } else {
         setNotice(null);
       }
-      void applyShortcuts(next);
+      applyShortcuts(next);
     };
 
     window.addEventListener('keydown', onKeyDown, true);
@@ -272,7 +288,7 @@ const ShortcutsPanelContent = ({
     const cur: ShortcutsState = { ...defaults, ...shortcuts };
     if (!cur[key].key) return;
     setNotice(null);
-    void applyShortcuts({ ...cur, [key]: { key: '' } });
+    applyShortcuts({ ...cur, [key]: { key: '' } });
   };
 
   const renderRow = (action: (typeof actions)[number]) => {

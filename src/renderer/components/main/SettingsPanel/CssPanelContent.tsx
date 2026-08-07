@@ -70,6 +70,9 @@ const CssPanelContent = ({
   const [hasLoaded, setHasLoaded] = React.useState(cssHistoryCache !== null);
   const [pendingPath, setPendingPath] = React.useState<string | null>(null);
   const [isLoadingNew, setIsLoadingNew] = React.useState(false);
+  const pendingPathRef = React.useRef<string | null>(null);
+  const loadingNewRef = React.useRef(false);
+  const removingPathsRef = React.useRef(new Set<string>());
 
   const { scrollContainerRef: scrollRef } = useLenis();
   const menu = usePickerItemMenu<string>();
@@ -108,8 +111,9 @@ const CssPanelContent = ({
   // 성공 시 스토어 갱신은 css:content 이벤트 구독(useAppBootstrap)에 일임
   // 응답으로 직접 쓰면 더 최신 이벤트를 이전 응답이 되덮을 수 있음
   const handleActivate = async (item: CustomCssHistoryItem): Promise<void> => {
-    if (pendingPath) return;
+    if (pendingPathRef.current) return;
     if (item.path === customCSSPath) return;
+    pendingPathRef.current = item.path;
     setPendingPath(item.path);
     try {
       const result = await window.api.css.historyActivate(item.path);
@@ -124,23 +128,29 @@ const CssPanelContent = ({
       console.error('Failed to activate CSS from history', error);
       showAlert(`${t('settings.cssLoadFailed')}${error}`);
     } finally {
+      pendingPathRef.current = null;
       setPendingPath(null);
       void refreshHistory();
     }
   };
 
   const handleRemove = async (path: string): Promise<void> => {
+    if (removingPathsRef.current.has(path)) return;
+    removingPathsRef.current.add(path);
     const seq = ++historyRequestSeqRef.current;
     try {
       applyHistoryResult(seq, await window.api.css.historyRemove(path));
     } catch (error) {
       console.error('Failed to remove CSS history entry', error);
       showAlert(t('settings.cssHistoryRemoveFailed'));
+    } finally {
+      removingPathsRef.current.delete(path);
     }
   };
 
   const handleLoadNew = async (): Promise<void> => {
-    if (isLoadingNew) return;
+    if (loadingNewRef.current) return;
+    loadingNewRef.current = true;
     setIsLoadingNew(true);
     try {
       const result: CssLoadResult = await window.api.css.load();
@@ -158,6 +168,7 @@ const CssPanelContent = ({
       console.error('Failed to load custom CSS', error);
       showAlert(`${t('settings.cssLoadFailed')}${error}`);
     } finally {
+      loadingNewRef.current = false;
       setIsLoadingNew(false);
       void refreshHistory();
     }
