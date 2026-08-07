@@ -122,6 +122,8 @@ export interface ToggleSwitchProps {
 export interface TextInputProps {
   value: string;
   onChange: (value: string) => void;
+  /** 타이핑 callback을 첫 paint 뒤로 미뤄 입력 echo를 우선 반영 */
+  commitStrategy?: CommitStrategy;
   onBlur?: (value: string) => void;
   /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
   onPreview?: (value: string) => void;

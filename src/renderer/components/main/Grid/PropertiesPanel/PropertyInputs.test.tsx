@@ -249,6 +249,12 @@ describe('TextInput preview commit', () => {
   let root: Root;
 
   beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -256,7 +262,42 @@ describe('TextInput preview commit', () => {
 
   afterEach(() => {
     act(() => root.unmount());
+    vi.unstubAllGlobals();
     container.remove();
+  });
+
+  it('기본 전략은 로컬 문자열을 먼저 표시하고 부모 commit을 미룬다', async () => {
+    const commit = vi.fn();
+    act(() => root.render(<TextInput value="before" onChange={commit} />));
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, 'after');
+    });
+
+    expect(input.value).toBe('after');
+    expect(input.getAttribute('value')).toBe('after');
+    expect(commit).not.toHaveBeenCalled();
+    await flushAfterPaintCommit();
+    expect(commit).toHaveBeenCalledWith('after');
+  });
+
+  it('sync 전략은 기존처럼 입력 이벤트 안에서 즉시 commit한다', () => {
+    const commit = vi.fn();
+    act(() =>
+      root.render(
+        <TextInput value="before" onChange={commit} commitStrategy="sync" />,
+      ),
+    );
+    const input = container.querySelector('input')!;
+
+    act(() => {
+      input.focus();
+      setInputValue(input, 'after');
+    });
+
+    expect(commit).toHaveBeenCalledWith('after');
   });
 
   it('preview가 부모 value를 갱신해도 blur에서 최종값을 commit한다', () => {

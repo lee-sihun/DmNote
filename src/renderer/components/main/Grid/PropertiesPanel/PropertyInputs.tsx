@@ -598,6 +598,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 export const TextInput: React.FC<TextInputProps> = ({
   value,
   onChange,
+  commitStrategy = 'after-paint',
   onBlur,
   onPreview,
   onCancel,
@@ -614,6 +615,12 @@ export const TextInput: React.FC<TextInputProps> = ({
   const sessionActiveRef = useRef(false);
   const unregisterLifecycleRef = useRef<(() => void) | null>(null);
   const finalizeRef = useRef<(finalValue: string) => void>(() => undefined);
+  const liveCommit = onPreview ?? onChange;
+  const { scheduleCommit, flushPendingCommit, cancelPendingCommit } =
+    useAfterPaintValueCommit<string>({
+      onCommit: liveCommit,
+      strategy: commitStrategy,
+    });
 
   useEffect(() => {
     if (!isFocused) {
@@ -623,9 +630,8 @@ export const TextInput: React.FC<TextInputProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalValue(e.target.value);
-    // 게스처 모드에서는 타이핑이 preview로만 흐름
     if (onPreview) previewedRef.current = true;
-    (onPreview ?? onChange)(e.target.value);
+    scheduleCommit(e.target.value);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -655,6 +661,7 @@ export const TextInput: React.FC<TextInputProps> = ({
     setIsFocused(false);
     if (escapedRef.current) {
       escapedRef.current = false;
+      cancelPendingCommit();
       previewedRef.current = false;
       setLocalValue(value);
       // 취소 의미이므로 commit 성격의 onBlur는 호출하지 않음
@@ -663,7 +670,10 @@ export const TextInput: React.FC<TextInputProps> = ({
     }
     // 확정은 입력 컴포넌트의 최종값 기준 (부모 store 재조회 금지)
     if (onPreview && previewedRef.current) {
+      cancelPendingCommit();
       onChange(finalValue);
+    } else {
+      flushPendingCommit();
     }
     previewedRef.current = false;
     onBlur?.(finalValue);
