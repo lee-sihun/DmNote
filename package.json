@@ -29,6 +29,7 @@
     "test": "vitest run",
     "benchmark:interaction": "cross-env DMN_INTERACTION_BENCHMARK=1 vitest run src/renderer/benchmarks/*.performance.test.tsx --reporter=verbose",
     "benchmark:interaction:pilot": "node scripts/run-interaction-pilot.mjs",
+    "test:interaction:pilot": "vitest run src/renderer/__tests__/shadowControls.test.tsx src/renderer/__tests__/batchShadowUpdate.test.ts src/renderer/__tests__/elementShadowContract.test.ts --reporter=dot",
     "test:docs": "vitest run tests/docs-code-blocks.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

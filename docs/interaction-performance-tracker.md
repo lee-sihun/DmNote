@@ -2,7 +2,7 @@
 
 > 작성일: 2026-08-07
 >
-> 상태: 기준선 측정 준비
+> 상태: PILOT-01 자동 측정·WebView 검증 중
 >
 > 원칙: 실측값만 기록하며 추정값이나 임의의 성능 수치를 입력하지 않는다.
 >
@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 165개   |
+| 대기                             | 164개   |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 0개     |
+| 실험·검증 중                     | 1개     |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -95,27 +95,51 @@
 
 모든 성능 값은 주 지표의 P95이며 단위는 `주 지표` 열을 따른다. 더 자세한 P50·P95·보조 지표는 `측정 세션`에 기록한다.
 
+<!-- PILOT-01:RESULT:START -->
+
+#### PILOT-01 최신 자동 측정
+
+| 조건           | 값                                                                    |
+| -------------- | --------------------------------------------------------------------- |
+| 측정 경로      | 실제 `updateKeyStyle` + 요소 그림자 CSS 렌더의 jsdom DOM commit proxy |
+| 요소 수        | 500개                                                                 |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회                                |
+| 측정 코드 커밋 | `45cbb96e8c979f9c40dd5e64877bb517d2c371e3`                            |
+| 비교 전략      | `sync` → `after-paint`                                                |
+| 환경           | darwin arm64, v25.2.1                                                 |
+
+| P95 지표              | sync 기준선 | after-paint | 개선율 |
+| --------------------- | ----------: | ----------: | -----: |
+| 시각 DOM commit       |     5.842ms |     0.464ms |  92.1% |
+| canonical DOM commit  |     5.844ms |     8.706ms | -49.0% |
+| React commit duration |     0.676ms |     0.973ms | -44.0% |
+
+- 원시 결과: [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json)
+- 정확성 게이트: `npm run test:interaction:pilot` 통과
+- 실제 WebView click-to-paint 값은 브라우저 또는 Tauri 자동화 표면에서 별도 검증 전까지 기록하지 않는다.
+<!-- PILOT-01:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
-| ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                      |
-| -------- | ---------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------ |
-| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | CTP ms       |        — |        — |      — | 대기 | 최초 파일럿                    |
-| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | CTP ms       |        — |        — |      — | 대기 | 파일럿 확장                    |
-| BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 대기 | 직접 사용처와 SettingToggleRow |
-| BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 대기 | 행 전체 토글                   |
-| BASE-03  | Dropdown                           | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·선택·닫기                 |
-| BASE-04  | NumberInput·OptionalNumberInput    | P0/P1    | CTP ms       |        — |        — |      — | 대기 | draft·preview·commit           |
-| BASE-05  | TextInput·SearchField              | P1       | CTP ms       |        — |        — |      — | 대기 | local echo·검색 필터           |
-| BASE-06  | ColorInput·ColorSwatchButton       | P0/P1    | CTP ms       |        — |        — |      — | 대기 | 피커 첫 표시 포함              |
-| BASE-07  | TabSwitch                          | P3       | CTP ms       |        — |        — |      — | 대기 | 탭 콘텐츠 paint 포함           |
-| BASE-08  | ListPopup·FloatingPopup            | 기반     | CTP ms       |        — |        — |      — | 대기 | 메뉴·피커 표면                 |
-| BASE-09  | Modal                              | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·닫기·포커스 복원          |
-| BASE-10  | TooltipGroup                       | P3       | CTP ms       |        — |        — |      — | 대기 | 의도된 hover delay는 별도 기록 |
-| BASE-11  | PanelToggleButton                  | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 mount·render 포함         |
-| BASE-12  | 패널 내부 PickerSurface·내비게이션 | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 위치 계산과 첫 paint           |
-| BASE-13  | 프로퍼티 패널 smooth scroll        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Lenis RAF 6개 영향 측정        |
-| BASE-14  | IconSwap·EyeToggleIcon             | 기반     | CTP ms       |        — |        — |      — | 대기 | 180ms 모션과 상태 반영 분리    |
-| BASE-15  | usePressAction·usePressGatedSwap   | 기반     | CTP ms       |        — |        — |      — | 대기 | pressed 피드백과 300ms gate    |
+| ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                     |
+| -------- | ---------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------------------------------------------------------------------------------------- |
+| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    5.842 |    0.464 |  92.1% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json) |
+| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | CTP ms       |        — |        — |      — | 대기 | 파일럿 확장                                                                                                   |
+| BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 대기 | 직접 사용처와 SettingToggleRow                                                                                |
+| BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 대기 | 행 전체 토글                                                                                                  |
+| BASE-03  | Dropdown                           | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·선택·닫기                                                                                                |
+| BASE-04  | NumberInput·OptionalNumberInput    | P0/P1    | CTP ms       |        — |        — |      — | 대기 | draft·preview·commit                                                                                          |
+| BASE-05  | TextInput·SearchField              | P1       | CTP ms       |        — |        — |      — | 대기 | local echo·검색 필터                                                                                          |
+| BASE-06  | ColorInput·ColorSwatchButton       | P0/P1    | CTP ms       |        — |        — |      — | 대기 | 피커 첫 표시 포함                                                                                             |
+| BASE-07  | TabSwitch                          | P3       | CTP ms       |        — |        — |      — | 대기 | 탭 콘텐츠 paint 포함                                                                                          |
+| BASE-08  | ListPopup·FloatingPopup            | 기반     | CTP ms       |        — |        — |      — | 대기 | 메뉴·피커 표면                                                                                                |
+| BASE-09  | Modal                              | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·닫기·포커스 복원                                                                                         |
+| BASE-10  | TooltipGroup                       | P3       | CTP ms       |        — |        — |      — | 대기 | 의도된 hover delay는 별도 기록                                                                                |
+| BASE-11  | PanelToggleButton                  | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 mount·render 포함                                                                                        |
+| BASE-12  | 패널 내부 PickerSurface·내비게이션 | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 위치 계산과 첫 paint                                                                                          |
+| BASE-13  | 프로퍼티 패널 smooth scroll        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Lenis RAF 6개 영향 측정                                                                                       |
+| BASE-14  | IconSwap·EyeToggleIcon             | 기반     | CTP ms       |        — |        — |      — | 대기 | 180ms 모션과 상태 반영 분리                                                                                   |
+| BASE-15  | usePressAction·usePressGatedSwap   | 기반     | CTP ms       |        — |        — |      — | 대기 | pressed 피드백과 300ms gate                                                                                   |
 
 ### 5.2 설정·Grid·프로퍼티 토글
 
@@ -289,32 +313,41 @@
 
 한 항목에 여러 세션을 추가할 수 있다. 원시 trace·프로파일 파일이 크면 저장소에 직접 넣지 않고 접근 가능한 경로나 CI artifact를 연결한다.
 
-| 세션 ID      | 날짜 | 항목 ID  | 단계   | 빌드·커밋 | 환경 | 시나리오·데이터 크기 | 반복 | P50 | P95 | 최대 | 보조 지표   | 원시 자료 | 비고                              |
-| ------------ | ---- | -------- | ------ | --------- | ---- | -------------------- | ---: | --: | --: | ---: | ----------- | --------- | --------------------------------- |
-| EXAMPLE-삭제 | —    | PILOT-01 | 기준선 | —         | —    | 그림자 off→on→off    |    — |   — |   — |    — | RENDER·LONG | —         | 실제 기록 시작 시 이 예시 행 삭제 |
+<!-- PILOT-01:SESSIONS:START -->
+
+| 세션 ID        | 날짜       | 항목 ID  | 단계   | 빌드·커밋  | 환경                                                 | 시나리오·데이터 크기      | 반복 |   P50 |   P95 |   최대 | 보조 지표                               | 원시 자료                                            | 비고             |
+| -------------- | ---------- | -------- | ------ | ---------- | ---------------------------------------------------- | ------------------------- | ---: | ----: | ----: | -----: | --------------------------------------- | ---------------------------------------------------- | ---------------- |
+| PILOT-01-SYNC  | 2026-08-07 | PILOT-01 | 기준선 | `45cbb96e` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 1.975 | 5.842 | 11.662 | canonical P95 5.844ms·React P95 0.676ms | [JSON](../benchmarks/results/pilot-01-baseline.json) | DOM commit proxy |
+| PILOT-01-PAINT | 2026-08-07 | PILOT-01 | 개선   | `45cbb96e` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 0.322 | 0.464 |  0.823 | canonical P95 8.706ms·React P95 0.973ms | [JSON](../benchmarks/results/pilot-01-improved.json) | DOM commit proxy |
+
+<!-- PILOT-01:SESSIONS:END -->
 
 ## 7. 실험 기록
 
 최적화 하나당 아래 블록을 복사한다.
 
-### EXP-000: 항목명
+<!-- PILOT-01:EXPERIMENT:START -->
 
-| 필드                | 내용                                      |
-| ------------------- | ----------------------------------------- |
-| 항목 ID             | —                                         |
-| 가설                | —                                         |
-| 변경 내용           | —                                         |
-| 적용 기법           | F / O / Y / R / V / C / P / W / M         |
-| 커밋·PR             | —                                         |
-| 기준선 세션         | —                                         |
-| 개선 후 세션        | —                                         |
-| P50 변화            | —                                         |
-| P95 변화            | —                                         |
-| Long Task·렌더 변화 | —                                         |
-| 정확성 검증         | 연속 입력·실패·취소·Undo/Redo·외부 동기화 |
-| 플랫폼 검증         | macOS / Windows                           |
-| 결론                | 채택 / 수정 후 재측정 / 폐기 / 보류       |
-| 후속 작업           | —                                         |
+### EXP-001: 그림자 사용 토글 시각 반응 우선 처리
+
+| 필드               | 내용                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| 항목 ID            | PILOT-01                                                                                                                       |
+| 가설               | 무거운 문서 상태 커밋을 첫 paint 뒤로 미루면 토글의 시각 반응이 선택 요소 수와 무관하게 빨라진다.                              |
+| 변경 내용          | 로컬 checked를 먼저 반영하고 `requestAnimationFrame` 다음 태스크에서 canonical 상태를 커밋한다. 연타는 마지막 의도로 병합한다. |
+| 적용 기법          | 낙관적 상태 투영·메인 스레드 양보·입력 병합                                                                                    |
+| 커밋·PR            | `45cbb96e`                                                                                                                     |
+| 기준선 세션        | PILOT-01-SYNC                                                                                                                  |
+| 개선 후 세션       | PILOT-01-PAINT                                                                                                                 |
+| P50 변화           | 1.975ms → 0.322ms (83.7%)                                                                                                      |
+| P95 변화           | 5.842ms → 0.464ms (92.1%)                                                                                                      |
+| canonical P95 변화 | 5.844ms → 8.706ms (-49.0%)                                                                                                     |
+| 정확성 검증        | 마지막 의도 병합·paint 전 unmount 의도 보존·접근성 checked 상태 단위 테스트 통과                                               |
+| 플랫폼 검증        | jsdom proxy 완료·macOS WKWebView 및 Windows WebView2 대기                                                                      |
+| 결론               | WebView 실측 전까지 검증 상태로 유지                                                                                           |
+| 후속 작업          | 실제 WebView CTP 측정 후 PILOT-02와 공통 정책 후보로 확대                                                                      |
+
+<!-- PILOT-01:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 
