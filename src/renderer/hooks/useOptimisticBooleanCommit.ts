@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-export type BooleanCommitStrategy = 'sync' | 'after-paint';
+export type CommitStrategy = 'sync' | 'after-paint';
+export type BooleanCommitStrategy = CommitStrategy;
 
 interface UseOptimisticBooleanCommitOptions {
   canonicalValue: boolean;

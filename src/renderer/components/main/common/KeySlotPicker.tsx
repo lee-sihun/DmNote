@@ -65,6 +65,7 @@ const KeySlotPicker = ({
       {/* 판정 방식 - 개별(any) / 동시(all), 키 2개부터 의미가 생김 */}
       {members.length >= 2 && (
         <TabSwitch
+          commitStrategy="after-paint"
           tabs={[
             { id: 'any', label: labels.modeAny },
             { id: 'all', label: labels.modeAll },

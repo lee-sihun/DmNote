@@ -139,6 +139,7 @@ const ImagePicker = ({
       {/* 모드 전환 */}
       {showActiveState ? (
         <TabSwitch
+          commitStrategy="after-paint"
           tabs={[
             { id: STATE_MODES.idle, label: t('imagePicker.idle') },
             { id: STATE_MODES.active, label: t('imagePicker.active') },

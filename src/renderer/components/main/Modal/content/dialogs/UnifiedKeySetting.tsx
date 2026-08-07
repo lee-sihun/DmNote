@@ -196,6 +196,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <TabSwitch
+          commitStrategy="after-paint"
           tabs={[
             { id: TABS.KEY, label: t('keySetting.tabKey') },
             { id: TABS.NOTE, label: t('keySetting.tabNote') },

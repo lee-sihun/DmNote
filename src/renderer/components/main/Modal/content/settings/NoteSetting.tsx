@@ -463,6 +463,7 @@ const NoteSetting = ({
       >
         {title && <p className="text-fg-muted text-label mb-[12px]">{title}</p>}
         <TabSwitch
+          commitStrategy="after-paint"
           tabs={[
             { id: NOTE_TAB, label: t('keySetting.tabNote') },
             { id: ADVANCED_TAB, label: t('propertiesPanel.advanced') },

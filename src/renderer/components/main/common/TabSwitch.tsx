@@ -1,4 +1,6 @@
 import React from 'react';
+import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
+import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface TabItem {
   id: string;
@@ -9,6 +11,7 @@ interface TabSwitchProps {
   tabs: TabItem[];
   activeTab: string;
   onTabChange: (tabId: string) => void;
+  commitStrategy?: CommitStrategy;
   className?: string;
 }
 
@@ -17,11 +20,17 @@ const TabSwitch = ({
   tabs,
   activeTab,
   onTabChange,
+  commitStrategy = 'sync',
   className,
 }: TabSwitchProps) => {
+  const { value: visualActiveTab, select } = useOptimisticValueCommit({
+    canonicalValue: activeTab,
+    onCommit: onTabChange,
+    strategy: commitStrategy,
+  });
   const activeIndex = Math.max(
     0,
-    tabs.findIndex((tab) => tab.id === activeTab),
+    tabs.findIndex((tab) => tab.id === visualActiveTab),
   );
 
   return (
@@ -42,9 +51,13 @@ const TabSwitch = ({
         <button
           key={tab.id}
           type="button"
-          onClick={() => onTabChange(tab.id)}
+          aria-pressed={visualActiveTab === tab.id}
+          data-tab-id={tab.id}
+          onClick={() => select(tab.id)}
           className={`relative z-10 w-full h-full rounded-[8px] text-body transition-colors duration-base ${
-            activeTab === tab.id ? 'text-fg' : 'text-fg-muted hover:text-fg'
+            visualActiveTab === tab.id
+              ? 'text-fg'
+              : 'text-fg-muted hover:text-fg'
           }`}
         >
           {tab.label}

@@ -1114,6 +1114,7 @@ function StateSwitch({ state, onChange }: StateSwitchProps) {
 
   return (
     <TabSwitch
+      commitStrategy="after-paint"
       tabs={[
         { id: 'idle', label: idleLabel },
         { id: 'active', label: activeLabel },
@@ -1135,6 +1136,7 @@ function ModeSwitch({ mode, onChange }: ModeSwitchProps) {
   const gradientLabel = t('colorPicker.gradient');
   return (
     <TabSwitch
+      commitStrategy="after-paint"
       tabs={[
         { id: MODES.solid, label: solidLabel },
         { id: MODES.gradient, label: gradientLabel },
