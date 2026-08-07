@@ -117,6 +117,9 @@ export function useLayerActions({
       try {
         await window.api.keys.updatePositions(updatedPositions);
       } catch (error) {
+        if (useKeyStore.getState().canonicalPositions === updatedPositions) {
+          useKeyStore.getState().setPositions(pos);
+        }
         console.error('Failed to toggle key visibility', error);
       } finally {
         useKeyStore.getState().setLocalUpdateInProgress(false);
@@ -143,6 +146,9 @@ export function useLayerActions({
       try {
         await window.api.statItems.updatePositions(updatedPositions);
       } catch (error) {
+        if (useStatItemStore.getState().positions === updatedPositions) {
+          useStatItemStore.getState().setPositions(current);
+        }
         console.error('Failed to toggle stat item visibility', error);
       } finally {
         useStatItemStore.getState().setLocalUpdateInProgress(false);
@@ -169,6 +175,9 @@ export function useLayerActions({
       try {
         await window.api.graphItems.updatePositions(updatedPositions);
       } catch (error) {
+        if (useGraphItemStore.getState().positions === updatedPositions) {
+          useGraphItemStore.getState().setPositions(current);
+        }
         console.error('Failed to toggle graph item visibility', error);
       } finally {
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
@@ -195,6 +204,9 @@ export function useLayerActions({
       try {
         await window.api.knobItems.updatePositions(updatedPositions);
       } catch (error) {
+        if (useKnobItemStore.getState().positions === updatedPositions) {
+          useKnobItemStore.getState().setPositions(current);
+        }
         console.error('Failed to toggle knob item visibility', error);
       } finally {
         useKnobItemStore.getState().setLocalUpdateInProgress(false);
@@ -225,6 +237,10 @@ export function useLayerActions({
     const newHidden = !allHidden;
 
     const changes: EditorPatchV1 = { schemaVersion: 1 };
+    const previousKeyPositions = useKeyStore.getState().canonicalPositions;
+    const previousStatPositions = useStatItemStore.getState().positions;
+    const previousGraphPositions = useGraphItemStore.getState().positions;
+    const previousKnobPositions = useKnobItemStore.getState().positions;
 
     // 키 positions
     const keyChildren = children.filter(
@@ -320,7 +336,32 @@ export function useLayerActions({
       try {
         await editorCoordinator.commitPatch(changes);
       } catch (error) {
+        if (
+          changes.keyPositions &&
+          useKeyStore.getState().canonicalPositions === changes.keyPositions
+        ) {
+          useKeyStore.getState().setPositions(previousKeyPositions);
+        }
+        if (
+          changes.statPositions &&
+          useStatItemStore.getState().positions === changes.statPositions
+        ) {
+          useStatItemStore.getState().setPositions(previousStatPositions);
+        }
+        if (
+          changes.graphPositions &&
+          useGraphItemStore.getState().positions === changes.graphPositions
+        ) {
+          useGraphItemStore.getState().setPositions(previousGraphPositions);
+        }
+        if (
+          changes.knobPositions &&
+          useKnobItemStore.getState().positions === changes.knobPositions
+        ) {
+          useKnobItemStore.getState().setPositions(previousKnobPositions);
+        }
         console.error('Failed to toggle group visibility', error);
+        return;
       }
     }
 
@@ -358,6 +399,11 @@ export function useLayerActions({
       useKeyStore.getState().setPositions(updatedPositions);
       try {
         await window.api.keys.updatePositions(updatedPositions);
+      } catch (error) {
+        if (useKeyStore.getState().canonicalPositions === updatedPositions) {
+          useKeyStore.getState().setPositions(pos);
+        }
+        console.error('Failed to rename key layer', error);
       } finally {
         useKeyStore.getState().setLocalUpdateInProgress(false);
       }
@@ -379,6 +425,11 @@ export function useLayerActions({
       useStatItemStore.getState().setPositions(updatedPositions);
       try {
         await window.api.statItems.updatePositions(updatedPositions);
+      } catch (error) {
+        if (useStatItemStore.getState().positions === updatedPositions) {
+          useStatItemStore.getState().setPositions(current);
+        }
+        console.error('Failed to rename stat layer', error);
       } finally {
         useStatItemStore.getState().setLocalUpdateInProgress(false);
       }
@@ -400,6 +451,11 @@ export function useLayerActions({
       useGraphItemStore.getState().setPositions(updatedPositions);
       try {
         await window.api.graphItems.updatePositions(updatedPositions);
+      } catch (error) {
+        if (useGraphItemStore.getState().positions === updatedPositions) {
+          useGraphItemStore.getState().setPositions(current);
+        }
+        console.error('Failed to rename graph layer', error);
       } finally {
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
       }
@@ -421,6 +477,11 @@ export function useLayerActions({
       useKnobItemStore.getState().setPositions(updatedPositions);
       try {
         await window.api.knobItems.updatePositions(updatedPositions);
+      } catch (error) {
+        if (useKnobItemStore.getState().positions === updatedPositions) {
+          useKnobItemStore.getState().setPositions(current);
+        }
+        console.error('Failed to rename knob layer', error);
       } finally {
         useKnobItemStore.getState().setLocalUpdateInProgress(false);
       }
@@ -454,6 +515,9 @@ export function useLayerActions({
     try {
       await window.api.layerGroups.update(updated);
     } catch (error) {
+      if (useLayerGroupStore.getState().layerGroups === updated) {
+        useLayerGroupStore.getState().setLayerGroups(currentGroups);
+      }
       console.error('Failed to rename group', error);
     }
   };
@@ -534,7 +598,33 @@ export function useLayerActions({
       changes.layerGroups = normalized.layerGroups;
     }
 
-    await editorCoordinator.commitPatch(changes);
+    try {
+      await editorCoordinator.commitPatch(changes);
+    } catch (error) {
+      if (
+        useKeyStore.getState().canonicalPositions === normalized.keyPositions
+      ) {
+        useKeyStore.getState().setPositions(pos);
+      }
+      if (useStatItemStore.getState().positions === normalized.statPositions) {
+        useStatItemStore.getState().setPositions(currentStatPositions);
+      }
+      if (
+        useGraphItemStore.getState().positions === normalized.graphPositions
+      ) {
+        useGraphItemStore.getState().setPositions(currentGraphPositions);
+      }
+      if (useKnobItemStore.getState().positions === normalized.knobPositions) {
+        useKnobItemStore.getState().setPositions(currentKnobPositions);
+      }
+      if (
+        shouldPersistGroups &&
+        useLayerGroupStore.getState().layerGroups === normalized.layerGroups
+      ) {
+        useLayerGroupStore.getState().setLayerGroups(storeLayerGroups);
+      }
+      throw error;
+    }
 
     return true;
   };
