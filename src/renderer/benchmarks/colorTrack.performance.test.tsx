@@ -24,7 +24,7 @@ const ITEM_COUNTS = (process.env.DMN_BENCHMARK_ITEM_COUNTS ?? '1,100,500')
   .split(',')
   .map(Number)
   .filter((value) => Number.isInteger(value) && value > 0);
-const BURST_SIZE = Number(process.env.DMN_BENCHMARK_BURST_SIZE ?? 100);
+const BURST_SIZE = Number(process.env.DMN_BENCHMARK_BURST_SIZE ?? 500);
 const STRATEGY =
   process.env.DMN_BENCHMARK_STRATEGY === 'legacy' ? 'legacy' : 'frame';
 

@@ -29,7 +29,7 @@ for (const [strategy, variant, output] of variants) {
           process.env.DMN_BENCHMARK_ITEM_COUNTS ?? '1,100,500',
         DMN_BENCHMARK_ITERATIONS: process.env.DMN_BENCHMARK_ITERATIONS ?? '30',
         DMN_BENCHMARK_WARMUP: process.env.DMN_BENCHMARK_WARMUP ?? '5',
-        DMN_BENCHMARK_BURST_SIZE: process.env.DMN_BENCHMARK_BURST_SIZE ?? '100',
+        DMN_BENCHMARK_BURST_SIZE: process.env.DMN_BENCHMARK_BURST_SIZE ?? '500',
       },
       stdio: 'inherit',
     },
