@@ -14,6 +14,10 @@ import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import {
+  createRafLatestScheduler,
+  type ContinuousInputStrategy,
+} from '@utils/animation/rafLatestScheduler';
 
 /**
  * 온캔버스 그라데이션 축 — 피커가 그라데이션 형식으로 열려 있는 동안
@@ -41,6 +45,8 @@ interface GradientAxisOverlayProps {
   zoom: number;
   panX: number;
   panY: number;
+  /** 성능 계측용 비교 전략. 제품 경로는 프레임당 최신 입력만 반영한다. */
+  continuousInputStrategy?: ContinuousInputStrategy;
 }
 
 // 축 끝 회전 앵커 — 시각 점과 히트 영역(px)
@@ -123,6 +129,7 @@ const GradientAxisOverlay = ({
   zoom,
   panX,
   panY,
+  continuousInputStrategy = 'frame',
 }: GradientAxisOverlayProps) => {
   const { t } = useTranslation();
   const session = useGradientEditStore((state) => state.session);
@@ -150,6 +157,9 @@ const GradientAxisOverlay = ({
   } | null>(null);
   // 드래그 세션 해제자 — begin에서 등록, 종료 경로 어디서든 1회 실행
   const detachRef = useRef<(() => void) | null>(null);
+  const moveSchedulerRef = useRef<ReturnType<
+    typeof createRafLatestScheduler<PointerEvent>
+  > | null>(null);
   const cancelActiveDragRef = useRef<() => void>(() => {});
 
   // 드래그 중 오버레이가 언마운트되면 현재 소유 세션의 preview도 복원
@@ -369,14 +379,9 @@ const GradientAxisOverlay = ({
     return drag;
   };
 
-  const handleWindowMove = (e: PointerEvent) => {
+  const applyWindowMove = (e: PointerEvent) => {
     const drag = ownedDrag(e);
     if (!drag) return;
-    // 창 밖에서 버튼이 이미 떼졌으면 stale 드래그 — 커밋 없이 종료
-    if (e.buttons === 0) {
-      cancelActiveDrag();
-      return;
-    }
     const live = sessionRef.current;
     if (!live) return;
     if (!drag.moved) {
@@ -411,7 +416,20 @@ const GradientAxisOverlay = ({
     );
   };
 
+  const handleWindowMove = (e: PointerEvent) => {
+    const drag = ownedDrag(e);
+    if (!drag) return;
+    // 창 밖에서 버튼이 이미 떼졌으면 stale 드래그 — 커밋 없이 종료
+    if (e.buttons === 0) {
+      cancelActiveDrag();
+      return;
+    }
+    moveSchedulerRef.current?.push(e);
+  };
+
   const handleWindowUp = (e: PointerEvent) => {
+    // 마지막 move 프리뷰를 먼저 반영해 moved 상태와 화면을 확정
+    moveSchedulerRef.current?.flush();
     const drag = ownedDrag(e);
     if (!drag) return;
     detachRef.current?.();
@@ -438,7 +456,8 @@ const GradientAxisOverlay = ({
       return;
     }
     if (!drag.moved) return; // 클릭 — 선택만
-    commitStopDrag(drag.index, drag.lastPos);
+    // pointerup 좌표를 직접 사용해 마지막 프레임 사이 입력도 유실하지 않음
+    commitStopDrag(drag.index, posFromClient(e.clientX, e.clientY));
   };
 
   // 취소 — preview로 반영된 변경을 시작 시점 spec으로 복원
@@ -483,6 +502,10 @@ const GradientAxisOverlay = ({
   };
 
   const attachWindowDrag = () => {
+    moveSchedulerRef.current = createRafLatestScheduler(
+      applyWindowMove,
+      continuousInputStrategy,
+    );
     window.addEventListener('pointermove', handleWindowMove);
     window.addEventListener('pointerup', handleWindowUp);
     window.addEventListener('pointercancel', handleWindowCancel);
@@ -492,6 +515,8 @@ const GradientAxisOverlay = ({
       window.removeEventListener('pointerup', handleWindowUp);
       window.removeEventListener('pointercancel', handleWindowCancel);
       window.removeEventListener('blur', handleWindowBlur);
+      moveSchedulerRef.current?.cancel();
+      moveSchedulerRef.current = null;
       detachRef.current = null;
       dragRef.current = null;
       suppressNextClick();

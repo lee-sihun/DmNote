@@ -86,6 +86,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
           zoom={1}
           panX={0}
           panY={0}
+          continuousInputStrategy="legacy"
         />,
       );
     });
@@ -97,6 +98,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
       useGradientEditStore.getState().setSession(null);
     });
     host.remove();
+    vi.unstubAllGlobals();
   });
 
   const strip = () => host.querySelector('[role="slider"]') as HTMLElement;
@@ -242,6 +244,133 @@ describe('GradientAxisOverlay 드래그 로직', () => {
     expect(previewCommit).toBe(false);
     expect(previewSpec.angle).toBe(90);
     expect(previewSpec.stops[0].pos).toBeCloseTo(0.3);
+  });
+
+  it('스톱 연속 이동은 프레임당 최신 좌표 한 번만 프리뷰한다', () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 1;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = nextFrameId++;
+      callbacks.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
+
+    act(() => {
+      root.render(
+        <GradientAxisOverlay
+          positions={positions}
+          statPositions={{} as never}
+          graphPositions={{} as never}
+          knobPositions={{} as never}
+          selectedElements={[]}
+          selectedKeyType="4key"
+          zoom={1}
+          panX={0}
+          panY={0}
+        />,
+      );
+    });
+    act(() => {
+      stopDot(1).dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 12,
+          clientX: 100,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 12,
+          clientX: 140,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 12,
+          clientX: 180,
+          clientY: 150,
+        }),
+      );
+    });
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(callbacks).toHaveLength(1);
+    act(() => {
+      const callback = [...callbacks.values()][0];
+      callbacks.clear();
+      callback(performance.now());
+    });
+
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        stops: expect.arrayContaining([
+          expect.objectContaining({ pos: expect.closeTo(0.4, 5) }),
+        ]),
+      }),
+      false,
+    );
+    act(() => {
+      window.dispatchEvent(
+        pointerEvent('pointerup', {
+          pointerId: 12,
+          clientX: 180,
+          clientY: 150,
+        }),
+      );
+    });
+  });
+
+  it('프레임 전 pointerup도 마지막 스톱 좌표를 커밋한다', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 1);
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    act(() => {
+      root.render(
+        <GradientAxisOverlay
+          positions={positions}
+          statPositions={{} as never}
+          graphPositions={{} as never}
+          knobPositions={{} as never}
+          selectedElements={[]}
+          selectedKeyType="4key"
+          zoom={1}
+          panX={0}
+          panY={0}
+        />,
+      );
+      stopDot(1).dispatchEvent(
+        pointerEvent('pointerdown', {
+          pointerId: 13,
+          clientX: 100,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointermove', {
+          pointerId: 13,
+          clientX: 140,
+          clientY: 150,
+        }),
+      );
+      window.dispatchEvent(
+        pointerEvent('pointerup', {
+          pointerId: 13,
+          clientX: 180,
+          clientY: 150,
+        }),
+      );
+    });
+
+    expect(apply).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        stops: expect.arrayContaining([
+          expect.objectContaining({ pos: expect.closeTo(0.4, 5) }),
+        ]),
+      }),
+      true,
+    );
   });
 
   it('축 선을 클릭하면 그 위치에 스톱이 추가된다', () => {
@@ -465,6 +594,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
           zoom={1}
           panX={0}
           panY={0}
+          continuousInputStrategy="legacy"
         />,
       );
     });
@@ -504,6 +634,7 @@ describe('GradientAxisOverlay 드래그 로직', () => {
           zoom={1}
           panX={0}
           panY={0}
+          continuousInputStrategy="legacy"
         />,
       );
     });
