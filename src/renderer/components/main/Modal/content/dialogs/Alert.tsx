@@ -3,6 +3,7 @@ import React, { useCallback, useRef } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
+import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 
 interface AlertProps {
   isOpen: boolean;
@@ -13,7 +14,7 @@ interface AlertProps {
   showCancel?: boolean;
   danger?: boolean;
   onCustomContentMount?: (element: HTMLElement) => void | (() => void);
-  onConfirm?: () => void;
+  onConfirm?: () => void | Promise<void>;
   onCancel?: () => void;
 }
 
@@ -57,10 +58,19 @@ const Alert = ({
 
   const isConfirm = type === 'confirm';
   const isCustom = type === 'custom';
+  const { run: confirm, pending: confirmPending } = useSingleFlightAction(
+    async () => onConfirm?.(),
+  );
 
   // custom dialog의 입력 blur·IME flush와 click 경합 방어 (일반 알림에도 무해)
-  const confirmPress = usePressAction(() => onConfirm?.());
-  const cancelPress = usePressAction(() => onCancel?.());
+  const confirmPress = usePressAction(() => {
+    void confirm().catch((error) =>
+      console.error('Dialog confirm action failed', error),
+    );
+  });
+  const cancelPress = usePressAction(() => {
+    if (!confirmPending) onCancel?.();
+  });
 
   if (!isOpen) return null;
 
@@ -70,7 +80,7 @@ const Alert = ({
 
   return (
     <Modal
-      onClick={onCancel}
+      onClick={confirmPending ? undefined : onCancel}
       ariaLabel={isCustom ? t('common.dialog') : message}
       contentMountStrategy="after-paint"
     >
@@ -100,6 +110,7 @@ const Alert = ({
         >
           <button
             {...confirmPress}
+            disabled={confirmPending}
             className={`${shouldShowCancel ? 'flex-[2]' : 'w-full'} h-[30px] ${
               danger
                 ? 'bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active text-danger-fg'
@@ -111,6 +122,7 @@ const Alert = ({
           {shouldShowCancel && (
             <button
               {...cancelPress}
+              disabled={confirmPending}
               className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             >
               {cancelLabel}
