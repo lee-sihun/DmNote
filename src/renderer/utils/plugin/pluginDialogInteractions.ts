@@ -1,6 +1,8 @@
 import { setupPluginDropdownInteractions } from './pluginDropdownManager';
+import { createPluginHandlerDispatcher } from './pluginHandlerDispatcher';
 
 export const attachPluginDialogInteractions = (root: HTMLElement) => {
+  const dispatcher = createPluginHandlerDispatcher();
   const handleCheckboxToggle = (event: Event) => {
     const target = event.target as HTMLElement;
     const checkbox = target.closest('[data-checkbox-toggle]');
@@ -83,7 +85,11 @@ export const attachPluginDialogInteractions = (root: HTMLElement) => {
           handlerName
         ];
         if (typeof handler === 'function') {
-          (handler as (event: Event) => void)(event);
+          dispatcher.dispatch(
+            element,
+            handler as (event: Event) => unknown,
+            event,
+          );
         }
         return;
       }
@@ -99,6 +105,7 @@ export const attachPluginDialogInteractions = (root: HTMLElement) => {
   root.addEventListener('blur', handleInputBlur, true);
 
   return () => {
+    dispatcher.cleanup();
     root.removeEventListener('click', handleCheckboxToggle);
     root.removeEventListener('click', handleEvent);
     root.removeEventListener('change', handleEvent);

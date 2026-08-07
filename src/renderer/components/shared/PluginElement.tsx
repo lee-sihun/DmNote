@@ -28,6 +28,7 @@ import {
   clearExposedActions,
 } from '@utils/displayElementActions';
 import { setupPluginDropdownInteractions } from '@utils/plugin/pluginDropdownManager';
+import { createPluginHandlerDispatcher } from '@utils/plugin/pluginHandlerDispatcher';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { obsApi } from '@api/modules/obsApi';
 import { evaluatePluginMenuItems } from '@utils/plugin/pluginElementContextMenu';
@@ -697,6 +698,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
 
     // data-plugin-handler 이벤트 위임 (메인 윈도우에서만)
     if (windowType === 'main') {
+      const dispatcher = createPluginHandlerDispatcher();
       // Input blur 핸들러: min/max 자동 정규화
       const handleInputBlur = (e: Event) => {
         const targetEl = e.target as HTMLInputElement;
@@ -802,8 +804,12 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
         const handler = (window as unknown as Record<string, unknown>)[
           handlerName
         ];
-        if (typeof handler === 'function') {
-          (handler as (e: Event) => void)(e);
+        if (typeof handler === 'function' && currentElement) {
+          dispatcher.dispatch(
+            currentElement,
+            handler as (event: Event) => unknown,
+            e,
+          );
         }
       };
 
@@ -817,6 +823,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
 
       // 정리
       return () => {
+        dispatcher.cleanup();
         if (measurementFrame !== null) {
           cancelAnimationFrame(measurementFrame);
         }
