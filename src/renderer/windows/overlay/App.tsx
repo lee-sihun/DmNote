@@ -8,6 +8,7 @@ import { LogicalPosition, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { Menu } from '@tauri-apps/api/menu';
 import { useTranslation } from '@contexts/useTranslation';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
+import { MAX_EVENT_AGE_MS } from '@constants/inputTiming';
 import { mergeNoteSettings } from '@src/types/settings/noteSettings';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
@@ -74,10 +75,6 @@ const flushKeyDelayTimers = (
     apply();
   });
 };
-
-// 입력 시각 보정용 age 상한(ms). 백엔드 stall/클럭 이상으로 비정상적으로 큰
-// 값이 와도 노트가 화면 위로 튀지 않도록 제한
-const MAX_EVENT_AGE_MS = 250;
 
 const validKeySet = (slots: readonly KeySlot[]) =>
   new Set(slots.filter(isSlotAssigned).map((slot) => slotCanonical(slot)));

@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useNoteSystem } from './useNoteSystem';
+import { resolveCanonicalFallbackHoldMs, useNoteSystem } from './useNoteSystem';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -43,6 +43,41 @@ const REFERENCE_LENGTHS = [
   { holdMs: 100, lengthMs: 100 },
   { holdMs: 150, lengthMs: 150 },
 ] as const;
+
+describe('canonical hold fallback 시각 방어', () => {
+  it('비클램프 시각 차가 과도하면 display 경과와 clock-skew 허용치로 제한한다', () => {
+    expect(
+      resolveCanonicalFallbackHoldMs({
+        displayDownTime: 0,
+        displayReleaseTime: 100,
+        physicalDownTime: -10_000,
+        physicalReleaseTime: 100,
+      }),
+    ).toBe(350);
+  });
+
+  it('정상적인 장시간 hold는 고정 상한으로 자르지 않는다', () => {
+    expect(
+      resolveCanonicalFallbackHoldMs({
+        displayDownTime: 0,
+        displayReleaseTime: 60_000,
+        physicalDownTime: 0,
+        physicalReleaseTime: 60_000,
+      }),
+    ).toBe(60_000);
+  });
+
+  it('역전된 물리 시각 차는 0으로 제한한다', () => {
+    expect(
+      resolveCanonicalFallbackHoldMs({
+        displayDownTime: 0,
+        displayReleaseTime: 100,
+        physicalDownTime: 200,
+        physicalReleaseTime: 100,
+      }),
+    ).toBe(0);
+  });
+});
 
 describe('useNoteSystem 길이 연속성', () => {
   let container: HTMLDivElement;

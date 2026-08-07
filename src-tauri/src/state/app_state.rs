@@ -726,6 +726,17 @@ fn key_state_payload(
     payload
 }
 
+fn canonical_hold_duration_ms(
+    can_use_physical_hold_duration: bool,
+    physical_hold_duration_ms: Option<f64>,
+) -> Option<f64> {
+    if can_use_physical_hold_duration {
+        physical_hold_duration_ms
+    } else {
+        None
+    }
+}
+
 fn collect_frontend_lifecycle_targets<T>(
     mut resolve: impl FnMut(&str) -> Option<T>,
 ) -> Vec<(String, T)> {
@@ -2595,7 +2606,10 @@ impl AppState {
                                     &outcome.mode,
                                     event_age_ms,
                                     is_active,
-                                    message.hold_duration_ms,
+                                    canonical_hold_duration_ms(
+                                        slot_event.can_use_physical_hold_duration,
+                                        message.hold_duration_ms,
+                                    ),
                                 );
 
                                 let mut emitted = false;
@@ -5077,24 +5091,24 @@ mod tests {
     use super::{
         acknowledge_editor_flush_handshake, acknowledge_panel_close_request,
         apply_panel_bounds_change, begin_panel_close_request, bootstrap_keyboard_state,
-        changed_panel_max_height, collect_authorized_css_paths, collect_frontend_lifecycle_targets,
-        frontend_history_mutation_blocked, frontend_lifecycle_restore_labels,
-        global_css_watch_path, install_history_handshake, install_lifecycle_handshake,
-        key_state_payload, next_keyboard_recovery_plan, panel_bounds_from_sample,
-        panel_height_bounds, publish_panel_hidden_transition, publish_panel_visibility_transition,
-        publish_selection_snapshot, resolve_event_age_ms, resolve_panel_window_layout,
-        run_panel_close_timeout, should_create_overlay_on_startup, should_recover_keyboard_daemon,
-        take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
-        take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
-        EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
-        FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
-        LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex, PanelBoundsChange,
-        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
-        PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
-        PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
-        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
-        SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
-        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        canonical_hold_duration_ms, changed_panel_max_height, collect_authorized_css_paths,
+        collect_frontend_lifecycle_targets, frontend_history_mutation_blocked,
+        frontend_lifecycle_restore_labels, global_css_watch_path, install_history_handshake,
+        install_lifecycle_handshake, key_state_payload, next_keyboard_recovery_plan,
+        panel_bounds_from_sample, panel_height_bounds, publish_panel_hidden_transition,
+        publish_panel_visibility_transition, publish_selection_snapshot, resolve_event_age_ms,
+        resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
+        should_recover_keyboard_daemon, take_cancelable_editor_flush_handshake,
+        take_editor_flush_handshake, take_targeted_panel_view_state, validate_selection_session,
+        EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest,
+        FrontendFlushAction, FrontendHistoryFlushPhase, FrontendHistoryFlushReady,
+        FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex,
+        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
+        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab,
+        PanelPropertyTab, PanelViewMode, PanelViewState, PanelViewTarget,
+        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
+        PhysicalPosition, PhysicalSize, SelectionSessionElement, SelectionSessionSnapshot,
+        TargetedPanelViewState, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
         KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
         MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
         OVERLAY_LABEL, PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
@@ -6065,6 +6079,13 @@ mod tests {
         assert!(down.get("holdDurationMs").is_none());
         assert_eq!(up["holdDurationMs"], serde_json::json!(15.0));
         assert!(unmatched_up.get("holdDurationMs").is_none());
+    }
+
+    #[test]
+    fn canonical_hold_duration_requires_matching_transition_source() {
+        assert_eq!(canonical_hold_duration_ms(true, Some(15.0)), Some(15.0));
+        assert_eq!(canonical_hold_duration_ms(false, Some(15.0)), None);
+        assert_eq!(canonical_hold_duration_ms(true, None), None);
     }
 
     #[test]

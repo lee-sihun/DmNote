@@ -23,6 +23,7 @@ pub struct SlotEvent {
     pub slot_indices: Vec<usize>,
     pub transition: Option<bool>,
     pub press: bool,
+    pub can_use_physical_hold_duration: bool,
 }
 
 // 키음 디스패치용: press 이벤트들의 기여 슬롯 인덱스를 병합
@@ -148,6 +149,7 @@ struct KeyboardState {
     held: HashMap<String, HeldEntry>,
     held_labels: HashMap<String, u32>,
     active: HashSet<String>,
+    activation_sources: HashMap<String, String>,
 }
 
 impl KeyboardState {
@@ -161,6 +163,8 @@ impl KeyboardState {
             }
         }
         self.active.clear();
+        // 재구성 시 canonical DOWN을 만든 물리 입력을 확정할 수 없으므로 source 폐기
+        self.activation_sources.clear();
         for slot in &self.compiled.slots {
             if slot.is_active(&self.held_labels) {
                 self.active
@@ -169,7 +173,12 @@ impl KeyboardState {
         }
     }
 
-    fn reevaluate_slots(&mut self, resolved: &str, is_down: bool) -> Vec<SlotEvent> {
+    fn reevaluate_slots(
+        &mut self,
+        resolved: &str,
+        physical_key: &str,
+        is_down: bool,
+    ) -> Vec<SlotEvent> {
         let Some(affected_indices) = self.compiled.member_to_slots.get(resolved).cloned() else {
             return Vec::new();
         };
@@ -211,6 +220,18 @@ impl KeyboardState {
                     .compiled
                     .canonical_is_active(&pending.canonical, &self.held_labels);
                 let transition = (was_active != is_active).then_some(is_active);
+                let can_use_physical_hold_duration = match transition {
+                    Some(true) => {
+                        self.activation_sources
+                            .insert(active_key.clone(), physical_key.to_string());
+                        false
+                    }
+                    Some(false) => self
+                        .activation_sources
+                        .remove(&active_key)
+                        .is_some_and(|source| source == physical_key),
+                    None => false,
+                };
                 if is_active {
                     self.active.insert(active_key);
                 } else {
@@ -221,6 +242,7 @@ impl KeyboardState {
                     slot_indices: pending.slot_indices,
                     transition,
                     press: is_down && (pending.press_on_fresh_down || transition == Some(true)),
+                    can_use_physical_hold_duration,
                 }
             })
             .collect()
@@ -245,6 +267,7 @@ impl KeyboardManager {
                 held: HashMap::new(),
                 held_labels: HashMap::new(),
                 active: HashSet::new(),
+                activation_sources: HashMap::new(),
             })),
         }
     }
@@ -310,7 +333,7 @@ impl KeyboardManager {
             }
             let resolved = state.compiled.resolve(&candidates);
             state.held.insert(
-                physical_key,
+                physical_key.clone(),
                 HeldEntry {
                     candidates,
                     resolved: resolved.clone(),
@@ -321,7 +344,7 @@ impl KeyboardManager {
             }
             let events = resolved
                 .as_deref()
-                .map(|label| state.reevaluate_slots(label, true))
+                .map(|label| state.reevaluate_slots(label, &physical_key, true))
                 .unwrap_or_default();
             return Some(MatchOutcome {
                 mode,
@@ -345,7 +368,7 @@ impl KeyboardManager {
         let events = held
             .resolved
             .as_deref()
-            .map(|label| state.reevaluate_slots(label, false))
+            .map(|label| state.reevaluate_slots(label, &physical_key, false))
             .unwrap_or_default();
         Some(MatchOutcome {
             mode,
@@ -390,6 +413,7 @@ impl KeyboardManager {
         state.held.clear();
         state.held_labels.clear();
         state.active.clear();
+        state.activation_sources.clear();
     }
 
     #[cfg(test)]
@@ -475,6 +499,19 @@ mod tests {
             slot_indices,
             transition,
             press,
+            can_use_physical_hold_duration: false,
+        }
+    }
+
+    fn event_with_physical_hold(
+        canonical: &str,
+        slot_indices: Vec<usize>,
+        transition: Option<bool>,
+        press: bool,
+    ) -> SlotEvent {
+        SlotEvent {
+            can_use_physical_hold_duration: true,
+            ..event(canonical, slot_indices, transition, press)
         }
     }
 
@@ -648,6 +685,124 @@ mod tests {
     }
 
     #[test]
+    fn overlapping_same_label_uses_physical_hold_only_when_transition_sources_match() {
+        let mappings = HashMap::from([("mode".to_string(), vec![single("A")])]);
+
+        let different_source = KeyboardManager::new(mappings.clone(), "mode");
+        let first_down = input(
+            &different_source,
+            Some("keyboard-1:a"),
+            InputDeviceKind::Keyboard,
+            &["A"],
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            first_down.events,
+            vec![event("A", vec![0], Some(true), true)]
+        );
+        assert_eq!(
+            input(
+                &different_source,
+                Some("keyboard-2:a"),
+                InputDeviceKind::Keyboard,
+                &["A"],
+                true,
+            )
+            .unwrap()
+            .events,
+            vec![event("A", vec![0], None, true)]
+        );
+        assert_eq!(
+            input(
+                &different_source,
+                Some("keyboard-1:a"),
+                InputDeviceKind::Keyboard,
+                &["A"],
+                false,
+            )
+            .unwrap()
+            .events,
+            vec![event("A", vec![0], None, false)]
+        );
+        assert_eq!(
+            input(
+                &different_source,
+                Some("keyboard-2:a"),
+                InputDeviceKind::Keyboard,
+                &["A"],
+                false,
+            )
+            .unwrap()
+            .events,
+            vec![event("A", vec![0], Some(false), false)]
+        );
+
+        let same_source = KeyboardManager::new(mappings, "mode");
+        input(
+            &same_source,
+            Some("keyboard-1:a"),
+            InputDeviceKind::Keyboard,
+            &["A"],
+            true,
+        );
+        input(
+            &same_source,
+            Some("keyboard-2:a"),
+            InputDeviceKind::Keyboard,
+            &["A"],
+            true,
+        );
+        input(
+            &same_source,
+            Some("keyboard-2:a"),
+            InputDeviceKind::Keyboard,
+            &["A"],
+            false,
+        );
+        assert_eq!(
+            input(
+                &same_source,
+                Some("keyboard-1:a"),
+                InputDeviceKind::Keyboard,
+                &["A"],
+                false,
+            )
+            .unwrap()
+            .events,
+            vec![event_with_physical_hold("A", vec![0], Some(false), false,)]
+        );
+    }
+
+    #[test]
+    fn mapping_rebuild_discards_unknown_activation_source() {
+        let mappings = HashMap::from([("mode".to_string(), vec![single("A")])]);
+        let manager = KeyboardManager::new(mappings.clone(), "mode");
+        input(
+            &manager,
+            Some("keyboard:a"),
+            InputDeviceKind::Keyboard,
+            &["A"],
+            true,
+        );
+
+        manager.update_mappings(mappings);
+
+        assert_eq!(
+            input(
+                &manager,
+                Some("keyboard:a"),
+                InputDeviceKind::Keyboard,
+                &["A"],
+                false,
+            )
+            .unwrap()
+            .events,
+            vec![event("A", vec![0], Some(false), false)]
+        );
+    }
+
+    #[test]
     fn mode_switch_and_mapping_removal_do_not_lose_later_key_up() {
         let manager = KeyboardManager::new(
             HashMap::from([
@@ -726,18 +881,21 @@ mod tests {
                 slot_indices: vec![1],
                 transition: Some(true),
                 press: true,
+                can_use_physical_hold_duration: false,
             },
             SlotEvent {
                 canonical: "A|B".to_string(),
                 slot_indices: vec![0, 1],
                 transition: None,
                 press: true,
+                can_use_physical_hold_duration: false,
             },
             SlotEvent {
                 canonical: "C".to_string(),
                 slot_indices: vec![2],
                 transition: Some(false),
                 press: false,
+                can_use_physical_hold_duration: true,
             },
         ];
 
@@ -856,7 +1014,12 @@ mod tests {
         .unwrap();
         assert_eq!(
             up.events,
-            vec![event("RIGHT ALT", vec![0], Some(false), false)]
+            vec![event_with_physical_hold(
+                "RIGHT ALT",
+                vec![0],
+                Some(false),
+                false,
+            )]
         );
     }
 
