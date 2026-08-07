@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "GRID-08",
+  "variant": "legacy-baseline",
+  "strategy": "legacy",
+  "measuredAt": "2026-08-07T11:35:12.674Z",
+  "commit": "50147d669855daf789d4a53ef5c391af990c91b3",
+  "runtime": {
+    "kind": "vitest-jsdom-gradient-stop-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.23641699999996035,
+        "p95": 0.3198330000000169,
+        "max": 0.43354199999998855
+      },
+      "visualDomCommitMs": {
+        "p50": 1.0225829999999405,
+        "p95": 1.6825000000000045,
+        "max": 2.684582999999975
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.7236220000006597,
+        "p95": 1.1315859999998565,
+        "max": 2.3557109999999284
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.2015000000001237,
+        "p95": 0.3089580000000751,
+        "max": 0.6240419999999176
+      },
+      "visualDomCommitMs": {
+        "p50": 1.1429169999998976,
+        "p95": 2.680499999999938,
+        "max": 3.3930420000001504
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.7692359999998644,
+        "p95": 2.6144550000001345,
+        "max": 2.924122000001944
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.3446249999999509,
+        "p95": 0.4051670000001195,
+        "max": 0.4061669999998685
+      },
+      "visualDomCommitMs": {
+        "p50": 2.6324999999999363,
+        "p95": 3.075749999999971,
+        "max": 5.113790999999992
+      },
+      "reactCommitDurationMs": {
+        "p50": 1.9470730000011827,
+        "p95": 2.1449450000002344,
+        "max": 2.4019719999953395
+      }
+    }
+  ]
+}

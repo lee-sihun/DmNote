@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 91개    |
+| 대기                             | 89개    |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 74개    |
+| 실험·검증 중                     | 76개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -394,6 +394,29 @@
 - 정확성 게이트: 최신 bounds 병합·mouseup flush·resize commit 테스트 통과
 <!-- GRID-06:RESULT:END -->
 
+<!-- GRID-08:RESULT:START -->
+
+#### GRID-08 그라데이션 축 최신 자동 측정
+
+| 조건           | 값                                                                         |
+| -------------- | -------------------------------------------------------------------------- |
+| 측정 경로      | 실제 GradientAxisOverlay + preview 구독 요소 500개, pointermove 20회 burst |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회                                     |
+| 구현 코드 커밋 | `23582b9a48a3b0a0407f3acf5adfb00ba9af8b37`                                 |
+| 측정 코드 커밋 | `50147d669855daf789d4a53ef5c391af990c91b3`                                 |
+| 비교 전략      | `legacy` → `frame`                                                         |
+| 환경           | darwin arm64, v25.2.1                                                      |
+
+| P95 지표              |  legacy | frame coalescing | 개선율 |
+| --------------------- | ------: | ---------------: | -----: |
+| burst event blocking  | 0.405ms |          0.137ms |  66.2% |
+| 최종 DOM commit       | 3.076ms |          4.391ms | -42.8% |
+| React commit duration | 2.145ms |          2.220ms |  -3.5% |
+
+- 원시 결과: [기준선](../benchmarks/results/grid-08-gradient-axis-baseline.json) · [개선](../benchmarks/results/grid-08-gradient-axis-improved.json)
+- 정확성 게이트: 최신 좌표 병합·pointerup flush·세션 세대 격리 테스트 통과
+<!-- GRID-08:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                                 |
@@ -468,7 +491,7 @@
 | GRID-05  | 미들 버튼 팬          | P0       | F95 ms/frame |    0.306 |    0.225 |  26.3% | 검증 | `9c90cae8`, frame coalescing 적용                   |
 | GRID-06  | 단일 리사이즈         | P0       | F95 ms/frame |    0.155 |    0.144 |   7.2% | 검증 | `78fb15eb`, latest bounds frame coalescing          |
 | GRID-07  | 그룹 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 실험 | `78fb15eb`, 공통 scheduler 적용·선택 수별 측정 대기 |
-| GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |        — |        — |      — | 대기 | 캔버스 preview                                      |
+| GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |    0.405 |    0.137 |  66.2% | 검증 | `23582b9a`, latest pointer frame coalescing         |
 | GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |    0.261 |    0.139 |  47.0% | 검증 | `f96cdd57`, 최신 좌표 frame coalescing              |
 | GRID-10  | 미니맵 클릭 이동      | P1       | CTP ms       |        — |        — |      — | 대기 | viewport 반영                                       |
 | GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport 반영                                       |
@@ -516,7 +539,7 @@
 | PROP-13 | 플러그인 설정 전체 저장          | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight                                            |
 | EDIT-01 | 색상 saturation·hue·alpha 드래그 | P0       | F95 ms/frame |        — |        — |      — | 대기 | picker 전체                                              |
 | EDIT-02 | 색상 텍스트·퍼센트 입력          | P1       | CTP ms       |        — |        — |      — | 대기 | validation                                               |
-| EDIT-03 | 그라데이션 stop 편집·형식 전환   | P0       | F95 ms/frame |        — |        — |      — | 대기 | draft·commit                                             |
+| EDIT-03 | 그라데이션 stop 편집·형식 전환   | P0       | F95 ms/frame |    0.405 |    0.137 |  66.2% | 검증 | `23582b9a`, stop 드래그 병합·형식 탭 즉시 반영           |
 | EDIT-04 | 카운터 bezier point 드래그       | P0       | F95 ms/frame |        — |        — |      — | 대기 | animation editor                                         |
 | EDIT-05 | 카운터 미리보기 scrub·wheel·play | P0       | F95 ms/frame |        — |        — |      — | 대기 | precompute                                               |
 | EDIT-06 | 사운드 파형 pan·zoom·trim        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Worker 후보                                              |
@@ -686,6 +709,15 @@
 | GRID-06-FRAME  | 2026-08-07 | GRID-06 | 개선   | `d092017a` | vitest-jsdom-resize-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·mousemove 20회 |   30 | 0.114 | 0.144 | 0.158 | DOM P95 8.699ms·React P95 1.390ms | [JSON](../benchmarks/results/grid-06-resize-improved.json) | resize burst proxy |
 
 <!-- GRID-06:SESSIONS:END -->
+
+<!-- GRID-08:SESSIONS:START -->
+
+| 세션 ID        | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                          | 시나리오·데이터 크기                | 반복 |   P50 |   P95 |  최대 | 보조 지표                         | 원시 자료                                                         | 비고                      |
+| -------------- | ---------- | ------- | ------ | ---------- | ------------------------------------------------------------- | ----------------------------------- | ---: | ----: | ----: | ----: | --------------------------------- | ----------------------------------------------------------------- | ------------------------- |
+| GRID-08-LEGACY | 2026-08-07 | GRID-08 | 기준선 | `50147d66` | vitest-jsdom-gradient-stop-burst-proxy, darwin arm64, v25.2.1 | preview 구독 500개·pointermove 20회 |   30 | 0.345 | 0.405 | 0.406 | DOM P95 3.076ms·React P95 2.145ms | [JSON](../benchmarks/results/grid-08-gradient-axis-baseline.json) | gradient stop burst proxy |
+| GRID-08-FRAME  | 2026-08-07 | GRID-08 | 개선   | `50147d66` | vitest-jsdom-gradient-stop-burst-proxy, darwin arm64, v25.2.1 | preview 구독 500개·pointermove 20회 |   30 | 0.114 | 0.137 | 0.163 | DOM P95 4.391ms·React P95 2.220ms | [JSON](../benchmarks/results/grid-08-gradient-axis-improved.json) | gradient stop burst proxy |
+
+<!-- GRID-08:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -991,6 +1023,21 @@
 | 결론        | 단일 경로 jsdom 검증, 그룹 선택 수별 WebView 측정 전까지 GRID-07은 실험 상태 유지 |
 
 <!-- GRID-06:EXPERIMENT:END -->
+
+<!-- GRID-08:EXPERIMENT:START -->
+
+### EXP-019: 그라데이션 축·스톱 입력 프레임 병합
+
+| 필드        | 내용                                                                                          |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| 항목 ID     | GRID-08, EDIT-03                                                                              |
+| 변경 내용   | rotate·stop pointermove 최신 좌표만 프레임당 한 번 preview하고 종료 전에 flush·최종 좌표 커밋 |
+| 구현 커밋   | `23582b9a`                                                                                    |
+| P95 변화    | 0.405ms → 0.137ms (66.2%)                                                                     |
+| 정확성 검증 | frame 병합·pointerup 최종 좌표·세션 교체·취소 롤백 테스트 통과                                |
+| 결론        | GRID-08 검증 완료, EDIT-03의 stop 드래그 경로 적용·형식 전환은 공통 탭 즉시 반영 기반 사용    |
+
+<!-- GRID-08:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 
