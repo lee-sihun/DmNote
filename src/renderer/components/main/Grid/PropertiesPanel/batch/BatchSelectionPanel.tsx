@@ -679,6 +679,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                           </span>
                         ) : null}
                         <Dropdown
+                          commitStrategy="after-paint"
                           options={graphShapeOptions}
                           value={graphTypeState.value}
                           onChange={(value) =>
@@ -1221,6 +1222,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                       </span>
                     ) : null}
                     <Dropdown
+                      commitStrategy="after-paint"
                       options={graphShapeOptions}
                       value={graphTypeState.value}
                       onChange={(value) =>

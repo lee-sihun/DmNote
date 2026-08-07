@@ -463,6 +463,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 label={t('propertiesPanel.graphShape') || 'Graph Shape'}
               >
                 <Dropdown
+                  commitStrategy="after-paint"
                   options={graphShapeOptions}
                   value={singleGraphPosition.graphType || 'line'}
                   onChange={(value) =>
@@ -1632,6 +1633,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
     <>
       <PropertyRow label={t('propertiesPanel.statType') || 'Stat Type'}>
         <Dropdown
+          commitStrategy="after-paint"
           options={STAT_BASE_OPTIONS}
           value={statBaseValue}
           onChange={(value) => {
@@ -1652,6 +1654,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
       {statBaseValue === 'kps' ? (
         <PropertyRow label={t('propertiesPanel.statKpsType') || 'KPS Type'}>
           <Dropdown
+            commitStrategy="after-paint"
             options={STAT_KPS_OPTIONS}
             value={resolvedStatType}
             onChange={(value) =>

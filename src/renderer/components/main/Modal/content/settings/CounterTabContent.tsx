@@ -293,6 +293,7 @@ const CounterTabContent = forwardRef<
       <PropertySection>
         <PropertyRow label={t('counterSetting.placementArea')}>
           <Dropdown
+            commitStrategy="after-paint"
             options={placementOptions}
             value={state.placement}
             onChange={handlePlacementChange}
@@ -306,6 +307,7 @@ const CounterTabContent = forwardRef<
           </p>
           <div ref={alignDropdownWrapperRef}>
             <Dropdown
+              commitStrategy="after-paint"
               options={alignOptions}
               value={state.align}
               onChange={handleAlignChange}
@@ -317,6 +319,7 @@ const CounterTabContent = forwardRef<
         {state.placement === 'inside' && (
           <PropertyRow label={t('counterSetting.alignMode')}>
             <Dropdown
+              commitStrategy="after-paint"
               options={alignModeOptions}
               value={state.alignMode}
               onChange={handleAlignModeChange}

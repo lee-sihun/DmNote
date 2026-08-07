@@ -1321,6 +1321,7 @@ const CounterAnimationEditorModal = ({
               {t('counterSetting.presetLabel') || '프리셋'}
             </p>
             <Dropdown
+              commitStrategy="after-paint"
               options={presetOptions}
               value={selectedPreset}
               onChange={(val) => handlePresetChange(String(val))}

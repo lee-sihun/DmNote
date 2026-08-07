@@ -2072,6 +2072,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           : String(schemaValue.default ?? '');
         control = (
           <Dropdown
+            commitStrategy="after-paint"
             value={selectedValue}
             options={options}
             placeholder={

@@ -140,6 +140,7 @@ export default function CommonListPickerPage<T>({
           {filterOptions && filterValue !== undefined && onFilterChange ? (
             <div className="flex-1 min-w-0">
               <Dropdown
+                commitStrategy="after-paint"
                 options={filterOptions}
                 value={filterValue}
                 onChange={onFilterChange}

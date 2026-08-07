@@ -229,6 +229,7 @@ const ImagePicker = ({
               {t('propertiesPanel.imageFit') || '표시'}
             </p>
             <Dropdown
+              commitStrategy="after-paint"
               value={currentImageFit || 'cover'}
               options={[
                 {

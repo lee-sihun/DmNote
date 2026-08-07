@@ -499,6 +499,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         {/* 노트 정렬 */}
         <PropertyRow label={t('keySetting.noteAlignment') || '노트 정렬'}>
           <Dropdown
+            commitStrategy="after-paint"
             options={[
               {
                 label: t('keySetting.noteAlignLeft') || '좌측',
@@ -567,6 +568,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               opacity={localBorderOpacity / 100}
             />
             <Dropdown
+              commitStrategy="after-paint"
               iconTrigger={
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                   {(keyPosition.noteBorderSide ?? 'all') === 'all' && (

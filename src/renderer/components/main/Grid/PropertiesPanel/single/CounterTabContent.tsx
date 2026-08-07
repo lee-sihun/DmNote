@@ -256,6 +256,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         {/* 배치 영역 */}
         <PropertyRow label={t('counterSetting.placementArea') || '배치 영역'}>
           <Dropdown
+            commitStrategy="after-paint"
             options={[
               {
                 label: t('counterSetting.placementInside') || '내부',
@@ -276,6 +277,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         {/* 정렬 방향 */}
         <PropertyRow label={t('counterSetting.alignDirection') || '정렬 방향'}>
           <Dropdown
+            commitStrategy="after-paint"
             options={[
               { label: t('counterSetting.alignTop') || '상단', value: 'top' },
               {
@@ -301,6 +303,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         {counterSettings.placement === 'inside' && (
           <PropertyRow label={t('counterSetting.alignMode') || '정렬 방식'}>
             <Dropdown
+              commitStrategy="after-paint"
               options={[
                 {
                   label: t('counterSetting.alignModeCenter') || '가운데',

@@ -8,6 +8,8 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { isTopmostPopupLayer, registerPopupLayer } from '../Modal/popupLayer';
+import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
+import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface DropdownOption {
   label: string;
@@ -18,6 +20,7 @@ interface DropdownProps {
   options: DropdownOption[];
   value: string;
   onChange: (value: string) => void;
+  commitStrategy?: CommitStrategy;
   placeholder?: string;
   disabled?: boolean;
   /** true일 경우 드롭다운이 부모 컨테이너의 전체 너비를 차지함 */
@@ -45,6 +48,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   options,
   value,
   onChange,
+  commitStrategy = 'sync',
   placeholder = '선택',
   disabled = false,
   fullWidth = false,
@@ -64,8 +68,16 @@ const Dropdown: React.FC<DropdownProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const menuId = useId();
+  const { value: visualValue, select: commitSelection } =
+    useOptimisticValueCommit({
+      canonicalValue: value,
+      onCommit: onChange,
+      strategy: commitStrategy,
+    });
 
-  const selectedIndex = options.findIndex((option) => option.value === value);
+  const selectedIndex = options.findIndex(
+    (option) => option.value === visualValue,
+  );
 
   const openMenu = useCallback(
     (preferredIndex?: number) => {
@@ -104,10 +116,15 @@ const Dropdown: React.FC<DropdownProps> = ({
     (index: number) => {
       const option = options[index];
       if (!option) return;
-      onChange(option.value);
+      if (commitStrategy === 'sync') {
+        commitSelection(option.value);
+        closeAndFocusTrigger();
+        return;
+      }
       closeAndFocusTrigger();
+      commitSelection(option.value);
     },
-    [closeAndFocusTrigger, onChange, options],
+    [closeAndFocusTrigger, commitSelection, commitStrategy, options],
   );
 
   const moveActiveOption = useCallback(
@@ -338,7 +355,7 @@ const Dropdown: React.FC<DropdownProps> = ({
     };
   }, [open]);
 
-  const selected = options.find((opt) => opt.value === value);
+  const selected = options.find((opt) => opt.value === visualValue);
 
   const menu =
     open && anchor
@@ -375,10 +392,10 @@ const Dropdown: React.FC<DropdownProps> = ({
                   }}
                   type="button"
                   role="option"
-                  aria-selected={value === opt.value}
+                  aria-selected={visualValue === opt.value}
                   tabIndex={-1}
                   className={`text-left w-full h-[23px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
-                    value === opt.value
+                    visualValue === opt.value
                       ? 'bg-surface-active text-fg pointer-events-none'
                       : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
                   }`}

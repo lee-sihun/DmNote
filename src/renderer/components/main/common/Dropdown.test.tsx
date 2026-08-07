@@ -90,6 +90,49 @@ describe('Dropdown keyboard contract', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it('after-paint 전략은 메뉴와 라벨을 먼저 갱신하고 선택 콜백을 미룬다', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
+    const onChange = vi.fn();
+    await act(async () => {
+      root.render(
+        <Dropdown
+          options={[
+            { label: 'One', value: 'one' },
+            { label: 'Two', value: 'two' },
+          ]}
+          value="one"
+          onChange={onChange}
+          commitStrategy="after-paint"
+        />,
+      );
+    });
+
+    const trigger = host.querySelector<HTMLButtonElement>(
+      '[aria-haspopup="listbox"]',
+    );
+    await act(async () => trigger?.click());
+    const options = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+    );
+    await act(async () => options[1]?.click());
+
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger?.textContent).toContain('Two');
+    expect(onChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(onChange).toHaveBeenCalledWith('two');
+  });
+
   it('wraps ArrowUp from the first option to the last option', async () => {
     await act(async () => {
       root.render(

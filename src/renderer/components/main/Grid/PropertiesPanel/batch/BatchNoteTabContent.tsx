@@ -183,6 +183,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             <span className="text-fg-faint text-body italic">Mixed</span>
           )}
           <Dropdown
+            commitStrategy="after-paint"
             options={[
               {
                 label: t('keySetting.noteAlignLeft') || '좌측',
@@ -240,6 +241,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               title={borderColorDisplay.label}
             />
             <Dropdown
+              commitStrategy="after-paint"
               iconTrigger={
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                   {getMixedValue((pos) => pos.noteBorderSide, 'all').value ===
