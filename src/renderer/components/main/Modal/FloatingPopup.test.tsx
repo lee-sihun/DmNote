@@ -21,6 +21,7 @@ describe('FloatingPopup focus contract', () => {
     await act(async () => root.unmount());
     host.remove();
     document.body.innerHTML = '';
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -218,6 +219,63 @@ describe('FloatingPopup focus contract', () => {
     expect(
       document.querySelector('[role="dialog"]')?.getAttribute('aria-label'),
     ).toBe('Test popup');
+  });
+
+  it('after-paint 전략은 opener와 shell을 먼저 반영한 뒤 콘텐츠를 mount한다', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      window.clearTimeout(id);
+    });
+    const Harness = () => {
+      const [open, setOpen] = React.useState(false);
+      return (
+        <>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((current) => !current)}
+          >
+            Open
+          </button>
+          <FloatingPopup
+            open={open}
+            ariaLabel="Deferred popup"
+            fixedX={0}
+            fixedY={0}
+            animate={false}
+            contentMountStrategy="after-paint"
+            onClose={() => setOpen(false)}
+          >
+            <button type="button">Deferred action</button>
+          </FloatingPopup>
+        </>
+      );
+    };
+    await act(async () => root.render(<Harness />));
+    const opener = host.querySelector<HTMLButtonElement>('button')!;
+
+    act(() => opener.click());
+
+    expect(opener.getAttribute('aria-expanded')).toBe('true');
+    const dialog = document.querySelector<HTMLElement>(
+      '[aria-label="Deferred popup"]',
+    );
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).not.toContain('Deferred action');
+    expect(document.activeElement).toBe(dialog);
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    const action = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Deferred action',
+    );
+    expect(action).not.toBeUndefined();
+    expect(document.activeElement).toBe(action);
   });
 
   it('lets only the topmost popup consume Escape', async () => {

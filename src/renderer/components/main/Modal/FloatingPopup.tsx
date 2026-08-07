@@ -18,6 +18,7 @@ import {
   isTopmostPopupLayer,
   registerPopupLayer,
 } from './popupLayer';
+import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 interface FloatingPopupBaseProps {
   open: boolean;
@@ -41,6 +42,8 @@ interface FloatingPopupBaseProps {
   focusOriginRef?: React.MutableRefObject<HTMLElement | null>;
   /** surface: 열릴 때 첫 포커서블 대신 팝업 표면에 포커스 (입력 필드 자동 포커스 방지) */
   initialFocus?: 'first' | 'surface';
+  /** 팝업 shell을 먼저 표시하고 무거운 children mount를 첫 paint 뒤로 분리 */
+  contentMountStrategy?: CommitStrategy;
 }
 
 interface FloatingDialogPopupProps extends FloatingPopupBaseProps {
@@ -65,6 +68,7 @@ interface FloatingPopupSurfaceProps {
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   focusOriginRef?: React.MutableRefObject<HTMLElement | null>;
   initialFocus?: 'first' | 'surface';
+  contentReady: boolean;
   children?: React.ReactNode;
 }
 
@@ -78,6 +82,7 @@ const FloatingPopupSurface = ({
   onKeyDown,
   focusOriginRef,
   initialFocus = 'first',
+  contentReady,
   children,
 }: FloatingPopupSurfaceProps) => {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -100,9 +105,15 @@ const FloatingPopupSurface = ({
     if (focusOriginRef) {
       focusOriginRef.current = prevFocusedRef.current;
     }
-    if (surface.contains(document.activeElement)) return;
+    if (
+      contentReady &&
+      document.activeElement !== surface &&
+      surface.contains(document.activeElement)
+    ) {
+      return;
+    }
     const initialTarget =
-      initialFocus === 'surface'
+      !contentReady || initialFocus === 'surface'
         ? surface
         : role === 'menu'
         ? Array.from(
@@ -112,7 +123,7 @@ const FloatingPopupSurface = ({
           ).find(isAvailableFocusTarget) ?? surface
         : getFocusableElements(surface)[0] ?? surface;
     initialTarget.focus();
-  }, [focusOriginRef, initialFocus, role]);
+  }, [contentReady, focusOriginRef, initialFocus, role]);
 
   useLayoutEffect(() => {
     const prevFocused = prevFocusedRef.current;
@@ -202,6 +213,7 @@ const FloatingPopup = ({
   onMenuTab,
   focusOriginRef,
   initialFocus,
+  contentMountStrategy = 'sync',
 }: FloatingPopupProps) => {
   const { x, y, refs, strategy, update } = useFloating({
     placement: placement as Placement,
@@ -214,6 +226,26 @@ const FloatingPopup = ({
     x: number;
     y: number;
   } | null>(null);
+  const [deferredContentMounted, setDeferredContentMounted] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setDeferredContentMounted(false);
+      return;
+    }
+    if (contentMountStrategy === 'sync') return;
+    let timer: number | null = null;
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => setDeferredContentMounted(true), 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [contentMountStrategy, open]);
+
+  const contentMounted =
+    open && (contentMountStrategy === 'sync' || deferredContentMounted);
 
   useEffect(() => {
     if (referenceRef && referenceRef.current)
@@ -483,8 +515,9 @@ const FloatingPopup = ({
       onKeyDown={onKeyDown}
       focusOriginRef={focusOriginRef}
       initialFocus={initialFocus}
+      contentReady={contentMounted}
     >
-      {children}
+      {contentMounted ? children : null}
     </FloatingPopupSurface>
   );
 

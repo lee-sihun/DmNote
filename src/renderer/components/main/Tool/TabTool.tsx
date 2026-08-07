@@ -59,6 +59,7 @@ const TabTool = () => {
         placement="bottom"
         initialFocus="surface"
         onClose={() => setIsPopupOpen(false)}
+        contentMountStrategy="after-paint"
       >
         <TabList />
       </FloatingPopup>

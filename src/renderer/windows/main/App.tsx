@@ -773,6 +773,7 @@ export default function App() {
           offset={25}
           onClose={handlePaletteClose}
           className="z-50"
+          contentMountStrategy="after-paint"
         >
           <Palette color={color} onColorChange={handleColorChange} />
         </FloatingPopup>

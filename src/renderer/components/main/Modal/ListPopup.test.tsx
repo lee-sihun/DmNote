@@ -42,6 +42,7 @@ describe('ListPopup keyboard contract', () => {
           referenceRef={referenceRef}
           onClose={() => setOpen(false)}
           items={items}
+          contentMountStrategy="sync"
         />
       );
     };

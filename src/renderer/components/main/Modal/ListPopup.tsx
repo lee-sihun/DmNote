@@ -3,6 +3,7 @@ import { createPortal, flushSync } from 'react-dom';
 import FloatingPopup from './FloatingPopup';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
 import { useLenis } from '@hooks/useLenis';
+import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 
 export type ListItem = {
   id: string;
@@ -29,6 +30,7 @@ interface ListPopupProps {
   offsetY?: number;
   /** 최대 표시 항목 수 (초과 시 스크롤) */
   maxVisibleItems?: number;
+  contentMountStrategy?: CommitStrategy;
 }
 
 // 아이템 26 + 갭 4 리듬 공용 스크롤 계산 — 메인 메뉴·서브메뉴가 함께 사용
@@ -495,6 +497,7 @@ const ListPopup = ({
   offsetX = 0,
   offsetY = 0,
   maxVisibleItems,
+  contentMountStrategy = 'after-paint',
 }: ListPopupProps) => {
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -547,6 +550,7 @@ const ListPopup = ({
       onClose={onClose}
       onKeyDown={handleMenuNavigation}
       className={effectiveClassName}
+      contentMountStrategy={contentMountStrategy}
     >
       <div
         ref={needsScroll ? lenisRef : undefined}
