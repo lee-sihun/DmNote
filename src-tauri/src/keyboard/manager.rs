@@ -585,6 +585,40 @@ mod tests {
             .events,
             vec![event("Z|B", vec![0], Some(false), false)]
         );
+
+        input(
+            &manager,
+            Some("keyboard:z"),
+            InputDeviceKind::Keyboard,
+            &["Z"],
+            true,
+        );
+        input(
+            &manager,
+            Some("keyboard:b"),
+            InputDeviceKind::Keyboard,
+            &["B"],
+            true,
+        );
+        input(
+            &manager,
+            Some("keyboard:b"),
+            InputDeviceKind::Keyboard,
+            &["B"],
+            false,
+        );
+        assert_eq!(
+            input(
+                &manager,
+                Some("keyboard:z"),
+                InputDeviceKind::Keyboard,
+                &["Z"],
+                false,
+            )
+            .unwrap()
+            .events,
+            vec![event_with_physical_hold("Z|B", vec![0], Some(false), false,)]
+        );
     }
 
     #[test]
@@ -632,6 +666,23 @@ mod tests {
                 .unwrap()
                 .events,
             vec![event("LEFT CTRL+Z", vec![0], Some(true), true)]
+        );
+        assert_eq!(
+            input(
+                &manager,
+                Some("z"),
+                InputDeviceKind::Keyboard,
+                &["Z"],
+                false,
+            )
+            .unwrap()
+            .events,
+            vec![event_with_physical_hold(
+                "LEFT CTRL+Z",
+                vec![0],
+                Some(false),
+                false,
+            )]
         );
     }
 
