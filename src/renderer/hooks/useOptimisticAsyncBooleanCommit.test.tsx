@@ -12,7 +12,7 @@ interface AsyncToggleHarnessProps {
 
 const AsyncToggleHarness = ({ onCommit, onError }: AsyncToggleHarnessProps) => {
   const [canonicalValue, setCanonicalValue] = useState(false);
-  const { value, toggle } = useOptimisticAsyncBooleanCommit({
+  const { value, toggle, flush } = useOptimisticAsyncBooleanCommit({
     canonicalValue,
     onCommit: async (nextValue) => {
       await onCommit(nextValue);
@@ -22,9 +22,14 @@ const AsyncToggleHarness = ({ onCommit, onError }: AsyncToggleHarnessProps) => {
   });
 
   return (
-    <button type="button" role="switch" aria-checked={value} onClick={toggle}>
-      토글
-    </button>
+    <>
+      <button type="button" role="switch" aria-checked={value} onClick={toggle}>
+        토글
+      </button>
+      <button type="button" data-flush="true" onClick={() => void flush()}>
+        반영
+      </button>
+    </>
   );
 };
 
@@ -153,5 +158,20 @@ describe('useOptimisticAsyncBooleanCommit', () => {
 
     expect(onCommit).not.toHaveBeenCalled();
     expect(getToggle()?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('flush는 예약 프레임을 기다리지 않고 최신 의도를 커밋한다', async () => {
+    const onCommit = vi.fn(async () => undefined);
+    act(() => root.render(<AsyncToggleHarness onCommit={onCommit} />));
+
+    act(() => getToggle()?.click());
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-flush="true"]')?.click();
+    });
+
+    expect(animationFrames.size).toBe(0);
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(onCommit).toHaveBeenCalledWith(true);
+    expect(getToggle()?.getAttribute('aria-checked')).toBe('true');
   });
 });

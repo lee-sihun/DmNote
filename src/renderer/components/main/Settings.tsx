@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { startTransition, useEffect, useRef, useState } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -170,6 +170,10 @@ const Settings = ({
   const removingPluginRef = useRef<string | null>(null);
   const resetAllRef = useRef(false);
   const regeneratingObsTokenRef = useRef(false);
+  const angleModeChangeRef = useRef(false);
+  const pendingResizeAnchorRef = useRef<OverlayResizeAnchor | null>(null);
+  const applyingResizeAnchorRef = useRef(false);
+  const confirmedResizeAnchorRef = useRef(overlayResizeAnchor);
 
   // OBS 모드
   const [obsStatus, setObsStatus] = useState<ObsStatus>({
@@ -194,6 +198,12 @@ const Settings = ({
     cachedKeySoundOutput = state;
     setKeySoundOutputRaw(state);
   };
+
+  useEffect(() => {
+    if (!applyingResizeAnchorRef.current) {
+      confirmedResizeAnchorRef.current = overlayResizeAnchor;
+    }
+  }, [overlayResizeAnchor]);
 
   useEffect(() => {
     let cancelled = false;
@@ -679,7 +689,8 @@ const Settings = ({
   };
 
   const handleAngleModeChangeSelect = (val: string): void => {
-    if (isMacOS) return;
+    if (isMacOS || angleModeChangeRef.current) return;
+    angleModeChangeRef.current = true;
     const apply = async (): Promise<void> => {
       setAngleMode(val);
       try {
@@ -687,14 +698,44 @@ const Settings = ({
         await window.api.app.restart();
       } catch (error) {
         console.error('Failed to change angle mode', error);
+      } finally {
+        angleModeChangeRef.current = false;
       }
     };
 
     if (showConfirm) {
-      showConfirm(t('settings.restartConfirm'), apply);
+      showConfirm(t('settings.restartConfirm'), apply, {
+        onCancel: () => {
+          angleModeChangeRef.current = false;
+        },
+      });
     } else {
-      apply();
+      void apply();
     }
+  };
+
+  const enqueueResizeAnchor = (anchor: OverlayResizeAnchor): void => {
+    pendingResizeAnchorRef.current = anchor;
+    setOverlayResizeAnchor(anchor);
+    if (applyingResizeAnchorRef.current) return;
+
+    applyingResizeAnchorRef.current = true;
+    void (async () => {
+      while (pendingResizeAnchorRef.current) {
+        const requested = pendingResizeAnchorRef.current;
+        pendingResizeAnchorRef.current = null;
+        try {
+          await window.api.overlay.setAnchor(requested);
+          confirmedResizeAnchorRef.current = requested;
+        } catch (error) {
+          console.error('Failed to set overlay anchor', error);
+          if (!pendingResizeAnchorRef.current) {
+            setOverlayResizeAnchor(confirmedResizeAnchorRef.current);
+          }
+        }
+      }
+      applyingResizeAnchorRef.current = false;
+    })();
   };
 
   const handleTrayToggle = async (): Promise<void> => {
@@ -855,8 +896,10 @@ const Settings = ({
   };
 
   const handleLanguageChange = (val: string): void => {
-    setLanguage(val);
-    i18n.changeLanguage(val as SupportedLocale);
+    startTransition(() => {
+      setLanguage(val);
+      void i18n.changeLanguage(val as SupportedLocale);
+    });
   };
 
   const requestedAsioDriver =
@@ -943,14 +986,9 @@ const Settings = ({
                     label: t(`settings.${opt.key}`),
                   }))}
                   value={overlayResizeAnchor}
-                  onChange={async (val: string) => {
-                    setOverlayResizeAnchor(val as OverlayResizeAnchor);
-                    try {
-                      await window.api.overlay.setAnchor(val);
-                    } catch (error) {
-                      console.error('Failed to set overlay anchor', error);
-                    }
-                  }}
+                  onChange={(val: string) =>
+                    enqueueResizeAnchor(val as OverlayResizeAnchor)
+                  }
                   placeholder={t('settings.selectAnchor')}
                   align="right"
                 />

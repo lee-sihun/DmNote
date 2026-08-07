@@ -34,6 +34,7 @@ import {
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
+import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
 
 import { useUIStore } from '@stores/useUIStore';
 
@@ -176,6 +177,21 @@ export default function App() {
   const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
     useState(false);
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
+  const { value: visualSettingsOpen, toggle: toggleSettingsView } =
+    useOptimisticBooleanCommit({
+      canonicalValue: isSettingsOpen,
+      onCommit: (next) => {
+        if (next) {
+          selectedKeyTypeAtSettingsOpenRef.current = selectedKeyType;
+          if (selectedKey) setSkipModalAnimationOnReturn(true);
+        } else if (
+          selectedKeyTypeAtSettingsOpenRef.current !== selectedKeyType
+        ) {
+          useGridSelectionStore.getState().clearSelection();
+        }
+        setIsSettingsOpen(next);
+      },
+    });
   const {
     noteEffect,
     angleMode: _angleMode,
@@ -748,18 +764,9 @@ export default function App() {
         }
         activeTool={activeTool}
         setActiveTool={setActiveTool}
-        isSettingsOpen={isSettingsOpen}
-        onOpenSettings={() => {
-          selectedKeyTypeAtSettingsOpenRef.current = selectedKeyType;
-          if (selectedKey) setSkipModalAnimationOnReturn(true);
-          setIsSettingsOpen(true);
-        }}
-        onCloseSettings={() => {
-          if (selectedKeyTypeAtSettingsOpenRef.current !== selectedKeyType) {
-            useGridSelectionStore.getState().clearSelection();
-          }
-          setIsSettingsOpen(false);
-        }}
+        isSettingsOpen={visualSettingsOpen}
+        onOpenSettings={toggleSettingsView}
+        onCloseSettings={toggleSettingsView}
         showAlert={showAlert}
         onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
         primaryButtonRef={primaryButtonRef}

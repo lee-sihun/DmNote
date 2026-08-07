@@ -39,6 +39,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     null,
   );
   const [isExporting, setIsExporting] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   const { scrollContainerRef: historyScrollRef } = useLenis();
 
@@ -47,18 +48,25 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
 
   // 진행 중 백엔드 변경 - 취소가 이보다 먼저 비교하면 취소한 변경이
   // 뒤늦게 커밋되는 레이스가 생기므로 취소 시 완료를 기다림
-  const pendingMutationRef = useRef<Promise<void> | null>(null);
+  const pendingMutationsRef = useRef(new Set<Promise<void>>());
+  const loadRef = useRef(false);
+  const clearRef = useRef(false);
+  const exportRef = useRef(false);
+  const historyRef = useRef<string | null>(null);
+  const closingRef = useRef(false);
+  const loadGenerationRef = useRef(0);
 
   const invokeTracked = async <T,>(op: () => Promise<T>): Promise<T> => {
     const promise = op();
-    pendingMutationRef.current = promise.then(
+    const tracked = promise.then(
       () => undefined,
       () => undefined,
     );
+    pendingMutationsRef.current.add(tracked);
     try {
       return await promise;
     } finally {
-      pendingMutationRef.current = null;
+      pendingMutationsRef.current.delete(tracked);
     }
   };
 
@@ -66,10 +74,14 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   useEffect(() => {
     if (!isOpen) return;
 
+    const generation = ++loadGenerationRef.current;
+    closingRef.current = false;
+    setIsClosing(false);
     setIsLoading(true);
     window.api.css.tab
       .get(selectedKeyType)
       .then((tabResponse) => {
+        if (generation !== loadGenerationRef.current) return;
         const css = tabResponse.css || null;
         setTabCss(css);
         // 원본 상태 깊은 복사로 저장
@@ -79,15 +91,20 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
         console.error('Failed to get CSS info:', error);
       })
       .finally(() => {
-        setIsLoading(false);
+        if (generation === loadGenerationRef.current) setIsLoading(false);
       });
 
     window.api.css
       .historyGet()
-      .then(setHistory)
+      .then((items) => {
+        if (generation === loadGenerationRef.current) setHistory(items);
+      })
       .catch((error) => {
         console.error('Failed to fetch CSS history:', error);
       });
+    return () => {
+      loadGenerationRef.current += 1;
+    };
   }, [isOpen, selectedKeyType]);
 
   // 탭 CSS 변경 이벤트 구독 (실시간 미리보기 반영)
@@ -106,8 +123,13 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   }, [isOpen, selectedKeyType]);
 
   const handleLoadCss = async () => {
+    if (loadRef.current || closingRef.current) return;
+    loadRef.current = true;
+    setIsLoading(true);
     try {
-      const result = await window.api.css.tab.load(selectedKeyType);
+      const result = await invokeTracked(() =>
+        window.api.css.tab.load(selectedKeyType),
+      );
       if (result.success && result.css) {
         setTabCss(result.css);
       } else if (result.error) {
@@ -115,10 +137,15 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
       }
     } catch (error) {
       console.error('Failed to load tab CSS:', error);
+    } finally {
+      loadRef.current = false;
+      setIsLoading(false);
     }
   };
 
   const handleClearCss = async () => {
+    if (clearRef.current || closingRef.current) return;
+    clearRef.current = true;
     try {
       const result = await invokeTracked(() =>
         window.api.css.tab.clear(selectedKeyType),
@@ -128,6 +155,8 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
       }
     } catch (error) {
       console.error('Failed to clear tab CSS:', error);
+    } finally {
+      clearRef.current = false;
     }
   };
 
@@ -146,19 +175,24 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     );
   };
 
-  const { value: visualCssEnabled, toggle: handleToggleCss } =
-    useOptimisticAsyncBooleanCommit({
-      canonicalValue: tabCss?.enabled ?? true,
-      onCommit: commitCssEnabled,
-      onError: (error) => {
-        console.error('Failed to toggle tab CSS:', error);
-      },
-    });
+  const {
+    value: visualCssEnabled,
+    toggle: handleToggleCss,
+    flush: flushCssEnabled,
+  } = useOptimisticAsyncBooleanCommit({
+    canonicalValue: tabCss?.enabled ?? true,
+    onCommit: commitCssEnabled,
+    onError: (error) => {
+      console.error('Failed to toggle tab CSS:', error);
+    },
+  });
 
   // 글로벌 히스토리 항목을 현재 탭 CSS로 적용
   const handleApplyHistory = async (item: CustomCssHistoryItem) => {
-    if (pendingHistoryPath || item.status !== 'available') return;
+    if (historyRef.current || closingRef.current || item.status !== 'available')
+      return;
     if (tabCss?.path === item.path) return;
+    historyRef.current = item.path;
     setPendingHistoryPath(item.path);
     try {
       const result = await invokeTracked(() =>
@@ -176,13 +210,15 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     } catch (error) {
       console.error('Failed to apply history CSS to tab:', error);
     } finally {
+      historyRef.current = null;
       setPendingHistoryPath(null);
     }
   };
 
   // 현재 탭 CSS 콘텐츠를 파일로 내보내기
   const handleExport = async () => {
-    if (isExporting) return;
+    if (exportRef.current || closingRef.current) return;
+    exportRef.current = true;
     setIsExporting(true);
     try {
       const result = await window.api.css.tab.export(selectedKeyType);
@@ -198,23 +234,35 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
       console.error('Failed to export tab CSS:', error);
       showAlert?.(t('tabCss.exportFailed'));
     } finally {
+      exportRef.current = false;
       setIsExporting(false);
     }
   };
 
   // 저장: 현재 상태 유지하고 모달 닫기
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setIsClosing(true);
+    await flushCssEnabled();
+    if (pendingMutationsRef.current.size > 0) {
+      await Promise.all([...pendingMutationsRef.current]);
+    }
     onClose();
   };
 
   // 취소: 진행 중 변경 커밋을 기다린 뒤 백엔드 상태 기준으로 원본 복원
   // (로컬 state 비교는 응답 도착 전 취소 시 변경 없음으로 오판)
   const handleCancel = async () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setIsClosing(true);
     const original = originalStateRef.current;
 
     try {
-      if (pendingMutationRef.current) {
-        await pendingMutationRef.current;
+      await flushCssEnabled();
+      if (pendingMutationsRef.current.size > 0) {
+        await Promise.all([...pendingMutationsRef.current]);
       }
       const { css } = await window.api.css.tab.get(selectedKeyType);
       const current = css || null;
@@ -257,6 +305,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
             role="switch"
             aria-checked={visualCssEnabled}
             onClick={handleToggleCss}
+            disabled={isClosing}
             data-dmn-press-scope=""
             className={`${FORM_ROW_CLASS} cursor-pointer`}
           >
@@ -283,7 +332,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
             <button
               type="button"
               onClick={handleLoadCss}
-              disabled={isLoading}
+              disabled={isLoading || isClosing}
               className={`${ACTION_BUTTON_CLASS} ${
                 isLoading ? FILL_DISABLED_CLASS : FILL_INTERACTIVE_CLASS
               }`}
@@ -293,7 +342,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
             <button
               type="button"
               onClick={() => void handleExport()}
-              disabled={!canExport}
+              disabled={!canExport || isClosing}
               className={`${ACTION_BUTTON_CLASS} ${
                 canExport ? FILL_INTERACTIVE_CLASS : FILL_DISABLED_CLASS
               }`}
@@ -303,7 +352,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
             <button
               type="button"
               onClick={handleClearCss}
-              disabled={isLoading || !hasTabCss}
+              disabled={isLoading || !hasTabCss || isClosing}
               className={`${ACTION_BUTTON_CLASS} ${
                 hasTabCss
                   ? 'bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active text-danger-fg'
@@ -356,7 +405,11 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
                         <button
                           type="button"
                           onClick={() => void handleApplyHistory(item)}
-                          disabled={!applicable || pendingHistoryPath !== null}
+                          disabled={
+                            !applicable ||
+                            pendingHistoryPath !== null ||
+                            isClosing
+                          }
                           className={`${PANEL_PILL_CLASS} ${
                             applicable
                               ? FILL_INTERACTIVE_CLASS
@@ -377,13 +430,15 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
         {/* 버튼 영역 */}
         <div className="flex gap-[8px]">
           <button
-            onClick={handleSave}
+            onClick={() => void handleSave()}
+            disabled={isClosing}
             className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.save')}
           </button>
           <button
             onClick={handleCancel}
+            disabled={isClosing}
             className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.cancel')}

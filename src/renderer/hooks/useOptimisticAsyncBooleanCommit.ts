@@ -26,6 +26,7 @@ export const useOptimisticAsyncBooleanCommit = ({
   const commitFrameRef = useRef<number | null>(null);
   const commitTimerRef = useRef<number | null>(null);
   const runningRef = useRef(false);
+  const runningPromiseRef = useRef<Promise<void> | null>(null);
   const mountedRef = useRef(true);
 
   const updateOptimisticValue = useCallback((value: boolean | null) => {
@@ -40,33 +41,56 @@ export const useOptimisticAsyncBooleanCommit = ({
   }, [updateOptimisticValue]);
 
   const drainPendingValue = async () => {
-    if (runningRef.current) return;
+    if (runningPromiseRef.current) {
+      await runningPromiseRef.current;
+      return;
+    }
     runningRef.current = true;
-    let attemptedCommit = false;
+    const run = (async () => {
+      let attemptedCommit = false;
 
-    try {
-      while (pendingValueRef.current !== null) {
-        const target = pendingValueRef.current;
-        pendingValueRef.current = null;
+      try {
+        while (pendingValueRef.current !== null) {
+          const target = pendingValueRef.current;
+          pendingValueRef.current = null;
 
-        if (!attemptedCommit && target === canonicalValueRef.current) {
-          continue;
-        }
+          if (!attemptedCommit && target === canonicalValueRef.current) {
+            continue;
+          }
 
-        attemptedCommit = true;
-        try {
-          await onCommitRef.current(target);
-        } catch (error) {
-          onErrorRef.current?.(error);
-          if (pendingValueRef.current === null) {
-            updateOptimisticValue(null);
+          attemptedCommit = true;
+          try {
+            await onCommitRef.current(target);
+          } catch (error) {
+            onErrorRef.current?.(error);
+            if (pendingValueRef.current === null) {
+              updateOptimisticValue(null);
+            }
           }
         }
+      } finally {
+        runningRef.current = false;
+        reconcileCanonicalValue();
       }
+    })();
+    runningPromiseRef.current = run;
+    try {
+      await run;
     } finally {
-      runningRef.current = false;
-      reconcileCanonicalValue();
+      if (runningPromiseRef.current === run) runningPromiseRef.current = null;
     }
+  };
+
+  const flush = async () => {
+    if (commitFrameRef.current !== null) {
+      cancelAnimationFrame(commitFrameRef.current);
+      commitFrameRef.current = null;
+    }
+    if (commitTimerRef.current !== null) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+    await drainPendingValue();
   };
 
   useLayoutEffect(() => {
@@ -98,12 +122,7 @@ export const useOptimisticAsyncBooleanCommit = ({
 
       const pending = pendingValueRef.current;
       if (!runningRef.current && pending !== null) {
-        pendingValueRef.current = null;
-        if (pending !== canonicalValueRef.current) {
-          void onCommitRef.current(pending).catch((error) => {
-            onErrorRef.current?.(error);
-          });
-        }
+        void drainPendingValue();
       }
     };
   }, []);
@@ -137,6 +156,7 @@ export const useOptimisticAsyncBooleanCommit = ({
   return {
     value: optimisticValue ?? canonicalValue,
     toggle,
+    flush,
     pending:
       optimisticValue !== null ||
       runningRef.current ||
