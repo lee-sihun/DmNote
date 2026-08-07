@@ -274,6 +274,7 @@ const NoteSetting = ({
       <PropertySection>
         <PropertyRow label={t('noteSetting.reverseEffect')}>
           <Checkbox
+            commitStrategy="after-paint"
             checked={reverse}
             onChange={() => setReverse((prev) => !prev)}
           />
@@ -370,6 +371,7 @@ const NoteSetting = ({
       <PropertySection>
         <PropertyRow label={t('laboratory.delayToggle')}>
           <Checkbox
+            commitStrategy="after-paint"
             checked={delayedNoteEnabled}
             onChange={() => setDelayedNoteEnabled((prev) => !prev)}
           />

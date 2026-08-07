@@ -354,7 +354,11 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         {/* 글로우 카드 */}
         <PropertySection>
           <PropertyRow label={t('keySetting.noteGlow')}>
-            <Checkbox checked={state.glowEnabled} onChange={handleGlowToggle} />
+            <Checkbox
+              commitStrategy="after-paint"
+              checked={state.glowEnabled}
+              onChange={handleGlowToggle}
+            />
           </PropertyRow>
 
           <div
@@ -458,6 +462,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         <PropertySection>
           <PropertyRow label={t('keySetting.noteEffectEnabled')}>
             <Checkbox
+              commitStrategy="after-paint"
               checked={state.noteEffectEnabled}
               onChange={handleNoteEffectToggle}
             />
@@ -465,6 +470,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
 
           <PropertyRow label={t('keySetting.noteAutoYCorrection')}>
             <Checkbox
+              commitStrategy="after-paint"
               checked={state.autoYCorrection}
               onChange={() => {
                 const newValue = !state.autoYCorrection;

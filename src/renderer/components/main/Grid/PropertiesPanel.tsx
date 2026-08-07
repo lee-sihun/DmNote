@@ -2000,6 +2000,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const checked = !!rawValue;
         control = (
           <Checkbox
+            commitStrategy="after-paint"
             checked={checked}
             onChange={() => onChange(key, !checked)}
           />

@@ -215,6 +215,7 @@ const ImagePicker = ({
             {t('imagePicker.transparent')}
           </p>
           <Checkbox
+            commitStrategy="after-paint"
             checked={currentTransparent}
             onChange={handleTransparentToggle}
           />

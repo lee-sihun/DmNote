@@ -420,6 +420,7 @@ const CounterTabContent = forwardRef<
       <PropertySection>
         <PropertyRow label={t('counterSetting.counterEnabled')}>
           <Checkbox
+            commitStrategy="after-paint"
             checked={state.counterEnabled}
             onChange={handleCounterToggle}
           />
