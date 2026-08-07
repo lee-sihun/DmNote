@@ -222,10 +222,12 @@ const BenchmarkApp = () => {
         );
         toggle.click();
         const eventFinishedAt = performance.now();
+        const paintOpportunity = afterPaintOpportunity().then(
+          () => performance.now() - startedAt,
+        );
         const visualDomCommitMs = await visualCommit;
         const canonicalDomCommitMs = await canonicalCommit;
-        await afterPaintOpportunity();
-        const clickToPaintOpportunityMs = performance.now() - startedAt;
+        const clickToPaintOpportunityMs = await paintOpportunity;
 
         if (index >= warmupIterations) {
           eventBlockingSamples.push(eventFinishedAt - startedAt);
@@ -264,6 +266,15 @@ const BenchmarkApp = () => {
       if (!resultElement) return;
       resultElement.dataset.status = 'complete';
       resultElement.textContent = JSON.stringify(result, null, 2);
+      document.title = [
+        'PILOT-01',
+        enabledCommitStrategy,
+        `event=${result.eventBlockingMs.p95.toFixed(3)}`,
+        `visual=${result.visualDomCommitMs.p95.toFixed(3)}`,
+        `canonical=${result.canonicalDomCommitMs.p95.toFixed(3)}`,
+        `paint=${result.clickToPaintOpportunityMs.p95.toFixed(3)}`,
+        `react=${result.reactCommitDurationMs.p95.toFixed(3)}`,
+      ].join('|');
     };
 
     void run().catch((error) => {
