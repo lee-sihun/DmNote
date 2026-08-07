@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 88개    |
+| 대기                             | 87개    |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 77개    |
+| 실험·검증 중                     | 78개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -440,6 +440,29 @@
 - 정확성 게이트: 최신 좌표 병합·mouseup flush·최종 pan 테스트 통과
 <!-- GRID-11:RESULT:END -->
 
+<!-- EDIT-01:RESULT:START -->
+
+#### EDIT-01 색상 트랙 최신 자동 측정
+
+| 조건           | 값                                                            |
+| -------------- | ------------------------------------------------------------- |
+| 측정 경로      | 실제 SaturationArea + 렌더 DOM 500개, pointermove 500회 burst |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회                        |
+| 구현 코드 커밋 | `82d86d95dd445b85aa6ecf413dcad3f060377049`                    |
+| 측정 코드 커밋 | `6b121431d373d8f549c287e4331392f462c3eef7`                    |
+| 비교 전략      | `legacy` → `frame`                                            |
+| 환경           | darwin arm64, v25.2.1                                         |
+
+| P95 지표              |   legacy | frame coalescing | 개선율 |
+| --------------------- | -------: | ---------------: | -----: |
+| burst event blocking  |  6.563ms |          6.074ms |   7.4% |
+| 최종 DOM commit       | 10.514ms |         11.094ms |  -5.5% |
+| React commit duration |  0.700ms |          0.808ms | -15.4% |
+
+- 원시 결과: [기준선](../benchmarks/results/edit-01-color-track-baseline.json) · [개선](../benchmarks/results/edit-01-color-track-improved.json)
+- 정확성 게이트: 최신 비율 병합·pointerup 최종 commit·중복 완료 방지 테스트 통과
+<!-- EDIT-01:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                                 |
@@ -549,18 +572,18 @@
 | ------- | -------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | -------------------------------------------------------- |
 | PROP-01 | 숫자 입력                        | P0/P1    | CTP ms       |        — |        — |      — | 실험 | `1b8945cf`, 공통 숫자 입력 62곳 적용                     |
 | PROP-02 | 텍스트 입력                      | P1       | CTP ms       |        — |        — |      — | 실험 | `8c66281b`, 공통 TextInput 8곳 적용                      |
-| PROP-03 | 색상 입력                        | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ad22c019` 상태 탭·`cb3335bd` 피커 mount 분리 적용       |
-| PROP-04 | 그라데이션 입력                  | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ad22c019`, 형식 탭 전환만 적용                          |
+| PROP-03 | 색상 입력                        | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                |
+| PROP-04 | 그라데이션 입력                  | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                |
 | PROP-05 | 드롭다운 속성 변경               | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4`, 로컬 선택 after-paint 적용                   |
 | PROP-06 | 폰트 스타일 버튼                 | P1       | CTP ms       |        — |        — |      — | 대기 | batch 포함                                               |
 | PROP-07 | 키 매핑·실입력 캡처              | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `ad22c019`, 판정 탭 전환만 적용                          |
 | PROP-08 | 이미지 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | decode ETC                                               |
 | PROP-09 | 사운드 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 파일·오디오 ETC                                          |
 | PROP-10 | 단일·다중 선택 탭 전환           | P1       | CTP ms       |        — |        — |      — | 대기 | keepalive 범위                                           |
-| PROP-11 | 플러그인 설정 color              | P0/P1    | F95 ms/frame |        — |        — |      — | 실험 | `cb3335bd`, 공통 ColorInput 피커 mount 분리 적용         |
+| PROP-11 | 플러그인 설정 color              | P0/P1    | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 ColorInput pointer 병합                 |
 | PROP-12 | 플러그인 설정 number·text·select | P1       | CTP ms       |        — |        — |      — | 실험 | `2b9b6cf4` select·`1b8945cf` number·`8c66281b` text 적용 |
 | PROP-13 | 플러그인 설정 전체 저장          | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight                                            |
-| EDIT-01 | 색상 saturation·hue·alpha 드래그 | P0       | F95 ms/frame |        — |        — |      — | 대기 | picker 전체                                              |
+| EDIT-01 | 색상 saturation·hue·alpha 드래그 | P0       | F95 ms/frame |    6.563 |    6.074 |   7.4% | 검증 | `82d86d95`, 공통 pointer frame coalescing                |
 | EDIT-02 | 색상 텍스트·퍼센트 입력          | P1       | CTP ms       |        — |        — |      — | 대기 | validation                                               |
 | EDIT-03 | 그라데이션 stop 편집·형식 전환   | P0       | F95 ms/frame |    0.405 |    0.137 |  66.2% | 검증 | `23582b9a`, stop 드래그 병합·형식 탭 즉시 반영           |
 | EDIT-04 | 카운터 bezier point 드래그       | P0       | F95 ms/frame |        — |        — |      — | 대기 | animation editor                                         |
@@ -750,6 +773,15 @@
 | GRID-11-FRAME  | 2026-08-07 | GRID-11 | 개선   | `1ca33879` | vitest-jsdom-minimap-drag-burst-proxy, darwin arm64, v25.2.1 | SVG 500개·mousemove 100회 |   30 | 0.471 | 0.569 | 0.985 | DOM P95 4.783ms·React P95 2.503ms | [JSON](../benchmarks/results/grid-11-minimap-improved.json) | minimap drag proxy |
 
 <!-- GRID-11:SESSIONS:END -->
+
+<!-- EDIT-01:SESSIONS:START -->
+
+| 세션 ID        | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                        | 시나리오·데이터 크기        | 반복 |   P50 |   P95 |  최대 | 보조 지표                          | 원시 자료                                                       | 비고              |
+| -------------- | ---------- | ------- | ------ | ---------- | ----------------------------------------------------------- | --------------------------- | ---: | ----: | ----: | ----: | ---------------------------------- | --------------------------------------------------------------- | ----------------- |
+| EDIT-01-LEGACY | 2026-08-07 | EDIT-01 | 기준선 | `6b121431` | vitest-jsdom-color-track-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·pointermove 500회 |   30 | 5.720 | 6.563 | 6.653 | DOM P95 10.514ms·React P95 0.700ms | [JSON](../benchmarks/results/edit-01-color-track-baseline.json) | color track proxy |
+| EDIT-01-FRAME  | 2026-08-07 | EDIT-01 | 개선   | `6b121431` | vitest-jsdom-color-track-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·pointermove 500회 |   30 | 5.594 | 6.074 | 8.506 | DOM P95 11.094ms·React P95 0.808ms | [JSON](../benchmarks/results/edit-01-color-track-improved.json) | color track proxy |
+
+<!-- EDIT-01:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -1085,6 +1117,21 @@
 | 결론        | 자동 회귀 게이트 포함 검증 완료                                        |
 
 <!-- GRID-11:EXPERIMENT:END -->
+
+<!-- EDIT-01:EXPERIMENT:START -->
+
+### EXP-021: 색상 트랙 pointer 입력 프레임 병합
+
+| 필드        | 내용                                                                                                |
+| ----------- | --------------------------------------------------------------------------------------------------- |
+| 항목 ID     | EDIT-01, PROP-03~04, PROP-11                                                                        |
+| 변경 내용   | saturation·hue·alpha·gradient stop 최신 비율만 프레임당 한 번 preview, pointerup 최종값 직접 commit |
+| 구현 커밋   | `82d86d95`                                                                                          |
+| P95 변화    | 6.563ms → 6.074ms (7.4%)                                                                            |
+| 정확성 검증 | 최신 비율·pointerup commit·capture/blur 종료 테스트 통과                                            |
+| 결론        | 공통 pointer session 사용 색상 편집 경로 전체 적용                                                  |
+
+<!-- EDIT-01:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 
