@@ -27,6 +27,10 @@ import {
   computeCounterAnimationPreviewKeyStyles,
   type CounterAnimationKeyVisual,
 } from '@utils/core/counterAnimationPreview';
+import {
+  createRafLatestScheduler,
+  type ContinuousInputStrategy,
+} from '@utils/animation/rafLatestScheduler';
 
 type EditorMode = 'create' | 'edit';
 
@@ -43,6 +47,8 @@ interface CounterAnimationEditorModalProps {
     affectedUsageCount: number;
   }) => void;
   t: (key: string) => string;
+  /** 성능 계측용 비교 전략. 제품 경로는 프레임당 최신 입력만 반영한다. */
+  continuousInputStrategy?: ContinuousInputStrategy;
 }
 
 type DragTarget = 'p1' | 'p2' | null;
@@ -161,6 +167,7 @@ const CounterAnimationEditorModal = ({
   onClose,
   onSaved,
   t,
+  continuousInputStrategy = 'frame',
 }: CounterAnimationEditorModalProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragTargetRef = useRef<DragTarget>(null);
@@ -563,14 +570,7 @@ const CounterAnimationEditorModal = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    const handlePointerMove = (event: PointerEvent) => {
-      if (activePointersRef.current.has(event.pointerId)) {
-        activePointersRef.current.set(event.pointerId, {
-          clientX: event.clientX,
-          clientY: event.clientY,
-        });
-      }
-
+    const applyPointerMove = (event: PointerEvent) => {
       if (
         activePointersRef.current.size === 2 &&
         pinchStartDistRef.current > 0
@@ -637,8 +637,22 @@ const CounterAnimationEditorModal = ({
         dragTargetRef.current,
       );
     };
+    const moveScheduler = createRafLatestScheduler(
+      applyPointerMove,
+      continuousInputStrategy,
+    );
+    const handlePointerMove = (event: PointerEvent) => {
+      if (activePointersRef.current.has(event.pointerId)) {
+        activePointersRef.current.set(event.pointerId, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+        });
+      }
+      moveScheduler.push(event);
+    };
 
     const handlePointerUp = (event: PointerEvent) => {
+      moveScheduler.flush();
       activePointersRef.current.delete(event.pointerId);
       if (activePointersRef.current.size < 2) {
         pinchStartDistRef.current = 0;
@@ -668,13 +682,14 @@ const CounterAnimationEditorModal = ({
     window.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
+      moveScheduler.cancel();
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
     };
     // 핸들러는 ref만 읽어서 재구독 불필요 — 매 렌더 재등록이 드래그 렉을 만듦
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [continuousInputStrategy, isOpen]);
 
   const handlePointPointerDown = (
     event: React.PointerEvent<SVGCircleElement>,
@@ -935,6 +950,7 @@ const CounterAnimationEditorModal = ({
             >
               <svg
                 ref={svgRef}
+                data-counter-bezier-editor="true"
                 className="absolute inset-0 w-full h-full"
                 viewBox={viewBoxStr}
                 preserveAspectRatio="none"
@@ -1015,6 +1031,7 @@ const CounterAnimationEditorModal = ({
                   vectorEffect="non-scaling-stroke"
                 />
                 <circle
+                  data-counter-bezier-handle="p1"
                   cx={p1w.x}
                   cy={p1w.y}
                   r={HANDLE_HIT_RADIUS * uns}
@@ -1032,6 +1049,7 @@ const CounterAnimationEditorModal = ({
                   style={{ pointerEvents: 'none' }}
                 />
                 <circle
+                  data-counter-bezier-handle="p2"
                   cx={p2w.x}
                   cy={p2w.y}
                   r={HANDLE_HIT_RADIUS * uns}
