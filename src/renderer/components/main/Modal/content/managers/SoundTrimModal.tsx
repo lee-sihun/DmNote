@@ -9,6 +9,10 @@ import {
   lockCustomCursor,
   unlockCustomCursor,
 } from '@utils/grid/cursorUtils';
+import {
+  createRafLatestScheduler,
+  type ContinuousInputStrategy,
+} from '@utils/animation/rafLatestScheduler';
 
 interface SoundTrimModalProps {
   isOpen: boolean;
@@ -20,6 +24,8 @@ interface SoundTrimModalProps {
   editingTrimEndRatio?: number;
   editingDisplayName?: string;
   initialFile?: File | null;
+  /** 성능 계측용 비교 전략. 제품 경로는 프레임당 최신 입력만 반영한다. */
+  continuousInputStrategy?: ContinuousInputStrategy;
 }
 
 type DragTarget = 'start' | 'end' | null;
@@ -315,6 +321,7 @@ const SoundTrimModal = ({
   editingTrimEndRatio,
   editingDisplayName,
   initialFile,
+  continuousInputStrategy = 'frame',
 }: SoundTrimModalProps) => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -737,16 +744,10 @@ const SoundTrimModal = ({
   viewZoomRef.current = viewZoom;
   const viewPanRatioRef = useRef(viewPanRatio);
   viewPanRatioRef.current = viewPanRatio;
-  const isWheelProcessingRef = useRef(false);
+  const wheelDeltaRef = useRef(0);
 
-  const handleWheel = (e: WheelEvent) => {
-    e.preventDefault();
+  const applyWheel = (e: WheelEvent, deltaY: number) => {
     if (!audioBuffer) return;
-    if (isWheelProcessingRef.current) return;
-    isWheelProcessingRef.current = true;
-    requestAnimationFrame(() => {
-      isWheelProcessingRef.current = false;
-    });
 
     const host = waveformRef.current;
     if (!host) return;
@@ -763,7 +764,7 @@ const SoundTrimModal = ({
     const curViewSpan = 1 / curZoom;
     const mouseAudioRatio = curPan + mouseScreenRatio * curViewSpan;
 
-    const zoomFactor = e.deltaY > 0 ? 0.85 : 1.18;
+    const zoomFactor = Math.exp(-deltaY * 0.0018);
     const newZoom = clamp(curZoom * zoomFactor, MIN_VIEW_ZOOM, MAX_VIEW_ZOOM);
     const newViewSpan = 1 / newZoom;
 
@@ -778,8 +779,22 @@ const SoundTrimModal = ({
     if (!isOpen) return;
     const node = waveformRef.current;
     if (!node) return;
+    const scheduler = createRafLatestScheduler<WheelEvent>((event) => {
+      const deltaY = wheelDeltaRef.current;
+      wheelDeltaRef.current = 0;
+      applyWheel(event, deltaY);
+    }, continuousInputStrategy);
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      wheelDeltaRef.current += event.deltaY;
+      scheduler.push(event);
+    };
     node.addEventListener('wheel', handleWheel, { passive: false });
-    return () => node.removeEventListener('wheel', handleWheel);
+    return () => {
+      scheduler.cancel();
+      wheelDeltaRef.current = 0;
+      node.removeEventListener('wheel', handleWheel);
+    };
   });
 
   // 중간 버튼 드래그: 줌 시 수평 패닝
@@ -803,14 +818,22 @@ const SoundTrimModal = ({
     if (canvas) canvas.style.cursor = '';
     host.style.cursor = 'grabbing';
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const applyMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
       let newPan = startPan - (deltaX / Math.max(1, drawableW)) * viewSpan;
       newPan = clamp(newPan, 0, Math.max(0, 1 - viewSpan));
       setViewPanRatio(newPan);
     };
+    const moveScheduler = createRafLatestScheduler(
+      applyMouseMove,
+      continuousInputStrategy,
+    );
+    const handleMouseMove = (moveEvent: MouseEvent) =>
+      moveScheduler.push(moveEvent);
 
     const cleanup = () => {
+      moveScheduler.flush();
+      moveScheduler.cancel();
       host.style.cursor = '';
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', cleanup);
@@ -959,10 +982,17 @@ const SoundTrimModal = ({
     lockCustomCursor('ew-resize', event.nativeEvent as unknown as MouseEvent);
     updateFromClientX(event.clientX, nextTarget);
 
-    const registeredMove = handlePointerMove;
+    const moveScheduler = createRafLatestScheduler(
+      handlePointerMove,
+      continuousInputStrategy,
+    );
+    const registeredMove = (moveEvent: PointerEvent) =>
+      moveScheduler.push(moveEvent);
     const registeredUp = handlePointerUp;
 
     handleDragCleanupRef.current = () => {
+      moveScheduler.flush();
+      moveScheduler.cancel();
       dragTargetRef.current = null;
       unlockCustomCursor();
       window.removeEventListener('pointermove', registeredMove);
@@ -1077,6 +1107,7 @@ const SoundTrimModal = ({
         <div className="flex-1 min-w-0 min-h-0 bg-fill-faint rounded-surface p-[10px] flex flex-col">
           <div
             ref={waveformRef}
+            data-sound-waveform="true"
             className="relative flex-1 min-h-0 min-w-0 rounded-md overflow-hidden bg-inset"
             onPointerDown={handleWaveformPointerDown}
           >
