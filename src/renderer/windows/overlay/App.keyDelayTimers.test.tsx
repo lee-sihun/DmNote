@@ -71,11 +71,8 @@ vi.mock('@stores/data/useKnobItemStore', () => ({
     selector: (state: { positions: Record<string, never[]> }) => T,
   ) => selector({ positions: {} }),
 }));
-vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
-  usePluginDisplayElementStore: <T,>(
-    selector: (state: { elements: never[] }) => T,
-  ) => selector({ elements: [] }),
-}));
+// usePluginDisplayElementStore는 실제 스토어 사용 — App이 store API
+// (getState/subscribe)를 요구하며, 이 파일은 플러그인 요소를 조작하지 않음
 vi.mock('@components/shared/OverlayScene', () => ({ default: () => null }));
 vi.mock('@hooks/shared/useLayoutComputation', () => ({
   computeLayout: () => ({

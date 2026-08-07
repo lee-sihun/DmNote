@@ -279,12 +279,10 @@ const NoteSetting = ({
           />
         </PropertyRow>
         <PropertyRow label={`${t('noteSetting.fade')}${reverse ? ' (R)' : ''}`}>
-          <div
-            className="relative h-[23px] bg-inset rounded-md"
-            style={{ width: '54px' }}
-          >
+          {/* 외형은 label 셸이 소유, input은 투명 flex 자식 - 긴 값도 잘리지 않음 */}
+          <label className="flex items-center gap-[4px] h-[23px] px-[6px] w-[54px] bg-inset rounded-md cursor-text focus-within:shadow-focus-ring">
             <svg
-              className="absolute left-[5px] top-[50%] transform -translate-y-1/2 pointer-events-none text-fg-muted"
+              className="shrink-0 text-fg-muted"
               width="12"
               height="12"
               viewBox="0 0 14 14"
@@ -319,15 +317,12 @@ const NoteSetting = ({
                     String(sanitizeNumericValue(fadeTopPx, 'fadeTopPx')),
                   );
               }}
-              className="absolute left-[20px] top-0 h-[23px] w-[26px] bg-transparent text-body tabular-nums text-fg text-center"
+              className="flex-1 min-w-0 h-full bg-transparent text-body tabular-nums text-fg text-center"
             />
-          </div>
-          <div
-            className="relative h-[23px] bg-inset rounded-md"
-            style={{ width: '54px' }}
-          >
+          </label>
+          <label className="flex items-center gap-[4px] h-[23px] px-[6px] w-[54px] bg-inset rounded-md cursor-text focus-within:shadow-focus-ring">
             <svg
-              className="absolute left-[5px] top-[50%] transform -translate-y-1/2 pointer-events-none text-fg-muted"
+              className="shrink-0 text-fg-muted"
               width="12"
               height="12"
               viewBox="0 0 14 14"
@@ -362,9 +357,9 @@ const NoteSetting = ({
                     String(sanitizeNumericValue(fadeBottomPx, 'fadeBottomPx')),
                   );
               }}
-              className="absolute left-[20px] top-0 h-[23px] w-[26px] bg-transparent text-body tabular-nums text-fg text-center"
+              className="flex-1 min-w-0 h-full bg-transparent text-body tabular-nums text-fg text-center"
             />
-          </div>
+          </label>
         </PropertyRow>
       </PropertySection>
     </div>

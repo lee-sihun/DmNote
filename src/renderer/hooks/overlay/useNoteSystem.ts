@@ -88,6 +88,16 @@ interface UseNoteSystemReturn {
   updateTrackLayouts: (layouts: TrackLayoutInput[]) => void;
 }
 
+// 렌더마다 재생성되는 내부 구현 중 안정 래퍼가 위임하는 대상
+type LatestNoteSystemFns = Pick<
+  UseNoteSystemReturn,
+  | 'subscribe'
+  | 'handleKeyDown'
+  | 'handleKeyUp'
+  | 'finalizeAllActive'
+  | 'reconcileActiveNotes'
+>;
+
 const acquireNote = (pool: Note[]): Note => {
   const note = pool.pop();
   if (note) {
@@ -138,7 +148,8 @@ export function useNoteSystem({
   noteSettings,
 }: UseNoteSystemOptions): UseNoteSystemReturn {
   const notesRef = useRef<Record<string, Note[]>>({});
-  const noteEffectEnabled = useRef<boolean>(true);
+  // 마운트~첫 effect 사이에도 최신값 보장 - 반환 핸들러는 삼항 없이 이 ref만 가드
+  const noteEffectEnabled = useRef<boolean>(!!noteEffect);
   const activeNotes = useRef<Map<string, NoteState[]>>(new Map());
   const flowSpeedRef = useRef<number>(DEFAULT_NOTE_SETTINGS.speed);
   const trackHeightRef = useRef<number>(DEFAULT_NOTE_SETTINGS.trackHeight);
@@ -701,14 +712,8 @@ export function useNoteSystem({
     };
   }, []);
 
-  // 노트 효과가 꺼져있으면 no-op 함수 반환하여 오버헤드 최소화
-  const noOpHandler = (): void => {};
-  const effectiveHandleKeyDown = noteEffect ? handleKeyDown : noOpHandler;
-  const effectiveHandleKeyUp = noteEffect ? handleKeyUp : noOpHandler;
-
   // 탭 전환 시 진행 중인 모든 노트 강제 완료
-  const finalizeAllActiveRef = useRef<() => void>(() => {});
-  finalizeAllActiveRef.current = (): void => {
+  const finalizeAllActive = (): void => {
     for (const [keyName, stateList] of activeNotes.current.entries()) {
       if (!Array.isArray(stateList)) continue;
       for (const state of stateList) {
@@ -735,7 +740,6 @@ export function useNoteSystem({
     }
     activeNotes.current.clear();
   };
-  const finalizeAllActive = (): void => finalizeAllActiveRef.current();
 
   // UP 유실 복구: 스냅샷 기준 실제로 눌려 있지 않은 키의 활성 press를 종료.
   // 유실된 release의 실제 시각은 복원 불가하므로 현재 시각 finalize로
@@ -771,15 +775,31 @@ export function useNoteSystem({
     }
   };
 
-  return {
-    notesRef,
+  // 반환 API는 마운트 1회 고정 - 소비 측 effect deps에 넣어도 재구독이 발생하지
+  // 않는다 (#111 재구독→resetAllKeySignals 함정 차단). 최신 구현은 latest-ref로 공급
+  const latestRef = useRef<LatestNoteSystemFns | undefined>(undefined);
+  latestRef.current = {
     subscribe,
-    handleKeyDown: effectiveHandleKeyDown,
-    handleKeyUp: effectiveHandleKeyUp,
+    handleKeyDown,
+    handleKeyUp,
     finalizeAllActive,
     reconcileActiveNotes,
+  };
+
+  const stableApiRef = useRef<UseNoteSystemReturn | null>(null);
+  stableApiRef.current ??= {
+    notesRef,
+    subscribe: (callback) => latestRef.current!.subscribe(callback),
+    handleKeyDown: (keyName, timing) =>
+      latestRef.current!.handleKeyDown(keyName, timing),
+    handleKeyUp: (keyName, timing) =>
+      latestRef.current!.handleKeyUp(keyName, timing),
+    finalizeAllActive: () => latestRef.current!.finalizeAllActive(),
+    reconcileActiveNotes: (activeKeys) =>
+      latestRef.current!.reconcileActiveNotes(activeKeys),
     noteBuffer: noteBufferRef.current,
     updateTrackLayouts: (layouts: TrackLayoutInput[]) =>
       noteBufferRef.current.updateTrackLayouts(layouts),
   };
+  return stableApiRef.current;
 }

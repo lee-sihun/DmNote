@@ -8,18 +8,9 @@ import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
-
-interface PluginElement {
-  hidden?: boolean;
-  tabId?: string;
-  position: { x: number; y: number };
-  anchor?: {
-    keyCode?: string;
-    offset?: { x?: number; y?: number };
-  };
-  measuredSize?: { width?: number; height?: number };
-  estimatedSize?: { width?: number; height?: number };
-}
+// 레이아웃이 읽을 수 있는 플러그인 필드는 투영 타입으로 제한 —
+// 필드 추가 시 selectPluginLayoutElements·pluginLayoutElementsEqual 동반 수정 필요
+import type { PluginLayoutElement } from '@utils/plugin/pluginLayoutElements';
 
 interface LayoutInput {
   // canonical 슬롯 식별자 배열 (slotCanonical 결과, 원본 KeySlot 아님)
@@ -31,7 +22,7 @@ interface LayoutInput {
   trackHeight: number;
   noteSettings: NoteSettings;
   selectedKeyType?: string;
-  pluginElements?: PluginElement[];
+  pluginElements?: PluginLayoutElement[];
   overlayPadding?: number;
 }
 

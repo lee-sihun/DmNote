@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   currentMonitor,
   getCurrentWindow,
@@ -26,6 +26,11 @@ import {
 } from '@stores/signals/keySignals';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
+import {
+  selectPluginLayoutElements,
+  pluginLayoutElementsEqual,
+} from '@utils/plugin/pluginLayoutElements';
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
 import {
@@ -50,6 +55,10 @@ const cancelKeyDelayTimers = (
   entries.forEach((entry) => entry.timers.clear());
   entries.clear();
 };
+
+// 슬라이스 부재 시에도 identity 안정 - computeLayout 메모 deps로 사용됨
+// 이종 배열 5곳이 같은 인스턴스를 별칭하므로 freeze로 교차 오염 차단
+const EMPTY_SLICE: never[] = Object.freeze([]) as never[];
 
 const flushKeyDelayTimers = (
   entries: Map<string, KeyDelayTimerEntry>,
@@ -127,8 +136,11 @@ export default function App() {
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
   const knobPositions = useKnobItemStore((state) => state.positions);
-  const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements,
+  // 레이아웃 필드만 투영 구독 - 플러그인 state/html 변경이 App 리렌더로 승격되지 않게
+  const pluginElements = useStoreWithEqualityFn(
+    usePluginDisplayElementStore,
+    selectPluginLayoutElements,
+    pluginLayoutElementsEqual,
   );
 
   const backgroundColor = useSettingsStore((state) => state.backgroundColor);
@@ -137,9 +149,11 @@ export default function App() {
   const setAlwaysOnTop = useSettingsStore((state) => state.setAlwaysOnTop);
   const globalNoteSettings = useSettingsStore((state) => state.noteSettings);
   const tabNoteOverrides = useSettingsStore((state) => state.tabNoteOverrides);
-  const noteSettings = mergeNoteSettings(
-    globalNoteSettings,
-    tabNoteOverrides?.[selectedKeyType],
+  // 현재 탭 override로 deps 한정 - 다른 탭 override 변경이 재병합·재계산으로 번지지 않게
+  const currentTabNoteOverride = tabNoteOverrides?.[selectedKeyType];
+  const noteSettings = useMemo(
+    () => mergeNoteSettings(globalNoteSettings, currentTabNoteOverride),
+    [globalNoteSettings, currentTabNoteOverride],
   );
   const noteEffect = useSettingsStore((state) => state.noteEffect);
   const overlayPadding = useSettingsStore(
@@ -396,19 +410,6 @@ export default function App() {
     }
     keyDisplayDelayMsRef.current = keyDisplayDelayMs;
   }, [keyDisplayDelayMs]);
-
-  // 키 활성 상태는 signals로 관리하여 App 리렌더를 방지
-  const [_layoutVersion, setLayoutVersion] = useState(0);
-
-  useEffect(() => {
-    const onResize = () => setLayoutVersion((value) => value + 1);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  useEffect(() => {
-    setLayoutVersion((value) => value + 1);
-  }, [trackHeight]);
 
   // 탭 전환 시 진행 중인 모든 노트 강제 완료
   useEffect(() => {
@@ -701,11 +702,16 @@ export default function App() {
     // 콜백이 읽는 값은 keyEventContextRef로 공급 - 구독은 창 수명과 동일
   }, []);
 
-  const currentSlots = keyMappings[selectedKeyType] ?? [];
+  const currentSlots = keyMappings[selectedKeyType] ?? EMPTY_SLICE;
   // 시그널·트랙 키는 canonical, 표시는 합성 라벨 (계약 §3, §11)
-  const currentKeys = currentSlots.map((slot) => slotCanonical(slot));
-  const currentKeyLabels = currentSlots.map((slot) => slotDisplayName(slot));
-  const currentValidKeySignature = validKeySignature(currentSlots);
+  const { currentKeys, currentKeyLabels, currentValidKeySignature } = useMemo(
+    () => ({
+      currentKeys: currentSlots.map((slot) => slotCanonical(slot)),
+      currentKeyLabels: currentSlots.map((slot) => slotDisplayName(slot)),
+      currentValidKeySignature: validKeySignature(currentSlots),
+    }),
+    [currentSlots],
+  );
 
   // 탭·현재 키 집합 전환 시 예약 타이머와 눌림 신호를 권위 상태로 정합
   // positions와 다른 탭의 매핑 변경은 signature가 같아 이 effect를 건드리지 않음
@@ -749,11 +755,13 @@ export default function App() {
     };
   }, [selectedKeyType, currentValidKeySignature]);
 
-  const currentPositions = positions[selectedKeyType] ?? [];
-  const currentStatPositions = statPositions[selectedKeyType] ?? [];
-  const currentGraphPositions = graphPositions[selectedKeyType] ?? [];
-  const currentKnobPositions = knobPositions[selectedKeyType] ?? [];
+  const currentPositions = positions[selectedKeyType] ?? EMPTY_SLICE;
+  const currentStatPositions = statPositions[selectedKeyType] ?? EMPTY_SLICE;
+  const currentGraphPositions = graphPositions[selectedKeyType] ?? EMPTY_SLICE;
+  const currentKnobPositions = knobPositions[selectedKeyType] ?? EMPTY_SLICE;
 
+  // 레이아웃 입력이 실제로 바뀔 때만 재계산 - webglTracks identity가 안정되어
+  // updateTrackLayouts effect·WebGL uniform effect가 무관한 리렌더에 재실행되지 않음
   const {
     bounds,
     displayPositions,
@@ -762,19 +770,36 @@ export default function App() {
     displayKnobPositions,
     positionOffset,
     webglTracks,
-  } = computeLayout({
-    currentKeys,
-    currentPositions,
-    currentStatPositions,
-    currentGraphPositions,
-    currentKnobPositions,
-    trackHeight,
-    noteSettings,
-    selectedKeyType,
-    pluginElements,
-    overlayPadding,
-  });
+  } = useMemo(
+    () =>
+      computeLayout({
+        currentKeys,
+        currentPositions,
+        currentStatPositions,
+        currentGraphPositions,
+        currentKnobPositions,
+        trackHeight,
+        noteSettings,
+        selectedKeyType,
+        pluginElements,
+        overlayPadding,
+      }),
+    [
+      currentKeys,
+      currentPositions,
+      currentStatPositions,
+      currentGraphPositions,
+      currentKnobPositions,
+      trackHeight,
+      noteSettings,
+      selectedKeyType,
+      pluginElements,
+      overlayPadding,
+    ],
+  );
 
+  // updateTrackLayouts는 useNoteSystem이 마운트 1회 고정 참조를 보장하므로
+  // deps 포함이 재실행을 유발하지 않으며, 훅이 updater를 교체하는 미래 변경에도 안전
   useEffect(() => {
     updateTrackLayouts(webglTracks);
   }, [webglTracks, updateTrackLayouts]);
