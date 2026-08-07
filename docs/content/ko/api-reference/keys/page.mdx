@@ -297,11 +297,17 @@ interface KeyStatePayload {
   // 입력 수신~emit 경과 시간(ms).
   // `performance.now() - eventAgeMs`로 실제 입력 시각 복원
   eventAgeMs?: number;
-  // UP 이벤트 한정. 입력 데몬이 캡처 시점에 측정한 물리 눌림
-  // 지속 시간(ms) - 전달 지연·지터의 영향을 받지 않음
+  // UP 이벤트 한정. 같은 물리 입력이 canonical DOWN과 UP을 만든 경우
+  // 입력 데몬이 측정한 물리 눌림 지속 시간(ms). source가 다르거나
+  // 불명확하면 생략됨
   holdDurationMs?: number;
 }
 ```
+
+`holdDurationMs`가 있으면 전달 지연·지터의 영향을 받지 않습니다. canonical
+슬롯은 여러 장치나 멤버 키의 겹친 입력 동안 계속 활성일 수 있으므로, 이 선택적
+필드가 없을 때 전체 활성 시간이 필요한 소비자는 같은 canonical의 `DOWN`과 `UP`
+시각을 직접 추적해야 합니다.
 
 ```javascript
 const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {

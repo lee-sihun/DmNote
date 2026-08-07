@@ -30,7 +30,8 @@ interface KeyStateEvent {
   // Recover the real input time with `performance.now() - eventAgeMs`.
   eventAgeMs?: number;
   // UP events only. Physical hold duration (ms) measured by the input
-  // daemon at capture time - immune to delivery latency and jitter.
+  // daemon when the same physical input produced canonical DOWN and UP.
+  // Omitted when those transitions came from different or unknown inputs.
   holdDurationMs?: number;
 }
 
@@ -38,6 +39,11 @@ const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
   console.log(`[${mode}] ${key} → ${state}`);
 });
 ```
+
+`holdDurationMs` is delivery-latency independent when present. A canonical slot
+can remain active across overlapping devices or member keys, so consumers that
+need its full active duration must also track the matching canonical `DOWN` and
+`UP` timestamps when this optional field is absent.
 
 The returned function also exposes a `ready` promise that resolves once the
 subscription is actually registered with the backend. Events fired before
