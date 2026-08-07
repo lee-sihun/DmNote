@@ -807,6 +807,7 @@ const Settings = ({
             {/* 키뷰어 설정 */}
             <SettingCard>
               <SettingToggleRow
+                commitStrategy="after-paint"
                 label={t('settings.overlayLock')}
                 checked={overlayLocked}
                 onToggle={handleOverlayLockChange}
@@ -814,6 +815,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
               />
               <SettingToggleRow
+                commitStrategy="after-paint"
                 label={t('settings.alwaysOnTop')}
                 checked={alwaysOnTop}
                 onToggle={handleAlwaysOnTopChange}
@@ -821,6 +823,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
               />
               <SettingToggleRow
+                commitStrategy="after-paint"
                 label={t('settings.noteEffect')}
                 checked={noteEffect}
                 onToggle={handleNoteEffectChange}
@@ -828,6 +831,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
               />
               <SettingToggleRow
+                commitStrategy="after-paint"
                 label={t('settings.keyCounter')}
                 checked={keyCounterEnabled}
                 onToggle={handleKeyCounterToggle}
@@ -835,6 +839,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
               />
               <SettingToggleRow
+                commitStrategy="after-paint"
                 label={t('settings.trayEnabled')}
                 checked={trayEnabled}
                 onToggle={handleTrayToggle}
@@ -926,6 +931,7 @@ const Settings = ({
               onMouseLeave={() => setHoveredKey(null)}
             >
               <SettingToggleRow
+                commitStrategy="after-paint"
                 label={t('settings.obsMode')}
                 checked={obsStatus.running}
                 onToggle={handleObsToggle}
@@ -1083,12 +1089,14 @@ const Settings = ({
               </SettingRow>
               {!isMacOS && (
                 <SettingToggleRow
+                  commitStrategy="after-paint"
                   label={t('settings.autoUpdate')}
                   checked={autoUpdateEnabled}
                   onToggle={handleAutoUpdateToggle}
                 />
               )}
               <SettingToggleRow
+                commitStrategy="after-paint"
                 label={t('settings.developerMode')}
                 checked={developerModeEnabled}
                 onToggle={handleDeveloperModeToggle}

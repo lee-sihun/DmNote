@@ -1,6 +1,10 @@
 import React from 'react';
 import Checkbox from '@components/main/common/Checkbox';
 import {
+  useOptimisticBooleanCommit,
+  type BooleanCommitStrategy,
+} from '@hooks/useOptimisticBooleanCommit';
+import {
   SETTINGS_CARD_CLASS,
   SETTINGS_ROW_CLASS,
   SETTINGS_LABEL_CLASS,
@@ -66,6 +70,7 @@ interface SettingToggleRowProps {
   label: string;
   checked: boolean;
   onToggle: () => void;
+  commitStrategy?: BooleanCommitStrategy;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }
@@ -76,22 +81,31 @@ export const SettingToggleRow = ({
   label,
   checked,
   onToggle,
+  commitStrategy = 'sync',
   onMouseEnter,
   onMouseLeave,
-}: SettingToggleRowProps) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={checked}
-    onClick={onToggle}
-    onMouseEnter={onMouseEnter}
-    onMouseLeave={onMouseLeave}
-    data-dmn-press-scope=""
-    className={`${SETTINGS_ROW_CLASS} cursor-pointer`}
-  >
-    <span className={SETTINGS_LABEL_CLASS}>{label}</span>
-    <span aria-hidden="true" className="pointer-events-none">
-      <Checkbox checked={checked} onChange={onToggle} />
-    </span>
-  </button>
-);
+}: SettingToggleRowProps) => {
+  const { value: visualChecked, toggle } = useOptimisticBooleanCommit({
+    canonicalValue: checked,
+    onCommit: onToggle,
+    strategy: commitStrategy,
+  });
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={visualChecked}
+      onClick={toggle}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      data-dmn-press-scope=""
+      className={`${SETTINGS_ROW_CLASS} cursor-pointer`}
+    >
+      <span className={SETTINGS_LABEL_CLASS}>{label}</span>
+      <span aria-hidden="true" className="pointer-events-none">
+        <Checkbox checked={visualChecked} onChange={toggle} />
+      </span>
+    </button>
+  );
+};

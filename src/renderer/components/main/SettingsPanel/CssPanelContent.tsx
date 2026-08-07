@@ -168,6 +168,7 @@ const CssPanelContent = ({
       <div className="px-[12px] pb-[12px] shrink-0">
         <div className={PANEL_SECTION_CLASS}>
           <SettingToggleRow
+            commitStrategy="after-paint"
             label={t('settings.customCSS')}
             checked={useCustomCSS}
             onToggle={onToggleCustomCSS}

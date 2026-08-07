@@ -54,6 +54,7 @@ const PluginsPanelContent = ({
       <div className="px-[12px] pb-[12px] shrink-0">
         <div className={PANEL_SECTION_CLASS}>
           <SettingToggleRow
+            commitStrategy="after-paint"
             label={t('settings.customJS')}
             checked={useCustomJS}
             onToggle={onToggleCustomJS}
