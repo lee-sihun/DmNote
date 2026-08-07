@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 142개   |
+| 대기                             | 131개   |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 23개    |
+| 실험·검증 중                     | 34개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -165,7 +165,7 @@
 | PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    7.563 |    0.431 |  94.3% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json) |
 | PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    7.576 |    0.454 |  94.0% | 검증 | [기준선](../benchmarks/results/pilot-02-baseline.json) · [개선](../benchmarks/results/pilot-02-improved.json) |
 | BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 실험 | `useOptimisticBooleanCommit`·선택적 `commitStrategy` 제공, PILOT-01·02 검증                                   |
-| BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 대기 | 행 전체 토글                                                                                                  |
+| BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 실험 | `05c02e43`, 선택적 `after-paint`·설정 토글 적용                                                               |
 | BASE-03  | Dropdown                           | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·선택·닫기                                                                                                |
 | BASE-04  | NumberInput·OptionalNumberInput    | P0/P1    | CTP ms       |        — |        — |      — | 대기 | draft·preview·commit                                                                                          |
 | BASE-05  | TextInput·SearchField              | P1       | CTP ms       |        — |        — |      — | 대기 | local echo·검색 필터                                                                                          |
@@ -184,16 +184,16 @@
 
 | ID     | 항목                                       | 우선순위 | 주 지표 | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                          |
 | ------ | ------------------------------------------ | -------- | ------- | -------: | -------: | -----: | ---- | ---------------------------------- |
-| TOG-01 | 오버레이 잠금                              | P2       | CTP ms  |        — |        — |      — | 대기 | ETC도 함께 측정                    |
-| TOG-02 | 항상 위                                    | P2       | CTP ms  |        — |        — |      — | 대기 | 창 상태 재동기화                   |
-| TOG-03 | 전역 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 대기 | 오버레이 렌더 영향                 |
-| TOG-04 | 전역 키 카운터                             | P1       | CTP ms  |        — |        — |      — | 대기 | 키 렌더 영향                       |
-| TOG-05 | 트레이 모드                                | P2       | CTP ms  |        — |        — |      — | 대기 | ETC도 함께 측정                    |
-| TOG-06 | OBS 모드                                   | P2       | CTP ms  |        — |        — |      — | 대기 | 서비스 시작·중지 ETC               |
-| TOG-07 | 자동 업데이트                              | P2       | CTP ms  |        — |        — |      — | 대기 | 설정 저장                          |
-| TOG-08 | 개발자 모드                                | P2       | CTP ms  |        — |        — |      — | 대기 | DevTools open 포함                 |
-| TOG-09 | 커스텀 CSS                                 | P1/P2    | CTP ms  |        — |        — |      — | 대기 | 스타일 재계산 영향                 |
-| TOG-10 | 커스텀 JS                                  | P2       | CTP ms  |        — |        — |      — | 대기 | 런타임 활성화 ETC                  |
+| TOG-01 | 오버레이 잠금                              | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, CTP·ETC 측정 대기      |
+| TOG-02 | 항상 위                                    | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 재동기화 검증 대기     |
+| TOG-03 | 전역 노트 효과                             | P1       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, WebView 측정 대기      |
+| TOG-04 | 전역 키 카운터                             | P1       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, WebView 측정 대기      |
+| TOG-05 | 트레이 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, CTP·ETC 측정 대기      |
+| TOG-06 | OBS 모드                                   | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 서비스 ETC 측정 대기   |
+| TOG-07 | 자동 업데이트                              | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 저장 실패 검증 대기    |
+| TOG-08 | 개발자 모드                                | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, DevTools ETC 측정 대기 |
+| TOG-09 | 커스텀 CSS                                 | P1/P2    | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 스타일 CTP 측정 대기   |
+| TOG-10 | 커스텀 JS                                  | P2       | CTP ms  |        — |        — |      — | 실험 | `05c02e43`, 런타임 ETC 측정 대기   |
 | TOG-11 | Grid 미니맵 표시                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, WebView 측정 대기      |
 | TOG-12 | Grid 정렬 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기   |
 | TOG-13 | Grid 간격 가이드                           | P1       | CTP ms  |        — |        — |      — | 실험 | `99e64f07`, 드래그 F95 측정 대기   |
@@ -463,6 +463,19 @@
 | 정확성 검증 | 타입 검사·린트·공통 Checkbox, 패널 계약, 배치 handler, 렌더 계약의 34개 테스트 통과           |
 | 성능 값     | 개별 WebView CTP와 Grid 드래그·리사이즈 F95 미측정 — 실측 전까지 수치 미기재                  |
 | 결론        | 구현은 실험 상태이며 플랫폼 자동 측정과 저장 실패 재동기화 검증 후 완료 여부 결정             |
+
+### EXP-006: 설정 토글 행 시각 우선 계약
+
+| 필드        | 내용                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------- |
+| 항목 ID     | BASE-02, TOG-01~10                                                                                 |
+| 적용 범위   | 오버레이 잠금, 항상 위, 전역 노트·카운터, 트레이, OBS, 자동 업데이트, 개발자 모드, 커스텀 CSS·JS   |
+| 변경 내용   | 행 버튼이 소유한 `SettingToggleRow`에 선택적 `after-paint` 계약을 추가하고 10개 설정 표면에 옵트인 |
+| 커밋·PR     | `05c02e43`                                                                                         |
+| 정확성 검증 | 기본 sync 호환·행과 장식 체크박스의 동시 시각 반영·연타 최종 의도 병합 테스트 통과                 |
+| 성능 값     | 개별 WebView CTP와 IPC·서비스 ETC 미측정 — 실측 전까지 수치 미기재                                 |
+| 남은 게이트 | 저장·IPC 실패 시 authoritative 재동기화, OBS 연속 조작, macOS WKWebView·Windows WebView2 자동 측정 |
+| 결론        | 공통 기반과 사용처 구현은 실험 상태이며 실패 정합성과 플랫폼 측정 후 완료 여부 결정                |
 
 ## 8. 완료 게이트
 
