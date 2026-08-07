@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "GRID-09",
+  "variant": "legacy-baseline",
+  "strategy": "legacy",
+  "measuredAt": "2026-08-07T11:24:56.244Z",
+  "commit": "a9d8d465c31005628237a164d62506b834b13b35",
+  "runtime": {
+    "kind": "vitest-jsdom-marquee-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.29033400000002985,
+        "p95": 0.6840420000000904,
+        "max": 1.0653749999999036
+      },
+      "visualDomCommitMs": {
+        "p50": 0.44191699999998946,
+        "p95": 1.1774169999999913,
+        "max": 1.526707999999985
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.014876999999728469,
+        "p95": 0.03999900000019352,
+        "max": 0.04408299999988685
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.23929199999997763,
+        "p95": 0.34220799999991414,
+        "max": 0.34854200000006585
+      },
+      "visualDomCommitMs": {
+        "p50": 1.5961249999999154,
+        "p95": 1.8791249999999309,
+        "max": 1.9085410000000138
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.18212200000061785,
+        "p95": 0.2413879999994606,
+        "max": 0.2652629999995497
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.2235000000000582,
+        "p95": 0.26137500000004366,
+        "max": 0.32816699999989396
+      },
+      "visualDomCommitMs": {
+        "p50": 3.339292000000114,
+        "p95": 6.321124999999938,
+        "max": 7.055290999999897
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.8044199999908415,
+        "p95": 0.9063770000011573,
+        "max": 0.946880999995301
+      }
+    }
+  ]
+}

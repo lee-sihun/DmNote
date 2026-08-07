@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "benchmarkId": "GRID-09",
+  "variant": "improved",
+  "strategy": "frame",
+  "measuredAt": "2026-08-07T11:24:58.312Z",
+  "commit": "a9d8d465c31005628237a164d62506b834b13b35",
+  "runtime": {
+    "kind": "vitest-jsdom-marquee-burst-proxy",
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "cases": [
+    {
+      "itemCount": 1,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.16550000000006548,
+        "p95": 0.3491670000000795,
+        "max": 13.935749999999985
+      },
+      "visualDomCommitMs": {
+        "p50": 1.6701249999999845,
+        "p95": 1.9809999999999945,
+        "max": 14.473292000000015
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.018248999999968873,
+        "p95": 0.028166999999939435,
+        "max": 0.03966900000000351
+      }
+    },
+    {
+      "itemCount": 100,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.12483299999996689,
+        "p95": 0.15362500000003365,
+        "max": 0.19366700000000492
+      },
+      "visualDomCommitMs": {
+        "p50": 2.9792079999999714,
+        "p95": 3.2493749999999864,
+        "max": 3.385291999999936
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.19644299999970372,
+        "p95": 0.2355569999999716,
+        "max": 0.29683499999941887
+      }
+    },
+    {
+      "itemCount": 500,
+      "burstSize": 20,
+      "iterations": 30,
+      "warmupIterations": 5,
+      "eventBlockingMs": {
+        "p50": 0.11133399999994253,
+        "p95": 0.13858300000015333,
+        "max": 0.13925000000017462
+      },
+      "visualDomCommitMs": {
+        "p50": 4.755542000000105,
+        "p95": 5.033374999999978,
+        "max": 7.369999999999891
+      },
+      "reactCommitDurationMs": {
+        "p50": 0.8139030000033927,
+        "p95": 0.9321369999956914,
+        "max": 1.130808000003526
+      }
+    }
+  ]
+}

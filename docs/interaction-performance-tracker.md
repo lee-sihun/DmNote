@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 94개    |
+| 대기                             | 93개    |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 71개    |
+| 실험·검증 중                     | 72개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -348,6 +348,29 @@
 - 정확성 게이트: wheel delta 누적·미들 팬 최신 좌표·드래그 프레임 병합 테스트 통과
 <!-- GRID-05:RESULT:END -->
 
+<!-- GRID-09:RESULT:START -->
+
+#### GRID-09 마퀴 선택 최신 자동 측정
+
+| 조건           | 값                                                         |
+| -------------- | ---------------------------------------------------------- |
+| 측정 경로      | 실제 useGridMarquee + 렌더 DOM 500개, mousemove 20회 burst |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회                     |
+| 구현 코드 커밋 | `f96cdd5718ff93b2de2c43f7e4b3b931cab45388`                 |
+| 측정 코드 커밋 | `a9d8d465c31005628237a164d62506b834b13b35`                 |
+| 비교 전략      | `legacy` → `frame`                                         |
+| 환경           | darwin arm64, v25.2.1                                      |
+
+| P95 지표              |  legacy | frame coalescing | 개선율 |
+| --------------------- | ------: | ---------------: | -----: |
+| burst event blocking  | 0.261ms |          0.139ms |  47.0% |
+| 최종 DOM commit       | 6.321ms |          5.033ms |  20.4% |
+| React commit duration | 0.906ms |          0.932ms |  -2.8% |
+
+- 원시 결과: [기준선](../benchmarks/results/grid-09-marquee-baseline.json) · [개선](../benchmarks/results/grid-09-marquee-improved.json)
+- 정확성 게이트: 최신 좌표 병합·mouseup 최종 좌표 flush 테스트 통과
+<!-- GRID-09:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
 | ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                                 |
@@ -423,7 +446,7 @@
 | GRID-06  | 단일 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | preview·commit                               |
 | GRID-07  | 그룹 리사이즈         | P0       | F95 ms/frame |        — |        — |      — | 대기 | 선택 수별 측정                               |
 | GRID-08  | 그라데이션 축 핸들    | P0       | F95 ms/frame |        — |        — |      — | 대기 | 캔버스 preview                               |
-| GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | 요소 수별 측정                               |
+| GRID-09  | 마퀴 선택             | P0/P1    | F95 ms/frame |    0.261 |    0.139 |  47.0% | 검증 | `f96cdd57`, 최신 좌표 frame coalescing       |
 | GRID-10  | 미니맵 클릭 이동      | P1       | CTP ms       |        — |        — |      — | 대기 | viewport 반영                                |
 | GRID-11  | 미니맵 드래그         | P0       | F95 ms/frame |        — |        — |      — | 대기 | viewport 반영                                |
 | GRID-12  | 요소 단일·다중 선택   | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 교체 포함                               |
@@ -622,6 +645,15 @@
 | GRID-05-FRAME  | 2026-08-07 | GRID-05 | 개선   | `19f65903` | vitest-jsdom-middle-pan-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·mousemove 20회 |   30 | 0.185 | 0.225 | 0.251 | DOM P95 11.384ms·React P95 1.067ms | [JSON](../benchmarks/results/grid-05-middle-pan-improved.json) | pointer burst proxy |
 
 <!-- GRID-05:SESSIONS:END -->
+
+<!-- GRID-09:SESSIONS:START -->
+
+| 세션 ID        | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                    | 시나리오·데이터 크기     | 반복 |   P50 |   P95 |  최대 | 보조 지표                         | 원시 자료                                                   | 비고                |
+| -------------- | ---------- | ------- | ------ | ---------- | ------------------------------------------------------- | ------------------------ | ---: | ----: | ----: | ----: | --------------------------------- | ----------------------------------------------------------- | ------------------- |
+| GRID-09-LEGACY | 2026-08-07 | GRID-09 | 기준선 | `a9d8d465` | vitest-jsdom-marquee-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·mousemove 20회 |   30 | 0.224 | 0.261 | 0.328 | DOM P95 6.321ms·React P95 0.906ms | [JSON](../benchmarks/results/grid-09-marquee-baseline.json) | marquee burst proxy |
+| GRID-09-FRAME  | 2026-08-07 | GRID-09 | 개선   | `a9d8d465` | vitest-jsdom-marquee-burst-proxy, darwin arm64, v25.2.1 | DOM 500개·mousemove 20회 |   30 | 0.111 | 0.139 | 0.139 | DOM P95 5.033ms·React P95 0.932ms | [JSON](../benchmarks/results/grid-09-marquee-improved.json) | marquee burst proxy |
+
+<!-- GRID-09:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -897,6 +929,21 @@
 | 결론        | jsdom burst proxy 검증, 실제 WebView F95 측정 전까지 검증 상태 유지            |
 
 <!-- GRID-05:EXPERIMENT:END -->
+
+<!-- GRID-09:EXPERIMENT:START -->
+
+### EXP-017: Grid 마퀴 좌표 프레임 병합
+
+| 필드        | 내용                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------ |
+| 항목 ID     | GRID-09                                                                              |
+| 변경 내용   | mousemove 최신 좌표를 프레임당 한 번 Store에 반영하고 mouseup 전에 마지막 좌표 flush |
+| 구현 커밋   | `f96cdd57`                                                                           |
+| P95 변화    | 0.261ms → 0.139ms (47.0%)                                                            |
+| 정확성 검증 | 프레임 병합·최종 좌표·선택 종료 테스트 통과                                          |
+| 결론        | jsdom burst proxy 검증, 실제 WebView F95 측정 전까지 검증 상태 유지                  |
+
+<!-- GRID-09:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 
