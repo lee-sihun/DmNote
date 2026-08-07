@@ -275,6 +275,7 @@ export default function App() {
   const openOverlayContextMenuAtImpl = useRef<
     (x: number, y: number) => Promise<void>
   >(async () => {});
+  const contextMenuOpenRef = useRef(false);
   openOverlayContextMenuAtImpl.current = async (x: number, y: number) => {
     const canOpenMainSettings = await resolveCanOpenMainSettings();
     const allTabs = [
@@ -354,7 +355,13 @@ export default function App() {
     }
   };
   const openOverlayContextMenuAt = async (x: number, y: number) => {
-    await openOverlayContextMenuAtImpl.current(x, y);
+    if (contextMenuOpenRef.current) return;
+    contextMenuOpenRef.current = true;
+    try {
+      await openOverlayContextMenuAtImpl.current(x, y);
+    } finally {
+      contextMenuOpenRef.current = false;
+    }
   };
 
   useEffect(() => {

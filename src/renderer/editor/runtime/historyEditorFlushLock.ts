@@ -4,6 +4,7 @@ interface ActiveHistoryFlushLock {
   handshakeId: string;
   root: HTMLElement;
   wasInert: boolean;
+  previousAriaBusy: string | null;
 }
 
 let activeLock: ActiveHistoryFlushLock | null = null;
@@ -46,6 +47,11 @@ const restoreActiveLock = () => {
   if (!activeLock) return;
   setInteractionBlocker(false);
   activeLock.root.inert = activeLock.wasInert;
+  if (activeLock.previousAriaBusy === null) {
+    activeLock.root.removeAttribute('aria-busy');
+  } else {
+    activeLock.root.setAttribute('aria-busy', activeLock.previousAriaBusy);
+  }
   activeLock = null;
 };
 
@@ -59,8 +65,10 @@ export const acquireHistoryEditorFlushLock = (handshakeId: string): boolean => {
     handshakeId,
     root,
     wasInert: root.inert === true,
+    previousAriaBusy: root.getAttribute('aria-busy'),
   };
   root.inert = true;
+  root.setAttribute('aria-busy', 'true');
   setInteractionBlocker(true);
   return true;
 };
