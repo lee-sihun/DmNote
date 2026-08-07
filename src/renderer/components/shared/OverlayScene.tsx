@@ -120,7 +120,6 @@ interface OverlaySceneProps {
 
   // 선택적
   positionOffset?: { x: number; y: number };
-  onMouseDownCapture?: (e: React.MouseEvent<HTMLDivElement>) => void;
   /** PluginElementsRenderer 표시 여부 (Tauri 컨텍스트에서만 true) */
   showPluginElements?: boolean;
 }
@@ -143,7 +142,6 @@ const OverlayScene = ({
   backgroundColor,
   keyCounterEnabled,
   positionOffset,
-  onMouseDownCapture,
   showPluginElements = true,
 }: OverlaySceneProps) => {
   const macOS = isMac();
@@ -161,7 +159,6 @@ const OverlayScene = ({
               contain: 'layout style paint',
             }),
       }}
-      onMouseDownCapture={onMouseDownCapture}
     >
       {noteEffect && (
         <Suspense fallback={null}>

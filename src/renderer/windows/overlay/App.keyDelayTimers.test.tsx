@@ -44,6 +44,10 @@ vi.mock('@hooks/app/useAppBootstrap', () => ({ useAppBootstrap: vi.fn() }));
 vi.mock('@hooks/overlay/useBuiltinStatsSubscription', () => ({
   useBuiltinStatsSubscription: vi.fn(),
 }));
+vi.mock('@hooks/overlay/useOverlayHitRegions', () => ({
+  useOverlayHitRegions: vi.fn(),
+  subscribeHitContextMenu: vi.fn(() => vi.fn()),
+}));
 vi.mock('@hooks/overlay/useNoteSystem', () => ({
   useNoteSystem: () => ({
     notesRef: { current: {} },

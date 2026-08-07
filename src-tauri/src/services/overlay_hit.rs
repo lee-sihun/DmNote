@@ -1,4 +1,7 @@
-use std::{sync::mpsc, time::Duration};
+use std::{
+    sync::Arc,
+    thread::{self, ThreadId},
+};
 
 use anyhow::{anyhow, Context, Result};
 use parking_lot::Mutex;
@@ -6,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 const OVERLAY_LABEL: &str = "overlay";
-const MAIN_THREAD_DISPATCH_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_HIT_RECTS: usize = 4_096;
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
@@ -26,33 +28,57 @@ struct OverlayHitContextMenuPayload {
 
 #[derive(Clone)]
 pub struct OverlayHitService {
-    inner: std::sync::Arc<OverlayHitServiceInner>,
+    inner: Arc<OverlayHitServiceInner>,
 }
 
 struct OverlayHitServiceInner {
     desired: Mutex<OverlayHitDesiredState>,
     native: Mutex<platform::NativeState>,
+    main_thread_id: ThreadId,
 }
 
 #[derive(Debug, Clone)]
 struct OverlayHitDesiredState {
     rects: Vec<OverlayHitRect>,
     last_revision: Option<u64>,
+    parent: Option<usize>,
     visible: bool,
     locked: bool,
     always_on_top: bool,
 }
 
 impl OverlayHitDesiredState {
-    fn apply_regions(&mut self, rects: Vec<OverlayHitRect>, revision: u64) -> bool {
+    fn apply_regions(&mut self, rects: Vec<OverlayHitRect>, revision: u64) -> Result<bool> {
         if self
             .last_revision
             .is_some_and(|last_revision| revision <= last_revision)
         {
-            return false;
+            return Ok(false);
         }
+        validate_hit_rects(&rects)?;
         self.rects = rects;
         self.last_revision = Some(revision);
+        Ok(true)
+    }
+
+    fn observe_parent(&mut self, parent: Option<usize>) -> bool {
+        let parent_replaced =
+            matches!((self.parent, parent), (Some(previous), Some(current)) if previous != current);
+        self.parent = parent;
+        (parent.is_none() || parent_replaced) && self.reset_regions()
+    }
+
+    fn mark_parent_absent(&mut self) {
+        self.parent = None;
+        self.reset_regions();
+    }
+
+    fn reset_regions(&mut self) -> bool {
+        if self.rects.is_empty() && self.last_revision.is_none() {
+            return false;
+        }
+        self.rects.clear();
+        self.last_revision = None;
         true
     }
 }
@@ -60,15 +86,17 @@ impl OverlayHitDesiredState {
 impl OverlayHitService {
     pub fn new(visible: bool, locked: bool, always_on_top: bool) -> Self {
         Self {
-            inner: std::sync::Arc::new(OverlayHitServiceInner {
+            inner: Arc::new(OverlayHitServiceInner {
                 desired: Mutex::new(OverlayHitDesiredState {
                     rects: Vec::new(),
                     last_revision: None,
+                    parent: None,
                     visible,
                     locked,
                     always_on_top,
                 }),
                 native: Mutex::new(platform::NativeState::default()),
+                main_thread_id: thread::current().id(),
             }),
         }
     }
@@ -81,19 +109,13 @@ impl OverlayHitService {
     ) -> Result<()> {
         {
             let mut desired = self.inner.desired.lock();
-            if desired
-                .last_revision
-                .is_some_and(|last_revision| revision <= last_revision)
-            {
+            if !desired.apply_regions(rects, revision)? {
                 log::debug!(
                     "[OverlayHit] stale revision ignored: revision={revision}, last={:?}",
                     desired.last_revision
                 );
                 return Ok(());
             }
-            validate_hit_rects(&rects)?;
-            let applied = desired.apply_regions(rects, revision);
-            debug_assert!(applied);
         }
         self.reconcile(app)
     }
@@ -129,34 +151,42 @@ impl OverlayHitService {
         self.reconcile(app)
     }
 
+    pub fn reset_for_parent_loss(&self) {
+        self.inner.desired.lock().mark_parent_absent();
+    }
+
     pub fn reconcile(&self, app: &AppHandle) -> Result<()> {
-        let overlay = app.get_webview_window(OVERLAY_LABEL);
-        let main_window = app.get_webview_window("main");
-        let thread_window = overlay.as_ref().or(main_window.as_ref());
-        if platform::is_main_thread(thread_window) {
+        if is_current_thread(self.inner.main_thread_id) {
             return self.reconcile_on_main(app);
         }
 
         let service = self.clone();
         let app_handle = app.clone();
-        let (sender, receiver) = mpsc::sync_channel(1);
         app.run_on_main_thread(move || {
-            let result = service.reconcile_on_main(&app_handle);
-            let _ = sender.send(result);
+            if let Err(error) = service.reconcile_on_main(&app_handle) {
+                log::warn!("failed to reconcile overlay hit windows on main thread: {error:#}");
+            }
         })
-        .context("failed to dispatch overlay hit reconciliation")?;
-
-        receiver
-            .recv_timeout(MAIN_THREAD_DISPATCH_TIMEOUT)
-            .map_err(|error| anyhow!("overlay hit reconciliation timed out: {error}"))?
+        .context("failed to dispatch overlay hit reconciliation")
     }
 
     fn reconcile_on_main(&self, app: &AppHandle) -> Result<()> {
-        let desired = self.inner.desired.lock().clone();
         let overlay = app.get_webview_window(OVERLAY_LABEL);
+        let parent = platform::parent_identity(overlay.as_ref())?;
+        let desired = {
+            let mut desired = self.inner.desired.lock();
+            if desired.observe_parent(parent) {
+                log::debug!("[OverlayHit] parent changed; stale regions cleared");
+            }
+            desired.clone()
+        };
         let mut native = self.inner.native.lock();
         platform::reconcile(app, overlay.as_ref(), &desired, &mut native)
     }
+}
+
+fn is_current_thread(expected: ThreadId) -> bool {
+    thread::current().id() == expected
 }
 
 fn validate_hit_rects(rects: &[OverlayHitRect]) -> Result<()> {
@@ -177,6 +207,39 @@ fn validate_hit_rects(rects: &[OverlayHitRect]) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn clip_hit_rect_to_bounds(
+    rect: OverlayHitRect,
+    content_width: f64,
+    content_height: f64,
+) -> Option<OverlayHitRect> {
+    if !content_width.is_finite()
+        || !content_height.is_finite()
+        || content_width <= 0.0
+        || content_height <= 0.0
+    {
+        return None;
+    }
+    let right = rect.x + rect.width;
+    let bottom = rect.y + rect.height;
+    if !right.is_finite() || !bottom.is_finite() {
+        return None;
+    }
+    let left = rect.x.max(0.0);
+    let top = rect.y.max(0.0);
+    let right = right.min(content_width);
+    let bottom = bottom.min(content_height);
+    if right <= left || bottom <= top {
+        return None;
+    }
+    Some(OverlayHitRect {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -203,7 +266,8 @@ mod platform {
     use tauri::{AppHandle, Emitter, WebviewWindow};
 
     use super::{
-        OverlayHitContextMenuPayload, OverlayHitDesiredState, OverlayHitRect, OVERLAY_LABEL,
+        clip_hit_rect_to_bounds, OverlayHitContextMenuPayload, OverlayHitDesiredState,
+        OverlayHitRect, OVERLAY_LABEL,
     };
 
     const HIT_CONTEXT_IVAR: &str = "dmNoteOverlayHitContext";
@@ -380,11 +444,17 @@ mod platform {
         Ok(())
     }
 
-    pub(super) fn is_main_thread(_overlay: Option<&WebviewWindow>) -> bool {
-        unsafe {
-            let is_main: BOOL = msg_send![class!(NSThread), isMainThread];
-            is_main != NO
+    pub(super) fn parent_identity(overlay: Option<&WebviewWindow>) -> Result<Option<usize>> {
+        let Some(overlay) = overlay else {
+            return Ok(None);
+        };
+        let parent = overlay
+            .ns_window()
+            .context("failed to get overlay NSWindow")? as id;
+        if parent.is_null() {
+            return Err(anyhow!("overlay NSWindow is unavailable"));
         }
+        Ok(Some(parent as usize))
     }
 
     pub(super) fn reconcile(
@@ -406,18 +476,28 @@ mod platform {
         }
 
         let parent_visible: BOOL = unsafe { msg_send![parent, isVisible] };
+        let clipped_rects = if desired.rects.is_empty() {
+            Vec::new()
+        } else {
+            let (content_width, content_height) = content_size(parent)?;
+            desired
+                .rects
+                .iter()
+                .filter_map(|rect| clip_hit_rect_to_bounds(*rect, content_width, content_height))
+                .collect::<Vec<_>>()
+        };
         let active =
-            desired.visible && !desired.locked && !desired.rects.is_empty() && parent_visible != NO;
+            desired.visible && !desired.locked && !clipped_rects.is_empty() && parent_visible != NO;
         if !active {
             hide_panels(native);
-            if desired.rects.is_empty() {
-                resize_panel_pool(app, parent, &desired.rects, native)?;
+            if clipped_rects.is_empty() {
+                resize_panel_pool(app, parent, &clipped_rects, native)?;
             }
             return Ok(());
         }
-        resize_panel_pool(app, parent, &desired.rects, native)?;
+        resize_panel_pool(app, parent, &clipped_rects, native)?;
 
-        for (panel, rect) in native.panels.iter_mut().zip(&desired.rects) {
+        for (panel, rect) in native.panels.iter_mut().zip(&clipped_rects) {
             panel.context.parent = parent as usize;
             panel.context.rect = *rect;
             let frame = panel_frame(parent, rect)?;
@@ -437,16 +517,22 @@ mod platform {
                 let _: () = msg_send![panel_id, setFrame: frame display: NO];
                 let _: () = msg_send![panel_id, setIgnoresMouseEvents: NO];
                 let _: () = msg_send![panel_id, invalidateCursorRectsForView: view_id];
-                if active {
-                    panel.context.active = true;
-                    let _: () = msg_send![panel_id, orderFront: nil];
-                } else {
-                    panel.context.active = false;
-                    let _: () = msg_send![panel_id, orderOut: nil];
-                }
+                panel.context.active = true;
+                let _: () = msg_send![panel_id, orderFront: nil];
             }
         }
         Ok(())
+    }
+
+    fn content_size(parent: id) -> Result<(f64, f64)> {
+        unsafe {
+            let content_view: id = msg_send![parent, contentView];
+            if content_view.is_null() {
+                return Err(anyhow!("overlay content view is unavailable"));
+            }
+            let content_bounds: NSRect = msg_send![content_view, bounds];
+            Ok((content_bounds.size.width, content_bounds.size.height))
+        }
     }
 
     fn resize_panel_pool(
@@ -503,8 +589,6 @@ mod platform {
             let _: () = msg_send![panel, setHasShadow: NO];
             let _: () = msg_send![panel, setReleasedWhenClosed: NO];
             let _: () = msg_send![panel, setHidesOnDeactivate: NO];
-            let _: () = msg_send![panel, setBecomesKeyOnlyIfNeeded: YES];
-            let _: () = msg_send![panel, setAcceptsMouseMovedEvents: YES];
             let _: () = msg_send![panel, setIgnoresMouseEvents: NO];
             let _: () = msg_send![view, setAlphaValue: 0.0_f64];
             let _: () = msg_send![panel, setContentView: view];
@@ -594,22 +678,21 @@ mod platform {
                 ClientToScreen, CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn,
                 ValidateRect, HGDIOBJ, RGN_OR,
             },
-            System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId},
+            System::LibraryLoader::GetModuleHandleW,
             UI::{
                 HiDpi::GetDpiForWindow,
                 Input::KeyboardAndMouse::ReleaseCapture,
                 Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass},
                 WindowsAndMessaging::{
                     CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetCursorPos,
-                    GetWindowLongPtrW, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
-                    LoadCursorW, PostMessageW, RegisterClassExW, SetCursor, SetWindowLongPtrW,
-                    SetWindowPos, ShowWindow, CREATESTRUCTW, GWLP_USERDATA, HTCAPTION,
-                    HWND_NOTOPMOST, HWND_TOPMOST, IDC_SIZEALL, MA_NOACTIVATE, SWP_NOACTIVATE,
-                    SWP_NOOWNERZORDER, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WM_DPICHANGED,
-                    WM_ERASEBKGND, WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_MOVE, WM_MOVING,
+                    GetWindowLongPtrW, IsWindow, IsWindowVisible, LoadCursorW, PostMessageW,
+                    RegisterClassExW, SetCursor, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+                    CREATESTRUCTW, GWLP_USERDATA, HTCAPTION, HWND_NOTOPMOST, HWND_TOPMOST,
+                    IDC_SIZEALL, MA_NOACTIVATE, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_SHOWWINDOW,
+                    SW_HIDE, WM_DPICHANGED, WM_ERASEBKGND, WM_LBUTTONDOWN, WM_MOUSEACTIVATE,
                     WM_NCCREATE, WM_NCDESTROY, WM_NCLBUTTONDOWN, WM_PAINT, WM_RBUTTONUP,
-                    WM_SETCURSOR, WM_SHOWWINDOW, WM_SIZE, WM_WINDOWPOSCHANGED, WNDCLASSEXW,
-                    WS_EX_NOACTIVATE, WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_POPUP,
+                    WM_SETCURSOR, WM_WINDOWPOSCHANGED, WNDCLASSEXW, WS_EX_NOACTIVATE,
+                    WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_POPUP,
                 },
             },
         },
@@ -620,8 +703,6 @@ mod platform {
     };
 
     const PARENT_SUBCLASS_ID: usize = 0x444d_4849;
-    const APPLY_MOVING_RECT_REFRESH: bool = false;
-
     #[derive(Default)]
     pub(super) struct NativeState {
         context: Option<Box<HitContext>>,
@@ -636,14 +717,12 @@ mod platform {
         always_on_top: AtomicBool,
     }
 
-    pub(super) fn is_main_thread(overlay: Option<&WebviewWindow>) -> bool {
+    pub(super) fn parent_identity(overlay: Option<&WebviewWindow>) -> Result<Option<usize>> {
         let Some(overlay) = overlay else {
-            return false;
+            return Ok(None);
         };
-        let Ok(hwnd) = overlay.hwnd() else {
-            return false;
-        };
-        unsafe { GetWindowThreadProcessId(hwnd, None) == GetCurrentThreadId() }
+        let parent = overlay.hwnd().context("failed to get overlay HWND")?;
+        Ok(Some(parent.0 as usize))
     }
 
     pub(super) fn reconcile(
@@ -820,19 +899,7 @@ mod platform {
             let context = (reference_data as *mut HitContext).as_ref();
             if let Some(context) = context {
                 match message {
-                    WM_MOVING if APPLY_MOVING_RECT_REFRESH && lparam.0 != 0 => {
-                        let suggested = &*(lparam.0 as *const RECT);
-                        let _ = SetWindowPos(
-                            window,
-                            None,
-                            suggested.left,
-                            suggested.top,
-                            suggested.right - suggested.left,
-                            suggested.bottom - suggested.top,
-                            SWP_NOACTIVATE | SWP_NOZORDER,
-                        );
-                    }
-                    WM_MOVE | WM_SIZE | WM_DPICHANGED | WM_SHOWWINDOW | WM_WINDOWPOSCHANGED => {
+                    WM_DPICHANGED | WM_WINDOWPOSCHANGED => {
                         if let Err(error) = sync_hit_window(context) {
                             log::warn!("failed to follow overlay HWND: {error:#}");
                         }
@@ -1034,8 +1101,8 @@ mod platform {
     #[derive(Default)]
     pub(super) struct NativeState;
 
-    pub(super) fn is_main_thread(_overlay: Option<&WebviewWindow>) -> bool {
-        true
+    pub(super) fn parent_identity(overlay: Option<&WebviewWindow>) -> Result<Option<usize>> {
+        Ok(overlay.map(|_| 1))
     }
 
     pub(super) fn reconcile(
@@ -1050,12 +1117,16 @@ mod platform {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_hit_rects, OverlayHitDesiredState, OverlayHitRect, MAX_HIT_RECTS};
+    use super::{
+        clip_hit_rect_to_bounds, validate_hit_rects, OverlayHitDesiredState, OverlayHitRect,
+        MAX_HIT_RECTS,
+    };
 
     fn desired_state() -> OverlayHitDesiredState {
         OverlayHitDesiredState {
             rects: Vec::new(),
             last_revision: None,
+            parent: None,
             visible: true,
             locked: false,
             always_on_top: true,
@@ -1074,12 +1145,98 @@ mod tests {
     #[test]
     fn hit_region_revision_only_accepts_newer_values() {
         let mut desired = desired_state();
-        assert!(desired.apply_regions(vec![rect(1.0)], 10));
-        assert!(!desired.apply_regions(vec![rect(2.0)], 10));
-        assert!(!desired.apply_regions(vec![rect(3.0)], 9));
+        assert!(desired.apply_regions(vec![rect(1.0)], 10).unwrap());
+        assert!(!desired.apply_regions(vec![rect(2.0)], 10).unwrap());
+        assert!(!desired
+            .apply_regions(
+                vec![OverlayHitRect {
+                    x: f64::NAN,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0,
+                }],
+                9,
+            )
+            .unwrap());
         assert_eq!(desired.rects, vec![rect(1.0)]);
-        assert!(desired.apply_regions(vec![rect(4.0)], 11));
+        assert!(desired
+            .apply_regions(
+                vec![OverlayHitRect {
+                    x: f64::NAN,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0,
+                }],
+                11,
+            )
+            .is_err());
+        assert_eq!(desired.rects, vec![rect(1.0)]);
+        assert!(desired.apply_regions(vec![rect(4.0)], 11).unwrap());
         assert_eq!(desired.rects, vec![rect(4.0)]);
+    }
+
+    #[test]
+    fn parent_replacement_and_loss_reset_regions_and_revision() {
+        let mut desired = desired_state();
+        assert!(!desired.observe_parent(Some(10)));
+        assert!(desired.apply_regions(vec![rect(1.0)], 90).unwrap());
+        assert!(!desired.observe_parent(Some(10)));
+
+        assert!(desired.observe_parent(Some(11)));
+        assert!(desired.rects.is_empty());
+        assert_eq!(desired.last_revision, None);
+        assert!(desired.apply_regions(vec![rect(2.0)], 1).unwrap());
+
+        desired.mark_parent_absent();
+        assert!(desired.rects.is_empty());
+        assert_eq!(desired.last_revision, None);
+        assert!(!desired.observe_parent(None));
+        assert!(!desired.observe_parent(Some(12)));
+        assert!(desired.apply_regions(vec![rect(3.0)], 1).unwrap());
+        assert!(desired.observe_parent(None));
+        assert!(!desired.observe_parent(None));
+    }
+
+    #[test]
+    fn hit_rect_clipping_uses_client_bounds_and_drops_empty_intersections() {
+        assert_eq!(
+            clip_hit_rect_to_bounds(
+                OverlayHitRect {
+                    x: -5.0,
+                    y: -10.0,
+                    width: 20.0,
+                    height: 30.0,
+                },
+                100.0,
+                100.0,
+            ),
+            Some(OverlayHitRect {
+                x: 0.0,
+                y: 0.0,
+                width: 15.0,
+                height: 20.0,
+            })
+        );
+        assert_eq!(
+            clip_hit_rect_to_bounds(
+                OverlayHitRect {
+                    x: 90.0,
+                    y: 95.0,
+                    width: 30.0,
+                    height: 10.0,
+                },
+                100.0,
+                100.0,
+            ),
+            Some(OverlayHitRect {
+                x: 90.0,
+                y: 95.0,
+                width: 10.0,
+                height: 5.0,
+            })
+        );
+        assert_eq!(clip_hit_rect_to_bounds(rect(110.0), 100.0, 100.0), None);
+        assert_eq!(clip_hit_rect_to_bounds(rect(1.0), 0.0, 100.0), None);
     }
 
     #[cfg(target_os = "macos")]
@@ -1108,6 +1265,38 @@ mod tests {
             height: 10.0,
         }])
         .is_err());
+    }
+
+    #[test]
+    fn hit_rect_validation_rejects_non_finite_values() {
+        for invalid in [
+            OverlayHitRect {
+                x: f64::NAN,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            },
+            OverlayHitRect {
+                x: 0.0,
+                y: f64::INFINITY,
+                width: 10.0,
+                height: 10.0,
+            },
+            OverlayHitRect {
+                x: 0.0,
+                y: 0.0,
+                width: f64::NEG_INFINITY,
+                height: 10.0,
+            },
+            OverlayHitRect {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: f64::NAN,
+            },
+        ] {
+            assert!(validate_hit_rects(&[invalid]).is_err());
+        }
     }
 
     #[test]
