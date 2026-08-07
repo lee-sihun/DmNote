@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ShadowToggleBenchmarkSurface,
@@ -34,8 +34,29 @@ interface IterationResult {
 benchmarkDescribe('PILOT-01 그림자 토글 성능', () => {
   let host: HTMLDivElement;
   let root: Root;
+  let nextFrameId: number;
+  let frameTimers: Map<number, number>;
 
   beforeEach(() => {
+    nextFrameId = 0;
+    frameTimers = new Map();
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      (callback: FrameRequestCallback): number => {
+        const id = ++nextFrameId;
+        const timer = window.setTimeout(() => {
+          frameTimers.delete(id);
+          callback(performance.now());
+        }, 0);
+        frameTimers.set(id, timer);
+        return id;
+      },
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      const timer = frameTimers.get(id);
+      if (timer !== undefined) window.clearTimeout(timer);
+      frameTimers.delete(id);
+    });
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -45,6 +66,8 @@ benchmarkDescribe('PILOT-01 그림자 토글 성능', () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    frameTimers.forEach((timer) => window.clearTimeout(timer));
+    vi.unstubAllGlobals();
   });
 
   it('실제 상태 변환·요소 렌더 경로의 DOM commit 분포를 기록한다', async () => {

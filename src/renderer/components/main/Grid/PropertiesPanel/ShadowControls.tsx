@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ElementShadowSpec } from '@src/types/key/shadows';
 import ShadowPicker from '@components/main/Modal/content/pickers/ShadowPicker';
 import Checkbox from '@components/main/common/Checkbox';
@@ -39,18 +39,76 @@ const ShadowControls = ({
   t,
 }: ShadowControlsProps) => {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [optimisticEnabled, setOptimisticEnabled] = useState<boolean | null>(
+    null,
+  );
   const configButtonRef = useRef<HTMLButtonElement>(null);
-  const anyEnabled =
+  const commitFrameRef = useRef<number | null>(null);
+  const commitTimerRef = useRef<number | null>(null);
+  const pendingEnabledRef = useRef<boolean | null>(null);
+  const onEnabledChangeRef = useRef(onEnabledChange);
+  const canonicalEnabled =
     anyEnabledProp ??
     (showActiveState
       ? idleShadow.enabled || activeShadow.enabled
       : idleShadow.enabled);
+  const anyEnabled = optimisticEnabled ?? canonicalEnabled;
   const mixed = showActiveState ? idleMixed || activeMixed : idleMixed;
+  const canonicalEnabledRef = useRef(canonicalEnabled);
+
+  useLayoutEffect(() => {
+    onEnabledChangeRef.current = onEnabledChange;
+    canonicalEnabledRef.current = canonicalEnabled;
+  }, [canonicalEnabled, onEnabledChange]);
+
+  useEffect(
+    () => () => {
+      if (commitFrameRef.current !== null) {
+        cancelAnimationFrame(commitFrameRef.current);
+      }
+      if (commitTimerRef.current !== null) {
+        window.clearTimeout(commitTimerRef.current);
+      }
+      // paint 전 선택 전환 등으로 언마운트돼도 마지막 사용자 의도 보존
+      const pending = pendingEnabledRef.current;
+      pendingEnabledRef.current = null;
+      if (pending !== null && pending !== canonicalEnabledRef.current) {
+        onEnabledChangeRef.current(pending);
+      }
+    },
+    [],
+  );
 
   const handleEnabledToggle = () => {
-    const next = !anyEnabled;
+    const current = pendingEnabledRef.current ?? canonicalEnabled;
+    const next = !current;
     if (!next) setPickerOpen(false);
-    onEnabledChange(next);
+    pendingEnabledRef.current = next;
+    setOptimisticEnabled(next);
+
+    if (commitFrameRef.current !== null) {
+      cancelAnimationFrame(commitFrameRef.current);
+    }
+    if (commitTimerRef.current !== null) {
+      window.clearTimeout(commitTimerRef.current);
+    }
+
+    // 로컬 checked가 먼저 paint된 뒤 Store·문서 커밋 시작
+    commitFrameRef.current = requestAnimationFrame(() => {
+      commitFrameRef.current = null;
+      commitTimerRef.current = window.setTimeout(() => {
+        commitTimerRef.current = null;
+        const pending = pendingEnabledRef.current;
+        pendingEnabledRef.current = null;
+        if (pending === null) return;
+        if (pending !== canonicalEnabledRef.current) {
+          onEnabledChangeRef.current(pending);
+        }
+        setOptimisticEnabled((currentOptimistic) =>
+          currentOptimistic === pending ? null : currentOptimistic,
+        );
+      }, 0);
+    });
   };
 
   return (

@@ -52,8 +52,33 @@ const findButton = (label: string) =>
 describe('ShadowControls', () => {
   let host: HTMLDivElement;
   let root: Root;
+  let animationFrames: Map<number, FrameRequestCallback>;
+  let nextAnimationFrameId: number;
+
+  const flushDeferredCommit = async () => {
+    const callbacks = [...animationFrames.values()];
+    animationFrames.clear();
+    act(() => {
+      callbacks.forEach((callback) => callback(performance.now()));
+    });
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
+    });
+  };
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    animationFrames = new Map();
+    nextAnimationFrameId = 1;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = nextAnimationFrameId;
+      nextAnimationFrameId += 1;
+      animationFrames.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      animationFrames.delete(id);
+    });
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -63,9 +88,11 @@ describe('ShadowControls', () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
-  it('마스터 토글이 대기·입력 사용을 한 번에 바꾼다', () => {
+  it('마스터 토글이 대기·입력 사용을 한 번에 바꾼다', async () => {
     const onChange = vi.fn();
     const onEnabledChange = vi.fn();
     act(() => {
@@ -85,6 +112,9 @@ describe('ShadowControls', () => {
     expect(toggle?.getAttribute('aria-checked')).toBe('true');
 
     act(() => toggle?.click());
+    expect(toggle?.getAttribute('aria-checked')).toBe('false');
+    expect(onEnabledChange).not.toHaveBeenCalled();
+    await flushDeferredCommit();
     expect(onEnabledChange).toHaveBeenLastCalledWith(false);
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -108,7 +138,7 @@ describe('ShadowControls', () => {
     expect(findButton('configure')).toBeUndefined();
   });
 
-  it('배치 anyEnabled가 대표값 대신 토글 표시를 결정한다', () => {
+  it('배치 anyEnabled가 대표값 대신 토글 표시를 결정한다', async () => {
     const onEnabledChange = vi.fn();
     act(() => {
       root.render(
@@ -130,10 +160,59 @@ describe('ShadowControls', () => {
 
     // 켜짐 표시 상태에서 클릭 → 전체 끄기
     act(() => toggle?.click());
+    await flushDeferredCommit();
     expect(onEnabledChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('showActiveState=false면 입력 탭이 없고 토글은 대기만 본다', () => {
+  it('paint 대기 중 연타는 마지막 사용자 의도 하나로 합친다', async () => {
+    const onEnabledChange = vi.fn();
+    act(() => {
+      root.render(
+        <ShadowControls
+          idleShadow={idleShadow}
+          activeShadow={activeShadow}
+          onChange={vi.fn()}
+          onEnabledChange={onEnabledChange}
+          t={t}
+        />,
+      );
+    });
+
+    const toggle = host.querySelector<HTMLElement>('[role="switch"]');
+    act(() => {
+      toggle?.click();
+      toggle?.click();
+    });
+
+    expect(toggle?.getAttribute('aria-checked')).toBe('true');
+    await flushDeferredCommit();
+    // true → false → true의 최종 값이 canonical과 같으므로 불필요한 저장 없음
+    expect(onEnabledChange).not.toHaveBeenCalled();
+  });
+
+  it('paint 전에 선택 전환으로 언마운트돼도 마지막 의도를 커밋한다', () => {
+    const onEnabledChange = vi.fn();
+    act(() => {
+      root.render(
+        <ShadowControls
+          idleShadow={idleShadow}
+          activeShadow={activeShadow}
+          onChange={vi.fn()}
+          onEnabledChange={onEnabledChange}
+          t={t}
+        />,
+      );
+    });
+
+    act(() => host.querySelector<HTMLElement>('[role="switch"]')?.click());
+    expect(onEnabledChange).not.toHaveBeenCalled();
+
+    act(() => root.render(null));
+    expect(onEnabledChange).toHaveBeenCalledOnce();
+    expect(onEnabledChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('showActiveState=false면 입력 탭이 없고 토글은 대기만 본다', async () => {
     const onEnabledChange = vi.fn();
     act(() => {
       root.render(
@@ -155,6 +234,7 @@ describe('ShadowControls', () => {
     ).toBe('false');
 
     act(() => host.querySelector<HTMLElement>('[role="switch"]')?.click());
+    await flushDeferredCommit();
     expect(onEnabledChange).toHaveBeenLastCalledWith(true);
 
     act(() => findButton('configure')?.click());
