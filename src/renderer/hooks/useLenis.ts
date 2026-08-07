@@ -35,6 +35,33 @@ const easeOutExpo = (t: number): number => {
   return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
 };
 
+// 여러 keepalive 스크롤 영역이 각자 영구 RAF를 만들지 않도록 전역 1개 루프로 병합
+const activeLenisInstances = new Set<Lenis>();
+let sharedRafId: number | null = null;
+
+const runSharedLenisFrame = (time: number) => {
+  sharedRafId = null;
+  activeLenisInstances.forEach((instance) => instance.raf(time));
+  if (activeLenisInstances.size > 0) {
+    sharedRafId = requestAnimationFrame(runSharedLenisFrame);
+  }
+};
+
+const registerLenisInstance = (instance: Lenis) => {
+  activeLenisInstances.add(instance);
+  if (sharedRafId === null) {
+    sharedRafId = requestAnimationFrame(runSharedLenisFrame);
+  }
+};
+
+const unregisterLenisInstance = (instance: Lenis) => {
+  activeLenisInstances.delete(instance);
+  if (activeLenisInstances.size === 0 && sharedRafId !== null) {
+    cancelAnimationFrame(sharedRafId);
+    sharedRafId = null;
+  }
+};
+
 /**
  * Lenis smooth scroll을 특정 컨테이너에 적용하는 훅
  * @param options Lenis 옵션 (미지정 시 전역 설정 사용)
@@ -86,17 +113,11 @@ export const useLenis = (options: UseLenisOptions = {}) => {
 
     lenisRef.current = lenis;
 
-    // RAF 루프 시작
-    let rafId: number;
-    const raf = (time: number) => {
-      lenis.raf(time);
-      rafId = requestAnimationFrame(raf);
-    };
-    rafId = requestAnimationFrame(raf);
+    registerLenisInstance(lenis);
 
     // 클린업
     return () => {
-      cancelAnimationFrame(rafId);
+      unregisterLenisInstance(lenis);
       lenis.destroy();
       lenisRef.current = null;
     };
