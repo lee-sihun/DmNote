@@ -82,9 +82,9 @@
 | 지표                             | 현재 값 |
 | -------------------------------- | ------- |
 | 전체 추적 항목                   | 165개   |
-| 대기                             | 127개   |
+| 대기                             | 121개   |
 | 완료                             | 0개     |
-| 실험·검증 중                     | 38개    |
+| 실험·검증 중                     | 44개    |
 | 회귀                             | 0개     |
 | P0 완료율                        | —       |
 | 측정 완료 항목의 P95 중앙 개선율 | —       |
@@ -158,27 +158,50 @@
 - 공통 `ShadowControls`의 시각 우선 반영이 배치 canonical 변환 비용과 분리되는지 검증한다.
 <!-- PILOT-02:RESULT:END -->
 
+<!-- BASE-07:RESULT:START -->
+
+#### BASE-07 TabSwitch 최신 자동 측정
+
+| 조건           | 값                                              |
+| -------------- | ----------------------------------------------- |
+| 측정 경로      | 공통 TabSwitch + 탭 콘텐츠 DOM 500개 교체 proxy |
+| 반복           | 기준선 30회 / 개선 30회, 워밍업 각 5회          |
+| 측정 코드 커밋 | `84917c5a11b1439e9ed8c049446f5eda699d2850`      |
+| 비교 전략      | `sync` → `after-paint`                          |
+| 환경           | darwin arm64, v25.2.1                           |
+
+| P95 지표                | sync 기준선 | after-paint | 개선율 |
+| ----------------------- | ----------: | ----------: | -----: |
+| 활성 탭 DOM commit      |    10.851ms |     0.492ms |  95.5% |
+| canonical 콘텐츠 commit |    10.852ms |    15.393ms | -41.8% |
+| React commit duration   |     0.838ms |     1.241ms | -48.1% |
+
+- 원시 결과: [기준선](../benchmarks/results/base-07-tab-switch-baseline.json) · [개선](../benchmarks/results/base-07-tab-switch-improved.json)
+- 정확성 게이트: `TabSwitch.test.tsx` 통과
+- 실제 WebView click-to-paint 값은 macOS WKWebView·Windows WebView2에서 별도 검증한다.
+<!-- BASE-07:RESULT:END -->
+
 ### 5.1 파일럿·공통 기반
 
-| ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                     |
-| -------- | ---------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------------------------------------------------------------------------------------- |
-| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    5.946 |    0.509 |  91.4% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json) |
-| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    8.385 |    0.550 |  93.4% | 검증 | [기준선](../benchmarks/results/pilot-02-baseline.json) · [개선](../benchmarks/results/pilot-02-improved.json) |
-| BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 실험 | `useOptimisticBooleanCommit`·선택적 `commitStrategy` 제공, PILOT-01·02 검증                                   |
-| BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 실험 | `05c02e43`, 선택적 `after-paint`·설정 토글 적용                                                               |
-| BASE-03  | Dropdown                           | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·선택·닫기                                                                                                |
-| BASE-04  | NumberInput·OptionalNumberInput    | P0/P1    | CTP ms       |        — |        — |      — | 대기 | draft·preview·commit                                                                                          |
-| BASE-05  | TextInput·SearchField              | P1       | CTP ms       |        — |        — |      — | 대기 | local echo·검색 필터                                                                                          |
-| BASE-06  | ColorInput·ColorSwatchButton       | P0/P1    | CTP ms       |        — |        — |      — | 대기 | 피커 첫 표시 포함                                                                                             |
-| BASE-07  | TabSwitch                          | P3       | CTP ms       |        — |        — |      — | 대기 | 탭 콘텐츠 paint 포함                                                                                          |
-| BASE-08  | ListPopup·FloatingPopup            | 기반     | CTP ms       |        — |        — |      — | 대기 | 메뉴·피커 표면                                                                                                |
-| BASE-09  | Modal                              | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·닫기·포커스 복원                                                                                         |
-| BASE-10  | TooltipGroup                       | P3       | CTP ms       |        — |        — |      — | 대기 | 의도된 hover delay는 별도 기록                                                                                |
-| BASE-11  | PanelToggleButton                  | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 mount·render 포함                                                                                        |
-| BASE-12  | 패널 내부 PickerSurface·내비게이션 | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 위치 계산과 첫 paint                                                                                          |
-| BASE-13  | 프로퍼티 패널 smooth scroll        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Lenis RAF 6개 영향 측정                                                                                       |
-| BASE-14  | IconSwap·EyeToggleIcon             | 기반     | CTP ms       |        — |        — |      — | 대기 | 180ms 모션과 상태 반영 분리                                                                                   |
-| BASE-15  | usePressAction·usePressGatedSwap   | 기반     | CTP ms       |        — |        — |      — | 대기 | pressed 피드백과 300ms gate                                                                                   |
+| ID       | 항목                               | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                                                                                                                         |
+| -------- | ---------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | --------------------------------------------------------------------------------------------------------------------------------- |
+| PILOT-01 | 단일 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    5.946 |    0.509 |  91.4% | 검증 | [기준선](../benchmarks/results/pilot-01-baseline.json) · [개선](../benchmarks/results/pilot-01-improved.json)                     |
+| PILOT-02 | 다중 선택 그림자 사용 토글         | P1       | DOM P95 ms   |    8.385 |    0.550 |  93.4% | 검증 | [기준선](../benchmarks/results/pilot-02-baseline.json) · [개선](../benchmarks/results/pilot-02-improved.json)                     |
+| BASE-01  | 공통 Checkbox                      | 기반     | CTP ms       |        — |        — |      — | 실험 | `useOptimisticBooleanCommit`·선택적 `commitStrategy` 제공, PILOT-01·02 검증                                                       |
+| BASE-02  | SettingToggleRow                   | 기반     | CTP ms       |        — |        — |      — | 실험 | `05c02e43`, 선택적 `after-paint`·설정 토글 적용                                                                                   |
+| BASE-03  | Dropdown                           | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·선택·닫기                                                                                                                    |
+| BASE-04  | NumberInput·OptionalNumberInput    | P0/P1    | CTP ms       |        — |        — |      — | 대기 | draft·preview·commit                                                                                                              |
+| BASE-05  | TextInput·SearchField              | P1       | CTP ms       |        — |        — |      — | 대기 | local echo·검색 필터                                                                                                              |
+| BASE-06  | ColorInput·ColorSwatchButton       | P0/P1    | CTP ms       |        — |        — |      — | 대기 | 피커 첫 표시 포함                                                                                                                 |
+| BASE-07  | TabSwitch                          | P3       | DOM P95 ms   |   10.851 |    0.492 |  95.5% | 검증 | [기준선](../benchmarks/results/base-07-tab-switch-baseline.json) · [개선](../benchmarks/results/base-07-tab-switch-improved.json) |
+| BASE-08  | ListPopup·FloatingPopup            | 기반     | CTP ms       |        — |        — |      — | 대기 | 메뉴·피커 표면                                                                                                                    |
+| BASE-09  | Modal                              | 기반     | CTP ms       |        — |        — |      — | 대기 | 열기·닫기·포커스 복원                                                                                                             |
+| BASE-10  | TooltipGroup                       | P3       | CTP ms       |        — |        — |      — | 대기 | 의도된 hover delay는 별도 기록                                                                                                    |
+| BASE-11  | PanelToggleButton                  | P1       | CTP ms       |        — |        — |      — | 대기 | 패널 mount·render 포함                                                                                                            |
+| BASE-12  | 패널 내부 PickerSurface·내비게이션 | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 위치 계산과 첫 paint                                                                                                              |
+| BASE-13  | 프로퍼티 패널 smooth scroll        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Lenis RAF 6개 영향 측정                                                                                                           |
+| BASE-14  | IconSwap·EyeToggleIcon             | 기반     | CTP ms       |        — |        — |      — | 대기 | 180ms 모션과 상태 반영 분리                                                                                                       |
+| BASE-15  | usePressAction·usePressGatedSwap   | 기반     | CTP ms       |        — |        — |      — | 대기 | pressed 피드백과 300ms gate                                                                                                       |
 
 ### 5.2 설정·Grid·프로퍼티 토글
 
@@ -263,90 +286,90 @@
 
 ### 5.4 프로퍼티 입력·편집기·피커
 
-| ID      | 항목                             | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거              |
-| ------- | -------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ---------------------- |
-| PROP-01 | 숫자 입력                        | P0/P1    | CTP ms       |        — |        — |      — | 대기 | 위치·크기·스타일       |
-| PROP-02 | 텍스트 입력                      | P1       | CTP ms       |        — |        — |      — | 대기 | draft·blur commit      |
-| PROP-03 | 색상 입력                        | P0       | F95 ms/frame |        — |        — |      — | 대기 | preview·commit         |
-| PROP-04 | 그라데이션 입력                  | P0       | F95 ms/frame |        — |        — |      — | 대기 | stop·angle·format      |
-| PROP-05 | 드롭다운 속성 변경               | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 반영            |
-| PROP-06 | 폰트 스타일 버튼                 | P1       | CTP ms       |        — |        — |      — | 대기 | batch 포함             |
-| PROP-07 | 키 매핑·실입력 캡처              | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 마지막 입력 보존       |
-| PROP-08 | 이미지 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | decode ETC             |
-| PROP-09 | 사운드 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 파일·오디오 ETC        |
-| PROP-10 | 단일·다중 선택 탭 전환           | P1       | CTP ms       |        — |        — |      — | 대기 | keepalive 범위         |
-| PROP-11 | 플러그인 설정 color              | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | handler 격리           |
-| PROP-12 | 플러그인 설정 number·text·select | P1       | CTP ms       |        — |        — |      — | 대기 | local draft            |
-| PROP-13 | 플러그인 설정 전체 저장          | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight          |
-| EDIT-01 | 색상 saturation·hue·alpha 드래그 | P0       | F95 ms/frame |        — |        — |      — | 대기 | picker 전체            |
-| EDIT-02 | 색상 텍스트·퍼센트 입력          | P1       | CTP ms       |        — |        — |      — | 대기 | validation             |
-| EDIT-03 | 그라데이션 stop 편집·형식 전환   | P0       | F95 ms/frame |        — |        — |      — | 대기 | draft·commit           |
-| EDIT-04 | 카운터 bezier point 드래그       | P0       | F95 ms/frame |        — |        — |      — | 대기 | animation editor       |
-| EDIT-05 | 카운터 미리보기 scrub·wheel·play | P0       | F95 ms/frame |        — |        — |      — | 대기 | precompute             |
-| EDIT-06 | 사운드 파형 pan·zoom·trim        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Worker 후보            |
-| EDIT-07 | 사운드 재생·정지·seek            | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | media event coalescing |
-| EDIT-08 | 사운드 처리 저장                 | P2       | ETC ms       |        — |        — |      — | 대기 | progress·취소          |
-| PICK-01 | 사운드 선택·검색·필터            | P1       | CTP ms       |        — |        — |      — | 대기 | 목록 크기별 측정       |
-| PICK-02 | 사운드 추가·삭제·이름·숨김       | P2       | ETC ms       |        — |        — |      — | 대기 | 파일 작업              |
-| PICK-03 | 폰트 선택·검색·필터              | P1       | CTP ms       |        — |        — |      — | 대기 | font load 영향         |
-| PICK-04 | 폰트 추가·삭제·이름 변경         | P2       | ETC ms       |        — |        — |      — | 대기 | 파일·검증              |
-| PICK-05 | 카운터 애니메이션 선택·삭제      | P2       | ETC ms       |        — |        — |      — | 대기 | 목록 조정              |
-| PICK-06 | 카운터 애니메이션 생성·편집      | P0/P2    | F95 ms/frame |        — |        — |      — | 대기 | 저장 ETC 별도          |
-| PICK-07 | 이미지 idle·active 로드          | P2       | ETC ms       |        — |        — |      — | 대기 | decode 포함            |
-| PICK-08 | 이미지 reset·fit·투명도          | P1       | CTP ms       |        — |        — |      — | 대기 | paint 포함             |
-| PICK-09 | 그림자 상태·수치·색상            | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | 파일럿 후속            |
-| PICK-10 | 팔레트 색상 선택·편집            | P1       | CTP ms       |        — |        — |      — | 대기 | 저장 ETC 별도          |
+| ID      | 항목                             | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                            |
+| ------- | -------------------------------- | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------------ |
+| PROP-01 | 숫자 입력                        | P0/P1    | CTP ms       |        — |        — |      — | 대기 | 위치·크기·스타일                     |
+| PROP-02 | 텍스트 입력                      | P1       | CTP ms       |        — |        — |      — | 대기 | draft·blur commit                    |
+| PROP-03 | 색상 입력                        | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ad22c019`, 상태 탭 전환만 적용      |
+| PROP-04 | 그라데이션 입력                  | P0       | F95 ms/frame |        — |        — |      — | 실험 | `ad22c019`, 형식 탭 전환만 적용      |
+| PROP-05 | 드롭다운 속성 변경               | P1       | CTP ms       |        — |        — |      — | 대기 | 캔버스 반영                          |
+| PROP-06 | 폰트 스타일 버튼                 | P1       | CTP ms       |        — |        — |      — | 대기 | batch 포함                           |
+| PROP-07 | 키 매핑·실입력 캡처              | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `ad22c019`, 판정 탭 전환만 적용      |
+| PROP-08 | 이미지 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | decode ETC                           |
+| PROP-09 | 사운드 설정                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 파일·오디오 ETC                      |
+| PROP-10 | 단일·다중 선택 탭 전환           | P1       | CTP ms       |        — |        — |      — | 대기 | keepalive 범위                       |
+| PROP-11 | 플러그인 설정 color              | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | handler 격리                         |
+| PROP-12 | 플러그인 설정 number·text·select | P1       | CTP ms       |        — |        — |      — | 대기 | local draft                          |
+| PROP-13 | 플러그인 설정 전체 저장          | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight                        |
+| EDIT-01 | 색상 saturation·hue·alpha 드래그 | P0       | F95 ms/frame |        — |        — |      — | 대기 | picker 전체                          |
+| EDIT-02 | 색상 텍스트·퍼센트 입력          | P1       | CTP ms       |        — |        — |      — | 대기 | validation                           |
+| EDIT-03 | 그라데이션 stop 편집·형식 전환   | P0       | F95 ms/frame |        — |        — |      — | 대기 | draft·commit                         |
+| EDIT-04 | 카운터 bezier point 드래그       | P0       | F95 ms/frame |        — |        — |      — | 대기 | animation editor                     |
+| EDIT-05 | 카운터 미리보기 scrub·wheel·play | P0       | F95 ms/frame |        — |        — |      — | 대기 | precompute                           |
+| EDIT-06 | 사운드 파형 pan·zoom·trim        | P0       | F95 ms/frame |        — |        — |      — | 대기 | Worker 후보                          |
+| EDIT-07 | 사운드 재생·정지·seek            | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | media event coalescing               |
+| EDIT-08 | 사운드 처리 저장                 | P2       | ETC ms       |        — |        — |      — | 대기 | progress·취소                        |
+| PICK-01 | 사운드 선택·검색·필터            | P1       | CTP ms       |        — |        — |      — | 대기 | 목록 크기별 측정                     |
+| PICK-02 | 사운드 추가·삭제·이름·숨김       | P2       | ETC ms       |        — |        — |      — | 대기 | 파일 작업                            |
+| PICK-03 | 폰트 선택·검색·필터              | P1       | CTP ms       |        — |        — |      — | 대기 | font load 영향                       |
+| PICK-04 | 폰트 추가·삭제·이름 변경         | P2       | ETC ms       |        — |        — |      — | 대기 | 파일·검증                            |
+| PICK-05 | 카운터 애니메이션 선택·삭제      | P2       | ETC ms       |        — |        — |      — | 대기 | 목록 조정                            |
+| PICK-06 | 카운터 애니메이션 생성·편집      | P0/P2    | F95 ms/frame |        — |        — |      — | 대기 | 저장 ETC 별도                        |
+| PICK-07 | 이미지 idle·active 로드          | P2       | ETC ms       |        — |        — |      — | 대기 | decode 포함                          |
+| PICK-08 | 이미지 reset·fit·투명도          | P1       | CTP ms       |        — |        — |      — | 실험 | `ad22c019`, 상태 탭 전환만 적용      |
+| PICK-09 | 그림자 상태·수치·색상            | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | 상태 전환 직후 편집의 동기 계약 유지 |
+| PICK-10 | 팔레트 색상 선택·편집            | P1       | CTP ms       |        — |        — |      — | 대기 | 저장 ETC 별도                        |
 
 ### 5.5 설정·툴바·모달·플러그인·전역
 
-| ID       | 항목                                 | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                |
-| -------- | ------------------------------------ | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------ |
-| SET-01   | 키 사운드 출력 변경                  | P2       | ETC ms       |        — |        — |      — | 대기 | 장치 적용                |
-| SET-02   | ASIO 버퍼 변경                       | P2       | ETC ms       |        — |        — |      — | 대기 | 적용·복구                |
-| SET-03   | 리사이즈 앵커                        | P2       | CTP ms       |        — |        — |      — | 대기 | 설정 저장                |
-| SET-04   | 언어 변경                            | P1       | CTP ms       |        — |        — |      — | 대기 | 전체 번역 rerender       |
-| SET-05   | 렌더러·ANGLE 모드                    | P2       | ETC ms       |        — |        — |      — | 대기 | 재시작 상태              |
-| SET-06   | 플러그인 추가·재로드                 | P2       | ETC ms       |        — |        — |      — | 대기 | 진행·중복 실행           |
-| SET-07   | 플러그인 활성화                      | P2       | CTP ms       |        — |        — |      — | 대기 | ETC·rollback             |
-| SET-08   | 플러그인 삭제·데이터 삭제            | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·목록 조정           |
-| SET-09   | CSS 파일 로드·활성화·삭제            | P2       | ETC ms       |        — |        — |      — | 대기 | 목록 projection          |
-| SET-10   | 단축키 캡처·삭제                     | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 저장 ETC                 |
-| SET-11   | OBS URL 복사                         | P2       | CTP ms       |        — |        — |      — | 대기 | 완료 피드백              |
-| SET-12   | OBS 토큰 재생성                      | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·결과                |
-| SET-13   | 전체 초기화                          | P2       | ETC ms       |        — |        — |      — | 대기 | 전체 재부트스트랩        |
-| SET-14   | 업데이트 확인                        | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight            |
-| TOOL-01  | 이동·지우개 도구 선택                | P3       | CTP ms       |        — |        — |      — | 대기 | 선택 표시                |
-| TOOL-02  | 키·통계·그래프·노브 추가 메뉴        | P1       | CTP ms       |        — |        — |      — | 대기 | 메뉴·추가 분리           |
-| TOOL-03  | 팔레트 열기                          | P3       | CTP ms       |        — |        — |      — | 대기 | 지연 mount               |
-| TOOL-04  | 현재 탭·카운터 초기화                | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·동기화              |
-| TOOL-05  | 기본 키 탭 전환                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | stale 응답 차단          |
-| TOOL-06  | 커스텀 탭 팝업                       | P2/P3    | CTP ms       |        — |        — |      — | 대기 | 목록·파일 작업           |
-| TOOL-07  | 프리셋 전체·탭 저장                  | P2       | ETC ms       |        — |        — |      — | 대기 | 진행·완료                |
-| TOOL-08  | 프리셋 전체·탭 불러오기              | P2       | ETC ms       |        — |        — |      — | 대기 | bootstrap 완료           |
-| TOOL-09  | 오버레이 표시                        | P2       | CTP ms       |        — |        — |      — | 대기 | 기존 optimistic+rollback |
-| TOOL-10  | 설정 화면 열기·뒤로                  | P1       | CTP ms       |        — |        — |      — | 대기 | 큰 화면 전환             |
-| TOOL-11  | 노트 트랙 설정 열기                  | P3       | CTP ms       |        — |        — |      — | 대기 | 모달 첫 paint            |
-| TOOL-12  | 외부 링크·창 최소화·닫기             | P2       | ETC ms       |        — |        — |      — | 대기 | 네이티브 호출            |
-| MODAL-01 | 통합 키 설정 저장·취소               | P2       | ETC ms       |        — |        — |      — | 대기 | atomic commit            |
-| MODAL-02 | 키·노트·카운터 설정 전체             | P1/P2    | CTP ms       |        — |        — |      — | 대기 | preview·commit           |
-| MODAL-03 | 탭 CSS 로드·이력·저장                | P2       | ETC ms       |        — |        — |      — | 대기 | authoritative 재조회     |
-| MODAL-04 | 탭 이름 변경                         | P2       | ETC ms       |        — |        — |      — | 대기 | validation               |
-| MODAL-05 | 커스텀 탭 생성·선택·삭제             | P1/P2    | ETC ms       |        — |        — |      — | 대기 | generation               |
-| MODAL-06 | 업데이트 다운로드·릴리스·건너뛰기    | P2       | ETC ms       |        — |        — |      — | 대기 | progress·재시도          |
-| MODAL-07 | 플러그인 데이터 삭제                 | P2       | ETC ms       |        — |        — |      — | 대기 | 위험 액션                |
-| MODAL-08 | Alert·Confirm·Custom Dialog          | 기반/P3  | CTP ms       |        — |        — |      — | 대기 | Promise settle           |
-| PLUG-01  | Promise plugin button handler        | P2       | ETC ms       |        — |        — |      — | 대기 | pending·오류 격리        |
-| PLUG-02  | plugin input onInput                 | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | handler duration         |
-| PLUG-03  | plugin dropdown                      | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 전역 listener            |
-| PLUG-04  | Display Element 선택·드래그·리사이즈 | P0       | F95 ms/frame |        — |        — |      — | 대기 | 호스트 Grid와 비교       |
-| PLUG-05  | plugin remove·context action         | P2       | ETC ms       |        — |        — |      — | 대기 | 실패 조정                |
-| WIN-01   | 모드 전환 단축키                     | P1/P2    | CTP ms       |        — |        — |      — | 대기 | generation               |
-| WIN-02   | 프로퍼티 패널 토글 단축키            | P1       | CTP ms       |        — |        — |      — | 대기 | handoff 포함             |
-| WIN-03   | 키 슬롯·단축키 실입력 캡처           | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 이벤트 격리              |
-| WIN-04   | 분리 패널 Cmd·Ctrl+W                 | P2       | ETC ms       |        — |        — |      — | 대기 | reattach                 |
-| WIN-05   | 오버레이 컨텍스트 메뉴               | P2       | CTP ms       |        — |        — |      — | 대기 | native menu 생성         |
-| WIN-06   | 편집 flush 입력 잠금                 | 기반     | ETC ms       |        — |        — |      — | 대기 | 잠금 시간·피드백         |
-| WIN-07   | focus·visibility 재동기화            | 기반     | ETC ms       |        — |        — |      — | 대기 | 사용자 입력과 경쟁 여부  |
+| ID       | 항목                                 | 우선순위 | 주 지표      | 기준 P95 | 개선 P95 | 개선율 | 상태 | 변경·근거                       |
+| -------- | ------------------------------------ | -------- | ------------ | -------: | -------: | -----: | ---- | ------------------------------- |
+| SET-01   | 키 사운드 출력 변경                  | P2       | ETC ms       |        — |        — |      — | 대기 | 장치 적용                       |
+| SET-02   | ASIO 버퍼 변경                       | P2       | ETC ms       |        — |        — |      — | 대기 | 적용·복구                       |
+| SET-03   | 리사이즈 앵커                        | P2       | CTP ms       |        — |        — |      — | 대기 | 설정 저장                       |
+| SET-04   | 언어 변경                            | P1       | CTP ms       |        — |        — |      — | 대기 | 전체 번역 rerender              |
+| SET-05   | 렌더러·ANGLE 모드                    | P2       | ETC ms       |        — |        — |      — | 대기 | 재시작 상태                     |
+| SET-06   | 플러그인 추가·재로드                 | P2       | ETC ms       |        — |        — |      — | 대기 | 진행·중복 실행                  |
+| SET-07   | 플러그인 활성화                      | P2       | CTP ms       |        — |        — |      — | 대기 | ETC·rollback                    |
+| SET-08   | 플러그인 삭제·데이터 삭제            | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·목록 조정                  |
+| SET-09   | CSS 파일 로드·활성화·삭제            | P2       | ETC ms       |        — |        — |      — | 대기 | 목록 projection                 |
+| SET-10   | 단축키 캡처·삭제                     | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 저장 ETC                        |
+| SET-11   | OBS URL 복사                         | P2       | CTP ms       |        — |        — |      — | 대기 | 완료 피드백                     |
+| SET-12   | OBS 토큰 재생성                      | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·결과                       |
+| SET-13   | 전체 초기화                          | P2       | ETC ms       |        — |        — |      — | 대기 | 전체 재부트스트랩               |
+| SET-14   | 업데이트 확인                        | P2       | ETC ms       |        — |        — |      — | 대기 | single-flight                   |
+| TOOL-01  | 이동·지우개 도구 선택                | P3       | CTP ms       |        — |        — |      — | 대기 | 선택 표시                       |
+| TOOL-02  | 키·통계·그래프·노브 추가 메뉴        | P1       | CTP ms       |        — |        — |      — | 대기 | 메뉴·추가 분리                  |
+| TOOL-03  | 팔레트 열기                          | P3       | CTP ms       |        — |        — |      — | 대기 | 지연 mount                      |
+| TOOL-04  | 현재 탭·카운터 초기화                | P2       | ETC ms       |        — |        — |      — | 대기 | 확인·동기화                     |
+| TOOL-05  | 기본 키 탭 전환                      | P1/P2    | CTP ms       |        — |        — |      — | 대기 | stale 응답 차단                 |
+| TOOL-06  | 커스텀 탭 팝업                       | P2/P3    | CTP ms       |        — |        — |      — | 대기 | 목록·파일 작업                  |
+| TOOL-07  | 프리셋 전체·탭 저장                  | P2       | ETC ms       |        — |        — |      — | 대기 | 진행·완료                       |
+| TOOL-08  | 프리셋 전체·탭 불러오기              | P2       | ETC ms       |        — |        — |      — | 대기 | bootstrap 완료                  |
+| TOOL-09  | 오버레이 표시                        | P2       | CTP ms       |        — |        — |      — | 대기 | 기존 optimistic+rollback        |
+| TOOL-10  | 설정 화면 열기·뒤로                  | P1       | CTP ms       |        — |        — |      — | 대기 | 큰 화면 전환                    |
+| TOOL-11  | 노트 트랙 설정 열기                  | P3       | CTP ms       |        — |        — |      — | 대기 | 모달 첫 paint                   |
+| TOOL-12  | 외부 링크·창 최소화·닫기             | P2       | ETC ms       |        — |        — |      — | 대기 | 네이티브 호출                   |
+| MODAL-01 | 통합 키 설정 저장·취소               | P2       | ETC ms       |        — |        — |      — | 대기 | atomic commit                   |
+| MODAL-02 | 키·노트·카운터 설정 전체             | P1/P2    | CTP ms       |        — |        — |      — | 실험 | `ad22c019`, 내부 탭 전환만 적용 |
+| MODAL-03 | 탭 CSS 로드·이력·저장                | P2       | ETC ms       |        — |        — |      — | 대기 | authoritative 재조회            |
+| MODAL-04 | 탭 이름 변경                         | P2       | ETC ms       |        — |        — |      — | 대기 | validation                      |
+| MODAL-05 | 커스텀 탭 생성·선택·삭제             | P1/P2    | ETC ms       |        — |        — |      — | 대기 | generation                      |
+| MODAL-06 | 업데이트 다운로드·릴리스·건너뛰기    | P2       | ETC ms       |        — |        — |      — | 대기 | progress·재시도                 |
+| MODAL-07 | 플러그인 데이터 삭제                 | P2       | ETC ms       |        — |        — |      — | 대기 | 위험 액션                       |
+| MODAL-08 | Alert·Confirm·Custom Dialog          | 기반/P3  | CTP ms       |        — |        — |      — | 대기 | Promise settle                  |
+| PLUG-01  | Promise plugin button handler        | P2       | ETC ms       |        — |        — |      — | 대기 | pending·오류 격리               |
+| PLUG-02  | plugin input onInput                 | P0/P1    | F95 ms/frame |        — |        — |      — | 대기 | handler duration                |
+| PLUG-03  | plugin dropdown                      | P1/P3    | CTP ms       |        — |        — |      — | 대기 | 전역 listener                   |
+| PLUG-04  | Display Element 선택·드래그·리사이즈 | P0       | F95 ms/frame |        — |        — |      — | 대기 | 호스트 Grid와 비교              |
+| PLUG-05  | plugin remove·context action         | P2       | ETC ms       |        — |        — |      — | 대기 | 실패 조정                       |
+| WIN-01   | 모드 전환 단축키                     | P1/P2    | CTP ms       |        — |        — |      — | 대기 | generation                      |
+| WIN-02   | 프로퍼티 패널 토글 단축키            | P1       | CTP ms       |        — |        — |      — | 대기 | handoff 포함                    |
+| WIN-03   | 키 슬롯·단축키 실입력 캡처           | P1/P2    | CTP ms       |        — |        — |      — | 대기 | 이벤트 격리                     |
+| WIN-04   | 분리 패널 Cmd·Ctrl+W                 | P2       | ETC ms       |        — |        — |      — | 대기 | reattach                        |
+| WIN-05   | 오버레이 컨텍스트 메뉴               | P2       | CTP ms       |        — |        — |      — | 대기 | native menu 생성                |
+| WIN-06   | 편집 flush 입력 잠금                 | 기반     | ETC ms       |        — |        — |      — | 대기 | 잠금 시간·피드백                |
+| WIN-07   | focus·visibility 재동기화            | 기반     | ETC ms       |        — |        — |      — | 대기 | 사용자 입력과 경쟁 여부         |
 
 ## 6. 측정 세션
 
@@ -360,6 +383,15 @@
 | PILOT-01-PAINT | 2026-08-07 | PILOT-01 | 개선   | `123e5878` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 단일 선택·렌더 요소 500개 |   30 | 0.345 | 0.509 | 0.649 | canonical P95 8.847ms·React P95 0.971ms | [JSON](../benchmarks/results/pilot-01-improved.json) | DOM commit proxy |
 
 <!-- PILOT-01:SESSIONS:END -->
+
+<!-- BASE-07:SESSIONS:START -->
+
+| 세션 ID       | 날짜       | 항목 ID | 단계   | 빌드·커밋  | 환경                                                 | 시나리오·데이터 크기 | 반복 |   P50 |    P95 |   최대 | 보조 지표                                | 원시 자료                                                      | 비고             |
+| ------------- | ---------- | ------- | ------ | ---------- | ---------------------------------------------------- | -------------------- | ---: | ----: | -----: | -----: | ---------------------------------------- | -------------------------------------------------------------- | ---------------- |
+| BASE-07-SYNC  | 2026-08-07 | BASE-07 | 기준선 | `84917c5a` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 탭 콘텐츠 500개      |   30 | 9.537 | 10.851 | 13.574 | canonical P95 10.852ms·React P95 0.838ms | [JSON](../benchmarks/results/base-07-tab-switch-baseline.json) | DOM commit proxy |
+| BASE-07-PAINT | 2026-08-07 | BASE-07 | 개선   | `84917c5a` | vitest-jsdom-dom-commit-proxy, darwin arm64, v25.2.1 | 탭 콘텐츠 500개      |   30 | 0.233 |  0.492 |  0.737 | canonical P95 15.393ms·React P95 1.241ms | [JSON](../benchmarks/results/base-07-tab-switch-improved.json) | DOM commit proxy |
+
+<!-- BASE-07:SESSIONS:END -->
 
 ### 6.1 실제 브라우저 세션
 
@@ -501,6 +533,23 @@
 | 정확성 검증 | 시각 선반영·성공 유지·실패 rollback·요청 중 마지막 의도 직렬화·paint 전 상쇄 테스트 통과 |
 | 성능 값     | 실제 WebView CTP와 CSS toggle ETC 미측정 — 실측 전까지 수치 미기재                       |
 | 결론        | 기능 계약은 검증됐으며 백엔드 오류 주입과 플랫폼 실측 후 완료 여부 결정                  |
+
+<!-- BASE-07:EXPERIMENT:START -->
+
+### EXP-009: 공통 TabSwitch 시각 우선 전환
+
+| 필드        | 내용                                                                                    |
+| ----------- | --------------------------------------------------------------------------------------- |
+| 항목 ID     | BASE-07                                                                                 |
+| 적용 범위   | 키 슬롯, 색상 상태·형식, 이미지 상태, 통합 키 설정, 노트 설정의 6개 탭 전환             |
+| 변경 내용   | 활성 인디케이터와 `aria-pressed`를 먼저 반영하고 탭 콘텐츠 상태 변경을 첫 paint 뒤 커밋 |
+| 적용 기법   | 낙관적 상태 투영·메인 스레드 양보·연속 탭 선택 병합                                     |
+| 커밋·PR     | `84917c5a`                                                                              |
+| P95 변화    | 10.851ms → 0.492ms (95.5%)                                                              |
+| 정확성 검증 | sync 호환·시각 선반영·마지막 탭 병합·언마운트 선택 보존 테스트 통과                     |
+| 결론        | jsdom DOM proxy에서 검증, 실제 WebView 측정 전까지 검증 상태 유지                       |
+
+<!-- BASE-07:EXPERIMENT:END -->
 
 ## 8. 완료 게이트
 
