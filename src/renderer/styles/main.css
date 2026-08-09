@@ -1251,8 +1251,13 @@ svg [data-dmn-icon-motion] {
 
 /* 585에서 586으로 갈 때 5와 8까지 흔들리면 자릿수가 바뀐 게 아니라
    숫자 전체가 깜빡인 걸로 읽힌다. 바뀐 자리만 재생 대상이다 */
+/* 단축이 아니라 개별 속성으로 건다 - 단축은 animation-delay를 0으로 되돌려
+   자릿수 시차가 선언 순서에 매달리게 된다 */
 .dmn-digit-pop > span[data-dmn-digit-changed] {
-  animation: dmnDigitPop var(--ui-digit-duration) var(--ui-digit-ease) both;
+  animation-name: dmnDigitPop;
+  animation-duration: var(--ui-digit-duration);
+  animation-timing-function: var(--ui-digit-ease);
+  animation-fill-mode: both;
   animation-delay: calc(var(--ui-digit-stagger) * var(--dmn-digit-step, 0));
 }
 
@@ -1281,8 +1286,10 @@ svg [data-dmn-icon-motion] {
 /* 확정할 수 없는 입력 - 값으로 만들 수 없다는 걸 한 번 털어서 알린다.
    상자를 흔드는 것이라 transform만 쓰고 레이아웃은 건드리지 않는다 */
 .dmn-field-shake {
-  animation: dmnFieldShake
-    calc(var(--ui-shake-dur-a) * 2 + var(--ui-shake-dur-b) * 2) linear;
+  animation-name: dmnFieldShake;
+  animation-duration: var(--ui-shake-duration);
+  /* 감속은 keyframe이 구간마다 따로 건다 */
+  animation-timing-function: linear;
 }
 
 @keyframes dmnFieldShake {
