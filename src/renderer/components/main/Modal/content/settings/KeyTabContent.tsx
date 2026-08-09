@@ -216,12 +216,12 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
               min={1}
               max={999}
               prefix="X"
+              // onCancel을 주지 않아야 Escape가 onChange로 편집 전 값을 되돌린다.
+              // 빈 onCancel은 취소를 삼켜 표시만 원복되고 값은 그대로 남는다
               onChange={(value) => {
                 setState((prev) => ({ ...prev, width: value }));
                 onPreview({ width: value });
               }}
-              // Escape 시 값 원복 후 이벤트 전파 - 모달 닫힘 경로 유지
-              onCancel={() => {}}
             />
             <NumberInput
               value={state.height}
@@ -232,7 +232,6 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
                 setState((prev) => ({ ...prev, height: value }));
                 onPreview({ height: value });
               }}
-              onCancel={() => {}}
             />
           </PropertyRow>
         </PropertySection>

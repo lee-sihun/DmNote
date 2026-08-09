@@ -531,9 +531,11 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       return;
     }
     if (e.key === 'Escape') {
-      // 이 필드가 Escape를 소비한다. 그대로 올려보내면 defaultPrevented만 보는
-      // FloatingPopup이 함께 닫혀 값만 되돌리려던 동작이 피커까지 접는다
-      e.preventDefault();
+      // 되돌릴 게 있을 때만 이 필드가 Escape를 소비한다.
+      // 팝업과 모달은 defaultPrevented로 한 겹씩 닫으므로, 편집을 되돌리는 Escape가
+      // 그대로 올라가면 값만 되돌리려다 감싸는 피커까지 접힌다.
+      // 반대로 손대지 않은 필드가 삼키면 모달이 첫 Escape에 안 닫힌다
+      if (hasUserInputRef.current) e.preventDefault();
       escapedRef.current = true;
       e.currentTarget.blur();
       return;
@@ -1027,9 +1029,11 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       return;
     }
     if (e.key === 'Escape') {
-      // 이 필드가 Escape를 소비한다. 그대로 올려보내면 defaultPrevented만 보는
-      // FloatingPopup이 함께 닫혀 값만 되돌리려던 동작이 피커까지 접는다
-      e.preventDefault();
+      // 되돌릴 게 있을 때만 이 필드가 Escape를 소비한다.
+      // 팝업과 모달은 defaultPrevented로 한 겹씩 닫으므로, 편집을 되돌리는 Escape가
+      // 그대로 올라가면 값만 되돌리려다 감싸는 피커까지 접힌다.
+      // 반대로 손대지 않은 필드가 삼키면 모달이 첫 Escape에 안 닫힌다
+      if (hasUserInputRef.current) e.preventDefault();
       escapedRef.current = true;
       e.currentTarget.blur();
       return;

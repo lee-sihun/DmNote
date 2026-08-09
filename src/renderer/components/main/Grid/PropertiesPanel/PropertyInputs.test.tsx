@@ -744,15 +744,23 @@ describe('숫자 입력 수식 계산', () => {
     expect(input.value).toBe('');
   });
 
-  it('Escape는 감싸는 팝업이 같이 닫히지 않게 기본 동작을 소비한다', () => {
-    // FloatingPopup은 defaultPrevented만 보고 한 겹씩 닫는다.
-    // 그대로 올려보내면 그림자 피커 안에서 값만 되돌리려다 피커까지 닫힌다
+  it('되돌릴 게 있는 Escape만 소비하고 나머지는 그대로 올려보낸다', () => {
+    // 팝업과 모달은 defaultPrevented로 한 겹씩 닫는다. 편집을 되돌리는 Escape가
+    // 그대로 올라가면 감싸는 피커까지 닫히고, 반대로 손대지 않았는데 삼키면
+    // 모달이 첫 Escape에 안 닫힌다
     const number = renderNumber();
-    expect(pressKey(number, 'Escape').defaultPrevented).toBe(true);
+    expect(pressKey(number, 'Escape').defaultPrevented).toBe(false);
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    const edited = renderNumber();
+    act(() => setInputValue(edited, '12'));
+    expect(pressKey(edited, 'Escape').defaultPrevented).toBe(true);
 
     act(() => root.unmount());
     root = createRoot(container);
     const optional = renderOptional();
+    act(() => setInputValue(optional, '12'));
     expect(pressKey(optional, 'Escape').defaultPrevented).toBe(true);
   });
 
