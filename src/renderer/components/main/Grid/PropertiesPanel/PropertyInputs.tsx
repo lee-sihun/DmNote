@@ -409,6 +409,11 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   // 스텝 기준은 편집 중인 값이 우선. 비었거나 부호만 남은 중간 상태면 확정값으로 돌아간다.
   // Mixed는 대표값이 기준 - 타이핑과 마찬가지로 절대값을 전체에 적용한다
   const resolveStepBase = (): number => {
+    // sanitizer는 숫자와 부호만 남기므로 지수 표기가 전혀 다른 수가 된다 (1e-7 -> 17).
+    // 그대로 숫자로 읽히는 draft는 손대지 않고 쓴다
+    if (canParseNumericInput(draftRef.current)) {
+      return Number(draftRef.current);
+    }
     const typed = sanitizeNumericInput(draftRef.current);
     if (canParseNumericInput(typed)) return Number(typed);
     const committed = typeof value === 'number' ? value : Number(value);
@@ -895,6 +900,11 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   // 값이 비어 있으면 placeholder에 보이는 상속값이 기준이다.
   // 화면에 16px이 떠 있는데 0에서 시작하면 방향키가 값을 되돌리는 것처럼 보인다
   const resolveStepBase = (): number => {
+    // sanitizer는 숫자와 부호만 남기므로 지수 표기가 전혀 다른 수가 된다 (1e-7 -> 17).
+    // 그대로 숫자로 읽히는 draft는 손대지 않고 쓴다
+    if (canParseNumericInput(draftRef.current)) {
+      return Number(draftRef.current);
+    }
     const typed = sanitizeInput(draftRef.current);
     if (canParseNumericInput(typed)) {
       return Number(typed);

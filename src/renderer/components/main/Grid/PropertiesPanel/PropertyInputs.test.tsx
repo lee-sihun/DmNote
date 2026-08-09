@@ -945,6 +945,17 @@ describe('숫자 입력 방향키 스텝', () => {
     expect(input.value).toBe('6.4');
   });
 
+  it('지수 표기로 표시되는 값도 그 수에서 스텝한다', () => {
+    // sanitizer는 숫자와 부호만 남기므로 1e-7이 17이 된다.
+    // 그대로 숫자로 읽히는 표시값은 sanitizer를 거치면 안 된다
+    const input = renderNumberInput({ value: 1e-7, min: -100, max: 100 });
+    act(() => input.focus());
+    expect(input.value).toBe('1e-7');
+
+    act(() => pressKey(input, 'ArrowUp'));
+    expect(input.value).toBe('1');
+  });
+
   it('쓸 수 없는 step은 기본 눈금으로 되돌린다', () => {
     const input = renderNumberInput({ value: 10, step: 0 });
     act(() => input.focus());
