@@ -38,9 +38,11 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
     (state) => state.elements,
   );
 
-  // 모든 요소의 bounds 계산
+  // 모든 요소의 bounds 계산.
+  // 가이드가 꺼져 있으면 계산하지 않는다 - 프리뷰마다 전체 요소를 훑던 비용
   const allElementBounds: ElementBounds[] = (() => {
     const bounds: ElementBounds[] = [];
+    if (!isActive) return bounds;
 
     // 키 요소 bounds
     const keyPositions = positions[selectedKeyType] || [];

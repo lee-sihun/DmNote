@@ -33,6 +33,12 @@ interface Bounds {
   maxY: number;
 }
 
+// 오프셋 적용 결과 캐시. 키가 원본 위치 객체라 원본이 사라지면 함께 회수된다
+const offsetCache = new WeakMap<
+  object,
+  { x: number; y: number; result: unknown }
+>();
+
 export function computeLayout(input: LayoutInput) {
   const {
     currentKeys,
@@ -173,15 +179,26 @@ export function computeLayout(input: LayoutInput) {
   const offsetX = bounds ? PADDING - bounds.minX : 0;
   const offsetY = bounds ? topOffset - bounds.minY : 0;
 
+  // 원본 객체와 오프셋이 그대로면 이전 결과를 재사용한다.
+  // 매번 새 객체를 만들면 아래쪽 Key의 React.memo가 항상 깨져,
+  // 프리뷰로 키 하나만 움직여도 오버레이의 모든 키가 다시 그려진다
   const applyOffset = <T extends { dx: number; dy: number }>(
     items: T[],
   ): T[] => {
     if (!bounds || !items.length) return items;
-    return items.map((item) => ({
-      ...item,
-      dx: item.dx + offsetX,
-      dy: item.dy + offsetY,
-    }));
+    return items.map((item) => {
+      const cached = offsetCache.get(item);
+      if (cached && cached.x === offsetX && cached.y === offsetY) {
+        return cached.result as T;
+      }
+      const shifted = {
+        ...item,
+        dx: item.dx + offsetX,
+        dy: item.dy + offsetY,
+      };
+      offsetCache.set(item, { x: offsetX, y: offsetY, result: shifted });
+      return shifted;
+    });
   };
 
   const displayPositions = applyOffset(currentPositions);
