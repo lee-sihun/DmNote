@@ -718,6 +718,32 @@ describe('숫자 입력 수식 계산', () => {
     expect(document.activeElement).not.toBe(input);
   });
 
+  it('Mixed 필드의 취소는 대표값을 전체 선택에 쓰지 않는다', () => {
+    // Mixed는 되돌릴 값이 하나가 아니다. 표시되던 대표값을 발행하면
+    // 호출부가 그 값을 선택된 요소 전부에 적용해 요소별 값이 사라진다
+    const commit = vi.fn();
+    const input = renderNumber({ isMixed: true, onChange: commit });
+
+    act(() => setInputValue(input, '5'));
+    expect(commit).toHaveBeenLastCalledWith(5);
+    act(() => pressKey(input, 'Escape'));
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe('');
+  });
+
+  it('Mixed Optional 필드의 취소도 대표값을 발행하지 않는다', () => {
+    const commit = vi.fn();
+    const input = renderOptional({ isMixed: true, onChange: commit });
+
+    act(() => setInputValue(input, '5'));
+    expect(commit).toHaveBeenLastCalledWith(5);
+    act(() => pressKey(input, 'Escape'));
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe('');
+  });
+
   it('손대지 않은 입력의 Escape는 되돌릴 것이 없어 아무것도 쓰지 않는다', () => {
     const commit = vi.fn();
     const input = renderNumber({ onChange: commit });
