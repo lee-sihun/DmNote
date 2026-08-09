@@ -407,31 +407,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     restorePreview();
   };
 
-  const prevValueRef = useRef(value);
-
   useEffect(() => {
-    const prevValue = prevValueRef.current;
-    prevValueRef.current = value;
-
     if (!isFocused) {
       syncText(isMixed ? '' : getDisplayValue(value));
       hasUserInputRef.current = false;
       committedValueRef.current = value;
       committedMixedRef.current = isMixed;
-      return;
     }
-
-    // 포커스 중에 우리가 내보낸 값과 다른 prop이 도착하면 편집 대상이 갈렸거나
-    // 외부가 값을 바꾼 것이다. 되돌릴 기준을 새 값으로 옮기고 발행 표시를 지운다 -
-    // 새 대상에는 아직 아무것도 쓰지 않았으므로 취소가 건드릴 게 없다.
-    // 값이 그대로면 판단하지 않는다. 호출부가 발행을 무시하는 경우와 구분되지 않는다
-    if (!emittedRef.current || value === prevValue) return;
-    const echoed = typeof value === 'number' ? value : Number(value);
-    if (echoed === lastEmittedRef.current) return;
-
-    committedValueRef.current = value;
-    committedMixedRef.current = isMixed;
-    emittedRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, isFocused, isMixed]);
 
@@ -929,30 +911,13 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     restorePreview();
   };
 
-  const prevValueRef = useRef(value);
-
   useEffect(() => {
-    const prevValue = prevValueRef.current;
-    prevValueRef.current = value;
-
     if (!isFocused) {
       syncText(isMixed || value == null ? '' : getDisplayValue(value));
       hasUserInputRef.current = false;
       committedValueRef.current = value;
       committedMixedRef.current = isMixed;
-      return;
     }
-
-    // 포커스 중에 우리가 내보낸 값과 다른 prop이 도착하면 편집 대상이 갈렸거나
-    // 외부가 값을 바꾼 것이다. 되돌릴 기준을 새 값으로 옮기고 발행 표시를 지운다 -
-    // 새 대상에는 아직 아무것도 쓰지 않았으므로 취소가 건드릴 게 없다.
-    // 값이 그대로면 판단하지 않는다. 호출부가 발행을 무시하는 경우와 구분되지 않는다
-    if (!emittedRef.current || value === prevValue) return;
-    if ((value ?? null) === lastEmittedRef.current) return;
-
-    committedValueRef.current = value;
-    committedMixedRef.current = isMixed;
-    emittedRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, isFocused, isMixed]);
 
