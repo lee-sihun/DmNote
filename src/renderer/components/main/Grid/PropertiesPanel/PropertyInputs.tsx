@@ -348,6 +348,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   const suppressDigitPopRef = useRef(false);
   const committedValueRef = useRef(value);
   const committedMixedRef = useRef(isMixed);
+  // 이번 편집에서 값을 내보냈는지. 되돌릴 게 없으면 취소가 호출부를 건드리면 안 된다
+  const emittedRef = useRef(false);
 
   // 권위값·화면값·비교 기준을 한 번에 맞춘다. 셋이 갈라지면 스텝이 화면과 다른 수에서 이어진다
   const syncText = (text: string) => {
@@ -360,22 +362,25 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   // 스텝이 우연히 이전 스텝값과 같아졌을 때 발행이 통째로 빠진다
   const emitValue = (next: number) => {
     lastEmittedRef.current = next;
+    emittedRef.current = true;
     scheduleCommit(next);
   };
 
+  // 취소는 값을 내보낸 것과 같은 채널로 되돌린다.
+  // onPreview가 없는 입력은 타이핑이 onChange로 이미 저장까지 갔으므로 되돌릴 길이 그것뿐이다
   const restorePreview = () => {
     if (onCancel) {
       onCancel();
       return;
     }
-    if (!onPreview) return;
+    if (!emittedRef.current) return;
 
     const committedValue = committedValueRef.current;
     const committed =
       typeof committedValue === 'number'
         ? committedValue
         : Number(committedValue);
-    if (Number.isFinite(committed)) onPreview(committed);
+    if (Number.isFinite(committed)) (onPreview ?? onChange)(committed);
   };
 
   const cancelDraft = () => {
@@ -609,6 +614,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     hasUserInputRef.current = false;
     escapedRef.current = false;
     lastEmittedRef.current = null;
+    emittedRef.current = false;
     fieldError.clear();
     committedValueRef.current = value;
     committedMixedRef.current = isMixed;
@@ -832,6 +838,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   const suppressDigitPopRef = useRef(false);
   const committedValueRef = useRef(value);
   const committedMixedRef = useRef(isMixed);
+  // 이번 편집에서 값을 내보냈는지. 되돌릴 게 없으면 취소가 호출부를 건드리면 안 된다
+  const emittedRef = useRef(false);
 
   // 권위값·화면값·비교 기준을 한 번에 맞춘다. 셋이 갈라지면 스텝이 화면과 다른 수에서 이어진다
   const syncText = (text: string) => {
@@ -845,15 +853,19 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   // unset은 숫자가 아니므로 기준을 비워 다음 스텝이 반드시 나가게 한다
   const emitValue = (next: number | undefined) => {
     lastEmittedRef.current = next ?? null;
+    emittedRef.current = true;
     scheduleCommit(next);
   };
 
+  // 취소는 값을 내보낸 것과 같은 채널로 되돌린다.
+  // onPreview가 없는 입력은 타이핑이 onChange로 이미 저장까지 갔으므로 되돌릴 길이 그것뿐이다
   const restorePreview = () => {
     if (onCancel) {
       onCancel();
       return;
     }
-    if (onPreview) onPreview(committedValueRef.current);
+    if (!emittedRef.current) return;
+    (onPreview ?? onChange)(committedValueRef.current);
   };
 
   const cancelDraft = () => {
@@ -1076,6 +1088,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     hasUserInputRef.current = false;
     escapedRef.current = false;
     lastEmittedRef.current = null;
+    emittedRef.current = false;
     fieldError.clear();
     committedValueRef.current = value;
     committedMixedRef.current = isMixed;

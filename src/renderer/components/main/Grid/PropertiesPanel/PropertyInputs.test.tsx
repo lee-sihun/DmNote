@@ -679,6 +679,53 @@ describe('숫자 입력 수식 계산', () => {
     expect(input.value).toBe('10');
   });
 
+  it('preview 채널이 없는 입력도 무효 수식 blur에서 편집 전 값으로 되돌린다', () => {
+    const commit = vi.fn();
+    const input = renderNumber({ onChange: commit });
+
+    // onPreview가 없으면 타이핑이 onChange로 곧장 저장까지 간다
+    act(() => setInputValue(input, '12'));
+    expect(commit).toHaveBeenLastCalledWith(12);
+    act(() => setInputValue(input, '12+'));
+    act(() => input.blur());
+
+    expect(commit).toHaveBeenLastCalledWith(10);
+    expect(input.value).toBe('10');
+  });
+
+  it('preview 채널이 없는 Optional은 unset 뒤 무효 수식 blur에서 값을 되살린다', () => {
+    const commit = vi.fn();
+    const input = renderOptional({ onChange: commit });
+
+    act(() => setInputValue(input, ''));
+    expect(commit).toHaveBeenLastCalledWith(undefined);
+    act(() => setInputValue(input, '+'));
+    act(() => input.blur());
+
+    expect(commit).toHaveBeenLastCalledWith(10);
+  });
+
+  it('preview 채널이 없는 입력도 Escape로 편집 전 값을 되찾는다', () => {
+    const commit = vi.fn();
+    const input = renderNumber({ onChange: commit });
+
+    act(() => setInputValue(input, '12'));
+    act(() => pressKey(input, 'Escape'));
+
+    expect(commit).toHaveBeenLastCalledWith(10);
+    expect(input.value).toBe('10');
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it('손대지 않은 입력의 Escape는 되돌릴 것이 없어 아무것도 쓰지 않는다', () => {
+    const commit = vi.fn();
+    const input = renderNumber({ onChange: commit });
+
+    act(() => pressKey(input, 'Escape'));
+
+    expect(commit).not.toHaveBeenCalled();
+  });
+
   it('Mixed 수식을 확정하고 잘못된 수식은 gesture 취소 경로를 탄다', () => {
     const commit = vi.fn();
     const preview = vi.fn();
