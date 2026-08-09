@@ -882,6 +882,12 @@ svg [data-dmn-icon-motion] {
   animation-duration: var(--ui-icon-punch-duration);
 }
 
+[data-dmn-icon-play] [data-dmn-icon-motion='eye-lid'] {
+  animation-name: dmnIconEyeLid;
+  animation-duration: var(--ui-icon-eye-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
 [data-dmn-icon-play] [data-dmn-icon-motion='eye-pupil'] {
   animation-name: dmnIconEyePupil;
   animation-duration: var(--ui-icon-eye-duration);
@@ -1182,8 +1188,25 @@ svg [data-dmn-icon-motion] {
   }
 }
 
-/* 움직이는 건 동공 하나뿐. 눈꺼풀까지 건드리면 사선·마스크 홈과 얽혀
-   상태별로 모션이 갈리고, 토글하는 순간 애니메이션이 교체되며 끊긴다 */
+/* 눈꺼풀이 좁혀지고 동공이 40ms 늦게 따라 눌린다. 두 겹이 다른 폭으로 움직여야
+   형태 없는 눌림이 아니라 초점으로 읽힌다.
+   동공은 눈꺼풀 그룹 안이라 두 배율이 곱해진다 - 세로 실효값 0.78 x 0.85 = 0.66.
+   사선은 이 그룹 밖이라 같이 눌리지 않고, 켜짐·꺼짐이 같은 모션이다 */
+@keyframes dmnIconEyeLid {
+  0% {
+    transform: scaleY(1);
+  }
+
+  42%,
+  52% {
+    transform: scaleY(0.78);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
 @keyframes dmnIconEyePupil {
   0% {
     transform: scale(1);
@@ -1191,7 +1214,7 @@ svg [data-dmn-icon-motion] {
 
   42%,
   52% {
-    transform: scale(0.7);
+    transform: scale(0.88, 0.85);
   }
 
   100% {

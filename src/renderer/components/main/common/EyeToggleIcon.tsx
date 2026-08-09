@@ -81,7 +81,7 @@ const EyeToggleIcon = ({ slashed }: EyeToggleIconProps) => {
   }, [slashed, isInstant]);
 
   return (
-    // data-dmn-icon(overflow: visible)을 걸지 않는다 — 숨긴 사선은 뷰포트 밖에
+    // data-dmn-icon(overflow: visible)을 걸지 않는다 - 숨긴 사선은 뷰포트 밖에
     // 세워두고 SVG 클리핑으로 감추는 구조라, 넘침을 허용하면 사선이 툴바로 삐져나온다.
     // 대신 호버 모션을 뷰박스 안에서만 끝나는 축소로 둔다
     <svg
@@ -93,49 +93,54 @@ const EyeToggleIcon = ({ slashed }: EyeToggleIconProps) => {
       fill="none"
       aria-hidden="true"
     >
-      {/* 움직이는 건 동공 하나뿐이고 켜짐·꺼짐이 같다.
-          눈꺼풀까지 움직이면 사선·마스크 홈과 같이 변형돼야 해서 상태별로 모션이 갈리고,
-          토글하는 순간 재생 중이던 애니메이션이 다른 것으로 교체되며 턱턱 끊긴다.
-          대상이 안 바뀌면 눌러도 끊을 이유가 없어 그대로 끝까지 재생된다 */}
-      <g>
-        <mask
-          id={maskId}
-          maskUnits="userSpaceOnUse"
-          x="0"
-          y="0"
-          width="18"
-          height="14"
-        >
-          <rect width="18" height="14" fill="white" />
-          <line
-            ref={gapRef}
-            x1="1"
-            y1="0.5"
-            x2="17"
-            y2="13.5"
-            stroke="black"
-            strokeWidth="4"
-            strokeLinecap="round"
-          />
-        </mask>
-        <path mask={`url(#${maskId})`} d={EYE_SHELL} fill="currentColor" />
-        <path
-          mask={`url(#${maskId})`}
-          data-dmn-icon-motion="eye-pupil"
-          d={EYE_PUPIL}
-          fill="currentColor"
-        />
+      <mask
+        id={maskId}
+        maskUnits="userSpaceOnUse"
+        x="0"
+        y="0"
+        width="18"
+        height="14"
+      >
+        <rect width="18" height="14" fill="white" />
         <line
-          ref={slashRef}
+          ref={gapRef}
           x1="1"
           y1="0.5"
           x2="17"
           y2="13.5"
-          stroke="currentColor"
-          strokeWidth="1.5"
+          stroke="black"
+          strokeWidth="4"
           strokeLinecap="round"
         />
+      </mask>
+      {/* 사선 홈은 이 바깥 그룹이 소유한다. 안쪽 눈꺼풀이 눌리는 동안
+          홈은 제자리에 있어야 사선과 어긋나지 않는다 */}
+      <g mask={`url(#${maskId})`}>
+        {/* 켜짐·꺼짐이 같은 모션이다. 상태별로 갈리면 토글하는 순간
+            재생 중이던 애니메이션이 다른 것으로 교체되며 턱턱 끊긴다.
+            대상이 안 바뀌니 눌러도 끊을 이유가 없어 그대로 끝까지 재생된다 */}
+        <g data-dmn-icon-motion="eye-lid">
+          <path d={EYE_SHELL} fill="currentColor" />
+          {/* 눈꺼풀보다 반 박자 늦게 눌려야 두 겹으로 읽힌다 */}
+          <path
+            data-dmn-icon-motion="eye-pupil"
+            style={{ '--dmn-icon-delay': '40ms' } as React.CSSProperties}
+            d={EYE_PUPIL}
+            fill="currentColor"
+          />
+        </g>
       </g>
+      {/* 사선은 눈꺼풀 그룹 밖. 같이 눌리면 각도가 얕아져 어긋나 보인다 */}
+      <line
+        ref={slashRef}
+        x1="1"
+        y1="0.5"
+        x2="17"
+        y2="13.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   );
 };
