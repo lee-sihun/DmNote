@@ -882,6 +882,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               handleBatchStyleChangeComplete('borderWidth', value)
             }
             onPreview={(value) => handleBatchStyleChange('borderWidth', value)}
+            onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
             max={20}
@@ -905,6 +906,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               handleBatchStyleChangeComplete('borderRadius', value)
             }
             onPreview={(value) => handleBatchStyleChange('borderRadius', value)}
+            onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
             max={100}
@@ -1013,6 +1015,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   onPreview={(value) =>
                     handleBatchStyleChange('fontSize', value)
                   }
+                  onCancel={() => editGestureController.cancel()}
                   suffix="px"
                   min={8}
                   max={72}
