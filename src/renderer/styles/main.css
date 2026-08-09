@@ -64,7 +64,8 @@ body.dmn-custom-cursor * {
 /* 글래스 백드롭 — 블러에 밝기·채도 클램프를 결합.
    비용 지배 요인은 반경이 아니라 표면 수·면적·아래 damage(재필터 트리거) —
    Skia가 큰 반경을 저해상도 다운샘플로 처리해 반경 비용은 평탄화됨.
-   글래스는 일시 표면(모달·팝업) 전용 유지, 표면 자체에 transform 애니메이션 금지 */
+   글래스는 일시 표면(모달·팝업) 전용 유지. 표면 transform은 등퇴장 한 번만
+   허용하고, 상주 중 반복 애니메이션은 금지 (프레임마다 재필터를 부름) */
 .backdrop-glass {
   -webkit-backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
@@ -327,6 +328,58 @@ body.dmn-custom-cursor * {
   transition: none !important;
 }
 
+/* 토글 노브 - 이동은 translate로만. left를 쓰면 매 프레임 레이아웃을 다시 잡는다.
+   오버슈트는 keyframe이 아니라 이징 커브가 만든다. 토글은 연타되는 컨트롤이라
+   keyframe이면 두 번째 클릭이 0에서 다시 재생돼 노브가 뒤로 튄다.
+   외부 상태 변경의 차단은 위 data-dmn-instant 규칙이 이미 소유 */
+.dmn-toggle-thumb {
+  translate: 0 0;
+  /* 손을 뗀 뒤 원형으로 돌아오는 clock. 크기는 Tailwind 유틸이 소유하고
+     여기서는 전환만 건다 */
+  transition: translate var(--ui-toggle-duration) var(--ui-toggle-ease),
+    height var(--ui-toggle-release-duration) var(--ui-ease-out),
+    margin-top var(--ui-toggle-release-duration) var(--ui-ease-out);
+}
+
+[role='switch'][aria-checked='true'] .dmn-toggle-thumb {
+  translate: var(--ui-toggle-travel) 0;
+}
+
+/* 누르고 있는 동안 노브가 캡슐로 눌린다. 들어갈 때는 천천히, 나올 때는 빠르게 -
+   duration을 :active 쪽에 따로 걸어 비대칭으로 만든다.
+   커진 만큼 margin으로 절반씩 되밀어 제자리에서 퍼지게 한다. 진행 방향으로
+   퍼뜨리려면 기준변이 aria-checked를 따라가야 하는데, 손을 떼는 순간 기준이
+   뒤집히면서 아직 원형으로 안 돌아온 상태라 노브가 툭 튄다.
+   중심 유지면 그 충돌이 생기지 않고, 양쪽 다 인셋 안에서 끝난다.
+   이동은 translate라 크기 전환과 속성이 갈려 서로 덮어쓰지 않는다 */
+[role='switch']:active .dmn-toggle-thumb {
+  height: var(--ui-toggle-press-height);
+  /* 줄어든 만큼 되밀어 제자리에서 눌리게 한다 */
+  margin-top: calc(
+    (var(--ui-toggle-thumb-size) - var(--ui-toggle-press-height)) / 2
+  );
+  transition: translate var(--ui-toggle-duration) var(--ui-toggle-ease),
+    height var(--ui-toggle-press-duration) var(--ui-toggle-press-ease),
+    margin-top var(--ui-toggle-press-duration) var(--ui-toggle-press-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 트랙도 함께 꺼야 한다. 노브만 멈추면 노브는 즉시 점프하는데
+     트랙 색만 180ms 동안 흐르며 두 clock이 갈라진다.
+     Tailwind 유틸(transition-colors)을 이기려면 특이도가 한 단계 높아야 한다 */
+  [role='switch'].dmn-toggle-track {
+    transition: none;
+  }
+
+  .dmn-toggle-thumb,
+  [role='switch']:active .dmn-toggle-thumb {
+    transition: none;
+    /* 전환이 없으면 눌림이 깜빡임으로 읽히므로 변형 자체를 끈다 */
+    height: var(--ui-toggle-thumb-size);
+    margin-top: 0;
+  }
+}
+
 /* 눈 토글의 사선 드로우 모션은 EyeToggleIcon.tsx에서 WAAPI로 처리 —
    드로우·이레이즈 모두 좌상→우하 한 방향 관통 스와이프 */
 
@@ -378,36 +431,143 @@ body.dmn-custom-cursor * {
   animation: tooltipFadeIn var(--ui-duration-fast) var(--ui-ease-out);
 }
 
-/* 종료 상태는 클래스 자연값 — to 블록 생략 */
-@keyframes modalScale {
-  from {
-    transform: scale(0.97);
-    opacity: 0;
+/* ===== 팝업 등퇴장 ===== */
+
+/* 상태는 팝업 표면이 갖고 값은 상속으로 내려간다. 글래스를 소유한 노드가
+   표면 자신일 때도(ListPopup) 자식 카드일 때도(피커) 있는데, 조상에 opacity나
+   transform이 걸리면 backdrop root가 생겨 자손 블러가 죽는다. 커스텀 속성은
+   상속되니 모션 노드가 어디에 있든 규칙 하나로 닿는다.
+   keyframe이 아니라 transition인 것도 의도 - 닫히는 중 재오픈이
+   현재 값에서 이어져야 한다 (keyframe은 처음부터 다시 재생) */
+
+/* 기본 다이얼 - 드롭다운, 팝오버, 피커 */
+[data-dmn-motion-state] {
+  --dmn-enter-duration: var(--ui-popup-enter-duration);
+  --dmn-exit-duration: var(--ui-popup-exit-duration);
+  --dmn-enter-scale: var(--ui-popup-enter-scale);
+  --dmn-exit-scale: var(--ui-popup-exit-scale);
+  --dmn-motion-duration: var(--dmn-enter-duration);
+}
+
+/* 카드 모달은 같은 상태 기계에 다이얼만 교체 */
+[data-dmn-motion-state][data-dmn-motion-variant='modal'] {
+  --dmn-enter-duration: var(--ui-modal-enter-duration);
+  --dmn-exit-duration: var(--ui-modal-exit-duration);
+  --dmn-enter-scale: var(--ui-modal-enter-scale);
+  --dmn-exit-scale: var(--ui-modal-exit-scale);
+}
+
+/* 등장 직전 - duration 0으로 시작 값을 확정시킨 뒤 open으로 넘어간다 */
+[data-dmn-motion-state='entering'] {
+  --dmn-motion-duration: 0s;
+  --dmn-motion-opacity: 0;
+  --dmn-motion-scale: var(--dmn-enter-scale);
+}
+
+/* 닫는 의미는 이미 끝난 상태 - 시각 잔상만 남으므로 입력을 받지 않는다 */
+[data-dmn-motion-state='closing'] {
+  --dmn-motion-duration: var(--dmn-exit-duration);
+  --dmn-motion-opacity: 0;
+  --dmn-motion-scale: var(--dmn-exit-scale);
+  pointer-events: none;
+}
+
+/* 실제 배치 방향에서 원점을 정한다. transformOrigin을 인라인 style로 박으면
+   유저 커스텀 CSS가 덮을 수 없다. 접두사 규칙이 먼저, 정렬까지 맞는 규칙이
+   나중 - 특이도가 같아 순서가 승부를 낸다 */
+[data-dmn-placement^='bottom'] {
+  --dmn-motion-origin: top center;
+}
+
+[data-dmn-placement^='top'] {
+  --dmn-motion-origin: bottom center;
+}
+
+[data-dmn-placement^='right'] {
+  --dmn-motion-origin: left center;
+}
+
+[data-dmn-placement^='left'] {
+  --dmn-motion-origin: right center;
+}
+
+[data-dmn-placement='bottom-start'] {
+  --dmn-motion-origin: top left;
+}
+
+[data-dmn-placement='bottom-end'] {
+  --dmn-motion-origin: top right;
+}
+
+[data-dmn-placement='top-start'] {
+  --dmn-motion-origin: bottom left;
+}
+
+[data-dmn-placement='top-end'] {
+  --dmn-motion-origin: bottom right;
+}
+
+[data-dmn-placement='right-start'] {
+  --dmn-motion-origin: left top;
+}
+
+[data-dmn-placement='right-end'] {
+  --dmn-motion-origin: left bottom;
+}
+
+[data-dmn-placement='left-start'] {
+  --dmn-motion-origin: right top;
+}
+
+[data-dmn-placement='left-end'] {
+  --dmn-motion-origin: right bottom;
+}
+
+/* 모션 노드 - 상속받은 값만 소비한다. 이 클래스는 글래스를 소유한 노드에 붙인다.
+   상태 속성이 없으면 완전히 보이는 상태라, 상태 플립이 실패해도
+   팝업이 안 보이는 사고는 나지 않는다.
+   dmn-motion-content는 글래스가 외자식에게 있을 때(모달 카드) 쓰는 위임형 -
+   래퍼에 직접 걸면 backdrop root가 생겨 카드 블러가 죽는다 */
+.dmn-motion,
+.dmn-motion-content > * {
+  transform-origin: var(--dmn-motion-origin, center);
+  opacity: var(--dmn-motion-opacity, 1);
+  transform: scale(var(--dmn-motion-scale, 1));
+  transition: opacity var(--dmn-motion-duration, var(--ui-popup-enter-duration))
+      var(--ui-popup-ease),
+    transform var(--dmn-motion-duration, var(--ui-popup-enter-duration))
+      var(--ui-popup-ease);
+}
+
+/* 등장은 틴트만 보간 - blur 반경 보간은 전화면 재필터라 금지.
+   opacity도 transition 목록에 두는 건 닫히다 다시 열릴 때를 위해서다.
+   퇴장 규칙에만 있으면 되돌아올 때 현재 값에서 이어지지 않고 1로 튄다 */
+.dmn-scrim-motion {
+  transition: background-color
+      var(--dmn-motion-duration, var(--ui-modal-enter-duration))
+      var(--ui-popup-ease),
+    opacity var(--dmn-motion-duration, var(--ui-modal-enter-duration))
+      var(--ui-popup-ease);
+}
+
+[data-dmn-motion-state='entering'] .dmn-scrim-motion {
+  background-color: transparent;
+}
+
+/* 퇴장은 레이어를 통째로 페이드한다. 틴트만 빼면 블러가 끝까지 남아 있다가
+   언마운트 순간 툭 끊긴다. 반경은 상수라 재필터가 아니라 합성 비용만 든다 */
+[data-dmn-motion-state='closing'] .dmn-scrim-motion {
+  opacity: 0;
+  transition: opacity var(--dmn-motion-duration, var(--ui-modal-exit-duration))
+    var(--ui-popup-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-motion,
+  .dmn-motion-content > *,
+  .dmn-scrim-motion {
+    transition: none;
   }
-}
-
-/* 래퍼가 아닌 콘텐츠 루트가 직접 애니메이션 — opacity가 1 미만인 조상은
-   backdrop root가 되어 글래스 블러가 죽었다가 애니메이션이 끝나는 순간 튐.
-   블러 소유 엘리먼트 자신의 페이드는 블러를 살린 채 진행됨 (Dropdown 참고) */
-.animate-modal-scale > * {
-  animation: modalScale var(--ui-duration-base) var(--ui-ease-out) both;
-}
-
-/* FloatingPopup 래퍼용 — 같은 원리로 페이드를 래퍼가 아닌 콘텐츠 루트(글래스 노드)에 적용 */
-.animate-popup-fade > * {
-  animation: tooltipFadeIn var(--ui-duration-fast) var(--ui-ease-out);
-}
-
-/* 스크림 틴트만 보간 — 종료 상태는 클래스 자연값
-   backdrop-filter 보간 금지: 애니메이션 내내 풀스크린 재필터 (Windows 렉) */
-@keyframes modalScrim {
-  from {
-    background-color: transparent;
-  }
-}
-
-.animate-modal-scrim {
-  animation: modalScrim var(--ui-duration-fast) var(--ui-ease-out) both;
 }
 
 /* 스테이지 콘텐츠 등장 — 비동기 준비(파형 디코드 등)를 마친 콘텐츠의 한 박자 페이드 */
@@ -546,8 +706,6 @@ body.dmn-custom-cursor * {
 /* 모션 축소 설정 존중 — 이동은 제거, 표시 자체는 유지 */
 @media (prefers-reduced-motion: reduce) {
   .tooltip-fade-in,
-  .animate-modal-scale > *,
-  .animate-modal-scrim,
   .animate-stage-in,
   .animate-pulse {
     animation: none;

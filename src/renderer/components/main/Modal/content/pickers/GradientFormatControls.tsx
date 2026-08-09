@@ -5,6 +5,7 @@ import {
   isTopmostPopupLayer,
   registerPopupLayer,
 } from '@components/main/Modal/popupLayer';
+import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { usePointerSession } from './colorPickerPrimitives';
 import { CHECKER_PATTERN } from './ColorSwatch';
 import {
@@ -46,6 +47,9 @@ export const FormatSelectBar = ({
   const [openUp, setOpenUp] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { mounted, state: motionState } = usePopupPresence(open, {
+    motionRef: menuRef,
+  });
 
   const labels: Record<ColorFormat, string> = {
     solid: t('colorPicker.solid'),
@@ -140,16 +144,19 @@ export const FormatSelectBar = ({
           />
         </svg>
       </button>
-      {open &&
+      {mounted &&
         anchorRect &&
         createPortal(
           <div
             ref={menuRef}
             data-dmn-popup-layer="true"
             data-dmn-popup-submenu="true"
+            data-dmn-motion-state={motionState}
+            data-dmn-placement={openUp ? 'top-start' : 'bottom-start'}
+            inert={motionState === 'closing'}
             role="menu"
             aria-label={labels[format]}
-            className="fixed z-[60] flex flex-col p-[4px] gap-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2"
+            className="dmn-motion fixed z-[60] flex flex-col p-[4px] gap-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2"
             style={{
               left: anchorRect.left,
               top: openUp

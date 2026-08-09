@@ -1,13 +1,26 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { getFocusableElements } from '@utils/focusableElements';
+import type { PopupMotionState } from '@hooks/ui/usePopupPresence';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
 
 interface ModalProps {
   onClick?: () => void;
   children: React.ReactNode;
+  /** 모션 전면 차단 - 등퇴장이 없어야 하는 표면과 테스트용 탈출구 */
   animate?: boolean;
+  /**
+   * useModalPresence가 넘기는 등퇴장 상태. 부모가 조건부로 모달을 걷어내면
+   * 퇴장 모션이 돌 자리가 없으므로, 수명은 호출부가 presence로 소유한다
+   */
+  motionState?: PopupMotionState;
   /** 스크린리더용 다이얼로그 이름 */
   ariaLabel?: string;
   /** 중앙 카드 대신 크롬 사이 영역을 통째로 덮는 전면 시트 */
@@ -20,13 +33,15 @@ const Modal = ({
   onClick,
   children,
   animate = true,
+  motionState,
   ariaLabel,
   fullSurface = false,
   contentMountStrategy = 'sync',
 }: ModalProps) => {
-  const scrimAnimClass = animate ? 'animate-modal-scrim' : '';
-  // 전면 시트는 등장 애니메이션 없이 즉시 표시
-  const contentAnimClass = animate && !fullSurface ? 'animate-modal-scale' : '';
+  const closing = motionState === 'closing';
+  const scrimAnimClass = animate ? 'dmn-scrim-motion' : '';
+  // 전면 시트는 등퇴장 모션 없이 즉시 표시
+  const contentAnimClass = animate && !fullSurface ? 'dmn-motion-content' : '';
   const closeFromBackdropRef = useRef(false);
   const backdropRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClick);
@@ -58,11 +73,13 @@ const Modal = ({
       : null,
   );
 
+  // 닫힘 모션이 도는 동안 DOM은 남지만 레이어 소유권은 즉시 놓는다.
+  // 아니면 닫히는 모달이 Escape와 Tab 순환을 계속 물고 있다
   useLayoutEffect(() => {
     const backdrop = backdropRef.current;
-    if (!backdrop) return;
+    if (closing || !backdrop) return;
     return registerPopupLayer(backdrop);
-  }, []);
+  }, [closing]);
 
   useEffect(() => {
     const reset = () => {
@@ -76,10 +93,19 @@ const Modal = ({
     };
   }, []);
 
-  // 자식 autoFocus를 존중하고, 지정이 없으면 첫 조작 요소로 포커스 이동
+  // 자식 autoFocus를 존중하고, 지정이 없으면 첫 조작 요소로 포커스 이동.
+  // closing을 의존성에 두는 건 퇴장 유예 때문이다. 닫히는 중 다시 열리면
+  // 인스턴스가 재사용돼 마운트 1회 전제로는 포커스가 다시 잡히지 않는다
+  const activatedRef = useRef(false);
   useLayoutEffect(() => {
     const backdrop = backdropRef.current;
-    if (!backdrop) return;
+    if (closing || !backdrop) return;
+    // 첫 활성화는 마운트 시점 캡처가 정확하다. 퇴장 유예 중 재오픈은 인스턴스를
+    // 재사용하므로 opener를 다시 잡아야 다른 트리거로 열어도 제자리로 돌아간다
+    if (activatedRef.current && !backdrop.contains(document.activeElement)) {
+      prevFocusedRef.current = document.activeElement as HTMLElement | null;
+    }
+    activatedRef.current = true;
     if (
       contentReady &&
       document.activeElement !== backdrop &&
@@ -89,17 +115,33 @@ const Modal = ({
     }
     const initialTarget = getFocusableElements(backdrop)[0] ?? backdrop;
     initialTarget.focus();
-  }, [contentReady]);
+  }, [closing, contentReady]);
 
-  // 닫힐 때 열기 전 포커스 복원 (요소가 아직 문서에 연결된 경우만)
-  useEffect(() => {
+  // 닫힐 때 열기 전 포커스 복원 (요소가 아직 문서에 연결된 경우만).
+  // 복원은 닫기 시작 시점에 한 번 - 언마운트 cleanup에만 걸어두면
+  // 퇴장 모션이 끝날 때까지 포커스가 모달에 붙잡혀 있다
+  const focusRestoredRef = useRef(false);
+  const restoreFocus = useCallback(() => {
+    if (focusRestoredRef.current) return;
+    focusRestoredRef.current = true;
     const prevFocused = prevFocusedRef.current;
-    return () => {
-      if (prevFocused && prevFocused.isConnected) {
-        prevFocused.focus();
-      }
-    };
+    if (prevFocused && prevFocused.isConnected) {
+      prevFocused.focus();
+    }
   }, []);
+
+  // paint 전에 돌려놔야 포커스가 한 프레임 뜨지 않는다 (FloatingPopup과 같은 타이밍)
+  useLayoutEffect(() => {
+    if (!closing) {
+      // 닫히다 다시 열리면 가드를 풀어야 다음 닫힘에서도 복원된다
+      focusRestoredRef.current = false;
+      return;
+    }
+    restoreFocus();
+  }, [closing, restoreFocus]);
+
+  // 모션 없이 통째로 사라지는 경로 폴백
+  useLayoutEffect(() => restoreFocus, [restoreFocus]);
 
   // 최상위 모달만 Escape와 Tab 포커스 순환을 소유
   useEffect(() => {
@@ -177,16 +219,20 @@ const Modal = ({
   // 글래스의 블러가 WebKit에서 배경을 샘플링하지 못함. 형제 레이어는 정상 합성됨
   // 조상 opacity 애니메이션도 같은 이유로 금지 — opacity < 1인 조상이
   // backdrop root가 되어 페이드 동안 블러가 죽었다가 끝나는 순간 튐.
-  // 그래서 animate-modal-scale은 래퍼가 아닌 직계 자식(> *)에 적용되고,
-  // 등장 모션은 스크림(틴트 키프레임)과 콘텐츠 루트가 각자 소유한다
-  // 스크림은 검은 딤 + 은은한 상수 블러 — 블러 키프레임 보간만 금지 (Windows 렉 요인)
+  // 그래서 dmn-motion-content는 래퍼가 아닌 직계 자식(> *)에 적용되고,
+  // 등퇴장 모션은 스크림(틴트 전환)과 콘텐츠 루트가 각자 소유한다
+  // 스크림은 검은 딤 + 은은한 상수 블러, 블러 보간만 금지 (Windows 렉 요인)
   return createPortal(
     <div
       ref={backdropRef}
       data-dmn-modal-backdrop="true"
+      data-dmn-motion-state={animate ? motionState : undefined}
+      data-dmn-motion-variant="modal"
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
+      // 닫히는 중엔 시각 잔상만 남으므로 포커스·스크린리더 대상에서 뺀다
+      inert={closing}
       tabIndex={-1}
       className="fixed top-[30px] bottom-[60px] left-0 right-0 flex items-center justify-center z-50"
       onPointerDown={handleBackdropPointerDown}

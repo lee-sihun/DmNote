@@ -7,6 +7,7 @@ import React, {
   useLayoutEffect,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { isTopmostPopupLayer, registerPopupLayer } from '../Modal/popupLayer';
 import { useOptimisticValueCommit } from '@hooks/useOptimisticValueCommit';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
@@ -42,6 +43,8 @@ interface MenuPosition {
   right?: number;
   top?: number;
   bottom?: number;
+  // 등퇴장 원점을 실제 펼침 방향에 맞추기 위한 배치 결과
+  placement: 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end';
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -75,6 +78,13 @@ const Dropdown: React.FC<DropdownProps> = ({
       strategy: commitStrategy,
     });
 
+  // 좌표가 확정되기 전에는 감춘 채 실측하므로, 그 프레임에 등장 모션이
+  // 소비되지 않게 ready를 늦춘다
+  const { mounted, state: motionState } = usePopupPresence(open, {
+    ready: Boolean(menuPos),
+    motionRef: menuRef,
+  });
+
   const selectedIndex = options.findIndex(
     (option) => option.value === visualValue,
   );
@@ -84,7 +94,10 @@ const Dropdown: React.FC<DropdownProps> = ({
       const button = buttonRef.current;
       if (!button || disabled || options.length === 0) return;
       setAnchor(button.getBoundingClientRect());
-      setMenuPos(null);
+      // 닫히는 중 재오픈은 이전 좌표를 이어받는다. 같은 트리거라 위치가 같고,
+      // null로 되돌리면 감춰진 프레임이 한 번 껴서 튄다.
+      // 스크롤·리사이즈는 메뉴를 닫으므로 그사이 앵커가 움직일 일은 없다
+      if (!mounted) setMenuPos(null);
       const fallbackIndex = selectedIndex >= 0 ? selectedIndex : 0;
       setActiveIndex(
         Math.min(
@@ -94,7 +107,7 @@ const Dropdown: React.FC<DropdownProps> = ({
       );
       setOpen(true);
     },
-    [disabled, options.length, selectedIndex],
+    [disabled, mounted, options.length, selectedIndex],
   );
 
   // 메뉴는 body로 포털 — 패널/모달의 backdrop-filter·mask 아래에서는
@@ -152,24 +165,27 @@ const Dropdown: React.FC<DropdownProps> = ({
     const bottomPadding = 60;
 
     // right 정렬은 right 좌표로 고정 — 열린 뒤 내용 폭이 변해도 우측 모서리 유지
-    let horizontal: MenuPosition;
+    let horizontal: Omit<MenuPosition, 'placement'>;
+    let alignment: 'start' | 'end';
     if (!fullWidth && align === 'right') {
       let right = window.innerWidth - anchor.right;
       right = Math.min(right, window.innerWidth - margin - menuWidth);
       right = Math.max(right, margin);
       horizontal = { right };
+      alignment = 'end';
     } else {
       let left = anchor.left;
       left = Math.min(left, window.innerWidth - margin - menuWidth);
       left = Math.max(left, margin);
       horizontal = { left };
+      alignment = 'start';
     }
 
     // 버튼 아래 공간이 부족하면 위로 펼치기 — 위로 열릴 땐 bottom 좌표로
     // 고정해 내용 높이가 변해도 위쪽으로 자라게 유지
     const openUpward =
       anchor.bottom + gap + menuHeight > window.innerHeight - bottomPadding;
-    let vertical: MenuPosition;
+    let vertical: Omit<MenuPosition, 'placement'>;
     if (openUpward) {
       let bottom = window.innerHeight - anchor.top + gap;
       bottom = Math.min(bottom, window.innerHeight - margin - menuHeight);
@@ -182,23 +198,28 @@ const Dropdown: React.FC<DropdownProps> = ({
       vertical = { top };
     }
 
-    const next = { ...horizontal, ...vertical };
+    const next: MenuPosition = {
+      ...horizontal,
+      ...vertical,
+      placement: `${openUpward ? 'top' : 'bottom'}-${alignment}`,
+    };
     setMenuPos((prev) =>
       prev &&
       prev.left === next.left &&
       prev.right === next.right &&
       prev.top === next.top &&
-      prev.bottom === next.bottom
+      prev.bottom === next.bottom &&
+      prev.placement === next.placement
         ? prev
         : next,
     );
   }, [anchor, fullWidth, align]);
 
   useLayoutEffect(() => {
-    if (!open || menuPos) return;
+    if (!open || !mounted || menuPos) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     place();
-  }, [open, menuPos, place]);
+  }, [open, mounted, menuPos, place]);
 
   // 열린 뒤 옵션이 사라지면 빈 포털을 남기지 않고 트리거로 복귀
   useLayoutEffect(() => {
@@ -212,21 +233,23 @@ const Dropdown: React.FC<DropdownProps> = ({
     optionRefs.current[activeIndex]?.focus();
   }, [activeIndex, menuPos, open]);
 
+  // 닫힘 모션이 도는 동안에도 DOM은 남지만 레이어 소유권은 즉시 놓는다.
+  // 아니면 닫히는 메뉴가 150ms 동안 Escape를 계속 먹는다
   useLayoutEffect(() => {
     const menu = menuRef.current;
-    if (!open || !menu) return;
+    if (!open || !mounted || !menu) return;
     return registerPopupLayer(menu);
-  }, [anchor, open]);
+  }, [anchor, mounted, open]);
 
   // 열린 동안 내용 크기 변화(비동기 옵션 로드 등) 시 클램프·플립 재계산
   useEffect(() => {
-    if (!open) return;
+    if (!open || !mounted) return;
     const menu = menuRef.current;
     if (!menu) return;
     const observer = new ResizeObserver(() => place());
     observer.observe(menu);
     return () => observer.disconnect();
-  }, [open, place]);
+  }, [mounted, open, place]);
 
   // 열린 채로 비활성화되면 닫는다 — 트리거만 죽고 포털 메뉴가 살아남는 것 방지
   useEffect(() => {
@@ -358,15 +381,19 @@ const Dropdown: React.FC<DropdownProps> = ({
   const selected = options.find((opt) => opt.value === visualValue);
 
   const menu =
-    open && anchor
+    mounted && anchor
       ? createPortal(
           <div
             ref={menuRef}
             data-dmn-popup-submenu="true"
             data-dmn-popup-layer="true"
+            data-dmn-motion-state={motionState}
+            data-dmn-placement={menuPos?.placement}
+            // 닫히는 중엔 시각 잔상만 남으므로 포커스·스크린리더 대상에서 뺀다
+            inert={motionState === 'closing'}
             role="listbox"
             id={menuId}
-            className={`fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2 z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] tooltip-fade-in ${widthClass}`}
+            className={`dmn-motion fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2 z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] ${widthClass}`}
             style={{
               // 실측 전에는 원점에서 히든 렌더 — 자연 크기 그대로 측정
               left: menuPos ? menuPos.left : 0,

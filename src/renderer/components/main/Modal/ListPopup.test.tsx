@@ -3,6 +3,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ListPopup, { type ListItem } from './ListPopup';
 
+// 닫힘 모션이 도는 동안 메뉴 DOM은 잠깐 남는다. 열려 있는 메뉴만 센다
+const openMenu = () =>
+  document.querySelector(
+    '[role="menu"]:not([data-dmn-motion-state="closing"])',
+  );
+
 describe('ListPopup keyboard contract', () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -122,7 +128,7 @@ describe('ListPopup keyboard contract', () => {
     await act(async () => document.dispatchEvent(tab));
 
     expect(tab.defaultPrevented).toBe(true);
-    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(openMenu()).toBeNull();
     expect(document.activeElement).toBe(nextButton);
   });
 
@@ -146,7 +152,7 @@ describe('ListPopup keyboard contract', () => {
     await act(async () => document.dispatchEvent(tab));
 
     expect(tab.defaultPrevented).toBe(true);
-    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(openMenu()).toBeNull();
     expect(document.activeElement).toBe(beforeButton);
   });
 });

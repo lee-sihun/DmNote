@@ -1,5 +1,6 @@
 import React, { useId, useLayoutEffect, useRef } from 'react';
 import { usePressGatedSwap } from '@hooks/usePressGatedSwap';
+import { prefersReducedMotion } from '@utils/animation/motionPreferences';
 
 interface EyeToggleIconProps {
   slashed: boolean;
@@ -51,10 +52,7 @@ const EyeToggleIcon = ({ slashed }: EyeToggleIconProps) => {
 
     const restState = slashed ? SLASH_DRAWN : SLASH_HIDDEN;
     // 직접 클릭이 아닌 외부 상태 변경은 드로우 없이 즉시 커밋
-    if (
-      isInstant() ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
+    if (isInstant() || prefersReducedMotion()) {
       applyStatic(restState);
       return;
     }
