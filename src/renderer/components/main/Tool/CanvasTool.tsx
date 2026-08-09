@@ -3,12 +3,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import MoveIcon from '@assets/svgs/move.svg';
 import EraserIcon from '@assets/svgs/eraser.svg';
-import LayerIcon from '@assets/svgs/layer.svg';
-import PrimaryIcon from '@assets/svgs/primary.svg';
 import BroomIcon from '@assets/svgs/broom.svg';
+import LayerStackIcon from './icons/LayerStackIcon';
+import PaletteIcon from './icons/PaletteIcon';
 import FloatingTooltip from '../Modal/FloatingTooltip';
 import { TooltipGroup } from '../Modal/TooltipGroup';
 import ListPopup from '../Modal/ListPopup';
+import { useIconMotion } from '@hooks/useIconMotion';
 
 type SelectableTool = 'move' | 'eraser';
 type AddItemType = 'key' | 'stat' | 'graph' | 'knob';
@@ -84,25 +85,29 @@ const CanvasTool = ({
   }[] = [
     {
       key: 'move',
-      icon: <MoveIcon />,
+      icon: <MoveIcon data-dmn-icon data-dmn-icon-motion="expand" />,
       label: 'Move',
       selected: selectedTool === 'move',
     },
     {
       key: 'eraser',
-      icon: <EraserIcon />,
+      icon: <EraserIcon data-dmn-icon data-dmn-icon-motion="wobble" />,
       label: 'Eraser',
       selected: selectedTool === 'eraser',
     },
     // 액션 버튼 모음
-    { key: 'layer', icon: <LayerIcon />, label: 'Add Key' },
+    { key: 'layer', icon: <LayerStackIcon />, label: 'Add Key' },
     {
       key: 'primary',
-      icon: <PrimaryIcon />,
+      icon: <PaletteIcon />,
       label: 'Palette',
       selected: isPaletteOpen,
     },
-    { key: 'broom', icon: <BroomIcon />, label: 'Reset Current Tab' },
+    {
+      key: 'broom',
+      icon: <BroomIcon data-dmn-icon data-dmn-icon-motion="sweep" />,
+      label: 'Reset Current Tab',
+    },
   ];
 
   return (
@@ -211,6 +216,8 @@ const IconButton = React.forwardRef<
     },
     ref,
   ) => {
+    const { motionProps } = useIconMotion();
+
     return (
       <button
         ref={ref}
@@ -225,6 +232,7 @@ const IconButton = React.forwardRef<
             : 'text-fg-muted hover:bg-fill hover:text-fg'
         }`}
         onClick={onClick}
+        {...motionProps}
       >
         {icon}
       </button>

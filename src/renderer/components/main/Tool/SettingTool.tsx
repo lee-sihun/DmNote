@@ -12,6 +12,7 @@ import EyeToggleIcon from '../common/EyeToggleIcon';
 import { TooltipGroup } from '../Modal/TooltipGroup';
 import { obsApi } from '@api/modules/obsApi';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useIconMotion } from '@hooks/useIconMotion';
 
 interface SettingToolProps {
   isSettingsOpen?: boolean;
@@ -221,7 +222,10 @@ SettingToolProps) => {
         <TooltipGroup>
           <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[0px]">
             <FloatingTooltip content={t('tooltip.exportPreset')}>
-              <Button icon={<FolderIcon />} onClick={handlePresetSave} />
+              <Button
+                icon={<FolderIcon data-dmn-icon data-dmn-icon-motion="tilt" />}
+                onClick={handlePresetSave}
+              />
             </FloatingTooltip>
 
             <FloatingTooltip
@@ -302,8 +306,12 @@ SettingToolProps) => {
                 icon={
                   <IconSwap
                     active={isSettingsOpen}
-                    activeIcon={<TurnIcon />}
-                    inactiveIcon={<SettingIcon />}
+                    activeIcon={
+                      <TurnIcon data-dmn-icon data-dmn-icon-motion="rewind" />
+                    }
+                    inactiveIcon={
+                      <SettingIcon data-dmn-icon data-dmn-icon-motion="turn" />
+                    }
                   />
                 }
                 onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
@@ -359,10 +367,13 @@ const Button = ({
   disabled = false,
   onClick,
 }: ButtonProps) => {
+  const { motionProps } = useIconMotion();
+
   return (
     <button
       type="button"
       disabled={disabled}
+      {...(disabled ? {} : motionProps)}
       className={`flex items-center justify-center h-[30px] w-[30px] rounded-md transition-colors duration-fast ${
         disabled
           ? 'opacity-40 cursor-not-allowed text-fg-muted'
@@ -386,6 +397,8 @@ interface ChevronButtonProps {
 
 const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
   ({ isSelected = false, onClick }, ref) => {
+    const { motionProps } = useIconMotion();
+
     return (
       <button
         ref={ref}
@@ -396,8 +409,9 @@ const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
             : 'text-fg-muted hover:bg-fill hover:text-fg'
         }`}
         onClick={onClick}
+        {...motionProps}
       >
-        <ChevronDownIcon />
+        <ChevronDownIcon data-dmn-icon data-dmn-icon-motion="nod" />
       </button>
     );
   },

@@ -166,6 +166,30 @@
   --ui-icon-swap-blur: 2px;
   --ui-icon-swap-scale: 0.25;
 
+  /* 툴바 아이콘 호버 모션 — 호버 진입에 한 번 재생되고 멈춘다. 반복 없음.
+     400ms 아래로 내리면 무슨 동작인지 읽기 전에 끝나므로 다른 모션보다 느긋하다.
+     동작마다 자연스러운 clock이 달라 지속 시간은 용도별로 따로 둔다 */
+  --ui-icon-ease: cubic-bezier(0.65, 0, 0.35, 1);
+  /* 오버슈트는 keyframe이 아니라 커브의 y값(1.4)이 소유한다.
+     토글 노브(--ui-toggle-ease)와 같은 원칙 */
+  --ui-icon-ease-back: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --ui-icon-expand-duration: 420ms;
+  --ui-icon-eye-duration: 440ms;
+  --ui-icon-nod-duration: 500ms;
+  --ui-icon-tilt-duration: 520ms;
+  --ui-icon-wobble-duration: 560ms;
+  --ui-icon-turn-duration: 600ms;
+  --ui-icon-sweep-duration: 620ms;
+  --ui-icon-fan-duration: 700ms;
+  --ui-icon-punch-duration: 700ms;
+  --ui-icon-shift-duration: 800ms;
+  --ui-icon-stagger: 80ms;
+
+  /* 팔레트 물감 구멍이 다시 터질 때의 크기. 여기서만 값이 오버슈트를 소유한다 —
+     반지름 0.875px에서는 커브가 만드는 오버슈트가 소수점 픽셀이라 화면에 안 나온다 */
+  --ui-icon-punch-pop: 1.3;
+
   /* 그림자 — 보더 없는 표면 분리의 핵심. 2/3은 인셋 링+상단 하이라이트로 재질 립 포함 */
   --ui-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
   --ui-shadow-2: inset 0 0 0 1px rgba(255, 255, 255, 0.07),

@@ -722,3 +722,529 @@ body.dmn-custom-cursor * {
     filter: none;
   }
 }
+
+/* ===== 툴바 아이콘 호버 모션 =====
+   호버 진입에만 한 번 재생하고 멈춘다. 클릭에는 재생하지 않는다 -
+   누르는 순간은 팝업이 열리거나 도구가 바뀌는 시점이라, 아이콘까지 움직이면
+   정작 봐야 할 변화를 가린다.
+   재생 상태는 버튼이 data 속성으로 들고 값은 keyframe이 소유한다.
+   :hover에 직접 걸면 커서가 중간에 빠질 때 잘려서 아이콘이 튄다.
+   모든 keyframe이 제자리에서 시작해 제자리로 끝나므로 되감기가 필요 없다.
+   기어만 예외 - 톱니가 6개라 60°에서 도형이 완전히 겹친다.
+
+   변형은 전부 transform 하나로 쓴다. translate/rotate/scale 개별 속성은
+   SVG 요소에서 엔진별로 안 먹는 경우가 있어 아무 일도 안 일어난 것처럼 보인다.
+   같은 이유로 EyeToggleIcon의 사선 드로우도 transform을 쓴다.
+
+   animation은 단축이 아니라 개별 속성으로 건다 - 단축은 animation-delay를
+   0으로 되돌려서 파트 시차(페이더, 눈 동공)가 사라진다 */
+
+[data-dmn-icon] {
+  /* 회전과 확대가 14px 뷰박스를 넘어간다. 30px 버튼 안이라 이웃과 안 부딪힘.
+     눈 아이콘만 예외 - 숨긴 사선을 뷰포트 밖에 세워두고 클리핑으로 감추는
+     구조라 넘침을 열면 사선이 툴바로 삐져나온다 */
+  overflow: visible;
+}
+
+/* 축은 항상 움직이는 것 자신의 중심.
+   svg 안의 path/circle/g는 CSS 박스가 없어서 fill-box가 그 도형의 bbox로 잡히고,
+   바깥 svg는 CSS 박스가 있어서 content-box로 폴백된다. 둘 다 결과는 제 중심이라
+   규칙 하나로 덮인다. 모서리를 축으로 삼으면 작은 아이콘에서는 회전이 아니라
+   위치가 흔들리는 걸로 보인다.
+   파트를 여러 개 움직일 때도 같은 원칙이라, 한 방향으로만 밀지 말고
+   서로 반대로 움직여 이동량을 상쇄시킨다 (레이어, 탭 목록) */
+[data-dmn-icon-motion] {
+  animation-delay: var(--dmn-icon-delay, 0ms);
+  animation-fill-mode: none;
+  animation-iteration-count: 1;
+}
+
+/* 아이콘 하나가 통째로 움직이는 경우. 바깥 svg는 CSS 박스를 가지므로
+   border-box로 잡아야 뷰박스 단위와 px가 1:1이 아닌 아이콘(뒤로 화살표는
+   16 뷰박스를 14px에 그린다)에서도 축이 실제 한가운데에 온다 */
+svg[data-dmn-icon-motion] {
+  transform-box: border-box;
+  transform-origin: center;
+}
+
+/* svg 안의 파트가 움직이는 경우. CSS 박스가 없어 fill-box가 그 도형의 bbox로 잡힌다 */
+[data-dmn-icon] [data-dmn-icon-motion] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='expand'] {
+  animation-name: dmnIconExpand;
+  animation-duration: var(--ui-icon-expand-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='wobble'] {
+  animation-name: dmnIconWobble;
+  animation-duration: var(--ui-icon-wobble-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='tilt'] {
+  animation-name: dmnIconTilt;
+  animation-duration: var(--ui-icon-tilt-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='sweep'] {
+  animation-name: dmnIconSweep;
+  animation-duration: var(--ui-icon-sweep-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='nod'] {
+  animation-name: dmnIconNod;
+  animation-duration: var(--ui-icon-nod-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='rewind'] {
+  animation-name: dmnIconRewind;
+  animation-duration: var(--ui-icon-nod-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='turn'] {
+  animation-name: dmnIconTurn;
+  animation-duration: var(--ui-icon-turn-duration);
+  animation-timing-function: var(--ui-icon-ease-back);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='fan'] {
+  animation-name: dmnIconFan;
+  animation-duration: var(--ui-icon-fan-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='ride'] {
+  animation-name: dmnIconRide;
+  animation-duration: var(--ui-icon-fan-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='shift-right'] {
+  animation-name: dmnIconShiftRight;
+  animation-duration: var(--ui-icon-shift-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='shift-down'] {
+  animation-name: dmnIconShiftDown;
+  animation-duration: var(--ui-icon-shift-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='shift-left'] {
+  animation-name: dmnIconShiftLeft;
+  animation-duration: var(--ui-icon-shift-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='shift-up'] {
+  animation-name: dmnIconShiftUp;
+  animation-duration: var(--ui-icon-shift-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+/* 팔레트는 구멍마다 delay를 주면 재생 시간이 간격보다 길어 넷이 겹쳐 돌고,
+   순차가 아니라 한 번 깜빡이는 걸로 보인다. 네 개가 같은 clock을 쓰고
+   구멍이 막혀 있는 시간만 다르게 줘서 터지는 순간을 11%씩 민다.
+   이징은 구간마다 달라서 keyframe이 직접 들고 있다 */
+[data-dmn-icon-play] [data-dmn-icon-motion='punch-1'] {
+  animation-name: dmnIconPunch1;
+  animation-duration: var(--ui-icon-punch-duration);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='punch-2'] {
+  animation-name: dmnIconPunch2;
+  animation-duration: var(--ui-icon-punch-duration);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='punch-3'] {
+  animation-name: dmnIconPunch3;
+  animation-duration: var(--ui-icon-punch-duration);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='punch-4'] {
+  animation-name: dmnIconPunch4;
+  animation-duration: var(--ui-icon-punch-duration);
+}
+
+/* 눈은 사선이 뷰박스 밖으로 나가 있는 상태가 있어 fill-box를 쓰면
+   그 위치까지 bbox에 들어가 축이 눈에서 벗어난다. 뷰박스 중심을 직접 지정 */
+.dmn-eye-toggle [data-dmn-icon-motion] {
+  transform-box: view-box;
+  transform-origin: 9px 7px;
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='eye-squint'] {
+  animation-name: dmnIconEyeSquint;
+  animation-duration: var(--ui-icon-eye-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='eye-pupil'] {
+  animation-name: dmnIconEyePupil;
+  animation-duration: var(--ui-icon-eye-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='eye-pulse'] {
+  animation-name: dmnIconEyePulse;
+  animation-duration: var(--ui-icon-expand-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+@keyframes dmnIconExpand {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.09);
+  }
+}
+
+/* 문지르는 물건이라 툴바에서 유일하게 여러 번 왕복한다 */
+@keyframes dmnIconWobble {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  22% {
+    transform: rotate(-8deg);
+  }
+
+  48% {
+    transform: rotate(5deg);
+  }
+
+  72% {
+    transform: rotate(-2deg);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes dmnIconTilt {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  45% {
+    transform: rotate(-7deg);
+  }
+}
+
+/* 크게 한 번 쓸고 아주 약한 반동만 남는다. 지우개와는 진폭이 아니라 횟수로 갈린다 */
+@keyframes dmnIconSweep {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  40% {
+    transform: rotate(-11deg);
+  }
+
+  72% {
+    transform: rotate(3deg);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes dmnIconNod {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  40% {
+    transform: translateY(1.5px);
+  }
+}
+
+@keyframes dmnIconRewind {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  42% {
+    transform: rotate(-14deg);
+  }
+}
+
+/* 톱니가 6개라 60°에서 도형이 완전히 겹친다. 되돌아오는 구간이 없는 유일한 아이콘 */
+@keyframes dmnIconTurn {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(60deg);
+  }
+}
+
+/* 도착점에서 머무는 구간(42~58%)이 동작을 읽을 시간을 준다 */
+@keyframes dmnIconFan {
+  0% {
+    transform: translateY(0);
+  }
+
+  42%,
+  58% {
+    transform: translateY(var(--dmn-icon-fan, 0px));
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dmnIconRide {
+  0% {
+    transform: translateY(0);
+  }
+
+  40%,
+  60% {
+    transform: translateY(var(--dmn-icon-ride, 0px));
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dmnIconShiftRight {
+  0% {
+    transform: translateX(0);
+  }
+
+  40%,
+  60% {
+    transform: translateX(8px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes dmnIconShiftDown {
+  0% {
+    transform: translateY(0);
+  }
+
+  40%,
+  60% {
+    transform: translateY(8px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dmnIconShiftLeft {
+  0% {
+    transform: translateX(0);
+  }
+
+  40%,
+  60% {
+    transform: translateX(-8px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes dmnIconShiftUp {
+  0% {
+    transform: translateY(0);
+  }
+
+  40%,
+  60% {
+    transform: translateY(-8px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* 크기를 조금 줄이는 건 이 크기에서 안 보인다. 0까지 닫아야 구멍이 사라지는 게 읽힌다.
+   닫힐 땐 ease-in으로 빠르게, 열릴 땐 오버슈트를 지나 자리를 잡는다 */
+@keyframes dmnIconPunch1 {
+  0% {
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+
+  11% {
+    transform: scale(0);
+  }
+
+  22% {
+    transform: scale(0);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  37% {
+    transform: scale(var(--ui-icon-punch-pop));
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  50%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes dmnIconPunch2 {
+  0% {
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+
+  11% {
+    transform: scale(0);
+  }
+
+  33% {
+    transform: scale(0);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  48% {
+    transform: scale(var(--ui-icon-punch-pop));
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  61%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes dmnIconPunch3 {
+  0% {
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+
+  11% {
+    transform: scale(0);
+  }
+
+  44% {
+    transform: scale(0);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  59% {
+    transform: scale(var(--ui-icon-punch-pop));
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  72%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes dmnIconPunch4 {
+  0% {
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+
+  11% {
+    transform: scale(0);
+  }
+
+  55% {
+    transform: scale(0);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  70% {
+    transform: scale(var(--ui-icon-punch-pop));
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  83%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 눈꺼풀과 동공이 다른 폭으로 움직여야 눌림이 아니라 초점으로 읽힌다.
+   동공은 눈꺼풀 그룹 안에 있어 두 배율이 곱해진다 -
+   세로 실효값은 0.78 x 0.85 = 0.66. 여기 0.5를 넣으면 0.39까지 줄어 동공이 사라진다 */
+@keyframes dmnIconEyeSquint {
+  0% {
+    transform: scaleY(1);
+  }
+
+  42%,
+  52% {
+    transform: scaleY(0.78);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes dmnIconEyePupil {
+  0% {
+    transform: scale(1, 1);
+  }
+
+  42%,
+  52% {
+    transform: scale(0.88, 0.85);
+  }
+
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+/* 꺼짐 상태는 사선과 그 마스크 홈이 같이 있어 변형을 걸면 서로 어긋난다.
+   모양을 안 건드리는 균일 배율만. 볼 게 없는 상태라 초점 동작도 어울리지 않는다.
+   확대가 아니라 축소인 건 눈만 넘침을 못 켜기 때문 -
+   숨긴 사선을 뷰포트 밖에 세워두고 클리핑으로 감추는 구조라
+   overflow를 열면 사선이 툴바로 삐져나온다 */
+@keyframes dmnIconEyePulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-dmn-icon-play] [data-dmn-icon-motion] {
+    animation-name: none;
+  }
+}
