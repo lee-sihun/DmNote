@@ -744,6 +744,18 @@ describe('숫자 입력 수식 계산', () => {
     expect(input.value).toBe('');
   });
 
+  it('Escape는 감싸는 팝업이 같이 닫히지 않게 기본 동작을 소비한다', () => {
+    // FloatingPopup은 defaultPrevented만 보고 한 겹씩 닫는다.
+    // 그대로 올려보내면 그림자 피커 안에서 값만 되돌리려다 피커까지 닫힌다
+    const number = renderNumber();
+    expect(pressKey(number, 'Escape').defaultPrevented).toBe(true);
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    const optional = renderOptional();
+    expect(pressKey(optional, 'Escape').defaultPrevented).toBe(true);
+  });
+
   it('손대지 않은 입력의 Escape는 되돌릴 것이 없어 아무것도 쓰지 않는다', () => {
     const commit = vi.fn();
     const input = renderNumber({ onChange: commit });
