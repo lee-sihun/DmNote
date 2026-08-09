@@ -1,4 +1,5 @@
-const MAX_EXPRESSION_LENGTH = 256;
+// 입력 단계에서도 같은 한계를 써야 파서가 절대 못 받을 문자열이 화면과 state를 거치지 않는다
+export const MAX_EXPRESSION_LENGTH = 256;
 const MAX_EXPRESSION_DEPTH = 32;
 
 class ArithmeticParser {

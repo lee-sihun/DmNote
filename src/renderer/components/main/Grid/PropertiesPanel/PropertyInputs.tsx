@@ -35,7 +35,10 @@ import {
   parseLeadingNumber,
   resolveStepDelta,
 } from '@utils/core/numberStep';
-import { evaluateArithmeticExpression } from '@utils/core/arithmeticExpression';
+import {
+  evaluateArithmeticExpression,
+  MAX_EXPRESSION_LENGTH,
+} from '@utils/core/arithmeticExpression';
 import { gradientToCss } from '@src/types/color';
 import { useTranslation } from '@contexts/useTranslation';
 import { I18nContext } from '@contexts/I18nContextDef';
@@ -287,6 +290,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   };
 
   const normalizeDraftInput = (raw: string): string | null => {
+    // 잘라서 받으면 사용자가 넣지 않은 다른 유효 수식이 확정될 수 있어 통째로 거절한다
+    if (raw.length > MAX_EXPRESSION_LENGTH) return null;
     if (!ARITHMETIC_INPUT_PATTERN.test(raw)) return null;
     if (isPartialNumericInput(raw) || canParseNumericInput(raw)) {
       return sanitizeNumericInput(raw);
@@ -787,6 +792,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   };
 
   const normalizeDraftInput = (raw: string): string | null => {
+    // 잘라서 받으면 사용자가 넣지 않은 다른 유효 수식이 확정될 수 있어 통째로 거절한다
+    if (raw.length > MAX_EXPRESSION_LENGTH) return null;
     if (!ARITHMETIC_INPUT_PATTERN.test(raw)) return null;
     if (isPartialNumericInput(raw) || canParseNumericInput(raw)) {
       return sanitizeInput(raw);

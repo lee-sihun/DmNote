@@ -43,6 +43,7 @@ import {
   OptionalNumberInput,
   TextInput,
 } from './PropertyInputs';
+import { MAX_EXPRESSION_LENGTH } from '@utils/core/arithmeticExpression';
 import { finalizeEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -828,6 +829,18 @@ describe('숫자 입력 수식 계산', () => {
     const input = renderNumber({ onPreview: preview });
 
     act(() => setInputValue(input, '10a+5'));
+
+    expect(input.value).toBe('10');
+    expect(preview).not.toHaveBeenCalled();
+  });
+
+  it('파서가 절대 받을 수 없는 길이의 입력도 통째로 거절한다', () => {
+    const preview = vi.fn();
+    const input = renderNumber({ onPreview: preview });
+    // 잘라서 받으면 사용자가 넣지 않은 다른 유효 수식이 확정될 수 있다
+    const tooLong = `${'1+'.repeat(MAX_EXPRESSION_LENGTH)}1`;
+
+    act(() => setInputValue(input, tooLong));
 
     expect(input.value).toBe('10');
     expect(preview).not.toHaveBeenCalled();
