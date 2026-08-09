@@ -3,6 +3,8 @@ import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import {
   FILL_DISABLED_CLASS,
+  FILL_QUIET_CLASS,
+  FILL_QUIET_DISABLED_CLASS,
   FILL_INTERACTIVE_CLASS,
   PANEL_APPLIED_LABEL_CLASS,
   PANEL_FOOTER_BUTTON_CLASS,
@@ -14,7 +16,7 @@ import {
   PANEL_PILL_CLASS,
   PANEL_ROW_NAME_ACTIVE_CLASS,
   PANEL_ROW_NAME_CLASS,
-  PANEL_ROW_NAME_UNAVAILABLE_CLASS,
+  PANEL_ROW_NAME_INACTIVE_CLASS,
   PANEL_SECTION_CLASS,
   PANEL_STATUS_BADGE_CLASS,
 } from '@components/main/SettingsPanel/panelChrome';
@@ -238,10 +240,12 @@ const CssPanelContent = ({
                     title={item.path}
                   >
                     <span
+                      // 이름 밝기는 '적용 중'이 기준이다. 파일 존재 여부로 가르면
+                      // 미적용 항목까지 밝아져 어느 게 적용 중인지 이름에서 안 읽힌다
                       className={`${PANEL_ROW_NAME_CLASS} ${
-                        available
+                        isCurrent && available
                           ? PANEL_ROW_NAME_ACTIVE_CLASS
-                          : PANEL_ROW_NAME_UNAVAILABLE_CLASS
+                          : PANEL_ROW_NAME_INACTIVE_CLASS
                       }`}
                     >
                       {pathBaseName(item.path)}
@@ -261,9 +265,9 @@ const CssPanelContent = ({
                         }}
                         disabled={!available || pendingPath !== null}
                         className={`${PANEL_PILL_CLASS} ${
-                          available
-                            ? FILL_INTERACTIVE_CLASS
-                            : FILL_DISABLED_CLASS
+                          available && pendingPath === null
+                            ? FILL_QUIET_CLASS
+                            : FILL_QUIET_DISABLED_CLASS
                         }`}
                       >
                         {t('settings.cssApply')}
@@ -296,11 +300,11 @@ const CssPanelContent = ({
         </button>
       </div>
 
-      {menu.menuKey !== null && (
+      {menu.renderKey !== null && (
         <ListPopup
-          open
+          open={menu.menuKey !== null}
           ariaLabel={t('common.more')}
-          position={menu.menuPosition ?? undefined}
+          position={menu.renderPosition ?? undefined}
           onClose={menu.close}
           items={[{ id: 'remove', label: t('settings.cssHistoryRemove') }]}
           onSelect={(id) => {
