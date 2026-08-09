@@ -802,6 +802,40 @@ describe('숫자 입력 수식 계산', () => {
     expect(commit).toHaveBeenCalledTimes(1);
   });
 
+  it('포커스 중 편집 대상이 갈리면 취소가 이전 대상의 값을 쓰지 않는다', () => {
+    // 둘 다 uniform이면 isMixed로는 갈린 걸 알 수 없다.
+    // 우리가 내보낸 값과 다른 prop이 오는 것으로 판별한다
+    const commit = vi.fn();
+    act(() => root.render(<NumberInput value={1000} onChange={commit} />));
+    const input = container.querySelector('input')!;
+    act(() => input.focus());
+    act(() => setInputValue(input, '1200'));
+    expect(commit).toHaveBeenLastCalledWith(1200);
+
+    act(() => root.render(<NumberInput value={2000} onChange={commit} />));
+    act(() => pressKey(input, 'Escape'));
+
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('포커스 중 대상이 갈리면 Optional 취소도 이전 값을 쓰지 않는다', () => {
+    const commit = vi.fn();
+    act(() =>
+      root.render(<OptionalNumberInput value={1000} onChange={commit} />),
+    );
+    const input = container.querySelector('input')!;
+    act(() => input.focus());
+    act(() => setInputValue(input, '1200'));
+    expect(commit).toHaveBeenLastCalledWith(1200);
+
+    act(() =>
+      root.render(<OptionalNumberInput value={2000} onChange={commit} />),
+    );
+    act(() => pressKey(input, 'Escape'));
+
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+
   it('손대지 않은 입력의 Escape는 되돌릴 것이 없어 아무것도 쓰지 않는다', () => {
     const commit = vi.fn();
     const input = renderNumber({ onChange: commit });
