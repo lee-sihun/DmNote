@@ -371,6 +371,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     spacingGestureIdRef.current = null;
   };
 
+  // Escape는 onBlur를 타지 않는다. 예약만 되고 아직 안 나간 커밋을 걷지 않으면
+  // 취소한 값이 80ms 뒤에 그대로 적용된다. 이미 나간 커밋은 되돌리지 않는다 -
+  // 항목별 원래 간격은 이 컴포넌트가 갖고 있지 않다
+  const onSpacingCancel = () => {
+    if (spacingDebounceTimerRef.current) {
+      clearTimeout(spacingDebounceTimerRef.current);
+      spacingDebounceTimerRef.current = null;
+    }
+    lastSpacingRef.current = null;
+    lastCommittedSpacingRef.current = null;
+    spacingGestureIdRef.current = null;
+  };
+
   useEffect(() => {
     return () => {
       if (spacingDebounceTimerRef.current) {
@@ -687,6 +700,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             value={batchSpacing.value}
             onChange={onSpacingChange}
             onBlur={onSpacingBlur}
+            onCancel={onSpacingCancel}
             suffix="px"
             min={0}
             max={500}
