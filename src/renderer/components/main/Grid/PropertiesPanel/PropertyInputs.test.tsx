@@ -764,6 +764,44 @@ describe('숫자 입력 수식 계산', () => {
     expect(pressKey(optional, 'Escape').defaultPrevented).toBe(true);
   });
 
+  it('포커스 중 선택이 Mixed로 바뀌면 취소가 이전 대표값을 쓰지 않는다', () => {
+    // 분리 패널 selection sync는 포커스를 유지한 채 선택만 갈아끼운다.
+    // 편집을 시작한 선택의 값을 새 선택 전체에 쓰면 요소별 값이 사라진다
+    const commit = vi.fn();
+    act(() => root.render(<NumberInput value={100} onChange={commit} />));
+    const input = container.querySelector('input')!;
+    act(() => input.focus());
+    act(() => setInputValue(input, '120'));
+    expect(commit).toHaveBeenLastCalledWith(120);
+
+    act(() =>
+      root.render(<NumberInput value={100} isMixed onChange={commit} />),
+    );
+    act(() => pressKey(input, 'Escape'));
+
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('포커스 중 선택이 Mixed로 바뀌면 Optional 취소도 대표값을 쓰지 않는다', () => {
+    const commit = vi.fn();
+    act(() =>
+      root.render(<OptionalNumberInput value={100} onChange={commit} />),
+    );
+    const input = container.querySelector('input')!;
+    act(() => input.focus());
+    act(() => setInputValue(input, '120'));
+    expect(commit).toHaveBeenLastCalledWith(120);
+
+    act(() =>
+      root.render(
+        <OptionalNumberInput value={100} isMixed onChange={commit} />,
+      ),
+    );
+    act(() => pressKey(input, 'Escape'));
+
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+
   it('손대지 않은 입력의 Escape는 되돌릴 것이 없어 아무것도 쓰지 않는다', () => {
     const commit = vi.fn();
     const input = renderNumber({ onChange: commit });

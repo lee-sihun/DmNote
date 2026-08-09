@@ -381,8 +381,10 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     if (!emittedRef.current) return;
     // Mixed는 되돌릴 값이 하나가 아니다. 표시되던 대표값을 발행하면
     // 호출부가 그 값을 선택된 요소 전부에 적용해 요소별 값이 사라진다.
+    // 지금도 함께 보는 이유: 분리 패널 selection sync는 포커스를 유지한 채 선택만
+    // 갈아끼워서, 편집을 시작한 선택과 지금 쓰이는 대상이 다를 수 있다.
     // 항목별 복원은 gesture를 가진 onCancel만 할 수 있다
-    if (committedMixedRef.current) return;
+    if (committedMixedRef.current || isMixed) return;
 
     const committedValue = committedValueRef.current;
     const committed =
@@ -888,8 +890,10 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     if (!emittedRef.current) return;
     // Mixed는 되돌릴 값이 하나가 아니다. 표시되던 대표값을 발행하면
     // 호출부가 그 값을 선택된 요소 전부에 적용해 요소별 값이 사라진다.
+    // 지금도 함께 보는 이유: 분리 패널 selection sync는 포커스를 유지한 채 선택만
+    // 갈아끼워서, 편집을 시작한 선택과 지금 쓰이는 대상이 다를 수 있다.
     // 항목별 복원은 gesture를 가진 onCancel만 할 수 있다
-    if (committedMixedRef.current) return;
+    if (committedMixedRef.current || isMixed) return;
     (onPreview ?? onChange)(committedValueRef.current);
   };
 
