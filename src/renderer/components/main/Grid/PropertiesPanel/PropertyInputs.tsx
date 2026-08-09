@@ -552,7 +552,12 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         if (isStaleRepeat(e.nativeEvent)) return;
         if (isExpressionDraft(draftRef.current)) {
           const evaluated = evaluateAndClampExpression(draftRef.current);
-          if (evaluated === null) return;
+          if (evaluated === null) {
+            // Enter와 같은 신호를 준다. 아무 반응이 없으면 방향키가 죽은 것으로 읽힌다.
+            // 반복은 재생을 매번 끊으므로 첫 누름만
+            if (!e.repeat) fieldError.raise();
+            return;
+          }
 
           stepFrame.cancel();
           holdKeyRef.current = null;
@@ -1052,7 +1057,12 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
         if (isStaleRepeat(e.nativeEvent)) return;
         if (isExpressionDraft(draftRef.current)) {
           const evaluated = evaluateAndClampExpression(draftRef.current);
-          if (evaluated === null) return;
+          if (evaluated === null) {
+            // Enter와 같은 신호를 준다. 아무 반응이 없으면 방향키가 죽은 것으로 읽힌다.
+            // 반복은 재생을 매번 끊으므로 첫 누름만
+            if (!e.repeat) fieldError.raise();
+            return;
+          }
 
           stepFrame.cancel();
           holdKeyRef.current = null;

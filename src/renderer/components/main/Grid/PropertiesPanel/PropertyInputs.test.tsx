@@ -847,6 +847,16 @@ describe('숫자 입력 수식 계산', () => {
     expect(container.querySelector('.dmn-digit-pop')).toBeNull();
   });
 
+  it('무효 수식에서 방향키도 Enter와 같은 오류 신호를 준다', () => {
+    const input = renderNumber();
+
+    act(() => setInputValue(input, '10+'));
+    act(() => pressKey(input, 'ArrowUp'));
+
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.value).toBe('10+');
+  });
+
   it('미완성 수식 방향키는 기본 동작만 막고 draft와 preview를 유지한다', () => {
     const preview = vi.fn();
     const input = renderNumber({ onPreview: preview });
