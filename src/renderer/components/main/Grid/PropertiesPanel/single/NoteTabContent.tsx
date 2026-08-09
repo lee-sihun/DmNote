@@ -22,6 +22,7 @@ import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConst
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';
 
@@ -458,6 +459,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onPreview={(value) => handleStylePreview('noteOffsetX', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="X"
+            width={AXIS_FIELD_WIDTH}
             allowNegative
             allowDecimal
             decimalScale={1}
@@ -473,6 +475,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onPreview={(value) => handleStylePreview('noteOffsetY', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="Y"
+            width={AXIS_FIELD_WIDTH}
             allowNegative
             allowDecimal
             decimalScale={1}

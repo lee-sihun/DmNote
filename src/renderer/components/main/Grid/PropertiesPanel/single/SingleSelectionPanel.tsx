@@ -12,6 +12,7 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { SizeCommit } from '../types';
 import {
   getActivePairPreservation,
   gradientPairPatch,
@@ -64,6 +65,7 @@ import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import ShadowControls from '../ShadowControls';
+import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -222,6 +224,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                     value={selectedPluginElement?.position.x ?? 0}
                     onChange={handlePluginPositionXChange}
                     prefix="X"
+                    width={AXIS_FIELD_WIDTH}
                     min={-9999}
                     max={9999}
                     allowDecimal
@@ -231,6 +234,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                     value={selectedPluginElement?.position.y ?? 0}
                     onChange={handlePluginPositionYChange}
                     prefix="Y"
+                    width={AXIS_FIELD_WIDTH}
                     min={-9999}
                     max={9999}
                     allowDecimal
@@ -242,6 +246,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                     value={pluginDisplaySize.width}
                     onChange={handlePluginWidthChange}
                     prefix="W"
+                    width={AXIS_FIELD_WIDTH}
                     min={10}
                     max={9999}
                     allowDecimal
@@ -251,6 +256,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                     value={pluginDisplaySize.height}
                     onChange={handlePluginHeightChange}
                     prefix="H"
+                    width={AXIS_FIELD_WIDTH}
                     min={10}
                     max={9999}
                     allowDecimal
@@ -414,6 +420,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     })
                   }
                   prefix="X"
+                  width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
                 />
@@ -426,6 +433,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     })
                   }
                   prefix="Y"
+                  width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
                 />
@@ -441,6 +449,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     })
                   }
                   prefix="W"
+                  width={AXIS_FIELD_WIDTH}
                   min={20}
                   max={9999}
                 />
@@ -453,6 +462,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     })
                   }
                   prefix="H"
+                  width={AXIS_FIELD_WIDTH}
                   min={20}
                   max={9999}
                 />
@@ -1176,6 +1186,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     handleKnobUpdate({ index: singleKnobIndex, dx: value })
                   }
                   prefix="X"
+                  width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
                 />
@@ -1185,6 +1196,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     handleKnobUpdate({ index: singleKnobIndex, dy: value })
                   }
                   prefix="Y"
+                  width={AXIS_FIELD_WIDTH}
                   min={-9999}
                   max={9999}
                 />
@@ -1200,6 +1212,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     })
                   }
                   prefix="W"
+                  width={AXIS_FIELD_WIDTH}
                   min={20}
                   max={9999}
                 />
@@ -1212,6 +1225,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     })
                   }
                   prefix="H"
+                  width={AXIS_FIELD_WIDTH}
                   min={20}
                   max={9999}
                 />
@@ -1552,7 +1566,7 @@ interface SingleKeyStatPanelProps {
   setLocalState: React.Dispatch<
     React.SetStateAction<Partial<KeyPosition> & { dx?: number; dy?: number }>
   >;
-  handleSizeBlur: () => void;
+  handleSizeBlur: (committed?: SizeCommit) => void;
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
   imageButtonRef: React.RefObject<HTMLButtonElement | null>;

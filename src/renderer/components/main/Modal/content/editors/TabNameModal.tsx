@@ -3,6 +3,7 @@ import { usePressAction } from '@hooks/usePressAction';
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from '../../Modal';
 import { useModalPresence } from '@hooks/ui/usePopupPresence';
+import { useFieldError } from '@hooks/ui/useFieldError';
 import { useTranslation } from '@contexts/useTranslation';
 
 interface TabNameModalProps {
@@ -25,6 +26,14 @@ const TabNameModal = ({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const { active, shaking, raise, clear, handleAnimationEnd } = useFieldError();
+
+  // 이름 검사와 백엔드 거절이 모두 여기로 모인다.
+  // 같은 이유로 다시 막혀도 매번 링과 흔들기를 새로 걸어야 눌린 게 반영됐다는 걸 알 수 있다
+  const raiseError = (message: string) => {
+    setError(message);
+    raise();
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -32,8 +41,10 @@ const TabNameModal = ({
       setError(null);
       setIsSubmitting(false);
       submittingRef.current = false;
+      // 퇴장 모션 동안 DOM이 남아 있어 홀드가 끝나기 전에 다시 열릴 수 있다
+      clear();
     }
-  }, [isOpen]);
+  }, [isOpen, clear]);
 
   const validate = (() => {
     return (v: string) => {
@@ -50,7 +61,7 @@ const TabNameModal = ({
     if (submittingRef.current) return;
     const err = validate(name.trim());
     if (err) {
-      setError(err);
+      raiseError(err);
       return;
     }
     submittingRef.current = true;
@@ -63,13 +74,13 @@ const TabNameModal = ({
           'duplicate-name': t('tabs.name.duplicate'),
           'invalid-name': t('tabs.errors.invalid'),
         };
-        setError(map[res.error] || t('tabs.errors.createFail'));
+        raiseError(map[res.error] || t('tabs.errors.createFail'));
         return;
       }
       onClose();
     } catch (submitError) {
       console.error('Failed to create custom tab', submitError);
-      setError(t('tabs.errors.createFail'));
+      raiseError(t('tabs.errors.createFail'));
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -106,7 +117,12 @@ const TabNameModal = ({
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleSubmit();
             }}
-            className="w-full min-w-0 h-[30px] px-[12px] rounded-surface bg-inset text-fg text-body focus:shadow-focus-ring"
+            // 오류 링은 포커스 링을 대체한다. 둘을 겹치면 같은 자리에서 색이 섞인다.
+            // 이 입력은 autoFocus라 겹치면 오류 링이 아예 보이지 않는다
+            className={`w-full min-w-0 h-[30px] px-[12px] rounded-surface bg-inset text-fg text-body ${
+              active ? 'shadow-danger-ring' : 'focus:shadow-focus-ring'
+            } ${shaking ? 'dmn-field-shake' : ''}`}
+            onAnimationEnd={handleAnimationEnd}
             placeholder={t('tabs.name.placeholder')}
           />
           {error && <div className="text-danger-fg text-body">{error}</div>}

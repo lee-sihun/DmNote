@@ -1227,3 +1227,92 @@ svg [data-dmn-icon-motion] {
     animation-name: none;
   }
 }
+
+/* 숫자 스텝 팝인 - 방향키로 값이 바뀐 자릿수만 재생한다.
+   input의 value는 브라우저가 그리는 단일 텍스트 노드라 자릿수를 따로 잡을 수 없어,
+   재생하는 동안만 같은 자리에 자릿수 span을 겹친다.
+   글자가 겹쳐 보이지 않게 input 쪽을 비우되 캐럿은 색을 따로 줘서 남긴다,
+   편집 중인 필드에서 캐럿까지 사라지면 포커스를 잃은 걸로 읽힌다 */
+.dmn-digit-pop-host {
+  color: transparent;
+  caret-color: var(--ui-fg);
+}
+
+/* input은 한 줄짜리 텍스트를 콘텐츠 박스 정중앙에 놓는다. 레이어도 같은 박스를 덮고
+   같은 줄 높이로 가운데를 잡아야 안 바뀐 자리가 제자리에 선다.
+   패딩은 셸(label)이 갖고 input은 0이라 두 박스가 정확히 겹친다.
+   자릿수가 아래에서 올라오는 동안 박스 밖으로 나가므로 클리핑하지 않는다 */
+.dmn-digit-pop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* 585에서 586으로 갈 때 5와 8까지 흔들리면 자릿수가 바뀐 게 아니라
+   숫자 전체가 깜빡인 걸로 읽힌다. 바뀐 자리만 재생 대상이다 */
+.dmn-digit-pop > span[data-dmn-digit-changed] {
+  animation: dmnDigitPop var(--ui-digit-duration) var(--ui-digit-ease) both;
+  animation-delay: calc(var(--ui-digit-stagger) * var(--dmn-digit-step, 0));
+}
+
+@keyframes dmnDigitPop {
+  from {
+    transform: translateY(
+      calc(var(--ui-digit-distance) * var(--dmn-digit-dir, 1))
+    );
+    opacity: 0;
+    filter: blur(var(--ui-digit-blur));
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-digit-pop > span[data-dmn-digit-changed] {
+    animation-name: none;
+  }
+}
+
+/* 확정할 수 없는 입력 - 값으로 만들 수 없다는 걸 한 번 털어서 알린다.
+   상자를 흔드는 것이라 transform만 쓰고 레이아웃은 건드리지 않는다 */
+.dmn-field-shake {
+  animation: dmnFieldShake
+    calc(var(--ui-shake-dur-a) * 2 + var(--ui-shake-dur-b) * 2) linear;
+}
+
+@keyframes dmnFieldShake {
+  0% {
+    transform: translateX(0);
+    animation-timing-function: var(--ui-shake-ease);
+  }
+
+  28.57% {
+    transform: translateX(var(--ui-shake-distance));
+    animation-timing-function: var(--ui-shake-ease);
+  }
+
+  57.14% {
+    transform: translateX(calc(var(--ui-shake-distance) * -1));
+    animation-timing-function: var(--ui-shake-ease);
+  }
+
+  78.57% {
+    transform: translateX(var(--ui-shake-overshoot));
+    animation-timing-function: var(--ui-shake-ease);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-field-shake {
+    animation-name: none;
+  }
+}

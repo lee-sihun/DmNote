@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import type { StyleTabContentProps } from '../types';
+import type { SizeCommit, StyleTabContentProps } from '../types';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
   slotMembers,
@@ -53,6 +53,7 @@ import {
 } from '@utils/core/elementDefaults';
 import { resolveElementShadow } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
@@ -89,7 +90,7 @@ interface StyleTabContentInternalProps extends StyleTabContentProps {
   onLocalDyChange?: (value: number) => void;
   onLocalWidthChange?: (value: number) => void;
   onLocalHeightChange?: (value: number) => void;
-  onSizeBlur?: () => void;
+  onSizeBlur?: (committed?: SizeCommit) => void;
 }
 
 const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
@@ -754,6 +755,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             onPreview={(value) => handleStylePreview('dx', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="X"
+            width={AXIS_FIELD_WIDTH}
             min={-9999}
             max={9999}
             allowDecimal
@@ -767,6 +769,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             onPreview={(value) => handleStylePreview('dy', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="Y"
+            width={AXIS_FIELD_WIDTH}
             min={-9999}
             max={9999}
             allowDecimal
@@ -783,9 +786,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 : localWidth ?? keyPosition.width ?? 60
             }
             onChange={handleWidthChange}
-            onBlur={onSizeBlur}
+            onBlur={(width) => onSizeBlur?.({ width })}
             onCancel={() => editGestureController.cancel()}
             prefix="W"
+            width={AXIS_FIELD_WIDTH}
             min={1}
             max={999}
             allowDecimal
@@ -798,9 +802,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 : localHeight ?? keyPosition.height ?? 60
             }
             onChange={handleHeightChange}
-            onBlur={onSizeBlur}
+            onBlur={(height) => onSizeBlur?.({ height })}
             onCancel={() => editGestureController.cancel()}
             prefix="H"
+            width={AXIS_FIELD_WIDTH}
             min={1}
             max={999}
             allowDecimal
