@@ -739,18 +739,31 @@ body.dmn-custom-cursor * {
    animation은 단축이 아니라 개별 속성으로 건다 - 단축은 animation-delay를
    0으로 되돌려서 파트 시차(페이더, 눈 동공)가 사라진다 */
 
+/* 파트가 뷰박스를 넘어가는 아이콘에만 붙인다 (레이어의 윗장이 위로 나간다).
+   전부에 걸면 안 되는데, 눈 아이콘은 숨긴 사선을 뷰포트 밖에 세워두고
+   클리핑으로 감추는 구조라 넘침을 열면 사선이 툴바로 삐져나온다 */
 [data-dmn-icon] {
-  /* 회전과 확대가 14px 뷰박스를 넘어간다. 30px 버튼 안이라 이웃과 안 부딪힘.
-     눈 아이콘만 예외 - 숨긴 사선을 뷰포트 밖에 세워두고 클리핑으로 감추는
-     구조라 넘침을 열면 사선이 툴바로 삐져나온다 */
   overflow: visible;
 }
 
-/* 축은 항상 움직이는 것 자신의 중심.
-   svg 안의 path/circle/g는 CSS 박스가 없어서 fill-box가 그 도형의 bbox로 잡히고,
-   바깥 svg는 CSS 박스가 있어서 content-box로 폴백된다. 둘 다 결과는 제 중심이라
-   규칙 하나로 덮인다. 모서리를 축으로 삼으면 작은 아이콘에서는 회전이 아니라
-   위치가 흔들리는 걸로 보인다.
+/* 아이콘을 통째로 움직이는 래퍼. svg 루트가 아니라 평범한 HTML 박스라
+   transform-origin: center가 아이콘의 실제 한가운데로 확정된다.
+   플렉스로 잡아 baseline 위에 뜨는 인라인 배치를 피한다 -
+   서브픽셀 위치에서 시작하면 첫 프레임에 위치가 튄다 */
+.dmn-icon-motion {
+  display: inline-flex;
+  transform-origin: center;
+  /* 평상시에도 합성 레이어를 유지한다. 없으면 transform: none 상태와
+     애니메이션 사이를 오갈 때마다 레이어가 승격·해제되고, 그 경계에서
+     14px 아이콘의 래스터가 다시 스냅돼 첫 프레임이 세로로 튄다
+     (WebKit 가속 합성 계열 — tasks/lessons.md 2026-07-12 참고).
+     .dmn-icon-swap과 달리 여기서는 will-change를 켠다 -
+     대상이 툴바 아이콘 11개로 고정이라 레이어가 늘어날 여지가 없다 */
+  will-change: transform;
+}
+
+/* 축은 항상 움직이는 것 자신의 중심. 모서리를 축으로 삼으면 작은 아이콘에서는
+   회전이 아니라 위치가 흔들리는 걸로 보인다.
    파트를 여러 개 움직일 때도 같은 원칙이라, 한 방향으로만 밀지 말고
    서로 반대로 움직여 이동량을 상쇄시킨다 (레이어, 탭 목록) */
 [data-dmn-icon-motion] {
@@ -759,18 +772,12 @@ body.dmn-custom-cursor * {
   animation-iteration-count: 1;
 }
 
-/* 아이콘 하나가 통째로 움직이는 경우. 바깥 svg는 CSS 박스를 가지므로
-   border-box로 잡아야 뷰박스 단위와 px가 1:1이 아닌 아이콘(뒤로 화살표는
-   16 뷰박스를 14px에 그린다)에서도 축이 실제 한가운데에 온다 */
-svg[data-dmn-icon-motion] {
-  transform-box: border-box;
-  transform-origin: center;
-}
-
-/* svg 안의 파트가 움직이는 경우. CSS 박스가 없어 fill-box가 그 도형의 bbox로 잡힌다 */
-[data-dmn-icon] [data-dmn-icon-motion] {
+/* svg 안의 파트가 움직이는 경우. CSS 박스가 없어 fill-box가 그 도형의 bbox로 잡힌다.
+   래퍼와 같은 이유로 레이어를 미리 잡아둔다 */
+svg [data-dmn-icon-motion] {
   transform-box: fill-box;
   transform-origin: center;
+  will-change: transform;
 }
 
 [data-dmn-icon-play] [data-dmn-icon-motion='expand'] {
@@ -875,28 +882,9 @@ svg[data-dmn-icon-motion] {
   animation-duration: var(--ui-icon-punch-duration);
 }
 
-/* 눈은 사선이 뷰박스 밖으로 나가 있는 상태가 있어 fill-box를 쓰면
-   그 위치까지 bbox에 들어가 축이 눈에서 벗어난다. 뷰박스 중심을 직접 지정 */
-.dmn-eye-toggle [data-dmn-icon-motion] {
-  transform-box: view-box;
-  transform-origin: 9px 7px;
-}
-
-[data-dmn-icon-play] [data-dmn-icon-motion='eye-squint'] {
-  animation-name: dmnIconEyeSquint;
-  animation-duration: var(--ui-icon-eye-duration);
-  animation-timing-function: var(--ui-icon-ease);
-}
-
 [data-dmn-icon-play] [data-dmn-icon-motion='eye-pupil'] {
   animation-name: dmnIconEyePupil;
   animation-duration: var(--ui-icon-eye-duration);
-  animation-timing-function: var(--ui-icon-ease);
-}
-
-[data-dmn-icon-play] [data-dmn-icon-motion='eye-pulse'] {
-  animation-name: dmnIconEyePulse;
-  animation-duration: var(--ui-icon-expand-duration);
   animation-timing-function: var(--ui-icon-ease);
 }
 
@@ -1194,52 +1182,20 @@ svg[data-dmn-icon-motion] {
   }
 }
 
-/* 눈꺼풀과 동공이 다른 폭으로 움직여야 눌림이 아니라 초점으로 읽힌다.
-   동공은 눈꺼풀 그룹 안에 있어 두 배율이 곱해진다 -
-   세로 실효값은 0.78 x 0.85 = 0.66. 여기 0.5를 넣으면 0.39까지 줄어 동공이 사라진다 */
-@keyframes dmnIconEyeSquint {
-  0% {
-    transform: scaleY(1);
-  }
-
-  42%,
-  52% {
-    transform: scaleY(0.78);
-  }
-
-  100% {
-    transform: scaleY(1);
-  }
-}
-
+/* 움직이는 건 동공 하나뿐. 눈꺼풀까지 건드리면 사선·마스크 홈과 얽혀
+   상태별로 모션이 갈리고, 토글하는 순간 애니메이션이 교체되며 끊긴다 */
 @keyframes dmnIconEyePupil {
   0% {
-    transform: scale(1, 1);
-  }
-
-  42%,
-  52% {
-    transform: scale(0.88, 0.85);
-  }
-
-  100% {
-    transform: scale(1, 1);
-  }
-}
-
-/* 꺼짐 상태는 사선과 그 마스크 홈이 같이 있어 변형을 걸면 서로 어긋난다.
-   모양을 안 건드리는 균일 배율만. 볼 게 없는 상태라 초점 동작도 어울리지 않는다.
-   확대가 아니라 축소인 건 눈만 넘침을 못 켜기 때문 -
-   숨긴 사선을 뷰포트 밖에 세워두고 클리핑으로 감추는 구조라
-   overflow를 열면 사선이 툴바로 삐져나온다 */
-@keyframes dmnIconEyePulse {
-  0%,
-  100% {
     transform: scale(1);
   }
 
-  45% {
-    transform: scale(0.92);
+  42%,
+  52% {
+    transform: scale(0.7);
+  }
+
+  100% {
+    transform: scale(1);
   }
 }
 

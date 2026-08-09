@@ -93,9 +93,11 @@ const EyeToggleIcon = ({ slashed }: EyeToggleIconProps) => {
       fill="none"
       aria-hidden="true"
     >
-      {/* 사선과 그 마스크 홈이 한 그룹에 있어야 같이 변형돼 서로 안 어긋난다.
-          꺼짐은 모양을 안 건드리는 균일 확대, 켜짐은 눈꺼풀만 좁힘 */}
-      <g data-dmn-icon-motion={slashed ? 'eye-pulse' : 'eye-squint'}>
+      {/* 움직이는 건 동공 하나뿐이고 켜짐·꺼짐이 같다.
+          눈꺼풀까지 움직이면 사선·마스크 홈과 같이 변형돼야 해서 상태별로 모션이 갈리고,
+          토글하는 순간 재생 중이던 애니메이션이 다른 것으로 교체되며 턱턱 끊긴다.
+          대상이 안 바뀌면 눌러도 끊을 이유가 없어 그대로 끝까지 재생된다 */}
+      <g>
         <mask
           id={maskId}
           maskUnits="userSpaceOnUse"
@@ -117,11 +119,9 @@ const EyeToggleIcon = ({ slashed }: EyeToggleIconProps) => {
           />
         </mask>
         <path mask={`url(#${maskId})`} d={EYE_SHELL} fill="currentColor" />
-        {/* 눈꺼풀보다 반 박자 늦게 풀려야 두 겹으로 읽힌다 */}
         <path
           mask={`url(#${maskId})`}
-          data-dmn-icon-motion={slashed ? undefined : 'eye-pupil'}
-          style={{ '--dmn-icon-delay': '40ms' } as React.CSSProperties}
+          data-dmn-icon-motion="eye-pupil"
           d={EYE_PUPIL}
           fill="currentColor"
         />

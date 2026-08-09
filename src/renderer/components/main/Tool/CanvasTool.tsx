@@ -6,6 +6,7 @@ import EraserIcon from '@assets/svgs/eraser.svg';
 import BroomIcon from '@assets/svgs/broom.svg';
 import LayerStackIcon from './icons/LayerStackIcon';
 import PaletteIcon from './icons/PaletteIcon';
+import IconMotion from './icons/IconMotion';
 import FloatingTooltip from '../Modal/FloatingTooltip';
 import { TooltipGroup } from '../Modal/TooltipGroup';
 import ListPopup from '../Modal/ListPopup';
@@ -85,13 +86,21 @@ const CanvasTool = ({
   }[] = [
     {
       key: 'move',
-      icon: <MoveIcon data-dmn-icon data-dmn-icon-motion="expand" />,
+      icon: (
+        <IconMotion motion="expand">
+          <MoveIcon />
+        </IconMotion>
+      ),
       label: 'Move',
       selected: selectedTool === 'move',
     },
     {
       key: 'eraser',
-      icon: <EraserIcon data-dmn-icon data-dmn-icon-motion="wobble" />,
+      icon: (
+        <IconMotion motion="wobble">
+          <EraserIcon />
+        </IconMotion>
+      ),
       label: 'Eraser',
       selected: selectedTool === 'eraser',
     },
@@ -105,7 +114,11 @@ const CanvasTool = ({
     },
     {
       key: 'broom',
-      icon: <BroomIcon data-dmn-icon data-dmn-icon-motion="sweep" />,
+      icon: (
+        <IconMotion motion="sweep">
+          <BroomIcon />
+        </IconMotion>
+      ),
       label: 'Reset Current Tab',
     },
   ];

@@ -13,6 +13,7 @@ import { TooltipGroup } from '../Modal/TooltipGroup';
 import { obsApi } from '@api/modules/obsApi';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useIconMotion } from '@hooks/useIconMotion';
+import IconMotion from './icons/IconMotion';
 
 interface SettingToolProps {
   isSettingsOpen?: boolean;
@@ -223,7 +224,11 @@ SettingToolProps) => {
           <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[0px]">
             <FloatingTooltip content={t('tooltip.exportPreset')}>
               <Button
-                icon={<FolderIcon data-dmn-icon data-dmn-icon-motion="tilt" />}
+                icon={
+                  <IconMotion motion="tilt">
+                    <FolderIcon />
+                  </IconMotion>
+                }
                 onClick={handlePresetSave}
               />
             </FloatingTooltip>
@@ -307,10 +312,14 @@ SettingToolProps) => {
                   <IconSwap
                     active={isSettingsOpen}
                     activeIcon={
-                      <TurnIcon data-dmn-icon data-dmn-icon-motion="rewind" />
+                      <IconMotion motion="rewind">
+                        <TurnIcon />
+                      </IconMotion>
                     }
                     inactiveIcon={
-                      <SettingIcon data-dmn-icon data-dmn-icon-motion="turn" />
+                      <IconMotion motion="turn">
+                        <SettingIcon />
+                      </IconMotion>
                     }
                   />
                 }
@@ -411,7 +420,9 @@ const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
         onClick={onClick}
         {...motionProps}
       >
-        <ChevronDownIcon data-dmn-icon data-dmn-icon-motion="nod" />
+        <IconMotion motion="nod">
+          <ChevronDownIcon />
+        </IconMotion>
       </button>
     );
   },
