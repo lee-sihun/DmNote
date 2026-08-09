@@ -3,6 +3,7 @@ import type { ElementShadowSpec } from '@src/types/key/shadows';
 import ShadowPicker from '@components/main/Modal/content/pickers/ShadowPicker';
 import Checkbox from '@components/main/common/Checkbox';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
+import PopupExit from '@components/main/Modal/PopupExit';
 import { PropertyRow, PropertySection } from './PropertyInputs';
 
 type ShadowState = 'idle' | 'active';
@@ -57,9 +58,9 @@ const ShadowControls = ({
       strategy: enabledCommitStrategy,
     });
 
+  // 설정하기 행이 항상 남으므로 열어둔 피커를 끊지 않는다.
+  // enabled와 값은 저장 경로가 분리돼 꺼진 상태로도 계속 편집할 수 있다
   const handleEnabledToggle = () => {
-    const next = !anyEnabled;
-    if (!next) setPickerOpen(false);
     toggleEnabled();
   };
 
@@ -75,38 +76,40 @@ const ShadowControls = ({
           <Checkbox checked={anyEnabled} onChange={handleEnabledToggle} />
         </PropertyRow>
 
-        {anyEnabled ? (
-          <PropertyRow label={t('propertiesPanel.shadow') || '그림자'}>
-            <button
-              ref={configButtonRef}
-              type="button"
-              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                pickerOpen ? 'shadow-focus-ring' : ''
-              } text-fg text-body`}
-              onClick={() => setPickerOpen((open) => !open)}
-            >
-              {t('propertiesPanel.configure') || '설정하기'}
-            </button>
-          </PropertyRow>
-        ) : null}
+        {/* 사용 여부와 무관하게 값 편집은 열어둔다 - 다른 토글과 같은 문법.
+            enabled와 값은 저장 경로가 분리돼 있어 꺼진 상태로 미리 맞춰둘 수 있다 */}
+        <PropertyRow label={t('propertiesPanel.shadow') || '그림자'}>
+          <button
+            ref={configButtonRef}
+            type="button"
+            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+              pickerOpen ? 'shadow-focus-ring' : ''
+            } text-fg text-body`}
+            onClick={() => setPickerOpen((open) => !open)}
+          >
+            {t('propertiesPanel.configure') || '설정하기'}
+          </button>
+        </PropertyRow>
       </PropertySection>
 
-      {pickerOpen ? (
-        <ShadowPicker
-          open
-          referenceRef={configButtonRef}
-          panelElement={panelElement}
-          idleShadow={idleShadow}
-          activeShadow={activeShadow}
-          idleMixed={idleMixed}
-          activeMixed={activeMixed}
-          onChange={onChange}
-          showActiveState={showActiveState}
-          onClose={() => setPickerOpen(false)}
-          interactiveRefs={[configButtonRef]}
-          t={t}
-        />
-      ) : null}
+      <PopupExit open={pickerOpen}>
+        {pickerOpen ? (
+          <ShadowPicker
+            open
+            referenceRef={configButtonRef}
+            panelElement={panelElement}
+            idleShadow={idleShadow}
+            activeShadow={activeShadow}
+            idleMixed={idleMixed}
+            activeMixed={activeMixed}
+            onChange={onChange}
+            showActiveState={showActiveState}
+            onClose={() => setPickerOpen(false)}
+            interactiveRefs={[configButtonRef]}
+            t={t}
+          />
+        ) : null}
+      </PopupExit>
     </>
   );
 };

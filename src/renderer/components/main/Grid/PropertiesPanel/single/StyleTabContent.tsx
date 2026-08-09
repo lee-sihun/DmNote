@@ -24,6 +24,7 @@ import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
+import PopupExit from '@components/main/Modal/PopupExit';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
@@ -1102,76 +1103,82 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       )}
 
       {/* 이미지 픽커 팝업 - 단일 선택 모드에서만 */}
-      {showImagePicker && onToggleImagePicker && imageButtonRef && (
-        <ImagePicker
-          open={showImagePicker}
-          referenceRef={imageButtonRef}
-          panelElement={panelElement}
-          idleImage={keyPosition.inactiveImage || ''}
-          activeImage={keyPosition.activeImage || ''}
-          idleTransparent={keyPosition.idleTransparent ?? false}
-          activeTransparent={keyPosition.activeTransparent ?? false}
-          idleImageFit={
-            keyPosition.idleImageFit ?? keyPosition.imageFit ?? 'cover'
-          }
-          activeImageFit={
-            keyPosition.activeImageFit ?? keyPosition.imageFit ?? 'cover'
-          }
-          onIdleImageChange={handleIdleImageChange}
-          onActiveImageChange={handleActiveImageChange}
-          onIdleTransparentChange={handleIdleTransparentChange}
-          onActiveTransparentChange={handleActiveTransparentChange}
-          onIdleImageFitChange={handleIdleImageFitChange}
-          onActiveImageFitChange={handleActiveImageFitChange}
-          onIdleImageReset={handleIdleImageReset}
-          onActiveImageReset={handleActiveImageReset}
-          onClose={() => onToggleImagePicker()}
-          showActiveState={shadowActiveState}
-        />
-      )}
+      <PopupExit open={showImagePicker}>
+        {showImagePicker && onToggleImagePicker && imageButtonRef ? (
+          <ImagePicker
+            open={showImagePicker}
+            referenceRef={imageButtonRef}
+            panelElement={panelElement}
+            idleImage={keyPosition.inactiveImage || ''}
+            activeImage={keyPosition.activeImage || ''}
+            idleTransparent={keyPosition.idleTransparent ?? false}
+            activeTransparent={keyPosition.activeTransparent ?? false}
+            idleImageFit={
+              keyPosition.idleImageFit ?? keyPosition.imageFit ?? 'cover'
+            }
+            activeImageFit={
+              keyPosition.activeImageFit ?? keyPosition.imageFit ?? 'cover'
+            }
+            onIdleImageChange={handleIdleImageChange}
+            onActiveImageChange={handleActiveImageChange}
+            onIdleTransparentChange={handleIdleTransparentChange}
+            onActiveTransparentChange={handleActiveTransparentChange}
+            onIdleImageFitChange={handleIdleImageFitChange}
+            onActiveImageFitChange={handleActiveImageFitChange}
+            onIdleImageReset={handleIdleImageReset}
+            onActiveImageReset={handleActiveImageReset}
+            onClose={() => onToggleImagePicker()}
+            showActiveState={shadowActiveState}
+          />
+        ) : null}
+      </PopupExit>
 
       {/* 통합 ColorPicker - 단일 인스턴스로 깜빡임 없이 전환 */}
-      {pickerFor && pickerFor !== 'image' && (
-        <ColorPicker
-          open={!!pickerFor}
-          referenceRef={
-            pickerFor === 'backgroundColor'
-              ? bgColorBtnRef
-              : pickerFor === 'borderColor'
-              ? borderColorBtnRef
-              : fontColorBtnRef
-          }
-          panelElement={panelElement}
-          color={
-            gradientTarget
-              ? gradientState.pickerColor
-              : colorValueFor(pickerFor as StyleColorTarget)
-          }
-          onColorChange={(c: string) =>
-            gradientTarget
-              ? gradientState.handlePickerColorChange(c, false)
-              : handleColorChange(pickerFor as StyleColorTarget, c)
-          }
-          onColorChangeComplete={(c: string) =>
-            gradientTarget
-              ? gradientState.handlePickerColorChange(c, true)
-              : handleColorChangeComplete(pickerFor as StyleColorTarget, c)
-          }
-          onClose={() => setPickerFor(null)}
-          solidOnly={true}
-          stateMode={shadowActiveState ? effectiveColorState : undefined}
-          onStateModeChange={shadowActiveState ? setColorState : undefined}
-          interactiveRefs={colorPickerInteractiveRefs}
-          headerSlot={gradientTarget ? gradientState.headerSlot : undefined}
-          footerSlot={gradientTarget ? gradientState.footerSlot : undefined}
-          gradientSpec={
-            gradientTarget ? gradientState.paletteGradientSpec : undefined
-          }
-          onGradientSpecSelect={
-            gradientTarget ? gradientState.handleGradientSpecSelect : undefined
-          }
-        />
-      )}
+      <PopupExit open={Boolean(pickerFor && pickerFor !== 'image')}>
+        {pickerFor && pickerFor !== 'image' ? (
+          <ColorPicker
+            open={!!pickerFor}
+            referenceRef={
+              pickerFor === 'backgroundColor'
+                ? bgColorBtnRef
+                : pickerFor === 'borderColor'
+                ? borderColorBtnRef
+                : fontColorBtnRef
+            }
+            panelElement={panelElement}
+            color={
+              gradientTarget
+                ? gradientState.pickerColor
+                : colorValueFor(pickerFor as StyleColorTarget)
+            }
+            onColorChange={(c: string) =>
+              gradientTarget
+                ? gradientState.handlePickerColorChange(c, false)
+                : handleColorChange(pickerFor as StyleColorTarget, c)
+            }
+            onColorChangeComplete={(c: string) =>
+              gradientTarget
+                ? gradientState.handlePickerColorChange(c, true)
+                : handleColorChangeComplete(pickerFor as StyleColorTarget, c)
+            }
+            onClose={() => setPickerFor(null)}
+            solidOnly={true}
+            stateMode={shadowActiveState ? effectiveColorState : undefined}
+            onStateModeChange={shadowActiveState ? setColorState : undefined}
+            interactiveRefs={colorPickerInteractiveRefs}
+            headerSlot={gradientTarget ? gradientState.headerSlot : undefined}
+            footerSlot={gradientTarget ? gradientState.footerSlot : undefined}
+            gradientSpec={
+              gradientTarget ? gradientState.paletteGradientSpec : undefined
+            }
+            onGradientSpecSelect={
+              gradientTarget
+                ? gradientState.handleGradientSpecSelect
+                : undefined
+            }
+          />
+        ) : null}
+      </PopupExit>
 
       {/* FontPicker — 패널 서브 페이지 */}
       {renderPageKey === FONT_PAGE_KEY &&

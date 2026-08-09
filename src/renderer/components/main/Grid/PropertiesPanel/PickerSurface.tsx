@@ -5,6 +5,7 @@ import {
   usePanelAnchoredPopupPosition,
   useTriggerAnchoredPopupPosition,
 } from '@hooks/ui/usePanelAnchoredPopupPosition';
+import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 
 // 분리 창은 패널 왼쪽에 도킹할 여백이 없음 —
 // 같은 팝업을 트리거 행 바로 아래에 붙이고 폭·좌우 정렬은 속성 섹션에 맞춘다
@@ -78,12 +79,20 @@ const PickerSurface = ({
     fallbackHeight,
   });
 
-  const measured = detached ? trigger.position : dockedPosition;
-  // 측정 뒤에 좌표가 확정되므로 그 전 프레임만 감춤 —
-  // 섹션 앵커가 없어 폴백 배치로 가는 경우는 감추면 안 됨
-  const awaitingPosition = detached
-    ? !trigger.settled
-    : Boolean(panelElement) && !measured;
+  // 닫으면 위치 훅이 좌표를 즉시 비운다. 그대로 두면 퇴장 중에 fixed 배치가 풀려
+  // 팝업이 원점으로 튀고 body 포털에서 인라인으로 옮겨가며 표면이 재마운트된다
+  const measured = useRetainedWhileOpen(
+    open,
+    detached ? trigger.position : dockedPosition,
+  );
+  // 측정 뒤에 좌표가 확정되므로 그 전 프레임만 감춤 -
+  // 섹션 앵커가 없어 폴백 배치로 가는 경우는 감추면 안 됨.
+  // 여는 동안에만 본다. 닫으면 위치 훅이 settled를 즉시 내리는데 그걸 그대로
+  // 따르면 퇴장 DOM이 hidden으로 덮여 모션이 한 프레임도 안 보인다
+  const awaitingPosition =
+    open && (detached ? !trigger.settled : Boolean(panelElement) && !measured);
+  // 폭도 좌표와 같이 붙잡는다. live 값을 쓰면 퇴장 중 폭이 0으로 무너진다
+  const shownWidth = useRetainedWhileOpen(open, trigger.position?.width);
 
   return (
     <FloatingPopup
@@ -103,15 +112,17 @@ const PickerSurface = ({
       autoClose={false}
       closeOnScroll={closeOnScroll}
       portalToBody={Boolean(panelElement) || portalToBody}
-      animate={!detached && !panelElement}
+      // 도킹·분리 배치도 모션 대상. 실측이 끝나기 전 프레임에 등장이 소모되는 건
+      // motionReady가 막는다
+      motionReady={!awaitingPosition}
     >
       <div
         ref={cardRef}
-        className={cardClassName}
+        className={`dmn-motion ${cardClassName}`}
         style={{
           visibility: awaitingPosition ? 'hidden' : undefined,
           // 분리 창에서는 카드 고정 폭 대신 섹션 폭을 따름
-          width: trigger.position?.width,
+          width: shownWidth,
         }}
       >
         {children}

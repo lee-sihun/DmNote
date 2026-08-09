@@ -7,6 +7,7 @@ import {
   PropertySection,
 } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import Modal from '../../Modal';
+import type { PopupMotionState } from '@hooks/ui/usePopupPresence';
 import { useTranslation } from '@contexts/useTranslation';
 import {
   NOTE_SETTINGS_CONSTRAINTS,
@@ -44,6 +45,8 @@ interface NoteSettingProps {
   settings: NoteSettings | null;
   onSave?: (normalized: NoteSettings) => Promise<void> | void;
   title?: string | null;
+  /** 수명은 호출부가 presence로 소유한다 */
+  motionState?: PopupMotionState;
 }
 
 const NoteSetting = ({
@@ -51,6 +54,7 @@ const NoteSetting = ({
   settings,
   onSave,
   title = null,
+  motionState,
 }: NoteSettingProps) => {
   const { t } = useTranslation();
   const initial: Partial<NoteSettings> = settings || {};
@@ -457,6 +461,7 @@ const NoteSetting = ({
 
   return (
     <Modal
+      motionState={motionState}
       onClick={onClose}
       ariaLabel={title ?? t('keySetting.tabNote')}
       contentMountStrategy="after-paint"

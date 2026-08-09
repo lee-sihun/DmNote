@@ -338,11 +338,11 @@ const CounterAnimationPicker = ({
         addLabel={t('counterSetting.addAnimation') || '애니메이션 추가'}
       />
 
-      {menu.menuKey !== null && (
+      {menu.renderKey !== null && (
         <ListPopup
-          open
+          open={menu.menuKey !== null}
           ariaLabel={t('common.more')}
-          position={menu.menuPosition ?? undefined}
+          position={menu.renderPosition ?? undefined}
           onClose={menu.close}
           items={menuItems}
           onSelect={(id) => {

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
+import { useModalPresence } from '@hooks/ui/usePopupPresence';
 
 interface UpdateInfo {
   currentVersion: string;
@@ -56,7 +57,10 @@ const UpdateModal = ({
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  // 퇴장 모션이 도는 동안 DOM을 유지한다
+  const { mounted, state: motionState } = useModalPresence(isOpen);
+
+  if (!mounted) return null;
 
   const handleGoToRelease = async () => {
     try {
@@ -86,6 +90,7 @@ const UpdateModal = ({
 
   return (
     <Modal
+      motionState={motionState}
       onClick={handleClose}
       ariaLabel={t('update.title')}
       contentMountStrategy="after-paint"

@@ -8,6 +8,7 @@ import {
   DisplayElementTemplateHelpers,
 } from '@src/types/plugin/api';
 import { useDraggable } from '@hooks/Grid';
+import { usePopupPresence } from '@hooks/ui/usePopupPresence';
 import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -1373,9 +1374,14 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       },
     );
 
-  // 컨텍스트 메뉴 항목 생성 — 열려 있을 때만 커스텀 predicate 평가
+  // 컨텍스트 메뉴 항목 생성 - 마운트된 동안만 커스텀 predicate 평가
+  // 퇴장 모션이 도는 동안 메뉴 DOM을 유지한다. 열림 판정 자체는 그대로 두고
+  // 마운트 게이트만 늘려 상시 마운트로 번지는 걸 막는다
+  const contextMenuPresence = usePopupPresence(contextMenuOpen);
+
   const contextMenuItems: ListItem[] = (() => {
-    if (!contextMenuOpen || !element.contextMenu) return [];
+    // 닫히는 중에도 항목을 유지해야 잔상이 빈 메뉴로 보이지 않는다
+    if (!contextMenuPresence.mounted || !element.contextMenu) return [];
 
     const {
       enableDelete = true,
@@ -1522,7 +1528,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       {/* 컨텍스트 메뉴 - 줌 영향을 받지 않도록 body에 Portal로 렌더링 */}
       {windowType === 'main' &&
         element.contextMenu &&
-        contextMenuOpen &&
+        contextMenuPresence.mounted &&
         createPortal(
           <ListPopup
             open={contextMenuOpen}

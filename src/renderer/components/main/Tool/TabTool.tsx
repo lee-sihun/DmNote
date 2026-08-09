@@ -60,6 +60,8 @@ const TabTool = () => {
         initialFocus="surface"
         onClose={() => setIsPopupOpen(false)}
         contentMountStrategy="after-paint"
+        // 글래스와 모션은 팝업 표면이 소유 - ListPopup과 같은 구조
+        className="dmn-motion flex flex-col gap-[6px] w-[216px] p-[8px] bg-glass backdrop-glass-popup rounded-popup shadow-elevation-2"
       >
         <TabList />
       </FloatingPopup>

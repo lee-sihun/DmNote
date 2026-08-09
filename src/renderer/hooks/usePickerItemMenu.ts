@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useRetainedValue } from '@hooks/ui/useRetainedValue';
 
 // 피커 행의 ⋮ 버튼/행 클릭/우클릭으로 여는 컨텍스트 메뉴 상태 관리
 export const usePickerItemMenu = <TKey>() => {
@@ -71,9 +72,15 @@ export const usePickerItemMenu = <TKey>() => {
     setMenuKey(key);
   };
 
+  // 퇴장 모션이 도는 동안에도 대상과 좌표가 필요하다.
+  // menuKey는 열림 판정용, renderKey는 렌더 유지용으로 나눠 쓴다
+  const renderKey = useRetainedValue(menuKey);
+  const renderPosition = useRetainedValue(menuPosition);
+
   return {
     menuKey,
-    menuPosition,
+    renderKey,
+    renderPosition,
     capturePressState,
     openFromButton,
     openFromRow,

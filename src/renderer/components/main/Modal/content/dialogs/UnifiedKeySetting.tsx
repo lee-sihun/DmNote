@@ -4,6 +4,8 @@ import React from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
+import type { PopupMotionState } from '@hooks/ui/usePopupPresence';
+import PopupExit from '../../PopupExit';
 import TabSwitch from '@components/main/common/TabSwitch';
 import KeyTabContent, {
   type KeyTabContentRef,
@@ -38,7 +40,8 @@ interface UnifiedKeySettingProps {
   onSave: (data: SaveData) => void;
   onClose: () => void;
   onPreview?: (data: PreviewData) => void;
-  skipAnimation?: boolean;
+  /** 수명은 호출부가 presence로 소유한다 */
+  motionState?: PopupMotionState;
 }
 
 // ============================================================================
@@ -51,10 +54,9 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   onSave,
   onClose,
   onPreview,
-  skipAnimation = false,
+  motionState,
 }) => {
   const { t } = useTranslation();
-  const initialSkipRef = React.useRef(skipAnimation);
   const contentRef = React.useRef<HTMLDivElement>(null);
   // 컨테이너 높이 (애니메이션용)
   const [containerHeight, setContainerHeight] = React.useState<number | null>(
@@ -188,7 +190,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   return (
     <Modal
       onClick={handleClose}
-      animate={!initialSkipRef.current}
+      motionState={motionState}
       ariaLabel={t('keySetting.title')}
       contentMountStrategy="after-paint"
     >
@@ -241,98 +243,106 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
       </div>
 
       {/* 이미지 피커 - 스크롤 영역 외부에 렌더링 */}
-      {keyState.showImagePicker && (
-        <ImagePicker
-          open={keyState.showImagePicker}
-          referenceRef={keyTabRef.current?.imageButtonRef}
-          idleImage={keyState.inactiveImage}
-          activeImage={keyState.activeImage}
-          idleTransparent={keyState.idleTransparent}
-          activeTransparent={keyState.activeTransparent}
-          onIdleImageChange={handleIdleImageChange}
-          onActiveImageChange={handleActiveImageChange}
-          onIdleTransparentChange={handleIdleTransparentChange}
-          onActiveTransparentChange={handleActiveTransparentChange}
-          onIdleImageReset={() => handleIdleImageChange('')}
-          onActiveImageReset={() => handleActiveImageChange('')}
-          onClose={() =>
-            setKeyState((prev) => ({ ...prev, showImagePicker: false }))
-          }
-        />
-      )}
+      <PopupExit open={keyState.showImagePicker}>
+        {keyState.showImagePicker ? (
+          <ImagePicker
+            open={keyState.showImagePicker}
+            referenceRef={keyTabRef.current?.imageButtonRef}
+            idleImage={keyState.inactiveImage}
+            activeImage={keyState.activeImage}
+            idleTransparent={keyState.idleTransparent}
+            activeTransparent={keyState.activeTransparent}
+            onIdleImageChange={handleIdleImageChange}
+            onActiveImageChange={handleActiveImageChange}
+            onIdleTransparentChange={handleIdleTransparentChange}
+            onActiveTransparentChange={handleActiveTransparentChange}
+            onIdleImageReset={() => handleIdleImageChange('')}
+            onActiveImageReset={() => handleActiveImageChange('')}
+            onClose={() =>
+              setKeyState((prev) => ({ ...prev, showImagePicker: false }))
+            }
+          />
+        ) : null}
+      </PopupExit>
 
       {/* 노트 컬러 피커 - 스크롤 영역 외부에 렌더링 */}
-      {noteState.showPicker && (
-        <ColorPicker
-          open={noteState.showPicker}
-          referenceRef={noteTabRef.current?.colorButtonRef}
-          color={
-            noteState.colorMode === COLOR_MODES.gradient
-              ? toGradient(noteState.noteColor, noteState.gradientBottom)
-              : noteState.noteColor
-          }
-          onColorChange={(c) => noteTabRef.current?.handleColorChange(c)}
-          onColorChangeComplete={(c) =>
-            noteTabRef.current?.handleColorChangeComplete(c)
-          }
-          onClose={() =>
-            setNoteState((prev) => ({ ...prev, showPicker: false }))
-          }
-          position={'right'}
-        />
-      )}
+      <PopupExit open={noteState.showPicker}>
+        {noteState.showPicker ? (
+          <ColorPicker
+            open={noteState.showPicker}
+            referenceRef={noteTabRef.current?.colorButtonRef}
+            color={
+              noteState.colorMode === COLOR_MODES.gradient
+                ? toGradient(noteState.noteColor, noteState.gradientBottom)
+                : noteState.noteColor
+            }
+            onColorChange={(c) => noteTabRef.current?.handleColorChange(c)}
+            onColorChangeComplete={(c) =>
+              noteTabRef.current?.handleColorChangeComplete(c)
+            }
+            onClose={() =>
+              setNoteState((prev) => ({ ...prev, showPicker: false }))
+            }
+            position={'right'}
+          />
+        ) : null}
+      </PopupExit>
 
       {/* 글로우 컬러 피커 - 스크롤 영역 외부에 렌더링 */}
-      {noteState.showGlowPicker && (
-        <ColorPicker
-          open={noteState.showGlowPicker}
-          referenceRef={noteTabRef.current?.glowColorButtonRef}
-          color={
-            noteState.glowColorMode === COLOR_MODES.gradient
-              ? toGradient(noteState.glowColor, noteState.glowGradientBottom)
-              : noteState.glowColor
-          }
-          onColorChange={(c) => noteTabRef.current?.handleGlowColorChange(c)}
-          onColorChangeComplete={(c) =>
-            noteTabRef.current?.handleGlowColorChangeComplete(c)
-          }
-          onClose={() =>
-            setNoteState((prev) => ({ ...prev, showGlowPicker: false }))
-          }
-          position={'right'}
-        />
-      )}
+      <PopupExit open={noteState.showGlowPicker}>
+        {noteState.showGlowPicker ? (
+          <ColorPicker
+            open={noteState.showGlowPicker}
+            referenceRef={noteTabRef.current?.glowColorButtonRef}
+            color={
+              noteState.glowColorMode === COLOR_MODES.gradient
+                ? toGradient(noteState.glowColor, noteState.glowGradientBottom)
+                : noteState.glowColor
+            }
+            onColorChange={(c) => noteTabRef.current?.handleGlowColorChange(c)}
+            onColorChangeComplete={(c) =>
+              noteTabRef.current?.handleGlowColorChangeComplete(c)
+            }
+            onClose={() =>
+              setNoteState((prev) => ({ ...prev, showGlowPicker: false }))
+            }
+            position={'right'}
+          />
+        ) : null}
+      </PopupExit>
 
       {/* 카운터 컬러 피커 - 스크롤 영역 외부에 렌더링 */}
-      {counterState.pickerFor && (
-        <ColorPicker
-          open={counterState.pickerOpen}
-          referenceRef={counterTabRef.current?.fillActiveBtnRef}
-          color={
-            counterTabRef.current?.colorValueFor(counterState.pickerFor) ??
-            '#FFFFFF'
-          }
-          onColorChange={(c: string) =>
-            counterTabRef.current?.setColorFor(counterState.pickerFor, c)
-          }
-          onColorChangeComplete={(c: string) =>
-            counterTabRef.current?.handleColorComplete(
-              counterState.pickerFor,
-              c,
-            )
-          }
-          onClose={() =>
-            setCounterState((prev) => ({
-              ...prev,
-              pickerFor: null,
-              pickerOpen: false,
-            }))
-          }
-          solidOnly={true}
-          interactiveRefs={counterTabRef.current?.colorPickerInteractiveRefs}
-          position={'right'}
-        />
-      )}
+      <PopupExit open={counterState.pickerOpen}>
+        {counterState.pickerFor ? (
+          <ColorPicker
+            open={counterState.pickerOpen}
+            referenceRef={counterTabRef.current?.fillActiveBtnRef}
+            color={
+              counterTabRef.current?.colorValueFor(counterState.pickerFor) ??
+              '#FFFFFF'
+            }
+            onColorChange={(c: string) =>
+              counterTabRef.current?.setColorFor(counterState.pickerFor, c)
+            }
+            onColorChangeComplete={(c: string) =>
+              counterTabRef.current?.handleColorComplete(
+                counterState.pickerFor,
+                c,
+              )
+            }
+            onClose={() =>
+              setCounterState((prev) => ({
+                ...prev,
+                pickerFor: null,
+                pickerOpen: false,
+              }))
+            }
+            solidOnly={true}
+            interactiveRefs={counterTabRef.current?.colorPickerInteractiveRefs}
+            position={'right'}
+          />
+        ) : null}
+      </PopupExit>
     </Modal>
   );
 };

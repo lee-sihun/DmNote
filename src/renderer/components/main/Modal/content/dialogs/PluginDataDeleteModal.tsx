@@ -1,5 +1,6 @@
 import React from 'react';
 import Modal from '@components/main/Modal/Modal';
+import { useModalPresence } from '@hooks/ui/usePopupPresence';
 
 interface PluginDataDeleteModalProps {
   isOpen: boolean;
@@ -18,10 +19,14 @@ export function PluginDataDeleteModal({
   pluginName,
   t,
 }: PluginDataDeleteModalProps) {
-  if (!isOpen) return null;
+  // 퇴장 모션이 도는 동안 DOM을 유지한다
+  const { mounted, state: motionState } = useModalPresence(isOpen);
+
+  if (!mounted) return null;
 
   return (
     <Modal
+      motionState={motionState}
       onClick={onClose}
       ariaLabel={t('settings.pluginDataDeleteTitle')}
       contentMountStrategy="after-paint"

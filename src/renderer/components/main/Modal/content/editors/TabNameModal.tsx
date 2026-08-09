@@ -2,6 +2,7 @@
 import { usePressAction } from '@hooks/usePressAction';
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from '../../Modal';
+import { useModalPresence } from '@hooks/ui/usePopupPresence';
 import { useTranslation } from '@contexts/useTranslation';
 
 interface TabNameModalProps {
@@ -79,10 +80,14 @@ const TabNameModal = ({
   const submitPress = usePressAction(handleSubmit);
   const cancelPress = usePressAction(onClose);
 
-  if (!isOpen) return null;
+  // 퇴장 모션이 도는 동안 DOM을 유지한다
+  const { mounted, state: motionState } = useModalPresence(isOpen);
+
+  if (!mounted) return null;
 
   return (
     <Modal
+      motionState={motionState}
       onClick={onClose}
       ariaLabel={t('tabs.createTitle')}
       contentMountStrategy="after-paint"

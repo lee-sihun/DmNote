@@ -23,6 +23,7 @@ import {
   FORM_LABEL_CLASS,
 } from '@utils/cardRecipes';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import PopupExit from '@components/main/Modal/PopupExit';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { gradientToCss } from '@src/types/color';
@@ -979,9 +980,10 @@ export const ColorInput: React.FC<ColorInputProps> = ({
             : undefined
         }
       />
-      {pickerMounted && (
-        <ColorPicker
-          open={pickerMounted}
+      <PopupExit open={pickerMounted}>
+        {pickerMounted ? (
+          <ColorPicker
+            open={pickerMounted}
           referenceRef={buttonRef}
           panelElement={panelElement}
           color={
@@ -1027,33 +1029,10 @@ export const ColorInput: React.FC<ColorInputProps> = ({
               ? gradientState.handleGradientSpecSelect
               : undefined
           }
-        />
-      )}
+          />
+        ) : null}
+      </PopupExit>
     </>
-  );
-};
-
-// ============================================================================
-// 토글 스위치
-// ============================================================================
-
-export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
-  checked,
-  onChange,
-}) => {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`w-[32px] h-[18px] rounded-full transition-colors relative flex-shrink-0 ${
-        checked ? 'bg-accent' : 'bg-line-strong'
-      }`}
-    >
-      <div
-        className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
-          checked ? 'translate-x-[16px]' : 'translate-x-[2px]'
-        }`}
-      />
-    </button>
   );
 };
 

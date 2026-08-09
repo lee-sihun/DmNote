@@ -84,7 +84,8 @@ const TabList = () => {
   };
 
   return (
-    <div className="flex flex-col gap-[6px] w-[216px] p-[8px] bg-glass backdrop-glass-popup rounded-popup shadow-elevation-2">
+    // 표면 클래스는 TabTool이 소유 - 여기서는 내용만 낸다
+    <>
       {/* 탭 리스트 - 드롭다운 메뉴와 같은 플랫 행 문법, 팝업 표면에 바로 배치 */}
       {customTabs.length > 0 && (
         <div
@@ -185,7 +186,7 @@ const TabList = () => {
         }}
         onCancel={() => setDeleteTarget(null)}
       />
-    </div>
+    </>
   );
 };
 

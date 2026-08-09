@@ -116,11 +116,6 @@ export interface ColorInputProps {
   gradientSurface?: GradientPreviewSurface;
 }
 
-export interface ToggleSwitchProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}
-
 export interface TextInputProps {
   value: string;
   onChange: (value: string) => void;

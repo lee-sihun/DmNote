@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ElementShadowSpec } from '@src/types/key/shadows';
 import PickerSurface from '@components/main/Grid/PropertiesPanel/PickerSurface';
 import ColorPicker from './ColorPicker';
+import PopupExit from '@components/main/Modal/PopupExit';
 import { ColorSwatchButton } from './ColorSwatch';
 import TabSwitch from '@components/main/common/TabSwitch';
 import {
@@ -102,26 +103,30 @@ const ShadowPicker = ({
       interactiveRefs={interactiveRefs}
       onClose={handleClose}
       overlay={
-        colorOpen ? (
-          <ColorPicker
-            open
-            referenceRef={colorButtonRef}
-            color={draftColor}
-            onColorChange={(color) => {
-              if (typeof color === 'string') setDraftColor(color);
-            }}
-            onColorChangeComplete={(color) => {
-              if (typeof color !== 'string') return;
-              setDraftColor(color);
-              update({ color });
-            }}
-            onClose={() => setColorOpen(false)}
-            solidOnly
-            placement="left-start"
-            offsetY={0}
-            interactiveRefs={[colorButtonRef]}
-          />
-        ) : null
+        // 바깥이 닫히면 안쪽도 같이 닫는다. colorOpen만 보면 부모가 퇴장하는
+        // 동안 색상 피커만 선명히 남아 있다가 함께 툭 사라진다
+        <PopupExit open={open && colorOpen}>
+          {colorOpen ? (
+            <ColorPicker
+              open
+              referenceRef={colorButtonRef}
+              color={draftColor}
+              onColorChange={(color) => {
+                if (typeof color === 'string') setDraftColor(color);
+              }}
+              onColorChangeComplete={(color) => {
+                if (typeof color !== 'string') return;
+                setDraftColor(color);
+                update({ color });
+              }}
+              onClose={() => setColorOpen(false)}
+              solidOnly
+              placement="left-start"
+              offsetY={0}
+              interactiveRefs={[colorButtonRef]}
+            />
+          ) : null}
+        </PopupExit>
       }
     >
       {/* 상태 전환 — 눌림 상태가 없는 요소는 대기만 */}

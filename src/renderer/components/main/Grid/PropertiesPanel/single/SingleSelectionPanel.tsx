@@ -60,6 +60,7 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import ShadowControls from '../ShadowControls';
@@ -701,77 +702,79 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
         </div>
       </div>
 
-      {showGraphImagePicker && graphImageButtonRef.current && (
-        <ImagePicker
-          open={showGraphImagePicker}
-          referenceRef={graphImageButtonRef}
-          panelElement={panelElement}
-          showActiveState={false}
-          idleImage={singleGraphPosition.inactiveImage || ''}
-          activeImage={singleGraphPosition.activeImage || ''}
-          idleTransparent={false}
-          activeTransparent={false}
-          idleImageFit={
-            singleGraphPosition.idleImageFit ||
-            singleGraphPosition.imageFit ||
-            'cover'
-          }
-          activeImageFit={
-            singleGraphPosition.activeImageFit ||
-            singleGraphPosition.imageFit ||
-            'cover'
-          }
-          onIdleImageChange={(imageUrl: string) =>
-            handleGraphUpdate({
-              index: singleGraphIndex,
-              inactiveImage: imageUrl,
-            })
-          }
-          onActiveImageChange={(imageUrl: string) =>
-            handleGraphUpdate({
-              index: singleGraphIndex,
-              activeImage: imageUrl,
-            })
-          }
-          onIdleTransparentChange={(value: boolean) =>
-            handleGraphUpdate({
-              index: singleGraphIndex,
-              idleTransparent: value,
-            })
-          }
-          onActiveTransparentChange={(value: boolean) =>
-            handleGraphUpdate({
-              index: singleGraphIndex,
-              activeTransparent: value,
-            })
-          }
-          onIdleImageFitChange={(fit: string) =>
-            handleGraphUpdate({
-              index: singleGraphIndex,
-              idleImageFit: fit as ImageFit,
-            })
-          }
-          onActiveImageFitChange={(fit: string) =>
-            handleGraphUpdate({
-              index: singleGraphIndex,
-              activeImageFit: fit as ImageFit,
-            })
-          }
-          onIdleImageReset={() =>
-            handleGraphUpdate({
-              index: singleGraphIndex,
-              inactiveImage: '',
-            })
-          }
-          onActiveImageReset={() =>
-            handleGraphUpdate({
-              index: singleGraphIndex,
-              activeImage: '',
-            })
-          }
-          onClose={() => setShowGraphImagePicker(false)}
-        />
-      )}
+      <PopupExit open={showGraphImagePicker}>
+        {showGraphImagePicker && graphImageButtonRef.current ? (
+          <ImagePicker
+            open={showGraphImagePicker}
+            referenceRef={graphImageButtonRef}
+            panelElement={panelElement}
+            showActiveState={false}
+            idleImage={singleGraphPosition.inactiveImage || ''}
+            activeImage={singleGraphPosition.activeImage || ''}
+            idleTransparent={false}
+            activeTransparent={false}
+            idleImageFit={
+              singleGraphPosition.idleImageFit ||
+              singleGraphPosition.imageFit ||
+              'cover'
+            }
+            activeImageFit={
+              singleGraphPosition.activeImageFit ||
+              singleGraphPosition.imageFit ||
+              'cover'
+            }
+            onIdleImageChange={(imageUrl: string) =>
+              handleGraphUpdate({
+                index: singleGraphIndex,
+                inactiveImage: imageUrl,
+              })
+            }
+            onActiveImageChange={(imageUrl: string) =>
+              handleGraphUpdate({
+                index: singleGraphIndex,
+                activeImage: imageUrl,
+              })
+            }
+            onIdleTransparentChange={(value: boolean) =>
+              handleGraphUpdate({
+                index: singleGraphIndex,
+                idleTransparent: value,
+              })
+            }
+            onActiveTransparentChange={(value: boolean) =>
+              handleGraphUpdate({
+                index: singleGraphIndex,
+                activeTransparent: value,
+              })
+            }
+            onIdleImageFitChange={(fit: string) =>
+              handleGraphUpdate({
+                index: singleGraphIndex,
+                idleImageFit: fit as ImageFit,
+              })
+            }
+            onActiveImageFitChange={(fit: string) =>
+              handleGraphUpdate({
+                index: singleGraphIndex,
+                activeImageFit: fit as ImageFit,
+              })
+            }
+            onIdleImageReset={() =>
+              handleGraphUpdate({
+                index: singleGraphIndex,
+                inactiveImage: '',
+              })
+            }
+            onActiveImageReset={() =>
+              handleGraphUpdate({
+                index: singleGraphIndex,
+                activeImage: '',
+              })
+            }
+            onClose={() => setShowGraphImagePicker(false)}
+          />
+        ) : null}
+      </PopupExit>
     </div>
   );
 };
@@ -1407,91 +1410,103 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         </div>
       </div>
 
-      {showImagePicker && imageButtonRef.current && (
-        <ImagePicker
-          open={showImagePicker}
-          referenceRef={imageButtonRef}
-          panelElement={panelRef.current}
-          idleImage={singleKnobPosition.inactiveImage || ''}
-          activeImage={singleKnobPosition.activeImage || ''}
-          idleTransparent={singleKnobPosition.idleTransparent ?? false}
-          activeTransparent={singleKnobPosition.activeTransparent ?? false}
-          idleImageFit={
-            singleKnobPosition.idleImageFit ||
-            singleKnobPosition.imageFit ||
-            'cover'
-          }
-          activeImageFit={
-            singleKnobPosition.activeImageFit ||
-            singleKnobPosition.imageFit ||
-            'cover'
-          }
-          onIdleImageChange={(imageUrl: string) =>
-            handleKnobUpdate({
-              index: singleKnobIndex,
-              inactiveImage: imageUrl,
-            })
-          }
-          onActiveImageChange={(imageUrl: string) =>
-            handleKnobUpdate({ index: singleKnobIndex, activeImage: imageUrl })
-          }
-          onIdleTransparentChange={(value: boolean) =>
-            handleKnobUpdate({ index: singleKnobIndex, idleTransparent: value })
-          }
-          onActiveTransparentChange={(value: boolean) =>
-            handleKnobUpdate({
-              index: singleKnobIndex,
-              activeTransparent: value,
-            })
-          }
-          onIdleImageFitChange={(fit: string) =>
-            handleKnobUpdate({
-              index: singleKnobIndex,
-              idleImageFit: fit as ImageFit,
-            })
-          }
-          onActiveImageFitChange={(fit: string) =>
-            handleKnobUpdate({
-              index: singleKnobIndex,
-              activeImageFit: fit as ImageFit,
-            })
-          }
-          onIdleImageReset={() =>
-            handleKnobUpdate({ index: singleKnobIndex, inactiveImage: '' })
-          }
-          onActiveImageReset={() =>
-            handleKnobUpdate({ index: singleKnobIndex, activeImage: '' })
-          }
-          onClose={() => setShowImagePicker(false)}
-        />
-      )}
+      <PopupExit open={showImagePicker}>
+        {showImagePicker && imageButtonRef.current ? (
+          <ImagePicker
+            open={showImagePicker}
+            referenceRef={imageButtonRef}
+            panelElement={panelRef.current}
+            idleImage={singleKnobPosition.inactiveImage || ''}
+            activeImage={singleKnobPosition.activeImage || ''}
+            idleTransparent={singleKnobPosition.idleTransparent ?? false}
+            activeTransparent={singleKnobPosition.activeTransparent ?? false}
+            idleImageFit={
+              singleKnobPosition.idleImageFit ||
+              singleKnobPosition.imageFit ||
+              'cover'
+            }
+            activeImageFit={
+              singleKnobPosition.activeImageFit ||
+              singleKnobPosition.imageFit ||
+              'cover'
+            }
+            onIdleImageChange={(imageUrl: string) =>
+              handleKnobUpdate({
+                index: singleKnobIndex,
+                inactiveImage: imageUrl,
+              })
+            }
+            onActiveImageChange={(imageUrl: string) =>
+              handleKnobUpdate({
+                index: singleKnobIndex,
+                activeImage: imageUrl,
+              })
+            }
+            onIdleTransparentChange={(value: boolean) =>
+              handleKnobUpdate({
+                index: singleKnobIndex,
+                idleTransparent: value,
+              })
+            }
+            onActiveTransparentChange={(value: boolean) =>
+              handleKnobUpdate({
+                index: singleKnobIndex,
+                activeTransparent: value,
+              })
+            }
+            onIdleImageFitChange={(fit: string) =>
+              handleKnobUpdate({
+                index: singleKnobIndex,
+                idleImageFit: fit as ImageFit,
+              })
+            }
+            onActiveImageFitChange={(fit: string) =>
+              handleKnobUpdate({
+                index: singleKnobIndex,
+                activeImageFit: fit as ImageFit,
+              })
+            }
+            onIdleImageReset={() =>
+              handleKnobUpdate({ index: singleKnobIndex, inactiveImage: '' })
+            }
+            onActiveImageReset={() =>
+              handleKnobUpdate({ index: singleKnobIndex, activeImage: '' })
+            }
+            onClose={() => setShowImagePicker(false)}
+          />
+        ) : null}
+      </PopupExit>
 
       {/* 대기/입력 색상 ColorPicker (키 패널과 동일한 stateMode 토글) */}
-      {pickerFor && (
-        <ColorPicker
-          open={!!pickerFor}
-          referenceRef={
-            pickerFor === 'backgroundColor' ? bgColorBtnRef : borderColorBtnRef
-          }
-          panelElement={panelElement}
-          color={knobGradientState.pickerColor}
-          onColorChange={(c: string) =>
-            knobGradientState.handlePickerColorChange(c, false)
-          }
-          onColorChangeComplete={(c: string) =>
-            knobGradientState.handlePickerColorChange(c, true)
-          }
-          onClose={() => setPickerFor(null)}
-          solidOnly={true}
-          stateMode={colorState}
-          onStateModeChange={setColorState}
-          interactiveRefs={[bgColorBtnRef, borderColorBtnRef]}
-          headerSlot={knobGradientState.headerSlot}
-          footerSlot={knobGradientState.footerSlot}
-          gradientSpec={knobGradientState.paletteGradientSpec}
-          onGradientSpecSelect={knobGradientState.handleGradientSpecSelect}
-        />
-      )}
+      <PopupExit open={Boolean(pickerFor)}>
+        {pickerFor ? (
+          <ColorPicker
+            open={!!pickerFor}
+            referenceRef={
+              pickerFor === 'backgroundColor'
+                ? bgColorBtnRef
+                : borderColorBtnRef
+            }
+            panelElement={panelElement}
+            color={knobGradientState.pickerColor}
+            onColorChange={(c: string) =>
+              knobGradientState.handlePickerColorChange(c, false)
+            }
+            onColorChangeComplete={(c: string) =>
+              knobGradientState.handlePickerColorChange(c, true)
+            }
+            onClose={() => setPickerFor(null)}
+            solidOnly={true}
+            stateMode={colorState}
+            onStateModeChange={setColorState}
+            interactiveRefs={[bgColorBtnRef, borderColorBtnRef]}
+            headerSlot={knobGradientState.headerSlot}
+            footerSlot={knobGradientState.footerSlot}
+            gradientSpec={knobGradientState.paletteGradientSpec}
+            onGradientSpecSelect={knobGradientState.handleGradientSpecSelect}
+          />
+        ) : null}
+      </PopupExit>
     </div>
   );
 };
