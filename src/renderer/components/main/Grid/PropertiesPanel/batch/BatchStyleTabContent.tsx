@@ -317,8 +317,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     null,
   );
   const spacingGestureIdRef = useRef<string | null>(null);
-  // 편집 전 간격. 첫 변경 시점의 prop이 아직 아무것도 커밋되지 않은 원래 값이다
-  const spacingBaseRef = useRef<number | null>(null);
 
   const isSameSpacingValue = (a: number | null, b: number | null): boolean => {
     if (a === null || b === null) return false;
@@ -339,7 +337,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   };
 
   const onSpacingChange = (value: number) => {
-    spacingBaseRef.current ??= batchSpacing.value;
     lastSpacingRef.current = value;
     if (spacingDebounceTimerRef.current) {
       clearTimeout(spacingDebounceTimerRef.current);
@@ -373,30 +370,19 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     lastSpacingRef.current = null;
     lastCommittedSpacingRef.current = null;
     spacingGestureIdRef.current = null;
-    spacingBaseRef.current = null;
   };
 
-  // Escape는 onBlur를 타지 않아 예약된 커밋이 80ms 뒤 그대로 적용된다.
-  // 그 예약을 걷고, 이미 나간 커밋이 있으면 편집 전 간격으로 되돌린다.
-  // 같은 gestureId를 쓰므로 되돌림이 undo 항목을 새로 만들지 않는다
+  // Escape는 onBlur를 타지 않는다. 예약만 되고 아직 안 나간 커밋을 걷지 않으면
+  // 취소한 값이 80ms 뒤에 그대로 적용된다. 이미 나간 커밋은 되돌리지 않는다 -
+  // 항목별 원래 간격은 이 컴포넌트가 갖고 있지 않다
   const onSpacingCancel = () => {
     if (spacingDebounceTimerRef.current) {
       clearTimeout(spacingDebounceTimerRef.current);
       spacingDebounceTimerRef.current = null;
     }
-    // Mixed는 대표값 하나로 항목별 간격을 되살릴 수 없어 예약 취소까지만 한다
-    const base = spacingBaseRef.current;
-    if (
-      !batchSpacing.isMixed &&
-      base !== null &&
-      lastCommittedSpacingRef.current !== null
-    ) {
-      commitSpacing(base);
-    }
     lastSpacingRef.current = null;
     lastCommittedSpacingRef.current = null;
     spacingGestureIdRef.current = null;
-    spacingBaseRef.current = null;
   };
 
   useEffect(() => {
