@@ -17,6 +17,11 @@ const keyElement = (index: number): SelectedElement => ({
   index,
 });
 
+const pluginElement = (id: string): SelectedElement => ({
+  type: 'plugin',
+  id,
+});
+
 const select = (...elements: SelectedElement[]) => {
   act(() => {
     useGridSelectionStore.setState({ selectedElements: elements });
@@ -91,6 +96,43 @@ describe('EditSessionBoundary', () => {
     select(keyElement(1), keyElement(0));
 
     expect(unmount).not.toHaveBeenCalled();
+  });
+
+  it('구분자가 든 플러그인 ID 조합이 같아 보여도 다른 대상으로 본다', () => {
+    const mount = vi.fn();
+    const unmount = vi.fn();
+    useGridSelectionStore.setState({
+      selectedElements: [
+        pluginElement('plugin::a,b'),
+        pluginElement('plugin::c'),
+      ],
+    });
+    renderProbe(mount, unmount);
+
+    select(pluginElement('plugin::a'), pluginElement('plugin::b,c'));
+
+    expect(unmount).toHaveBeenCalledTimes(1);
+    expect(mount).toHaveBeenCalledTimes(2);
+  });
+
+  it('모드와 ID의 구분자 경계가 달라지면 다른 대상으로 본다', () => {
+    const mount = vi.fn();
+    const unmount = vi.fn();
+    useKeyStore.setState({ selectedKeyType: 'custom:a' });
+    useGridSelectionStore.setState({
+      selectedElements: [pluginElement('plugin::b')],
+    });
+    renderProbe(mount, unmount);
+
+    act(() => {
+      useKeyStore.setState({ selectedKeyType: 'custom' });
+      useGridSelectionStore.setState({
+        selectedElements: [pluginElement('a:plugin::b')],
+      });
+    });
+
+    expect(unmount).toHaveBeenCalledTimes(1);
+    expect(mount).toHaveBeenCalledTimes(2);
   });
 
   it('배치 선택이 줄어들면 새로 마운트한다', () => {

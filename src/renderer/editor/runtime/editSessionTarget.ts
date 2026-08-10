@@ -17,11 +17,19 @@ import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 export const formatEditSessionTarget = (
   mode: string,
   selectedElements: readonly SelectedElement[],
-): string =>
-  `${mode}:${selectedElements
-    .map((element) => element.id)
-    .sort()
-    .join(',')}`;
+): string => {
+  const targets = selectedElements
+    .map((element) => [element.type, element.id] as const)
+    .sort(([leftType, leftId], [rightType, rightId]) => {
+      if (leftType !== rightType) return leftType < rightType ? -1 : 1;
+      if (leftId === rightId) return 0;
+      return leftId < rightId ? -1 : 1;
+    });
+
+  // mode·ID는 플러그인과 사용자 정의 탭에서 오므로, 구분자 문자열은
+  // 서로 다른 대상을 같은 지문으로 만들 수 있다. 구조를 직렬화해 경계를 보존한다
+  return JSON.stringify([mode, targets]);
+};
 
 // 비동기 완료 콜백만 쓰는 좁은 지문.
 //
