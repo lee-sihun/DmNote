@@ -18,6 +18,7 @@ import { editGestureController } from '@src/renderer/editor/runtime/editGestureC
 interface CapturedNumberInput {
   min?: number;
   max?: number;
+  prefix?: string;
   onChange?: (value: number) => void;
   onCancel?: () => void;
 }
@@ -176,6 +177,21 @@ describe('배치 스타일 숫자 필드 취소', () => {
 
     // 모서리 반경
     act(() => fieldByMax(100)?.onCancel?.());
+    expect(cancel).toHaveBeenCalledTimes(2);
+  });
+
+  it('배치 크기 필드 취소는 진행 중 gesture를 취소한다', () => {
+    const cancel = vi
+      .spyOn(editGestureController, 'cancel')
+      .mockImplementation(() => undefined);
+    renderPanel();
+
+    const width = captured.numberInputs.find((props) => props.prefix === 'W');
+    const height = captured.numberInputs.find((props) => props.prefix === 'H');
+
+    act(() => width?.onCancel?.());
+    act(() => height?.onCancel?.());
+
     expect(cancel).toHaveBeenCalledTimes(2);
   });
 });

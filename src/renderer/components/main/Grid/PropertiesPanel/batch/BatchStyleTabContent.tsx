@@ -716,6 +716,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             value={getMixedValue((pos) => pos.width, 60).value}
             onChange={(value) => handleBatchResize('width', value)}
             onPreview={(value) => handleBatchStyleChange('width', value)}
+            onCancel={() => editGestureController.cancel()}
             prefix="W"
             min={10}
             max={500}
@@ -727,6 +728,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             value={getMixedValue((pos) => pos.height, 60).value}
             onChange={(value) => handleBatchResize('height', value)}
             onPreview={(value) => handleBatchStyleChange('height', value)}
+            onCancel={() => editGestureController.cancel()}
             prefix="H"
             min={10}
             max={500}
