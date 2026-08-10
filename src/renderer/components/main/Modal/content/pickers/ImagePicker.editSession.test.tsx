@@ -12,6 +12,7 @@ import {
 
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 import ImagePicker from './ImagePicker';
 
@@ -112,6 +113,25 @@ describe('ImagePicker 비동기 완료와 대상 전환', () => {
     await finishLoad();
 
     expect(onIdleImageChange).not.toHaveBeenCalled();
+  });
+
+  // 가드를 전체 대상 지문으로 넓히면 이게 깨진다. 옛 index는 여전히 A를
+  // 가리키므로 A에 저장하는 것이 맞다
+  it('같은 모드에서 선택만 바뀌면 편집을 시작한 대상에 연결한다', async () => {
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'key', id: 'key-0', index: 0 }],
+    });
+    mount(true);
+    clickPreview();
+
+    act(() => {
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id: 'key-1', index: 1 }],
+      });
+    });
+    await finishLoad();
+
+    expect(onIdleImageChange).toHaveBeenCalledWith('/tmp/picked.png');
   });
 
   it('캔버스 대상에 묶이지 않은 피커는 모드가 바뀌어도 연결한다', async () => {
