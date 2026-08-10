@@ -127,7 +127,7 @@ describe('Dropdown keyboard contract', () => {
     );
     await act(async () => options[1]?.click());
 
-    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(openListbox()).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(trigger?.textContent).toContain('Two');
     expect(onChange).not.toHaveBeenCalled();

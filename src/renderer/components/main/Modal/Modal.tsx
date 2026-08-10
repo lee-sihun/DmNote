@@ -1,9 +1,4 @@
-import React, {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { getFocusableElements } from '@utils/focusableElements';
@@ -53,7 +48,9 @@ const Modal = ({
   });
 
   useEffect(() => {
-    if (contentMountStrategy === 'sync') return;
+    // 닫히기 전에 아직 내용이 안 붙었다면 퇴장 잔상에서 무거운 children을 새로
+    // 마운트하지 않는다. 이미 붙은 내용은 state가 유지하므로 그대로 퇴장한다
+    if (closing || contentMountStrategy === 'sync') return;
     let timer: number | null = null;
     const frame = requestAnimationFrame(() => {
       timer = window.setTimeout(() => setDeferredContentMounted(true), 0);
@@ -62,7 +59,7 @@ const Modal = ({
       cancelAnimationFrame(frame);
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [contentMountStrategy]);
+  }, [closing, contentMountStrategy]);
 
   // 퇴장 유예 동안 DOM이 남으므로 열림 여부는 closing으로 판정한다
   const { captureOpener } = useFocusRestore(!closing);

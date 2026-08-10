@@ -262,11 +262,7 @@ const FloatingPopup = ({
   const [deferredContentMounted, setDeferredContentMounted] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      setDeferredContentMounted(false);
-      return;
-    }
-    if (contentMountStrategy === 'sync') return;
+    if (!open || contentMountStrategy === 'sync') return;
     let timer: number | null = null;
     const frame = requestAnimationFrame(() => {
       timer = window.setTimeout(() => setDeferredContentMounted(true), 0);
@@ -277,8 +273,10 @@ const FloatingPopup = ({
     };
   }, [contentMountStrategy, open]);
 
+  // 퇴장 중에는 마지막 children을 유지한다. open에 묶으면 PopupExit가 붙잡은
+  // 내용도 닫는 첫 렌더에서 비어 퇴장 잔상과 미저장 편집 상태가 사라진다
   const contentMounted =
-    open && (contentMountStrategy === 'sync' || deferredContentMounted);
+    contentMountStrategy === 'sync' || deferredContentMounted;
 
   // 호출부는 닫으면서 좌표를 즉시 비운다. 그대로 두면 퇴장 중 isFixed가 뒤집혀
   // body 포털이 인라인 렌더로 바뀌고, 표면이 재마운트되며 모션·포커스·스크롤이 끊긴다.

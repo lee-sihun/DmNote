@@ -184,7 +184,7 @@ describe('NumberInput visual-first commit', () => {
     expect(commit).toHaveBeenCalledWith(25);
   });
 
-  it('유효하지 않은 중간 문자로 blur해도 직전 유효값은 보존한다', () => {
+  it('유효하지 않은 중간 문자로 blur하면 편집 전 값으로 복원한다', () => {
     const commit = vi.fn();
     act(() => root.render(<NumberInput value={1} onChange={commit} />));
     const input = container.querySelector('input')!;
@@ -197,7 +197,7 @@ describe('NumberInput visual-first commit', () => {
     act(() => input.blur());
 
     expect(commit).toHaveBeenCalledTimes(1);
-    expect(commit).toHaveBeenCalledWith(2);
+    expect(commit).toHaveBeenCalledWith(1);
   });
 
   it('blur는 예약된 preview를 취소하고 최종값을 먼저 commit한다', async () => {
@@ -399,7 +399,11 @@ describe('TextInput preview commit', () => {
     // 타이핑이 onChange로 곧장 저장까지 가는 입력이다.
     // 되돌릴 채널도 onChange뿐이다
     const commit = vi.fn();
-    act(() => root.render(<TextInput value="before" onChange={commit} />));
+    act(() =>
+      root.render(
+        <TextInput value="before" onChange={commit} commitStrategy="sync" />,
+      ),
+    );
     const input = container.querySelector('input')!;
 
     act(() => input.focus());
@@ -509,7 +513,14 @@ describe('숫자 입력 수식 계산', () => {
     props: Partial<React.ComponentProps<typeof NumberInput>> = {},
   ) => {
     act(() =>
-      root.render(<NumberInput value={10} onChange={() => {}} {...props} />),
+      root.render(
+        <NumberInput
+          value={10}
+          onChange={() => {}}
+          commitStrategy="sync"
+          {...props}
+        />,
+      ),
     );
     const input = container.querySelector('input')!;
     act(() => input.focus());
@@ -521,7 +532,12 @@ describe('숫자 입력 수식 계산', () => {
   ) => {
     act(() =>
       root.render(
-        <OptionalNumberInput value={10} onChange={() => {}} {...props} />,
+        <OptionalNumberInput
+          value={10}
+          onChange={() => {}}
+          commitStrategy="sync"
+          {...props}
+        />,
       ),
     );
     const input = container.querySelector('input')!;
@@ -800,14 +816,25 @@ describe('숫자 입력 수식 계산', () => {
     // 분리 패널 selection sync는 포커스를 유지한 채 선택만 갈아끼운다.
     // 편집을 시작한 선택의 값을 새 선택 전체에 쓰면 요소별 값이 사라진다
     const commit = vi.fn();
-    act(() => root.render(<NumberInput value={100} onChange={commit} />));
+    act(() =>
+      root.render(
+        <NumberInput value={100} onChange={commit} commitStrategy="sync" />,
+      ),
+    );
     const input = container.querySelector('input')!;
     act(() => input.focus());
     act(() => setInputValue(input, '120'));
     expect(commit).toHaveBeenLastCalledWith(120);
 
     act(() =>
-      root.render(<NumberInput value={100} isMixed onChange={commit} />),
+      root.render(
+        <NumberInput
+          value={100}
+          isMixed
+          onChange={commit}
+          commitStrategy="sync"
+        />,
+      ),
     );
     act(() => pressKey(input, 'Escape'));
 
@@ -817,7 +844,13 @@ describe('숫자 입력 수식 계산', () => {
   it('포커스 중 선택이 Mixed로 바뀌면 Optional 취소도 대표값을 쓰지 않는다', () => {
     const commit = vi.fn();
     act(() =>
-      root.render(<OptionalNumberInput value={100} onChange={commit} />),
+      root.render(
+        <OptionalNumberInput
+          value={100}
+          onChange={commit}
+          commitStrategy="sync"
+        />,
+      ),
     );
     const input = container.querySelector('input')!;
     act(() => input.focus());
@@ -826,7 +859,12 @@ describe('숫자 입력 수식 계산', () => {
 
     act(() =>
       root.render(
-        <OptionalNumberInput value={100} isMixed onChange={commit} />,
+        <OptionalNumberInput
+          value={100}
+          isMixed
+          onChange={commit}
+          commitStrategy="sync"
+        />,
       ),
     );
     act(() => pressKey(input, 'Escape'));
@@ -1018,7 +1056,14 @@ describe('숫자 입력 방향키 스텝', () => {
     props: Partial<React.ComponentProps<typeof NumberInput>> = {},
   ) => {
     act(() =>
-      root.render(<NumberInput value={585} onChange={() => {}} {...props} />),
+      root.render(
+        <NumberInput
+          value={585}
+          onChange={() => {}}
+          commitStrategy="sync"
+          {...props}
+        />,
+      ),
     );
     return container.querySelector('input')!;
   };
@@ -1123,6 +1168,7 @@ describe('숫자 입력 방향키 스텝', () => {
           max={10}
           onChange={commit}
           onPreview={preview}
+          commitStrategy="sync"
         />,
       ),
     );
@@ -1144,7 +1190,12 @@ describe('숫자 입력 방향키 스텝', () => {
     const preview = vi.fn();
     act(() =>
       root.render(
-        <NumberInput value={585} onChange={() => {}} onPreview={preview} />,
+        <NumberInput
+          value={585}
+          onChange={() => {}}
+          onPreview={preview}
+          commitStrategy="sync"
+        />,
       ),
     );
     const input = container.querySelector('input')!;
@@ -1191,7 +1242,12 @@ describe('숫자 입력 방향키 스텝', () => {
     const preview = vi.fn();
     act(() =>
       root.render(
-        <NumberInput value={585} onChange={() => {}} onPreview={preview} />,
+        <NumberInput
+          value={585}
+          onChange={() => {}}
+          onPreview={preview}
+          commitStrategy="sync"
+        />,
       ),
     );
     const input = container.querySelector('input')!;
@@ -1323,6 +1379,7 @@ describe('숫자 입력 방향키 스텝', () => {
             max={max}
             onChange={() => {}}
             onPreview={onPreview}
+            commitStrategy="sync"
           />,
         ),
       );
@@ -1346,7 +1403,12 @@ describe('숫자 입력 방향키 스텝', () => {
     const preview = vi.fn();
     act(() =>
       root.render(
-        <NumberInput value={19} onChange={() => {}} onPreview={preview} />,
+        <NumberInput
+          value={19}
+          onChange={() => {}}
+          onPreview={preview}
+          commitStrategy="sync"
+        />,
       ),
     );
     const input = container.querySelector('input')!;
@@ -1425,6 +1487,7 @@ describe('숫자 입력 방향키 스텝', () => {
           value={585}
           onChange={() => {}}
           onPreview={preview}
+          commitStrategy="sync"
         />,
       ),
     );
@@ -1560,6 +1623,7 @@ describe('숫자 스텝 팝인 레이어', () => {
           max={999}
           onChange={() => {}}
           onPreview={preview}
+          commitStrategy="sync"
         />,
       ),
     );
@@ -1581,7 +1645,12 @@ describe('숫자 스텝 팝인 레이어', () => {
     const preview = vi.fn();
     act(() =>
       root.render(
-        <NumberInput value={585} onChange={() => {}} onPreview={preview} />,
+        <NumberInput
+          value={585}
+          onChange={() => {}}
+          onPreview={preview}
+          commitStrategy="sync"
+        />,
       ),
     );
     const input = container.querySelector('input')!;

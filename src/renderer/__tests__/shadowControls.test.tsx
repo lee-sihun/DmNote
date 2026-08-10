@@ -123,7 +123,7 @@ describe('ShadowControls', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('열린 피커는 마스터 토글을 꺼도 닫히지 않는다', () => {
+  it('열린 피커는 마스터 토글을 꺼도 닫히지 않는다', async () => {
     const onChange = vi.fn();
     const onEnabledChange = vi.fn();
     const render = (enabled: boolean) =>
@@ -147,6 +147,7 @@ describe('ShadowControls', () => {
 
     // 끄기 - enabled와 값 편집은 저장 경로가 분리돼 있어 피커를 끊을 이유가 없다
     act(() => host.querySelector<HTMLElement>('[role="switch"]')?.click());
+    await flushDeferredCommit();
     expect(onEnabledChange).toHaveBeenLastCalledWith(false);
     render(false);
 

@@ -12,7 +12,6 @@ import type {
   OptionalNumberInputProps,
   TextInputProps,
   ColorInputProps,
-  ToggleSwitchProps,
   TabsProps,
   FontStyleToggleProps,
 } from './types';
@@ -1652,51 +1651,53 @@ export const ColorInput: React.FC<ColorInputProps> = ({
         {pickerMounted ? (
           <ColorPicker
             open={pickerMounted}
-          referenceRef={buttonRef}
-          panelElement={panelElement}
-          color={
-            supportsGradient
-              ? gradientState.pickerColor
-              : showStateTabs && stateMode === 'active'
-              ? localActiveColor
-              : localColor
-          }
-          onColorChange={
-            supportsGradient
-              ? (c: string) => gradientState.handlePickerColorChange(c, false)
-              : handleColorChange
-          }
-          onColorChangeComplete={
-            supportsGradient
-              ? (c: string) => gradientState.handlePickerColorChange(c, true)
-              : handleColorChangeComplete
-          }
-          onClose={handleClose}
-          interactiveRefs={interactiveRefs}
-          solidOnly={solidOnly}
-          stateMode={showStateTabs ? stateMode : undefined}
-          onStateModeChange={showStateTabs ? handleStateModeChange : undefined}
-          headerSlot={supportsGradient ? gradientState.headerSlot : undefined}
-          footerSlot={
-            supportsGradient ? (
-              <>
-                {gradientState.footerSlot}
-                {showDetachedGradientHint && (
-                  <p className="mt-[8px] max-w-[210px] text-caption leading-[1.35] text-fg-muted">
-                    {t('propertiesPanel.detachedGradientHint')}
-                  </p>
-                )}
-              </>
-            ) : undefined
-          }
-          gradientSpec={
-            supportsGradient ? gradientState.paletteGradientSpec : undefined
-          }
-          onGradientSpecSelect={
-            supportsGradient
-              ? gradientState.handleGradientSpecSelect
-              : undefined
-          }
+            referenceRef={buttonRef}
+            panelElement={panelElement}
+            color={
+              supportsGradient
+                ? gradientState.pickerColor
+                : showStateTabs && stateMode === 'active'
+                ? localActiveColor
+                : localColor
+            }
+            onColorChange={
+              supportsGradient
+                ? (c: string) => gradientState.handlePickerColorChange(c, false)
+                : handleColorChange
+            }
+            onColorChangeComplete={
+              supportsGradient
+                ? (c: string) => gradientState.handlePickerColorChange(c, true)
+                : handleColorChangeComplete
+            }
+            onClose={handleClose}
+            interactiveRefs={interactiveRefs}
+            solidOnly={solidOnly}
+            stateMode={showStateTabs ? stateMode : undefined}
+            onStateModeChange={
+              showStateTabs ? handleStateModeChange : undefined
+            }
+            headerSlot={supportsGradient ? gradientState.headerSlot : undefined}
+            footerSlot={
+              supportsGradient ? (
+                <>
+                  {gradientState.footerSlot}
+                  {showDetachedGradientHint && (
+                    <p className="mt-[8px] max-w-[210px] text-caption leading-[1.35] text-fg-muted">
+                      {t('propertiesPanel.detachedGradientHint')}
+                    </p>
+                  )}
+                </>
+              ) : undefined
+            }
+            gradientSpec={
+              supportsGradient ? gradientState.paletteGradientSpec : undefined
+            }
+            onGradientSpecSelect={
+              supportsGradient
+                ? gradientState.handleGradientSpecSelect
+                : undefined
+            }
           />
         ) : null}
       </PopupExit>
