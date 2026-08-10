@@ -2,7 +2,7 @@ import React from 'react';
 
 // 추가 아이콘 — 위 장은 올라가고 아래 장은 같은 만큼 내려간다.
 // 이동량이 서로 상쇄돼 아이콘의 중심이 제자리에 남고, 가운데 장은 기준선 역할이라 고정.
-// 모션은 main.css의 dmnIconFan, layer.svg와 도형은 동일
+// 모션은 main.css의 dmnIconFan, 도형은 기존 아이콘과 동일
 const LayerStackIcon = () => {
   return (
     <svg
