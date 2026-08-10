@@ -332,6 +332,36 @@ describe('editGestureController', () => {
     });
   });
 
+  it('아직 발행하지 않은 다른 그룹은 대기 중 최신값으로 교체됨', async () => {
+    let release: () => void = () => undefined;
+    vi.mocked(previewApi.publish).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+
+    editGestureController.preview('4key', [
+      { index: 0, patch: { width: 10 } },
+      { index: 1, patch: { width: 20 } },
+    ]);
+    await flushPromises();
+    expect(previewApi.publish).toHaveBeenCalledTimes(1);
+
+    editGestureController.preview('4key', [{ index: 1, patch: { width: 30 } }]);
+    await flushPromises();
+
+    release();
+    await flushPromises();
+    await flushPromises();
+
+    const targetOneCalls = vi
+      .mocked(previewApi.publish)
+      .mock.calls.map(([request]) => request)
+      .filter((request) => request.targets.includes(1));
+    expect(targetOneCalls).toHaveLength(1);
+    expect(targetOneCalls[0].patch).toEqual({ width: 30 });
+  });
+
   it('같은 patch를 쓰는 여러 대상은 한 번에 발행됨', async () => {
     editGestureController.preview('4key', [
       { index: 0, patch: { width: 42 } },

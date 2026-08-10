@@ -66,30 +66,33 @@ const hasPending = (gesture: ActiveGesture): boolean => {
   return false;
 };
 
-// 발행 직전에만 같은 patch를 쓰는 대상끼리 묶는다. 배치 편집의 한 번 발행 이득은
-// 그대로 두면서, 대기 구간에서는 대상별 최신 값만 남는다
-const collectGroups = (gesture: ActiveGesture) => {
-  const groups: {
-    domain: PreviewDomain;
-    targets: number[];
-    patch: Record<string, unknown>;
-  }[] = [];
-
+// 다음 발행분 하나만 꺼낸다. 아직 발행하지 않은 대상은 pending에 남아 있어야
+// 앞선 invoke를 기다리는 동안 새 입력이 들어왔을 때 최신 patch로 교체할 수 있다
+const takeNextGroup = (gesture: ActiveGesture) => {
   for (const [domain, targets] of gesture.pendingPatches) {
-    const byPatch = new Map<string, (typeof groups)[number]>();
-    for (const [index, patch] of targets) {
-      const key = JSON.stringify(patch);
-      const group = byPatch.get(key);
-      if (group) {
-        group.targets.push(index);
-        continue;
-      }
-      byPatch.set(key, { domain, targets: [index], patch });
+    const first = targets.entries().next();
+    if (first.done) {
+      gesture.pendingPatches.delete(domain);
+      continue;
     }
-    groups.push(...byPatch.values());
+
+    const [firstIndex, patch] = first.value;
+    const patchKey = JSON.stringify(patch);
+    const groupTargets = [firstIndex];
+    targets.delete(firstIndex);
+
+    for (const [index, candidate] of targets) {
+      if (JSON.stringify(candidate) === patchKey) {
+        groupTargets.push(index);
+        targets.delete(index);
+      }
+    }
+
+    if (targets.size === 0) gesture.pendingPatches.delete(domain);
+    return { domain, targets: groupTargets, patch };
   }
-  gesture.pendingPatches.clear();
-  return groups;
+
+  return null;
 };
 
 const flushPending = async (gesture: ActiveGesture) => {
@@ -97,10 +100,11 @@ const flushPending = async (gesture: ActiveGesture) => {
   if (gesture !== active || gesture.publishInFlight) return;
   if (!hasPending(gesture)) return;
 
-  const groups = collectGroups(gesture);
   gesture.publishInFlight = true;
   try {
-    for (const group of groups) {
+    while (gesture === active) {
+      const group = takeNextGroup(gesture);
+      if (!group) break;
       gesture.seq += 1;
       await previewApi.publish({
         schemaVersion: PREVIEW_SCHEMA_VERSION,
