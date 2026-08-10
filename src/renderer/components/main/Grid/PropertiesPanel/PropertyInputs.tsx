@@ -489,7 +489,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
     if (repeat) {
       // 예약해 둔 함수가 아니라 최신 렌더의 것을 실행해야 한다.
-      // 예약과 실행 사이에 선택이나 min/max가 바뀌면 낡은 규칙으로 확정된다
+      // 예약과 실행 사이에 min/max가 바뀌면 낡은 규칙으로 확정된다.
+      // 대상 전환은 이 경로로 막지 않는다 - 최신 콜백은 새 대상을 가리킨다
       stepFrame.schedule(() => flushStepRef.current());
       return true;
     }
@@ -995,7 +996,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 
     if (repeat) {
       // 예약해 둔 함수가 아니라 최신 렌더의 것을 실행해야 한다.
-      // 예약과 실행 사이에 선택이나 min/max가 바뀌면 낡은 규칙으로 확정된다
+      // 예약과 실행 사이에 min/max가 바뀌면 낡은 규칙으로 확정된다.
+      // 대상 전환은 이 경로로 막지 않는다 - 최신 콜백은 새 대상을 가리킨다
       stepFrame.schedule(() => flushStepRef.current());
       return true;
     }

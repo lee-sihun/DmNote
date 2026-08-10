@@ -1389,7 +1389,7 @@ describe('숫자 입력 방향키 스텝', () => {
     act(() => input.focus());
     act(() => pressKey(input, 'ArrowUp', { shiftKey: true, repeat: true }));
 
-    // 프레임이 오기 전에 대상이 바뀐다
+    // 프레임이 오기 전에 clamp 규칙과 콜백이 바뀐다
     render(6, secondCommit);
     await nextFrame();
 
