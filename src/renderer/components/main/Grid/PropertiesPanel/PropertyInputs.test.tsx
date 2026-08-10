@@ -395,6 +395,38 @@ describe('TextInput preview commit', () => {
     expect(commit).not.toHaveBeenCalled();
   });
 
+  it('preview 채널이 없어도 Escape가 편집 전 값으로 되돌린다', () => {
+    // 타이핑이 onChange로 곧장 저장까지 가는 입력이다.
+    // 되돌릴 채널도 onChange뿐이다
+    const commit = vi.fn();
+    act(() => root.render(<TextInput value="before" onChange={commit} />));
+    const input = container.querySelector('input')!;
+
+    act(() => input.focus());
+    act(() => setInputValue(input, 'after'));
+    expect(commit).toHaveBeenLastCalledWith('after');
+
+    act(() => pressKey(input, 'Escape'));
+
+    expect(commit).toHaveBeenLastCalledWith('before');
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it('되돌릴 게 있는 Escape만 소비하고 나머지는 그대로 올려보낸다', () => {
+    // 그냥 삼키면 감싸는 모달이 Escape로 안 닫힌다
+    const commit = vi.fn();
+    act(() => root.render(<TextInput value="before" onChange={commit} />));
+    const input = container.querySelector('input')!;
+
+    act(() => input.focus());
+    expect(pressKey(input, 'Escape').defaultPrevented).toBe(false);
+    expect(commit).not.toHaveBeenCalled();
+
+    act(() => input.focus());
+    act(() => setInputValue(input, 'after'));
+    expect(pressKey(input, 'Escape').defaultPrevented).toBe(true);
+  });
+
   it('lifecycle finalizer가 DOM 최종값을 한 번만 commit한다', () => {
     const commit = vi.fn();
     act(() =>
