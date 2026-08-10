@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import {
@@ -403,6 +404,26 @@ describe('editGestureController', () => {
 
     expect(editGestureController.hasActiveGesture()).toBe(true);
     expect(useKeyStore.getState().positions['4key'][0].width).toBe(100);
+  });
+
+  it('settleCommit 실패 뒤 편집 대상이 갈렸으면 세션을 되살리지 않는다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'key', id: 'key-0', index: 0 }],
+    });
+    editGestureController.preview('4key', [
+      { index: 0, patch: { width: 100 } },
+    ]);
+
+    editGestureController.settleCommit(Promise.reject(new Error('io')));
+    // 정산이 끝나기 전에 선택이 다른 요소로 넘어간다 (분리 패널 selection sync)
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'key', id: 'key-1', index: 1 }],
+    });
+    await flushPromises();
+
+    // 되살리면 index 0 patch가 다음 커밋 경계에서 남의 값을 덮는다
+    expect(editGestureController.hasActiveGesture()).toBe(false);
   });
 
   it('cancel은 canonical을 건드리지 않고 오버레이만 제거', () => {
