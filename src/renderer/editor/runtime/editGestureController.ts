@@ -16,6 +16,7 @@ import { PREVIEW_SCHEMA_VERSION, type PreviewDomain } from '@src/types/preview';
 import { previewOverlay } from './previewOverlay';
 import { editorCoordinator } from './editorStateCoordinator';
 import { drainEditorWrites, trackEditorWrite } from './editorWriteBarrier';
+import { getEditSessionTarget } from './editSessionTarget';
 import {
   registerGestureSession,
   releaseGestureSession,
@@ -205,6 +206,8 @@ export const editGestureController = {
     const gesture = active;
     if (!gesture) return;
     active = null;
+    // 실패 복원을 판정할 기준. 정산이 끝났을 때 대상이 그대로여야 되살릴 의미가 있다
+    const committedTarget = getEditSessionTarget();
 
     persistPromise
       .then(() => {
@@ -223,8 +226,10 @@ export const editGestureController = {
           return;
         }
         console.error('Commit failed, keeping preview session', error);
-        // 새 게스처가 이미 시작됐으면 이전 세션은 오버레이만 정리
-        if (active === null) {
+        // 세션을 살려두는 건 같은 대상에서 재시도하라는 뜻이다.
+        // 그 사이 편집 대상이 갈렸으면 되살린 patch의 index가 다른 요소를 가리키므로
+        // 다음 커밋 경계에서 남의 값을 덮는다. 새 게스처가 이미 있을 때도 마찬가지
+        if (active === null && getEditSessionTarget() === committedTarget) {
           active = gesture;
         } else {
           releaseGestureSession(gesture.lifecycle);
@@ -336,10 +341,6 @@ export const editGestureController = {
     if (!own) return false;
     return drainEditorWrites();
   },
-
-  commitPending(): void {
-    void this.commitPendingAsync();
-  },
 };
 
 // 선택 대상 변경 시 진행 중 게스처 취소 (barrier)
@@ -350,10 +351,5 @@ if (typeof window !== 'undefined') {
       lastSelectedElements = state.selectedElements;
       editGestureController.cancel();
     }
-  });
-
-  // 창 포커스 이탈 시 진행 중 게스처 커밋 (입력 유실 방지)
-  window.addEventListener('blur', () => {
-    editGestureController.commitPending();
   });
 }

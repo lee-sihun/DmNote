@@ -66,6 +66,7 @@ import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import ShadowControls from '../ShadowControls';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import EditSessionBoundary from '../EditSessionBoundary';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -216,7 +217,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
           ref={setPluginScrollRef}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <EditSessionBoundary>
             {isPluginResizable && (
               <PropertySection>
                 <PropertyRow label={t('propertiesPanel.position') || '위치'}>
@@ -286,7 +287,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                 `plugin-element-${selectedPluginElement?.fullId ?? 'unknown'}`,
                 handlePluginSettingChange,
               )}
-          </div>
+          </EditSessionBoundary>
         </div>
       </div>
     </div>
@@ -408,7 +409,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
           ref={singleScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <EditSessionBoundary>
             <PropertySection>
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
@@ -708,7 +709,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 </PropertyRow>
               </PropertySection>
             )}
-          </div>
+          </EditSessionBoundary>
         </div>
       </div>
 
@@ -911,6 +912,16 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       singleKnobPosition.borderColor ||
       DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
   });
+
+  // 이 패널은 편집 트리 경계 위에서 피커와 캡처 세션을 소유한다.
+  // 대상이 갈려도 살아남으면 열린 피커가 옛 노브에서 떠 온 색을 그대로 쥐고
+  // 있고, 축 캡처 대기는 다음 회전을 새 노브에 바인딩한다.
+  // 피커를 닫으면 아래 동기화가 새 노브 색을 다시 떠 온다
+  useEffect(() => {
+    setPickerFor(null);
+    setShowImagePicker(false);
+    setCapturing(false);
+  }, [singleKnobIndex, selectedKeyType]);
 
   // 피커가 닫혀있을 때만 외부 prop과 동기화
   useEffect(() => {
@@ -1155,7 +1166,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
           ref={singleScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <EditSessionBoundary>
             {/* 노브 매핑 (키 매핑과 동일한 라벨/버튼 구조) */}
             <PropertySection>
               <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
@@ -1420,7 +1431,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               panelElement={panelElement}
               t={t}
             />
-          </div>
+          </EditSessionBoundary>
         </div>
       </div>
 
@@ -1767,7 +1778,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             activeTab === TABS.STYLE ? '' : 'hidden'
           }`}
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <EditSessionBoundary>
             <StyleTabContent
               keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}
@@ -1814,7 +1825,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               }
               onSizeBlur={handleSizeBlur}
             />
-          </div>
+          </EditSessionBoundary>
         </div>
 
         {/* NOTE 탭 viewport */}
@@ -1825,7 +1836,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               activeTab === TABS.NOTE ? '' : 'hidden'
             }`}
           >
-            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+            <EditSessionBoundary>
               <NoteTabContent
                 keyIndex={singleKeyIndex!}
                 keyPosition={singleKeyPosition!}
@@ -1834,7 +1845,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
                 panelElement={panelElement}
                 t={t}
               />
-            </div>
+            </EditSessionBoundary>
           </div>
         )}
 
@@ -1845,7 +1856,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             activeTab === TABS.COUNTER ? '' : 'hidden'
           }`}
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <EditSessionBoundary>
             <CounterTabContent
               keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}
@@ -1855,7 +1866,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               panelElement={panelElement}
               t={t}
             />
-          </div>
+          </EditSessionBoundary>
         </div>
       </div>
     </div>

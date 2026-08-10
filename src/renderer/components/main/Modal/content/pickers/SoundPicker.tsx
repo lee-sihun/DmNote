@@ -12,6 +12,7 @@ import {
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import SoundTrimModal from '../managers/SoundTrimModal';
+import { useEditSessionModeGuard } from '@src/renderer/contexts/EditSessionScope';
 
 interface SoundPickerProps {
   open: boolean;
@@ -47,6 +48,7 @@ const SoundPicker = ({
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [trimState, setTrimState] = useState<TrimState | null>(null);
+  const isSameEditSessionMode = useEditSessionModeGuard();
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -209,7 +211,12 @@ const SoundPicker = ({
         return next;
       });
       await window.api.sound.remove(item.soundPath);
-      if (normalizedSelectedSound === item.soundPath) {
+      // 백엔드가 이미 모든 요소에서 이 사운드를 해제했다. 대상이 갈렸으면
+      // 여기서 한 번 더 비우는 건 새 모드의 다른 사운드를 지우는 일이 된다
+      if (
+        normalizedSelectedSound === item.soundPath &&
+        isSameEditSessionMode()
+      ) {
         onSoundSelect(null);
       }
       await loadSounds();
@@ -280,7 +287,8 @@ const SoundPicker = ({
   };
 
   const handleTrimSaved = (soundPath: string) => {
-    onSoundSelect(soundPath);
+    // 사운드 파일은 이미 저장됐다. 대상이 갈렸으면 연결만 하지 않는다
+    if (isSameEditSessionMode()) onSoundSelect(soundPath);
     setTrimState(null);
     void loadSounds();
   };

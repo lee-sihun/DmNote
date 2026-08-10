@@ -23,6 +23,7 @@ import {
 } from './pickerRowClass';
 import CounterAnimationEditorModal from '../editors/CounterAnimationEditorModal';
 import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPreview';
+import { useEditSessionModeGuard } from '@src/renderer/contexts/EditSessionScope';
 
 interface CounterAnimationPickerProps {
   open: boolean;
@@ -79,6 +80,7 @@ const CounterAnimationPicker = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [editorState, setEditorState] = useState<EditorState | null>(null);
+  const isSameEditSessionMode = useEditSessionModeGuard();
   const loadRequestRef = useRef(0);
   const isOpenRef = useRef(open);
   const pendingPresetActionsRef = useRef(new Set<string>());
@@ -250,6 +252,8 @@ const CounterAnimationPicker = ({
     affectedUsageCount: number;
   }) => {
     await loadLibrary();
+    // preset은 라이브러리에 이미 저장됐다. 대상이 갈렸으면 적용만 하지 않는다
+    if (!isSameEditSessionMode()) return;
     if (mode === 'create' || selectedPresetId === preset.id) {
       onAnimationChange(applyPresetToAnimation(animation, preset));
     }

@@ -5,6 +5,8 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
+import { getEditSessionTarget } from '@src/renderer/editor/runtime/editSessionTarget';
+import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
 
 // 디자인 조절점 — 내부 폭 148px 기준 비율 ≈1.42:1
 const SATURATION_HEIGHT = 104;
@@ -57,6 +59,8 @@ export const usePointerSession = (
   const previewSchedulerRef = useRef<ReturnType<
     typeof createRafLatestScheduler<true>
   > | null>(null);
+  const editSessionScoped = useIsEditSessionScoped();
+  const sessionTargetRef = useRef<string | null>(null);
 
   // 좌표를 0~1 비율로 갱신 — 세션 시작 시 rect 유효성이 보장됨
   const updateRatio = (clientX: number, clientY: number) => {
@@ -90,6 +94,7 @@ export const usePointerSession = (
     rectRef.current = null;
     previewSchedulerRef.current?.cancel();
     previewSchedulerRef.current = null;
+    sessionTargetRef.current = null;
     blurCleanupRef.current?.();
     blurCleanupRef.current = null;
     const target = targetRef.current;
@@ -119,6 +124,9 @@ export const usePointerSession = (
     activePointerRef.current = event.pointerId;
     targetRef.current = target;
     rectRef.current = rect;
+    sessionTargetRef.current = editSessionScoped
+      ? getEditSessionTarget()
+      : null;
     target.setPointerCapture(event.pointerId);
     const onWindowBlur = () => finish();
     window.addEventListener('blur', onWindowBlur);
@@ -149,9 +157,21 @@ export const usePointerSession = (
     finish();
   };
 
-  // 드래그 중 언마운트(Esc로 팝업 닫힘 등)돼도 마지막 값을 커밋 — 저장 계약 유지
-  const finishRef = useLatest(finish);
-  useEffect(() => () => finishRef.current(), [finishRef]);
+  // 드래그 중 언마운트(Esc로 팝업 닫힘 등)돼도 마지막 값을 커밋 — 저장 계약 유지.
+  // 단 편집 대상에 묶인 피커에서 그 대상이 갈려 사라지는 경우는 커밋하지 않는다.
+  // 콜백이 가리키는 곳이 드래그를 시작한 요소가 아니고, 배열이 줄어든 경우
+  // 옛 index는 이미 다른 요소다. 캠버스 선택과 무관한 피커는 그대로 커밋한다
+  const finishOnUnmount = () => {
+    if (activePointerRef.current === null) return;
+    const sessionTarget = sessionTargetRef.current;
+    if (sessionTarget !== null && sessionTarget !== getEditSessionTarget()) {
+      teardown();
+      return;
+    }
+    finish();
+  };
+  const finishOnUnmountRef = useLatest(finishOnUnmount);
+  useEffect(() => () => finishOnUnmountRef.current(), [finishOnUnmountRef]);
 
   return {
     onPointerDown,

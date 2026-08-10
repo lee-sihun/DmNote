@@ -1,26 +1,9 @@
 import { editGestureController } from './editGestureController';
-import { finalizeEditorDraftForLifecycle } from './lifecycleEditorDraft';
-import { beginEditorWriteBarrier } from './editorWriteBarrier';
+import { settleFocusedEditor } from './focusedEditorSettlement';
 
-const yieldToRender = () =>
-  new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-export const flushFocusedEditorForLifecycle = async (): Promise<boolean> => {
-  const drainBlurWrites = beginEditorWriteBarrier();
-  const active = document.activeElement;
-  if (
-    active instanceof HTMLElement &&
-    active.matches('input, textarea, [contenteditable="true"]')
-  ) {
-    active.blur();
-  }
-
-  const draftCommitted = finalizeEditorDraftForLifecycle();
-  // OS 종료가 먼저 만든 focus 변경과 React 로컬 draft를 같은 turn에서 정산
-  await yieldToRender();
-  const [gestureCommitted, blurWritesCommitted] = await Promise.all([
-    editGestureController.commitPendingAsync(),
-    drainBlurWrites(),
-  ]);
-  return draftCommitted && gestureCommitted && blurWritesCommitted;
-};
+// 편집 경계에서 포커스된 입력을 지금 대상에 확정한다.
+//
+// 정산 순서는 settleFocusedEditor가 소유하고, 여기서는 표준 gesture 커밋만 묶는다.
+// 호출부가 각자 조립하면 커밋 대상이 갈릴 때 순서가 어긋난다
+export const flushFocusedEditor = (): Promise<boolean> =>
+  settleFocusedEditor(() => editGestureController.commitPendingAsync());

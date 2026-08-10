@@ -10,9 +10,9 @@ vi.mock('./editGestureController', () => ({
   editGestureController: { commitPendingAsync },
 }));
 
-import { flushFocusedEditorForLifecycle } from './lifecycleEditorFlush';
+import { flushFocusedEditor } from './lifecycleEditorFlush';
 
-describe('flushFocusedEditorForLifecycle', () => {
+describe('flushFocusedEditor', () => {
   afterEach(() => {
     document.body.replaceChildren();
     beginEditorWriteBarrier.mockReset();
@@ -37,7 +37,7 @@ describe('flushFocusedEditorForLifecycle', () => {
       return true;
     });
 
-    await expect(flushFocusedEditorForLifecycle()).resolves.toBe(true);
+    await expect(flushFocusedEditor()).resolves.toBe(true);
 
     expect(order).toEqual(['barrier', 'blur', 'gesture', 'blur-write']);
   });
@@ -48,9 +48,44 @@ describe('flushFocusedEditorForLifecycle', () => {
       settled = true;
     }, 0);
     beginEditorWriteBarrier.mockReturnValue(vi.fn(async () => true));
-    commitPendingAsync.mockImplementation(async () => settled);
+    commitPendingAsync.mockResolvedValue(true);
 
-    await expect(flushFocusedEditorForLifecycle()).resolves.toBe(true);
+    await flushFocusedEditor();
+
+    expect(settled).toBe(true);
+  });
+
+  it('blur가 promise로 이어붙인 쓰기를 커밋 전에 정산한다', async () => {
+    const order: string[] = [];
+    const input = document.createElement('input');
+    input.addEventListener('blur', () => {
+      order.push('blur');
+      queueMicrotask(() => order.push('blur-settled'));
+    });
+    document.body.append(input);
+    input.focus();
+    beginEditorWriteBarrier.mockReturnValue(vi.fn(async () => true));
+    commitPendingAsync.mockImplementation(async () => {
+      order.push('commit');
+      return true;
+    });
+
+    await flushFocusedEditor();
+
+    expect(order).toEqual(['blur', 'blur-settled', 'commit']);
+  });
+
+  it('gesture 커밋을 양보 전에 시작한다', async () => {
+    // 양보하는 동안 도착한 원격 선택이 선택 구독자를 깨워 아직 시작도 안 한
+    // gesture를 취소할 수 있다. history handshake 경로가 실제로 그 순서다
+    let yielded = false;
+    setTimeout(() => {
+      yielded = true;
+    }, 0);
+    beginEditorWriteBarrier.mockReturnValue(vi.fn(async () => true));
+    commitPendingAsync.mockImplementation(async () => !yielded);
+
+    await expect(flushFocusedEditor()).resolves.toBe(true);
   });
 
   it.each([
@@ -64,7 +99,7 @@ describe('flushFocusedEditorForLifecycle', () => {
       );
       commitPendingAsync.mockResolvedValue(gestureResult);
 
-      await expect(flushFocusedEditorForLifecycle()).resolves.toBe(false);
+      await expect(flushFocusedEditor()).resolves.toBe(false);
     },
   );
 });

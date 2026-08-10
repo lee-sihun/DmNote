@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 
 import { panelWindowApi } from '@api/modules/selectionSessionApi';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { beginEditorWriteBarrier } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import { flushSelectionSync } from '@src/renderer/editor/runtime/selectionSync';
 import { capturePanelViewState } from '@stores/grid/panelViewHandoff';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
@@ -43,39 +42,23 @@ export const usePanelWindowStore = create<PanelWindowState>((set) => ({
 const yieldToRender = () =>
   new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-// 단축키·토글 OFF·네이티브 close는 click 포커스 이동이 없으므로
-// blur 전용 편집값을 먼저 확정하고 React·IME 정산 turn을 기다림
-const flushFocusedEditor = async (): Promise<void> => {
-  const active = document.activeElement;
-  if (
-    active instanceof HTMLElement &&
-    active.matches('input, textarea, [contenteditable="true"]')
-  ) {
-    active.blur();
-    await yieldToRender();
-  }
-};
-
+// 단축키·토글 OFF·네이티브 close는 click 포커스 이동이 없으므로 blur 전용 편집값을 먼저 확정한다.
+// 정산 순서는 공용 함수가 소유한다 - 여기서 따로 양보하면 그 사이 도착한 선택 변경이
+// 아직 시작도 안 한 gesture를 취소한다
 const flushPanelTransition = async (): Promise<boolean> => {
-  const drainBlurWrites = beginEditorWriteBarrier();
-  await flushFocusedEditor();
-  const [
-    committed,
-    blurWritesCommitted,
-    pluginElementsCommitted,
-    pluginSettingsCommitted,
-  ] = await Promise.all([
-    editGestureController.commitPendingAsync(),
-    drainBlurWrites(),
-    drainPendingPluginElementWrites(),
-    drainPendingPluginSettingsWrites(),
-  ]);
-  const editorAndPluginsCommitted =
-    committed &&
-    blurWritesCommitted &&
-    pluginElementsCommitted &&
-    pluginSettingsCommitted;
-  if (!editorAndPluginsCommitted) return false;
+  const [editorCommitted, pluginElementsCommitted, pluginSettingsCommitted] =
+    await Promise.all([
+      flushFocusedEditor(),
+      drainPendingPluginElementWrites(),
+      drainPendingPluginSettingsWrites(),
+    ]);
+  if (
+    !editorCommitted ||
+    !pluginElementsCommitted ||
+    !pluginSettingsCommitted
+  ) {
+    return false;
+  }
 
   return flushSelectionSync();
 };

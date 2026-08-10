@@ -34,6 +34,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
+import EditSessionBoundary from '../EditSessionBoundary';
 
 const RenameIcon: React.FC = () => (
   <svg
@@ -657,7 +658,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               activeTab === TABS.STYLE ? '' : 'hidden'
             }`}
           >
-            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+            <EditSessionBoundary>
               <BatchStyleTabContent
                 selectedCount={selectedBatchStyleElements.length}
                 showSoundControls={selectedKeyElements.length > 0}
@@ -815,7 +816,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 useCustomCSS={useCustomCSS}
                 t={t}
               />
-            </div>
+            </EditSessionBoundary>
           </div>
 
           {/* NOTE 탭 viewport */}
@@ -826,7 +827,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 activeTab === TABS.NOTE ? '' : 'hidden'
               }`}
             >
-              <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+              <EditSessionBoundary>
                 <BatchNoteTabContent
                   getMixedValue={getMixedValueKeysOnly}
                   handleBatchStyleChangeComplete={
@@ -852,7 +853,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   batchBorderColorButtonRef={batchBorderColorButtonRef}
                   t={t}
                 />
-              </div>
+              </EditSessionBoundary>
             </div>
           )}
 
@@ -863,7 +864,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               activeTab === TABS.COUNTER ? '' : 'hidden'
             }`}
           >
-            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+            <EditSessionBoundary>
               <BatchCounterTabContent
                 batchCounterSettings={batchCounterSettings}
                 keyVisual={batchKeyVisual}
@@ -878,7 +879,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 isStrokePickerOpen={batchPickerFor === 'stroke'}
                 t={t}
               />
-            </div>
+            </EditSessionBoundary>
           </div>
         </div>
 
@@ -1212,7 +1213,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           ref={batchScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <EditSessionBoundary>
             <BatchStyleTabContent
               selectedCount={selectedGraphElements.length}
               hideDisplayText
@@ -1348,7 +1349,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               useCustomCSS={useCustomCSS}
               t={t}
             />
-          </div>
+          </EditSessionBoundary>
         </div>
       </div>
 
@@ -1570,7 +1571,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
           ref={batchScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <EditSessionBoundary>
             <BatchStyleTabContent
               selectedCount={selectedKnobElements.length}
               hideDisplayText
@@ -1649,7 +1650,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               useCustomCSS={useCustomCSS}
               t={t}
             />
-          </div>
+          </EditSessionBoundary>
         </div>
       </div>
 
