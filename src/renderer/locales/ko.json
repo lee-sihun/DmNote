@@ -218,6 +218,9 @@
     "more": "더보기",
     "dialog": "대화상자"
   },
+  "numberInput": {
+    "expressionHint": "수식 사용 가능: + - * / ( )"
+  },
   "tooltip": {
     "github": "깃허브",
     "issue": "이슈 신고",

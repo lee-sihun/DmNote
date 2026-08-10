@@ -98,6 +98,7 @@ module.exports = {
         'elevation-chrome': 'var(--ui-shadow-chrome)',
         'elevation-panel': 'var(--ui-shadow-panel)',
         'focus-ring': 'var(--ui-focus-ring)',
+        'danger-ring': 'var(--ui-danger-ring)',
       },
     },
   },

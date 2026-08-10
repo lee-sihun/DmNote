@@ -218,6 +218,9 @@
     "more": "More",
     "dialog": "Dialog"
   },
+  "numberInput": {
+    "expressionHint": "Expressions supported: + - * / ( )"
+  },
   "tooltip": {
     "github": "GitHub",
     "issue": "Report Issue",

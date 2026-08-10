@@ -13,6 +13,7 @@ import {
 import FlaskIcon from '@assets/svgs/flask.svg';
 import ResetIcon from '@assets/svgs/reset.svg';
 import { PluginDataDeleteModal } from '@components/main/Modal/content/dialogs/PluginDataDeleteModal';
+import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import SettingsSidePanel from '@components/main/SettingsPanel/SettingsSidePanel';
 import type { SettingsPanelKey } from '@components/main/SettingsPanel/SettingsSidePanel';
 import ShortcutsPanelContent from '@components/main/SettingsPanel/ShortcutsPanelContent';
@@ -160,6 +161,12 @@ const Settings = ({
     useState<boolean>(false);
   const [pluginToDelete, setPluginToDelete] = useState<PluginToDelete | null>(
     null,
+  );
+  // 닫으면 대상도 함께 비워진다. 퇴장 구간에 쓸 값은 붙잡아 둔다
+  const dataDeleteModalOpen = isDataDeleteModalOpen && !!pluginToDelete;
+  const shownPluginToDelete = useRetainedWhileOpen(
+    dataDeleteModalOpen,
+    pluginToDelete,
   );
   const [isReloadingPlugins, setIsReloadingPlugins] = useState<boolean>(false);
   const [isAddingPlugins, setIsAddingPlugins] = useState<boolean>(false);
@@ -1342,16 +1349,18 @@ const Settings = ({
           />
         )}
       </div>
-      {isDataDeleteModalOpen && pluginToDelete && (
+      {/* 열림 여부로 걷어내면 퇴장 모션이 돌 자리가 없다 - 수명은 모달이 소유하고
+          여기서는 마지막 열림 대상만 붙잡아 잔상이 빈 카드가 되는 걸 막는다 */}
+      {shownPluginToDelete && (
         <PluginDataDeleteModal
-          isOpen={isDataDeleteModalOpen}
+          isOpen={dataDeleteModalOpen}
           onClose={() => {
             setDataDeleteModalOpen(false);
             setPluginToDelete(null);
           }}
-          onDeleteWithData={() => removePluginWithData(pluginToDelete.id)}
-          onDeletePluginOnly={() => removePluginOnly(pluginToDelete.id)}
-          pluginName={pluginToDelete.name}
+          onDeleteWithData={() => removePluginWithData(shownPluginToDelete.id)}
+          onDeletePluginOnly={() => removePluginOnly(shownPluginToDelete.id)}
+          pluginName={shownPluginToDelete.name}
           t={t}
         />
       )}

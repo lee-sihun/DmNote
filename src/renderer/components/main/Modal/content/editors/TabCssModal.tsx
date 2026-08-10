@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Modal from '../../Modal';
+import { useModalPresence } from '@hooks/ui/usePopupPresence';
 import Checkbox from '@components/main/common/Checkbox';
 import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import {
   FILL_DISABLED_CLASS,
+  FILL_QUIET_CLASS,
+  FILL_QUIET_DISABLED_CLASS,
   FILL_INTERACTIVE_CLASS,
   PANEL_APPLIED_LABEL_CLASS,
   PANEL_PILL_CLASS,
@@ -282,13 +285,17 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     onClose();
   };
 
-  if (!isOpen) return null;
+  // 퇴장 모션이 도는 동안 DOM을 유지한다
+  const { mounted, state: motionState } = useModalPresence(isOpen);
+
+  if (!mounted) return null;
 
   const hasTabCss = Boolean(tabCss && tabCss.path);
   const canExport = Boolean(tabCss?.content) && !isExporting;
 
   return (
     <Modal
+      motionState={motionState}
       onClick={handleCancel}
       ariaLabel={t('tabCss.enableCss')}
       contentMountStrategy="after-paint"
@@ -386,8 +393,11 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
                       title={item.path}
                     >
                       <span
+                        // 적용 중인 항목만 밝게 - 패널 히스토리와 같은 규칙
                         className={`min-w-0 flex-1 truncate text-body ${
-                          available ? 'text-fg' : 'text-fg-disabled'
+                          isCurrent && available
+                            ? 'text-fg'
+                            : 'text-fg-disabled'
                         }`}
                       >
                         {pathBaseName(item.path)}
@@ -411,9 +421,9 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
                             isClosing
                           }
                           className={`${PANEL_PILL_CLASS} ${
-                            applicable
-                              ? FILL_INTERACTIVE_CLASS
-                              : FILL_DISABLED_CLASS
+                            applicable && pendingHistoryPath === null
+                              ? FILL_QUIET_CLASS
+                              : FILL_QUIET_DISABLED_CLASS
                           }`}
                         >
                           {t('settings.cssApply')}

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import UnifiedKeySetting from '../../Modal/content/dialogs/UnifiedKeySetting';
+import { useModalPresence } from '@hooks/ui/usePopupPresence';
+import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import { createDefaultCounterSettings } from '@src/types/key/keys';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import type {
@@ -104,7 +106,20 @@ const GridKeySettingModal = ({
     }
   }, [shouldSkipModalAnimation, selectedKey, onModalAnimationConsumed]);
 
-  if (!selectedKey || !currentKeyPosition) return null;
+  // 닫으면 호출부가 selectedKey를 비우므로, 퇴장 구간에 쓸 대상은 붙잡아 둔다
+  const open = Boolean(selectedKey && currentKeyPosition);
+  const {
+    mounted,
+    state: motionState,
+    cycle,
+  } = useModalPresence(open, {
+    skipEnter: shouldSkipModalAnimation,
+  });
+  const shown = useRetainedWhileOpen(open, { selectedKey, currentKeyPosition });
+  const shownKey = shown.selectedKey;
+  const shownPosition = shown.currentKeyPosition;
+
+  if (!mounted || !shownKey || !shownPosition) return null;
 
   const handleClose = () => {
     // 프리뷰는 canonical을 건드리지 않으므로 게스처 취소만으로 원복
@@ -126,8 +141,8 @@ const GridKeySettingModal = ({
     // 원본 데이터 저장 (최초 미리보기 시)
     if (!originalKeyData) {
       setOriginalKeyData({
-        key: currentKeyPosition,
-        counter: currentKeyPosition.counter,
+        key: shownPosition,
+        counter: shownPosition.counter,
       });
     }
 
@@ -136,7 +151,7 @@ const GridKeySettingModal = ({
       typeof onCounterPreview === 'function'
     ) {
       const currentCounter: KeyCounterSettings =
-        currentKeyPosition.counter ?? createDefaultCounterSettings();
+        shownPosition.counter ?? createDefaultCounterSettings();
       const mergedPayload: KeyCounterSettings = {
         ...currentCounter,
         enabled: previewData.enabled ?? currentCounter.enabled,
@@ -156,12 +171,12 @@ const GridKeySettingModal = ({
           active: previewData.stroke?.active ?? currentCounter.stroke.active,
         },
       };
-      onCounterPreview(selectedKey.index, mergedPayload);
+      onCounterPreview(shownKey.index, mergedPayload);
     }
 
     if (previewData.type === 'key' && typeof onKeyPreview === 'function') {
       const { type: _type, ...rest } = previewData;
-      onKeyPreview(selectedKey.index, rest);
+      onKeyPreview(shownKey.index, rest);
     }
 
     // 노트 미리보기 처리
@@ -169,25 +184,23 @@ const GridKeySettingModal = ({
       previewData.type === 'note' &&
       typeof onNoteColorPreview === 'function'
     ) {
-      const noteColor = previewData.noteColor ?? currentKeyPosition.noteColor;
-      const noteOpacity =
-        previewData.noteOpacity ?? currentKeyPosition.noteOpacity;
+      const noteColor = previewData.noteColor ?? shownPosition.noteColor;
+      const noteOpacity = previewData.noteOpacity ?? shownPosition.noteOpacity;
       const noteGlowEnabled =
-        previewData.noteGlowEnabled ?? currentKeyPosition.noteGlowEnabled;
+        previewData.noteGlowEnabled ?? shownPosition.noteGlowEnabled;
       const noteGlowSize =
-        previewData.noteGlowSize ?? currentKeyPosition.noteGlowSize;
+        previewData.noteGlowSize ?? shownPosition.noteGlowSize;
       const noteGlowOpacity =
-        previewData.noteGlowOpacity ?? currentKeyPosition.noteGlowOpacity;
+        previewData.noteGlowOpacity ?? shownPosition.noteGlowOpacity;
       const noteGlowColor =
-        previewData.noteGlowColor ?? currentKeyPosition.noteGlowColor;
+        previewData.noteGlowColor ?? shownPosition.noteGlowColor;
       const noteAutoYCorrection =
-        previewData.noteAutoYCorrection ??
-        currentKeyPosition.noteAutoYCorrection;
+        previewData.noteAutoYCorrection ?? shownPosition.noteAutoYCorrection;
       const noteEffectEnabled =
-        previewData.noteEffectEnabled ?? currentKeyPosition.noteEffectEnabled;
+        previewData.noteEffectEnabled ?? shownPosition.noteEffectEnabled;
 
       onNoteColorPreview(
-        selectedKey.index,
+        shownKey.index,
         noteColor,
         noteOpacity,
         noteGlowEnabled,
@@ -201,33 +214,34 @@ const GridKeySettingModal = ({
   };
 
   return (
+    // 열 때마다 새 인스턴스로 간다. 퇴장 유예 동안 재오픈하면 인스턴스가 재사용돼
+    // 취소했던 편집 상태가 남고, 다른 키를 열면 그 값이 그대로 저장될 수 있다
     <UnifiedKeySetting
+      key={`${cycle}:${shownKey.index}`}
       keyData={{
-        key: selectedKey.key,
-        activeImage: currentKeyPosition.activeImage,
-        inactiveImage: currentKeyPosition.inactiveImage,
-        activeTransparent: currentKeyPosition.activeTransparent || false,
-        idleTransparent: currentKeyPosition.idleTransparent || false,
-        width: currentKeyPosition.width,
-        height: currentKeyPosition.height,
-        noteColor: currentKeyPosition.noteColor || '#FFFFFF',
-        noteOpacity: currentKeyPosition.noteOpacity ?? 90,
-        noteEffectEnabled: currentKeyPosition.noteEffectEnabled,
-        noteGlowEnabled: currentKeyPosition.noteGlowEnabled ?? true,
-        noteGlowSize: currentKeyPosition.noteGlowSize ?? 20,
-        noteGlowOpacity: currentKeyPosition.noteGlowOpacity ?? 70,
+        key: shownKey.key,
+        activeImage: shownPosition.activeImage,
+        inactiveImage: shownPosition.inactiveImage,
+        activeTransparent: shownPosition.activeTransparent || false,
+        idleTransparent: shownPosition.idleTransparent || false,
+        width: shownPosition.width,
+        height: shownPosition.height,
+        noteColor: shownPosition.noteColor || '#FFFFFF',
+        noteOpacity: shownPosition.noteOpacity ?? 90,
+        noteEffectEnabled: shownPosition.noteEffectEnabled,
+        noteGlowEnabled: shownPosition.noteGlowEnabled ?? true,
+        noteGlowSize: shownPosition.noteGlowSize ?? 20,
+        noteGlowOpacity: shownPosition.noteGlowOpacity ?? 70,
         noteGlowColor:
-          currentKeyPosition.noteGlowColor ||
-          currentKeyPosition.noteColor ||
-          '#FFFFFF',
-        noteAutoYCorrection: currentKeyPosition.noteAutoYCorrection,
-        className: currentKeyPosition.className || '',
+          shownPosition.noteGlowColor || shownPosition.noteColor || '#FFFFFF',
+        noteAutoYCorrection: shownPosition.noteAutoYCorrection,
+        className: shownPosition.className || '',
       }}
-      initialCounterSettings={currentKeyPosition.counter || null}
+      initialCounterSettings={shownPosition.counter || null}
       onClose={handleClose}
       onSave={handleSave}
       onPreview={handlePreview}
-      skipAnimation={shouldSkipModalAnimation}
+      motionState={motionState}
     />
   );
 };

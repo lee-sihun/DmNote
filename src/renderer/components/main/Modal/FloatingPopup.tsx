@@ -14,6 +14,13 @@ import {
   isAvailableFocusTarget,
 } from '@utils/focusableElements';
 import {
+  usePopupPresence,
+  type PopupMotionState,
+} from '@hooks/ui/usePopupPresence';
+import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
+import { useFocusRestore } from '@hooks/ui/useFocusRestore';
+import { FloatingPopupMotionContext } from './floatingPopupMotion';
+import {
   isInsideHigherPopupLayer,
   isTopmostPopupLayer,
   registerPopupLayer,
@@ -37,7 +44,10 @@ interface FloatingPopupBaseProps {
   autoClose?: boolean;
   closeOnScroll?: boolean; // 스크롤 시 닫을지 여부
   portalToBody?: boolean;
+  /** 모션 전면 차단 - 등퇴장이 없어야 하는 표면과 테스트용 탈출구 */
   animate?: boolean;
+  /** 좌표 실측이 끝나기 전에는 false - 감춰진 프레임에 등장 모션이 소비되는 걸 막는다 */
+  motionReady?: boolean;
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   focusOriginRef?: React.MutableRefObject<HTMLElement | null>;
   /** surface: 열릴 때 첫 포커서블 대신 팝업 표면에 포커스 (입력 필드 자동 포커스 방지) */
@@ -62,6 +72,10 @@ interface FloatingPopupSurfaceProps {
   setFloating: (node: HTMLDivElement | null) => void;
   style: React.CSSProperties;
   className: string;
+  /** 열려 있는 동안만 true - 닫힘 모션이 도는 잔상 구간에서는 false */
+  active: boolean;
+  motionState?: PopupMotionState;
+  placement?: string;
   role: 'dialog' | 'menu';
   ariaLabel: string;
   onMenuTab?: (event: KeyboardEvent) => void;
@@ -76,6 +90,9 @@ const FloatingPopupSurface = ({
   setFloating,
   style,
   className,
+  active,
+  motionState,
+  placement,
   role,
   ariaLabel,
   onMenuTab,
@@ -86,24 +103,24 @@ const FloatingPopupSurface = ({
   children,
 }: FloatingPopupSurfaceProps) => {
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const prevFocusedRef = useRef<HTMLElement | null>(
-    typeof document !== 'undefined'
-      ? (document.activeElement as HTMLElement | null)
-      : null,
-  );
+  const { openerRef, captureOpener } = useFocusRestore(active);
 
-  // 자식 팝업은 부모 모달의 layout 등록 뒤에 쌓여야 하므로 passive effect 사용
+  // 자식 팝업은 부모 모달의 layout 등록 뒤에 쌓여야 하므로 passive effect 사용.
+  // 닫힘 모션이 도는 동안 DOM은 남지만 레이어 소유권은 즉시 놓는다
   useEffect(() => {
     const surface = surfaceRef.current;
-    if (!surface) return;
+    if (!active || !surface) return;
     return registerPopupLayer(surface);
-  }, []);
+  }, [active]);
 
+  // active를 의존성에 두는 건 퇴장 유예 때문이다. 닫히는 중 다시 열리면 표면이
+  // 재사용돼 마운트 1회 전제로는 초기 포커스가 다시 잡히지 않는다
   useLayoutEffect(() => {
     const surface = surfaceRef.current;
-    if (!surface) return;
+    if (!active || !surface) return;
+    captureOpener(surface);
     if (focusOriginRef) {
-      focusOriginRef.current = prevFocusedRef.current;
+      focusOriginRef.current = openerRef.current;
     }
     if (
       contentReady &&
@@ -123,16 +140,15 @@ const FloatingPopupSurface = ({
           ).find(isAvailableFocusTarget) ?? surface
         : getFocusableElements(surface)[0] ?? surface;
     initialTarget.focus();
-  }, [contentReady, focusOriginRef, initialFocus, role]);
-
-  useLayoutEffect(() => {
-    const prevFocused = prevFocusedRef.current;
-    return () => {
-      if (prevFocused && prevFocused.isConnected) {
-        prevFocused.focus();
-      }
-    };
-  }, []);
+  }, [
+    active,
+    captureOpener,
+    contentReady,
+    focusOriginRef,
+    initialFocus,
+    openerRef,
+    role,
+  ]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -182,6 +198,10 @@ const FloatingPopupSurface = ({
       aria-modal={role === 'dialog' ? false : undefined}
       data-dmn-popup-layer="true"
       data-dmn-floating-popup="true"
+      data-dmn-motion-state={motionState}
+      data-dmn-placement={placement}
+      // 닫히는 중엔 시각 잔상만 남으므로 포커스·스크린리더 대상에서 뺀다
+      inert={motionState === 'closing'}
       tabIndex={-1}
       onKeyDown={onKeyDown}
     >
@@ -209,13 +229,26 @@ const FloatingPopup = ({
   closeOnScroll = false,
   portalToBody = false,
   animate = true,
+  motionReady = true,
   onKeyDown,
   onMenuTab,
   focusOriginRef,
   initialFocus,
   contentMountStrategy = 'sync',
 }: FloatingPopupProps) => {
-  const { x, y, refs, strategy, update } = useFloating({
+  const {
+    x,
+    y,
+    refs,
+    strategy,
+    update,
+    // flip·shift를 거친 최종 배치 - 등퇴장 원점을 실제 방향에 맞추는 근거
+    placement: resolvedPlacement,
+    isPositioned,
+  } = useFloating({
+    // open을 넘겨야 isPositioned가 닫힐 때 false로 되돌아간다. 안 넘기면 첫 배치
+    // 이후 계속 true라 두 번째 열림부터 등장 상태가 한 프레임도 안 그려지고 합쳐진다
+    open,
     placement: placement as Placement,
     middleware: [fuiOffset(offset), shift(), flip()],
     whileElementsMounted: autoUpdate,
@@ -229,11 +262,7 @@ const FloatingPopup = ({
   const [deferredContentMounted, setDeferredContentMounted] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      setDeferredContentMounted(false);
-      return;
-    }
-    if (contentMountStrategy === 'sync') return;
+    if (!open || contentMountStrategy === 'sync') return;
     let timer: number | null = null;
     const frame = requestAnimationFrame(() => {
       timer = window.setTimeout(() => setDeferredContentMounted(true), 0);
@@ -244,13 +273,43 @@ const FloatingPopup = ({
     };
   }, [contentMountStrategy, open]);
 
+  // 퇴장 중에는 마지막 children을 유지한다. open에 묶으면 PopupExit가 붙잡은
+  // 내용도 닫는 첫 렌더에서 비어 퇴장 잔상과 미저장 편집 상태가 사라진다
   const contentMounted =
-    open && (contentMountStrategy === 'sync' || deferredContentMounted);
+    contentMountStrategy === 'sync' || deferredContentMounted;
 
-  useEffect(() => {
-    if (referenceRef && referenceRef.current)
-      refs.setReference(referenceRef.current);
-  }, [referenceRef, refs.setReference]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 호출부는 닫으면서 좌표를 즉시 비운다. 그대로 두면 퇴장 중 isFixed가 뒤집혀
+  // body 포털이 인라인 렌더로 바뀌고, 표면이 재마운트되며 모션·포커스·스크롤이 끊긴다.
+  // 렌더 루트를 마운트 내내 고정하려면 마지막 열림 좌표를 붙잡아야 한다
+  const { x: shownFixedX, y: shownFixedY } = useRetainedWhileOpen(open, {
+    x: fixedX,
+    y: fixedY,
+  });
+
+  // 기준 요소가 없으면 Floating UI가 배치를 확정할 일이 없다.
+  // 그때까지 등장을 막으면 팝업이 영영 안 보이므로 게이트에서 뺀다
+  const usesFloatingPosition =
+    referenceRef !== undefined &&
+    (typeof shownFixedX !== 'number' || typeof shownFixedY !== 'number');
+
+  // Floating UI 배치는 비동기다. 좌표가 확정되기 전에 등장을 시작하면
+  // 원점(0,0)에서 한 프레임 그려진 뒤 제자리로 튀어 모션이 묻힌다
+  const { mounted, state: motionState } = usePopupPresence(open, {
+    enabled: animate,
+    ready: motionReady && (!usesFloatingPosition || isPositioned),
+    motionRef: floatingRef,
+  });
+
+  // 의존성을 걸면 ref 객체 교체만 보고 그 안의 노드 교체는 놓친다. 트리거가
+  // 사라졌다 다시 생기거나 여러 버튼이 ref 하나를 돌려쓰면, Floating UI가 연결
+  // 끊긴 옛 노드를 계속 재서 팝업이 화면 좌상단으로 날아간다.
+  // 매 렌더 동기화가 노드 교체를 잡는 유일한 방법이고, 같은 노드면 내부에서 무시된다.
+  // paint 전에 맞춰야 이전 좌표가 한 프레임 비치지 않는다.
+  // null은 밀지 않는다 - 끊으면 좌표가 0으로 초기화돼 팝업이 좌상단으로 튄다
+  useLayoutEffect(() => {
+    const node = referenceRef?.current;
+    if (node) refs.setReference(node);
+  });
 
   // Escape 소유는 autoClose와 무관 — 한 번에 한 겹씩 닫힘.
   // 위에 body 포털 서브메뉴가 떠 있으면 그쪽이 상위 레이어이므로 양보
@@ -329,11 +388,13 @@ const FloatingPopup = ({
 
   // 고정 좌표 사용 시 메뉴 위치를 조정
   useLayoutEffect(() => {
+    // 닫히는 중엔 좌표를 얼린다. scale 보간 중 rect를 다시 재면 팝업이 흐른다
+    if (motionState === 'closing') return;
     if (
-      !open ||
+      !mounted ||
       !floatingRef.current ||
-      typeof fixedX !== 'number' ||
-      typeof fixedY !== 'number'
+      typeof shownFixedX !== 'number' ||
+      typeof shownFixedY !== 'number'
     ) {
       setAdjustedPos(null);
       return;
@@ -341,8 +402,8 @@ const FloatingPopup = ({
 
     const rect = floatingRef.current.getBoundingClientRect();
 
-    let adjustedX = fixedX + offsetX;
-    let adjustedY = fixedY + offsetY;
+    let adjustedX = shownFixedX + offsetX;
+    let adjustedY = shownFixedY + offsetY;
 
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
@@ -374,7 +435,7 @@ const FloatingPopup = ({
       if (prev?.x === adjustedX && prev.y === adjustedY) return prev;
       return { x: adjustedX, y: adjustedY };
     });
-  }, [open, fixedX, fixedY, offsetX, offsetY]);
+  }, [mounted, motionState, shownFixedX, shownFixedY, offsetX, offsetY]);
 
   useEffect(() => {
     if (!open || autoClose) return;
@@ -477,9 +538,10 @@ const FloatingPopup = ({
     };
   }, [open, autoClose, onClose, referenceRef, interactiveRefs]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
-  const isFixed = typeof fixedX === 'number' && typeof fixedY === 'number';
+  const isFixed =
+    typeof shownFixedX === 'number' && typeof shownFixedY === 'number';
 
   // 고정 좌표를 사용할 때는 조정된 위치, 아니면 기본 위치를 사용합
   let left: number;
@@ -490,8 +552,8 @@ const FloatingPopup = ({
     top = adjustedPos.y;
   } else if (isFixed) {
     // adjustedPos 계산 대기 중이면 기본 위치 사용
-    left = (fixedX as number) + offsetX;
-    top = (fixedY as number) + offsetY;
+    left = (shownFixedX as number) + offsetX;
+    top = (shownFixedY as number) + offsetY;
   } else {
     left = (x ?? 0) + offsetX;
     top = (y ?? 0) + offsetY;
@@ -508,7 +570,11 @@ const FloatingPopup = ({
         left,
         top,
       }}
-      className={`${className}${animate ? ' animate-popup-fade' : ''}`}
+      className={className}
+      active={open}
+      motionState={animate ? motionState : undefined}
+      // 고정 좌표는 Floating UI 배치를 우회하므로 기준 방향이 없다
+      placement={animate && !isFixed ? resolvedPlacement : undefined}
       role={role}
       ariaLabel={ariaLabel}
       onMenuTab={onMenuTab}
@@ -517,7 +583,9 @@ const FloatingPopup = ({
       initialFocus={initialFocus}
       contentReady={contentMounted}
     >
-      {contentMounted ? children : null}
+      <FloatingPopupMotionContext.Provider value={motionState}>
+        {contentMounted ? children : null}
+      </FloatingPopupMotionContext.Provider>
     </FloatingPopupSurface>
   );
 

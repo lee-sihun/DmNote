@@ -218,6 +218,9 @@
     "more": "更多",
     "dialog": "对话框"
   },
+  "numberInput": {
+    "expressionHint": "支持算式：+ - * / ( )"
+  },
   "tooltip": {
     "github": "GitHub",
     "issue": "报告问题",

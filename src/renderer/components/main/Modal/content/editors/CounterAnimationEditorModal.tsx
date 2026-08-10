@@ -1392,8 +1392,10 @@ const CounterAnimationEditorModal = ({
             <NumberInput
               value={parsedScale}
               onChange={(val) => setScaleInput(String(val))}
-              onBlur={() => {
-                const parsed = parseNumber(scaleInput);
+              onBlur={(committed) => {
+                // 확정값을 입력에서 직접 받는다. onChange가 예약한 scaleInput은
+                // 같은 blur 이벤트 안에서 아직 이전 값이다
+                const parsed = committed ?? parseNumber(scaleInput);
                 const normalized = normalizeScale(parsed ?? 1.1);
                 setScaleInput(String(Math.round(normalized * 100) / 100));
               }}
@@ -1412,8 +1414,10 @@ const CounterAnimationEditorModal = ({
             <NumberInput
               value={parsedDuration}
               onChange={(val) => setDurationInput(String(val))}
-              onBlur={() => {
-                const parsed = parseNumber(durationInput);
+              onBlur={(committed) => {
+                // 확정값을 입력에서 직접 받는다. onChange가 예약한 durationInput은
+                // 같은 blur 이벤트 안에서 아직 이전 값이다
+                const parsed = committed ?? parseNumber(durationInput);
                 const normalized = clampDuration(parsed ?? 300);
                 setDurationInput(String(normalized));
               }}

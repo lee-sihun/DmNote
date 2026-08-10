@@ -4,6 +4,8 @@ import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
+import { useModalPresence } from '@hooks/ui/usePopupPresence';
+import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 
 interface AlertProps {
   isOpen: boolean;
@@ -20,17 +22,28 @@ interface AlertProps {
 
 const Alert = ({
   isOpen,
-  message,
-  type = 'alert', // "alert", "confirm", or "custom"
-  confirmText,
-  cancelText,
-  showCancel,
-  danger = false,
+  message: openMessage,
+  type: openType = 'alert', // "alert", "confirm", or "custom"
+  confirmText: openConfirmText,
+  cancelText: openCancelText,
+  showCancel: openShowCancel,
+  danger: openDanger = false,
   onCustomContentMount,
   onConfirm,
   onCancel,
 }: AlertProps) => {
   const { t } = useTranslation();
+
+  // 호출부가 닫으면서 메시지를 비우므로 퇴장 구간에는 마지막 열림 값을 보여준다
+  const { message, type, confirmText, cancelText, showCancel, danger } =
+    useRetainedWhileOpen(isOpen, {
+      message: openMessage,
+      type: openType,
+      confirmText: openConfirmText,
+      cancelText: openCancelText,
+      showCancel: openShowCancel,
+      danger: openDanger,
+    });
 
   const { scrollContainerRef: scrollRef } = useLenis();
   const customContentCleanupRef = useRef<(() => void) | null>(null);
@@ -72,7 +85,10 @@ const Alert = ({
     if (!confirmPending) onCancel?.();
   });
 
-  if (!isOpen) return null;
+  // 퇴장 모션이 도는 동안 DOM을 유지한다
+  const { mounted, state: motionState } = useModalPresence(isOpen);
+
+  if (!mounted) return null;
 
   const confirmLabel = confirmText || t('common.confirm');
   const cancelLabel = cancelText || t('common.cancel');
@@ -80,6 +96,7 @@ const Alert = ({
 
   return (
     <Modal
+      motionState={motionState}
       onClick={confirmPending ? undefined : onCancel}
       ariaLabel={isCustom ? t('common.dialog') : message}
       contentMountStrategy="after-paint"

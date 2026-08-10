@@ -176,6 +176,45 @@ describe('Modal focus contract', () => {
     expect(document.activeElement).toBe(action);
   });
 
+  it('퇴장 전까지 지연 콘텐츠가 준비되지 않으면 새로 mount하지 않는다', async () => {
+    let pendingFrame: FrameRequestCallback | null = null;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      pendingFrame = callback;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {
+      pendingFrame = null;
+    });
+
+    await act(async () => {
+      root.render(
+        <Modal
+          ariaLabel="Closing deferred dialog"
+          motionState="entering"
+          contentMountStrategy="after-paint"
+        >
+          <button type="button">Late action</button>
+        </Modal>,
+      );
+    });
+    expect(pendingFrame).not.toBeNull();
+
+    await act(async () => {
+      root.render(
+        <Modal
+          ariaLabel="Closing deferred dialog"
+          motionState="closing"
+          contentMountStrategy="after-paint"
+        >
+          <button type="button">Late action</button>
+        </Modal>,
+      );
+    });
+
+    expect(pendingFrame).toBeNull();
+    expect(document.body.textContent).not.toContain('Late action');
+  });
+
   it('yields keyboard ownership while a popup layer is open', async () => {
     const closeModal = vi.fn();
     const closePopup = vi.fn();

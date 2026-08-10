@@ -11,6 +11,7 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import PopupExit from '@components/main/Modal/PopupExit';
 import {
   isGradientColor,
   toRgbHexColor,
@@ -21,6 +22,7 @@ import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConst
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';
 
@@ -457,6 +459,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onPreview={(value) => handleStylePreview('noteOffsetX', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="X"
+            width={AXIS_FIELD_WIDTH}
             allowNegative
             allowDecimal
             decimalScale={1}
@@ -472,6 +475,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             onPreview={(value) => handleStylePreview('noteOffsetY', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="Y"
+            width={AXIS_FIELD_WIDTH}
             allowNegative
             allowDecimal
             decimalScale={1}
@@ -759,184 +763,190 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
       </PropertySection>
 
       {/* 통합 ColorPicker - 단일 인스턴스로 깜빡임 없이 전환 */}
-      {pickerFor && (
-        <ColorPicker
-          open={pickerOpen}
-          referenceRef={
-            pickerFor === 'note'
-              ? noteColorButtonRef
-              : pickerFor === 'glow'
-              ? glowColorButtonRef
-              : borderColorButtonRef
-          }
-          panelElement={panelElement}
-          color={
-            pickerFor === 'note'
-              ? notePickerColor
-              : pickerFor === 'glow'
-              ? glowPickerColor
-              : hexWithAlphaPercent(borderColor, localBorderOpacity)
-          }
-          onColorChange={(c: NoteColor) => {
-            if (pickerFor === 'border') {
-              const raw = typeof c === 'string' ? c : undefined;
-              const hex = toRgbHexColor(raw);
-              const opacity = parseAlphaPercent(raw, localBorderOpacity);
-              setBorderColor(hex);
-              setLocalBorderOpacity(opacity);
-              return;
-            }
-            handleColorChange(pickerFor, c);
-          }}
-          onColorChangeComplete={(c: NoteColor) => {
-            if (pickerFor === 'border') {
-              const raw = typeof c === 'string' ? c : undefined;
-              const hex = toRgbHexColor(raw);
-              const opacity = parseAlphaPercent(raw, localBorderOpacity);
-              setBorderColor(hex);
-              setLocalBorderOpacity(opacity);
-              onKeyPreview?.(keyIndex, {
-                noteBorderColor: hex,
-                noteBorderOpacity: opacity,
-              });
-              onKeyUpdate({
-                index: keyIndex,
-                noteBorderColor: hex,
-                noteBorderOpacity: opacity,
-              });
-              return;
-            }
-            handleColorChangeComplete(pickerFor, c);
-          }}
-          onClose={() => setPickerFor(null)}
-          interactiveRefs={interactiveRefs}
-          solidOnly={pickerFor === 'border'}
-          {...(pickerFor !== 'border' && {
-            opacityPercent:
+      <PopupExit open={pickerOpen}>
+        {pickerFor ? (
+          <ColorPicker
+            open={pickerOpen}
+            referenceRef={
               pickerFor === 'note'
-                ? noteColorMode === COLOR_MODES.gradient
-                  ? { top: localNoteOpacityTop, bottom: localNoteOpacityBottom }
-                  : localNoteOpacity
-                : glowColorMode === COLOR_MODES.gradient
-                ? { top: localGlowOpacityTop, bottom: localGlowOpacityBottom }
-                : localGlowOpacity,
-            onOpacityPercentChange: (
-              value: number,
-              target: 'solid' | 'top' | 'bottom',
-            ) => {
-              if (pickerFor === 'note') {
-                if (target === 'solid') {
-                  setLocalNoteOpacity(value);
-                  setLocalNoteOpacityTop(value);
+                ? noteColorButtonRef
+                : pickerFor === 'glow'
+                ? glowColorButtonRef
+                : borderColorButtonRef
+            }
+            panelElement={panelElement}
+            color={
+              pickerFor === 'note'
+                ? notePickerColor
+                : pickerFor === 'glow'
+                ? glowPickerColor
+                : hexWithAlphaPercent(borderColor, localBorderOpacity)
+            }
+            onColorChange={(c: NoteColor) => {
+              if (pickerFor === 'border') {
+                const raw = typeof c === 'string' ? c : undefined;
+                const hex = toRgbHexColor(raw);
+                const opacity = parseAlphaPercent(raw, localBorderOpacity);
+                setBorderColor(hex);
+                setLocalBorderOpacity(opacity);
+                return;
+              }
+              handleColorChange(pickerFor, c);
+            }}
+            onColorChangeComplete={(c: NoteColor) => {
+              if (pickerFor === 'border') {
+                const raw = typeof c === 'string' ? c : undefined;
+                const hex = toRgbHexColor(raw);
+                const opacity = parseAlphaPercent(raw, localBorderOpacity);
+                setBorderColor(hex);
+                setLocalBorderOpacity(opacity);
+                onKeyPreview?.(keyIndex, {
+                  noteBorderColor: hex,
+                  noteBorderOpacity: opacity,
+                });
+                onKeyUpdate({
+                  index: keyIndex,
+                  noteBorderColor: hex,
+                  noteBorderOpacity: opacity,
+                });
+                return;
+              }
+              handleColorChangeComplete(pickerFor, c);
+            }}
+            onClose={() => setPickerFor(null)}
+            interactiveRefs={interactiveRefs}
+            solidOnly={pickerFor === 'border'}
+            {...(pickerFor !== 'border' && {
+              opacityPercent:
+                pickerFor === 'note'
+                  ? noteColorMode === COLOR_MODES.gradient
+                    ? {
+                        top: localNoteOpacityTop,
+                        bottom: localNoteOpacityBottom,
+                      }
+                    : localNoteOpacity
+                  : glowColorMode === COLOR_MODES.gradient
+                  ? { top: localGlowOpacityTop, bottom: localGlowOpacityBottom }
+                  : localGlowOpacity,
+              onOpacityPercentChange: (
+                value: number,
+                target: 'solid' | 'top' | 'bottom',
+              ) => {
+                if (pickerFor === 'note') {
+                  if (target === 'solid') {
+                    setLocalNoteOpacity(value);
+                    setLocalNoteOpacityTop(value);
+                    setLocalNoteOpacityBottom(value);
+                    return;
+                  }
+                  if (target === 'top') {
+                    setLocalNoteOpacityTop(value);
+                    setLocalNoteOpacity(
+                      Math.round((value + localNoteOpacityBottom) / 2),
+                    );
+                    return;
+                  }
                   setLocalNoteOpacityBottom(value);
-                  return;
-                }
-                if (target === 'top') {
-                  setLocalNoteOpacityTop(value);
                   setLocalNoteOpacity(
-                    Math.round((value + localNoteOpacityBottom) / 2),
+                    Math.round((localNoteOpacityTop + value) / 2),
                   );
                   return;
                 }
-                setLocalNoteOpacityBottom(value);
-                setLocalNoteOpacity(
-                  Math.round((localNoteOpacityTop + value) / 2),
-                );
-                return;
-              }
 
-              if (target === 'solid') {
-                setLocalGlowOpacity(value);
-                setLocalGlowOpacityTop(value);
-                setLocalGlowOpacityBottom(value);
-                return;
-              }
-              if (target === 'top') {
-                setLocalGlowOpacityTop(value);
-                setLocalGlowOpacity(
-                  Math.round((value + localGlowOpacityBottom) / 2),
-                );
-                return;
-              }
-              setLocalGlowOpacityBottom(value);
-              setLocalGlowOpacity(
-                Math.round((localGlowOpacityTop + value) / 2),
-              );
-            },
-            onOpacityPercentChangeComplete: (
-              value: number,
-              target: 'solid' | 'top' | 'bottom',
-            ) => {
-              if (pickerFor === 'note') {
                 if (target === 'solid') {
-                  setLocalNoteOpacity(value);
-                  setLocalNoteOpacityTop(value);
-                  setLocalNoteOpacityBottom(value);
+                  setLocalGlowOpacity(value);
+                  setLocalGlowOpacityTop(value);
+                  setLocalGlowOpacityBottom(value);
+                  return;
+                }
+                if (target === 'top') {
+                  setLocalGlowOpacityTop(value);
+                  setLocalGlowOpacity(
+                    Math.round((value + localGlowOpacityBottom) / 2),
+                  );
+                  return;
+                }
+                setLocalGlowOpacityBottom(value);
+                setLocalGlowOpacity(
+                  Math.round((localGlowOpacityTop + value) / 2),
+                );
+              },
+              onOpacityPercentChangeComplete: (
+                value: number,
+                target: 'solid' | 'top' | 'bottom',
+              ) => {
+                if (pickerFor === 'note') {
+                  if (target === 'solid') {
+                    setLocalNoteOpacity(value);
+                    setLocalNoteOpacityTop(value);
+                    setLocalNoteOpacityBottom(value);
+                    const payload = {
+                      noteOpacity: value,
+                      noteOpacityTop: value,
+                      noteOpacityBottom: value,
+                    };
+                    onKeyPreview?.(keyIndex, payload);
+                    onKeyUpdate({ index: keyIndex, ...payload });
+                    return;
+                  }
+
+                  const nextTop =
+                    target === 'top' ? value : localNoteOpacityTop;
+                  const nextBottom =
+                    target === 'bottom' ? value : localNoteOpacityBottom;
+                  const nextBase = Math.round((nextTop + nextBottom) / 2);
+                  setLocalNoteOpacity(nextBase);
+                  if (target === 'top') setLocalNoteOpacityTop(value);
+                  else setLocalNoteOpacityBottom(value);
+
                   const payload = {
-                    noteOpacity: value,
-                    noteOpacityTop: value,
-                    noteOpacityBottom: value,
+                    noteOpacity: nextBase,
+                    noteOpacityTop: nextTop,
+                    noteOpacityBottom: nextBottom,
                   };
                   onKeyPreview?.(keyIndex, payload);
                   onKeyUpdate({ index: keyIndex, ...payload });
                   return;
                 }
 
-                const nextTop = target === 'top' ? value : localNoteOpacityTop;
+                if (target === 'solid') {
+                  setLocalGlowOpacity(value);
+                  setLocalGlowOpacityTop(value);
+                  setLocalGlowOpacityBottom(value);
+                  const payload = {
+                    noteGlowOpacity: value,
+                    noteGlowOpacityTop: value,
+                    noteGlowOpacityBottom: value,
+                  };
+                  onKeyPreview?.(keyIndex, payload);
+                  onKeyUpdate({ index: keyIndex, ...payload });
+                  return;
+                }
+
+                const nextTop = target === 'top' ? value : localGlowOpacityTop;
                 const nextBottom =
-                  target === 'bottom' ? value : localNoteOpacityBottom;
+                  target === 'bottom' ? value : localGlowOpacityBottom;
                 const nextBase = Math.round((nextTop + nextBottom) / 2);
-                setLocalNoteOpacity(nextBase);
-                if (target === 'top') setLocalNoteOpacityTop(value);
-                else setLocalNoteOpacityBottom(value);
+                setLocalGlowOpacity(nextBase);
+                if (target === 'top') setLocalGlowOpacityTop(value);
+                else setLocalGlowOpacityBottom(value);
 
                 const payload = {
-                  noteOpacity: nextBase,
-                  noteOpacityTop: nextTop,
-                  noteOpacityBottom: nextBottom,
+                  noteGlowOpacity: nextBase,
+                  noteGlowOpacityTop: nextTop,
+                  noteGlowOpacityBottom: nextBottom,
                 };
                 onKeyPreview?.(keyIndex, payload);
                 onKeyUpdate({ index: keyIndex, ...payload });
-                return;
-              }
-
-              if (target === 'solid') {
-                setLocalGlowOpacity(value);
-                setLocalGlowOpacityTop(value);
-                setLocalGlowOpacityBottom(value);
-                const payload = {
-                  noteGlowOpacity: value,
-                  noteGlowOpacityTop: value,
-                  noteGlowOpacityBottom: value,
-                };
-                onKeyPreview?.(keyIndex, payload);
-                onKeyUpdate({ index: keyIndex, ...payload });
-                return;
-              }
-
-              const nextTop = target === 'top' ? value : localGlowOpacityTop;
-              const nextBottom =
-                target === 'bottom' ? value : localGlowOpacityBottom;
-              const nextBase = Math.round((nextTop + nextBottom) / 2);
-              setLocalGlowOpacity(nextBase);
-              if (target === 'top') setLocalGlowOpacityTop(value);
-              else setLocalGlowOpacityBottom(value);
-
-              const payload = {
-                noteGlowOpacity: nextBase,
-                noteGlowOpacityTop: nextTop,
-                noteGlowOpacityBottom: nextBottom,
-              };
-              onKeyPreview?.(keyIndex, payload);
-              onKeyUpdate({ index: keyIndex, ...payload });
-            },
-            opacityPercentLabel:
-              pickerFor === 'note'
-                ? t('keySetting.noteOpacity') || '노트 투명도'
-                : t('keySetting.noteGlowOpacity') || '글로우 투명도',
-          })}
-        />
-      )}
+              },
+              opacityPercentLabel:
+                pickerFor === 'note'
+                  ? t('keySetting.noteOpacity') || '노트 투명도'
+                  : t('keySetting.noteGlowOpacity') || '글로우 투명도',
+            })}
+          />
+        ) : null}
+      </PopupExit>
     </>
   );
 };

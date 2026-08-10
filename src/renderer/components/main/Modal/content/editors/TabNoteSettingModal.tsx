@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import NoteSetting from '../settings/NoteSetting';
+import { useModalPresence } from '@hooks/ui/usePopupPresence';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { mergeNoteSettings } from '@src/types/settings/noteSettings';
@@ -22,21 +23,38 @@ const TabNoteSettingModal = ({ isOpen, onClose }: TabNoteSettingModalProps) => {
   const selectedKeyType = useKeyStore((s) => s.selectedKeyType);
   const [tabOverride, setTabOverride] = useState<TabNoteSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadGenerationRef = useRef(0);
 
   // 모달 열릴 때 현재 탭의 오버라이드 로드
   useEffect(() => {
     if (!isOpen) return;
+
+    const generation = ++loadGenerationRef.current;
+    const isCurrentGeneration = () => loadGenerationRef.current === generation;
+
     setLoading(true);
     window.api.noteTab
       .get(selectedKeyType)
       .then((res) => {
+        if (!isCurrentGeneration()) return;
         setTabOverride(res.settings ?? null);
       })
       .catch((err) => {
+        if (!isCurrentGeneration()) return;
         console.error('Failed to load tab note settings', err);
         setTabOverride(null);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (isCurrentGeneration()) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      if (isCurrentGeneration()) {
+        loadGenerationRef.current += 1;
+      }
+    };
   }, [isOpen, selectedKeyType]);
 
   const handleSave = async (normalized: NoteSettings) => {
@@ -61,13 +79,22 @@ const TabNoteSettingModal = ({ isOpen, onClose }: TabNoteSettingModalProps) => {
     }
   };
 
-  if (!isOpen || !noteEffect || loading) return null;
+  // 퇴장 모션이 도는 동안 DOM을 유지한다
+  const {
+    mounted,
+    state: motionState,
+    cycle,
+  } = useModalPresence(isOpen && noteEffect && !loading);
+
+  if (!mounted) return null;
 
   // 전역 + 오버라이드 병합하여 모달에 전달
   const mergedSettings = mergeNoteSettings(globalSettings, tabOverride);
 
   return (
     <NoteSetting
+      key={cycle}
+      motionState={motionState}
       settings={mergedSettings}
       onClose={onClose}
       onSave={handleSave}

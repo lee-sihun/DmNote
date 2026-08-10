@@ -1,6 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '@contexts/useTranslation';
+import { usePopupPresence } from '@hooks/ui/usePopupPresence';
+import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
 import {
   useGridSelectionStore,
   type SelectedElement,
@@ -213,6 +215,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     setLastClickedIndex,
     setLastClickedDisplayIndex,
     t,
+  });
+
+  // 퇴장 모션이 도는 동안 메뉴 DOM과 표시 내용을 유지한다
+  const contextMenuPresence = usePopupPresence(actions.contextMenuOpen);
+  const contextMenuShown = useRetainedWhileOpen(actions.contextMenuOpen, {
+    position: actions.contextMenuPosition,
+    items: actions.contextMenuItems,
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -830,17 +839,17 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       </div>
 
       {/* 컨텍스트 메뉴 */}
-      {actions.contextMenuOpen &&
+      {contextMenuPresence.mounted &&
         createPortal(
           <ListPopup
             open={actions.contextMenuOpen}
             ariaLabel={t('common.more')}
-            position={actions.contextMenuPosition}
+            position={contextMenuShown.position}
             onClose={() => {
               actions.setContextMenuOpen(false);
               actions.setContextMenuGroupId(null);
             }}
-            items={actions.contextMenuItems}
+            items={contextMenuShown.items}
             onSelect={actions.handleContextMenuSelect}
           />,
           document.body,

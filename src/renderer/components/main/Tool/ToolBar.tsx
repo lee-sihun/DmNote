@@ -3,12 +3,13 @@ import SettingTool from './SettingTool';
 import TabTool from './TabTool';
 import Github from '@assets/svgs/github.svg';
 import Bug from '@assets/svgs/code.svg';
-import NoteIcon from '@assets/svgs/note.svg';
+import FaderIcon from './icons/FaderIcon';
 import { TooltipGroup } from '../Modal/TooltipGroup';
 import { useTranslation } from '@contexts/useTranslation';
 import FloatingTooltip from '../Modal/FloatingTooltip';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
+import { useIconMotion } from '@hooks/useIconMotion';
 
 interface ToolBarProps {
   onAddItem: (type: 'key' | 'stat' | 'graph' | 'knob') => void;
@@ -125,6 +126,7 @@ const TrackSettingButton = ({
   t: (key: string) => string;
 }) => {
   const { noteEffect } = useSettingsStore();
+  const { motionProps } = useIconMotion();
 
   if (!noteEffect) return null;
 
@@ -136,8 +138,9 @@ const TrackSettingButton = ({
             type="button"
             onClick={onOpenNoteSetting}
             className="flex items-center justify-center h-[30px] w-[30px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
+            {...motionProps}
           >
-            <NoteIcon />
+            <FaderIcon />
           </button>
         </FloatingTooltip>
       </div>

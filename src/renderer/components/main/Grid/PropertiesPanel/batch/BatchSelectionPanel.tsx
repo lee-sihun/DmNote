@@ -32,6 +32,7 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 
 const RenameIcon: React.FC = () => (
@@ -882,135 +883,143 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         </div>
 
         {/* 배치 편집용 로컬 ColorPicker */}
-        {batchPickerFor && (
-          <ColorPicker
-            open={!!batchPickerFor}
-            referenceRef={getBatchPickerRef()}
-            panelElement={panelElement}
-            color={getBatchPickerColor()}
-            onColorChange={handleBatchPickerColorChange}
-            onColorChangeComplete={handleBatchPickerColorChangeComplete}
-            onClose={() => setBatchPickerFor(null)}
-            interactiveRefs={batchColorPickerInteractiveRefs}
-            solidOnly={
-              batchPickerFor !== 'noteColor' && batchPickerFor !== 'glowColor'
-            }
-            stateMode={
-              (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
-              selectedKeyElements.length > 0
-                ? batchCounterColorState
-                : undefined
-            }
-            onStateModeChange={
-              (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
-              selectedKeyElements.length > 0
-                ? setBatchCounterColorState
-                : undefined
-            }
-            opacityPercent={
-              batchPickerFor === 'noteColor'
-                ? batchLocalOpacities.noteOpacity
-                : batchPickerFor === 'glowColor'
-                ? batchLocalOpacities.glowOpacity
-                : undefined
-            }
-            onOpacityPercentChange={(value: number) => {
-              if (batchPickerFor === 'noteColor') {
-                setBatchLocalOpacities((prev) => ({
-                  ...prev,
-                  noteOpacity: value,
-                }));
-                handleBatchStyleChange('noteOpacity', value);
-              } else if (batchPickerFor === 'glowColor') {
-                setBatchLocalOpacities((prev) => ({
-                  ...prev,
-                  glowOpacity: value,
-                }));
-                handleBatchStyleChange('noteGlowOpacity', value);
+        <PopupExit open={Boolean(batchPickerFor)}>
+          {batchPickerFor ? (
+            <ColorPicker
+              open={!!batchPickerFor}
+              referenceRef={getBatchPickerRef()}
+              panelElement={panelElement}
+              color={getBatchPickerColor()}
+              onColorChange={handleBatchPickerColorChange}
+              onColorChangeComplete={handleBatchPickerColorChangeComplete}
+              onClose={() => setBatchPickerFor(null)}
+              interactiveRefs={batchColorPickerInteractiveRefs}
+              solidOnly={
+                batchPickerFor !== 'noteColor' && batchPickerFor !== 'glowColor'
               }
-            }}
-            onOpacityPercentChangeComplete={(value: number) => {
-              if (batchPickerFor === 'noteColor') {
-                setBatchLocalOpacities((prev) => ({
-                  ...prev,
-                  noteOpacity: value,
-                }));
-                handleBatchStyleChangeComplete('noteOpacity', value);
-              } else if (batchPickerFor === 'glowColor') {
-                setBatchLocalOpacities((prev) => ({
-                  ...prev,
-                  glowOpacity: value,
-                }));
-                handleBatchStyleChangeComplete('noteGlowOpacity', value);
+              stateMode={
+                (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
+                selectedKeyElements.length > 0
+                  ? batchCounterColorState
+                  : undefined
               }
-            }}
-            opacityPercentLabel={
-              batchPickerFor === 'noteColor'
-                ? t('keySetting.noteOpacity') || '노트 투명도'
-                : batchPickerFor === 'glowColor'
-                ? t('keySetting.noteGlowOpacity') || '글로우 투명도'
-                : undefined
-            }
-            opacityPercentMixed={
-              batchPickerFor === 'noteColor'
-                ? noteOpacityMixed
-                : batchPickerFor === 'glowColor'
-                ? glowOpacityMixed
-                : false
-            }
-          />
-        )}
+              onStateModeChange={
+                (batchPickerFor === 'fill' || batchPickerFor === 'stroke') &&
+                selectedKeyElements.length > 0
+                  ? setBatchCounterColorState
+                  : undefined
+              }
+              opacityPercent={
+                batchPickerFor === 'noteColor'
+                  ? batchLocalOpacities.noteOpacity
+                  : batchPickerFor === 'glowColor'
+                  ? batchLocalOpacities.glowOpacity
+                  : undefined
+              }
+              onOpacityPercentChange={(value: number) => {
+                if (batchPickerFor === 'noteColor') {
+                  setBatchLocalOpacities((prev) => ({
+                    ...prev,
+                    noteOpacity: value,
+                  }));
+                  handleBatchStyleChange('noteOpacity', value);
+                } else if (batchPickerFor === 'glowColor') {
+                  setBatchLocalOpacities((prev) => ({
+                    ...prev,
+                    glowOpacity: value,
+                  }));
+                  handleBatchStyleChange('noteGlowOpacity', value);
+                }
+              }}
+              onOpacityPercentChangeComplete={(value: number) => {
+                if (batchPickerFor === 'noteColor') {
+                  setBatchLocalOpacities((prev) => ({
+                    ...prev,
+                    noteOpacity: value,
+                  }));
+                  handleBatchStyleChangeComplete('noteOpacity', value);
+                } else if (batchPickerFor === 'glowColor') {
+                  setBatchLocalOpacities((prev) => ({
+                    ...prev,
+                    glowOpacity: value,
+                  }));
+                  handleBatchStyleChangeComplete('noteGlowOpacity', value);
+                }
+              }}
+              opacityPercentLabel={
+                batchPickerFor === 'noteColor'
+                  ? t('keySetting.noteOpacity') || '노트 투명도'
+                  : batchPickerFor === 'glowColor'
+                  ? t('keySetting.noteGlowOpacity') || '글로우 투명도'
+                  : undefined
+              }
+              opacityPercentMixed={
+                batchPickerFor === 'noteColor'
+                  ? noteOpacityMixed
+                  : batchPickerFor === 'glowColor'
+                  ? glowOpacityMixed
+                  : false
+              }
+            />
+          ) : null}
+        </PopupExit>
 
         {/* 다중 선택용 ImagePicker */}
-        {showBatchImagePicker && batchImageButtonRef.current && (
-          <ImagePicker
-            open={showBatchImagePicker}
-            referenceRef={batchImageButtonRef}
-            panelElement={panelElement}
-            idleImage={
-              styleMixedValueGetter((pos) => pos.inactiveImage, '').isMixed
-                ? ''
-                : styleMixedValueGetter((pos) => pos.inactiveImage, '').value
-            }
-            activeImage={
-              getMixedValueActiveCapable((pos) => pos.activeImage, '').isMixed
-                ? ''
-                : getMixedValueActiveCapable((pos) => pos.activeImage, '').value
-            }
-            idleTransparent={
-              styleMixedValueGetter((pos) => pos.idleTransparent, false).value
-            }
-            activeTransparent={
-              getMixedValueActiveCapable((pos) => pos.activeTransparent, false)
-                .value
-            }
-            onIdleImageChange={(imageUrl: string) => {
-              handleBatchStyleChangeComplete('inactiveImage', imageUrl);
-            }}
-            onActiveImageChange={(imageUrl: string) => {
-              handleActiveCapableStyleChangeComplete('activeImage', imageUrl);
-            }}
-            onIdleTransparentChange={(value: boolean) => {
-              handleBatchStyleChangeComplete('idleTransparent', value);
-            }}
-            onActiveTransparentChange={(value: boolean) => {
-              handleActiveCapableStyleChangeComplete(
-                'activeTransparent',
-                value,
-              );
-            }}
-            onIdleImageReset={() => {
-              handleBatchStyleChangeComplete('inactiveImage', '');
-            }}
-            onActiveImageReset={() => {
-              handleActiveCapableStyleChangeComplete('activeImage', '');
-            }}
-            onClose={() => setShowBatchImagePicker(false)}
-            showActiveState={
-              selectedKeyElements.length > 0 || selectedKnobElements.length > 0
-            }
-          />
-        )}
+        <PopupExit open={showBatchImagePicker}>
+          {showBatchImagePicker && batchImageButtonRef.current ? (
+            <ImagePicker
+              open={showBatchImagePicker}
+              referenceRef={batchImageButtonRef}
+              panelElement={panelElement}
+              idleImage={
+                styleMixedValueGetter((pos) => pos.inactiveImage, '').isMixed
+                  ? ''
+                  : styleMixedValueGetter((pos) => pos.inactiveImage, '').value
+              }
+              activeImage={
+                getMixedValueActiveCapable((pos) => pos.activeImage, '').isMixed
+                  ? ''
+                  : getMixedValueActiveCapable((pos) => pos.activeImage, '')
+                      .value
+              }
+              idleTransparent={
+                styleMixedValueGetter((pos) => pos.idleTransparent, false).value
+              }
+              activeTransparent={
+                getMixedValueActiveCapable(
+                  (pos) => pos.activeTransparent,
+                  false,
+                ).value
+              }
+              onIdleImageChange={(imageUrl: string) => {
+                handleBatchStyleChangeComplete('inactiveImage', imageUrl);
+              }}
+              onActiveImageChange={(imageUrl: string) => {
+                handleActiveCapableStyleChangeComplete('activeImage', imageUrl);
+              }}
+              onIdleTransparentChange={(value: boolean) => {
+                handleBatchStyleChangeComplete('idleTransparent', value);
+              }}
+              onActiveTransparentChange={(value: boolean) => {
+                handleActiveCapableStyleChangeComplete(
+                  'activeTransparent',
+                  value,
+                );
+              }}
+              onIdleImageReset={() => {
+                handleBatchStyleChangeComplete('inactiveImage', '');
+              }}
+              onActiveImageReset={() => {
+                handleActiveCapableStyleChangeComplete('activeImage', '');
+              }}
+              onClose={() => setShowBatchImagePicker(false)}
+              showActiveState={
+                selectedKeyElements.length > 0 ||
+                selectedKnobElements.length > 0
+              }
+            />
+          ) : null}
+        </PopupExit>
       </>
     </div>
   );
@@ -1343,49 +1352,51 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
         </div>
       </div>
 
-      {showBatchImagePicker && batchImageButtonRef.current && (
-        <ImagePicker
-          open={showBatchImagePicker}
-          referenceRef={batchImageButtonRef}
-          panelElement={panelElement}
-          showActiveState={false}
-          idleImage={
-            getMixedValueGraphs((pos) => pos.inactiveImage, '').isMixed
-              ? ''
-              : getMixedValueGraphs((pos) => pos.inactiveImage, '').value
-          }
-          activeImage={
-            getMixedValueGraphs((pos) => pos.activeImage, '').isMixed
-              ? ''
-              : getMixedValueGraphs((pos) => pos.activeImage, '').value
-          }
-          idleTransparent={
-            getMixedValueGraphs((pos) => pos.idleTransparent, false).value
-          }
-          activeTransparent={
-            getMixedValueGraphs((pos) => pos.activeTransparent, false).value
-          }
-          onIdleImageChange={(imageUrl: string) => {
-            handleGraphBatchSharedSetting({ inactiveImage: imageUrl });
-          }}
-          onActiveImageChange={(imageUrl: string) => {
-            handleGraphBatchSharedSetting({ activeImage: imageUrl });
-          }}
-          onIdleTransparentChange={(value: boolean) => {
-            handleGraphBatchSharedSetting({ idleTransparent: value });
-          }}
-          onActiveTransparentChange={(value: boolean) => {
-            handleGraphBatchSharedSetting({ activeTransparent: value });
-          }}
-          onIdleImageReset={() => {
-            handleGraphBatchSharedSetting({ inactiveImage: '' });
-          }}
-          onActiveImageReset={() => {
-            handleGraphBatchSharedSetting({ activeImage: '' });
-          }}
-          onClose={() => setShowBatchImagePicker(false)}
-        />
-      )}
+      <PopupExit open={showBatchImagePicker}>
+        {showBatchImagePicker && batchImageButtonRef.current ? (
+          <ImagePicker
+            open={showBatchImagePicker}
+            referenceRef={batchImageButtonRef}
+            panelElement={panelElement}
+            showActiveState={false}
+            idleImage={
+              getMixedValueGraphs((pos) => pos.inactiveImage, '').isMixed
+                ? ''
+                : getMixedValueGraphs((pos) => pos.inactiveImage, '').value
+            }
+            activeImage={
+              getMixedValueGraphs((pos) => pos.activeImage, '').isMixed
+                ? ''
+                : getMixedValueGraphs((pos) => pos.activeImage, '').value
+            }
+            idleTransparent={
+              getMixedValueGraphs((pos) => pos.idleTransparent, false).value
+            }
+            activeTransparent={
+              getMixedValueGraphs((pos) => pos.activeTransparent, false).value
+            }
+            onIdleImageChange={(imageUrl: string) => {
+              handleGraphBatchSharedSetting({ inactiveImage: imageUrl });
+            }}
+            onActiveImageChange={(imageUrl: string) => {
+              handleGraphBatchSharedSetting({ activeImage: imageUrl });
+            }}
+            onIdleTransparentChange={(value: boolean) => {
+              handleGraphBatchSharedSetting({ idleTransparent: value });
+            }}
+            onActiveTransparentChange={(value: boolean) => {
+              handleGraphBatchSharedSetting({ activeTransparent: value });
+            }}
+            onIdleImageReset={() => {
+              handleGraphBatchSharedSetting({ inactiveImage: '' });
+            }}
+            onActiveImageReset={() => {
+              handleGraphBatchSharedSetting({ activeImage: '' });
+            }}
+            onClose={() => setShowBatchImagePicker(false)}
+          />
+        ) : null}
+      </PopupExit>
     </div>
   );
 };
@@ -1642,48 +1653,50 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
         </div>
       </div>
 
-      {showBatchImagePicker && batchImageButtonRef.current && (
-        <ImagePicker
-          open={showBatchImagePicker}
-          referenceRef={batchImageButtonRef}
-          panelElement={panelElement}
-          idleImage={
-            getMixedValueKnobs((pos) => pos.inactiveImage, '').isMixed
-              ? ''
-              : getMixedValueKnobs((pos) => pos.inactiveImage, '').value
-          }
-          activeImage={
-            getMixedValueKnobs((pos) => pos.activeImage, '').isMixed
-              ? ''
-              : getMixedValueKnobs((pos) => pos.activeImage, '').value
-          }
-          idleTransparent={
-            getMixedValueKnobs((pos) => pos.idleTransparent, false).value
-          }
-          activeTransparent={
-            getMixedValueKnobs((pos) => pos.activeTransparent, false).value
-          }
-          onIdleImageChange={(imageUrl: string) => {
-            handleKnobBatchSharedSetting({ inactiveImage: imageUrl });
-          }}
-          onActiveImageChange={(imageUrl: string) => {
-            handleKnobBatchSharedSetting({ activeImage: imageUrl });
-          }}
-          onIdleTransparentChange={(value: boolean) => {
-            handleKnobBatchSharedSetting({ idleTransparent: value });
-          }}
-          onActiveTransparentChange={(value: boolean) => {
-            handleKnobBatchSharedSetting({ activeTransparent: value });
-          }}
-          onIdleImageReset={() => {
-            handleKnobBatchSharedSetting({ inactiveImage: '' });
-          }}
-          onActiveImageReset={() => {
-            handleKnobBatchSharedSetting({ activeImage: '' });
-          }}
-          onClose={() => setShowBatchImagePicker(false)}
-        />
-      )}
+      <PopupExit open={showBatchImagePicker}>
+        {showBatchImagePicker && batchImageButtonRef.current ? (
+          <ImagePicker
+            open={showBatchImagePicker}
+            referenceRef={batchImageButtonRef}
+            panelElement={panelElement}
+            idleImage={
+              getMixedValueKnobs((pos) => pos.inactiveImage, '').isMixed
+                ? ''
+                : getMixedValueKnobs((pos) => pos.inactiveImage, '').value
+            }
+            activeImage={
+              getMixedValueKnobs((pos) => pos.activeImage, '').isMixed
+                ? ''
+                : getMixedValueKnobs((pos) => pos.activeImage, '').value
+            }
+            idleTransparent={
+              getMixedValueKnobs((pos) => pos.idleTransparent, false).value
+            }
+            activeTransparent={
+              getMixedValueKnobs((pos) => pos.activeTransparent, false).value
+            }
+            onIdleImageChange={(imageUrl: string) => {
+              handleKnobBatchSharedSetting({ inactiveImage: imageUrl });
+            }}
+            onActiveImageChange={(imageUrl: string) => {
+              handleKnobBatchSharedSetting({ activeImage: imageUrl });
+            }}
+            onIdleTransparentChange={(value: boolean) => {
+              handleKnobBatchSharedSetting({ idleTransparent: value });
+            }}
+            onActiveTransparentChange={(value: boolean) => {
+              handleKnobBatchSharedSetting({ activeTransparent: value });
+            }}
+            onIdleImageReset={() => {
+              handleKnobBatchSharedSetting({ inactiveImage: '' });
+            }}
+            onActiveImageReset={() => {
+              handleKnobBatchSharedSetting({ activeImage: '' });
+            }}
+            onClose={() => setShowBatchImagePicker(false)}
+          />
+        ) : null}
+      </PopupExit>
     </div>
   );
 };

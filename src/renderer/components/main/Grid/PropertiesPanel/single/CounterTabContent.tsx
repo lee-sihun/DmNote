@@ -16,6 +16,7 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import PopupExit from '@components/main/Modal/PopupExit';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 import { usePanelNav } from '../PanelNavContext';
@@ -460,56 +461,58 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         </PropertyRow>
       </PropertySection>
 
-      {pickerFor && (
-        <ColorPicker
-          open={pickerOpen}
-          referenceRef={pickerFor === 'fill' ? fillBtnRef : strokeBtnRef}
-          panelElement={panelElement}
-          color={
-            pickerFor === 'fill'
-              ? fillGradientState.pickerColor
-              : activeColorFor(
-                  pickerFor as 'fill' | 'stroke',
-                  effectiveColorState,
-                )
-          }
-          onColorChange={(c: string) =>
-            pickerFor === 'fill'
-              ? fillGradientState.handlePickerColorChange(c, false)
-              : handleColorChange(c)
-          }
-          onColorChangeComplete={(c: string) =>
-            pickerFor === 'fill'
-              ? fillGradientState.handlePickerColorChange(c, true)
-              : handleColorChangeComplete(c)
-          }
-          onClose={() => setPickerFor(null)}
-          solidOnly={true}
-          interactiveRefs={colorPickerInteractiveRefs}
-          stateMode={showActiveState ? effectiveColorState : undefined}
-          onStateModeChange={
-            showActiveState
-              ? (mode: string) => setColorState(mode as ColorState)
-              : undefined
-          }
-          headerSlot={
-            pickerFor === 'fill' ? fillGradientState.headerSlot : undefined
-          }
-          footerSlot={
-            pickerFor === 'fill' ? fillGradientState.footerSlot : undefined
-          }
-          gradientSpec={
-            pickerFor === 'fill'
-              ? fillGradientState.paletteGradientSpec
-              : undefined
-          }
-          onGradientSpecSelect={
-            pickerFor === 'fill'
-              ? fillGradientState.handleGradientSpecSelect
-              : undefined
-          }
-        />
-      )}
+      <PopupExit open={Boolean(pickerFor)}>
+        {pickerFor ? (
+          <ColorPicker
+            open={pickerOpen}
+            referenceRef={pickerFor === 'fill' ? fillBtnRef : strokeBtnRef}
+            panelElement={panelElement}
+            color={
+              pickerFor === 'fill'
+                ? fillGradientState.pickerColor
+                : activeColorFor(
+                    pickerFor as 'fill' | 'stroke',
+                    effectiveColorState,
+                  )
+            }
+            onColorChange={(c: string) =>
+              pickerFor === 'fill'
+                ? fillGradientState.handlePickerColorChange(c, false)
+                : handleColorChange(c)
+            }
+            onColorChangeComplete={(c: string) =>
+              pickerFor === 'fill'
+                ? fillGradientState.handlePickerColorChange(c, true)
+                : handleColorChangeComplete(c)
+            }
+            onClose={() => setPickerFor(null)}
+            solidOnly={true}
+            interactiveRefs={colorPickerInteractiveRefs}
+            stateMode={showActiveState ? effectiveColorState : undefined}
+            onStateModeChange={
+              showActiveState
+                ? (mode: string) => setColorState(mode as ColorState)
+                : undefined
+            }
+            headerSlot={
+              pickerFor === 'fill' ? fillGradientState.headerSlot : undefined
+            }
+            footerSlot={
+              pickerFor === 'fill' ? fillGradientState.footerSlot : undefined
+            }
+            gradientSpec={
+              pickerFor === 'fill'
+                ? fillGradientState.paletteGradientSpec
+                : undefined
+            }
+            onGradientSpecSelect={
+              pickerFor === 'fill'
+                ? fillGradientState.handleGradientSpecSelect
+                : undefined
+            }
+          />
+        ) : null}
+      </PopupExit>
 
       {/* FontPicker — 패널 서브 페이지 */}
       {renderPageKey === FONT_PAGE_KEY &&

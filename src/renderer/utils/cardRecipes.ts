@@ -19,6 +19,11 @@ export const FORM_ROW_CLASS =
 // 행 라벨
 export const FORM_LABEL_CLASS = 'text-fg-muted text-label';
 
+// 좌표·치수 필드 폭 - X/Y/W/H는 한 행에 둘씩 서고 소수 한 자리가 붙어도 잘리면 안 된다.
+// 패널 240px에서 카드 안쪽이 196px이라 두 칸(60+8+60)을 쓰고 라벨에 68px가 남는다.
+// 최장 라벨인 러시아어 Смещение, 영어 Position이 들어가는 폭
+export const AXIS_FIELD_WIDTH = '60px';
+
 // 설정 표면 밀도 - 설정 페이지와 설정 페인 공용 (2026-07-20 개편)
 // compact(위)는 도킹 패널·다이얼로그·플러그인 표면 전용, 이 둘 외 제3 밀도 추가 금지
 // 행 36px: 컨트롤(스위치 18, 드롭다운 23)에 상하 숨통을 주는 중간 밀도

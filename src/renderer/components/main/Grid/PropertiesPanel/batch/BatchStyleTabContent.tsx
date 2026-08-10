@@ -35,6 +35,7 @@ import {
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
@@ -718,6 +719,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             onPreview={(value) => handleBatchStyleChange('width', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="W"
+            width={AXIS_FIELD_WIDTH}
             min={10}
             max={500}
             allowDecimal
@@ -730,6 +732,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             onPreview={(value) => handleBatchStyleChange('height', value)}
             onCancel={() => editGestureController.cancel()}
             prefix="H"
+            width={AXIS_FIELD_WIDTH}
             min={10}
             max={500}
             allowDecimal

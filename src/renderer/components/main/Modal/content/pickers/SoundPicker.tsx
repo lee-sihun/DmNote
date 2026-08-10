@@ -134,8 +134,8 @@ const SoundPicker = ({
   })();
 
   const menuTargetItem =
-    menu.menuKey !== null
-      ? sounds.find((item) => item.soundPath === menu.menuKey) ?? null
+    menu.renderKey !== null
+      ? sounds.find((item) => item.soundPath === menu.renderKey) ?? null
       : null;
 
   const menuItems: ListItem[] = menuTargetItem
@@ -402,11 +402,11 @@ const SoundPicker = ({
         onChange={handleAddFileChange}
       />
 
-      {menu.menuKey !== null && (
+      {menu.renderKey !== null && (
         <ListPopup
-          open
+          open={menu.menuKey !== null}
           ariaLabel={t('common.more')}
-          position={menu.menuPosition ?? undefined}
+          position={menu.renderPosition ?? undefined}
           onClose={menu.close}
           items={menuItems}
           onSelect={(id) => {

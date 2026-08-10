@@ -12,18 +12,22 @@ vi.mock('@components/main/Modal/FloatingPopup', () => ({
 
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   default: ({
+    open,
     color,
     onColorChangeComplete,
   }: {
+    open: boolean;
     color: string;
     onColorChangeComplete: (color: string) => void;
-  }) => (
-    <button
-      data-testid="color-commit"
-      data-color={color}
-      onClick={() => onColorChangeComplete('#123456')}
-    />
-  ),
+  }) =>
+    // 퇴장 유예 동안 DOM은 남지만 open은 즉시 false - 닫힘 판정은 open이 소유
+    open ? (
+      <button
+        data-testid="color-commit"
+        data-color={color}
+        onClick={() => onColorChangeComplete('#123456')}
+      />
+    ) : null,
 }));
 
 const idleShadow: ElementShadowSpec = {
@@ -119,7 +123,65 @@ describe('ShadowControls', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('꺼져 있으면 설정하기 행이 숨는다', () => {
+  it('열린 피커는 마스터 토글을 꺼도 닫히지 않는다', async () => {
+    const onChange = vi.fn();
+    const onEnabledChange = vi.fn();
+    const render = (enabled: boolean) =>
+      act(() => {
+        root.render(
+          <ShadowControls
+            idleShadow={{ ...idleShadow, enabled }}
+            activeShadow={{ ...activeShadow, enabled: false }}
+            onChange={onChange}
+            onEnabledChange={onEnabledChange}
+            t={t}
+          />,
+        );
+      });
+
+    render(true);
+    act(() => findButton('configure')?.click());
+    expect(
+      document.querySelector('[data-testid="floating-popup"]'),
+    ).not.toBeNull();
+
+    // 끄기 - enabled와 값 편집은 저장 경로가 분리돼 있어 피커를 끊을 이유가 없다
+    act(() => host.querySelector<HTMLElement>('[role="switch"]')?.click());
+    await flushDeferredCommit();
+    expect(onEnabledChange).toHaveBeenLastCalledWith(false);
+    render(false);
+
+    expect(
+      document.querySelector('[data-testid="floating-popup"]'),
+    ).not.toBeNull();
+
+    // 꺼진 채로 값을 바꿔도 되살아나지 않는다
+    act(() => findButton('shadowActive')?.click());
+    const swatch = Array.from(
+      document
+        .querySelector('[data-testid="floating-popup"]')!
+        .querySelectorAll('button'),
+    ).find(
+      (button) =>
+        button.textContent !== 'shadowIdle' &&
+        button.textContent !== 'shadowActive',
+    );
+    act(() => swatch?.click());
+    act(() =>
+      document
+        .querySelector<HTMLElement>('[data-testid="color-commit"]')
+        ?.click(),
+    );
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      'active',
+      { ...activeShadow, enabled: false, color: '#123456' },
+      { color: '#123456' },
+    );
+    expect(onEnabledChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('꺼져 있어도 설정하기 행이 남아 값을 미리 맞출 수 있다', () => {
     act(() => {
       root.render(
         <ShadowControls
@@ -135,7 +197,12 @@ describe('ShadowControls', () => {
     expect(
       host.querySelector('[role="switch"]')?.getAttribute('aria-checked'),
     ).toBe('false');
-    expect(findButton('configure')).toBeUndefined();
+    // enabled와 값은 저장 경로가 분리돼 있어 꺼진 상태로도 편집 가능해야 한다.
+    // 다른 토글들과 같은 문법 - 조건부 렌더로 되돌아가면 이 테스트가 잡는다
+    const configure = findButton('configure');
+    expect(configure).toBeDefined();
+    expect(configure?.closest('[inert]')).toBeNull();
+    expect(configure?.hasAttribute('disabled')).toBe(false);
   });
 
   it('배치 anyEnabled가 대표값 대신 토글 표시를 결정한다', async () => {

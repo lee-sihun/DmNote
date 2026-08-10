@@ -1,6 +1,13 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, {
+  useContext,
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+} from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import FloatingPopup from './FloatingPopup';
+import { FloatingPopupMotionContext } from './floatingPopupMotion';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
 import { useLenis } from '@hooks/useLenis';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
@@ -149,6 +156,7 @@ const SubMenu = ({
   onRequestClose: () => void;
 }) => {
   const subMenuRef = useRef<HTMLDivElement>(null);
+  const parentMotionState = useContext(FloatingPopupMotionContext);
   const siblingActiveRef = useRef<{
     id: string | null;
     close: (() => void) | null;
@@ -160,11 +168,13 @@ const SubMenu = ({
     top: number;
   } | null>(null);
 
+  // 부모가 닫히는 동안 서브메뉴는 렌더를 멈추므로 등록도 함께 풀어야 한다.
+  // parentMotionState를 의존성에서 빼면 해제 없이 스택에 남아 Escape 순서가 뒤집힌다
   useLayoutEffect(() => {
     const element = subMenuRef.current;
-    if (!element) return;
+    if (!element || parentMotionState === 'closing') return;
     return registerPopupLayer(element);
-  }, [anchorRect]);
+  }, [anchorRect, parentMotionState]);
 
   // 최상위 서브메뉴만 키보드 종료를 소유
   useEffect(() => {
@@ -229,7 +239,9 @@ const SubMenu = ({
     wheelMultiplier: 0.7,
   });
 
-  if (!anchorRect) return null;
+  // 부모가 닫히기 시작하면 서브메뉴는 잔상 없이 즉시 걷는다. 남겨두면 body 포털이라
+  // 부모 페이드와 무관하게 선명히 떠 있고 Escape 소유권도 계속 물고 있다
+  if (!anchorRect || parentMotionState === 'closing') return null;
 
   // body 포털 필수 — 부모 팝업의 backdrop-filter가 fixed의 containing block이 되어
   // 뷰포트 좌표가 어긋나는 것 방지. 호버 유지는 onMouseEnter/Leave 콜백으로 연결
@@ -515,7 +527,7 @@ const ListPopup = ({
 
   // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
   const defaultClassName =
-    'z-40 bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
+    'dmn-motion z-40 bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
   const { needsScroll, maxHeight } = getListScrollMetrics(

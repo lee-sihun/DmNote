@@ -21,6 +21,9 @@ import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import type { ShortcutBinding } from '@src/types/settings/shortcuts';
 import FloatingPopup from '@components/main/Modal/FloatingPopup';
+import { useModalPresence } from '@hooks/ui/usePopupPresence';
+import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
+import PopupExit from '@components/main/Modal/PopupExit';
 import Palette from '@components/main/Modal/content/pickers/Palette';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -273,17 +276,18 @@ export default function App() {
   });
 
   // Global Color Picker 상태
-  const colorPickerCallbackRef = useRef<((color: string) => void) | null>(null);
-  const colorPickerCompleteCallbackRef = useRef<
-    ((color: string) => void) | null
-  >(null);
   const colorPickerCloseCallbackRef = useRef<(() => void) | null>(null);
+  // 콜백은 ref가 아니라 열림 상태에 함께 싣는다. 퇴장 유예 동안 다른 피커가
+  // 열리면 ref는 이미 새 주인을 가리켜, 옛 피커의 마지막 커밋이 엉뚱한 대상에 꽂힌다.
+  // 상태에 실으면 엘리먼트가 그 세션의 콜백을 그대로 들고 퇴장한다
   const [colorPickerState, setColorPickerState] = useState<{
     isOpen: boolean;
     color: string;
     position?: { x: number; y: number };
     id?: string;
     referenceElement?: HTMLElement;
+    onChange?: (color: string) => void;
+    onComplete?: (color: string) => void;
   }>({
     isOpen: false,
     color: '#FFFFFF',
@@ -468,6 +472,22 @@ export default function App() {
     callback?.();
   };
 
+  // 노트 설정 모달 수명 - 퇴장 모션이 도는 동안 마운트를 유지한다.
+  // 설정값도 같이 붙잡는다. 스토어가 먼저 비면 잔상이 빈 카드가 된다
+  const noteSettingOpen = Boolean(
+    noteEffect && isNoteSettingOpen && noteSettings,
+  );
+  const noteSettingPresence = useModalPresence(noteSettingOpen);
+  const shownNoteSettings = useRetainedWhileOpen(noteSettingOpen, noteSettings);
+
+  // 닫으면 정보와 최신 여부가 함께 비워진다. isLatestVersion은 모달 화면을
+  // 가르는 값이라 따로 두면 퇴장 구간에 반대 화면으로 뒤집힌다 - 한 스냅샷으로 묶는다
+  const updateModalOpen = (updateAvailable || isLatestVersion) && !!updateInfo;
+  const shownUpdate = useRetainedWhileOpen(updateModalOpen, {
+    info: updateInfo,
+    isLatestVersion,
+  });
+
   const handleAlertCancel = () => {
     const callback = cancelCallbackRef.current;
     closeAlert();
@@ -577,9 +597,6 @@ export default function App() {
     onClose?: () => void;
     onColorChangeComplete?: (color: string) => void;
   }) => {
-    colorPickerCallbackRef.current = options.onColorChange;
-    colorPickerCompleteCallbackRef.current =
-      options.onColorChangeComplete || null;
     colorPickerCloseCallbackRef.current = options.onClose || null;
     setColorPickerState({
       isOpen: true,
@@ -587,6 +604,8 @@ export default function App() {
       position: options.position,
       id: options.id,
       referenceElement: options.referenceElement,
+      onChange: options.onColorChange,
+      onComplete: options.onColorChangeComplete,
     });
   };
 
@@ -594,9 +613,9 @@ export default function App() {
     if (colorPickerCloseCallbackRef.current) {
       colorPickerCloseCallbackRef.current();
     }
+    // 세션 콜백은 지우지 않는다. 퇴장 중 언마운트 커밋이 아직 남아 있고,
+    // 그 커밋은 이 세션의 대상으로 가야 한다
     setColorPickerState((prev) => ({ ...prev, isOpen: false }));
-    colorPickerCallbackRef.current = null;
-    colorPickerCompleteCallbackRef.current = null;
     colorPickerCloseCallbackRef.current = null;
   };
 
@@ -634,17 +653,15 @@ export default function App() {
     };
   });
 
+  // 콜백을 상태에서 꺼내므로 이 클로저는 열림 세션에 묶인다.
+  // 엘리먼트가 붙잡히면 클로저도 함께 붙잡혀 퇴장 구간의 마지막 커밋이 제 대상으로 간다
   const handleGlobalColorChange = (newColor: string) => {
     setColorPickerState((prev) => ({ ...prev, color: newColor }));
-    if (colorPickerCallbackRef.current) {
-      colorPickerCallbackRef.current(newColor);
-    }
+    colorPickerState.onChange?.(newColor);
   };
 
   const handleGlobalColorChangeComplete = (newColor: string) => {
-    if (colorPickerCompleteCallbackRef.current) {
-      colorPickerCompleteCallbackRef.current(newColor);
-    }
+    colorPickerState.onComplete?.(newColor);
   };
 
   const colorPickerStateRef = useRef(colorPickerState);
@@ -771,23 +788,25 @@ export default function App() {
         onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
         primaryButtonRef={primaryButtonRef}
       />
-      {palette && (
-        <FloatingPopup
-          open={palette}
-          ariaLabel={t('tooltip.palette')}
-          referenceRef={primaryButtonRef}
-          placement="top"
-          offset={25}
-          onClose={handlePaletteClose}
-          className="z-50"
-          contentMountStrategy="after-paint"
-        >
-          <Palette color={color} onColorChange={handleColorChange} />
-        </FloatingPopup>
-      )}
-      {noteEffect && isNoteSettingOpen && noteSettings && (
+      {/* 조건부 마운트를 걷어내야 퇴장 모션이 돈다 - 팝업 수명은 FloatingPopup이 소유 */}
+      <FloatingPopup
+        open={palette}
+        ariaLabel={t('tooltip.palette')}
+        referenceRef={primaryButtonRef}
+        placement="top"
+        offset={25}
+        onClose={handlePaletteClose}
+        // 글래스와 모션은 팝업 표면이 소유 - ListPopup과 같은 구조
+        className="dmn-motion z-50 flex flex-col justify-between rounded-popup bg-glass backdrop-glass-popup shadow-elevation-2 p-[8px]"
+        contentMountStrategy="after-paint"
+      >
+        <Palette color={color} onColorChange={handleColorChange} />
+      </FloatingPopup>
+      {noteSettingPresence.mounted && shownNoteSettings && (
         <NoteSettingModal
-          settings={noteSettings}
+          key={noteSettingPresence.cycle}
+          motionState={noteSettingPresence.state}
+          settings={shownNoteSettings}
           onClose={() => setIsNoteSettingOpen(false)}
           onSave={async (normalized) => {
             try {
@@ -821,33 +840,37 @@ export default function App() {
         onConfirm={handleCustomDialogConfirm}
         onCancel={handleCustomDialogCancel}
       />
-      {colorPickerState.isOpen && (
-        <ColorPicker
-          open={colorPickerState.isOpen}
-          color={colorPickerState.color}
-          onColorChange={handleGlobalColorChange}
-          onColorChangeComplete={handleGlobalColorChangeComplete}
-          onClose={closeColorPicker}
-          position={colorPickerState.position}
-          referenceRef={
-            colorPickerState.referenceElement
-              ? { current: colorPickerState.referenceElement }
-              : undefined
-          }
-          offsetY={colorPickerState.referenceElement ? 10 : -80}
-          placement="right"
-          solidOnly={true}
-          portalToBody={true}
-          closeOnScroll={true}
-        />
-      )}
-      {(updateAvailable || isLatestVersion) && updateInfo && (
+      <PopupExit open={colorPickerState.isOpen}>
+        {colorPickerState.isOpen ? (
+          <ColorPicker
+            open={colorPickerState.isOpen}
+            color={colorPickerState.color}
+            onColorChange={handleGlobalColorChange}
+            onColorChangeComplete={handleGlobalColorChangeComplete}
+            onClose={closeColorPicker}
+            position={colorPickerState.position}
+            referenceRef={
+              colorPickerState.referenceElement
+                ? { current: colorPickerState.referenceElement }
+                : undefined
+            }
+            offsetY={colorPickerState.referenceElement ? 10 : -80}
+            placement="right"
+            solidOnly={true}
+            portalToBody={true}
+            closeOnScroll={true}
+          />
+        ) : null}
+      </PopupExit>
+      {/* 열림 여부로 걷어내면 퇴장 모션이 돌 자리가 없다 - 수명은 모달이 소유하고
+          여기서는 마지막 열림 정보만 붙잡아 잔상이 빈 카드가 되는 걸 막는다 */}
+      {shownUpdate.info && (
         <UpdateModal
-          isOpen={updateAvailable || isLatestVersion}
-          updateInfo={updateInfo}
+          isOpen={updateModalOpen}
+          updateInfo={shownUpdate.info}
           onClose={handleUpdateModalClose}
           onSkipVersion={skipVersion}
-          isLatestVersion={isLatestVersion}
+          isLatestVersion={shownUpdate.isLatestVersion}
           onPrimaryAction={handleUpdatePrimaryAction}
           primaryActionLabel={
             autoUpdateEnabled

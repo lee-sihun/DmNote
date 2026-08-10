@@ -6,6 +6,7 @@ import {
   useOptimisticBooleanCommit,
   type CommitStrategy,
 } from '@hooks/useOptimisticBooleanCommit';
+import { prefersReducedMotion } from '@utils/animation/motionPreferences';
 
 interface PanelToggleButtonProps {
   open: boolean;
@@ -62,10 +63,7 @@ const PanelToggleButton = ({
     animRef.current = null;
 
     // 직접 클릭이 아닌 외부 개폐는 페이드 없이 즉시 커밋
-    if (
-      isInstant() ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
+    if (isInstant() || prefersReducedMotion()) {
       chip.style.opacity = restState;
       return;
     }

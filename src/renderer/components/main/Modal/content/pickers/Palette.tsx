@@ -71,10 +71,8 @@ const Palette = ({ color, onColorChange }: PaletteProps) => {
   };
 
   return (
-    <div
-      className="flex flex-col justify-between rounded-popup bg-glass backdrop-glass-popup shadow-elevation-2 p-[8px]"
-      onClick={(e) => e.stopPropagation()}
-    >
+    // 표면 클래스는 호출부가 소유 - 박스를 만들지 않고 클릭만 가로챈다
+    <div className="contents" onClick={(e) => e.stopPropagation()}>
       <div className="grid grid-cols-5 gap-x-[8px] gap-y-[8px]">
         {colors.map((colorItem) => (
           <Color

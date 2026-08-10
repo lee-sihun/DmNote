@@ -36,16 +36,13 @@ const Checkbox = ({
       ref={ref}
       role="switch"
       aria-checked={visualChecked}
-      className={`relative w-[30px] h-[18px] rounded-full cursor-pointer transition-colors duration-base ease-out-expo ${
+      className={`dmn-toggle-track relative w-[28px] h-[16px] rounded-full cursor-pointer transition-colors duration-base ease-out-expo ${
         visualChecked ? 'bg-accent' : 'bg-line-strong hover:bg-white/[0.18]'
       }`}
       onClick={handleClick}
     >
-      <div
-        className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-elevation-1 transition-all duration-base ease-out-expo ${
-          visualChecked ? 'left-[14px]' : 'left-[2px]'
-        }`}
-      />
+      {/* 이동량은 --ui-toggle-travel이 소유, 트랙 28 - 노브 12 - 인셋 2×2 */}
+      <div className="dmn-toggle-thumb absolute top-[2px] left-[2px] w-[12px] h-[12px] rounded-full bg-white shadow-elevation-1" />
     </div>
   );
 };

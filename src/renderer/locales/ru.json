@@ -218,6 +218,9 @@
     "more": "Ещё",
     "dialog": "Диалог"
   },
+  "numberInput": {
+    "expressionHint": "Можно использовать: + - * / ( )"
+  },
   "tooltip": {
     "github": "GitHub",
     "issue": "Проблема",

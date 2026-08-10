@@ -9,6 +9,12 @@ class ResizeObserverStub {
   disconnect() {}
 }
 
+// 닫힘 모션이 도는 동안 메뉴 DOM은 잠깐 남는다. 열려 있는 메뉴만 센다
+const openListbox = () =>
+  document.querySelector(
+    '[role="listbox"]:not([data-dmn-motion-state="closing"])',
+  );
+
 describe('Dropdown keyboard contract', () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -86,7 +92,7 @@ describe('Dropdown keyboard contract', () => {
     });
 
     expect(onChange).toHaveBeenCalledWith('two');
-    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(openListbox()).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
 
@@ -121,7 +127,7 @@ describe('Dropdown keyboard contract', () => {
     );
     await act(async () => options[1]?.click());
 
-    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(openListbox()).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(trigger?.textContent).toContain('Two');
     expect(onChange).not.toHaveBeenCalled();
@@ -216,7 +222,7 @@ describe('Dropdown keyboard contract', () => {
     });
 
     expect(document.activeElement?.textContent).toBe('After');
-    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(openListbox()).toBeNull();
   });
 
   it('keeps Tab navigation inside a parent popup layer', async () => {
@@ -266,7 +272,7 @@ describe('Dropdown keyboard contract', () => {
     });
 
     expect(document.activeElement?.textContent).toBe('Inside after');
-    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(openListbox()).toBeNull();
   });
 
   it('closes and restores trigger focus when open options become empty', async () => {
@@ -296,11 +302,11 @@ describe('Dropdown keyboard contract', () => {
         }),
       );
     });
-    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(openListbox()).not.toBeNull();
 
     await renderOptions([]);
 
-    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(openListbox()).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(trigger?.getAttribute('aria-expanded')).toBe('false');
   });
@@ -334,7 +340,7 @@ describe('Dropdown keyboard contract', () => {
         }),
       );
     });
-    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(openListbox()).not.toBeNull();
 
     await act(async () => {
       document.dispatchEvent(
@@ -345,7 +351,7 @@ describe('Dropdown keyboard contract', () => {
         }),
       );
     });
-    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(openListbox()).toBeNull();
     expect(closeModal).not.toHaveBeenCalled();
 
     await act(async () => {

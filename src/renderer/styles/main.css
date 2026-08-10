@@ -64,7 +64,8 @@ body.dmn-custom-cursor * {
 /* 글래스 백드롭 — 블러에 밝기·채도 클램프를 결합.
    비용 지배 요인은 반경이 아니라 표면 수·면적·아래 damage(재필터 트리거) —
    Skia가 큰 반경을 저해상도 다운샘플로 처리해 반경 비용은 평탄화됨.
-   글래스는 일시 표면(모달·팝업) 전용 유지, 표면 자체에 transform 애니메이션 금지 */
+   글래스는 일시 표면(모달·팝업) 전용 유지. 표면 transform은 등퇴장 한 번만
+   허용하고, 상주 중 반복 애니메이션은 금지 (프레임마다 재필터를 부름) */
 .backdrop-glass {
   -webkit-backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
@@ -327,6 +328,58 @@ body.dmn-custom-cursor * {
   transition: none !important;
 }
 
+/* 토글 노브 - 이동은 translate로만. left를 쓰면 매 프레임 레이아웃을 다시 잡는다.
+   오버슈트는 keyframe이 아니라 이징 커브가 만든다. 토글은 연타되는 컨트롤이라
+   keyframe이면 두 번째 클릭이 0에서 다시 재생돼 노브가 뒤로 튄다.
+   외부 상태 변경의 차단은 위 data-dmn-instant 규칙이 이미 소유 */
+.dmn-toggle-thumb {
+  translate: 0 0;
+  /* 손을 뗀 뒤 원형으로 돌아오는 clock. 크기는 Tailwind 유틸이 소유하고
+     여기서는 전환만 건다 */
+  transition: translate var(--ui-toggle-duration) var(--ui-toggle-ease),
+    height var(--ui-toggle-release-duration) var(--ui-ease-out),
+    margin-top var(--ui-toggle-release-duration) var(--ui-ease-out);
+}
+
+[role='switch'][aria-checked='true'] .dmn-toggle-thumb {
+  translate: var(--ui-toggle-travel) 0;
+}
+
+/* 누르고 있는 동안 노브가 캡슐로 눌린다. 들어갈 때는 천천히, 나올 때는 빠르게 -
+   duration을 :active 쪽에 따로 걸어 비대칭으로 만든다.
+   커진 만큼 margin으로 절반씩 되밀어 제자리에서 퍼지게 한다. 진행 방향으로
+   퍼뜨리려면 기준변이 aria-checked를 따라가야 하는데, 손을 떼는 순간 기준이
+   뒤집히면서 아직 원형으로 안 돌아온 상태라 노브가 툭 튄다.
+   중심 유지면 그 충돌이 생기지 않고, 양쪽 다 인셋 안에서 끝난다.
+   이동은 translate라 크기 전환과 속성이 갈려 서로 덮어쓰지 않는다 */
+[role='switch']:active .dmn-toggle-thumb {
+  height: var(--ui-toggle-press-height);
+  /* 줄어든 만큼 되밀어 제자리에서 눌리게 한다 */
+  margin-top: calc(
+    (var(--ui-toggle-thumb-size) - var(--ui-toggle-press-height)) / 2
+  );
+  transition: translate var(--ui-toggle-duration) var(--ui-toggle-ease),
+    height var(--ui-toggle-press-duration) var(--ui-toggle-press-ease),
+    margin-top var(--ui-toggle-press-duration) var(--ui-toggle-press-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 트랙도 함께 꺼야 한다. 노브만 멈추면 노브는 즉시 점프하는데
+     트랙 색만 180ms 동안 흐르며 두 clock이 갈라진다.
+     Tailwind 유틸(transition-colors)을 이기려면 특이도가 한 단계 높아야 한다 */
+  [role='switch'].dmn-toggle-track {
+    transition: none;
+  }
+
+  .dmn-toggle-thumb,
+  [role='switch']:active .dmn-toggle-thumb {
+    transition: none;
+    /* 전환이 없으면 눌림이 깜빡임으로 읽히므로 변형 자체를 끈다 */
+    height: var(--ui-toggle-thumb-size);
+    margin-top: 0;
+  }
+}
+
 /* 눈 토글의 사선 드로우 모션은 EyeToggleIcon.tsx에서 WAAPI로 처리 —
    드로우·이레이즈 모두 좌상→우하 한 방향 관통 스와이프 */
 
@@ -378,36 +431,143 @@ body.dmn-custom-cursor * {
   animation: tooltipFadeIn var(--ui-duration-fast) var(--ui-ease-out);
 }
 
-/* 종료 상태는 클래스 자연값 — to 블록 생략 */
-@keyframes modalScale {
-  from {
-    transform: scale(0.97);
-    opacity: 0;
+/* ===== 팝업 등퇴장 ===== */
+
+/* 상태는 팝업 표면이 갖고 값은 상속으로 내려간다. 글래스를 소유한 노드가
+   표면 자신일 때도(ListPopup) 자식 카드일 때도(피커) 있는데, 조상에 opacity나
+   transform이 걸리면 backdrop root가 생겨 자손 블러가 죽는다. 커스텀 속성은
+   상속되니 모션 노드가 어디에 있든 규칙 하나로 닿는다.
+   keyframe이 아니라 transition인 것도 의도 - 닫히는 중 재오픈이
+   현재 값에서 이어져야 한다 (keyframe은 처음부터 다시 재생) */
+
+/* 기본 다이얼 - 드롭다운, 팝오버, 피커 */
+[data-dmn-motion-state] {
+  --dmn-enter-duration: var(--ui-popup-enter-duration);
+  --dmn-exit-duration: var(--ui-popup-exit-duration);
+  --dmn-enter-scale: var(--ui-popup-enter-scale);
+  --dmn-exit-scale: var(--ui-popup-exit-scale);
+  --dmn-motion-duration: var(--dmn-enter-duration);
+}
+
+/* 카드 모달은 같은 상태 기계에 다이얼만 교체 */
+[data-dmn-motion-state][data-dmn-motion-variant='modal'] {
+  --dmn-enter-duration: var(--ui-modal-enter-duration);
+  --dmn-exit-duration: var(--ui-modal-exit-duration);
+  --dmn-enter-scale: var(--ui-modal-enter-scale);
+  --dmn-exit-scale: var(--ui-modal-exit-scale);
+}
+
+/* 등장 직전 - duration 0으로 시작 값을 확정시킨 뒤 open으로 넘어간다 */
+[data-dmn-motion-state='entering'] {
+  --dmn-motion-duration: 0s;
+  --dmn-motion-opacity: 0;
+  --dmn-motion-scale: var(--dmn-enter-scale);
+}
+
+/* 닫는 의미는 이미 끝난 상태 - 시각 잔상만 남으므로 입력을 받지 않는다 */
+[data-dmn-motion-state='closing'] {
+  --dmn-motion-duration: var(--dmn-exit-duration);
+  --dmn-motion-opacity: 0;
+  --dmn-motion-scale: var(--dmn-exit-scale);
+  pointer-events: none;
+}
+
+/* 실제 배치 방향에서 원점을 정한다. transformOrigin을 인라인 style로 박으면
+   유저 커스텀 CSS가 덮을 수 없다. 접두사 규칙이 먼저, 정렬까지 맞는 규칙이
+   나중 - 특이도가 같아 순서가 승부를 낸다 */
+[data-dmn-placement^='bottom'] {
+  --dmn-motion-origin: top center;
+}
+
+[data-dmn-placement^='top'] {
+  --dmn-motion-origin: bottom center;
+}
+
+[data-dmn-placement^='right'] {
+  --dmn-motion-origin: left center;
+}
+
+[data-dmn-placement^='left'] {
+  --dmn-motion-origin: right center;
+}
+
+[data-dmn-placement='bottom-start'] {
+  --dmn-motion-origin: top left;
+}
+
+[data-dmn-placement='bottom-end'] {
+  --dmn-motion-origin: top right;
+}
+
+[data-dmn-placement='top-start'] {
+  --dmn-motion-origin: bottom left;
+}
+
+[data-dmn-placement='top-end'] {
+  --dmn-motion-origin: bottom right;
+}
+
+[data-dmn-placement='right-start'] {
+  --dmn-motion-origin: left top;
+}
+
+[data-dmn-placement='right-end'] {
+  --dmn-motion-origin: left bottom;
+}
+
+[data-dmn-placement='left-start'] {
+  --dmn-motion-origin: right top;
+}
+
+[data-dmn-placement='left-end'] {
+  --dmn-motion-origin: right bottom;
+}
+
+/* 모션 노드 - 상속받은 값만 소비한다. 이 클래스는 글래스를 소유한 노드에 붙인다.
+   상태 속성이 없으면 완전히 보이는 상태라, 상태 플립이 실패해도
+   팝업이 안 보이는 사고는 나지 않는다.
+   dmn-motion-content는 글래스가 외자식에게 있을 때(모달 카드) 쓰는 위임형 -
+   래퍼에 직접 걸면 backdrop root가 생겨 카드 블러가 죽는다 */
+.dmn-motion,
+.dmn-motion-content > * {
+  transform-origin: var(--dmn-motion-origin, center);
+  opacity: var(--dmn-motion-opacity, 1);
+  transform: scale(var(--dmn-motion-scale, 1));
+  transition: opacity var(--dmn-motion-duration, var(--ui-popup-enter-duration))
+      var(--ui-popup-ease),
+    transform var(--dmn-motion-duration, var(--ui-popup-enter-duration))
+      var(--ui-popup-ease);
+}
+
+/* 등장은 틴트만 보간 - blur 반경 보간은 전화면 재필터라 금지.
+   opacity도 transition 목록에 두는 건 닫히다 다시 열릴 때를 위해서다.
+   퇴장 규칙에만 있으면 되돌아올 때 현재 값에서 이어지지 않고 1로 튄다 */
+.dmn-scrim-motion {
+  transition: background-color
+      var(--dmn-motion-duration, var(--ui-modal-enter-duration))
+      var(--ui-popup-ease),
+    opacity var(--dmn-motion-duration, var(--ui-modal-enter-duration))
+      var(--ui-popup-ease);
+}
+
+[data-dmn-motion-state='entering'] .dmn-scrim-motion {
+  background-color: transparent;
+}
+
+/* 퇴장은 레이어를 통째로 페이드한다. 틴트만 빼면 블러가 끝까지 남아 있다가
+   언마운트 순간 툭 끊긴다. 반경은 상수라 재필터가 아니라 합성 비용만 든다 */
+[data-dmn-motion-state='closing'] .dmn-scrim-motion {
+  opacity: 0;
+  transition: opacity var(--dmn-motion-duration, var(--ui-modal-exit-duration))
+    var(--ui-popup-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-motion,
+  .dmn-motion-content > *,
+  .dmn-scrim-motion {
+    transition: none;
   }
-}
-
-/* 래퍼가 아닌 콘텐츠 루트가 직접 애니메이션 — opacity가 1 미만인 조상은
-   backdrop root가 되어 글래스 블러가 죽었다가 애니메이션이 끝나는 순간 튐.
-   블러 소유 엘리먼트 자신의 페이드는 블러를 살린 채 진행됨 (Dropdown 참고) */
-.animate-modal-scale > * {
-  animation: modalScale var(--ui-duration-base) var(--ui-ease-out) both;
-}
-
-/* FloatingPopup 래퍼용 — 같은 원리로 페이드를 래퍼가 아닌 콘텐츠 루트(글래스 노드)에 적용 */
-.animate-popup-fade > * {
-  animation: tooltipFadeIn var(--ui-duration-fast) var(--ui-ease-out);
-}
-
-/* 스크림 틴트만 보간 — 종료 상태는 클래스 자연값
-   backdrop-filter 보간 금지: 애니메이션 내내 풀스크린 재필터 (Windows 렉) */
-@keyframes modalScrim {
-  from {
-    background-color: transparent;
-  }
-}
-
-.animate-modal-scrim {
-  animation: modalScrim var(--ui-duration-fast) var(--ui-ease-out) both;
 }
 
 /* 스테이지 콘텐츠 등장 — 비동기 준비(파형 디코드 등)를 마친 콘텐츠의 한 박자 페이드 */
@@ -546,8 +706,6 @@ body.dmn-custom-cursor * {
 /* 모션 축소 설정 존중 — 이동은 제거, 표시 자체는 유지 */
 @media (prefers-reduced-motion: reduce) {
   .tooltip-fade-in,
-  .animate-modal-scale > *,
-  .animate-modal-scrim,
   .animate-stage-in,
   .animate-pulse {
     animation: none;
@@ -562,5 +720,606 @@ body.dmn-custom-cursor * {
   .dmn-panel-page[data-active='false'] {
     transform: none;
     filter: none;
+  }
+}
+
+/* ===== 툴바 아이콘 호버 모션 =====
+   호버 진입에만 한 번 재생하고 멈춘다. 클릭에는 재생하지 않는다 -
+   누르는 순간은 팝업이 열리거나 도구가 바뀌는 시점이라, 아이콘까지 움직이면
+   정작 봐야 할 변화를 가린다.
+   재생 상태는 버튼이 data 속성으로 들고 값은 keyframe이 소유한다.
+   :hover에 직접 걸면 커서가 중간에 빠질 때 잘려서 아이콘이 튄다.
+   모든 keyframe이 제자리에서 시작해 제자리로 끝나므로 되감기가 필요 없다.
+   기어만 예외 - 톱니가 6개라 60°에서 도형이 완전히 겹친다.
+
+   변형은 전부 transform 하나로 쓴다. translate/rotate/scale 개별 속성은
+   SVG 요소에서 엔진별로 안 먹는 경우가 있어 아무 일도 안 일어난 것처럼 보인다.
+   같은 이유로 EyeToggleIcon의 사선 드로우도 transform을 쓴다.
+
+   animation은 단축이 아니라 개별 속성으로 건다 - 단축은 animation-delay를
+   0으로 되돌려서 파트 시차(페이더, 눈 동공)가 사라진다 */
+
+/* 파트가 뷰박스를 넘어가는 아이콘에만 붙인다 (레이어의 윗장이 위로 나간다).
+   전부에 걸면 안 되는데, 눈 아이콘은 숨긴 사선을 뷰포트 밖에 세워두고
+   클리핑으로 감추는 구조라 넘침을 열면 사선이 툴바로 삐져나온다 */
+[data-dmn-icon] {
+  overflow: visible;
+}
+
+/* 아이콘을 통째로 움직이는 래퍼. svg 루트가 아니라 평범한 HTML 박스라
+   transform-origin: center가 아이콘의 실제 한가운데로 확정된다.
+   플렉스로 잡아 baseline 위에 뜨는 인라인 배치를 피한다 -
+   서브픽셀 위치에서 시작하면 첫 프레임에 위치가 튄다 */
+.dmn-icon-motion {
+  display: inline-flex;
+  transform-origin: center;
+  /* 평상시에도 합성 레이어를 유지한다. 없으면 transform: none 상태와
+     애니메이션 사이를 오갈 때마다 레이어가 승격·해제되고, 그 경계에서
+     14px 아이콘의 래스터가 다시 스냅돼 첫 프레임이 세로로 튄다
+     (WebKit 가속 합성 계열 — tasks/lessons.md 2026-07-12 참고).
+     .dmn-icon-swap과 달리 여기서는 will-change를 켠다 -
+     대상이 툴바 아이콘 11개로 고정이라 레이어가 늘어날 여지가 없다 */
+  will-change: transform;
+}
+
+/* 축은 항상 움직이는 것 자신의 중심. 모서리를 축으로 삼으면 작은 아이콘에서는
+   회전이 아니라 위치가 흔들리는 걸로 보인다.
+   파트를 여러 개 움직일 때도 같은 원칙이라, 한 방향으로만 밀지 말고
+   서로 반대로 움직여 이동량을 상쇄시킨다 (레이어, 탭 목록) */
+[data-dmn-icon-motion] {
+  animation-delay: var(--dmn-icon-delay, 0ms);
+  animation-fill-mode: none;
+  animation-iteration-count: 1;
+}
+
+/* svg 안의 파트가 움직이는 경우. CSS 박스가 없어 fill-box가 그 도형의 bbox로 잡힌다.
+   래퍼와 같은 이유로 레이어를 미리 잡아둔다 */
+svg [data-dmn-icon-motion] {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='expand'] {
+  animation-name: dmnIconExpand;
+  animation-duration: var(--ui-icon-expand-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='wobble'] {
+  animation-name: dmnIconWobble;
+  animation-duration: var(--ui-icon-wobble-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='tilt'] {
+  animation-name: dmnIconTilt;
+  animation-duration: var(--ui-icon-tilt-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='sweep'] {
+  animation-name: dmnIconSweep;
+  animation-duration: var(--ui-icon-sweep-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='nod'] {
+  animation-name: dmnIconNod;
+  animation-duration: var(--ui-icon-nod-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='rewind'] {
+  animation-name: dmnIconRewind;
+  animation-duration: var(--ui-icon-nod-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='turn'] {
+  animation-name: dmnIconTurn;
+  animation-duration: var(--ui-icon-turn-duration);
+  animation-timing-function: var(--ui-icon-ease-back);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='fan'] {
+  animation-name: dmnIconFan;
+  animation-duration: var(--ui-icon-fan-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='ride'] {
+  animation-name: dmnIconRide;
+  animation-duration: var(--ui-icon-fan-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='shift-right'] {
+  animation-name: dmnIconShiftRight;
+  animation-duration: var(--ui-icon-shift-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='shift-down'] {
+  animation-name: dmnIconShiftDown;
+  animation-duration: var(--ui-icon-shift-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='shift-left'] {
+  animation-name: dmnIconShiftLeft;
+  animation-duration: var(--ui-icon-shift-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='shift-up'] {
+  animation-name: dmnIconShiftUp;
+  animation-duration: var(--ui-icon-shift-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+/* 팔레트는 구멍마다 delay를 주면 재생 시간이 간격보다 길어 넷이 겹쳐 돌고,
+   순차가 아니라 한 번 깜빡이는 걸로 보인다. 네 개가 같은 clock을 쓰고
+   구멍이 막혀 있는 시간만 다르게 줘서 터지는 순간을 11%씩 민다.
+   이징은 구간마다 달라서 keyframe이 직접 들고 있다 */
+[data-dmn-icon-play] [data-dmn-icon-motion='punch-1'] {
+  animation-name: dmnIconPunch1;
+  animation-duration: var(--ui-icon-punch-duration);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='punch-2'] {
+  animation-name: dmnIconPunch2;
+  animation-duration: var(--ui-icon-punch-duration);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='punch-3'] {
+  animation-name: dmnIconPunch3;
+  animation-duration: var(--ui-icon-punch-duration);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='punch-4'] {
+  animation-name: dmnIconPunch4;
+  animation-duration: var(--ui-icon-punch-duration);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='eye-lid'] {
+  animation-name: dmnIconEyeLid;
+  animation-duration: var(--ui-icon-eye-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+[data-dmn-icon-play] [data-dmn-icon-motion='eye-pupil'] {
+  animation-name: dmnIconEyePupil;
+  animation-duration: var(--ui-icon-eye-duration);
+  animation-timing-function: var(--ui-icon-ease);
+}
+
+@keyframes dmnIconExpand {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.09);
+  }
+}
+
+/* 문지르는 물건이라 툴바에서 유일하게 여러 번 왕복한다 */
+@keyframes dmnIconWobble {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  22% {
+    transform: rotate(-8deg);
+  }
+
+  48% {
+    transform: rotate(5deg);
+  }
+
+  72% {
+    transform: rotate(-2deg);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes dmnIconTilt {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  45% {
+    transform: rotate(-7deg);
+  }
+}
+
+/* 크게 한 번 쓸고 아주 약한 반동만 남는다. 지우개와는 진폭이 아니라 횟수로 갈린다 */
+@keyframes dmnIconSweep {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  40% {
+    transform: rotate(-11deg);
+  }
+
+  72% {
+    transform: rotate(3deg);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes dmnIconNod {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  40% {
+    transform: translateY(1.5px);
+  }
+}
+
+@keyframes dmnIconRewind {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  42% {
+    transform: rotate(-14deg);
+  }
+}
+
+/* 톱니가 6개라 60°에서 도형이 완전히 겹친다. 되돌아오는 구간이 없는 유일한 아이콘 */
+@keyframes dmnIconTurn {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(60deg);
+  }
+}
+
+/* 도착점에서 머무는 구간(42~58%)이 동작을 읽을 시간을 준다 */
+@keyframes dmnIconFan {
+  0% {
+    transform: translateY(0);
+  }
+
+  42%,
+  58% {
+    transform: translateY(var(--dmn-icon-fan, 0px));
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dmnIconRide {
+  0% {
+    transform: translateY(0);
+  }
+
+  40%,
+  60% {
+    transform: translateY(var(--dmn-icon-ride, 0px));
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dmnIconShiftRight {
+  0% {
+    transform: translateX(0);
+  }
+
+  40%,
+  60% {
+    transform: translateX(8px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes dmnIconShiftDown {
+  0% {
+    transform: translateY(0);
+  }
+
+  40%,
+  60% {
+    transform: translateY(8px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dmnIconShiftLeft {
+  0% {
+    transform: translateX(0);
+  }
+
+  40%,
+  60% {
+    transform: translateX(-8px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes dmnIconShiftUp {
+  0% {
+    transform: translateY(0);
+  }
+
+  40%,
+  60% {
+    transform: translateY(-8px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* 크기를 조금 줄이는 건 이 크기에서 안 보인다. 0까지 닫아야 구멍이 사라지는 게 읽힌다.
+   닫힐 땐 ease-in으로 빠르게, 열릴 땐 오버슈트를 지나 자리를 잡는다 */
+@keyframes dmnIconPunch1 {
+  0% {
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+
+  11% {
+    transform: scale(0);
+  }
+
+  22% {
+    transform: scale(0);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  37% {
+    transform: scale(var(--ui-icon-punch-pop));
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  50%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes dmnIconPunch2 {
+  0% {
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+
+  11% {
+    transform: scale(0);
+  }
+
+  33% {
+    transform: scale(0);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  48% {
+    transform: scale(var(--ui-icon-punch-pop));
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  61%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes dmnIconPunch3 {
+  0% {
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+
+  11% {
+    transform: scale(0);
+  }
+
+  44% {
+    transform: scale(0);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  59% {
+    transform: scale(var(--ui-icon-punch-pop));
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  72%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes dmnIconPunch4 {
+  0% {
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
+
+  11% {
+    transform: scale(0);
+  }
+
+  55% {
+    transform: scale(0);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  70% {
+    transform: scale(var(--ui-icon-punch-pop));
+    animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  83%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 눈꺼풀이 좁혀지고 동공이 40ms 늦게 따라 눌린다. 두 겹이 다른 폭으로 움직여야
+   형태 없는 눌림이 아니라 초점으로 읽힌다.
+   동공은 눈꺼풀 그룹 안이라 두 배율이 곱해진다 - 세로 실효값 0.78 x 0.85 = 0.66.
+   사선은 이 그룹 밖이라 같이 눌리지 않고, 켜짐·꺼짐이 같은 모션이다 */
+@keyframes dmnIconEyeLid {
+  0% {
+    transform: scaleY(1);
+  }
+
+  42%,
+  52% {
+    transform: scaleY(0.78);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes dmnIconEyePupil {
+  0% {
+    transform: scale(1);
+  }
+
+  42%,
+  52% {
+    transform: scale(0.88, 0.85);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-dmn-icon-play] [data-dmn-icon-motion] {
+    animation-name: none;
+  }
+}
+
+/* 숫자 스텝 팝인 - 방향키로 값이 바뀐 자릿수만 재생한다.
+   input의 value는 브라우저가 그리는 단일 텍스트 노드라 자릿수를 따로 잡을 수 없어,
+   재생하는 동안만 같은 자리에 자릿수 span을 겹친다.
+   글자가 겹쳐 보이지 않게 input 쪽을 비우되 캐럿은 색을 따로 줘서 남긴다,
+   편집 중인 필드에서 캐럿까지 사라지면 포커스를 잃은 걸로 읽힌다 */
+.dmn-digit-pop-host {
+  color: transparent;
+  caret-color: var(--ui-fg);
+}
+
+/* input은 한 줄짜리 텍스트를 콘텐츠 박스 정중앙에 놓는다. 레이어도 같은 박스를 덮고
+   같은 줄 높이로 가운데를 잡아야 안 바뀐 자리가 제자리에 선다.
+   패딩은 셸(label)이 갖고 input은 0이라 두 박스가 정확히 겹친다.
+   자릿수가 아래에서 올라오는 동안 박스 밖으로 나가므로 클리핑하지 않는다 */
+.dmn-digit-pop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* 585에서 586으로 갈 때 5와 8까지 흔들리면 자릿수가 바뀐 게 아니라
+   숫자 전체가 깜빡인 걸로 읽힌다. 바뀐 자리만 재생 대상이다 */
+/* 단축이 아니라 개별 속성으로 건다 - 단축은 animation-delay를 0으로 되돌려
+   자릿수 시차가 선언 순서에 매달리게 된다 */
+.dmn-digit-pop > span[data-dmn-digit-changed] {
+  animation-name: dmnDigitPop;
+  animation-duration: var(--ui-digit-duration);
+  animation-timing-function: var(--ui-digit-ease);
+  animation-fill-mode: both;
+  animation-delay: calc(var(--ui-digit-stagger) * var(--dmn-digit-step, 0));
+}
+
+@keyframes dmnDigitPop {
+  from {
+    transform: translateY(
+      calc(var(--ui-digit-distance) * var(--dmn-digit-dir, 1))
+    );
+    opacity: 0;
+    filter: blur(var(--ui-digit-blur));
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-digit-pop > span[data-dmn-digit-changed] {
+    animation-name: none;
+  }
+}
+
+/* 확정할 수 없는 입력 - 값으로 만들 수 없다는 걸 한 번 털어서 알린다.
+   상자를 흔드는 것이라 transform만 쓰고 레이아웃은 건드리지 않는다 */
+.dmn-field-shake {
+  animation-name: dmnFieldShake;
+  animation-duration: var(--ui-shake-duration);
+  /* 감속은 keyframe이 구간마다 따로 건다 */
+  animation-timing-function: linear;
+}
+
+@keyframes dmnFieldShake {
+  0% {
+    transform: translateX(0);
+    animation-timing-function: var(--ui-shake-ease);
+  }
+
+  28.57% {
+    transform: translateX(var(--ui-shake-distance));
+    animation-timing-function: var(--ui-shake-ease);
+  }
+
+  57.14% {
+    transform: translateX(calc(var(--ui-shake-distance) * -1));
+    animation-timing-function: var(--ui-shake-ease);
+  }
+
+  78.57% {
+    transform: translateX(var(--ui-shake-overshoot));
+    animation-timing-function: var(--ui-shake-ease);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-field-shake {
+    animation-name: none;
   }
 }

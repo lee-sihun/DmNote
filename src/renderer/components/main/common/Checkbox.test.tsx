@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
 import React, { act } from 'react';
+import { readFileSync } from 'node:fs';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Checkbox from './Checkbox';
+
+const pxOf = (className: string, pattern: RegExp) => {
+  const match = className.match(pattern);
+  if (!match) throw new Error(`치수를 찾지 못함: ${pattern} in ${className}`);
+  return Number(match[1]);
+};
 
 describe('Checkbox commit 전략', () => {
   let host: HTMLDivElement;
@@ -122,5 +129,51 @@ describe('Checkbox commit 전략', () => {
     act(() => root.render(null));
 
     expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  it('노브 이동을 CSS가 잡을 수 있게 시각 상태와 훅을 노출한다', () => {
+    act(() => root.render(<Checkbox checked={false} onChange={vi.fn()} />));
+    const track = host.querySelector<HTMLElement>('[role="switch"]');
+    expect(host.querySelector('.dmn-toggle-thumb')).not.toBeNull();
+    expect(track?.getAttribute('aria-checked')).toBe('false');
+
+    act(() => root.render(<Checkbox checked={true} onChange={vi.fn()} />));
+    expect(track?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('이동량 토큰이 트랙·노브 치수와 맞는다', () => {
+    act(() => root.render(<Checkbox checked={false} onChange={vi.fn()} />));
+    const track = host.querySelector<HTMLElement>('[role="switch"]')!;
+    const thumb = host.querySelector<HTMLElement>('.dmn-toggle-thumb')!;
+    const trackWidth = pxOf(track.className, /w-\[(\d+)px\]/);
+    const thumbWidth = pxOf(thumb.className, /w-\[(\d+)px\]/);
+    const inset = pxOf(thumb.className, /left-\[(\d+)px\]/);
+    const tokens = readFileSync('src/renderer/styles/tokens.css', 'utf8');
+    const travel = Number(
+      tokens.match(/--ui-toggle-travel:\s*(\d+)px/)?.[1] ?? NaN,
+    );
+
+    expect(travel).toBe(trackWidth - thumbWidth - inset * 2);
+
+    const px = (name: string): number => {
+      const raw = tokens.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]?.trim();
+      if (!raw) return NaN;
+      const alias = raw.match(/^var\((--[\w-]+)\)$/);
+      if (alias) return px(alias[1]);
+      return Number(raw.match(/(\d+)px/)?.[1] ?? NaN);
+    };
+    expect(px('--ui-toggle-thumb-size')).toBe(thumbWidth);
+    expect(px('--ui-toggle-press-height')).toBeLessThan(thumbWidth);
+
+    const [, y1] =
+      tokens
+        .match(/--ui-toggle-ease:\s*cubic-bezier\(([^)]+)\)/)?.[1]
+        .split(',')
+        .map(Number) ?? [];
+    const at = (t: number) =>
+      3 * (1 - t) ** 2 * t * y1 + 3 * (1 - t) * t * t + t ** 3;
+    let peak = 1;
+    for (let t = 0; t <= 1; t += 0.005) peak = Math.max(peak, at(t));
+    expect((peak - 1) * travel).toBeLessThanOrEqual(inset);
   });
 });

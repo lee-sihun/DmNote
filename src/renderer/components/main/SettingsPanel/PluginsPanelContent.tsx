@@ -4,6 +4,8 @@ import { useTranslation } from '@contexts/useTranslation';
 import {
   FILL_DISABLED_CLASS,
   FILL_INTERACTIVE_CLASS,
+  FILL_QUIET_CLASS,
+  FILL_QUIET_DISABLED_CLASS,
   PANEL_FOOTER_BUTTON_CLASS,
   PANEL_FOOTER_CLASS,
   PANEL_LIST_EMPTY_CLASS,
@@ -100,18 +102,22 @@ const PluginsPanelContent = ({
                     >
                       {plugin.name}
                     </span>
-                    {/* 알약형 온·오프 - 무채색 밝기 단계로만 상태 표현 */}
+                    {/* 알약형 온·오프 - 무채색 유지하되 면의 유무로 상태를 가른다 */}
                     <button
                       type="button"
                       aria-pressed={plugin.enabled}
+                      // 요청이 나가 있는 동안은 실제로 눌러도 무시되므로
+                      // 시각·보조기술 표현도 같이 잠근다
+                      disabled={isPluginActionPending}
                       className={`${PANEL_PILL_CLASS} ${
-                        plugin.enabled
+                        isPluginActionPending
+                          ? FILL_QUIET_DISABLED_CLASS
+                          : plugin.enabled
                           ? FILL_INTERACTIVE_CLASS
-                          : 'bg-fill-faint text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-active'
+                          : FILL_QUIET_CLASS
                       }`}
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (isPluginActionPending) return;
                         onToggle(plugin.id, !plugin.enabled);
                       }}
                     >
@@ -146,11 +152,11 @@ const PluginsPanelContent = ({
         </button>
       </div>
 
-      {menu.menuKey !== null && (
+      {menu.renderKey !== null && (
         <ListPopup
-          open
+          open={menu.menuKey !== null}
           ariaLabel={t('common.more')}
-          position={menu.menuPosition ?? undefined}
+          position={menu.renderPosition ?? undefined}
           onClose={menu.close}
           items={[{ id: 'remove', label: t('settings.removePlugin') }]}
           onSelect={(id) => {

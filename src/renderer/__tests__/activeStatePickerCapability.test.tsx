@@ -6,6 +6,7 @@ import { ColorInput } from '@components/main/Grid/PropertiesPanel/PropertyInputs
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 
 interface CapturedColorPickerProps {
+  open: boolean;
   color: string;
   stateMode?: 'idle' | 'active';
   onStateModeChange?: (mode: 'idle' | 'active') => void;
@@ -19,7 +20,8 @@ const captured = vi.hoisted(() => ({
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   default: (props: CapturedColorPickerProps) => {
     captured.colorPickerProps = props;
-    return <div data-testid="color-picker" />;
+    // 퇴장 유예 동안 DOM은 남지만 open은 즉시 false - 닫힘 판정은 open이 소유
+    return props.open ? <div data-testid="color-picker" /> : null;
   },
 }));
 

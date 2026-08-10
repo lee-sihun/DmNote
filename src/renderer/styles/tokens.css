@@ -118,6 +118,42 @@
   --ui-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ui-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
+  /* 토글 노브 - 끝점을 지나쳤다 돌아온다. 세기는 커브의 y값이 소유한다.
+     1.35는 12px 이동에서 0.49px밖에 넘지 않아 눈에 안 띈다. 1.56이면 1.17px로
+     인셋 2px 안에서 끝나면서 확실히 읽힌다.
+     트랙 색은 노브보다 짧은 clock으로 따로 간다 */
+  --ui-toggle-duration: var(--ui-duration-slow);
+  --ui-toggle-travel: 12px;
+  --ui-toggle-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* 누름 변형 - 원이 아니라 캡슐이 된다.
+     scale로는 만들 수 없다. 원을 비균등 스케일하면 반지름도 같이 눌려 타원이 될 뿐,
+     위아래 평평한 변이 생기지 않는다. 실제 폭·높이를 바꿔야 반지름이 높이의 절반으로
+     고정된 캡슐이 나온다. 노브는 out-of-flow라 형제 레이아웃에는 영향이 없다 */
+  --ui-toggle-thumb-size: 12px;
+  /* 가로는 건드리지 않는다 - 폭까지 자라면 노브가 부푸는 것처럼 보인다.
+     폭이 높이보다 크기만 하면 반지름이 높이 절반으로 잡혀 위아래 평평한 변이 생긴다 */
+  --ui-toggle-press-height: 10px;
+  /* 누르는 동안 천천히 눌리고, 손을 떼면 빠르게 돌아온다 */
+  --ui-toggle-press-duration: 420ms;
+  --ui-toggle-press-ease: cubic-bezier(0.33, 1, 0.68, 1);
+  --ui-toggle-release-duration: var(--ui-duration-base);
+
+  /* 팝업 등퇴장 - 드롭다운, 팝오버, 피커 공통 다이얼.
+     닫힘이 열림보다 짧은 건 의도, 사라지는 걸 기다릴 이유가 없음 */
+  --ui-popup-enter-duration: var(--ui-duration-base);
+  --ui-popup-exit-duration: var(--ui-duration-fast);
+  --ui-popup-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 커브가 앞쪽에 몰려 있어 이동이 30ms 안에 소모된다.
+     duration을 늘리는 대신 폭을 키워 체감을 확보 */
+  --ui-popup-enter-scale: 0.94;
+  --ui-popup-exit-scale: 0.99;
+
+  /* 카드 모달 등퇴장 - 큰 표면이라 팝업보다 느긋하게 */
+  --ui-modal-enter-duration: 250ms;
+  --ui-modal-exit-duration: 150ms;
+  --ui-modal-enter-scale: 0.96;
+  --ui-modal-exit-scale: 0.96;
+
   /* 패널 페이지 전환 — 사이드 패널 인-패널 내비게이션 다이얼 */
   --ui-duration-page: 250ms;
   --ui-ease-page: cubic-bezier(0.22, 1, 0.36, 1);
@@ -129,6 +165,53 @@
   --ui-icon-swap-ease: ease-in-out;
   --ui-icon-swap-blur: 2px;
   --ui-icon-swap-scale: 0.25;
+
+  /* 툴바 아이콘 호버 모션 — 호버 진입에 한 번 재생되고 멈춘다. 반복 없음.
+     400ms 아래로 내리면 무슨 동작인지 읽기 전에 끝나므로 다른 모션보다 느긋하다.
+     동작마다 자연스러운 clock이 달라 지속 시간은 용도별로 따로 둔다 */
+  --ui-icon-ease: cubic-bezier(0.65, 0, 0.35, 1);
+  /* 오버슈트는 keyframe이 아니라 커브의 y값(1.4)이 소유한다.
+     토글 노브(--ui-toggle-ease)와 같은 원칙 */
+  --ui-icon-ease-back: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --ui-icon-expand-duration: 420ms;
+  --ui-icon-eye-duration: 440ms;
+  --ui-icon-nod-duration: 500ms;
+  --ui-icon-tilt-duration: 520ms;
+  --ui-icon-wobble-duration: 560ms;
+  --ui-icon-turn-duration: 600ms;
+  --ui-icon-sweep-duration: 620ms;
+  --ui-icon-fan-duration: 700ms;
+  --ui-icon-punch-duration: 700ms;
+  --ui-icon-shift-duration: 800ms;
+  --ui-icon-stagger: 80ms;
+
+  /* 팔레트 물감 구멍이 다시 터질 때의 크기. 여기서만 값이 오버슈트를 소유한다 —
+     반지름 0.875px에서는 커브가 만드는 오버슈트가 소수점 픽셀이라 화면에 안 나온다 */
+  --ui-icon-punch-pop: 1.3;
+
+  /* 숫자 스텝 팝인 - 값이 바뀐 자릿수만 한 번 튀어오른다.
+     누를 때와 뗄 때 한 번씩만 돈다. 꾹 누르는 구간은 값만 바뀌고 재생하지 않는다 -
+     반복 간격이 재생보다 짧아 매 스텝이 이전 재생을 끊으면 숫자가 깜빡이고
+     값을 눈으로 좇을 수 없다.
+     아이콘 호버(400ms+)보다 짧은 건 의도. 손이 값을 기다리는 컨트롤이다.
+     오버슈트는 keyframe이 아니라 커브의 y값이 소유한다 (--ui-icon-ease-back과 같은 원칙) */
+  --ui-digit-duration: 220ms;
+  --ui-digit-stagger: 40ms;
+  --ui-digit-distance: 6px;
+  --ui-digit-blur: 2px;
+  --ui-digit-ease: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* 오류 흔들기 - 좌우로 한 번 털고 작은 오버슈트로 멈춘다.
+     구간마다 커브를 따로 걸어야 각 다리가 독립적으로 감속한다.
+     구간 비율(80/80/60/60)은 keyframe %가 소유한다 - 선택자 %에는 calc를 못 써서
+     구간 길이를 토큰으로 쪼개도 총 길이만 바뀌고 분할은 그대로다. 다이얼은 총 길이 하나.
+     폭은 필드 기준으로 잡는다 - 60px 칸에서 6px는 10%라 값이 튀어나간 것처럼 보인다.
+     여기서는 "틀렸다"는 신호만 필요하므로 눈에 걸릴 만큼만 움직인다 */
+  --ui-shake-distance: 3px;
+  --ui-shake-overshoot: 1.5px;
+  --ui-shake-duration: 280ms;
+  --ui-shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* 그림자 — 보더 없는 표면 분리의 핵심. 2/3은 인셋 링+상단 하이라이트로 재질 립 포함 */
   --ui-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -149,4 +232,8 @@
 
   /* 포커스 링 — 보더 대신 그림자 링 */
   --ui-focus-ring: 0 0 0 1.5px rgba(139, 92, 246, 0.55);
+
+  /* 확정할 수 없는 입력 - 포커스 링과 같은 자리, 같은 두께로 그려 색만 바뀐다.
+     보더를 쓰면 상자 안쪽이 좁아지고 바깥 포커스 링과 나란히 서서 색이 섞인다 */
+  --ui-danger-ring: 0 0 0 1.5px rgba(229, 72, 77, 0.75);
 }

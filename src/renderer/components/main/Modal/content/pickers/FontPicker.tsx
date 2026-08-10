@@ -15,6 +15,7 @@ import {
 } from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
+import { useRetainedValue } from '@hooks/ui/useRetainedValue';
 import CommonListPickerPage from './CommonListPickerPage';
 import {
   pickerRowClass,
@@ -214,9 +215,12 @@ const FontPicker = ({
     { value: 'local', label: t('fontPicker.filterLocal') || '로컬' },
   ];
 
+  // 퇴장 모션이 도는 동안 좌표를 유지한다
+  const addMenuShown = useRetainedValue(addMenuPosition);
+
   const menuTargetFont =
-    menu.menuKey !== null
-      ? customFonts.find((font) => font.id === menu.menuKey) ?? null
+    menu.renderKey !== null
+      ? customFonts.find((font) => font.id === menu.renderKey) ?? null
       : null;
 
   const menuItems: ListItem[] = menuTargetFont
@@ -426,12 +430,12 @@ const FontPicker = ({
         addButtonRef={addButtonRef}
       />
 
-      {addMenuPosition !== null && (
+      {addMenuShown && (
         <ListPopup
-          open
+          open={addMenuPosition !== null}
           ariaLabel={t('fontPicker.add')}
           referenceRef={addButtonRef}
-          position={addMenuPosition}
+          position={addMenuShown}
           onClose={() => setAddMenuPosition(null)}
           items={addMenuItems}
           onSelect={(id) => {
@@ -447,11 +451,11 @@ const FontPicker = ({
         />
       )}
 
-      {menu.menuKey !== null && (
+      {menu.renderKey !== null && (
         <ListPopup
-          open
+          open={menu.menuKey !== null}
           ariaLabel={t('common.more')}
-          position={menu.menuPosition ?? undefined}
+          position={menu.renderPosition ?? undefined}
           onClose={menu.close}
           items={menuItems}
           onSelect={(id) => {

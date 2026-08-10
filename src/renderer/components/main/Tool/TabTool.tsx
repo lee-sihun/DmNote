@@ -1,6 +1,7 @@
 import { useKeyStore } from '@stores/data/useKeyStore';
-import GridIcon from '@assets/svgs/grid.svg';
+import TabGridIcon from './icons/TabGridIcon';
 import { useTranslation } from '@contexts/useTranslation';
+import { useIconMotion } from '@hooks/useIconMotion';
 import { useState, useRef } from 'react';
 import FloatingPopup from '../Modal/FloatingPopup';
 import TabList from '../Modal/content/settings/TabList';
@@ -12,6 +13,7 @@ const TabTool = () => {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const gridButtonRef = useRef(null);
   const isCustomSelected = !keyTypes.includes(selectedKeyType);
+  const { motionProps } = useIconMotion();
 
   return (
     <div className="flex gap-[8px]">
@@ -41,6 +43,7 @@ const TabTool = () => {
           setIsPopupOpen((prev) => !prev);
         }}
         disabled={!isBootstrapped}
+        {...motionProps}
       >
         <div
           className={`w-[30px] h-[30px] flex items-center justify-center rounded-md transition-colors duration-fast ${
@@ -49,7 +52,7 @@ const TabTool = () => {
               : 'text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover'
           } ${!isBootstrapped ? 'opacity-40' : ''}`}
         >
-          <GridIcon />
+          <TabGridIcon />
         </div>
       </button>
       <FloatingPopup
@@ -60,6 +63,8 @@ const TabTool = () => {
         initialFocus="surface"
         onClose={() => setIsPopupOpen(false)}
         contentMountStrategy="after-paint"
+        // 글래스와 모션은 팝업 표면이 소유 - ListPopup과 같은 구조
+        className="dmn-motion flex flex-col gap-[6px] w-[216px] p-[8px] bg-glass backdrop-glass-popup rounded-popup shadow-elevation-2"
       >
         <TabList />
       </FloatingPopup>

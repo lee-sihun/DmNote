@@ -36,6 +36,7 @@ import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { SizeCommit } from './PropertiesPanel/types';
 import type {
   PluginSettingSchema,
   PluginMessages,
@@ -1501,12 +1502,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       });
   };
 
-  // 크기 변경 완료 (blur 시 저장)
-  const handleSizeBlur = () => {
+  // 크기 변경 완료 (blur 시 저장).
+  // 방금 확정된 값은 입력에서 직접 받는다. onChange가 예약한 localState는
+  // 같은 blur 이벤트 안에서 아직 이전 값이라 밀린 스텝이 유실된다
+  const handleSizeBlur = (committed?: SizeCommit) => {
     if (singleKeyIndex === null && singleStatIndex === null) return;
+    const width = committed?.width ?? localState.width;
+    const height = committed?.height ?? localState.height;
     const updates: Partial<KeyPosition> = {};
-    if (localState.width !== undefined) updates.width = localState.width;
-    if (localState.height !== undefined) updates.height = localState.height;
+    if (width !== undefined) updates.width = width;
+    if (height !== undefined) updates.height = height;
     if (Object.keys(updates).length > 0) {
       if (singleKeyIndex !== null) {
         onKeyUpdate({ index: singleKeyIndex, ...updates });
@@ -2047,6 +2052,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             max={schemaValue.max}
             allowDecimal={hasDecimal}
             decimalScale={decimalScale}
+            step={schemaValue.step}
             onChange={(nextValue) => onChange(key, nextValue)}
             width={getPluginInputWidth('number', rawValue)}
           />

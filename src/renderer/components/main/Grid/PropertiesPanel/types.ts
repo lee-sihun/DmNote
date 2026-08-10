@@ -43,12 +43,19 @@ export interface PropertyRowProps {
   children: React.ReactNode;
 }
 
+/** blur로 방금 확정된 크기. 편집한 축만 담긴다 */
+export interface SizeCommit {
+  width?: number;
+  height?: number;
+}
+
 export interface NumberInputProps {
   value: number | string;
   onChange: (value: number) => void;
   /** 타이핑 callback을 첫 paint 뒤로 미뤄 입력 echo를 우선 반영 */
   commitStrategy?: CommitStrategy;
-  onBlur?: () => void;
+  /** 확정값을 함께 받는다. onChange가 예약한 state는 같은 이벤트에서 아직 이전 값이다 */
+  onBlur?: (value?: number) => void;
   /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
   onPreview?: (value: number) => void;
   /** Escape 원복 시 호출 (게스처 취소 연동) */
@@ -60,6 +67,8 @@ export interface NumberInputProps {
   width?: string;
   allowDecimal?: boolean;
   decimalScale?: number;
+  /** 방향키 눈금. 미지정이면 1, Shift는 이 값의 10배 */
+  step?: number;
   isMixed?: boolean;
   mixedPlaceholder?: string;
 }
@@ -69,7 +78,8 @@ export interface OptionalNumberInputProps {
   onChange: (value?: number) => void;
   /** 타이핑 callback을 첫 paint 뒤로 미뤄 입력 echo를 우선 반영 */
   commitStrategy?: CommitStrategy;
-  onBlur?: () => void;
+  /** 확정값을 함께 받는다. onChange가 예약한 state는 같은 이벤트에서 아직 이전 값이다 */
+  onBlur?: (value?: number) => void;
   /** 지정 시 타이핑은 preview로 흐르고 onChange는 blur/Enter 확정에만 호출됨 */
   onPreview?: (value?: number) => void;
   /** Escape 원복 시 호출 (게스처 취소 연동) */
@@ -114,11 +124,6 @@ export interface ColorInputProps {
   canvasAnchor?: GradientCanvasAnchor;
   /** 편집 표면 — 캔버스 일시 페인트 대상 필드 (기본 background) */
   gradientSurface?: GradientPreviewSurface;
-}
-
-export interface ToggleSwitchProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
 }
 
 export interface TextInputProps {

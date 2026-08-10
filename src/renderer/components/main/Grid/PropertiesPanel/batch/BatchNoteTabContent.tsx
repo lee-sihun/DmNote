@@ -11,6 +11,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
+import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 
 interface SwatchDisplay {
   color?: string;
@@ -135,6 +136,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               handleBatchStyleChangeComplete('noteOffsetX', value)
             }
             prefix="X"
+            width={AXIS_FIELD_WIDTH}
             allowNegative
             allowDecimal
             decimalScale={1}
@@ -151,6 +153,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               handleBatchStyleChangeComplete('noteOffsetY', value)
             }
             prefix="Y"
+            width={AXIS_FIELD_WIDTH}
             allowNegative
             allowDecimal
             decimalScale={1}
