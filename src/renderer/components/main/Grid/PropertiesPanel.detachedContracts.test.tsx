@@ -50,7 +50,7 @@ vi.mock('./PropertiesPanel/index', () => {
   );
   const SingleKeyStatPanel = (props: Record<string, unknown>) => {
     singleKeyStatPropsMock(props);
-    return <div />;
+    return <ScopeProbe id="single-key-stat" />;
   };
   return {
     TABS: { STYLE: 'style', NOTE: 'note', COUNTER: 'counter' },
@@ -70,7 +70,7 @@ vi.mock('./PropertiesPanel/index', () => {
     },
     BatchGraphOnlyPanel: Stub,
     BatchKnobOnlyPanel: Stub,
-    PluginSettingsPanelView: Stub,
+    PluginSettingsPanelView: () => <ScopeProbe id="plugin-settings" />,
     useBatchHandlers: (props: Record<string, unknown>) => {
       batchPropsMock(props);
       return {};
@@ -93,7 +93,14 @@ vi.mock('./PropertiesPanel/PanelToggleButton', () => ({
 vi.mock('@components/main/common/Checkbox', () => ({ default: () => null }));
 vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
 
+import { useIsEditSessionScoped } from '@src/renderer/contexts/EditSessionScope';
+
 import PropertiesPanel from './PropertiesPanel';
+
+// 대상 전환 억제는 캔버스 선택 패널 안에서만 걸려야 한다
+const ScopeProbe = ({ id }: { id: string }) => (
+  <div data-testid={id} data-scoped={String(useIsEditSessionScoped())} />
+);
 
 interface MountedPanel {
   container: HTMLDivElement;
@@ -267,6 +274,58 @@ describe('PropertiesPanel detached preview contract', () => {
 
 // 배치 색상 draft는 피커를 열 때 첫 요소에서 한 번만 떠 온다.
 // 그 상태가 편집 트리 바깥(PropertiesPanel)에 있어 리마운트 경계로는 안 걷힌다
+// 대상 전환 억제는 캔버스 선택 패널에서만 걸려야 한다.
+// 플러그인 설정 세션은 캔버스 선택과 무관한데, 그 폼의 색상 피커까지 억제되면
+// 무관한 선택 변경 뒤 피커가 닫힐 때 멀쩡한 색 편집이 폐기된다
+describe('PropertiesPanel 편집 세션 scope 경계', () => {
+  let mounted: MountedPanel;
+
+  const scopedOf = (id: string) =>
+    mounted.container
+      .querySelector(`[data-testid="${id}"]`)
+      ?.getAttribute('data-scoped');
+
+  beforeEach(() => {
+    resetStores();
+  });
+
+  afterEach(() => {
+    act(() => mounted.root.unmount());
+    mounted.container.remove();
+    document
+      .querySelectorAll('[data-dmn-modal-backdrop], [data-dmn-popup-layer]')
+      .forEach((node) => node.remove());
+  });
+
+  it('캔버스 선택 패널은 편집 세션 scope 안이다', () => {
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'stat', id: 'stat-0', index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+
+    expect(scopedOf('single-key-stat')).toBe('true');
+  });
+
+  it('플러그인 설정 패널은 편집 세션 scope 밖이다', () => {
+    usePropertiesPanelStore.setState({
+      pluginSettingsPanel: {
+        pluginId: 'scope-test',
+        definition: { settings: {} },
+        settings: {},
+        originalSettings: {},
+        onChange: vi.fn(),
+        onConfirm: vi.fn(),
+        onCancel: vi.fn(),
+        resolve: vi.fn(),
+      } as never,
+    });
+    mounted = mountPanel(true);
+
+    expect(scopedOf('plugin-settings')).toBe('false');
+  });
+});
+
 describe('PropertiesPanel 배치 색상 피커 대상 결합', () => {
   let mounted: MountedPanel;
 

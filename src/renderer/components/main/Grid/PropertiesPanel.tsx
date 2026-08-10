@@ -86,6 +86,7 @@ import PanelToggleButton from './PropertiesPanel/PanelToggleButton';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
+import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -2456,49 +2457,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 렌더링
   // ============================================================================
 
-  // 선택 상태별 구상 패널 — 프레임(글래스) 안의 루트 페이지 콘텐츠
-  const renderPanelBody = () => {
-    if (pluginSettingsPanel) {
-      return (
-        <PluginSettingsPanelView
-          setPanelElement={setPanelElement}
-          pluginSettingsPanel={pluginSettingsPanel}
-          pluginPanelSettings={pluginPanelSettings}
-          handlePluginSettingsPanelChange={handlePluginSettingsPanelChange}
-          handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
-          isSaving={isPluginSettingsSaving}
-          setPluginScrollRef={setPluginScrollRef}
-          renderPluginSettingsForm={renderPluginSettingsForm}
-          reportNormalizationError={reportPluginNormalizationError}
-          t={t}
-        />
-      );
-    }
-
-    // 레이어 모드일 때는 선택 여부와 관계없이 레이어 패널 표시
-    if (panelMode === 'layer') {
-      return (
-        <LayerPanel
-          onSwitchToProperty={handleToggleMode}
-          onSelectionFromPanel={() => {
-            selectionFromLayerPanelRef.current = true;
-          }}
-        />
-      );
-    }
-
-    // 선택된 키 요소가 없으면 레이어 패널 표시
-    if (selectedKeyElements.length === 0 && selectedElements.length === 0) {
-      return (
-        <LayerPanel
-          onSwitchToProperty={handleToggleMode}
-          onSelectionFromPanel={() => {
-            selectionFromLayerPanelRef.current = true;
-          }}
-        />
-      );
-    }
-
+  // 캔버스 선택에 묶인 구상 패널 — 프레임(글래스) 안의 루트 페이지 콘텐츠
+  const renderSelectionPanelBody = () => {
     // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
     if (
       selectedBatchStyleElements.length > 1 &&
@@ -2855,6 +2815,54 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         t={t}
       />
     );
+  };
+
+  // 캔버스 선택에 묶이지 않는 뷰는 EditSessionScope 밖에 둔다.
+  // 플러그인 설정 세션의 색상 피커까지 대상 전환 억제를 걸면, 무관한 캔버스 선택
+  // 변경 뒤에 피커가 닫힐 때 멀쩡한 색 편집이 폐기된다
+  const renderPanelBody = () => {
+    if (pluginSettingsPanel) {
+      return (
+        <PluginSettingsPanelView
+          setPanelElement={setPanelElement}
+          pluginSettingsPanel={pluginSettingsPanel}
+          pluginPanelSettings={pluginPanelSettings}
+          handlePluginSettingsPanelChange={handlePluginSettingsPanelChange}
+          handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
+          isSaving={isPluginSettingsSaving}
+          setPluginScrollRef={setPluginScrollRef}
+          renderPluginSettingsForm={renderPluginSettingsForm}
+          reportNormalizationError={reportPluginNormalizationError}
+          t={t}
+        />
+      );
+    }
+
+    // 레이어 모드일 때는 선택 여부와 관계없이 레이어 패널 표시
+    if (panelMode === 'layer') {
+      return (
+        <LayerPanel
+          onSwitchToProperty={handleToggleMode}
+          onSelectionFromPanel={() => {
+            selectionFromLayerPanelRef.current = true;
+          }}
+        />
+      );
+    }
+
+    // 선택된 키 요소가 없으면 레이어 패널 표시
+    if (selectedKeyElements.length === 0 && selectedElements.length === 0) {
+      return (
+        <LayerPanel
+          onSwitchToProperty={handleToggleMode}
+          onSelectionFromPanel={() => {
+            selectionFromLayerPanelRef.current = true;
+          }}
+        />
+      );
+    }
+
+    return <EditSessionScope>{renderSelectionPanelBody()}</EditSessionScope>;
   };
 
   // 열림/닫힘과 무관하게 항상 렌더되는 지속 토글 — 리마운트 없이 모프 전환
