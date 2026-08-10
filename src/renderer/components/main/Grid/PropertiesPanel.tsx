@@ -941,6 +941,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setShowImagePicker(false);
     setShowGraphImagePicker(false);
     setShowBatchImagePicker(false);
+    // 배치 색상 draft는 피커를 열 때 첫 요소에서 한 번만 떠 온다.
+    // 열린 채로 선택이 바뀌면 옛 대상 색이 남아 다음 드래그가 그 값을 새 선택에 쓴다
+    setBatchPickerFor(null);
     closePage();
   }, [
     singleKeyIndex,

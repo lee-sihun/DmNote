@@ -13,11 +13,13 @@ import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const {
+  batchKeyLikePropsMock,
   batchPropsMock,
   previewMock,
   settleCommitMock,
   singleKeyStatPropsMock,
 } = vi.hoisted(() => ({
+  batchKeyLikePropsMock: vi.fn(),
   batchPropsMock: vi.fn(),
   previewMock: vi.fn(),
   settleCommitMock: vi.fn(),
@@ -62,7 +64,10 @@ vi.mock('./PropertiesPanel/index', () => {
     SingleGraphPanel: Stub,
     SingleKnobPanel: Stub,
     SingleKeyStatPanel,
-    BatchKeyLikePanel: Stub,
+    BatchKeyLikePanel: (props: Record<string, unknown>) => {
+      batchKeyLikePropsMock(props);
+      return <div />;
+    },
     BatchGraphOnlyPanel: Stub,
     BatchKnobOnlyPanel: Stub,
     PluginSettingsPanelView: Stub,
@@ -125,6 +130,7 @@ const resetStores = () => {
   settleCommitMock.mockClear();
   singleKeyStatPropsMock.mockClear();
   batchPropsMock.mockClear();
+  batchKeyLikePropsMock.mockClear();
   useKeyStore.setState({
     selectedKeyType: '4key',
     keyMappings: { '4key': [] },
@@ -256,6 +262,70 @@ describe('PropertiesPanel detached preview contract', () => {
         { domain: 'knobPosition' },
       ],
     ]);
+  });
+});
+
+// 배치 색상 draft는 피커를 열 때 첫 요소에서 한 번만 떠 온다.
+// 그 상태가 편집 트리 바깥(PropertiesPanel)에 있어 리마운트 경계로는 안 걷힌다
+describe('PropertiesPanel 배치 색상 피커 대상 결합', () => {
+  let mounted: MountedPanel;
+
+  const selectKeys = (...indices: number[]) => {
+    useGridSelectionStore.setState({
+      selectedElements: indices.map((index) => ({
+        type: 'key' as const,
+        id: `key-${index}`,
+        index,
+      })),
+      selectedGroupIds: [],
+    });
+  };
+
+  const latestBatchProps = () =>
+    batchKeyLikePropsMock.mock.lastCall?.[0] as {
+      batchPickerFor: string | null;
+      handleBatchPickerToggle: (target: string) => void;
+    };
+
+  beforeEach(() => {
+    resetStores();
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      keyMappings: { '4key': ['KeyA', 'KeyS', 'KeyD'] as never },
+      positions: {
+        '4key': [
+          { dx: 0, dy: 0, width: 60, height: 60 },
+          { dx: 0, dy: 0, width: 60, height: 60 },
+          { dx: 0, dy: 0, width: 60, height: 60 },
+        ] as never,
+      },
+    });
+    selectKeys(0, 1, 2);
+    mounted = mountPanel(true);
+  });
+
+  afterEach(() => {
+    act(() => mounted.root.unmount());
+    mounted.container.remove();
+  });
+
+  it('선택이 바뀌면 열려 있던 배치 색상 피커를 닫는다', () => {
+    act(() => latestBatchProps().handleBatchPickerToggle('noteColor'));
+    expect(latestBatchProps().batchPickerFor).toBe('noteColor');
+
+    act(() => selectKeys(0, 1));
+
+    expect(latestBatchProps().batchPickerFor).toBeNull();
+  });
+
+  // 선택을 건드리지 않는 재렌더까지 닫으면 피커를 쓸 수가 없다.
+  // 기존 이미지 피커 3종과 같은 조건(선택 store 갱신)에만 반응해야 한다
+  it('선택을 건드리지 않는 재렌더는 피커를 닫지 않는다', () => {
+    act(() => latestBatchProps().handleBatchPickerToggle('noteColor'));
+
+    act(() => mounted.render(true));
+
+    expect(latestBatchProps().batchPickerFor).toBe('noteColor');
   });
 });
 
