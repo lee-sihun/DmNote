@@ -10,9 +10,9 @@ vi.mock('./editGestureController', () => ({
   editGestureController: { commitPendingAsync },
 }));
 
-import { flushFocusedEditorForLifecycle } from './lifecycleEditorFlush';
+import { flushFocusedEditor } from './lifecycleEditorFlush';
 
-describe('flushFocusedEditorForLifecycle', () => {
+describe('flushFocusedEditor', () => {
   afterEach(() => {
     document.body.replaceChildren();
     beginEditorWriteBarrier.mockReset();
@@ -37,7 +37,7 @@ describe('flushFocusedEditorForLifecycle', () => {
       return true;
     });
 
-    await expect(flushFocusedEditorForLifecycle()).resolves.toBe(true);
+    await expect(flushFocusedEditor()).resolves.toBe(true);
 
     expect(order).toEqual(['barrier', 'blur', 'gesture', 'blur-write']);
   });
@@ -50,7 +50,7 @@ describe('flushFocusedEditorForLifecycle', () => {
     beginEditorWriteBarrier.mockReturnValue(vi.fn(async () => true));
     commitPendingAsync.mockResolvedValue(true);
 
-    await flushFocusedEditorForLifecycle();
+    await flushFocusedEditor();
 
     expect(settled).toBe(true);
   });
@@ -70,7 +70,7 @@ describe('flushFocusedEditorForLifecycle', () => {
       return true;
     });
 
-    await flushFocusedEditorForLifecycle();
+    await flushFocusedEditor();
 
     expect(order).toEqual(['blur', 'blur-settled', 'commit']);
   });
@@ -85,7 +85,7 @@ describe('flushFocusedEditorForLifecycle', () => {
     beginEditorWriteBarrier.mockReturnValue(vi.fn(async () => true));
     commitPendingAsync.mockImplementation(async () => !yielded);
 
-    await expect(flushFocusedEditorForLifecycle()).resolves.toBe(true);
+    await expect(flushFocusedEditor()).resolves.toBe(true);
   });
 
   it.each([
@@ -99,7 +99,7 @@ describe('flushFocusedEditorForLifecycle', () => {
       );
       commitPendingAsync.mockResolvedValue(gestureResult);
 
-      await expect(flushFocusedEditorForLifecycle()).resolves.toBe(false);
+      await expect(flushFocusedEditor()).resolves.toBe(false);
     },
   );
 });

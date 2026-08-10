@@ -14,8 +14,7 @@ import { reattachPropertiesPanel } from '@stores/grid/usePanelWindowStore';
 import { initPluginSettingsMirror } from '@plugins/rpc/pluginSettingsMirror';
 import { startPluginRpcClient } from '@plugins/rpc/pluginRpcClient';
 import { onSelectionSyncReady } from '@src/renderer/editor/runtime/selectionSync';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { settleFocusedEditor } from '@src/renderer/editor/runtime/focusedEditorSettlement';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import { applyPanelViewState } from '@stores/grid/panelViewHandoff';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
@@ -54,9 +53,7 @@ const App = ({ initialViewState }: AppProps) => {
   // 메인 창에는 걸지 않는다 - alt-tab만 해도 편집 중인 입력이 풀린다
   useEffect(() => {
     const settle = () => {
-      void settleFocusedEditor(() =>
-        editGestureController.commitPendingAsync(),
-      );
+      void flushFocusedEditor();
     };
     window.addEventListener('blur', settle);
     return () => window.removeEventListener('blur', settle);

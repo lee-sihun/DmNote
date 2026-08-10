@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 
 import { panelWindowApi } from '@api/modules/selectionSessionApi';
-import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
-import { settleFocusedEditor } from '@src/renderer/editor/runtime/focusedEditorSettlement';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import { flushSelectionSync } from '@src/renderer/editor/runtime/selectionSync';
 import { capturePanelViewState } from '@stores/grid/panelViewHandoff';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
@@ -49,7 +48,7 @@ const yieldToRender = () =>
 const flushPanelTransition = async (): Promise<boolean> => {
   const [editorCommitted, pluginElementsCommitted, pluginSettingsCommitted] =
     await Promise.all([
-      settleFocusedEditor(() => editGestureController.commitPendingAsync()),
+      flushFocusedEditor(),
       drainPendingPluginElementWrites(),
       drainPendingPluginSettingsWrites(),
     ]);

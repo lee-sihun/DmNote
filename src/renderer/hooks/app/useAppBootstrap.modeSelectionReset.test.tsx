@@ -162,7 +162,7 @@ vi.mock('@stores/data/useHistoryStatusStore', () => ({
   syncHistoryStatus: vi.fn(),
 }));
 vi.mock('@src/renderer/editor/runtime/lifecycleEditorFlush', () => ({
-  flushFocusedEditorForLifecycle: vi.fn(),
+  flushFocusedEditor: vi.fn(),
 }));
 vi.mock('@src/renderer/editor/runtime/historyEditorFlushLock', () => ({
   acquireHistoryEditorFlushLock: vi.fn(),

@@ -45,7 +45,7 @@ import {
   useHistoryStatusStore,
   syncHistoryStatus,
 } from '@stores/data/useHistoryStatusStore';
-import { flushFocusedEditorForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
+import { flushFocusedEditor } from '@src/renderer/editor/runtime/lifecycleEditorFlush';
 import {
   acquireHistoryEditorFlushLock,
   releaseHistoryEditorFlushLock,
@@ -147,6 +147,28 @@ export function useAppBootstrap() {
     let editorCoordinatorRetryTimer: ReturnType<typeof setTimeout> | null =
       null;
     const isOverlayWindow = window.__dmn_window_type === 'overlay';
+
+    // 모드가 실제로 갈릴 때만 선택을 리셋한다.
+    //
+    // 백엔드는 customTabs와 프리셋 스냅샷을 keys:mode-changed보다 먼저 보낸다.
+    // 여기서 리셋하지 않으면 그 사이 store가 "새 모드 + 옛 index"가 되고,
+    // 그 창에서 확정된 편집이 새 모드의 엉뚱한 요소에 실린다
+    const adoptSelectedKeyType = (
+      customTabs: CustomTab[],
+      selectedKeyType: string,
+    ) => {
+      const modeChanged =
+        useKeyStore.getState().selectedKeyType !== selectedKeyType;
+      useKeyStore.setState((state) => ({
+        ...state,
+        customTabs,
+        selectedKeyType,
+      }));
+      if (modeChanged && !isOverlayWindow && window.__dmn_runtime !== 'obs') {
+        resetSelectionForModeChange();
+      }
+    };
+
     let conflictDialogOpen = false;
     let lastShownPermanentEditorError: unknown = null;
     // 키 표시 딜레이와 동기화를 위한 카운터 업데이트 지연
@@ -874,7 +896,7 @@ export function useAppBootstrap() {
           acquireHistoryEditorFlushLock(handshakeId);
         }
         void (async () => {
-          const committed = await flushFocusedEditorForLifecycle();
+          const committed = await flushFocusedEditor();
           if (!committed) {
             throw new Error('pending focused editor failed to commit');
           }
@@ -972,17 +994,7 @@ export function useAppBootstrap() {
       }),
       window.api.keys.customTabs.onChanged(
         ({ customTabs, selectedKeyType }) => {
-          const modeChanged =
-            useKeyStore.getState().selectedKeyType !== selectedKeyType;
-          useKeyStore.setState((state) => ({
-            ...state,
-            customTabs,
-            selectedKeyType,
-          }));
-          // 백엔드가 customTabs를 keys:mode-changed보다 먼저 보낸다.
-          // 여기서 리셋하지 않으면 그 사이 store가 "새 모드 + 옛 index"가 된다
-          if (modeChanged && !isOverlayWindow && window.__dmn_runtime !== 'obs')
-            resetSelectionForModeChange();
+          adoptSelectedKeyType(customTabs, selectedKeyType);
         },
       ),
       window.api.noteTab.onChanged(({ tabId, settings }) => {
@@ -1006,15 +1018,7 @@ export function useAppBootstrap() {
       }),
       window.api.presets.onSnapshot((snapshot) => {
         if (disposed) return;
-        const modeChanged =
-          useKeyStore.getState().selectedKeyType !== snapshot.selectedKeyType;
-        useKeyStore.setState((state) => ({
-          ...state,
-          customTabs: snapshot.customTabs,
-          selectedKeyType: snapshot.selectedKeyType,
-        }));
-        if (modeChanged && !isOverlayWindow && window.__dmn_runtime !== 'obs')
-          resetSelectionForModeChange();
+        adoptSelectedKeyType(snapshot.customTabs, snapshot.selectedKeyType);
         useSettingsStore.setState({
           tabNoteOverrides: snapshot.tabNoteOverrides,
         });

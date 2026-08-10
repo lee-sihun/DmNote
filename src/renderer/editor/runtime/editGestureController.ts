@@ -341,10 +341,6 @@ export const editGestureController = {
     if (!own) return false;
     return drainEditorWrites();
   },
-
-  commitPending(): void {
-    void this.commitPendingAsync();
-  },
 };
 
 // 선택 대상 변경 시 진행 중 게스처 취소 (barrier)
