@@ -1,11 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   useFloating,
@@ -24,6 +18,7 @@ import {
   type PopupMotionState,
 } from '@hooks/ui/usePopupPresence';
 import { useRetainedWhileOpen } from '@hooks/ui/useRetainedValue';
+import { useFocusRestore } from '@hooks/ui/useFocusRestore';
 import { FloatingPopupMotionContext } from './floatingPopupMotion';
 import {
   isInsideHigherPopupLayer,
@@ -108,12 +103,7 @@ const FloatingPopupSurface = ({
   children,
 }: FloatingPopupSurfaceProps) => {
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const prevFocusedRef = useRef<HTMLElement | null>(
-    typeof document !== 'undefined'
-      ? (document.activeElement as HTMLElement | null)
-      : null,
-  );
-  const activatedRef = useRef(false);
+  const { openerRef, captureOpener } = useFocusRestore(active);
 
   // 자식 팝업은 부모 모달의 layout 등록 뒤에 쌓여야 하므로 passive effect 사용.
   // 닫힘 모션이 도는 동안 DOM은 남지만 레이어 소유권은 즉시 놓는다
@@ -128,15 +118,9 @@ const FloatingPopupSurface = ({
   useLayoutEffect(() => {
     const surface = surfaceRef.current;
     if (!active || !surface) return;
-    // 첫 활성화는 마운트 시점 캡처가 정확하다. 퇴장 유예 중 재오픈은 표면을
-    // 재사용하므로 opener를 다시 잡아야 다른 트리거로 열어도 제자리로 돌아간다.
-    // 이미 팝업 안에 포커스가 있으면 자식 autoFocus를 opener로 오인하지 않게 유지
-    if (activatedRef.current && !surface.contains(document.activeElement)) {
-      prevFocusedRef.current = document.activeElement as HTMLElement | null;
-    }
-    activatedRef.current = true;
+    captureOpener(surface);
     if (focusOriginRef) {
-      focusOriginRef.current = prevFocusedRef.current;
+      focusOriginRef.current = openerRef.current;
     }
     if (
       contentReady &&
@@ -156,31 +140,15 @@ const FloatingPopupSurface = ({
           ).find(isAvailableFocusTarget) ?? surface
         : getFocusableElements(surface)[0] ?? surface;
     initialTarget.focus();
-  }, [active, contentReady, focusOriginRef, initialFocus, role]);
-
-  // 포커스 복원은 닫기 시작 시점에 한 번. 언마운트 cleanup에만 걸어두면
-  // 퇴장 모션이 끝날 때까지 포커스가 팝업에 붙잡혀 있다
-  const focusRestoredRef = useRef(false);
-  const restoreFocus = useCallback(() => {
-    if (focusRestoredRef.current) return;
-    focusRestoredRef.current = true;
-    const prevFocused = prevFocusedRef.current;
-    if (prevFocused && prevFocused.isConnected) {
-      prevFocused.focus();
-    }
-  }, []);
-
-  useLayoutEffect(() => {
-    if (active) {
-      // 표면을 재사용한 재오픈이면 가드를 풀어야 다음 닫힘에서도 복원된다
-      focusRestoredRef.current = false;
-      return;
-    }
-    restoreFocus();
-  }, [active, restoreFocus]);
-
-  // 닫기 신호 없이 사라지는 경로(부모가 통째로 언마운트) 폴백
-  useLayoutEffect(() => restoreFocus, [restoreFocus]);
+  }, [
+    active,
+    captureOpener,
+    contentReady,
+    focusOriginRef,
+    initialFocus,
+    openerRef,
+    role,
+  ]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

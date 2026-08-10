@@ -1,0 +1,64 @@
+import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react';
+
+export interface FocusRestore {
+  /** 열기 전 포커스. 퇴장 유예 중 재오픈이면 captureOpener가 갱신한다 */
+  openerRef: RefObject<HTMLElement | null>;
+  /**
+   * 활성화 시점에 opener를 다시 잡는다. 첫 활성화는 첫 렌더 캡처가 정확하므로 건너뛴다.
+   * 이미 안쪽에 포커스가 있으면 자식 autoFocus를 opener로 오인하지 않게 유지
+   */
+  captureOpener: (container: HTMLElement) => void;
+  /** 닫기 시작 시점에 한 번 복원 */
+  restoreFocus: () => void;
+}
+
+// 팝업과 모달의 포커스 복원.
+//
+// 열기 전 포커스는 첫 렌더 시점에 잡아야 한다. passive effect는 자식 autoFocus와
+// 자식 effect 이후에 실행돼 opener 대신 내부 요소를 잡는다.
+//
+// 복원은 닫기 시작 시점에 한 번이다. 언마운트 cleanup에만 걸어두면 퇴장 모션이
+// 끝날 때까지 포커스가 안에 붙잡혀 있다.
+//
+// open은 "열려 있는가"지 "마운트돼 있는가"가 아니다. 퇴장 유예 중에는 DOM이 남아도
+// false여야 복원이 모션 시작과 함께 일어난다
+export const useFocusRestore = (open: boolean): FocusRestore => {
+  const openerRef = useRef<HTMLElement | null>(
+    typeof document !== 'undefined'
+      ? (document.activeElement as HTMLElement | null)
+      : null,
+  );
+  const activatedRef = useRef(false);
+  const restoredRef = useRef(false);
+
+  const captureOpener = useCallback((container: HTMLElement) => {
+    if (activatedRef.current && !container.contains(document.activeElement)) {
+      openerRef.current = document.activeElement as HTMLElement | null;
+    }
+    activatedRef.current = true;
+  }, []);
+
+  const restoreFocus = useCallback(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const opener = openerRef.current;
+    if (opener && opener.isConnected) {
+      opener.focus();
+    }
+  }, []);
+
+  // paint 전에 돌려놔야 포커스가 한 프레임 뜨지 않는다
+  useLayoutEffect(() => {
+    if (open) {
+      // 닫히다 다시 열리면 가드를 풀어야 다음 닫힘에서도 복원된다
+      restoredRef.current = false;
+      return;
+    }
+    restoreFocus();
+  }, [open, restoreFocus]);
+
+  // 닫기 신호 없이 사라지는 경로(부모가 통째로 언마운트) 폴백
+  useLayoutEffect(() => restoreFocus, [restoreFocus]);
+
+  return { openerRef, captureOpener, restoreFocus };
+};

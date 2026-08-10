@@ -1,5 +1,4 @@
 import React, {
-  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -8,6 +7,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import { getFocusableElements } from '@utils/focusableElements';
+import { useFocusRestore } from '@hooks/ui/useFocusRestore';
 import type { PopupMotionState } from '@hooks/ui/usePopupPresence';
 import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
 
@@ -64,14 +64,8 @@ const Modal = ({
     };
   }, [contentMountStrategy]);
 
-  // 열기 전 포커스를 첫 렌더 시점에 캡처 — passive effect는 자식 autoFocus·
-  // 자식 effect 이후에 실행돼 opener 대신 모달 내부 요소를 잡는 오염이 생긴다.
-  // ref 초기화는 자식 마운트 전에 1회만 실행되므로 opener가 정확히 잡힘
-  const prevFocusedRef = useRef<HTMLElement | null>(
-    typeof document !== 'undefined'
-      ? (document.activeElement as HTMLElement | null)
-      : null,
-  );
+  // 퇴장 유예 동안 DOM이 남으므로 열림 여부는 closing으로 판정한다
+  const { captureOpener } = useFocusRestore(!closing);
 
   // 닫힘 모션이 도는 동안 DOM은 남지만 레이어 소유권은 즉시 놓는다.
   // 아니면 닫히는 모달이 Escape와 Tab 순환을 계속 물고 있다
@@ -96,16 +90,10 @@ const Modal = ({
   // 자식 autoFocus를 존중하고, 지정이 없으면 첫 조작 요소로 포커스 이동.
   // closing을 의존성에 두는 건 퇴장 유예 때문이다. 닫히는 중 다시 열리면
   // 인스턴스가 재사용돼 마운트 1회 전제로는 포커스가 다시 잡히지 않는다
-  const activatedRef = useRef(false);
   useLayoutEffect(() => {
     const backdrop = backdropRef.current;
     if (closing || !backdrop) return;
-    // 첫 활성화는 마운트 시점 캡처가 정확하다. 퇴장 유예 중 재오픈은 인스턴스를
-    // 재사용하므로 opener를 다시 잡아야 다른 트리거로 열어도 제자리로 돌아간다
-    if (activatedRef.current && !backdrop.contains(document.activeElement)) {
-      prevFocusedRef.current = document.activeElement as HTMLElement | null;
-    }
-    activatedRef.current = true;
+    captureOpener(backdrop);
     if (
       contentReady &&
       document.activeElement !== backdrop &&
@@ -115,33 +103,7 @@ const Modal = ({
     }
     const initialTarget = getFocusableElements(backdrop)[0] ?? backdrop;
     initialTarget.focus();
-  }, [closing, contentReady]);
-
-  // 닫힐 때 열기 전 포커스 복원 (요소가 아직 문서에 연결된 경우만).
-  // 복원은 닫기 시작 시점에 한 번 - 언마운트 cleanup에만 걸어두면
-  // 퇴장 모션이 끝날 때까지 포커스가 모달에 붙잡혀 있다
-  const focusRestoredRef = useRef(false);
-  const restoreFocus = useCallback(() => {
-    if (focusRestoredRef.current) return;
-    focusRestoredRef.current = true;
-    const prevFocused = prevFocusedRef.current;
-    if (prevFocused && prevFocused.isConnected) {
-      prevFocused.focus();
-    }
-  }, []);
-
-  // paint 전에 돌려놔야 포커스가 한 프레임 뜨지 않는다 (FloatingPopup과 같은 타이밍)
-  useLayoutEffect(() => {
-    if (!closing) {
-      // 닫히다 다시 열리면 가드를 풀어야 다음 닫힘에서도 복원된다
-      focusRestoredRef.current = false;
-      return;
-    }
-    restoreFocus();
-  }, [closing, restoreFocus]);
-
-  // 모션 없이 통째로 사라지는 경로 폴백
-  useLayoutEffect(() => restoreFocus, [restoreFocus]);
+  }, [captureOpener, closing, contentReady]);
 
   // 최상위 모달만 Escape와 Tab 포커스 순환을 소유
   useEffect(() => {
