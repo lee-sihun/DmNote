@@ -130,4 +130,20 @@ describe('CounterAnimationEditorModal 베지어 드래그', () => {
 
     expect(Number(p1().getAttribute('cx'))).toBeCloseTo(75);
   });
+
+  // 드래그의 preventDefault가 포커스를 남긴다. 편집 세션을 안 끊으면
+  // 뒤이은 Escape가 드래그 결과까지 함께 되돌린다
+  it('드래그를 시작하면 포커스된 입력의 편집 세션을 끊는다', () => {
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    act(() => p1().dispatchEvent(pointerEvent('pointerdown', 47.5, 79.4)));
+
+    expect(document.activeElement).not.toBe(input);
+
+    act(() => window.dispatchEvent(pointerEvent('pointerup', 47.5, 79.4)));
+    input.remove();
+  });
 });
