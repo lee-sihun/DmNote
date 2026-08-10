@@ -48,7 +48,22 @@ describe('flushFocusedEditorForLifecycle', () => {
       settled = true;
     }, 0);
     beginEditorWriteBarrier.mockReturnValue(vi.fn(async () => true));
-    commitPendingAsync.mockImplementation(async () => settled);
+    commitPendingAsync.mockResolvedValue(true);
+
+    await flushFocusedEditorForLifecycle();
+
+    expect(settled).toBe(true);
+  });
+
+  it('gesture 커밋을 양보 전에 시작한다', async () => {
+    // 양보하는 동안 도착한 원격 선택이 선택 구독자를 깨워 아직 시작도 안 한
+    // gesture를 취소할 수 있다. history handshake 경로가 실제로 그 순서다
+    let yielded = false;
+    setTimeout(() => {
+      yielded = true;
+    }, 0);
+    beginEditorWriteBarrier.mockReturnValue(vi.fn(async () => true));
+    commitPendingAsync.mockImplementation(async () => !yielded);
 
     await expect(flushFocusedEditorForLifecycle()).resolves.toBe(true);
   });
