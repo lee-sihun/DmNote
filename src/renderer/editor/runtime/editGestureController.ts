@@ -351,9 +351,4 @@ if (typeof window !== 'undefined') {
       editGestureController.cancel();
     }
   });
-
-  // 창 포커스 이탈 시 진행 중 게스처 커밋 (입력 유실 방지)
-  window.addEventListener('blur', () => {
-    editGestureController.commitPending();
-  });
 }

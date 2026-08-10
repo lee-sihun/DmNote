@@ -27,6 +27,11 @@ export const settleFocusedEditor = async (
   }
 
   const draftCommitted = finalizeEditorDraftForLifecycle();
+
+  // blur 핸들러가 promise로 이어붙인 쓰기는 여기서 끝난다.
+  // 매크로태스크는 양보하지 않는다 - 원격 선택은 그쪽으로 오므로 커밋 전에 끼어들 수 없다
+  await Promise.resolve();
+
   const gestureCommit = startGestureCommit();
 
   // blur가 만든 React state 갱신과 IME 정산을 한 turn 기다린다

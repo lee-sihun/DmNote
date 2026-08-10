@@ -55,6 +55,26 @@ describe('flushFocusedEditorForLifecycle', () => {
     expect(settled).toBe(true);
   });
 
+  it('blur가 promise로 이어붙인 쓰기를 커밋 전에 정산한다', async () => {
+    const order: string[] = [];
+    const input = document.createElement('input');
+    input.addEventListener('blur', () => {
+      order.push('blur');
+      queueMicrotask(() => order.push('blur-settled'));
+    });
+    document.body.append(input);
+    input.focus();
+    beginEditorWriteBarrier.mockReturnValue(vi.fn(async () => true));
+    commitPendingAsync.mockImplementation(async () => {
+      order.push('commit');
+      return true;
+    });
+
+    await flushFocusedEditorForLifecycle();
+
+    expect(order).toEqual(['blur', 'blur-settled', 'commit']);
+  });
+
   it('gesture 커밋을 양보 전에 시작한다', async () => {
     // 양보하는 동안 도착한 원격 선택이 선택 구독자를 깨워 아직 시작도 안 한
     // gesture를 취소할 수 있다. history handshake 경로가 실제로 그 순서다

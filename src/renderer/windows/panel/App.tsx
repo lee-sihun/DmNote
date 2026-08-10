@@ -14,6 +14,8 @@ import { reattachPropertiesPanel } from '@stores/grid/usePanelWindowStore';
 import { initPluginSettingsMirror } from '@plugins/rpc/pluginSettingsMirror';
 import { startPluginRpcClient } from '@plugins/rpc/pluginRpcClient';
 import { onSelectionSyncReady } from '@src/renderer/editor/runtime/selectionSync';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { settleFocusedEditor } from '@src/renderer/editor/runtime/focusedEditorSettlement';
 import { applyPanelViewState } from '@stores/grid/panelViewHandoff';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
@@ -42,6 +44,23 @@ const App = ({ initialViewState }: AppProps) => {
   useEffect(() => startPluginRpcClient(), []);
   // main 소유 설정 세션의 descriptor 미러 - 입력은 RPC로 왕복
   useEffect(() => initPluginSettingsMirror(), []);
+
+  // 이 창이 포커스를 잃으면 편집을 지금 대상에 확정한다.
+  //
+  // 메인 창을 클릭해도 이 창의 입력은 커서를 놓지 않는다. 그 뒤 선택만 메인에서
+  // 넘어오면 콜백은 새 대상을 가리키는데 draft는 옛 대상 것이라, 다음 blur가
+  // 옛 값을 새 대상에 저장한다.
+  // 창 blur는 로컬 이벤트고 선택 반영은 백엔드 왕복이라 정산이 항상 먼저 도착한다.
+  // 메인 창에는 걸지 않는다 - alt-tab만 해도 편집 중인 입력이 풀린다
+  useEffect(() => {
+    const settle = () => {
+      void settleFocusedEditor(() =>
+        editGestureController.commitPendingAsync(),
+      );
+    };
+    window.addEventListener('blur', settle);
+    return () => window.removeEventListener('blur', settle);
+  }, []);
   useEffect(
     () =>
       panelWindowApi.onPropertyModeRequested(() => {
