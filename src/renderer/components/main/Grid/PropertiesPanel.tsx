@@ -2116,7 +2116,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     };
 
     return (
-      <div className="flex flex-col gap-[12px]">
+      // 대상이 바뀌면 폼을 통째로 새로 만든다. 설정 key만으로 묶으면 같은 스키마를 가진
+      // 다른 요소로 선택이 옮겨가도 입력 인스턴스가 살아남아, 편집 중이던 값이
+      // 새 대상에 확정되거나 취소가 옛 값을 새 대상에 쓴다.
+      // 포커스를 유지한 채 선택만 바뀌는 경로가 분리 패널 selection sync에 있다
+      <div key={colorIdPrefix} className="flex flex-col gap-[12px]">
         {sections.map((section) => {
           if (!section.renderVisible) return null;
           const sectionLabel = translate(section.label, section.label);
