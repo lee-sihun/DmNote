@@ -697,6 +697,13 @@ const CounterAnimationEditorModal = ({
     target: DragTarget,
   ) => {
     if (event.button !== 0 || spaceHeldRef.current) return;
+    // 드래그가 시작되면 텍스트 편집은 끝난 것으로 본다.
+    // 아래 preventDefault가 포커스를 남기는데, 드래그는 베지어 입력값도 같이 바꾼다.
+    // 편집 세션을 안 끊으면 뒤이은 Escape가 드래그 결과까지 함께 되돌린다
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.matches('input, textarea')) {
+      active.blur();
+    }
     event.preventDefault();
     event.stopPropagation();
     cancelAutoFit();
