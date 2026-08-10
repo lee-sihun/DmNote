@@ -1,4 +1,12 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useRef,
+  type ReactNode,
+} from 'react';
+
+import { getEditSessionMode } from '@src/renderer/editor/runtime/editSessionTarget';
 
 // 이 아래 트리는 캔버스 편집 대상에 묶여 있다는 표시.
 //
@@ -23,3 +31,22 @@ export const EditSessionScope = ({ children }: EditSessionScopeProps) => (
 // eslint-disable-next-line react-refresh/only-export-components
 export const useIsEditSessionScoped = (): boolean =>
   useContext(EditSessionScopeContext);
+
+// 비동기 완료 콜백이 옛 편집 세션에 값을 연결하려 할 때 쓰는 가드.
+//
+// 네이티브 대화상자나 IPC 응답을 기다리는 동안 편집 대상이 갈릴 수 있다.
+// 이미 시작된 Promise는 언마운트로 취소되지 않으므로, 마지막 연결 단계에서
+// 직접 확인해야 한다. 자산 생성 자체는 막지 않는다 - 파일 복사와 preset 생성은
+// 그대로 끝내고 옛 세션에 연결하는 한 걸음만 버린다.
+//
+// 캔버스 대상에 묶이지 않은 곳(전역 키 설정 모달 등)에서는 항상 통과시킨다
+// eslint-disable-next-line react-refresh/only-export-components
+export const useEditSessionGuard = (): (() => boolean) => {
+  const scoped = useIsEditSessionScoped();
+  const sessionMode = useRef(getEditSessionMode());
+
+  return useCallback(
+    () => !scoped || sessionMode.current === getEditSessionMode(),
+    [scoped],
+  );
+};

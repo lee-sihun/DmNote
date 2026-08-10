@@ -6,6 +6,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import TabSwitch from '@components/main/common/TabSwitch';
 import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
+import { useEditSessionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 interface ImagePickerProps {
   open: boolean;
@@ -64,6 +65,7 @@ const ImagePicker = ({
   >(STATE_MODES.idle);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(false);
   const loadingImageRef = useRef(false);
+  const isSameEditSession = useEditSessionGuard();
   const effectiveMode = showActiveState ? mode : STATE_MODES.idle;
 
   useEffect(() => {
@@ -79,6 +81,8 @@ const ImagePicker = ({
       if (!result?.success || !result.imagePath) {
         return;
       }
+      // 파일 복사는 이미 끝났다. 대상이 갈렸으면 연결만 하지 않는다
+      if (!isSameEditSession()) return;
       if (stateMode === STATE_MODES.idle) {
         onIdleImageChange?.(result.imagePath);
       } else {
