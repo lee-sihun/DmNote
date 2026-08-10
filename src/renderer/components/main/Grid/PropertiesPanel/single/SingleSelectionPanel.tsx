@@ -913,6 +913,16 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
   });
 
+  // 이 패널은 편집 트리 경계 위에서 피커와 캡처 세션을 소유한다.
+  // 대상이 갈려도 살아남으면 열린 피커가 옛 노브에서 떠 온 색을 그대로 쥐고
+  // 있고, 축 캡처 대기는 다음 회전을 새 노브에 바인딩한다.
+  // 피커를 닫으면 아래 동기화가 새 노브 색을 다시 떠 온다
+  useEffect(() => {
+    setPickerFor(null);
+    setShowImagePicker(false);
+    setCapturing(false);
+  }, [singleKnobIndex, selectedKeyType]);
+
   // 피커가 닫혀있을 때만 외부 prop과 동기화
   useEffect(() => {
     if (!pickerFor) {
