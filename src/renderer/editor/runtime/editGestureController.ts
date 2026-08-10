@@ -38,15 +38,11 @@ interface ActiveGesture {
   seq: number;
   // 도메인 → target index → 게스처 동안 누적된 전체 patch
   appliedPatches: Map<PreviewDomain, Map<number, Record<string, unknown>>>;
-  // 다음 flush에 실릴 patch (patch 내용 직렬화 키로 그룹핑)
-  pendingGroups: Map<
-    string,
-    {
-      domain: PreviewDomain;
-      targets: Set<number>;
-      patch: Record<string, unknown>;
-    }
-  >;
+  // 도메인 → target index → 다음 flush에 실릴 patch.
+  // 대상별로 모아야 같은 대상의 옛 값이 덮어써진다. patch 내용으로 묶으면
+  // 값이 연속으로 바뀌는 편집(드래그, 방향키 꾹 누르기)에서 중간값마다 그룹이 하나씩 생기고,
+  // in-flight 하나가 도는 동안 쌓인 그룹이 전부 순차 발행돼 이미 무의미해진 값까지 IPC를 탄다
+  pendingPatches: Map<PreviewDomain, Map<number, Record<string, unknown>>>;
   flushScheduled: boolean;
   publishInFlight: boolean;
 }
@@ -63,16 +59,52 @@ const schedulePublishFlush = () => {
   });
 };
 
+const hasPending = (gesture: ActiveGesture): boolean => {
+  for (const targets of gesture.pendingPatches.values()) {
+    if (targets.size > 0) return true;
+  }
+  return false;
+};
+
+// 다음 발행분 하나만 꺼낸다. 아직 발행하지 않은 대상은 pending에 남아 있어야
+// 앞선 invoke를 기다리는 동안 새 입력이 들어왔을 때 최신 patch로 교체할 수 있다
+const takeNextGroup = (gesture: ActiveGesture) => {
+  for (const [domain, targets] of gesture.pendingPatches) {
+    const first = targets.entries().next();
+    if (first.done) {
+      gesture.pendingPatches.delete(domain);
+      continue;
+    }
+
+    const [firstIndex, patch] = first.value;
+    const patchKey = JSON.stringify(patch);
+    const groupTargets = [firstIndex];
+    targets.delete(firstIndex);
+
+    for (const [index, candidate] of targets) {
+      if (JSON.stringify(candidate) === patchKey) {
+        groupTargets.push(index);
+        targets.delete(index);
+      }
+    }
+
+    if (targets.size === 0) gesture.pendingPatches.delete(domain);
+    return { domain, targets: groupTargets, patch };
+  }
+
+  return null;
+};
+
 const flushPending = async (gesture: ActiveGesture) => {
   // invoke in-flight 1개 유지, 대기 중 최신 patch만 보존
   if (gesture !== active || gesture.publishInFlight) return;
-  if (gesture.pendingGroups.size === 0) return;
+  if (!hasPending(gesture)) return;
 
-  const groups = [...gesture.pendingGroups.values()];
-  gesture.pendingGroups.clear();
   gesture.publishInFlight = true;
   try {
-    for (const group of groups) {
+    while (gesture === active) {
+      const group = takeNextGroup(gesture);
+      if (!group) break;
       gesture.seq += 1;
       await previewApi.publish({
         schemaVersion: PREVIEW_SCHEMA_VERSION,
@@ -80,7 +112,7 @@ const flushPending = async (gesture: ActiveGesture) => {
         seq: gesture.seq,
         domain: group.domain,
         mode: gesture.mode,
-        targets: [...group.targets],
+        targets: group.targets,
         patch: group.patch,
       });
     }
@@ -88,7 +120,7 @@ const flushPending = async (gesture: ActiveGesture) => {
     console.error('Failed to publish preview', error);
   } finally {
     gesture.publishInFlight = false;
-    if (gesture === active && gesture.pendingGroups.size > 0) {
+    if (gesture === active && hasPending(gesture)) {
       schedulePublishFlush();
     }
   }
@@ -118,7 +150,7 @@ export const editGestureController = {
         mode,
         seq: 0,
         appliedPatches: new Map(),
-        pendingGroups: new Map(),
+        pendingPatches: new Map(),
         flushScheduled: false,
         publishInFlight: false,
       };
@@ -142,18 +174,16 @@ export const editGestureController = {
         entry.patch,
         domain,
       );
-      const groupKey = JSON.stringify([domain, entry.patch]);
-      const group = active.pendingGroups.get(groupKey);
-      if (group) {
-        group.targets.add(entry.index);
-        group.patch = { ...group.patch, ...entry.patch };
-      } else {
-        active.pendingGroups.set(groupKey, {
-          domain,
-          targets: new Set([entry.index]),
-          patch: { ...entry.patch },
-        });
+      let pending = active.pendingPatches.get(domain);
+      if (!pending) {
+        pending = new Map();
+        active.pendingPatches.set(domain, pending);
       }
+      const queued = pending.get(entry.index);
+      pending.set(
+        entry.index,
+        queued ? { ...queued, ...entry.patch } : { ...entry.patch },
+      );
     }
     schedulePublishFlush();
   },
@@ -210,7 +240,7 @@ export const editGestureController = {
     if (!gesture) return;
     active = null;
     releaseGestureSession(gesture.lifecycle);
-    gesture.pendingGroups.clear();
+    gesture.pendingPatches.clear();
     previewOverlay.endSession(gesture.sessionId);
     previewApi.cancel(gesture.sessionId).catch(() => {});
   },

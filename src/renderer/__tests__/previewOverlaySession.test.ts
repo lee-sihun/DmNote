@@ -302,6 +302,79 @@ describe('editGestureController', () => {
     expect(request.patch).toEqual({ backgroundColor: '#111111' });
   });
 
+  it('발행 대기 중 쌓인 중간값은 대상별 최신 값 하나로 합쳐 발행됨', async () => {
+    let release: () => void = () => undefined;
+    vi.mocked(previewApi.publish).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+
+    editGestureController.preview('4key', [{ index: 0, patch: { width: 1 } }]);
+    await flushPromises();
+    expect(previewApi.publish).toHaveBeenCalledTimes(1);
+
+    // in-flight 하나가 도는 동안 값이 계속 바뀐다 (드래그, 방향키 꾹 누르기)
+    for (const width of [2, 3, 4, 5]) {
+      editGestureController.preview('4key', [{ index: 0, patch: { width } }]);
+      await flushPromises();
+    }
+    expect(previewApi.publish).toHaveBeenCalledTimes(1);
+
+    release();
+    await flushPromises();
+    await flushPromises();
+
+    // 중간값 2, 3, 4는 이미 무의미하므로 IPC를 타지 않는다
+    expect(previewApi.publish).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(previewApi.publish).mock.calls[1][0].patch).toEqual({
+      width: 5,
+    });
+  });
+
+  it('아직 발행하지 않은 다른 그룹은 대기 중 최신값으로 교체됨', async () => {
+    let release: () => void = () => undefined;
+    vi.mocked(previewApi.publish).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+
+    editGestureController.preview('4key', [
+      { index: 0, patch: { width: 10 } },
+      { index: 1, patch: { width: 20 } },
+    ]);
+    await flushPromises();
+    expect(previewApi.publish).toHaveBeenCalledTimes(1);
+
+    editGestureController.preview('4key', [{ index: 1, patch: { width: 30 } }]);
+    await flushPromises();
+
+    release();
+    await flushPromises();
+    await flushPromises();
+
+    const targetOneCalls = vi
+      .mocked(previewApi.publish)
+      .mock.calls.map(([request]) => request)
+      .filter((request) => request.targets.includes(1));
+    expect(targetOneCalls).toHaveLength(1);
+    expect(targetOneCalls[0].patch).toEqual({ width: 30 });
+  });
+
+  it('같은 patch를 쓰는 여러 대상은 한 번에 발행됨', async () => {
+    editGestureController.preview('4key', [
+      { index: 0, patch: { width: 42 } },
+      { index: 1, patch: { width: 42 } },
+    ]);
+    await flushPromises();
+
+    expect(previewApi.publish).toHaveBeenCalledTimes(1);
+    const request = vi.mocked(previewApi.publish).mock.calls[0][0];
+    expect(request.targets).toEqual([0, 1]);
+    expect(request.patch).toEqual({ width: 42 });
+  });
+
   it('settleCommit 성공 시 로컬 세션 종료 + 보조 cancel 브로드캐스트', async () => {
     editGestureController.preview('4key', [
       { index: 0, patch: { width: 100 } },

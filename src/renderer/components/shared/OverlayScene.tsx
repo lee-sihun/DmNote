@@ -14,6 +14,7 @@ import {
 } from '@src/types/key/keys';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 import type { NoteBuffer } from '@stores/signals/noteBuffer';
+import { resolveZIndexFallback } from '@utils/core/zIndexFallback';
 
 const FALLBACK_POSITION: KeyPosition = {
   dx: 0,
@@ -184,10 +185,7 @@ const OverlayScene = ({
           currentPositions[index] ??
           FALLBACK_POSITION;
 
-        const position = {
-          ...basePosition,
-          zIndex: basePosition.zIndex ?? index,
-        };
+        const position = resolveZIndexFallback(basePosition, index);
 
         return (
           <OverlayKey
