@@ -972,11 +972,17 @@ export function useAppBootstrap() {
       }),
       window.api.keys.customTabs.onChanged(
         ({ customTabs, selectedKeyType }) => {
+          const modeChanged =
+            useKeyStore.getState().selectedKeyType !== selectedKeyType;
           useKeyStore.setState((state) => ({
             ...state,
             customTabs,
             selectedKeyType,
           }));
+          // 백엔드가 customTabs를 keys:mode-changed보다 먼저 보낸다.
+          // 여기서 리셋하지 않으면 그 사이 store가 "새 모드 + 옛 index"가 된다
+          if (modeChanged && !isOverlayWindow && window.__dmn_runtime !== 'obs')
+            resetSelectionForModeChange();
         },
       ),
       window.api.noteTab.onChanged(({ tabId, settings }) => {
@@ -1000,11 +1006,15 @@ export function useAppBootstrap() {
       }),
       window.api.presets.onSnapshot((snapshot) => {
         if (disposed) return;
+        const modeChanged =
+          useKeyStore.getState().selectedKeyType !== snapshot.selectedKeyType;
         useKeyStore.setState((state) => ({
           ...state,
           customTabs: snapshot.customTabs,
           selectedKeyType: snapshot.selectedKeyType,
         }));
+        if (modeChanged && !isOverlayWindow && window.__dmn_runtime !== 'obs')
+          resetSelectionForModeChange();
         useSettingsStore.setState({
           tabNoteOverrides: snapshot.tabNoteOverrides,
         });
