@@ -454,6 +454,41 @@ mod tests {
         );
     }
 
+    // 프리셋 편집은 백엔드가 모든 모드의 바인딩된 요소를 갱신한다.
+    // 프론트가 index로 한 번 더 얹지 않는 근거라 값까지 고정한다
+    #[test]
+    fn preset_update_rewrites_every_mode_and_leaves_unbound_alone() {
+        const OTHER_MODE: &str = "8key";
+        let preset = target_preset();
+        let mut store = counter_store(true, true, true);
+        store
+            .keys
+            .insert(OTHER_MODE.to_string(), vec!["KeyB".into()]);
+        store.key_positions.insert(
+            OTHER_MODE.to_string(),
+            vec![position(true), position(false)],
+        );
+
+        let affected = apply_preset_to_bound_counters(&mut store, TARGET_PRESET_ID, &preset);
+
+        assert_eq!(affected, 4);
+
+        let other = &store.key_positions[OTHER_MODE];
+        let bound = &other[0].counter.animation;
+        assert_eq!(bound.preset_id.as_deref(), Some(TARGET_PRESET_ID));
+        assert_eq!(bound.bezier, preset.bezier);
+        assert_eq!(bound.scale, preset.scale);
+        assert_eq!(bound.duration_ms, preset.duration_ms);
+
+        // 바인딩되지 않은 요소는 그대로 둔다
+        let untouched = &other[1].counter.animation;
+        let default_animation = KeyPosition::default().counter.animation;
+        assert_eq!(untouched.preset_id, default_animation.preset_id);
+        assert_eq!(untouched.bezier, default_animation.bezier);
+        assert_eq!(untouched.scale, default_animation.scale);
+        assert_eq!(untouched.duration_ms, default_animation.duration_ms);
+    }
+
     #[test]
     fn preset_update_reports_only_actually_changed_collections() {
         let mut store = counter_store(false, true, false);
