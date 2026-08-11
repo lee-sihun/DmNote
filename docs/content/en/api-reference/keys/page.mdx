@@ -258,6 +258,7 @@ gradient siblings:
 
 ```typescript
 interface KeyPosition {
+  id?: string; // stable element identity (UUID), assigned and owned by the app
   // ...position, image, note, and counter fields...
   backgroundColor?: string;
   activeBackgroundColor?: string;
@@ -292,6 +293,13 @@ interface ElementShadowSpec {
   blur: number; // px, 0 to 100
 }
 ```
+
+Every element position (`keyPositions`, `statPositions`, `graphPositions`,
+`knobPositions`) carries a stable `id`. Treat it as opaque: echo back the value
+you read, never invent one, and never copy an `id` onto another element. A
+write whose `id` is missing or unknown gets a fresh one assigned by the
+backend, and loading a preset re-issues every `id`. Use `id` to track an
+element across reorders instead of its array index.
 
 When a gradient field is present it takes priority over the matching solid
 field, and the solid field is kept in sync with the first stop color on save.

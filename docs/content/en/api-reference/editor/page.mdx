@@ -52,6 +52,15 @@ that top-level collection. It is not an item-level diff.
   identifier rules.
 </Callout>
 
+<Callout>
+  Every element in the position collections (`keyPositions`, `statPositions`,
+  `graphPositions`, `knobPositions`) carries a stable `id` (UUID) assigned and
+  owned by the app. Treat it as opaque: echo back the value you read and never
+  invent or duplicate one. A written element with a missing or unknown `id`
+  gets a fresh one from the backend. See the
+  [Keys API](/docs/api-reference/keys) for the identity rules.
+</Callout>
+
 ## Read the Current Document
 
 ### `dmn.editor.get(): Promise<EditorGetResult>`

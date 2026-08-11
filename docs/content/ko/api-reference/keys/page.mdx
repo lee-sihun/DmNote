@@ -106,6 +106,7 @@ fail-closed 게이트입니다. 같은 규칙이 `updateWithPositions()`와, `ke
 
 ```typescript
 interface KeyPosition {
+  id?: string; // 요소 안정 ID (UUID). 앱이 발급·소유
   dx: number;
   dy: number;
   width: number;
@@ -159,6 +160,13 @@ interface ElementShadowSpec {
   blur: number; // px, 0~100
 }
 ```
+
+모든 요소 위치(`keyPositions`, `statPositions`, `graphPositions`,
+`knobPositions`)는 안정 `id`를 가집니다. 불투명 값으로 다루세요. 읽은 값을
+그대로 되돌려 보내고, 직접 만들거나 다른 요소에 복사하지 마세요. `id`가
+없거나 미확인인 쓰기는 백엔드가 새 값을 발급하며, 프리셋을 불러오면 모든
+`id`가 재발급됩니다. 재정렬을 가로질러 요소를 추적할 때는 배열 index 대신
+`id`를 사용하세요.
 
 그라데이션 필드가 있으면 렌더에서 대응 단색 필드보다 우선하며, 저장 시
 대응 단색 필드는 첫 스톱 색으로 자동 동기화됩니다. 단색으로 되돌리려면
