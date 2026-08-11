@@ -411,20 +411,32 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
-  // 백엔드 v1 adapter 흉내: 무ID keyPositions에 canonical의 ID를 되살린다.
-  // 결과 envelope에는 adapted 값이 없으므로 coordinator는 get으로만 알 수 있다
+  // 백엔드 v1 adapter 흉내 (계약 §3 충실 재현): 무ID 요소는 같은 자리의
+  // 값 일치만 ID를 승계하고, 값이 수정된 요소는 새 ID를 발급한다. stale
+  // baseRevision은 실백엔드처럼 REVISION_CONFLICT로 거절한다. 결과
+  // envelope에는 adapted 값이 없으므로 coordinator는 get으로만 알 수 있다
   const emulateV1AdapterCommit = (
     harness: ReturnType<typeof createHarness>,
   ) => {
+    let issued = 0;
+    const valueWithoutId = (position: Record<string, unknown>) => {
+      const { id: _id, ...rest } = position;
+      return JSON.stringify(rest);
+    };
     harness.transport.commitMock.mockImplementation(async (request) => {
+      if (request.baseRevision !== harness.transport.canonical.revision) {
+        throw revisionConflict();
+      }
       const before = harness.transport.canonical.document;
       const next = applyEditorPatch(before, request.changes);
       for (const [mode, positions] of Object.entries(next.keyPositions)) {
         positions.forEach((position, index) => {
-          if (!position.id) {
-            const inherited = before.keyPositions[mode]?.[index]?.id;
-            if (inherited) position.id = inherited;
-          }
+          if (position.id) return;
+          const current = before.keyPositions[mode]?.[index];
+          position.id =
+            current?.id && valueWithoutId(current) === valueWithoutId(position)
+              ? current.id
+              : `fresh-${(issued += 1)}`;
         });
       }
       const changedFields = getChangedEditorFields(before, next);
@@ -469,7 +481,7 @@ describe('EditorSaveCoordinator', () => {
     expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
   });
 
-  it('keeps canonical element ids after a changing idless plugin commit', async () => {
+  it('mirrors adapter-issued ids after a changing idless plugin commit', async () => {
     const base = makeDocument('A');
     const idBefore = base.keyPositions['4key'][0].id;
     const harness = createHarness(base);
@@ -483,14 +495,19 @@ describe('EditorSaveCoordinator', () => {
       { multiKey: false },
     );
 
-    // own committed 이벤트는 revision 선점으로 패치가 무시되므로,
-    // 커밋 경로 자체가 canonical(ID 포함)을 되찾아야 한다
+    // 값이 수정된 무ID 요소는 계약(§3)상 새 ID를 받는다. own committed
+    // 이벤트는 revision 선점으로 패치가 무시되므로 커밋 경로 자체가
+    // 백엔드가 발급한 canonical ID를 되찾아 비춰야 한다
+    const adaptedId =
+      harness.transport.canonical.document.keyPositions['4key'][0].id;
+    expect(adaptedId).toBeTruthy();
+    expect(adaptedId).not.toBe(idBefore);
     expect(result.keyPositions['4key'][0].dx).toBe(moved['4key'][0].dx);
-    expect(result.keyPositions['4key'][0].id).toBe(idBefore);
-    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+    expect(result.keyPositions['4key'][0].id).toBe(adaptedId);
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(adaptedId);
   });
 
-  it('keeps the previous canonical when the post-commit read fails and recovers on retry', async () => {
+  it('recovers via sync when the post-commit read and own event are both lost', async () => {
     const base = makeDocument('A');
     const idBefore = base.keyPositions['4key'][0].id;
     const harness = createHarness(base);
@@ -502,11 +519,15 @@ describe('EditorSaveCoordinator', () => {
 
     const moved = strippedIdPositions(base);
     moved['4key'][0].dx += 10;
+    const patch = {
+      schemaVersion: 1 as const,
+      keys: base.keys,
+      keyPositions: moved,
+    };
     await expect(
-      harness.coordinator.commitIsolatedPluginPatch(
-        { schemaVersion: 1, keys: base.keys, keyPositions: moved },
-        { multiKey: false },
-      ),
+      harness.coordinator.commitIsolatedPluginPatch(patch, {
+        multiKey: false,
+      }),
     ).rejects.toThrow('ipc unavailable');
 
     // 무ID target이 lastAck·스토어를 오염시키지 않는다 (이전 canonical 유지)
@@ -515,16 +536,27 @@ describe('EditorSaveCoordinator', () => {
       base.keyPositions['4key'][0].dx,
     );
 
-    // coordinator는 죽은 상태가 아니다 - 재시도가 정상 경로로 복구된다
-    const retried = await harness.coordinator.commitIsolatedPluginPatch(
-      { schemaVersion: 1, keys: base.keys, keyPositions: moved },
-      { multiKey: false },
-    );
-    expect(retried.keyPositions['4key'][0].id).toBe(idBefore);
-    expect(retried.keyPositions['4key'][0].dx).toBe(moved['4key'][0].dx);
+    // revision이 뒤처진 즉시 재시도는 실백엔드 계약대로 충돌한다
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(patch, {
+        multiKey: false,
+      }),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    // 복구 경로: sync가 canonical(발급된 ID 포함)을 revision·lastAck·스토어에 적용
+    await harness.coordinator.sync();
+    const adaptedId =
+      harness.transport.canonical.document.keyPositions['4key'][0].id;
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(adaptedId);
     expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
       moved['4key'][0].dx,
     );
+
+    // 복구 후 재시도는 정상 완료된다 (값 일치라 승계, no-op)
+    const retried = await harness.coordinator.commitIsolatedPluginPatch(patch, {
+      multiKey: false,
+    });
+    expect(retried.keyPositions['4key'][0].id).toBe(adaptedId);
     harness.coordinator.stop();
   });
 
@@ -562,7 +594,10 @@ describe('EditorSaveCoordinator', () => {
         moved['4key'][0].dx,
       ),
     );
-    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(
+      harness.transport.canonical.document.keyPositions['4key'][0].id,
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBeTruthy();
 
     // 후속 flush가 성공한 플러그인 변경을 낡은 로컬로 되돌리지 않는다
     const commitsBefore = harness.transport.commitMock.mock.calls.length;
@@ -573,7 +608,6 @@ describe('EditorSaveCoordinator', () => {
 
   it('recovers the local store when the own event lands before the failed read', async () => {
     const base = makeDocument('A');
-    const idBefore = base.keyPositions['4key'][0].id;
     const harness = createHarness(base);
     emulateV1AdapterCommit(harness);
     await harness.coordinator.start();
@@ -604,7 +638,10 @@ describe('EditorSaveCoordinator', () => {
         moved['4key'][0].dx,
       ),
     );
-    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(
+      harness.transport.canonical.document.keyPositions['4key'][0].id,
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBeTruthy();
 
     const commitsBefore = harness.transport.commitMock.mock.calls.length;
     await harness.coordinator.commitEditorState();
