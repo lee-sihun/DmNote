@@ -119,6 +119,12 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    await mountPicker();
+  });
+
+  const mountPicker = async (
+    completionBinding?: 'session-mode' | 'element-id',
+  ) => {
     act(() => {
       root.render(
         <EditSessionScope>
@@ -128,12 +134,13 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
             onSoundSelect={onSoundSelect}
             pageTitle="sound"
             onBack={vi.fn()}
+            completionBinding={completionBinding}
           />
         </EditSessionScope>,
       );
     });
     await settle();
-  });
+  };
 
   afterEach(() => {
     act(() => root.unmount());
@@ -169,6 +176,31 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
 
   it('삭제 뒤 모드가 그대로면 로컬 선택도 해제한다', async () => {
     await runDelete();
+
+    await act(async () => {
+      resolveConfirm(true);
+      await settle();
+    });
+
+    expect(remove).toHaveBeenCalledWith(SOUND.soundPath);
+    expect(onSoundSelect).toHaveBeenCalledWith(null);
+  });
+
+  // element-id 결합은 유효성 판정을 ID applier에 위임한다.
+  // 가드 2곳(트림 저장, 삭제 후 해제) 모두 같은 조건으로 통과해야 한다
+  it('element-id 결합이면 모드가 바뀌어도 트림 저장을 연결한다', async () => {
+    await mountPicker('element-id');
+    switchMode();
+
+    act(() => mocks.saveTrim?.('sounds/new.wav'));
+
+    expect(onSoundSelect).toHaveBeenCalledWith('sounds/new.wav');
+  });
+
+  it('element-id 결합이면 모드가 바뀌어도 삭제 해제를 원 요소로 보낸다', async () => {
+    await mountPicker('element-id');
+    await runDelete();
+    switchMode();
 
     await act(async () => {
       resolveConfirm(true);

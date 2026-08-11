@@ -24,6 +24,8 @@ import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorS
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
+import { mergeChangedAnimationFields } from '@src/types/key/counterAnimation';
 import {
   counterFillPair,
   gradientToCss,
@@ -103,10 +105,34 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     onKeyUpdate({ index: keyIndex, counter: newSettings });
   };
 
+  // 모션 편집기를 기다린 비동기 완료. 대기 중 재정렬·모드 전환이 일어나도
+  // id로 현재 (mode, index)를 다시 찾아 적용하고, 병합 base는 완료 시점의
+  // 현재 값으로 읽는다. animation도 시작 스냅샷 대비 바뀐 필드만 얹어 대기 중
+  // 다른 writer의 변경(enabled 등)을 되돌리지 않는다.
+  // 시작 type으로만 조회해 type이 옮겨졌으면 조용히 중단한다
   const handleAnimationUpdate = (
     nextAnimation: KeyCounterAnimationSettings,
   ) => {
-    handleCounterUpdate({ animation: nextAnimation });
+    const id = keyPosition.id;
+    if (!id) {
+      handleCounterUpdate({ animation: nextAnimation });
+      return;
+    }
+    const startType = isStat ? ('stat' as const) : ('key' as const);
+    const startAnimation = counterSettings.animation;
+    applyElementPatchById(startType, id, (current) => {
+      const settings = normalizeCounterSettings(current.counter);
+      return {
+        counter: {
+          ...settings,
+          animation: mergeChangedAnimationFields(
+            settings.animation,
+            startAnimation,
+            nextAnimation,
+          ),
+        },
+      };
+    });
   };
 
   const handlePickerToggle = (target: Exclude<PickerTarget, null>) => {
@@ -536,6 +562,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         createPortal(
           <CounterAnimationPicker
             open
+            completionBinding={keyPosition.id ? 'element-id' : 'session-mode'}
             animation={counterSettings.animation}
             counterSettings={counterSettings}
             keyVisual={{

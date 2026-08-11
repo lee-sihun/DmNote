@@ -88,6 +88,12 @@ describe('CounterAnimationPicker 저장 완료와 모드 전환', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    await mountPicker();
+  });
+
+  const mountPicker = async (
+    completionBinding?: 'session-mode' | 'element-id',
+  ) => {
     act(() => {
       root.render(
         <EditSessionScope>
@@ -98,13 +104,14 @@ describe('CounterAnimationPicker 저장 완료와 모드 전환', () => {
             t={(key: string) => key}
             pageTitle="animation"
             onBack={vi.fn()}
+            completionBinding={completionBinding}
           />
         </EditSessionScope>,
       );
     });
     await settle();
     list.mockClear();
-  });
+  };
 
   afterEach(() => {
     act(() => root.unmount());
@@ -127,5 +134,17 @@ describe('CounterAnimationPicker 저장 완료와 모드 전환', () => {
     // 라이브러리 갱신은 그대로 진행한다
     expect(list).toHaveBeenCalled();
     expect(onAnimationChange).not.toHaveBeenCalled();
+  });
+
+  // element-id 결합은 유효성 판정을 ID applier에 위임한다
+  it('element-id 결합이면 모드가 바뀌어도 저장한 모션을 콜백에 전달한다', async () => {
+    await mountPicker('element-id');
+    act(() => {
+      useKeyStore.setState({ selectedKeyType: '8key' });
+    });
+
+    await savePreset();
+
+    expect(onAnimationChange).toHaveBeenCalled();
   });
 });

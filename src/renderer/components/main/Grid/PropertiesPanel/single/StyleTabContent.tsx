@@ -22,6 +22,8 @@ import {
 } from '../PropertyInputs';
 import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { resolveElementByIdAcross } from '@src/renderer/editor/model/elementIdMap';
+import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
@@ -580,15 +582,35 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     onKeyUpdate({ index: keyIndex, [property]: value });
   };
 
+  // 작업 시작(=이 렌더) 시점의 소속 컬렉션. in-flight 클로저에 함께 캡처된다.
+  // 이 패널은 writer가 key/stat 어느 쪽인지 모르므로 시작 시점 소속으로 고정한다
+  const boundElementType = keyPosition.id
+    ? resolveElementByIdAcross(['key', 'stat'], keyPosition.id)?.type ?? null
+    : null;
+
+  // 비동기 완료 전용 적용자. 파일 대화상자·모달을 기다리는 사이 배열 재정렬이나
+  // 모드 전환이 일어나도 id로 현재 (mode, index)를 다시 찾아 그 요소에 적용한다.
+  // 삭제됐거나 type이 옮겨졌으면 자산만 남기고 연결은 조용히 중단한다
+  const applyToBoundElement = (patch: Omit<Partial<KeyPosition>, 'id'>) => {
+    const id = keyPosition.id;
+    if (!id) {
+      // id 없는 구형 데이터는 기존 index 경로 유지
+      onKeyPreview?.(keyIndex, patch);
+      onKeyUpdate({ index: keyIndex, ...patch });
+      return;
+    }
+    // id가 있는데 시작 시점 조회가 실패했으면 옛 index 폴백 대신 중단
+    if (!boundElementType) return;
+    applyElementPatchById(boundElementType, id, () => patch);
+  };
+
   // 이미지 변경 핸들러
   const handleIdleImageChange = (imageUrl: string) => {
-    onKeyPreview?.(keyIndex, { inactiveImage: imageUrl });
-    onKeyUpdate({ index: keyIndex, inactiveImage: imageUrl });
+    applyToBoundElement({ inactiveImage: imageUrl });
   };
 
   const handleActiveImageChange = (imageUrl: string) => {
-    onKeyPreview?.(keyIndex, { activeImage: imageUrl });
-    onKeyUpdate({ index: keyIndex, activeImage: imageUrl });
+    applyToBoundElement({ activeImage: imageUrl });
   };
 
   const handleIdleTransparentChange = (checked: boolean) => {
@@ -1114,6 +1136,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             open={showImagePicker}
             referenceRef={imageButtonRef}
             panelElement={panelElement}
+            completionBinding={keyPosition.id ? 'element-id' : 'session-mode'}
             idleImage={keyPosition.inactiveImage || ''}
             activeImage={keyPosition.activeImage || ''}
             idleTransparent={keyPosition.idleTransparent ?? false}
@@ -1208,11 +1231,11 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         createPortal(
           <SoundPicker
             open
+            completionBinding={keyPosition.id ? 'element-id' : 'session-mode'}
             selectedSound={keyPosition.soundPath || null}
             onSoundSelect={(soundPath) => {
               const nextPath = soundPath || '';
-              onKeyPreview?.(keyIndex, { soundPath: nextPath });
-              onKeyUpdate({ index: keyIndex, soundPath: nextPath });
+              applyToBoundElement({ soundPath: nextPath });
             }}
             previewVolume={keyPosition.soundVolume ?? 100}
             pageTitle={t('propertiesPanel.keySound') || '키 사운드'}

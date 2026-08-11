@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
+import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
 import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import {
   STAT_BASE_OPTIONS,
@@ -349,6 +350,17 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   useCustomCSS,
   t,
 }) => {
+  // 이미지 대화상자 완료 전용. 대기 중 재정렬·모드 전환이 일어나도 id로
+  // 현재 (mode, index)를 다시 찾아 적용하고, 삭제됐으면 조용히 중단한다
+  const applyToGraphById = (patch: Omit<Partial<GraphItemPosition>, 'id'>) => {
+    const id = singleGraphPosition.id;
+    if (!id) {
+      handleGraphUpdate({ index: singleGraphIndex, ...patch });
+      return;
+    }
+    applyElementPatchById('graph', id, () => patch);
+  };
+
   const graphShapeOptions = [
     { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
     { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
@@ -720,6 +732,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             referenceRef={graphImageButtonRef}
             panelElement={panelElement}
             showActiveState={false}
+            completionBinding={
+              singleGraphPosition.id ? 'element-id' : 'session-mode'
+            }
             idleImage={singleGraphPosition.inactiveImage || ''}
             activeImage={singleGraphPosition.activeImage || ''}
             idleTransparent={false}
@@ -735,16 +750,10 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               'cover'
             }
             onIdleImageChange={(imageUrl: string) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                inactiveImage: imageUrl,
-              })
+              applyToGraphById({ inactiveImage: imageUrl })
             }
             onActiveImageChange={(imageUrl: string) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                activeImage: imageUrl,
-              })
+              applyToGraphById({ activeImage: imageUrl })
             }
             onIdleTransparentChange={(value: boolean) =>
               handleGraphUpdate({
@@ -835,6 +844,17 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   useCustomCSS,
   t,
 }) => {
+  // 이미지 대화상자 완료 전용. 대기 중 재정렬·모드 전환이 일어나도 id로
+  // 현재 (mode, index)를 다시 찾아 적용하고, 삭제됐으면 조용히 중단한다
+  const applyToKnobById = (patch: Omit<Partial<KnobItemPosition>, 'id'>) => {
+    const id = singleKnobPosition.id;
+    if (!id) {
+      handleKnobUpdate({ index: singleKnobIndex, ...patch });
+      return;
+    }
+    applyElementPatchById('knob', id, () => patch);
+  };
+
   const panelRef = useRef<HTMLDivElement | null>(null);
   const imageButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showImagePicker, setShowImagePicker] = useState(false);
@@ -1441,6 +1461,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             open={showImagePicker}
             referenceRef={imageButtonRef}
             panelElement={panelRef.current}
+            completionBinding={
+              singleKnobPosition.id ? 'element-id' : 'session-mode'
+            }
             idleImage={singleKnobPosition.inactiveImage || ''}
             activeImage={singleKnobPosition.activeImage || ''}
             idleTransparent={singleKnobPosition.idleTransparent ?? false}
@@ -1456,16 +1479,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               'cover'
             }
             onIdleImageChange={(imageUrl: string) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                inactiveImage: imageUrl,
-              })
+              applyToKnobById({ inactiveImage: imageUrl })
             }
             onActiveImageChange={(imageUrl: string) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                activeImage: imageUrl,
-              })
+              applyToKnobById({ activeImage: imageUrl })
             }
             onIdleTransparentChange={(value: boolean) =>
               handleKnobUpdate({

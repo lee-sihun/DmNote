@@ -12,7 +12,9 @@ import {
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import SoundTrimModal from '../managers/SoundTrimModal';
-import { useEditSessionModeGuard } from '@src/renderer/contexts/EditSessionScope';
+import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
+
+import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 
 interface SoundPickerProps {
   open: boolean;
@@ -21,6 +23,8 @@ interface SoundPickerProps {
   pageTitle: string;
   onBack: () => void;
   previewVolume?: number;
+  /** 비동기 완료 콜백이 안정 ID applier로 라우팅되면 element-id */
+  completionBinding?: CompletionBinding;
 }
 
 type TrimState =
@@ -36,6 +40,7 @@ const SoundPicker = ({
   pageTitle,
   onBack,
   previewVolume,
+  completionBinding = 'session-mode',
 }: SoundPickerProps) => {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,7 +53,7 @@ const SoundPicker = ({
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [trimState, setTrimState] = useState<TrimState | null>(null);
-  const isSameEditSessionMode = useEditSessionModeGuard();
+  const canBindCompletion = useEditSessionCompletionGuard(completionBinding);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -213,10 +218,8 @@ const SoundPicker = ({
       await window.api.sound.remove(item.soundPath);
       // 백엔드가 이미 모든 요소에서 이 사운드를 해제했다. 대상이 갈렸으면
       // 여기서 한 번 더 비우는 건 새 모드의 다른 사운드를 지우는 일이 된다
-      if (
-        normalizedSelectedSound === item.soundPath &&
-        isSameEditSessionMode()
-      ) {
+      // (element-id 결합이면 ID applier가 원 요소에만 해제를 적용한다)
+      if (normalizedSelectedSound === item.soundPath && canBindCompletion()) {
         onSoundSelect(null);
       }
       await loadSounds();
@@ -288,7 +291,8 @@ const SoundPicker = ({
 
   const handleTrimSaved = (soundPath: string) => {
     // 사운드 파일은 이미 저장됐다. 대상이 갈렸으면 연결만 하지 않는다
-    if (isSameEditSessionMode()) onSoundSelect(soundPath);
+    // (element-id 결합이면 ID applier가 유효성을 판정하므로 통과)
+    if (canBindCompletion()) onSoundSelect(soundPath);
     setTrimState(null);
     void loadSounds();
   };
