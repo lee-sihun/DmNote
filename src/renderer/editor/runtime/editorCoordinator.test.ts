@@ -508,6 +508,66 @@ describe('EditorSaveCoordinator', () => {
     expect(harness.getLocal().keyPositions['4key'][0].id).toBe(adaptedId);
   });
 
+  it('삭제 후 stale 재제출로 재발급된 요소에 옛 ID 완료가 닿지 않는다', async () => {
+    // 계약 신뢰 경계 필수 테스트: retired-ID 집합 없이도 이 체인이 안전해야 한다
+    const base = makeDocument('A');
+    const retiredId = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+
+    // 1) 비동기 완료가 retiredId를 캡처해 둔 상태에서 요소 삭제
+    await harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keys: { '4key': [] },
+      keyPositions: { '4key': [] },
+    });
+    expect(harness.transport.canonical.document.keyPositions['4key']).toEqual(
+      [],
+    );
+
+    // 2) 삭제 전 스냅샷을 든 stale v1 클라이언트가 무ID로 재제출 -
+    //    계약(§3)상 삭제된 ID를 승계하지 못하고 새 ID를 발급받는다
+    await harness.coordinator.commitIsolatedPluginPatch(
+      {
+        schemaVersion: 1,
+        keys: base.keys,
+        keyPositions: strippedIdPositions(base),
+      },
+      { multiKey: false },
+    );
+    const reissued =
+      harness.transport.canonical.document.keyPositions['4key'][0];
+    expect(reissued.id).toBeTruthy();
+    expect(reissued.id).not.toBe(retiredId);
+
+    // 3) 옛 ID에 묶인 완료가 실행돼도 재발급 요소를 건드리지 않는다
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    const result = await harness.coordinator.commitGeneratedPatch((latest) => {
+      const record = structuredClone(latest.keyPositions);
+      let touched = false;
+      for (const list of Object.values(record)) {
+        list.forEach((position, index) => {
+          if (position.id !== retiredId) return;
+          list[index] = { ...position, inactiveImage: 'stale.png' };
+          touched = true;
+        });
+      }
+      return touched ? { schemaVersion: 1, keyPositions: record } : null;
+    });
+
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    const finalPosition =
+      harness.transport.canonical.document.keyPositions['4key'][0];
+    expect(finalPosition.id).toBe(reissued.id);
+    expect(finalPosition.inactiveImage ?? '').toBe('');
+    expect(result.keyPositions['4key'][0].inactiveImage ?? '').toBe('');
+    expect(harness.getLocal().keyPositions['4key'][0].inactiveImage ?? '').toBe(
+      '',
+    );
+    harness.coordinator.stop();
+  });
+
   it('resyncs on retry conflict so plugin retries recover without ui sync', async () => {
     const base = makeDocument('A');
     const idBefore = base.keyPositions['4key'][0].id;
