@@ -377,6 +377,7 @@ pub fn preset_load(
                 if let Some(tab_css_overrides) = preset_tab_css_overrides {
                     store.tab_css_overrides = tab_css_overrides;
                 }
+                rekey_full_preset_elements(store);
                 crate::state::migration::clear_dangling_group_ids(store);
                 let diff = apply_patch_to_store(store, &settings_patch);
                 Ok((
@@ -610,6 +611,9 @@ pub fn preset_load_tab(
             admission,
             move |store| {
                 let previous_tab_css_overrides = store.tab_css_overrides.clone();
+                let stat_positions_written = imported_stat_positions.is_some();
+                let graph_positions_written = imported_graph_positions.is_some();
+                let knob_positions_written = imported_knob_positions.is_some();
                 merge_tab_preset_key_pair(store, &current_tab_id, src_keys, imported_key_positions);
                 if let Some(positions) = imported_stat_positions {
                     store
@@ -626,6 +630,13 @@ pub fn preset_load_tab(
                         .knob_positions
                         .insert(current_tab_id.clone(), positions);
                 }
+                rekey_tab_preset_elements(
+                    store,
+                    &current_tab_id,
+                    stat_positions_written,
+                    graph_positions_written,
+                    knob_positions_written,
+                );
                 apply_tab_note_override(
                     store,
                     &current_tab_id,
@@ -888,6 +899,27 @@ fn align_imported_key_collections(keys: &mut KeyMappings, positions: &mut KeyPos
         let mode_positions = positions.entry(mode).or_default();
         align_imported_key_pair(mode_keys, mode_positions);
     }
+}
+
+fn rekey_full_preset_elements(store: &mut AppStoreData) {
+    crate::state::native_element_id::rekey_store_element_ids(store);
+}
+
+fn rekey_tab_preset_elements(
+    store: &mut AppStoreData,
+    tab_id: &str,
+    stat_positions_written: bool,
+    graph_positions_written: bool,
+    knob_positions_written: bool,
+) {
+    crate::state::native_element_id::rekey_mode_element_ids_for_collections(
+        store,
+        tab_id,
+        true,
+        stat_positions_written,
+        graph_positions_written,
+        knob_positions_written,
+    );
 }
 
 fn merge_tab_preset_key_pair(
@@ -1551,7 +1583,10 @@ mod tests {
     use super::*;
     use crate::{
         defaults::{default_keys, default_positions},
-        models::{CustomCssHistoryEntry, CustomFont, JsPlugin, KnobPosition},
+        models::{
+            CustomCssHistoryEntry, CustomFont, GraphPosition, GraphStatType, GraphType, JsPlugin,
+            KnobPosition, StatPosition, StatType,
+        },
     };
 
     #[test]
@@ -2260,6 +2295,96 @@ mod tests {
         assert_eq!(store.key_positions["4key"][0].dx, 777.0);
         assert_eq!(store.keys["4key"][0], KeySlot::from("Imported"));
         assert_eq!(store.keys["4key"].len(), store.key_positions["4key"].len());
+    }
+
+    fn old_preset_store() -> AppStoreData {
+        AppStoreData {
+            key_positions: KeyPositions::from([
+                ("target".to_string(), vec![KeyPosition::default()]),
+                ("untouched".to_string(), vec![KeyPosition::default()]),
+            ]),
+            stat_positions: StatPositions::from([(
+                "target".to_string(),
+                vec![StatPosition {
+                    stat_type: StatType::Kps,
+                    position: KeyPosition::default(),
+                }],
+            )]),
+            graph_positions: GraphPositions::from([(
+                "target".to_string(),
+                vec![GraphPosition {
+                    stat_type: GraphStatType::Kps,
+                    graph_type: GraphType::Line,
+                    graph_speed: 100,
+                    graph_color: "#123456".to_string(),
+                    show_avg_line: true,
+                    position: KeyPosition::default(),
+                }],
+            )]),
+            knob_positions: KnobPositions::from([(
+                "target".to_string(),
+                vec![KnobPosition {
+                    axis_id: "axis".to_string(),
+                    sensitivity: 1.0,
+                    reverse: false,
+                    position: KeyPosition::default(),
+                }],
+            )]),
+            ..AppStoreData::default()
+        }
+    }
+
+    fn target_preset_ids(store: &AppStoreData) -> Vec<String> {
+        vec![
+            store.key_positions["target"][0].id.clone(),
+            store.stat_positions["target"][0].position.id.clone(),
+            store.graph_positions["target"][0].position.id.clone(),
+            store.knob_positions["target"][0].position.id.clone(),
+        ]
+    }
+
+    #[test]
+    fn old_full_preset_rekeys_every_application() {
+        let mut first = old_preset_store();
+        rekey_full_preset_elements(&mut first);
+        let first_ids = target_preset_ids(&first);
+        let mut second = old_preset_store();
+        rekey_full_preset_elements(&mut second);
+        let second_ids = target_preset_ids(&second);
+
+        assert!(first_ids
+            .iter()
+            .all(|id| crate::state::native_element_id::is_valid_element_id(id)));
+        assert!(first_ids.iter().all(|id| !second_ids.contains(id)));
+    }
+
+    #[test]
+    fn old_tab_preset_rekeys_only_written_collections_on_every_application() {
+        let mut store = old_preset_store();
+        crate::state::native_element_id::backfill_store_element_ids(&mut store);
+        let untouched_id = store.key_positions["untouched"][0].id.clone();
+        let original_ids = target_preset_ids(&store);
+
+        rekey_tab_preset_elements(&mut store, "target", true, true, false);
+        let first_ids = target_preset_ids(&store);
+        rekey_tab_preset_elements(&mut store, "target", true, true, false);
+        let second_ids = target_preset_ids(&store);
+
+        assert!(original_ids[..3]
+            .iter()
+            .zip(&first_ids[..3])
+            .all(|(before, after)| before != after));
+        assert!(first_ids[..3]
+            .iter()
+            .zip(&second_ids[..3])
+            .all(|(before, after)| before != after));
+        assert_eq!(first_ids[3], original_ids[3]);
+        assert_eq!(second_ids[3], original_ids[3]);
+        assert_eq!(store.key_positions["untouched"][0].id, untouched_id);
+        crate::state::native_element_id::validate_document_element_ids(
+            &crate::models::EditorDocumentV1::from_store(&store),
+        )
+        .unwrap();
     }
 
     #[test]

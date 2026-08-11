@@ -852,6 +852,11 @@ impl AppStore {
             return Err(EditorCommitError::multi_key_unsupported());
         }
 
+        super::native_element_id::prepare_commit_patch_element_ids(
+            &guard.data,
+            &mut request.changes,
+        )?;
+
         let gesture_id = request.history_gesture_id();
         let gesture_ids = request.echoed_gesture_ids();
         let touched_fields = request.changes.included_fields();
@@ -994,7 +999,7 @@ impl AppStore {
 
     fn commit_gesture_admitted(
         &self,
-        request: GestureCommitRequest,
+        mut request: GestureCommitRequest,
         admission: &HistoryAdmissionLease,
     ) -> std::result::Result<GestureCommitOutcome, EditorCommitError> {
         let fingerprint = canonical_request_fingerprint(&request)?;
@@ -1032,6 +1037,10 @@ impl AppStore {
             return Err(EditorCommitError::plugin_revision_conflict(
                 guard.plugin_model_revision,
             ));
+        }
+
+        if let Some(changes) = request.editor_changes.as_mut() {
+            super::native_element_id::prepare_commit_patch_element_ids(&guard.data, changes)?;
         }
 
         let current_store = guard.data.clone();
@@ -2744,12 +2753,13 @@ fn preserve_pre_migration_store(path: &Path) -> Result<Option<PathBuf>> {
 fn initialize_default_state() -> AppStoreData {
     use crate::defaults::{default_keys, default_positions};
 
-    let data = AppStoreData {
+    let mut data = normalize_state(AppStoreData {
         keys: default_keys().clone(),
         key_positions: default_positions().clone(),
         ..Default::default()
-    };
-    normalize_state(data)
+    });
+    crate::state::native_element_id::backfill_store_element_ids(&mut data);
+    data
 }
 
 fn ensure_generic_editor_unchanged(before: &AppStoreData, after: &AppStoreData) -> Result<()> {
@@ -4006,7 +4016,8 @@ mod tests {
             KnobPosition, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
             PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
             SavedPluginInstance, SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource,
-            StatPosition, StatType, TabCss, TabNoteSettings,
+            StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
+            EDITOR_SCHEMA_VERSION,
         },
         services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
         state::{
@@ -5883,6 +5894,171 @@ mod tests {
             .data;
         assert_eq!(reloaded.editor_revision, 1);
         assert_eq!(reloaded.keys["4key"][0], KeySlot::from("StrictKey"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fresh_install_has_globally_unique_native_element_ids() {
+        let dir = test_directory("fresh-native-element-ids-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let document = store.editor_get().document;
+
+        crate::state::native_element_id::validate_document_element_ids(&document).unwrap();
+        assert!(document
+            .key_positions
+            .values()
+            .flatten()
+            .all(|position| uuid::Uuid::parse_str(&position.id)
+                .is_ok_and(|id| id.get_version_num() == 4)));
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn v2_editor_commit_rejects_invalid_ids_atomically_and_keeps_read_event_v1() {
+        let dir = test_directory("v2-native-element-id-commit-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        legacy_editor_commit(&store, &[EditorField::StatPositions], |data| {
+            data.stat_positions.insert(
+                "4key".to_string(),
+                vec![StatPosition {
+                    stat_type: StatType::Kps,
+                    position: KeyPosition {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        ..KeyPosition::default()
+                    },
+                }],
+            );
+        })
+        .unwrap();
+        let baseline = store.editor_get();
+        let persist_count = store.writer.persist_count();
+
+        let mut invalid_patches = Vec::new();
+        let mut missing = baseline.document.key_positions.clone();
+        missing.get_mut("4key").unwrap()[0].id.clear();
+        invalid_patches.push((missing, "MISSING_ELEMENT_ID"));
+
+        let mut malformed = baseline.document.key_positions.clone();
+        malformed.get_mut("4key").unwrap()[0].id = "not-a-uuid".to_string();
+        invalid_patches.push((malformed, "INVALID_ELEMENT_ID"));
+
+        let mut nil = baseline.document.key_positions.clone();
+        nil.get_mut("4key").unwrap()[0].id = uuid::Uuid::nil().to_string();
+        invalid_patches.push((nil, "INVALID_ELEMENT_ID"));
+
+        let mut merged_duplicate = baseline.document.key_positions.clone();
+        merged_duplicate.get_mut("4key").unwrap()[0].id = baseline.document.stat_positions["4key"]
+            [0]
+        .position
+        .id
+        .clone();
+        invalid_patches.push((merged_duplicate, "DUPLICATE_ELEMENT_ID"));
+
+        for (positions, expected_code) in invalid_patches {
+            let error = store
+                .commit_editor_document(editor_request(
+                    baseline.revision,
+                    uuid::Uuid::new_v4().to_string(),
+                    EditorPatchV1 {
+                        schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                        key_positions: Some(positions),
+                        ..EditorPatchV1::default()
+                    },
+                ))
+                .unwrap_err();
+            assert_eq!(error.error_code, EditorCommitErrorCode::ValidationFailed);
+            assert!(!error.retryable);
+            assert_eq!(
+                error.details.unwrap().validation_code.as_deref(),
+                Some(expected_code)
+            );
+            assert_eq!(store.editor_get(), baseline);
+            assert_eq!(store.writer.persist_count(), persist_count);
+        }
+
+        let mut valid = baseline.document.key_positions.clone();
+        valid.get_mut("4key").unwrap()[0].dx += 1.0;
+        let change = store
+            .commit_editor_document(editor_request(
+                baseline.revision,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    key_positions: Some(valid),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+
+        assert_eq!(change.document.schema_version, EDITOR_SCHEMA_VERSION);
+        assert_eq!(
+            change.event.as_ref().unwrap().schema_version,
+            EDITOR_SCHEMA_VERSION
+        );
+        assert_eq!(
+            change.event.as_ref().unwrap().patch.schema_version,
+            EDITOR_SCHEMA_VERSION
+        );
+        assert!(change
+            .document
+            .key_positions
+            .values()
+            .flatten()
+            .all(|position| !position.id.is_empty()));
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn v1_stale_snapshot_commit_rekeys_deleted_element_instead_of_reviving_it() {
+        let dir = test_directory("v1-stale-native-element-id-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get();
+        let stale_keys = initial.document.keys.clone();
+        let stale_positions = initial.document.key_positions.clone();
+        let deleted_id = stale_positions["4key"][0].id.clone();
+
+        let mut deleted_keys = stale_keys.clone();
+        let mut deleted_positions = stale_positions.clone();
+        deleted_keys.get_mut("4key").unwrap().remove(0);
+        deleted_positions.get_mut("4key").unwrap().remove(0);
+        store
+            .commit_editor_document(editor_request(
+                initial.revision,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    keys: Some(deleted_keys),
+                    key_positions: Some(deleted_positions),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+
+        let after_delete = store.editor_get();
+        let restored = store
+            .commit_editor_document(editor_request(
+                after_delete.revision,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    keys: Some(stale_keys),
+                    key_positions: Some(stale_positions),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+
+        assert_ne!(restored.document.key_positions["4key"][0].id, deleted_id);
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &restored.document.key_positions["4key"][0].id
+        ));
+
+        store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -8042,8 +8218,14 @@ mod tests {
         let mut data = super::initialize_default_state();
         data.keys
             .insert("ghost".to_string(), vec!["GhostKey".into()]);
-        data.key_positions
-            .insert("ghost".to_string(), vec![KeyPosition::default()]);
+        let ghost_id = uuid::Uuid::new_v4().to_string();
+        data.key_positions.insert(
+            "ghost".to_string(),
+            vec![KeyPosition {
+                id: ghost_id.clone(),
+                ..KeyPosition::default()
+            }],
+        );
         let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
 
         store
@@ -8056,10 +8238,7 @@ mod tests {
 
         let snapshot = store.snapshot();
         assert_eq!(snapshot.keys["ghost"], vec![KeySlot::from("GhostKey")]);
-        assert_eq!(
-            snapshot.key_positions["ghost"],
-            vec![KeyPosition::default()]
-        );
+        assert_eq!(snapshot.key_positions["ghost"][0].id, ghost_id);
         store.flush_and_shutdown().unwrap();
         drop(store);
         let _ = std::fs::remove_dir_all(dir);

@@ -475,6 +475,8 @@ pub struct ElementShadowSpec {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyPosition {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
     pub dx: f64,
     pub dy: f64,
     pub width: f64,
@@ -629,6 +631,7 @@ pub struct KeyPosition {
 impl Default for KeyPosition {
     fn default() -> Self {
         Self {
+            id: String::new(),
             dx: 0.0,
             dy: 0.0,
             width: 60.0,
@@ -2502,9 +2505,10 @@ pub struct SettingsPatch {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_canonical_rgba, FadePosition, GradientSpec, KeyCounterAlign, KeyCounterAlignMode,
-        KeyCounterColor, KeyCounterPlacement, KeyCounterSettings, KeyMappings, KeyPosition,
-        KeySlot, NoteColor, NoteSettings, SlotMatch, StatType, MAX_SLOT_KEYS,
+        compact_canonical_rgba, FadePosition, GradientSpec, GraphPosition, GraphStatType,
+        GraphType, KeyCounterAlign, KeyCounterAlignMode, KeyCounterColor, KeyCounterPlacement,
+        KeyCounterSettings, KeyMappings, KeyPosition, KeySlot, KnobPosition, NoteColor,
+        NoteSettings, SlotMatch, StatPosition, StatType, MAX_SLOT_KEYS,
     };
     use serde::Deserialize;
 
@@ -2517,6 +2521,59 @@ mod tests {
         let mappings: KeyMappings = serde_json::from_value(raw.clone()).unwrap();
 
         assert_eq!(serde_json::to_value(mappings).unwrap(), raw);
+    }
+
+    #[test]
+    fn element_id_defaults_to_empty_and_flattens_into_every_position_type() {
+        let id = uuid::Uuid::new_v4().to_string();
+        let position = KeyPosition {
+            id: id.clone(),
+            ..KeyPosition::default()
+        };
+        let mut values = [
+            serde_json::to_value(&position).unwrap(),
+            serde_json::to_value(StatPosition {
+                stat_type: StatType::Kps,
+                position: position.clone(),
+            })
+            .unwrap(),
+            serde_json::to_value(GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 100,
+                graph_color: "#123456".to_string(),
+                show_avg_line: true,
+                position: position.clone(),
+            })
+            .unwrap(),
+            serde_json::to_value(KnobPosition {
+                axis_id: "axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position,
+            })
+            .unwrap(),
+        ];
+
+        assert!(values.iter().all(|value| value["id"] == id));
+        for value in &mut values {
+            value.as_object_mut().unwrap().remove("id");
+        }
+        let stat: StatPosition = serde_json::from_value(values[1].clone()).unwrap();
+        let graph: GraphPosition = serde_json::from_value(values[2].clone()).unwrap();
+        let knob: KnobPosition = serde_json::from_value(values[3].clone()).unwrap();
+        assert!(stat.position.id.is_empty());
+        assert!(graph.position.id.is_empty());
+        assert!(knob.position.id.is_empty());
+
+        let missing: KeyPosition = serde_json::from_value(serde_json::json!({
+            "dx": 0,
+            "dy": 0,
+            "width": 60,
+            "count": 0
+        }))
+        .unwrap();
+        assert!(missing.id.is_empty());
     }
 
     #[test]

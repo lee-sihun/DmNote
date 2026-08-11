@@ -10,7 +10,8 @@ use crate::{
     errors::EditorCommitError,
     models::{
         AppStoreData, CustomTab, EditorCommitRequest, EditorDocumentV1, EditorField,
-        ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition, KeySlot, EDITOR_SCHEMA_VERSION,
+        ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition, KeySlot,
+        EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_SCHEMA_VERSION,
     },
 };
 
@@ -52,20 +53,101 @@ struct FingerprintPayload<'a> {
     changes: &'a crate::models::EditorPatchV1,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum NativeElementKind {
+    Key,
+    Stat,
+    Graph,
+    Knob,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NativeElementDiagnostic<'a> {
+    kind: NativeElementKind,
+    field: &'static str,
+    mode: &'a str,
+    index: usize,
+    id: &'a str,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct ValidationViolation {
-    identity: String,
+enum ViolationOwner {
+    Mode { mode: String },
+    Pair { mode: String },
+    GroupOccurrence { mode: String, index: usize },
+    DuplicateGroup { mode: String, id: String },
+    NativeElement { kind: NativeElementKind, id: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum ViolationPropertyPath {
+    ModeId,
+    Collection(&'static str),
+    PairCollections,
+    GroupId,
+    GroupReference,
+    KnobSensitivity,
+    Shadow {
+        name: &'static str,
+        property: &'static str,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum InvalidValueSignature {
+    None,
+    Empty,
+    FloatBits(u64),
+    Text(String),
+    PairPresence { keys: bool, key_positions: bool },
+    PairLength { keys: usize, key_positions: usize },
+    Count(usize),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct ViolationKey {
+    owner: ViolationOwner,
     code: &'static str,
+    property_path: ViolationPropertyPath,
+    invalid_value: InvalidValueSignature,
+}
+
+#[derive(Debug, Clone)]
+struct ValidationViolation {
+    key: ViolationKey,
     message: String,
 }
 
 impl ValidationViolation {
-    fn new(identity: impl Into<String>, code: &'static str, message: impl Into<String>) -> Self {
+    fn new(key: ViolationKey, message: impl Into<String>) -> Self {
         Self {
-            identity: identity.into(),
-            code,
+            key,
             message: message.into(),
         }
+    }
+
+    fn code(&self) -> &'static str {
+        self.key.code
+    }
+}
+
+impl PartialEq for ValidationViolation {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+impl Eq for ValidationViolation {}
+
+impl PartialOrd for ValidationViolation {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ValidationViolation {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.key.cmp(&other.key)
     }
 }
 
@@ -74,7 +156,10 @@ pub(crate) fn validate_request_envelope(
 ) -> Result<(), EditorCommitError> {
     validate_revision(request.base_revision)?;
 
-    if request.changes.schema_version != EDITOR_SCHEMA_VERSION {
+    if !matches!(
+        request.changes.schema_version,
+        EDITOR_SCHEMA_VERSION | EDITOR_COMMIT_SCHEMA_VERSION_V2
+    ) {
         return Err(EditorCommitError::validation(
             "UNSUPPORTED_SCHEMA_VERSION",
             format!(
@@ -323,6 +408,14 @@ pub(crate) fn validate_paired_update(
         return Err(EditorCommitError::paired_update_required("keys"));
     }
 
+    if key_positions_touched
+        && !keys_touched
+        && key_position_id_order(&current.key_positions)
+            != key_position_id_order(&candidate.key_positions)
+    {
+        return Err(EditorCommitError::paired_update_required("keys"));
+    }
+
     Ok(())
 }
 
@@ -333,6 +426,25 @@ fn collection_shape<T>(collection: &HashMap<String, Vec<T>>) -> Vec<(String, usi
         .collect::<Vec<_>>();
     shape.sort_unstable();
     shape
+}
+
+fn key_position_id_order(
+    collection: &HashMap<String, Vec<KeyPosition>>,
+) -> Vec<(String, Vec<String>)> {
+    let mut order = collection
+        .iter()
+        .map(|(mode, positions)| {
+            (
+                mode.clone(),
+                positions
+                    .iter()
+                    .map(|position| position.id.clone())
+                    .collect(),
+            )
+        })
+        .collect::<Vec<_>>();
+    order.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+    order
 }
 
 /// 기존 store에 있던 손실 없는 비정상 데이터는 유지하되 새 비정상 상태는 만들지 않음
@@ -354,14 +466,18 @@ pub(crate) fn validate_document_transition(
 
     let current_violations = collect_violations(current, &allowed_modes(current_store));
     let candidate_violations = collect_violations(candidate, &allowed_modes(candidate_store));
+    let current_violation_keys = current_violations
+        .iter()
+        .map(|violation| violation.key.clone())
+        .collect::<BTreeSet<_>>();
     validate_metric_limits(current, candidate)?;
 
     if let Some(violation) = candidate_violations.iter().find(|violation| {
-        is_unconditional_structural_violation(violation.code)
-            || !current_violations.contains(*violation)
+        is_unconditional_structural_violation(violation.code())
+            || !is_grandfathered(&current_violation_keys, violation)
     }) {
         return Err(EditorCommitError::validation(
-            violation.code,
+            violation.code(),
             violation.message.clone(),
         ));
     }
@@ -369,13 +485,17 @@ pub(crate) fn validate_document_transition(
     Ok(())
 }
 
+fn is_grandfathered(
+    current_violation_keys: &BTreeSet<ViolationKey>,
+    candidate: &ValidationViolation,
+) -> bool {
+    current_violation_keys.contains(&candidate.key)
+}
+
 fn is_unconditional_structural_violation(code: &str) -> bool {
     matches!(
         code,
-        "KEY_POSITION_MODE_MISMATCH"
-            | "KEY_POSITION_LENGTH_MISMATCH"
-            | "DUPLICATE_GROUP_ID"
-            | "UNKNOWN_GROUP_ID"
+        "KEY_POSITION_MODE_MISMATCH" | "KEY_POSITION_LENGTH_MISMATCH" | "DUPLICATE_GROUP_ID"
     )
 }
 
@@ -385,6 +505,24 @@ fn allowed_modes(store: &AppStoreData) -> HashSet<String> {
         .cloned()
         .chain(store.custom_tabs.iter().map(|tab| tab.id.clone()))
         .collect()
+}
+
+fn native_violation_key(
+    kind: NativeElementKind,
+    id: &str,
+    code: &'static str,
+    property_path: ViolationPropertyPath,
+    invalid_value: InvalidValueSignature,
+) -> ViolationKey {
+    ViolationKey {
+        owner: ViolationOwner::NativeElement {
+            kind,
+            id: id.to_string(),
+        },
+        code,
+        property_path,
+        invalid_value,
+    }
 }
 
 fn collect_violations(
@@ -406,8 +544,12 @@ fn collect_violations(
     for mode in &all_modes {
         if mode.is_empty() {
             violations.insert(ValidationViolation::new(
-                format!("invalid-mode-id:{mode:?}"),
-                "INVALID_MODE_ID",
+                ViolationKey {
+                    owner: ViolationOwner::Mode { mode: mode.clone() },
+                    code: "INVALID_MODE_ID",
+                    property_path: ViolationPropertyPath::ModeId,
+                    invalid_value: InvalidValueSignature::Empty,
+                },
                 "mode id is empty",
             ));
         }
@@ -450,12 +592,15 @@ fn collect_violations(
         let positions = document.key_positions.get(mode);
         if keys.is_some() != positions.is_some() {
             violations.insert(ValidationViolation::new(
-                format!(
-                    "paired-mode:{mode}:{}:{}",
-                    keys.is_some(),
-                    positions.is_some()
-                ),
-                "KEY_POSITION_MODE_MISMATCH",
+                ViolationKey {
+                    owner: ViolationOwner::Pair { mode: mode.clone() },
+                    code: "KEY_POSITION_MODE_MISMATCH",
+                    property_path: ViolationPropertyPath::PairCollections,
+                    invalid_value: InvalidValueSignature::PairPresence {
+                        keys: keys.is_some(),
+                        key_positions: positions.is_some(),
+                    },
+                },
                 format!("keys and keyPositions must contain the same mode '{mode}'"),
             ));
         }
@@ -464,8 +609,15 @@ fn collect_violations(
         let position_count = positions.map_or(0, Vec::len);
         if key_count != position_count {
             violations.insert(ValidationViolation::new(
-                format!("paired-length:{mode}:{key_count}:{position_count}"),
-                "KEY_POSITION_LENGTH_MISMATCH",
+                ViolationKey {
+                    owner: ViolationOwner::Pair { mode: mode.clone() },
+                    code: "KEY_POSITION_LENGTH_MISMATCH",
+                    property_path: ViolationPropertyPath::PairCollections,
+                    invalid_value: InvalidValueSignature::PairLength {
+                        keys: key_count,
+                        key_positions: position_count,
+                    },
+                },
                 format!("keys and keyPositions for mode '{mode}' have different lengths"),
             ));
         }
@@ -475,11 +627,13 @@ fn collect_violations(
         for (index, position) in positions.iter().enumerate() {
             if !position.sensitivity.is_finite() {
                 violations.insert(ValidationViolation::new(
-                    format!(
-                        "knob-sensitivity:{mode}:{index}:{}",
-                        position.sensitivity.to_bits()
+                    native_violation_key(
+                        NativeElementKind::Knob,
+                        &position.position.id,
+                        "INVALID_NUMBER",
+                        ViolationPropertyPath::KnobSensitivity,
+                        InvalidValueSignature::FloatBits(position.sensitivity.to_bits()),
                     ),
-                    "INVALID_NUMBER",
                     format!("knob sensitivity at {mode}[{index}] is invalid"),
                 ));
             }
@@ -496,14 +650,19 @@ fn collect_position_style_violations(
     document: &EditorDocumentV1,
     violations: &mut BTreeSet<ValidationViolation>,
 ) {
-    for (field, mode, index, position) in document
+    for (kind, field, mode, index, position) in document
         .key_positions
         .iter()
         .flat_map(|(mode, positions)| {
-            positions
-                .iter()
-                .enumerate()
-                .map(move |(index, position)| ("keyPositions", mode, index, position))
+            positions.iter().enumerate().map(move |(index, position)| {
+                (
+                    NativeElementKind::Key,
+                    "keyPositions",
+                    mode,
+                    index,
+                    position,
+                )
+            })
         })
         .chain(
             document
@@ -511,7 +670,13 @@ fn collect_position_style_violations(
                 .iter()
                 .flat_map(|(mode, positions)| {
                     positions.iter().enumerate().map(move |(index, position)| {
-                        ("statPositions", mode, index, &position.position)
+                        (
+                            NativeElementKind::Stat,
+                            "statPositions",
+                            mode,
+                            index,
+                            &position.position,
+                        )
                     })
                 }),
         )
@@ -521,7 +686,13 @@ fn collect_position_style_violations(
                 .iter()
                 .flat_map(|(mode, positions)| {
                     positions.iter().enumerate().map(move |(index, position)| {
-                        ("graphPositions", mode, index, &position.position)
+                        (
+                            NativeElementKind::Graph,
+                            "graphPositions",
+                            mode,
+                            index,
+                            &position.position,
+                        )
                     })
                 }),
         )
@@ -531,7 +702,13 @@ fn collect_position_style_violations(
                 .iter()
                 .flat_map(|(mode, positions)| {
                     positions.iter().enumerate().map(move |(index, position)| {
-                        ("knobPositions", mode, index, &position.position)
+                        (
+                            NativeElementKind::Knob,
+                            "knobPositions",
+                            mode,
+                            index,
+                            &position.position,
+                        )
                     })
                 }),
         )
@@ -541,35 +718,61 @@ fn collect_position_style_violations(
             ("activeShadow", position.active_shadow.as_ref()),
         ] {
             if let Some(shadow) = shadow {
-                collect_shadow_violations(field, mode, index, name, shadow, violations);
+                collect_shadow_violations(
+                    NativeElementDiagnostic {
+                        kind,
+                        field,
+                        mode,
+                        index,
+                        id: &position.id,
+                    },
+                    name,
+                    shadow,
+                    violations,
+                );
             }
         }
     }
 }
 
 fn collect_shadow_violations(
-    field: &str,
-    mode: &str,
-    index: usize,
-    name: &str,
+    element: NativeElementDiagnostic<'_>,
+    name: &'static str,
     shadow: &ElementShadowSpec,
     violations: &mut BTreeSet<ValidationViolation>,
 ) {
+    let NativeElementDiagnostic {
+        kind,
+        field,
+        mode,
+        index,
+        id,
+    } = element;
     if shadow.color.is_empty() {
         violations.insert(ValidationViolation::new(
-            format!("element-shadow:{field}:{mode}:{index}:{name}:color-empty"),
-            "INVALID_ELEMENT_SHADOW",
+            native_violation_key(
+                kind,
+                id,
+                "INVALID_ELEMENT_SHADOW",
+                ViolationPropertyPath::Shadow {
+                    name,
+                    property: "color",
+                },
+                InvalidValueSignature::Empty,
+            ),
             format!("{field} {mode}[{index}].{name}.color must be a non-empty string"),
         ));
     }
     for (property, value) in [("offsetX", shadow.offset_x), ("offsetY", shadow.offset_y)] {
         if !value.is_finite() || !(MIN_SHADOW_OFFSET..=MAX_SHADOW_OFFSET).contains(&value) {
             violations.insert(ValidationViolation::new(
-                format!(
-                    "element-shadow:{field}:{mode}:{index}:{name}:{property}:{}",
-                    value.to_bits()
+                native_violation_key(
+                    kind,
+                    id,
+                    "INVALID_ELEMENT_SHADOW",
+                    ViolationPropertyPath::Shadow { name, property },
+                    InvalidValueSignature::FloatBits(value.to_bits()),
                 ),
-                "INVALID_ELEMENT_SHADOW",
                 format!(
                     "{field} {mode}[{index}].{name}.{property} must be a finite number between {MIN_SHADOW_OFFSET} and {MAX_SHADOW_OFFSET}"
                 ),
@@ -578,11 +781,16 @@ fn collect_shadow_violations(
     }
     if !shadow.blur.is_finite() || !(MIN_SHADOW_BLUR..=MAX_SHADOW_BLUR).contains(&shadow.blur) {
         violations.insert(ValidationViolation::new(
-            format!(
-                "element-shadow:{field}:{mode}:{index}:{name}:blur:{}",
-                shadow.blur.to_bits()
+            native_violation_key(
+                kind,
+                id,
+                "INVALID_ELEMENT_SHADOW",
+                ViolationPropertyPath::Shadow {
+                    name,
+                    property: "blur",
+                },
+                InvalidValueSignature::FloatBits(shadow.blur.to_bits()),
             ),
-            "INVALID_ELEMENT_SHADOW",
             format!(
                 "{field} {mode}[{index}].{name}.blur must be a finite number between {MIN_SHADOW_BLUR} and {MAX_SHADOW_BLUR}"
             ),
@@ -599,8 +807,12 @@ fn collect_collection_violations<T>(
     for (mode, values) in collection {
         if !allowed_modes.contains(mode) {
             violations.insert(ValidationViolation::new(
-                format!("unknown-mode:{field}:{mode}"),
-                "UNKNOWN_MODE",
+                ViolationKey {
+                    owner: ViolationOwner::Mode { mode: mode.clone() },
+                    code: "UNKNOWN_MODE",
+                    property_path: ViolationPropertyPath::Collection(field),
+                    invalid_value: InvalidValueSignature::None,
+                },
                 format!("{field} contains unknown mode '{mode}'"),
             ));
         }
@@ -609,6 +821,15 @@ fn collect_collection_violations<T>(
 }
 
 fn validate_metric_limits(
+    current: &EditorDocumentV1,
+    candidate: &EditorDocumentV1,
+) -> Result<(), EditorCommitError> {
+    validate_aggregate_metric_limits(current, candidate)?;
+    validate_mode_metric_limits(current, candidate)?;
+    validate_per_owner_metric_limits(current, candidate)
+}
+
+fn validate_aggregate_metric_limits(
     current: &EditorDocumentV1,
     candidate: &EditorDocumentV1,
 ) -> Result<(), EditorCommitError> {
@@ -663,8 +884,16 @@ fn validate_metric_limits(
         MAX_LAYER_GROUPS,
     )?;
 
+    Ok(())
+}
+
+fn validate_mode_metric_limits(
+    current: &EditorDocumentV1,
+    candidate: &EditorDocumentV1,
+) -> Result<(), EditorCommitError> {
+    let current_modes = editor_modes(current);
     for mode in editor_modes(candidate) {
-        let current_len = editor_modes(current)
+        let current_len = current_modes
             .get(&mode)
             .map_or(0, |current_mode| current_mode.len());
         validate_count_limit(
@@ -676,32 +905,49 @@ fn validate_metric_limits(
         )?;
     }
 
-    for (mode, keys) in &candidate.keys {
-        for (slot_index, slot) in keys.iter().enumerate() {
-            for (member_index, member) in slot.members().enumerate() {
-                let current_len = current
-                    .keys
-                    .get(mode)
-                    .and_then(|values| values.get(slot_index))
-                    .and_then(|slot| slot.members().nth(member_index))
-                    .map_or(0, String::len);
-                validate_count_limit(
-                    "KEY_LABEL_TOO_LONG",
-                    &format!("key label {mode}[{slot_index}].members[{member_index}] byte length"),
-                    current_len,
-                    member.len(),
-                    MAX_KEY_LABEL_BYTES,
-                )?;
-            }
+    Ok(())
+}
+
+fn validate_per_owner_metric_limits(
+    current: &EditorDocumentV1,
+    candidate: &EditorDocumentV1,
+) -> Result<(), EditorCommitError> {
+    let mut current_key_slots = HashMap::new();
+    for (mode, positions) in &current.key_positions {
+        let Some(slots) = current.keys.get(mode) else {
+            continue;
+        };
+        for (position, slot) in positions.iter().zip(slots) {
+            current_key_slots.insert(position.id.as_str(), slot);
         }
     }
 
+    for (mode, keys) in &candidate.keys {
+        for (slot_index, slot) in keys.iter().enumerate() {
+            let current_slot = candidate
+                .key_positions
+                .get(mode)
+                .and_then(|positions| positions.get(slot_index))
+                .and_then(|position| current_key_slots.get(position.id.as_str()))
+                .copied();
+            validate_key_slot_label_limits(mode, slot_index, current_slot, slot)?;
+        }
+    }
+
+    let current_groups = current
+        .layer_groups
+        .iter()
+        .flat_map(|(mode, groups)| {
+            groups
+                .iter()
+                .map(move |group| ((mode.as_str(), group.id.as_str()), group))
+        })
+        .collect::<HashMap<_, _>>();
     for (mode, groups) in &candidate.layer_groups {
         for (index, group) in groups.iter().enumerate() {
-            let current_group = current
-                .layer_groups
-                .get(mode)
-                .and_then(|values| values.get(index));
+            let current_group = current_groups
+                .get(&(mode.as_str(), group.id.as_str()))
+                .copied();
             validate_count_limit(
                 "GROUP_ID_TOO_LONG",
                 &format!("layer group id {mode}[{index}] byte length"),
@@ -719,64 +965,117 @@ fn validate_metric_limits(
         }
     }
 
+    let current_key_positions = current
+        .key_positions
+        .values()
+        .flatten()
+        .map(|position| (position.id.as_str(), position))
+        .collect::<HashMap<_, _>>();
     for (mode, positions) in &candidate.key_positions {
         for (index, position) in positions.iter().enumerate() {
             validate_position_metrics(
                 "keyPositions",
                 mode,
                 index,
-                current
-                    .key_positions
-                    .get(mode)
-                    .and_then(|values| values.get(index)),
+                current_key_positions.get(position.id.as_str()).copied(),
                 position,
             )?;
         }
     }
+
+    let current_stat_positions = current
+        .stat_positions
+        .values()
+        .flatten()
+        .map(|position| (position.position.id.as_str(), &position.position))
+        .collect::<HashMap<_, _>>();
     for (mode, positions) in &candidate.stat_positions {
         for (index, position) in positions.iter().enumerate() {
             validate_position_metrics(
                 "statPositions",
                 mode,
                 index,
-                current
-                    .stat_positions
-                    .get(mode)
-                    .and_then(|values| values.get(index))
-                    .map(|position| &position.position),
+                current_stat_positions
+                    .get(position.position.id.as_str())
+                    .copied(),
                 &position.position,
             )?;
         }
     }
+
+    let current_graph_positions = current
+        .graph_positions
+        .values()
+        .flatten()
+        .map(|position| (position.position.id.as_str(), &position.position))
+        .collect::<HashMap<_, _>>();
     for (mode, positions) in &candidate.graph_positions {
         for (index, position) in positions.iter().enumerate() {
             validate_position_metrics(
                 "graphPositions",
                 mode,
                 index,
-                current
-                    .graph_positions
-                    .get(mode)
-                    .and_then(|values| values.get(index))
-                    .map(|position| &position.position),
+                current_graph_positions
+                    .get(position.position.id.as_str())
+                    .copied(),
                 &position.position,
             )?;
         }
     }
+
+    let current_knob_positions = current
+        .knob_positions
+        .values()
+        .flatten()
+        .map(|position| (position.position.id.as_str(), &position.position))
+        .collect::<HashMap<_, _>>();
     for (mode, positions) in &candidate.knob_positions {
         for (index, position) in positions.iter().enumerate() {
             validate_position_metrics(
                 "knobPositions",
                 mode,
                 index,
-                current
-                    .knob_positions
-                    .get(mode)
-                    .and_then(|values| values.get(index))
-                    .map(|position| &position.position),
+                current_knob_positions
+                    .get(position.position.id.as_str())
+                    .copied(),
                 &position.position,
             )?;
         }
+    }
+
+    Ok(())
+}
+
+fn validate_key_slot_label_limits(
+    mode: &str,
+    slot_index: usize,
+    current: Option<&KeySlot>,
+    candidate: &KeySlot,
+) -> Result<(), EditorCommitError> {
+    let mut grandfathered_lengths = current
+        .into_iter()
+        .flat_map(KeySlot::members)
+        .map(String::len)
+        .filter(|length| *length > MAX_KEY_LABEL_BYTES)
+        .collect::<Vec<_>>();
+    grandfathered_lengths.sort_unstable();
+
+    for (member_index, member) in candidate.members().enumerate() {
+        if member.len() <= MAX_KEY_LABEL_BYTES {
+            continue;
+        }
+        let Some(budget_index) = grandfathered_lengths
+            .iter()
+            .position(|length| member.len() <= *length)
+        else {
+            return Err(EditorCommitError::validation(
+                "KEY_LABEL_TOO_LONG",
+                format!(
+                    "key label {mode}[{slot_index}].members[{member_index}] byte length exceeds {MAX_KEY_LABEL_BYTES} and has no matching stored allowance"
+                ),
+            ));
+        };
+        grandfathered_lengths.remove(budget_index);
     }
 
     Ok(())
@@ -963,24 +1262,38 @@ fn collect_group_violations(
     let mut result = HashMap::new();
     for (mode, groups) in &document.layer_groups {
         let mut ids = HashSet::new();
+        let mut counts = HashMap::new();
         for (index, group) in groups.iter().enumerate() {
             if group.id.is_empty() {
                 violations.insert(ValidationViolation::new(
-                    format!("group-id:{mode}:{index}:{:?}", group.id),
-                    "INVALID_GROUP_ID",
+                    ViolationKey {
+                        owner: ViolationOwner::GroupOccurrence {
+                            mode: mode.clone(),
+                            index,
+                        },
+                        code: "INVALID_GROUP_ID",
+                        property_path: ViolationPropertyPath::GroupId,
+                        invalid_value: InvalidValueSignature::Empty,
+                    },
                     format!("layer group id at {mode}[{index}] is empty"),
                 ));
             }
-            if !ids.insert(group.id.clone()) {
-                violations.insert(ValidationViolation::new(
-                    format!("duplicate-group:{mode}:{}", group.id),
-                    "DUPLICATE_GROUP_ID",
-                    format!(
-                        "layer group id '{}' is duplicated in mode '{mode}'",
-                        group.id
-                    ),
-                ));
-            }
+            ids.insert(group.id.clone());
+            *counts.entry(group.id.clone()).or_insert(0usize) += 1;
+        }
+        for (id, count) in counts.into_iter().filter(|(_, count)| *count > 1) {
+            violations.insert(ValidationViolation::new(
+                ViolationKey {
+                    owner: ViolationOwner::DuplicateGroup {
+                        mode: mode.clone(),
+                        id: id.clone(),
+                    },
+                    code: "DUPLICATE_GROUP_ID",
+                    property_path: ViolationPropertyPath::GroupId,
+                    invalid_value: InvalidValueSignature::Count(count),
+                },
+                format!("layer group id '{id}' is duplicated {count} times in mode '{mode}'"),
+            ));
         }
         result.insert(mode.clone(), ids);
     }
@@ -992,14 +1305,19 @@ fn collect_group_reference_violations(
     group_ids: &HashMap<String, HashSet<String>>,
     violations: &mut BTreeSet<ValidationViolation>,
 ) {
-    for (field, mode, index, position) in document
+    for (kind, field, mode, index, position) in document
         .key_positions
         .iter()
         .flat_map(|(mode, positions)| {
-            positions
-                .iter()
-                .enumerate()
-                .map(move |(index, position)| ("keyPositions", mode, index, position))
+            positions.iter().enumerate().map(move |(index, position)| {
+                (
+                    NativeElementKind::Key,
+                    "keyPositions",
+                    mode,
+                    index,
+                    position,
+                )
+            })
         })
         .chain(
             document
@@ -1007,7 +1325,13 @@ fn collect_group_reference_violations(
                 .iter()
                 .flat_map(|(mode, positions)| {
                     positions.iter().enumerate().map(move |(index, position)| {
-                        ("statPositions", mode, index, &position.position)
+                        (
+                            NativeElementKind::Stat,
+                            "statPositions",
+                            mode,
+                            index,
+                            &position.position,
+                        )
                     })
                 }),
         )
@@ -1017,7 +1341,13 @@ fn collect_group_reference_violations(
                 .iter()
                 .flat_map(|(mode, positions)| {
                     positions.iter().enumerate().map(move |(index, position)| {
-                        ("graphPositions", mode, index, &position.position)
+                        (
+                            NativeElementKind::Graph,
+                            "graphPositions",
+                            mode,
+                            index,
+                            &position.position,
+                        )
                     })
                 }),
         )
@@ -1027,7 +1357,13 @@ fn collect_group_reference_violations(
                 .iter()
                 .flat_map(|(mode, positions)| {
                     positions.iter().enumerate().map(move |(index, position)| {
-                        ("knobPositions", mode, index, &position.position)
+                        (
+                            NativeElementKind::Knob,
+                            "knobPositions",
+                            mode,
+                            index,
+                            &position.position,
+                        )
                     })
                 }),
         )
@@ -1040,8 +1376,13 @@ fn collect_group_reference_violations(
             .is_some_and(|ids| ids.contains(group_id));
         if !exists {
             violations.insert(ValidationViolation::new(
-                format!("group-ref:{field}:{mode}:{index}:{group_id}"),
-                "UNKNOWN_GROUP_ID",
+                native_violation_key(
+                    kind,
+                    &position.id,
+                    "UNKNOWN_GROUP_ID",
+                    ViolationPropertyPath::GroupReference,
+                    InvalidValueSignature::Text(group_id.to_string()),
+                ),
                 format!("{field} {mode}[{index}] references unknown group '{group_id}'"),
             ));
         }
@@ -1110,11 +1451,13 @@ mod tests {
     }
 
     fn default_editor_store() -> AppStoreData {
-        AppStoreData {
+        let mut store = AppStoreData {
             keys: crate::defaults::default_keys().clone(),
             key_positions: crate::defaults::default_positions().clone(),
             ..AppStoreData::default()
-        }
+        };
+        crate::state::native_element_id::backfill_store_element_ids(&mut store);
+        store
     }
 
     fn store_with_custom_modes(count: usize) -> AppStoreData {
@@ -1157,6 +1500,7 @@ mod tests {
                 position: KeyPosition::default(),
             }],
         );
+        crate::state::native_element_id::backfill_store_element_ids(&mut store);
         store
     }
 
@@ -1337,6 +1681,38 @@ mod tests {
             error.error_code,
             crate::errors::EditorCommitErrorCode::PairedUpdateRequired
         );
+    }
+
+    #[test]
+    fn stage_four_paired_topology_uses_key_position_id_order() {
+        let store = default_editor_store();
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut position_edit = current.clone();
+        position_edit.key_positions.get_mut("4key").unwrap()[0].dx += 1.0;
+        validate_paired_update(&current, &position_edit, false, true).unwrap();
+
+        let mut positions_only_reorder = current.clone();
+        positions_only_reorder
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .swap(0, 1);
+        let error =
+            validate_paired_update(&current, &positions_only_reorder, false, true).unwrap_err();
+        assert_eq!(
+            error.error_code,
+            crate::errors::EditorCommitErrorCode::PairedUpdateRequired
+        );
+        assert!(!error.retryable);
+
+        let mut paired_reorder = positions_only_reorder;
+        paired_reorder.keys.get_mut("4key").unwrap().swap(0, 1);
+        validate_paired_update(&current, &paired_reorder, true, true).unwrap();
+
+        let mut keys_only = current.clone();
+        keys_only.keys.get_mut("4key").unwrap()[0] = KeySlot::from("Changed");
+        validate_paired_update(&current, &keys_only, true, false).unwrap();
     }
 
     #[test]
@@ -1586,6 +1962,400 @@ mod tests {
                 .and_then(|details| details.validation_code.as_deref()),
             Some("INVALID_ELEMENT_SHADOW")
         );
+    }
+
+    #[test]
+    fn stage_four_grandfathering_ignores_diagnostic_message_changes() {
+        let key = ViolationKey {
+            owner: ViolationOwner::Mode {
+                mode: "ghost".to_string(),
+            },
+            code: "UNKNOWN_MODE",
+            property_path: ViolationPropertyPath::Collection("keys"),
+            invalid_value: InvalidValueSignature::None,
+        };
+        let current = [ValidationViolation::new(key.clone(), "same message")]
+            .into_iter()
+            .map(|violation| violation.key)
+            .collect();
+
+        assert!(is_grandfathered(
+            &current,
+            &ValidationViolation::new(key, "different diagnostic message")
+        ));
+    }
+
+    #[test]
+    fn stage_four_stable_id_grandfathers_violation_after_reorder() {
+        let mut store = default_editor_store();
+        let mut shadow = valid_shadow();
+        shadow.blur = MAX_SHADOW_BLUR + 1.0;
+        store.key_positions.get_mut("4key").unwrap()[0].shadow = Some(shadow);
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut candidate = current.clone();
+        candidate.keys.get_mut("4key").unwrap().swap(0, 1);
+        candidate.key_positions.get_mut("4key").unwrap().swap(0, 1);
+        let mut candidate_store = store.clone();
+        candidate.apply_to_store(&mut candidate_store);
+
+        validate_paired_update(&current, &candidate, true, true).unwrap();
+        validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap();
+    }
+
+    #[test]
+    fn stage_four_native_violation_key_omits_mode_for_same_element() {
+        let mut store = store_with_each_position_collection();
+        let mut shadow = valid_shadow();
+        shadow.blur = MAX_SHADOW_BLUR + 1.0;
+        store.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .shadow = Some(shadow);
+        let current = EditorDocumentV1::from_store(&store);
+        let mut candidate = current.clone();
+        let moved = candidate
+            .stat_positions
+            .get_mut("4key")
+            .unwrap()
+            .pop()
+            .unwrap();
+        candidate
+            .stat_positions
+            .entry("5key".to_string())
+            .or_default()
+            .push(moved);
+        let mut candidate_store = store.clone();
+        candidate.apply_to_store(&mut candidate_store);
+
+        validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap();
+    }
+
+    #[test]
+    fn stage_four_same_violation_on_a_different_id_is_rejected() {
+        let mut store = default_editor_store();
+        let mut shadow = valid_shadow();
+        shadow.blur = MAX_SHADOW_BLUR + 1.0;
+        store.key_positions.get_mut("4key").unwrap()[0].shadow = Some(shadow);
+        let current = EditorDocumentV1::from_store(&store);
+        let mut candidate = current.clone();
+        candidate.key_positions.get_mut("4key").unwrap()[0].id = Uuid::new_v4().to_string();
+        let mut candidate_store = store.clone();
+        candidate.apply_to_store(&mut candidate_store);
+
+        let error = validate_document_transition(&current, &candidate, &store, &candidate_store)
+            .unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("INVALID_ELEMENT_SHADOW")
+        );
+    }
+
+    #[test]
+    fn unconditional_structural_violation_is_rejected_even_when_unchanged() {
+        let mut store = default_editor_store();
+        store.keys.get_mut("4key").unwrap().pop();
+        let document = EditorDocumentV1::from_store(&store);
+
+        let error = validate_document_transition(&document, &document, &store, &store).unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("KEY_POSITION_LENGTH_MISMATCH")
+        );
+    }
+
+    #[test]
+    fn stage_four_per_owner_limits_follow_stable_ids_across_reorder() {
+        let mut label_store = default_editor_store();
+        label_store.keys.get_mut("4key").unwrap()[0] =
+            KeySlot::from("x".repeat(MAX_KEY_LABEL_BYTES + 1));
+        let current_labels = EditorDocumentV1::from_store(&label_store);
+        validate_document_transition(&current_labels, &current_labels, &label_store, &label_store)
+            .unwrap();
+
+        let mut moved_label = current_labels.clone();
+        moved_label.keys.get_mut("4key").unwrap().swap(0, 1);
+        moved_label
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .swap(0, 1);
+        let mut moved_label_store = label_store.clone();
+        moved_label.apply_to_store(&mut moved_label_store);
+        validate_document_transition(
+            &current_labels,
+            &moved_label,
+            &label_store,
+            &moved_label_store,
+        )
+        .unwrap();
+
+        let mut coordinate_store = default_editor_store();
+        coordinate_store.key_positions.get_mut("4key").unwrap()[0].dx = MAX_ABS_COORDINATE + 1.0;
+        let current_coordinates = EditorDocumentV1::from_store(&coordinate_store);
+        validate_document_transition(
+            &current_coordinates,
+            &current_coordinates,
+            &coordinate_store,
+            &coordinate_store,
+        )
+        .unwrap();
+
+        let mut moved_coordinate = current_coordinates.clone();
+        moved_coordinate
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .swap(0, 1);
+        moved_coordinate.keys.get_mut("4key").unwrap().swap(0, 1);
+        let mut moved_coordinate_store = coordinate_store.clone();
+        moved_coordinate.apply_to_store(&mut moved_coordinate_store);
+        validate_document_transition(
+            &current_coordinates,
+            &moved_coordinate,
+            &coordinate_store,
+            &moved_coordinate_store,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn stage_four_new_element_has_no_metric_allowance() {
+        let store = default_editor_store();
+        let current = EditorDocumentV1::from_store(&store);
+        let mut candidate = current.clone();
+        candidate
+            .keys
+            .get_mut("4key")
+            .unwrap()
+            .push(KeySlot::from("NEW"));
+        candidate
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .push(KeyPosition {
+                id: Uuid::new_v4().to_string(),
+                dx: MAX_ABS_COORDINATE + 1.0,
+                ..KeyPosition::default()
+            });
+        let mut candidate_store = store.clone();
+        candidate.apply_to_store(&mut candidate_store);
+
+        let error = validate_document_transition(&current, &candidate, &store, &candidate_store)
+            .unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("COORDINATE_OUT_OF_RANGE")
+        );
+    }
+
+    #[test]
+    fn stage_four_deleted_element_is_excluded_from_per_owner_comparison() {
+        let mut store = default_editor_store();
+        store.key_positions.get_mut("4key").unwrap()[0].dx = MAX_ABS_COORDINATE + 1.0;
+        let current = EditorDocumentV1::from_store(&store);
+        let deleted_id = current.key_positions["4key"][0].id.clone();
+        let mut candidate = current.clone();
+        candidate.keys.get_mut("4key").unwrap().remove(0);
+        candidate.key_positions.get_mut("4key").unwrap().remove(0);
+        let mut candidate_store = store.clone();
+        candidate.apply_to_store(&mut candidate_store);
+
+        validate_document_transition(&current, &candidate, &store, &candidate_store).unwrap();
+        assert!(candidate.key_positions["4key"]
+            .iter()
+            .all(|position| position.id != deleted_id));
+    }
+
+    #[test]
+    fn stage_four_multi_key_label_allowances_are_consumed_once() {
+        let mut store = default_editor_store();
+        store.keys.get_mut("4key").unwrap()[0] = KeySlot::Multi {
+            keys: vec![
+                "x".repeat(MAX_KEY_LABEL_BYTES + 100),
+                "y".repeat(MAX_KEY_LABEL_BYTES + 200),
+            ],
+            match_mode: crate::models::SlotMatch::Any,
+        };
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut non_increasing = current.clone();
+        non_increasing.keys.get_mut("4key").unwrap()[0] = KeySlot::Multi {
+            keys: vec![
+                "a".repeat(MAX_KEY_LABEL_BYTES + 150),
+                "b".repeat(MAX_KEY_LABEL_BYTES + 50),
+            ],
+            match_mode: crate::models::SlotMatch::Any,
+        };
+        let mut non_increasing_store = store.clone();
+        non_increasing.apply_to_store(&mut non_increasing_store);
+        validate_document_transition(&current, &non_increasing, &store, &non_increasing_store)
+            .unwrap();
+
+        let mut duplicated_allowance = non_increasing.clone();
+        let KeySlot::Multi { keys, .. } =
+            &mut duplicated_allowance.keys.get_mut("4key").unwrap()[0]
+        else {
+            unreachable!()
+        };
+        keys.push("c".repeat(MAX_KEY_LABEL_BYTES + 25));
+        let mut duplicated_store = store.clone();
+        duplicated_allowance.apply_to_store(&mut duplicated_store);
+        let error = validate_document_transition(
+            &current,
+            &duplicated_allowance,
+            &store,
+            &duplicated_store,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("KEY_LABEL_TOO_LONG")
+        );
+    }
+
+    #[test]
+    fn stage_four_group_name_limit_follows_group_id_after_reorder() {
+        let mut store = default_editor_store();
+        store.layer_groups.insert(
+            "4key".to_string(),
+            vec![
+                LayerGroupDef {
+                    id: "oversized".to_string(),
+                    name: "x".repeat(MAX_GROUP_NAME_BYTES + 1),
+                },
+                LayerGroupDef {
+                    id: "normal".to_string(),
+                    name: "Normal".to_string(),
+                },
+            ],
+        );
+        let current = EditorDocumentV1::from_store(&store);
+        let mut reordered = current.clone();
+        reordered.layer_groups.get_mut("4key").unwrap().swap(0, 1);
+        let mut reordered_store = store.clone();
+        reordered.apply_to_store(&mut reordered_store);
+        validate_document_transition(&current, &reordered, &store, &reordered_store).unwrap();
+
+        let mut changed_id = reordered;
+        changed_id.layer_groups.get_mut("4key").unwrap()[1].id = "new-id".to_string();
+        let mut changed_id_store = store.clone();
+        changed_id.apply_to_store(&mut changed_id_store);
+        let error = validate_document_transition(&current, &changed_id, &store, &changed_id_store)
+            .unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("GROUP_NAME_TOO_LONG")
+        );
+    }
+
+    #[test]
+    fn aggregate_render_limit_compares_total_candidate_and_current_counts() {
+        let mut store = store_with_custom_modes(8);
+        for index in 0..8 {
+            let mode = format!("custom-{index}");
+            store
+                .keys
+                .insert(mode.clone(), vec![KeySlot::default(); 512]);
+            store
+                .key_positions
+                .insert(mode, vec![KeyPosition::default(); 512]);
+        }
+        store.stat_positions.insert(
+            "custom-0".to_string(),
+            vec![
+                StatPosition {
+                    stat_type: StatType::Kps,
+                    position: KeyPosition::default(),
+                };
+                2
+            ],
+        );
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut same_total = current.clone();
+        same_total.stat_positions.get_mut("custom-0").unwrap().pop();
+        same_total.graph_positions.insert(
+            "custom-0".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 100,
+                graph_color: "#123456".to_string(),
+                show_avg_line: true,
+                position: KeyPosition::default(),
+            }],
+        );
+        let mut same_total_store = store.clone();
+        same_total.apply_to_store(&mut same_total_store);
+        validate_document_transition(&current, &same_total, &store, &same_total_store).unwrap();
+
+        let mut increased = same_total.clone();
+        increased
+            .stat_positions
+            .get_mut("custom-0")
+            .unwrap()
+            .push(StatPosition {
+                stat_type: StatType::Kps,
+                position: KeyPosition::default(),
+            });
+        let mut increased_store = same_total_store.clone();
+        increased.apply_to_store(&mut increased_store);
+        let error = validate_document_transition(&current, &increased, &store, &increased_store)
+            .unwrap_err();
+        assert_eq!(
+            error.details.unwrap().validation_code.as_deref(),
+            Some("TOO_MANY_RENDER_ITEMS")
+        );
+    }
+
+    #[test]
+    fn violation_categories_keep_their_existing_grandfathering_decisions() {
+        let mut mode_store = AppStoreData::default();
+        mode_store
+            .keys
+            .insert("ghost".to_string(), vec![KeySlot::from("A")]);
+        mode_store
+            .key_positions
+            .insert("ghost".to_string(), vec![KeyPosition::default()]);
+        let mode_document = EditorDocumentV1::from_store(&mode_store);
+        validate_document_transition(&mode_document, &mode_document, &mode_store, &mode_store)
+            .unwrap();
+
+        let mut pair_store = default_editor_store();
+        pair_store.keys.get_mut("4key").unwrap().pop();
+        let pair_document = EditorDocumentV1::from_store(&pair_store);
+        let pair_error =
+            validate_document_transition(&pair_document, &pair_document, &pair_store, &pair_store)
+                .unwrap_err();
+        assert_eq!(
+            pair_error.details.unwrap().validation_code.as_deref(),
+            Some("KEY_POSITION_LENGTH_MISMATCH")
+        );
+
+        let mut group_store = default_editor_store();
+        group_store.layer_groups.insert(
+            "4key".to_string(),
+            vec![LayerGroupDef {
+                id: String::new(),
+                name: "Group".to_string(),
+            }],
+        );
+        let group_document = EditorDocumentV1::from_store(&group_store);
+        validate_document_transition(&group_document, &group_document, &group_store, &group_store)
+            .unwrap();
+
+        let mut element_store = default_editor_store();
+        let mut shadow = valid_shadow();
+        shadow.blur = MAX_SHADOW_BLUR + 1.0;
+        element_store.key_positions.get_mut("4key").unwrap()[0].shadow = Some(shadow);
+        let element_document = EditorDocumentV1::from_store(&element_store);
+        validate_document_transition(
+            &element_document,
+            &element_document,
+            &element_store,
+            &element_store,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -1997,7 +2767,7 @@ mod tests {
     }
 
     #[test]
-    fn existing_pair_and_group_reference_violations_are_not_grandfathered() {
+    fn pair_violations_stay_unconditional_but_group_references_follow_element_ids() {
         let mut pair_store = default_editor_store();
         pair_store.keys.get_mut("4key").unwrap().pop();
         let pair_document = EditorDocumentV1::from_store(&pair_store);
@@ -2013,13 +2783,22 @@ mod tests {
         reference_store.key_positions.get_mut("4key").unwrap()[0].group_id =
             Some("missing".to_string());
         let reference_document = EditorDocumentV1::from_store(&reference_store);
+        let mut reordered_reference = reference_document.clone();
+        reordered_reference.keys.get_mut("4key").unwrap().swap(0, 1);
+        reordered_reference
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .swap(0, 1);
+        let mut reordered_store = reference_store.clone();
+        reordered_reference.apply_to_store(&mut reordered_store);
         assert!(validate_document_transition(
             &reference_document,
-            &reference_document,
+            &reordered_reference,
             &reference_store,
-            &reference_store,
+            &reordered_store,
         )
-        .is_err());
+        .is_ok());
     }
 
     #[test]

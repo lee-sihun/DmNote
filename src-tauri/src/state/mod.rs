@@ -8,6 +8,7 @@ pub(crate) mod local_asset_path;
 #[cfg(target_os = "macos")]
 pub(crate) mod macos_termination;
 pub(crate) mod migration;
+pub(crate) mod native_element_id;
 pub(crate) mod plugin;
 pub mod store;
 

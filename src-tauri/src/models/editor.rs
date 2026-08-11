@@ -6,6 +6,7 @@ use super::{
 };
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
+pub const EDITOR_COMMIT_SCHEMA_VERSION_V2: u16 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

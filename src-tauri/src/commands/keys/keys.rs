@@ -72,6 +72,7 @@ fn reset_all_editor_data(store: &mut AppStoreData, keys: &KeyMappings, positions
     store.selected_key_type = "4key".to_string();
     store.tab_note_overrides.clear();
     store.tab_css_overrides.clear();
+    crate::state::native_element_id::rekey_store_element_ids(store);
 }
 
 fn reset_mode_kind(store: &AppStoreData, mode: &str) -> Option<ModeResetKind> {
@@ -156,6 +157,7 @@ fn reset_mode_data(store: &mut AppStoreData, mode: &str, kind: ModeResetKind) {
             .map(|key| (key.canonical(), 0))
             .collect(),
     );
+    crate::state::native_element_id::rekey_mode_element_ids(store, mode);
 }
 
 fn plan_custom_tab_delete(store: &AppStoreData, id: &str) -> Option<CustomTabDeletePlan> {
@@ -950,7 +952,7 @@ mod tests {
             KnobPosition, LayerGroupDef, StatPosition, StatType, TabCss, TabNoteSettings,
         },
     };
-    use std::cell::Cell;
+    use std::{cell::Cell, collections::HashSet};
 
     const TARGET_TAB: &str = "custom-target";
 
@@ -1062,6 +1064,34 @@ mod tests {
             .values()
             .flat_map(|mode| mode.values())
             .all(|count| *count == 0));
+    }
+
+    #[test]
+    fn reset_all_issues_a_fresh_globally_unique_id_generation_each_time() {
+        let mut store = populated_custom_tab_store();
+        reset_all_editor_data(&mut store, default_keys(), default_positions());
+        let first = store
+            .key_positions
+            .values()
+            .flatten()
+            .map(|position| position.id.clone())
+            .collect::<HashSet<_>>();
+        let first_count = store.key_positions.values().map(Vec::len).sum::<usize>();
+
+        reset_all_editor_data(&mut store, default_keys(), default_positions());
+        let second = store
+            .key_positions
+            .values()
+            .flatten()
+            .map(|position| position.id.clone())
+            .collect::<HashSet<_>>();
+
+        assert_eq!(first.len(), first_count);
+        assert_eq!(second.len(), first_count);
+        assert!(first.is_disjoint(&second));
+        assert!(second
+            .iter()
+            .all(|id| crate::state::native_element_id::is_valid_element_id(id)));
     }
 
     #[test]
