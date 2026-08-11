@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import {
-  captureElementRef,
-  resolveElementById,
-  resolveElementByIdAcross,
-} from './elementIdMap';
+import { resolveElementById, resolveElementByIdAcross } from './elementIdMap';
 import { createDefaultKeyPosition } from './keys';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -74,11 +70,5 @@ describe('elementIdMap', () => {
       mode: '4key',
       index: 0,
     });
-  });
-
-  it('id가 없는 요소는 캡처하지 않는다 (구형 데이터 폴백)', () => {
-    expect(captureElementRef('key', '4key', { id: undefined })).toBeNull();
-    expect(captureElementRef('key', '4key', undefined)).toBeNull();
-    expect(captureElementRef('key', '4key', { id: 'abc' })?.id).toBe('abc');
   });
 });

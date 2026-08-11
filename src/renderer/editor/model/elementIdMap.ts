@@ -13,13 +13,6 @@ export interface ElementLocator {
   index: number;
 }
 
-// 비동기 시작 시 캡처해 완료 시 조회하는 요소 참조
-export interface ElementRef {
-  type: NativeElementType;
-  mode: string;
-  id: string;
-}
-
 type PositionsRecord = Record<string, readonly KeyPosition[]> | undefined;
 
 // 권위 컬렉션만 읽는다. 키의 렌더 positions는 canonical + 프리뷰 합성이라
@@ -89,16 +82,4 @@ export const resolveElementByIdAcross = (
     if (hit) return hit;
   }
   return null;
-};
-
-// 비동기 작업 시작 시점의 참조 캡처. 대상 요소에 id가 없으면(구형 데이터가
-// 아직 backfill 전) null을 돌려 호출부가 기존 경로를 유지하게 한다
-export const captureElementRef = (
-  type: NativeElementType,
-  mode: string,
-  position: { id?: string } | undefined,
-): ElementRef | null => {
-  const id = position?.id;
-  if (typeof id !== 'string' || id.length === 0) return null;
-  return { type, mode, id };
 };
