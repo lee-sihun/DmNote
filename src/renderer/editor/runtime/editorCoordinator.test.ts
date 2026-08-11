@@ -742,6 +742,85 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('keeps first-party commit bases off the isolated in-flight target', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    // start()는 호출마다 이 훅을 기다린다. 자사 호출만 여기서 정지시켜
+    // "빈 tail 통과 -> start 대기 중 격리 커밋이 in-flight" TOCTOU 순서를
+    // 결정적으로 만든다
+    const startGates: Array<Deferred<void>> = [];
+    const harness = createHarness(base, {
+      onStartSucceeded: () => {
+        const gate = deferred<void>();
+        startGates.push(gate);
+        return gate.promise;
+      },
+    });
+    const starting = harness.coordinator.start();
+    await vi.waitFor(() => expect(startGates.length).toBe(1));
+    startGates[0].resolve(undefined);
+    await starting;
+
+    // 자사 커밋이 먼저 진입해 start 훅에서 대기한다
+    const firstParty = harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      layerGroups: { '4key': [{ id: 'group-1', name: 'group-1' }] },
+    });
+    await vi.waitFor(() => expect(startGates.length).toBe(2));
+
+    // 그 사이 격리 커밋이 in-flight가 된다
+    const commitGate = deferred<EditorCommitResult>();
+    harness.transport.commitMock.mockImplementationOnce(
+      () => commitGate.promise,
+    );
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    const isolated = harness.coordinator.commitIsolatedPluginPatch(
+      { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+      { multiKey: false },
+    );
+    await vi.waitFor(() => expect(startGates.length).toBe(3));
+    startGates[2].resolve(undefined);
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock).toHaveBeenCalledOnce(),
+    );
+
+    // 자사 호출이 재개되어 base를 계산한다 - 미승인 격리 target이 base면
+    // 오염은 wire가 아니라 lastAck 승인으로 귀결된다 (아래 단언)
+    startGates[1].resolve(undefined);
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock).toHaveBeenCalledTimes(2),
+    );
+    const firstPartyRequest = harness.transport.commitMock.mock.calls[1][0];
+    expect(firstPartyRequest.changes.layerGroups).toBeDefined();
+    expect(firstPartyRequest.changes.keyPositions).toBeUndefined();
+
+    // 오염은 wire가 아니라 lastAck로 귀결된다 - base가 격리 target이면
+    // 자사 커밋 성공 시 applyCommitResult가 무ID keyPositions를 lastAck로
+    // 승인하고, 다음 flush가 이를 근거로 플러그인 변경을 되돌린다
+    await firstParty;
+    const acknowledged = harness.coordinator.getState().lastAck!;
+    expect(acknowledged.keyPositions['4key'][0].id).toBe(idBefore);
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+
+    // 정리: 격리 커밋을 adapted canonical로 완료시킨다
+    const adapted = structuredClone(
+      harness.transport.canonical.document,
+    ) as EditorDocumentV1;
+    adapted.keyPositions['4key'][0].dx = moved['4key'][0].dx;
+    harness.transport.canonical = {
+      revision: harness.transport.canonical.revision + 1,
+      document: structuredClone(adapted),
+    };
+    commitGate.resolve({
+      revision: harness.transport.canonical.revision,
+      changedFields: ['keyPositions'],
+    });
+    await isolated;
+    await firstParty;
+    harness.coordinator.stop();
+  });
+
   it('stamps the wire schema version by transport path', async () => {
     const base = makeDocument('A');
     const harness = createHarness(base);

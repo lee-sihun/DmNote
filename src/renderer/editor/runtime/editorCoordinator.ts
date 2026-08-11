@@ -376,7 +376,7 @@ export class EditorSaveCoordinator {
     }
 
     const outstandingFields = new Set<EditorField>([
-      ...(this.inFlight?.localFields ?? []),
+      ...(this.optimisticInFlight()?.localFields ?? []),
       ...this.pendingFields,
       ...newIntentFields,
     ]);
