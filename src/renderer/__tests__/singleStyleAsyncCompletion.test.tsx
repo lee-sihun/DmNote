@@ -18,12 +18,16 @@ const api = vi.hoisted(() => ({
     async (_positions: KeyPositions, _gestureId?: string) => ({}),
   ),
   updateMappingsAndPositionsWithGesture: vi.fn(async () => ({})),
+  commitGeneratedPatch: vi.fn(),
 }));
 
 vi.mock('@api/modules/keysApi', () => ({
   updatePositionsWithGesture: api.updatePositionsWithGesture,
   updateMappingsAndPositionsWithGesture:
     api.updateMappingsAndPositionsWithGesture,
+}));
+vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
+  editorCoordinator: { commitGeneratedPatch: api.commitGeneratedPatch },
 }));
 vi.mock('@api/modules/editorApi', () => ({
   editorApi: {
@@ -67,6 +71,8 @@ import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNav
 import { useKeyStore } from '@stores/data/useKeyStore';
 import StyleTabContent from '@components/main/Grid/PropertiesPanel/single/StyleTabContent';
 
+import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const ID_TARGET = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -92,9 +98,30 @@ describe('단일 스타일 패널 비동기 이미지 완료', () => {
   let onKeyUpdate: Mock<
     (data: Partial<KeyPosition> & { index: number }) => void
   >;
+  const generatedPatches: Array<EditorPatchV1 | null> = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
+    generatedPatches.length = 0;
+    // 슬롯 시점 base는 호출 시점 스토어 상태 - 대기 중 재정렬·삭제가 이미
+    // 스토어에 반영된 뒤 생성됨을 재현
+    api.commitGeneratedPatch.mockImplementation(
+      async (generate: (base: EditorDocumentV1) => EditorPatchV1 | null) => {
+        const base = {
+          schemaVersion: 1,
+          keys: {},
+          keyPositions: structuredClone(
+            useKeyStore.getState().canonicalPositions,
+          ),
+          statPositions: {},
+          graphPositions: {},
+          knobPositions: {},
+          layerGroups: {},
+        } as EditorDocumentV1;
+        generatedPatches.push(generate(base));
+        return base;
+      },
+    );
     onKeyUpdate = vi.fn();
     useKeyStore.setState({
       selectedKeyType: '4key',
@@ -174,15 +201,14 @@ describe('단일 스타일 패널 비동기 이미지 완료', () => {
     });
     await finishLoad();
 
-    expect(api.updatePositionsWithGesture).toHaveBeenCalledTimes(1);
-    const persisted = api.updatePositionsWithGesture.mock.calls[0][0];
-    expect(persisted['4key'][0].id).toBe(ID_TARGET);
-    expect(persisted['4key'][0].inactiveImage).toBe('/tmp/picked.png');
-    expect(persisted['4key'][1].inactiveImage ?? '').toBe('');
-    // 레거시 index writer는 우회된다
+    expect(api.commitGeneratedPatch).toHaveBeenCalledTimes(1);
+    const persisted = generatedPatches[0]?.keyPositions;
+    expect(persisted?.['4key'][0].id).toBe(ID_TARGET);
+    expect(persisted?.['4key'][0].inactiveImage).toBe('/tmp/picked.png');
+    expect(persisted?.['4key'][1].inactiveImage ?? '').toBe('');
+    // 레거시 index writer와 캡처 레코드 경로는 우회된다
     expect(onKeyUpdate).not.toHaveBeenCalled();
-    // wire에 gestureId 없음
-    expect(api.updatePositionsWithGesture.mock.calls[0][1]).toBeUndefined();
+    expect(api.updatePositionsWithGesture).not.toHaveBeenCalled();
   });
 
   it('대기 중 요소가 삭제되면 아무것도 쓰지 않는다', async () => {
@@ -195,6 +221,8 @@ describe('단일 스타일 패널 비동기 이미지 완료', () => {
     });
     await finishLoad();
 
+    // 슬롯 재판정까지 가되 wire에는 아무것도 싣지 않는다
+    expect(generatedPatches).toEqual([null]);
     expect(api.updatePositionsWithGesture).not.toHaveBeenCalled();
     expect(onKeyUpdate).not.toHaveBeenCalled();
   });

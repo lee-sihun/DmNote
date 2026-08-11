@@ -405,6 +405,15 @@ export class EditorSaveCoordinator {
     this.assertWritable();
     await this.waitForGestureCommits();
     await this.start();
+    return this.commitPatchSettled(changes, meta?.gestureId);
+  }
+
+  // 대기 이후 공통 본문. 슬롯 안에서 재사용하므로 여기서 tail을 다시
+  // 기다리면 자기 슬롯 교착이 된다
+  private commitPatchSettled(
+    changes: EditorPatchV1,
+    gestureId?: string,
+  ): Promise<EditorDocumentV1> {
     // gradient canonical 정규화를 assert 앞에 — optimistic·diff·invoke가 같은 값 사용
     const canonicalChanges = canonicalizeEditorGradients(changes);
     assertEditorPatch(canonicalChanges);
@@ -430,8 +439,26 @@ export class EditorSaveCoordinator {
       target,
       newIntentFields,
       requestFields,
-      meta?.gestureId,
+      gestureId,
     );
+  }
+
+  // 호출 시점 캡처 patch는 대기 중 정산된 다른 커밋의 같은 컬렉션 값을
+  // 통째로 되돌린다. 컬렉션 전체 레코드를 보내야 하는 호출자는 이 경로로
+  // 직렬 슬롯 안에서 최신 base를 받아 patch를 생성한다. null 반환은 무커밋
+  // (mutation·낙관 적용·revision 전진 전부 없음)
+  commitGeneratedPatch(
+    generate: (base: EditorDocumentV1) => EditorPatchV1 | null,
+  ): Promise<EditorDocumentV1> {
+    this.assertWritable();
+    return this.enqueueSerialized(async () => {
+      await this.start();
+      await this.drainUntilSettled();
+      await this.eventQueue;
+      const changes = generate(this.getLatestCommitBase());
+      if (!changes) return clone(this.requireLastAck());
+      return this.commitPatchSettled(changes);
+    });
   }
 
   // 플러그인 발신 커밋을 gesture 커밋과 같은 단일 직렬 큐에 태운다.

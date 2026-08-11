@@ -15,6 +15,7 @@ import {
   createEditorPatch,
   getChangedEditorFields,
 } from './editorCoordinator';
+import { enqueueEditorCompatibilityWrite } from './editorCompatibilityQueue';
 
 import type {
   EditorCommitError,
@@ -1753,6 +1754,270 @@ describe('EditorSaveCoordinator', () => {
       keys: { '4key': ['B'] },
       graphPositions: preview.graphPositions,
     });
+    harness.coordinator.stop();
+  });
+});
+// 지연 생성 커밋: 호출 시점 캡처 patch가 대기 중 정산된 다른 커밋의 같은
+// 컬렉션 값을 되돌리는 lost-update의 방어 경로
+describe('commitGeneratedPatch', () => {
+  const gatedDefaultCommit = (
+    harness: ReturnType<typeof createHarness>,
+    gate: Promise<void>,
+  ) => {
+    harness.transport.commitMock.mockImplementationOnce(async (request) => {
+      await gate;
+      const before = harness.transport.canonical.document;
+      const next = applyEditorPatch(before, request.changes);
+      const changedFields = getChangedEditorFields(before, next);
+      if (changedFields.length > 0) harness.transport.canonical.revision += 1;
+      harness.transport.canonical.document = next;
+      return {
+        revision: harness.transport.canonical.revision,
+        changedFields,
+      };
+    });
+  };
+
+  const imageRecordFrom = (base: EditorDocumentV1) => {
+    const record = structuredClone(base.keyPositions);
+    record['4key'] = record['4key'].map((position, index) =>
+      index === 0 ? { ...position, inactiveImage: 'generated.png' } : position,
+    );
+    return record;
+  };
+
+  it('게스처 in-flight 완료 후의 base에서 생성해 양쪽 값을 보존한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const gate = deferred<void>();
+    gatedDefaultCommit(harness, gate.promise);
+    const gesture = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': ['G'] } },
+      'gesture-g',
+      async (context) =>
+        harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          changes: context.editorChanges!,
+        }),
+    );
+
+    const generatorSpy = vi.fn((latest: EditorDocumentV1) => ({
+      schemaVersion: 1 as const,
+      keyPositions: imageRecordFrom(latest),
+    }));
+    const generated = harness.coordinator.commitGeneratedPatch(generatorSpy);
+
+    // 게스처가 정산되기 전에는 생성하지 않는다
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(generatorSpy).not.toHaveBeenCalled();
+
+    gate.resolve();
+    await gesture;
+    await generated;
+
+    // 생성 base에 게스처 결과가 이미 반영돼 있다
+    expect(generatorSpy.mock.calls[0][0].keys['4key']).toEqual(['G']);
+    const finalDocument = harness.transport.canonical.document;
+    expect(finalDocument.keys['4key']).toEqual(['G']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('격리 플러그인 커밋 선행 시 그 결과 위에서 생성한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const gate = deferred<void>();
+    gatedDefaultCommit(harness, gate.promise);
+    const isolated = harness.coordinator.commitIsolatedPluginPatch(
+      { schemaVersion: 1, keys: { '4key': ['P'] } },
+      { multiKey: false },
+    );
+
+    const generatorSpy = vi.fn((latest: EditorDocumentV1) => ({
+      schemaVersion: 1 as const,
+      keyPositions: imageRecordFrom(latest),
+    }));
+    const generated = harness.coordinator.commitGeneratedPatch(generatorSpy);
+
+    gate.resolve();
+    await isolated;
+    await generated;
+
+    expect(generatorSpy.mock.calls[0][0].keys['4key']).toEqual(['P']);
+    const finalDocument = harness.transport.canonical.document;
+    expect(finalDocument.keys['4key']).toEqual(['P']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('compatibility 큐 선행 writer의 stale 레코드와 생성 커밋이 모두 생존한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    // C가 큐 점유 - X는 클릭 전 캡처한 full record를 들고 대기
+    const releaseC = deferred<void>();
+    const cDone = enqueueEditorCompatibilityWrite(
+      () => releaseC.promise,
+      () => undefined,
+    );
+    const staleRecord = structuredClone(
+      harness.transport.canonical.document.keyPositions,
+    );
+    staleRecord['4key'] = staleRecord['4key'].map((position, index) =>
+      index === 0 ? { ...position, noteWidth: 222 } : position,
+    );
+    const xDone = enqueueEditorCompatibilityWrite(
+      () =>
+        harness.coordinator.commitPatch({
+          schemaVersion: 1,
+          keyPositions: staleRecord,
+        }),
+      () => undefined,
+    );
+
+    // 생성 커밋도 같은 큐에 합류 - 큐를 건너뛰면 X가 나중에 실행되어
+    // 생성 값을 되돌린다
+    const bDone = enqueueEditorCompatibilityWrite(
+      () =>
+        harness.coordinator.commitGeneratedPatch((latest) => ({
+          schemaVersion: 1,
+          keyPositions: imageRecordFrom(latest),
+        })),
+      () => undefined,
+    );
+
+    releaseC.resolve();
+    await Promise.all([cDone, xDone, bDone]);
+
+    const finalPosition =
+      harness.transport.canonical.document.keyPositions['4key'][0];
+    expect(finalPosition.noteWidth).toBe(222);
+    expect(finalPosition.inactiveImage).toBe('generated.png');
+    harness.coordinator.stop();
+  });
+
+  it('선행 커밋이 대상을 삭제하면 생성이 null로 수렴해 커밋하지 않는다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const targetId =
+      harness.transport.canonical.document.keyPositions['4key'][0].id;
+
+    const gate = deferred<void>();
+    gatedDefaultCommit(harness, gate.promise);
+    const deletion = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': [] }, keyPositions: { '4key': [] } },
+      'gesture-delete',
+      async (context) =>
+        harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          changes: context.editorChanges!,
+        }),
+    );
+
+    const generatorSpy = vi.fn((latest: EditorDocumentV1) => {
+      const found = latest.keyPositions['4key']?.some(
+        (position) => position.id === targetId,
+      );
+      if (!found) return null;
+      return {
+        schemaVersion: 1 as const,
+        keyPositions: imageRecordFrom(latest),
+      };
+    });
+    const generated = harness.coordinator.commitGeneratedPatch(generatorSpy);
+
+    gate.resolve();
+    await deletion;
+    await generated;
+
+    // 생성은 삭제가 반영된 base를 받아 null로 수렴한다
+    expect(generatorSpy.mock.calls[0][0].keyPositions['4key']).toEqual([]);
+    // wire 커밋은 삭제 1건뿐, revision도 그만큼만 전진
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(1);
+    expect(harness.transport.canonical.revision).toBe(1);
+    expect(harness.transport.canonical.document.keyPositions['4key']).toEqual(
+      [],
+    );
+    harness.coordinator.stop();
+  });
+
+  it('null 생성은 mutation·낙관 적용·revision 전진이 전부 없다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    const applicationsBefore = harness.applications.length;
+    const revisionBefore = harness.transport.canonical.revision;
+
+    const result = await harness.coordinator.commitGeneratedPatch(() => null);
+
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    expect(harness.applications.length).toBe(applicationsBefore);
+    expect(harness.transport.canonical.revision).toBe(revisionBefore);
+    expect(result).toEqual(base);
+    harness.coordinator.stop();
+  });
+
+  it('생성 후 revision 충돌은 비중첩 rebase로 양쪽을 보존한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    harness.transport.commitMock.mockImplementationOnce(async () => {
+      // 외부 writer가 먼저 revision을 전진시킨 상황
+      harness.transport.canonical.revision += 1;
+      harness.transport.canonical.document = applyEditorPatch(
+        harness.transport.canonical.document,
+        { schemaVersion: 1, keys: { '4key': ['EXT'] } },
+      );
+      throw revisionConflict();
+    });
+
+    await harness.coordinator.commitGeneratedPatch((latest) => ({
+      schemaVersion: 1,
+      keyPositions: imageRecordFrom(latest),
+    }));
+
+    const finalDocument = harness.transport.canonical.document;
+    expect(finalDocument.keys['4key']).toEqual(['EXT']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('generator 예외는 해당 커밋만 실패시키고 큐는 계속 진행된다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitGeneratedPatch(() => {
+        throw new Error('generator failed');
+      }),
+    ).rejects.toThrow('generator failed');
+
+    await expect(
+      harness.coordinator.commitPatch({
+        schemaVersion: 1,
+        keys: { '4key': ['N'] },
+      }),
+    ).resolves.toBeTruthy();
+    expect(harness.transport.canonical.document.keys['4key']).toEqual(['N']);
     harness.coordinator.stop();
   });
 });
