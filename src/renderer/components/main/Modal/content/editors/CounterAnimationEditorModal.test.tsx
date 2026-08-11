@@ -36,6 +36,7 @@ describe('CounterAnimationEditorModal 베지어 드래그', () => {
   let host: HTMLDivElement;
   let root: Root;
   let callbacks: Map<number, FrameRequestCallback>;
+  let resizeCallback: ResizeObserverCallback;
 
   beforeEach(() => {
     callbacks = new Map();
@@ -49,6 +50,10 @@ describe('CounterAnimationEditorModal 베지어 드래그', () => {
     vi.stubGlobal(
       'ResizeObserver',
       class {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+
         observe() {}
         disconnect() {}
       },
@@ -102,6 +107,75 @@ describe('CounterAnimationEditorModal 베지어 드래그', () => {
 
   const p1 = () =>
     host.querySelector<SVGCircleElement>('[data-counter-bezier-handle="p1"]')!;
+  const p1Visual = () => p1().nextElementSibling as SVGCircleElement;
+
+  it('캔버스 실측 전에도 베지어 좌표계를 비균등 확대하지 않는다', () => {
+    const svg = host.querySelector<SVGSVGElement>(
+      '[data-counter-bezier-editor="true"]',
+    )!;
+
+    expect(svg.getAttribute('preserveAspectRatio')).toBe('xMidYMid meet');
+  });
+
+  it('가로형 캔버스 실측 뒤에는 같은 비율의 풀블리드 viewBox를 쓴다', () => {
+    const svg = host.querySelector<SVGSVGElement>(
+      '[data-counter-bezier-editor="true"]',
+    )!;
+    const area = svg.parentElement!;
+    vi.spyOn(area, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 440,
+      height: 220,
+      right: 440,
+      bottom: 220,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    act(() => resizeCallback([], {} as ResizeObserver));
+
+    const [, , viewWidth, viewHeight] = svg
+      .getAttribute('viewBox')!
+      .split(' ')
+      .map(Number);
+    expect(viewWidth / viewHeight).toBeCloseTo(2);
+  });
+
+  it('가로형 캔버스에서도 손잡이의 기존 화면 크기를 유지한다', () => {
+    const svg = host.querySelector<SVGSVGElement>(
+      '[data-counter-bezier-editor="true"]',
+    )!;
+    const area = svg.parentElement!;
+    vi.spyOn(area, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 440,
+      height: 220,
+      right: 440,
+      bottom: 220,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    act(() => resizeCallback([], {} as ResizeObserver));
+
+    const [, , , viewHeight] = svg
+      .getAttribute('viewBox')!
+      .split(' ')
+      .map(Number);
+    const screenScale = 220 / viewHeight;
+    const visualRadius = Number(p1Visual().getAttribute('r')) * screenScale;
+    const strokeWidth =
+      Number(p1Visual().getAttribute('stroke-width')) * screenScale;
+    const hitRadius = Number(p1().getAttribute('r')) * screenScale;
+
+    expect(visualRadius).toBeCloseTo(6);
+    expect(strokeWidth).toBeCloseTo(2);
+    expect(hitRadius).toBeCloseTo(10);
+  });
 
   it('연속 pointermove의 최신 좌표만 한 프레임에 반영한다', () => {
     act(() => {

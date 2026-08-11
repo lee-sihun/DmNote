@@ -908,11 +908,10 @@ const CounterAnimationEditorModal = ({
   const viewTop = viewOffset.y - (vbH - vbBase) / 2;
   const viewBoxStr = `${viewLeft} ${viewTop} ${vbW} ${vbH}`;
   const ns = 1 / viewScale;
-  // 캔버스가 커져도 핸들·코너는 기준 렌더 크기의 화면 크기 유지 (짧은 변 기준)
+  // 캔버스와 줌에 관계없이 기존 손잡이 화면 크기 유지
   const uns =
     ns *
-    (EDITOR_RENDER_SIZE /
-      Math.max(Math.min(editorSize.width, editorSize.height), 1));
+    (TOTAL_SIZE / Math.max(Math.min(editorSize.width, editorSize.height), 1));
 
   const headerTitle =
     mode === 'edit'
@@ -963,7 +962,7 @@ const CounterAnimationEditorModal = ({
                 data-counter-bezier-editor="true"
                 className="absolute inset-0 w-full h-full"
                 viewBox={viewBoxStr}
-                preserveAspectRatio="none"
+                preserveAspectRatio="xMidYMid meet"
                 onWheel={handleWheel}
                 onPointerDown={handleSvgPointerDown}
                 onDoubleClick={handleDoubleClick}
