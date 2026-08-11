@@ -36,6 +36,8 @@ identifiers are stored in a knob element's `axisId`.
 
 ```typescript
 // KeyPosition styling fields are inherited (position, size, colors, images...)
+// including the stable element `id` (UUID): it keeps identifying the same knob
+// across reorders and mode switches, and preset loads reissue new IDs
 type KnobItemPosition = KeyPosition & {
   axisId: string; // bound HID axis ("HIDA:..."), empty if unbound
   sensitivity: number; // rotation multiplier (default 1)
