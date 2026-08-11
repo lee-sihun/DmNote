@@ -411,6 +411,207 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  // 백엔드 v1 adapter 흉내: 무ID keyPositions에 canonical의 ID를 되살린다.
+  // 결과 envelope에는 adapted 값이 없으므로 coordinator는 get으로만 알 수 있다
+  const emulateV1AdapterCommit = (
+    harness: ReturnType<typeof createHarness>,
+  ) => {
+    harness.transport.commitMock.mockImplementation(async (request) => {
+      const before = harness.transport.canonical.document;
+      const next = applyEditorPatch(before, request.changes);
+      for (const [mode, positions] of Object.entries(next.keyPositions)) {
+        positions.forEach((position, index) => {
+          if (!position.id) {
+            const inherited = before.keyPositions[mode]?.[index]?.id;
+            if (inherited) position.id = inherited;
+          }
+        });
+      }
+      const changedFields = getChangedEditorFields(before, next);
+      if (changedFields.length > 0) harness.transport.canonical.revision += 1;
+      harness.transport.canonical.document = next;
+      return {
+        revision: harness.transport.canonical.revision,
+        changedFields,
+      };
+    });
+  };
+
+  const strippedIdPositions = (document: EditorDocumentV1) => {
+    const positions = structuredClone(document.keyPositions);
+    Object.values(positions).forEach((list) =>
+      list.forEach((position) => {
+        delete position.id;
+      }),
+    );
+    return positions;
+  };
+
+  it('keeps canonical element ids after a no-op idless plugin commit', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    expect(idBefore).toBeTruthy();
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+
+    const result = await harness.coordinator.commitIsolatedPluginPatch(
+      {
+        schemaVersion: 1,
+        keys: base.keys,
+        keyPositions: strippedIdPositions(base),
+      },
+      { multiKey: false },
+    );
+
+    // 백엔드는 ID를 보존했다 - lastAck가 무ID 요청값으로 덮이면 안 된다
+    expect(result.keyPositions['4key'][0].id).toBe(idBefore);
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+  });
+
+  it('keeps canonical element ids after a changing idless plugin commit', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    const result = await harness.coordinator.commitIsolatedPluginPatch(
+      { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+      { multiKey: false },
+    );
+
+    // own committed 이벤트는 revision 선점으로 패치가 무시되므로,
+    // 커밋 경로 자체가 canonical(ID 포함)을 되찾아야 한다
+    expect(result.keyPositions['4key'][0].dx).toBe(moved['4key'][0].dx);
+    expect(result.keyPositions['4key'][0].id).toBe(idBefore);
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+  });
+
+  it('keeps the previous canonical when the post-commit read fails and recovers on retry', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('ipc unavailable'),
+    );
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(
+        { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+        { multiKey: false },
+      ),
+    ).rejects.toThrow('ipc unavailable');
+
+    // 무ID target이 lastAck·스토어를 오염시키지 않는다 (이전 canonical 유지)
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+    expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+      base.keyPositions['4key'][0].dx,
+    );
+
+    // coordinator는 죽은 상태가 아니다 - 재시도가 정상 경로로 복구된다
+    const retried = await harness.coordinator.commitIsolatedPluginPatch(
+      { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+      { multiKey: false },
+    );
+    expect(retried.keyPositions['4key'][0].id).toBe(idBefore);
+    expect(retried.keyPositions['4key'][0].dx).toBe(moved['4key'][0].dx);
+    expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+      moved['4key'][0].dx,
+    );
+    harness.coordinator.stop();
+  });
+
+  it('recovers the local store from the own event after a failed post-commit read', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('ipc unavailable'),
+    );
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(
+        { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+        { multiKey: false },
+      ),
+    ).rejects.toThrow('ipc unavailable');
+
+    // own committed 이벤트가 lastAck뿐 아니라 store까지 복구한다
+    const request = harness.transport.commitMock.mock.calls[0][0];
+    harness.transport.emit(
+      eventFor(
+        harness.transport.canonical.revision,
+        request.mutationId,
+        base,
+        harness.transport.canonical.document,
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+        moved['4key'][0].dx,
+      ),
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+
+    // 후속 flush가 성공한 플러그인 변경을 낡은 로컬로 되돌리지 않는다
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    await harness.coordinator.commitEditorState();
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    harness.coordinator.stop();
+  });
+
+  it('recovers the local store when the own event lands before the failed read', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+    harness.transport.getMock.mockImplementationOnce(async () => {
+      const request = harness.transport.commitMock.mock.calls[0][0];
+      harness.transport.emit(
+        eventFor(
+          harness.transport.canonical.revision,
+          request.mutationId,
+          base,
+          harness.transport.canonical.document,
+        ),
+      );
+      throw new Error('ipc unavailable');
+    });
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(
+        { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+        { multiKey: false },
+      ),
+    ).rejects.toThrow('ipc unavailable');
+
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+        moved['4key'][0].dx,
+      ),
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+
+    const commitsBefore = harness.transport.commitMock.mock.calls.length;
+    await harness.coordinator.commitEditorState();
+    expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    harness.coordinator.stop();
+  });
+
   it('stamps the wire schema version by transport path', async () => {
     const base = makeDocument('A');
     const harness = createHarness(base);

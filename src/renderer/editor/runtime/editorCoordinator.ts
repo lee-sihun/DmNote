@@ -245,6 +245,9 @@ export class EditorSaveCoordinator {
   private unsubscribeCommitted: EditorReadyUnsubscribe | null = null;
   private bufferedEvents: EditorCommittedV1[] = [];
   private ownMutations = new Set<string>();
+  // 낙관 적용 없이 커밋되는 격리 플러그인 mutation. own 이벤트가 도착하면
+  // store 적용까지 필요하다는 표시
+  private isolatedMutations = new Set<string>();
   private listeners = new Set<(state: EditorCoordinatorState) => void>();
 
   private readonly handleFocus = () => {
@@ -485,7 +488,7 @@ export class EditorSaveCoordinator {
       gestureIds: [],
     };
     this.inFlight = inFlight;
-    this.rememberOwnMutation(inFlight);
+    this.rememberOwnMutation(inFlight, true);
     this.phase = 'saving';
     this.notify();
 
@@ -500,7 +503,18 @@ export class EditorSaveCoordinator {
         multiKey: options.multiKey === true,
       });
       assertEditorCommitResult(result);
-      await this.applyCommitResult(inFlight, result);
+      // v1 adapter가 무ID 요소에 ID를 채우므로 canonical은 요청 target과
+      // 다를 수 있고, 결과 envelope에는 adapted 값이 없다. target을 lastAck로
+      // 승인하지 않고 canonical을 직접 읽어 성공했을 때만 전진한다 - 읽기가
+      // 실패하면 revision을 이전 값에 묶어 두어 own committed 이벤트가
+      // 선점 없이 patch를 적용해 자가 복구한다 (no-op이면 canonical이
+      // 이전과 같아 복구할 것이 없다)
+      const canonical = await this.transport.get();
+      assertEditorGetResult(canonical);
+      if (canonical.revision >= this.requireRevision()) {
+        this.revision = canonical.revision;
+        this.lastAck = clone(canonical.document);
+      }
       // 실행 창의 로컬 문서도 canonical로 갱신 - 격리 커밋은 낙관 적용을
       // 거치지 않으므로 여기서 반영하지 않으면 이후 flush가 낡은 로컬을
       // 새 편집으로 계산해 방금 성공한 변경을 되돌린다
@@ -1076,6 +1090,7 @@ export class EditorSaveCoordinator {
 
     if (event.revision <= this.revision) {
       this.ownMutations.delete(event.mutationId);
+      this.isolatedMutations.delete(event.mutationId);
       this.onCommittedApplied?.(event);
       return;
     }
@@ -1098,7 +1113,25 @@ export class EditorSaveCoordinator {
 
     if (isOwnMutation) {
       this.error = null;
-      this.notify();
+      // 격리 커밋은 낙관 적용이 없다. 커밋 경로의 canonical 재동기화가
+      // 실패했을 때만 이 분기까지 오므로 store에도 적용해야 다음 flush가
+      // 성공한 플러그인 변경을 낡은 로컬로 되돌리지 않는다
+      if (this.isolatedMutations.delete(event.mutationId)) {
+        // 아직 해제 전인 자기 inFlight의 무ID target을 pending으로 오인해
+        // canonical 위에 되얹지 않게 먼저 내린다
+        if (this.inFlight?.mutationId === event.mutationId) {
+          this.inFlight = null;
+        }
+        this.applyExternalCanonical(
+          canonical,
+          event.changedFields,
+          event.revision,
+          'event',
+          previousCanonical,
+        );
+      } else {
+        this.notify();
+      }
       this.onCommittedApplied?.(event);
       return;
     }
@@ -1288,12 +1321,17 @@ export class EditorSaveCoordinator {
     this.notify();
   }
 
-  private rememberOwnMutation(inFlight: InFlightCommit): void {
+  private rememberOwnMutation(
+    inFlight: InFlightCommit,
+    isolated = false,
+  ): void {
     this.ownMutations.add(inFlight.mutationId);
+    if (isolated) this.isolatedMutations.add(inFlight.mutationId);
     while (this.ownMutations.size > MAX_TRACKED_MUTATIONS) {
       const oldest = this.ownMutations.values().next().value;
       if (oldest === undefined) break;
       this.ownMutations.delete(oldest);
+      this.isolatedMutations.delete(oldest);
     }
   }
 
