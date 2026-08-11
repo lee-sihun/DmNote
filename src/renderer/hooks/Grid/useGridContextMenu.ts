@@ -26,6 +26,8 @@ interface MenuItem {
 
 interface KeyContext {
   keyCode: string;
+  // 요소 안정 ID - index는 스냅샷 한정 locator
+  id: string;
   index: number;
   position: KeyPosition;
   mode: string;
@@ -123,6 +125,7 @@ export function useGridContextMenu({
             keyCode: slotCanonical(
               keyMappings[selectedKeyType]?.[contextIndex] ?? '',
             ),
+            id: keyPosition.id ?? '',
             index: contextIndex,
             position: keyPosition,
             mode: selectedKeyType,

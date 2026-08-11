@@ -2189,6 +2189,7 @@ const Grid = ({
                 keyCode: slotCanonical(
                   keyMappings[selectedKeyType]?.[contextIndex] ?? '',
                 ),
+                id: positionForContext.id ?? '',
                 index: contextIndex,
                 position: positionForContext,
                 mode: selectedKeyType,

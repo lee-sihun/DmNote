@@ -33,7 +33,8 @@ const menuId = dmn.ui.contextMenu.addKeyMenuItem({
 | Property   | Type        | Description             |
 | ---------- | ----------- | ----------------------- |
 | `keyCode`  | string      | Canonical slot identifier (e.g. "D", "LEFT CTRL+Z", "F\|NUMPAD 4") |
-| `index`    | number      | Key index               |
+| `id`       | string      | Stable element ID (UUID). Keeps identifying the same key across reorders and mode switches |
+| `index`    | number      | Key index. Deprecated: only valid for the current snapshot, use `id` for identity |
 | `position` | KeyPosition | Key position info       |
 | `mode`     | string      | Current key mode        |
 

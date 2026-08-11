@@ -33,7 +33,8 @@ const menuId = dmn.ui.contextMenu.addKeyMenuItem({
 | 속성       | 타입        | 설명                 |
 | ---------- | ----------- | -------------------- |
 | `keyCode`  | string      | canonical 슬롯 식별자 (예: "D", "LEFT CTRL+Z", "F\|NUMPAD 4") |
-| `index`    | number      | 키 인덱스            |
+| `id`       | string      | 요소 안정 ID (UUID). 재정렬·모드 전환에도 같은 키를 가리킵니다 |
+| `index`    | number      | 키 인덱스. deprecated: 현재 스냅샷에서만 유효하며 신원은 `id`를 사용하세요 |
 | `position` | KeyPosition | 키 위치 정보         |
 | `mode`     | string      | 현재 키 모드         |
 

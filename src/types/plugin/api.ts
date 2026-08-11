@@ -350,6 +350,9 @@ export type WindowTarget = 'main' | 'overlay';
 // UI Plugin 컨텍스트 메뉴 types
 export type KeyMenuContext = {
   keyCode: string;
+  /** 요소 안정 ID (UUID). 재정렬·모드 전환에도 유지된다 */
+  id: string;
+  /** @deprecated 현재 스냅샷에서만 유효한 위치 locator - 신원은 id 사용 */
   index: number;
   position: KeyPosition;
   mode: string;
