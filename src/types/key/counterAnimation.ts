@@ -168,6 +168,22 @@ export function applyPresetToAnimation(
   };
 }
 
+// 배치 모션 적용용 intent mask: 피커가 소유한 preset 필드만 쓰고 각 요소의
+// enabled는 보존한다. 배치 기준값은 첫 요소라 델타 비교는 혼합 상태를
+// 오판한다 (같은 preset 재선택으로 혼합 통일하려는 동작이 무변경으로 보임)
+export function applyAnimationIntentMask(
+  current: KeyCounterAnimationSettings,
+  next: KeyCounterAnimationSettings,
+): KeyCounterAnimationSettings {
+  return {
+    enabled: current.enabled,
+    presetId: next.presetId,
+    bezier: next.bezier,
+    scale: next.scale,
+    durationMs: next.durationMs,
+  };
+}
+
 // 비동기 완료 병합용. 시작 스냅샷(start) 대비 실제로 바뀐 필드만 base(fresh)
 // 위에 적용해, 대기 중 다른 writer가 바꾼 필드(enabled 등)를 시작 값으로
 // 되돌리지 않는다. 필드가 늘면 여기 병합도 함께 늘려야 컴파일된다.

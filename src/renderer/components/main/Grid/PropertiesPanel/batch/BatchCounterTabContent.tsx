@@ -1,6 +1,13 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyCounterSettings } from '@src/types/key/keys';
+import { normalizeCounterSettings } from '@src/types/key/keys';
+import { applyAnimationIntentMask } from '@src/types/key/counterAnimation';
+import { applyElementPatchesById } from '@src/renderer/editor/runtime/elementPatch';
+import {
+  LEGACY_BATCH_ELEMENT_BINDING,
+  type BatchElementBinding,
+} from '@hooks/pickers/useBatchElementBinding';
 import {
   PropertyRow,
   NumberInput,
@@ -18,7 +25,9 @@ import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-counter:font';
-const ANIMATION_PAGE_KEY = 'batch-counter:animation';
+// 결합 캡처 소유자(리마운트 경계 밖)가 open 판정에 쓰도록 export
+export const BATCH_COUNTER_ANIMATION_PAGE_KEY = 'batch-counter:animation';
+const ANIMATION_PAGE_KEY = BATCH_COUNTER_ANIMATION_PAGE_KEY;
 
 interface BatchCounterTabContentProps {
   // 카운터 설정 (첫 번째 선택 키 기준)
@@ -38,6 +47,9 @@ interface BatchCounterTabContentProps {
   batchCounterStrokeButtonRef: React.RefObject<HTMLButtonElement>;
   isFillPickerOpen: boolean;
   isStrokePickerOpen: boolean;
+  // 모션 완료의 시작 시점 결합. 소유자는 EditSessionBoundary 밖 부모다 -
+  // 이 컴포넌트는 선택 변경 시 리마운트되어 open 중 재캡처가 일어난다
+  animationBinding?: BatchElementBinding;
   // 패널 요소 (FloatingPopup 위치용)
   // 번역
   t: (key: string) => string;
@@ -55,15 +67,34 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   batchCounterStrokeButtonRef,
   isFillPickerOpen,
   isStrokePickerOpen,
+  animationBinding = LEGACY_BATCH_ELEMENT_BINDING,
   t,
 }) => {
   // 인-패널 내비게이션 (폰트/애니메이션 서브 페이지)
   const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
     usePanelNav();
 
+  // 모션 편집기를 기다린 비동기 완료. ID 결합이면 시작 시점 선택 요소들에
+  // 적용하되, 피커가 소유한 preset 필드만 쓰고 각 요소의 fresh enabled는
+  // 보존한다 (첫 요소 기준 델타는 혼합 상태를 오판하므로 intent mask 방식)
   const handleAnimationUpdate = (
     nextAnimation: KeyCounterSettings['animation'],
   ) => {
+    if (animationBinding.binding === 'element-id') {
+      applyElementPatchesById(animationBinding.selection, (current) => {
+        const settings = normalizeCounterSettings(current.counter);
+        return {
+          counter: {
+            ...settings,
+            animation: applyAnimationIntentMask(
+              settings.animation,
+              nextAnimation,
+            ),
+          },
+        };
+      });
+      return;
+    }
     handleBatchCounterUpdate({ animation: nextAnimation });
   };
 
@@ -329,6 +360,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         createPortal(
           <CounterAnimationPicker
             open
+            completionBinding={animationBinding.binding}
             animation={batchCounterSettings.animation}
             counterSettings={batchCounterSettings}
             keyVisual={keyVisual}

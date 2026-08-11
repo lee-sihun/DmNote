@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { mergeChangedAnimationFields } from '@src/types/key/counterAnimation';
+import {
+  applyAnimationIntentMask,
+  mergeChangedAnimationFields,
+} from '@src/types/key/counterAnimation';
 
 import type { KeyCounterAnimationSettings } from '@src/types/key/keys';
 
@@ -55,6 +58,39 @@ describe('mergeChangedAnimationFields', () => {
     const merged = mergeChangedAnimationFields(fresh, start, animation());
 
     expect(merged).toEqual(fresh);
+  });
+
+  // 배치는 첫 요소 기준값이라 델타가 아니라 intent mask를 쓴다.
+  // 혼합 상태(요소마다 preset·duration이 다름)에서 같은 preset을 재선택해
+  // 통일하는 동작이 무변경으로 오판되면 안 된다
+  describe('applyAnimationIntentMask', () => {
+    it('preset 필드는 전부 쓰고 각 요소의 enabled만 보존한다', () => {
+      const current = animation({
+        enabled: false,
+        presetId: 'preset-c',
+        durationMs: 500,
+      });
+      const next = animation({ presetId: 'preset-b', durationMs: 300 });
+
+      const masked = applyAnimationIntentMask(current, next);
+
+      expect(masked.enabled).toBe(false);
+      expect(masked.presetId).toBe('preset-b');
+      expect(masked.durationMs).toBe(300);
+      expect(masked.bezier).toEqual(next.bezier);
+      expect(masked.scale).toBe(next.scale);
+    });
+
+    it('기준값과 같은 preset을 재선택해도 혼합 요소가 통일된다', () => {
+      // 기준(첫 요소)은 이미 preset-a인데 둘째 요소는 preset-c인 혼합 상태
+      const mixedSecond = animation({ presetId: 'preset-c', durationMs: 500 });
+      const reselected = animation();
+
+      const masked = applyAnimationIntentMask(mixedSecond, reselected);
+
+      expect(masked.presetId).toBe('preset-a');
+      expect(masked.durationMs).toBe(300);
+    });
   });
 
   // preset 매칭용 epsilon(0.001)을 변경 감지에 재사용하면 이런 미세 드래그가

@@ -28,6 +28,11 @@ import {
 } from '@utils/core/elementDefaults';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
+import { applyElementPatchesById } from '@src/renderer/editor/runtime/elementPatch';
+import {
+  LEGACY_BATCH_ELEMENT_BINDING,
+  type BatchElementBinding,
+} from '@hooks/pickers/useBatchElementBinding';
 import { usePanelNav } from '../PanelNavContext';
 import ShadowControls from '../ShadowControls';
 import {
@@ -39,7 +44,9 @@ import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
-const SOUND_PAGE_KEY = 'batch-style:sound';
+// 결합 캡처 소유자(리마운트 경계 밖)가 open 판정에 쓰도록 export
+export const BATCH_STYLE_SOUND_PAGE_KEY = 'batch-style:sound';
+const SOUND_PAGE_KEY = BATCH_STYLE_SOUND_PAGE_KEY;
 
 const SPACING_COMMIT_DEBOUNCE_MS = 80;
 const SPACING_COMMIT_EPSILON = 0.0001;
@@ -54,6 +61,9 @@ interface KeyData {
 interface BatchStyleTabContentProps {
   // 다중 선택 정보
   selectedCount: number;
+  // 사운드 완료의 시작 시점 결합. 소유자는 EditSessionBoundary 밖 부모다 -
+  // 이 컴포넌트는 선택 변경 시 리마운트되어 open 중 재캡처가 일어난다
+  soundBinding?: BatchElementBinding;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -132,6 +142,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   selectedCount,
   hideDisplayText = false,
   hideFontControls = false,
+  soundBinding = LEGACY_BATCH_ELEMENT_BINDING,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -1277,6 +1288,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         createPortal(
           <SoundPicker
             open={true}
+            completionBinding={soundBinding.binding}
             selectedSound={
               (getKeyOnlyMixedValue ?? getMixedValue)(
                 (pos) => pos.soundPath,
@@ -1284,10 +1296,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ).value || null
             }
             onSoundSelect={(soundPath) => {
+              const nextPath = soundPath || '';
+              if (soundBinding.binding === 'element-id') {
+                applyElementPatchesById(soundBinding.selection, () => ({
+                  soundPath: nextPath,
+                }));
+                return;
+              }
               (
                 handleKeyOnlyStyleChangeComplete ??
                 handleBatchStyleChangeComplete
-              )('soundPath', soundPath || '');
+              )('soundPath', nextPath);
             }}
             previewVolume={
               (getKeyOnlyMixedValue ?? getMixedValue)(

@@ -35,6 +35,14 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
+import { applyElementPatchesById } from '@src/renderer/editor/runtime/elementPatch';
+import {
+  captureBatchElementBinding,
+  useBatchElementBinding,
+} from '@hooks/pickers/useBatchElementBinding';
+import { usePanelNav } from '../PanelNavContext';
+import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
+import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
 
 const RenameIcon: React.FC = () => (
   <svg
@@ -224,7 +232,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   setPanelElement,
   selectedBatchStyleElements,
   selectedKeyElements,
-  selectedStatElements: _selectedStatElements,
+  selectedStatElements,
   selectedKnobElements,
   selectedGraphElements,
   selectedKeyLikeElements,
@@ -303,6 +311,36 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   selectedKeyType,
   t,
 }) => {
+  // 피커 open 시점의 선택을 ID로 고정 - 대기 중 재정렬·모드 전환에도
+  // 완료가 시작 시점 요소들에 적용된다 (전원이 ID를 가질 때만, 아니면 legacy).
+  // 결합 소유자는 이 패널이다 - EditSessionBoundary 안(탭 컴포넌트)에 두면
+  // 같은 개수 선택 교체 시 리마운트로 open 중 재캡처가 일어난다
+  const batchImageBinding = useBatchElementBinding(showBatchImagePicker, () =>
+    captureBatchElementBinding({
+      key: selectedKeyElements,
+      stat: selectedStatElements,
+      graph: selectedGraphElements,
+      knob: selectedKnobElements,
+    }),
+  );
+
+  // open 판정은 activePageKey다. renderPageKey는 exit 애니메이션 동안
+  // 유지되는 마운트 상태라, 닫고 250ms 안에 재열면 전환이 감지되지 않아
+  // 이전 결합이 재사용된다 (닫히는 동안의 옛 완료는 유지된 bound가 담당)
+  const { activePageKey } = usePanelNav();
+  const animationBinding = useBatchElementBinding(
+    activePageKey === BATCH_COUNTER_ANIMATION_PAGE_KEY,
+    () =>
+      captureBatchElementBinding({
+        key: selectedKeyElements,
+        stat: selectedStatElements,
+      }),
+  );
+  const soundBinding = useBatchElementBinding(
+    activePageKey === BATCH_STYLE_SOUND_PAGE_KEY,
+    () => captureBatchElementBinding({ key: selectedKeyElements }),
+  );
+
   const hasGraphSelection = selectedGraphElements.length > 0;
   const styleMixedValueGetter = hasGraphSelection
     ? getMixedValueBatch
@@ -661,6 +699,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             <EditSessionBoundary>
               <BatchStyleTabContent
                 selectedCount={selectedBatchStyleElements.length}
+                soundBinding={soundBinding}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
                 shadowActiveState={
@@ -877,6 +916,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
                 isFillPickerOpen={batchPickerFor === 'fill'}
                 isStrokePickerOpen={batchPickerFor === 'stroke'}
+                animationBinding={animationBinding}
                 t={t}
               />
             </EditSessionBoundary>
@@ -992,10 +1032,28 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   false,
                 ).value
               }
+              completionBinding={batchImageBinding.binding}
               onIdleImageChange={(imageUrl: string) => {
+                if (batchImageBinding.binding === 'element-id') {
+                  applyElementPatchesById(batchImageBinding.selection, () => ({
+                    inactiveImage: imageUrl,
+                  }));
+                  return;
+                }
                 handleBatchStyleChangeComplete('inactiveImage', imageUrl);
               }}
               onActiveImageChange={(imageUrl: string) => {
+                if (batchImageBinding.binding === 'element-id') {
+                  // active 이미지는 key·knob만 지원 (기존 writer와 동일 범위)
+                  applyElementPatchesById(
+                    {
+                      key: batchImageBinding.selection.key,
+                      knob: batchImageBinding.selection.knob,
+                    },
+                    () => ({ activeImage: imageUrl }),
+                  );
+                  return;
+                }
                 handleActiveCapableStyleChangeComplete('activeImage', imageUrl);
               }}
               onIdleTransparentChange={(value: boolean) => {
@@ -1116,6 +1174,11 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   selectedKeyType,
   t,
 }) => {
+  // 이미지 피커 open 시점의 그래프 선택을 ID로 고정
+  const graphImageBinding = useBatchElementBinding(showBatchImagePicker, () =>
+    captureBatchElementBinding({ graph: selectedGraphElements }),
+  );
+
   const graphShapeOptions = [
     { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
     { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
@@ -1376,10 +1439,23 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
             activeTransparent={
               getMixedValueGraphs((pos) => pos.activeTransparent, false).value
             }
+            completionBinding={graphImageBinding.binding}
             onIdleImageChange={(imageUrl: string) => {
+              if (graphImageBinding.binding === 'element-id') {
+                applyElementPatchesById(graphImageBinding.selection, () => ({
+                  inactiveImage: imageUrl,
+                }));
+                return;
+              }
               handleGraphBatchSharedSetting({ inactiveImage: imageUrl });
             }}
             onActiveImageChange={(imageUrl: string) => {
+              if (graphImageBinding.binding === 'element-id') {
+                applyElementPatchesById(graphImageBinding.selection, () => ({
+                  activeImage: imageUrl,
+                }));
+                return;
+              }
               handleGraphBatchSharedSetting({ activeImage: imageUrl });
             }}
             onIdleTransparentChange={(value: boolean) => {
@@ -1498,6 +1574,11 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   useCustomCSS,
   t,
 }) => {
+  // 이미지 피커 open 시점의 노브 선택을 ID로 고정
+  const knobImageBinding = useBatchElementBinding(showBatchImagePicker, () =>
+    captureBatchElementBinding({ knob: selectedKnobElements }),
+  );
+
   const sensitivityState = getMixedValueKnobs(
     (pos) => Number(pos.sensitivity ?? 1),
     1,
@@ -1676,10 +1757,23 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
             activeTransparent={
               getMixedValueKnobs((pos) => pos.activeTransparent, false).value
             }
+            completionBinding={knobImageBinding.binding}
             onIdleImageChange={(imageUrl: string) => {
+              if (knobImageBinding.binding === 'element-id') {
+                applyElementPatchesById(knobImageBinding.selection, () => ({
+                  inactiveImage: imageUrl,
+                }));
+                return;
+              }
               handleKnobBatchSharedSetting({ inactiveImage: imageUrl });
             }}
             onActiveImageChange={(imageUrl: string) => {
+              if (knobImageBinding.binding === 'element-id') {
+                applyElementPatchesById(knobImageBinding.selection, () => ({
+                  activeImage: imageUrl,
+                }));
+                return;
+              }
               handleKnobBatchSharedSetting({ activeImage: imageUrl });
             }}
             onIdleTransparentChange={(value: boolean) => {
