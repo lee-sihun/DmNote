@@ -48,6 +48,7 @@ const ensurePreviewSubscription = (): Promise<void> => {
 export const captureEditorDocument = (): EditorDocumentV1 => {
   const keyState = useKeyStore.getState();
   return {
+    // 문서 스키마는 v1 유지. v2는 쓰기(commit) 전용 버전이다
     schemaVersion: 1,
     keys: keyState.keyMappings,
     // 프리뷰가 섞이지 않은 canonical만 문서로 캡처

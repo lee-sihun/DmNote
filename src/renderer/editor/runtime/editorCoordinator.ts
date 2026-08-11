@@ -1,6 +1,7 @@
 import { stableStringify } from '@utils/core/stableStringify';
 
 import {
+  EDITOR_COMMIT_SCHEMA_VERSION,
   EDITOR_FIELDS,
   EDITOR_SCHEMA_VERSION,
   assertEditorCommitResult,
@@ -147,11 +148,14 @@ const unresolvedLocalFields = (
       stableStringify(canonical[field]),
   );
 
+// wire 버전은 전송 경로가 결정한다. 호출부 패치의 schemaVersion은 문서 적용
+// 과정에서 소비되어 여기까지 오지 않으므로, 자사 전송 지점만 v2를 명시한다
 const patchForFields = (
   document: EditorDocumentV1,
   fields: readonly EditorField[],
+  schemaVersion: EditorPatchV1['schemaVersion'] = EDITOR_SCHEMA_VERSION,
 ): EditorPatchV1 => {
-  const patch: EditorPatchV1 = { schemaVersion: EDITOR_SCHEMA_VERSION };
+  const patch: EditorPatchV1 = { schemaVersion };
   fields.forEach((field) => {
     Object.assign(patch, { [field]: clone(document[field]) });
   });
@@ -489,6 +493,8 @@ export class EditorSaveCoordinator {
       const result = await this.transport.commit({
         baseRevision,
         mutationId,
+        // 플러그인 격리 커밋은 v1 유지 - ID 없는 레거시 패치를 백엔드
+        // adapter가 수용한다 (계약 §10)
         changes: patchForFields(target, requestFields),
         // provenance 명시 전달 - 기본값 승격 경로 없음
         multiKey: options.multiKey === true,
@@ -772,7 +778,12 @@ export class EditorSaveCoordinator {
         const result = await this.transport.commit({
           baseRevision,
           mutationId,
-          changes: patchForFields(target, requestFields),
+          // 자사 커밋은 v2 - 백엔드가 ID 필수와 merged 유일성을 검증한다
+          changes: patchForFields(
+            target,
+            requestFields,
+            EDITOR_COMMIT_SCHEMA_VERSION,
+          ),
           ...(gestureId ? { gestureId } : {}),
           ...(gestureIds.length > 0 ? { gestureIds } : {}),
         });
@@ -877,8 +888,15 @@ export class EditorSaveCoordinator {
       const result = await commit({
         editorBaseRevision: inFlight.baseRevision,
         mutationId,
+        // 게스처 커밋도 자사 전용 경로라 v2
         ...(requestFields.length > 0
-          ? { editorChanges: patchForFields(target, requestFields) }
+          ? {
+              editorChanges: patchForFields(
+                target,
+                requestFields,
+                EDITOR_COMMIT_SCHEMA_VERSION,
+              ),
+            }
           : {}),
       });
       assertEditorCommitResult(result);

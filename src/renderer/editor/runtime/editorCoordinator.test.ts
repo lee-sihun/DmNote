@@ -411,6 +411,47 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('stamps the wire schema version by transport path', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    // 자사 일반 커밋 wire는 v2 - 호출부 패치 버전과 무관하게 경로가 결정
+    await harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keys: { '4key': ['B'] },
+    });
+    expect(
+      harness.transport.commitMock.mock.calls.at(-1)?.[0].changes.schemaVersion,
+    ).toBe(2);
+
+    // 게스처 커밋 wire도 v2
+    let gestureWireVersion: number | undefined;
+    await harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': ['C'] } },
+      'gesture-wire',
+      async (context) => {
+        gestureWireVersion = context.editorChanges?.schemaVersion;
+        return harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          changes: context.editorChanges!,
+        });
+      },
+    );
+    expect(gestureWireVersion).toBe(2);
+
+    // 플러그인 격리 커밋 wire는 v1 유지 (레거시 패치 수용 경계)
+    await harness.coordinator.commitIsolatedPluginPatch(
+      { schemaVersion: 1, keys: { '4key': ['D'] } },
+      { multiKey: false },
+    );
+    expect(
+      harness.transport.commitMock.mock.calls.at(-1)?.[0].changes.schemaVersion,
+    ).toBe(1);
+    harness.coordinator.stop();
+  });
+
   it('keeps queued mixed gestures as separate ordered transactions', async () => {
     const base = makeDocument('A');
     const harness = createHarness(base);
@@ -476,6 +517,8 @@ describe('EditorSaveCoordinator', () => {
   it('resyncs canonical state when a gesture result is outcome-unknown', async () => {
     const base = makeDocument('A');
     const target = makeDocument('B');
+    // 키만 다른 문서다. positions id까지 갈리면 resync 판정과 무관한 차이가 섞인다
+    target.keyPositions = structuredClone(base.keyPositions);
     const harness = createHarness(base);
     await harness.coordinator.start();
 
@@ -699,7 +742,7 @@ describe('EditorSaveCoordinator', () => {
       expect(harness.transport.commitMock).toHaveBeenCalledTimes(2),
     );
     expect(harness.transport.commitMock.mock.calls[1][0].changes).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       statPositions,
       graphPositions,
       knobPositions,
@@ -1018,7 +1061,7 @@ describe('EditorSaveCoordinator', () => {
     const retried = harness.transport.commitMock.mock.calls[1][0];
     expect(retried.baseRevision).toBe(1);
     expect(retried.changes).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       keys: { '4key': ['L'] },
     });
     expect(harness.coordinator.getState().conflict).toBeNull();
@@ -1083,7 +1126,7 @@ describe('EditorSaveCoordinator', () => {
     expect(harness.getLocal()).toEqual(expected);
     expect(harness.transport.commitMock.mock.calls[1][0]).toMatchObject({
       baseRevision: 1,
-      changes: { schemaVersion: 1, keys: { '4key': ['L'] } },
+      changes: { schemaVersion: 2, keys: { '4key': ['L'] } },
     });
     harness.coordinator.stop();
   });
@@ -1265,7 +1308,7 @@ describe('EditorSaveCoordinator', () => {
     expect(result).toEqual(base);
     expect(harness.transport.commitMock).toHaveBeenCalledOnce();
     expect(harness.transport.commitMock.mock.calls[0][0].changes).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       keys: base.keys,
     });
     expect(harness.coordinator.getState()).toMatchObject({
@@ -1292,7 +1335,7 @@ describe('EditorSaveCoordinator', () => {
     });
 
     expect(harness.transport.commitMock.mock.calls[0][0].changes).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       keys: { '4key': ['B'] },
     });
     expect(result.graphPositions).toEqual(base.graphPositions);

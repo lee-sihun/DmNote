@@ -16,9 +16,11 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
 vi.mock('@api/modules/editorApi', () => ({ editorCommitRaw }));
 
 import {
+  pluginEditorCommit,
   pluginKeysUpdate,
   pluginKeysUpdateWithPositions,
 } from './pluginWriteGateway';
+import type { PluginEditorCommitRequest } from '@src/types/editor';
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
 
 describe('pluginWriteGateway', () => {
@@ -81,5 +83,55 @@ describe('pluginWriteGateway', () => {
       expect.anything(),
       { multiKey: false },
     );
+  });
+
+  // 자사 wire가 v2로 옮겨가도 raw plugin envelope는 재직렬화 없이
+  // 선언된 버전 그대로 백엔드에 도달해야 한다
+  it('forwards a raw editor commit envelope without reserialization', async () => {
+    editorCommitRaw.mockReset();
+    editorCommitRaw.mockResolvedValue({ revision: 2, changedFields: [] });
+    const request = {
+      baseRevision: 1,
+      mutationId: '00000000-0000-4000-8000-000000000001',
+      changes: { schemaVersion: 1, statPositions: {} },
+    } as unknown as PluginEditorCommitRequest;
+
+    await pluginEditorCommit(request);
+
+    expect(editorCommitRaw).toHaveBeenCalledTimes(1);
+    // 같은 참조가 무가공 전달된다 (버전 재작성 지점 자체가 없음)
+    expect(editorCommitRaw.mock.calls[0][0]).toBe(request);
+  });
+
+  // commit wire v2는 자사 내부 전용 - 플러그인 경계는 v1만 통과해야 한다
+  it('rejects a v2 envelope at the plugin boundary', async () => {
+    editorCommitRaw.mockReset();
+    const request = {
+      baseRevision: 1,
+      mutationId: '00000000-0000-4000-8000-000000000003',
+      changes: { schemaVersion: 2, statPositions: {} },
+    } as unknown as PluginEditorCommitRequest;
+
+    await expect(pluginEditorCommit(request)).rejects.toThrow(TypeError);
+    expect(editorCommitRaw).not.toHaveBeenCalled();
+  });
+
+  it('serializes keys-bearing raw commits but keeps the envelope untouched', async () => {
+    editorCommitRaw.mockReset();
+    editorCommitRaw.mockResolvedValue({ revision: 2, changedFields: [] });
+    runSerializedPluginCommit.mockReset();
+    runSerializedPluginCommit.mockImplementation(
+      (run: () => Promise<unknown>) => run(),
+    );
+    const request = {
+      baseRevision: 1,
+      mutationId: '00000000-0000-4000-8000-000000000002',
+      changes: { schemaVersion: 1, keys: { '4key': ['Z'] } },
+    } as unknown as PluginEditorCommitRequest;
+
+    await pluginEditorCommit(request);
+
+    expect(runSerializedPluginCommit).toHaveBeenCalledTimes(1);
+    expect(editorCommitRaw.mock.calls[0][0]).toBe(request);
   });
 });

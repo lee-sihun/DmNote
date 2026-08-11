@@ -15,6 +15,11 @@ import { canonicalizePositionGradients } from '@src/types/color';
 
 export const EDITOR_SCHEMA_VERSION = 1 as const;
 
+// 쓰기(commit) 전용 버전. 문서(editor_get)와 이벤트(editor:committed)는 v1을
+// 유지하고 id를 additive로 싣는다. v2 커밋은 포함된 모든 위치 항목에 유효 ID가
+// 필수라 백엔드가 형식·전역 유일성을 강제한다. 구형 플러그인 gateway만 v1로 남는다
+export const EDITOR_COMMIT_SCHEMA_VERSION = 2 as const;
+
 export const EDITOR_FIELDS = [
   'keys',
   'keyPositions',
@@ -37,6 +42,14 @@ export interface EditorDocumentV1 {
 }
 
 export type EditorPatchV1 = {
+  schemaVersion:
+    | typeof EDITOR_SCHEMA_VERSION
+    | typeof EDITOR_COMMIT_SCHEMA_VERSION;
+} & Partial<Pick<EditorDocumentV1, EditorField>>;
+
+// 플러그인 공개 표면 전용 패치. commit wire v2(ID 필수 검증)는 자사 내부
+// 전용이라 플러그인 경계에는 v1만 노출한다 - durable plugin ID는 별도 릴리스
+export type EditorLegacyPatchV1 = {
   schemaVersion: typeof EDITOR_SCHEMA_VERSION;
 } & Partial<Pick<EditorDocumentV1, EditorField>>;
 
@@ -51,6 +64,12 @@ export interface EditorCommitRequest {
   // 멀티 키 슬롯 지원 선언. keys를 포함한 커밋에서 현재 매핑에 멀티 슬롯이
   // 존재하는데 이 선언이 없으면 백엔드가 MULTI_KEY_UNSUPPORTED로 거절
   multiKey?: boolean;
+}
+
+// 플러그인 dmn.editor.commit 요청. changes만 v1으로 좁힌다
+export interface PluginEditorCommitRequest
+  extends Omit<EditorCommitRequest, 'changes'> {
+  changes: EditorLegacyPatchV1;
 }
 
 export interface EditorCommitResult {
@@ -473,7 +492,11 @@ export function assertEditorPatch(
   value: unknown,
   label = 'editor patch',
 ): asserts value is EditorPatchV1 {
-  if (!isRecord(value) || value.schemaVersion !== EDITOR_SCHEMA_VERSION) {
+  if (
+    !isRecord(value) ||
+    (value.schemaVersion !== EDITOR_SCHEMA_VERSION &&
+      value.schemaVersion !== EDITOR_COMMIT_SCHEMA_VERSION)
+  ) {
     throw new EditorProtocolError(`${label} has an unsupported schema version`);
   }
   const unknownKey = Object.keys(value).find(

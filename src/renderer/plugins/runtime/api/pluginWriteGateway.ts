@@ -7,9 +7,10 @@
 
 import { editorCommitRaw } from '@api/modules/editorApi';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { EDITOR_SCHEMA_VERSION } from '@src/types/editor';
 import type {
-  EditorCommitRequest,
   EditorCommitResult,
+  PluginEditorCommitRequest,
 } from '@src/types/editor';
 import { normalizeSlot } from '@utils/keySlot';
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
@@ -79,10 +80,14 @@ export const pluginKeysUpdateWithPositions = async (
 // 플러그인의 직접 editor_commit. keys를 포함하면 coordinator 큐로 직렬화해
 // 예약된 자사 변경보다 먼저 lock을 잡는 경합을 차단하고, envelope는 무가공
 // 전달 (multiKey는 플러그인이 선언한 값만 백엔드 게이트에 도달)
-export const pluginEditorCommit = (
-  request: EditorCommitRequest,
+export const pluginEditorCommit = async (
+  request: PluginEditorCommitRequest,
 ): Promise<EditorCommitResult> => {
-  if (request?.changes?.keys !== undefined) {
+  // commit wire v2는 자사 내부 전용 - 플러그인 경계는 v1만 통과 (fail-closed)
+  if (request?.changes?.schemaVersion !== EDITOR_SCHEMA_VERSION) {
+    throw new TypeError('editor.commit changes.schemaVersion must be 1');
+  }
+  if (request.changes.keys !== undefined) {
     return editorCoordinator.runSerializedPluginCommit(() =>
       editorCommitRaw(request),
     );

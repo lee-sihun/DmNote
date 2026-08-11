@@ -13,10 +13,10 @@ import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type {
-  EditorCommitRequest,
   EditorCommitResult,
   EditorCommittedV1,
   EditorGetResult,
+  PluginEditorCommitRequest,
 } from '@src/types/editor';
 import {
   SettingsDiff,
@@ -910,7 +910,7 @@ export interface DMNoteAPI {
   };
   editor: {
     get(): Promise<EditorGetResult>;
-    commit(request: EditorCommitRequest): Promise<EditorCommitResult>;
+    commit(request: PluginEditorCommitRequest): Promise<EditorCommitResult>;
     onCommitted(listener: (event: EditorCommittedV1) => void): ReadyUnsubscribe;
   };
   keys: {
