@@ -3,6 +3,7 @@
  * Grid.tsx에서 추출된 stat/graph 편집 로직
  */
 
+import { newElementId } from '@src/renderer/editor/model/elementId';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -357,7 +358,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       ...current,
       [selectedKeyType]: [
         ...tabPositions,
-        { ...templatePosition, dx, dy, zIndex: maxZ + 1 },
+        { ...templatePosition, id: newElementId(), dx, dy, zIndex: maxZ + 1 },
       ],
     };
     persistStatPositions(nextPositions, 'Failed to duplicate stat item');
@@ -477,7 +478,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       ...current,
       [selectedKeyType]: [
         ...tabPositions,
-        { ...templatePosition, dx, dy, zIndex: maxZ + 1 },
+        { ...templatePosition, id: newElementId(), dx, dy, zIndex: maxZ + 1 },
       ],
     };
     persistGraphPositions(nextPositions, 'Failed to duplicate graph item');
@@ -488,6 +489,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
 
     const list = [...(current[selectedKeyType] || [])];
     list.push({
+      id: newElementId(),
       statType: 'kps',
       dx,
       dy,
@@ -523,6 +525,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
 
     const list = [...(current[selectedKeyType] || [])];
     list.push({
+      id: newElementId(),
       statType: 'kps',
       graphType: 'line',
       graphSpeed: 1000,
@@ -668,7 +671,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       ...current,
       [selectedKeyType]: [
         ...tabPositions,
-        { ...templatePosition, dx, dy, zIndex: maxZ + 1 },
+        { ...templatePosition, id: newElementId(), dx, dy, zIndex: maxZ + 1 },
       ],
     };
     persistKnobPositions(nextPositions, 'Failed to duplicate knob item');
@@ -678,6 +681,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const current = useKnobItemStore.getState().positions;
     const list = [...(current[selectedKeyType] || [])];
     list.push({
+      id: newElementId(),
       axisId: '',
       sensitivity: 1,
       reverse: false,

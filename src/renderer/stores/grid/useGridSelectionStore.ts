@@ -28,9 +28,20 @@ export interface IndexedElementArrays {
 
 export interface SelectedElement {
   type: SelectableElementType;
-  id: string; // key의 경우 "key-{index}", plugin의 경우 fullId
-  index?: number; // key인 경우 인덱스
+  // 네이티브 요소는 position.id(UUID). backfill 전 데이터만 "type-{index}" 폴백.
+  // plugin은 fullId
+  id: string;
+  // canonical에서 파생된 locator 캐시. 신원이 아니다 - 문서 적용 시 id로 재계산된다
+  index?: number;
 }
+
+// 선택 id 생성의 단일 지점. 신원은 요소 안의 UUID이고, 합성 문자열은
+// id가 아직 없는 구형 데이터를 위한 폴백일 뿐이다
+export const selectionElementId = (
+  type: IndexedSelectableElementType,
+  position: { id?: string } | undefined,
+  index: number,
+): string => position?.id || `${type}-${index}`;
 
 // 클립보드에 저장되는 키 데이터
 export interface ClipboardKeyData {
@@ -305,9 +316,15 @@ export function reconcileSelectionAfterIndexedElementDeletion(
     }
     if (element.index < indexToDelete) return [element];
 
+    // 신원(id)은 그대로, locator(index)만 한 칸 당긴다.
+    // UUID id는 유지되고 합성 폴백 id만 새 index로 재작성된다
     changed = true;
     const index = element.index - 1;
-    return [{ ...element, id: `${elementType}-${index}`, index }];
+    const id =
+      element.id === `${elementType}-${element.index}`
+        ? `${elementType}-${index}`
+        : element.id;
+    return [{ ...element, id, index }];
   });
 
   if (changed) selection.setSelectedElements(selectedElements);
@@ -317,6 +334,17 @@ export function invalidateSelectionForChangedIndexedElementArrays(
   current: IndexedElementArrays,
   next: IndexedElementArrays,
 ) {
+  // id는 신원이지 값이 아니다. 이 경계 탐지는 "값이 같으면 같은 요소"라는
+  // 단계 5 이전의 근사를 유지하므로 id를 지문에서 뺀다 - 넣으면 값이 동일한
+  // 요소의 id 재발급만으로 앞쪽 선택이 무효화된다
+  const withoutElementId = (item: unknown): unknown => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      return item;
+    }
+    const { id: _id, ...rest } = item as { id?: unknown };
+    return rest;
+  };
+
   const firstDifferentIndex = (
     currentItems: readonly unknown[],
     nextItems: readonly unknown[],
@@ -324,8 +352,8 @@ export function invalidateSelectionForChangedIndexedElementArrays(
     const sharedLength = Math.min(currentItems.length, nextItems.length);
     for (let index = 0; index < sharedLength; index += 1) {
       if (
-        stableStringify(currentItems[index]) !==
-        stableStringify(nextItems[index])
+        stableStringify(withoutElementId(currentItems[index])) !==
+        stableStringify(withoutElementId(nextItems[index]))
       ) {
         return index;
       }
@@ -358,18 +386,48 @@ export function invalidateSelectionForChangedIndexedElementArrays(
       );
     }
   }
-  if (boundaries.size === 0) return;
-
   const selection = useGridSelectionStore.getState();
-  const selectedElements = selection.selectedElements.filter((element) => {
-    if (element.type === 'plugin') return true;
+  if (selection.selectedElements.length === 0) return;
+
+  const nextPositionsFor = (
+    type: IndexedSelectableElementType,
+  ): readonly { id?: string }[] =>
+    (type === 'key' ? next.keyPositions : next[type]) as readonly {
+      id?: string;
+    }[];
+
+  let changed = false;
+  const selectedElements = selection.selectedElements.flatMap((element) => {
+    if (element.type === 'plugin') return [element];
+
+    // 신원 id를 가진 선택은 id로 재조정한다: 살아 있으면 index만 갱신,
+    // 사라졌으면 제거. 재정렬돼도 선택은 같은 요소를 따라간다
+    if (element.id !== `${element.type}-${element.index}`) {
+      const newIndex = nextPositionsFor(element.type).findIndex(
+        (position) => position?.id === element.id,
+      );
+      if (newIndex === -1) {
+        changed = true;
+        return [];
+      }
+      if (newIndex !== element.index) {
+        changed = true;
+        return [{ ...element, index: newIndex }];
+      }
+      return [element];
+    }
+
+    // 합성 id 폴백 (backfill 전 데이터): 기존 경계 휴리스틱 유지
     const boundary = boundaries.get(element.type);
-    if (boundary === undefined) return true;
-    return typeof element.index === 'number' && element.index < boundary;
+    if (boundary === undefined) return [element];
+    if (typeof element.index === 'number' && element.index < boundary) {
+      return [element];
+    }
+    changed = true;
+    return [];
   });
-  if (selectedElements.length !== selection.selectedElements.length) {
-    selection.setSelectedElements(selectedElements);
-  }
+
+  if (changed) selection.setSelectedElements(selectedElements);
 }
 
 /**

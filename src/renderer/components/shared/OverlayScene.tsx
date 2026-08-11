@@ -16,6 +16,12 @@ import type { NoteSettings } from '@src/types/settings/noteSettings';
 import type { NoteBuffer } from '@stores/signals/noteBuffer';
 import { resolveZIndexFallback } from '@utils/core/zIndexFallback';
 
+// 오버레이 wire 타입에 id가 아직 좁혀지지 않은 컬렉션용 안전 접근
+const stableKeyOf = (pos: unknown, fallback: string): string => {
+  const id = (pos as { id?: unknown } | null | undefined)?.id;
+  return typeof id === 'string' && id.length > 0 ? id : fallback;
+};
+
 const FALLBACK_POSITION: KeyPosition = {
   dx: 0,
   dy: 0,
@@ -189,7 +195,7 @@ const OverlayScene = ({
 
         return (
           <OverlayKey
-            key={`${selectedKeyType}-${index}`}
+            key={position.id || `${selectedKeyType}-${index}`}
             keyName={displayName}
             globalKey={key}
             position={position}
@@ -221,7 +227,7 @@ const OverlayScene = ({
 
         return (
           <OverlayStatItem
-            key={`stat-${selectedKeyType}-${index}`}
+            key={stableKeyOf(pos, `stat-${selectedKeyType}-${index}`)}
             statType={statType}
             label={label}
             position={position}
@@ -237,7 +243,7 @@ const OverlayScene = ({
         };
         return (
           <OverlayGraphItem
-            key={`graph-${selectedKeyType}-${index}`}
+            key={stableKeyOf(pos, `graph-${selectedKeyType}-${index}`)}
             index={index}
             position={graphPosition}
           />
@@ -251,7 +257,7 @@ const OverlayScene = ({
         };
         return (
           <OverlayKnobItem
-            key={`knob-${selectedKeyType}-${index}`}
+            key={stableKeyOf(pos, `knob-${selectedKeyType}-${index}`)}
             index={index}
             position={knobPosition}
           />

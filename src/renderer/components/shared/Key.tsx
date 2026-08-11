@@ -36,6 +36,8 @@ interface SelectedElement {
 interface DraggableKeyProps {
   index: number;
   elementId?: string;
+  /** 그라디언트 프리뷰 앵커 종류. id 문자열 모양으로 추론하지 않는다 */
+  anchorKind?: 'key' | 'stat';
   position: KeyPosition;
   keyName: string;
   onPositionChange: (index: number, dx: number, dy: number) => void;
@@ -74,6 +76,7 @@ const DraggableKey = React.memo(
   ({
     index,
     elementId,
+    anchorKind,
     position,
     keyName,
     onPositionChange,
@@ -125,15 +128,13 @@ const DraggableKey = React.memo(
       (state) => state.isDraggingOrResizing,
     );
 
-    const effectiveElementId = elementId || `key-${index}`;
+    const effectiveElementId = elementId || `${anchorKind ?? 'key'}-${index}`;
 
     // 편집 세션 일시 페인트 — 드래그 프리뷰가 저장·히스토리를 거치지 않고
     // 해당 표면의 spec과 대기/입력 상태 전체를 함께 그린다
-    const anchorKind = effectiveElementId.startsWith('stat-')
-      ? ('stat' as const)
-      : ('key' as const);
+    const previewAnchorKind = anchorKind ?? 'key';
     const previewSession = useGradientPreviewSession(
-      anchorKind,
+      previewAnchorKind,
       index,
       isSelected,
     );

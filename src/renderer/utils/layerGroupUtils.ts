@@ -1,3 +1,4 @@
+import { selectionElementId } from '@stores/grid/useGridSelectionStore';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import type { KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
@@ -360,7 +361,7 @@ export function buildLayerItemsForMode(
   (keyPositions[mode] || []).forEach((pos, index) => {
     items.push({
       type: 'key',
-      id: `key-${index}`,
+      id: selectionElementId('key', pos, index),
       index,
       zIndex: pos.zIndex ?? index,
       groupId: pos.groupId,
@@ -370,7 +371,7 @@ export function buildLayerItemsForMode(
   (statPositions[mode] || []).forEach((pos, index) => {
     items.push({
       type: 'stat',
-      id: `stat-${index}`,
+      id: selectionElementId('stat', pos, index),
       index,
       zIndex: pos.zIndex ?? index,
       groupId: pos.groupId,
@@ -380,7 +381,7 @@ export function buildLayerItemsForMode(
   (graphPositions[mode] || []).forEach((pos, index) => {
     items.push({
       type: 'graph',
-      id: `graph-${index}`,
+      id: selectionElementId('graph', pos, index),
       index,
       zIndex: pos.zIndex ?? index,
       groupId: pos.groupId,
@@ -390,7 +391,7 @@ export function buildLayerItemsForMode(
   (knobPositions[mode] || []).forEach((pos, index) => {
     items.push({
       type: 'knob',
-      id: `knob-${index}`,
+      id: selectionElementId('knob', pos, index),
       index,
       zIndex: pos.zIndex ?? index,
       groupId: pos.groupId,

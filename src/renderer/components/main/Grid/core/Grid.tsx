@@ -42,6 +42,7 @@ import KnobItem from '../layers/KnobItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
+  selectionElementId,
   type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
@@ -846,55 +847,31 @@ const Grid = ({
       setIsContextOpen(false);
       setContextPosition(null);
     }
+    const collections = {
+      key: positions[selectedKeyType] || [],
+      stat: useStatItemStore.getState().positions[selectedKeyType] || [],
+      graph: useGraphItemStore.getState().positions[selectedKeyType] || [],
+      knob: useKnobItemStore.getState().positions[selectedKeyType] || [],
+    } as const;
+
+    const clicked = collections[type][index];
     const nextSelection: SelectedElement[] = [
-      { type, id: `${type}-${index}`, index },
+      { type, id: selectionElementId(type, clicked, index), index },
     ];
 
-    // 그룹 ID 조회
-    let groupId: string | undefined;
-    if (type === 'key') {
-      groupId = positions[selectedKeyType]?.[index]?.groupId;
-    } else if (type === 'stat') {
-      groupId =
-        useStatItemStore.getState().positions[selectedKeyType]?.[index]
-          ?.groupId;
-    } else if (type === 'graph') {
-      groupId =
-        useGraphItemStore.getState().positions[selectedKeyType]?.[index]
-          ?.groupId;
-    } else {
-      groupId =
-        useKnobItemStore.getState().positions[selectedKeyType]?.[index]
-          ?.groupId;
-    }
-
+    const groupId = clicked?.groupId;
     if (groupId) {
       // 같은 그룹의 모든 요소 선택
-      (positions[selectedKeyType] || []).forEach((p, i) => {
-        if (p?.groupId === groupId && !(type === 'key' && i === index)) {
-          nextSelection.push({ type: 'key', id: `key-${i}`, index: i });
-        }
-      });
-      const statPos =
-        useStatItemStore.getState().positions[selectedKeyType] || [];
-      statPos.forEach((p, i) => {
-        if (p?.groupId === groupId && !(type === 'stat' && i === index)) {
-          nextSelection.push({ type: 'stat', id: `stat-${i}`, index: i });
-        }
-      });
-      const graphPos =
-        useGraphItemStore.getState().positions[selectedKeyType] || [];
-      graphPos.forEach((p, i) => {
-        if (p?.groupId === groupId && !(type === 'graph' && i === index)) {
-          nextSelection.push({ type: 'graph', id: `graph-${i}`, index: i });
-        }
-      });
-      const knobPos =
-        useKnobItemStore.getState().positions[selectedKeyType] || [];
-      knobPos.forEach((p, i) => {
-        if (p?.groupId === groupId && !(type === 'knob' && i === index)) {
-          nextSelection.push({ type: 'knob', id: `knob-${i}`, index: i });
-        }
+      (['key', 'stat', 'graph', 'knob'] as const).forEach((memberType) => {
+        collections[memberType].forEach((p, i) => {
+          if (p?.groupId === groupId && !(type === memberType && i === index)) {
+            nextSelection.push({
+              type: memberType,
+              id: selectionElementId(memberType, p, i),
+              index: i,
+            });
+          }
+        });
       });
     }
     // 그룹 멤버 수와 무관하게 선택 Store 알림·React render를 1회로 유지
@@ -911,7 +888,7 @@ const Grid = ({
       useGridSelectionStore.getState();
     const isMultiMember =
       currentSelection.length > 1 &&
-      currentSelection.some((el) => el.id === `${type}-${index}`);
+      currentSelection.some((el) => el.type === type && el.index === index);
     if (!isMultiMember) {
       selectElementWithGroup(type, index);
     }
@@ -930,7 +907,15 @@ const Grid = ({
       setDuplicateState(null);
       setDuplicateCursor(null);
     }
-    const clickedId = `${type}-${index}`;
+    const clickedPosition =
+      type === 'key'
+        ? positions[selectedKeyType]?.[index]
+        : type === 'stat'
+        ? useStatItemStore.getState().positions[selectedKeyType]?.[index]
+        : type === 'graph'
+        ? useGraphItemStore.getState().positions[selectedKeyType]?.[index]
+        : useKnobItemStore.getState().positions[selectedKeyType]?.[index];
+    const clickedId = selectionElementId(type, clickedPosition, index);
     if (shouldOpenMixedSelectionMenu(clickedId)) {
       openMixedSelectionContextMenu(clientX, clientY, ref);
       return;
@@ -1005,7 +990,7 @@ const Grid = ({
 
     return positions[selectedKeyType].map(
       (position: KeyPosition, index: number) => {
-        const handlers = stableHandlers(`key-${index}`, {
+        const handlers = stableHandlers(position.id || `key-${index}`, {
           onPositionChange: onPositionChange,
           onClick: () => {
             selectElementWithGroup('key', index);
@@ -1023,7 +1008,15 @@ const Grid = ({
           onDoubleClick: () => openElementEditor('key', index),
           onCtrlClick: () => {
             // 다중 선택: 기존 선택 유지하면서 추가/제거
-            toggleSelection({ type: 'key', id: `key-${index}`, index });
+            toggleSelection({
+              type: 'key',
+              id: selectionElementId(
+                'key',
+                positions[selectedKeyType]?.[index],
+                index,
+              ),
+              index,
+            });
             // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
             const pos = positions[selectedKeyType]?.[index];
             if (pos) {
@@ -1040,7 +1033,15 @@ const Grid = ({
             if (!lastSelectedKeyBounds) {
               // 이전 선택이 없으면 단일 선택처럼 동작
               clearSelection();
-              toggleSelection({ type: 'key', id: `key-${index}`, index });
+              toggleSelection({
+                type: 'key',
+                id: selectionElementId(
+                  'key',
+                  positions[selectedKeyType]?.[index],
+                  index,
+                ),
+                index,
+              });
               const pos = positions[selectedKeyType]?.[index];
               if (pos) {
                 setLastSelectedKeyBounds({
@@ -1094,7 +1095,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'key',
-                  id: `key-${i}`,
+                  id: selectionElementId('key', pos, i),
                   index: i,
                 });
               }
@@ -1132,7 +1133,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'stat',
-                  id: `stat-${i}`,
+                  id: selectionElementId('stat', pos, i),
                   index: i,
                 });
               }
@@ -1150,7 +1151,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'graph',
-                  id: `graph-${i}`,
+                  id: selectionElementId('graph', pos, i),
                   index: i,
                 });
               }
@@ -1168,7 +1169,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'knob',
-                  id: `knob-${i}`,
+                  id: selectionElementId('knob', pos, i),
                   index: i,
                 });
               }
@@ -1205,8 +1206,9 @@ const Grid = ({
 
         return (
           <DraggableKey
-            key={`${selectedKeyType}-${index}`}
+            key={position.id || `${selectedKeyType}-${index}`}
             index={index}
+            elementId={position.id || undefined}
             position={position}
             keyName={slotDisplayName(
               keyMappings[selectedKeyType]?.[index] ?? '',
@@ -1257,18 +1259,34 @@ const Grid = ({
     };
 
     return items.map((position: StatItemPosition, index: number) => {
-      const handlers = stableHandlers(`stat-${index}`, {
+      const handlers = stableHandlers(position.id || `stat-${index}`, {
         onPositionChange: handleStatPositionChange,
         onClick: () => {
           selectElementWithGroup('stat', index);
         },
         onDoubleClick: () => openElementEditor('stat', index),
         onCtrlClick: () => {
-          toggleSelection({ type: 'stat', id: `stat-${index}`, index });
+          toggleSelection({
+            type: 'stat',
+            id: selectionElementId(
+              'stat',
+              useStatItemStore.getState().positions[selectedKeyType]?.[index],
+              index,
+            ),
+            index,
+          });
         },
         onShiftClick: () => {
           // 통계 요소는 범위 선택 대상이 아니므로 Ctrl+클릭과 동일하게 처리
-          toggleSelection({ type: 'stat', id: `stat-${index}`, index });
+          toggleSelection({
+            type: 'stat',
+            id: selectionElementId(
+              'stat',
+              useStatItemStore.getState().positions[selectedKeyType]?.[index],
+              index,
+            ),
+            index,
+          });
         },
         onMultiDrag: (deltaX: number, deltaY: number) =>
           moveSelectedElements(deltaX, deltaY, undefined, false),
@@ -1298,9 +1316,10 @@ const Grid = ({
 
       return (
         <DraggableKey
-          key={`stat-${selectedKeyType}-${index}`}
+          key={position.id || `stat-${selectedKeyType}-${index}`}
           index={index}
-          elementId={`stat-${index}`}
+          elementId={position.id || `stat-${index}`}
+          anchorKind="stat"
           position={position}
           keyName={getStatTypeLabel(position.statType)}
           zIndex={position.zIndex ?? index}
@@ -1349,9 +1368,9 @@ const Grid = ({
 
     return items.map((position, index) => (
       <GraphItem
-        key={`graph-${selectedKeyType}-${index}`}
+        key={position.id || `graph-${selectedKeyType}-${index}`}
         index={index}
-        elementId={`graph-${index}`}
+        elementId={position.id || `graph-${index}`}
         position={position}
         onPositionChange={handleGraphPositionChange}
         zIndex={position.zIndex ?? index}
@@ -1360,10 +1379,26 @@ const Grid = ({
         }}
         onDoubleClick={() => openElementEditor('graph', index)}
         onCtrlClick={() => {
-          toggleSelection({ type: 'graph', id: `graph-${index}`, index });
+          toggleSelection({
+            type: 'graph',
+            id: selectionElementId(
+              'graph',
+              useGraphItemStore.getState().positions[selectedKeyType]?.[index],
+              index,
+            ),
+            index,
+          });
         }}
         onShiftClick={() => {
-          toggleSelection({ type: 'graph', id: `graph-${index}`, index });
+          toggleSelection({
+            type: 'graph',
+            id: selectionElementId(
+              'graph',
+              useGraphItemStore.getState().positions[selectedKeyType]?.[index],
+              index,
+            ),
+            index,
+          });
         }}
         isSelected={selectedElements.some(
           (el) => el.type === 'graph' && el.index === index,
@@ -1431,9 +1466,9 @@ const Grid = ({
 
     return items.map((position, index) => (
       <KnobItem
-        key={`knob-${selectedKeyType}-${index}`}
+        key={position.id || `knob-${selectedKeyType}-${index}`}
         index={index}
-        elementId={`knob-${index}`}
+        elementId={position.id || `knob-${index}`}
         position={position}
         onPositionChange={handleKnobPositionChange}
         zIndex={position.zIndex ?? index}
@@ -1442,10 +1477,26 @@ const Grid = ({
         }}
         onDoubleClick={() => openElementEditor('knob', index)}
         onCtrlClick={() => {
-          toggleSelection({ type: 'knob', id: `knob-${index}`, index });
+          toggleSelection({
+            type: 'knob',
+            id: selectionElementId(
+              'knob',
+              useKnobItemStore.getState().positions[selectedKeyType]?.[index],
+              index,
+            ),
+            index,
+          });
         }}
         onShiftClick={() => {
-          toggleSelection({ type: 'knob', id: `knob-${index}`, index });
+          toggleSelection({
+            type: 'knob',
+            id: selectionElementId(
+              'knob',
+              useKnobItemStore.getState().positions[selectedKeyType]?.[index],
+              index,
+            ),
+            index,
+          });
         }}
         isSelected={selectedElements.some(
           (el) => el.type === 'knob' && el.index === index,
@@ -1890,7 +1941,7 @@ const Grid = ({
               width: pos.width || 60,
               height: pos.height || 60,
             };
-            elementId = `key-${el.index}`;
+            elementId = selectionElementId('key', pos, el.index);
           } else if (el.type === 'stat' && el.index !== undefined) {
             const pos = statPositions?.[selectedKeyType]?.[el.index];
             if (!pos) return null;
@@ -1901,7 +1952,7 @@ const Grid = ({
               width: pos.width || 60,
               height: pos.height || 60,
             };
-            elementId = `stat-${el.index}`;
+            elementId = selectionElementId('stat', pos, el.index);
           } else if (el.type === 'graph' && el.index !== undefined) {
             const pos = graphPositions?.[selectedKeyType]?.[el.index];
             if (!pos) return null;
@@ -1912,7 +1963,7 @@ const Grid = ({
               width: pos.width || 200,
               height: pos.height || 100,
             };
-            elementId = `graph-${el.index}`;
+            elementId = selectionElementId('graph', pos, el.index);
           } else if (el.type === 'knob' && el.index !== undefined) {
             const pos = knobPositions?.[selectedKeyType]?.[el.index];
             if (!pos) return null;
@@ -1923,7 +1974,7 @@ const Grid = ({
               width: pos.width || 60,
               height: pos.height || 60,
             };
-            elementId = `knob-${el.index}`;
+            elementId = selectionElementId('knob', pos, el.index);
           } else if (el.type === 'plugin') {
             // 플러그인 요소 - resizable 속성 확인
             const pluginEl = pluginElements.find((p) => p.fullId === el.id);

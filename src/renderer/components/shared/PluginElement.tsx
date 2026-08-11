@@ -16,6 +16,7 @@ import {
   useGridSelectionStore,
   SelectedElement,
   isElementInMarquee,
+  selectionElementId,
 } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
@@ -1255,7 +1256,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
         if (isElementInMarquee(elementBounds, rangeRect)) {
           newSelectedElements.push({
             type: 'key',
-            id: `key-${i}`,
+            id: selectionElementId('key', pos, i),
             index: i,
           });
         }

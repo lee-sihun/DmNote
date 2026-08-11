@@ -2,6 +2,7 @@
  * 스마트 가이드를 위한 모든 요소의 bounds를 제공하는 훅
  */
 
+import { selectionElementId } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -35,7 +36,7 @@ const getOtherElementsSnapshot = (
   const keyPositions = positions[selectedKeyType] || [];
   keyPositions.forEach((pos, index) => {
     if (pos.hidden) return;
-    const id = `key-${index}`;
+    const id = selectionElementId('key', pos, index);
     if (!excludeSet.has(id)) {
       bounds.push(
         calculateBounds(pos.dx, pos.dy, pos.width || 60, pos.height || 60, id),
@@ -47,7 +48,7 @@ const getOtherElementsSnapshot = (
   const stats = statPositions[selectedKeyType] || [];
   stats.forEach((pos, index) => {
     if (!pos || pos.hidden) return;
-    const id = `stat-${index}`;
+    const id = selectionElementId('stat', pos, index);
     if (!excludeSet.has(id)) {
       bounds.push(
         calculateBounds(pos.dx, pos.dy, pos.width || 60, pos.height || 60, id),
@@ -59,7 +60,7 @@ const getOtherElementsSnapshot = (
   const graphs = graphPositions[selectedKeyType] || [];
   graphs.forEach((pos, index) => {
     if (!pos || pos.hidden) return;
-    const id = `graph-${index}`;
+    const id = selectionElementId('graph', pos, index);
     if (!excludeSet.has(id)) {
       bounds.push(
         calculateBounds(
@@ -77,7 +78,7 @@ const getOtherElementsSnapshot = (
   const knobs = knobPositions[selectedKeyType] || [];
   knobs.forEach((pos, index) => {
     if (!pos || pos.hidden) return;
-    const id = `knob-${index}`;
+    const id = selectionElementId('knob', pos, index);
     if (!excludeSet.has(id)) {
       bounds.push(
         calculateBounds(pos.dx, pos.dy, pos.width || 60, pos.height || 60, id),

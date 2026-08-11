@@ -236,7 +236,9 @@ export function useLayerActions({
     const allHidden = children.every((c) => c.hidden);
     const newHidden = !allHidden;
 
-    const changes: EditorPatchV1 = { schemaVersion: 1 };
+    const changes: EditorPatchV1 = {
+      schemaVersion: 1,
+    };
     const previousKeyPositions = useKeyStore.getState().canonicalPositions;
     const previousStatPositions = useStatItemStore.getState().positions;
     const previousGraphPositions = useGraphItemStore.getState().positions;
@@ -581,7 +583,9 @@ export function useLayerActions({
       useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
     }
 
-    const changes: EditorPatchV1 = { schemaVersion: 1 };
+    const changes: EditorPatchV1 = {
+      schemaVersion: 1,
+    };
     if (hasChanged(pos, normalized.keyPositions)) {
       changes.keyPositions = normalized.keyPositions;
     }
@@ -971,7 +975,9 @@ export function useLayerActions({
         useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
       }
 
-      const changes: EditorPatchV1 = { schemaVersion: 1 };
+      const changes: EditorPatchV1 = {
+        schemaVersion: 1,
+      };
       if (hasChanged(currentMappings, nextMappings)) {
         changes.keys = nextMappings;
         changes.keyPositions = normalized.keyPositions;

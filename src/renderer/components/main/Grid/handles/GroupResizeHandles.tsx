@@ -466,10 +466,9 @@ const GroupResizeHandles = ({
       const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
       const sizeMatchGuidesEnabled = gridSettings?.sizeMatchGuides !== false;
 
-      // 선택된 요소들의 ID 수집 (스마트 가이드에서 제외)
-      const selectedIds = selectedElements.map((el) =>
-        el.type === 'key' ? `key-${el.index}` : el.id,
-      );
+      // 선택된 요소들의 ID 수집 (스마트 가이드에서 제외).
+      // 선택 id와 가이드 bounds id가 같은 생성자(position.id)를 쓰므로 그대로 넘긴다
+      const selectedIds = selectedElements.map((el) => el.id);
 
       if (getOtherElements && alignmentGuidesEnabled) {
         const otherElements = getOtherElements(selectedIds);

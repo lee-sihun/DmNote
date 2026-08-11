@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from 'react';
 import {
+  selectionElementId,
   useGridSelectionStore,
   isElementInMarquee,
   getMarqueeRect,
@@ -130,7 +131,7 @@ export function useGridMarquee({
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
             type: 'key',
-            id: `key-${index}`,
+            id: selectionElementId('key', pos, index),
             index,
           });
         }
@@ -149,7 +150,7 @@ export function useGridMarquee({
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
             type: 'stat',
-            id: `stat-${index}`,
+            id: selectionElementId('stat', pos, index),
             index,
           });
         }
@@ -168,7 +169,7 @@ export function useGridMarquee({
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
             type: 'graph',
-            id: `graph-${index}`,
+            id: selectionElementId('graph', pos, index),
             index,
           });
         }
@@ -187,7 +188,7 @@ export function useGridMarquee({
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
             type: 'knob',
-            id: `knob-${index}`,
+            id: selectionElementId('knob', pos, index),
             index,
           });
         }

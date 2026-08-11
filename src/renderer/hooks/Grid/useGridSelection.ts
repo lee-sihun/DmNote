@@ -5,6 +5,7 @@
  * - 복사/붙여넣기
  */
 
+import { newElementId } from '@src/renderer/editor/model/elementId';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -12,6 +13,7 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
+  selectionElementId,
   useGridSelectionStore,
   type SelectedElement,
   type ClipboardItem,
@@ -646,6 +648,7 @@ export function useGridSelection({
           keyCode: cloneSlot(item.keyCode),
           position: {
             ...item.position,
+            id: newElementId(),
             groupId: remapGroupId(item.position.groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
@@ -655,6 +658,7 @@ export function useGridSelection({
         statsToAdd.push({
           position: {
             ...item.position,
+            id: newElementId(),
             groupId: remapGroupId(item.position.groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
@@ -664,6 +668,7 @@ export function useGridSelection({
         graphsToAdd.push({
           position: {
             ...item.position,
+            id: newElementId(),
             groupId: remapGroupId(item.position.groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
@@ -673,6 +678,7 @@ export function useGridSelection({
         knobsToAdd.push({
           position: {
             ...item.position,
+            id: newElementId(),
             groupId: remapGroupId(item.position.groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
@@ -729,7 +735,11 @@ export function useGridSelection({
           posArray.push(keysToAdd[i].position);
           newSelectedElements.push({
             type: 'key',
-            id: `key-${startIndex + i}`,
+            id: selectionElementId(
+              'key',
+              keysToAdd[i].position,
+              startIndex + i,
+            ),
             index: startIndex + i,
           });
         }
@@ -754,7 +764,11 @@ export function useGridSelection({
           posArray.push(statsToAdd[i].position);
           newSelectedElements.push({
             type: 'stat',
-            id: `stat-${startIndex + i}`,
+            id: selectionElementId(
+              'stat',
+              statsToAdd[i].position,
+              startIndex + i,
+            ),
             index: startIndex + i,
           });
         }
@@ -776,7 +790,11 @@ export function useGridSelection({
           posArray.push(graphsToAdd[i].position);
           newSelectedElements.push({
             type: 'graph',
-            id: `graph-${startIndex + i}`,
+            id: selectionElementId(
+              'graph',
+              graphsToAdd[i].position,
+              startIndex + i,
+            ),
             index: startIndex + i,
           });
         }
@@ -798,7 +816,11 @@ export function useGridSelection({
           posArray.push(knobsToAdd[i].position);
           newSelectedElements.push({
             type: 'knob',
-            id: `knob-${startIndex + i}`,
+            id: selectionElementId(
+              'knob',
+              knobsToAdd[i].position,
+              startIndex + i,
+            ),
             index: startIndex + i,
           });
         }

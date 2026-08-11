@@ -11,6 +11,7 @@ import {
   calculateSnapPoints,
   calculateSizeSnap,
 } from '@utils/grid/smartGuides';
+import { selectionElementId } from '@stores/grid/useGridSelectionStore';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import type { KeyPositions } from '@src/types/key/keys';
@@ -469,7 +470,14 @@ export function useGridResize({
       handle?: ResizeHandle;
     },
   ) => {
-    handleElementResizePreview(`key-${index}`, newBounds);
+    handleElementResizePreview(
+      selectionElementId(
+        'key',
+        useKeyStore.getState().canonicalPositions[selectedKeyType]?.[index],
+        index,
+      ),
+      newBounds,
+    );
   };
 
   const handleStatResizePreview = (
@@ -482,7 +490,14 @@ export function useGridResize({
       handle?: ResizeHandle;
     },
   ) => {
-    handleElementResizePreview(`stat-${index}`, newBounds);
+    handleElementResizePreview(
+      selectionElementId(
+        'stat',
+        useStatItemStore.getState().positions[selectedKeyType]?.[index],
+        index,
+      ),
+      newBounds,
+    );
   };
 
   const handleGraphResizePreview = (
@@ -495,7 +510,14 @@ export function useGridResize({
       handle?: ResizeHandle;
     },
   ) => {
-    handleElementResizePreview(`graph-${index}`, newBounds);
+    handleElementResizePreview(
+      selectionElementId(
+        'graph',
+        useGraphItemStore.getState().positions[selectedKeyType]?.[index],
+        index,
+      ),
+      newBounds,
+    );
   };
 
   const handleKnobResizePreview = (
@@ -508,7 +530,14 @@ export function useGridResize({
       handle?: ResizeHandle;
     },
   ) => {
-    handleElementResizePreview(`knob-${index}`, newBounds);
+    handleElementResizePreview(
+      selectionElementId(
+        'knob',
+        useKnobItemStore.getState().positions[selectedKeyType]?.[index],
+        index,
+      ),
+      newBounds,
+    );
   };
 
   // 플러그인 요소 리사이즈 처리 (스마트 가이드 포함) - 프리뷰 모드

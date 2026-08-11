@@ -16,6 +16,7 @@ import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
 } from '@src/types/key/keys';
+import { newElementId } from './elementId';
 import { cloneSlot } from '@utils/keySlot';
 
 // ----------------------------------------------------------------------------
@@ -24,6 +25,7 @@ import { cloneSlot } from '@utils/keySlot';
 
 export function createDefaultKeyPosition(dx = 0, dy = 0): KeyPosition {
   return {
+    id: newElementId(),
     dx,
     dy,
     width: 60,
@@ -159,6 +161,8 @@ export function duplicateKey(
 
   const clonedPosition: KeyPosition = {
     ...sourcePosition,
+    // 복제본은 새 신원. source id를 물려받으면 후보 안 중복으로 커밋이 거절된다
+    id: newElementId(),
     dx: Math.round(targetDx),
     dy: Math.round(targetDy),
     counter: clonedCounter,

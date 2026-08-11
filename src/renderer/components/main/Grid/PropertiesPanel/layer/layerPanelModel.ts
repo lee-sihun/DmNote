@@ -3,6 +3,7 @@
  * LayerTabContent에서 사용하는 layerItems / displayItems 생성
  */
 
+import { selectionElementId } from '@stores/grid/useGridSelectionStore';
 import { slotDisplayName } from '@utils/keySlot';
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
@@ -45,7 +46,7 @@ export function buildLayerItems({
     const defaultName = slotDisplayName(slot) || `Key ${index + 1}`;
     items.push({
       type: 'key',
-      id: `key-${index}`,
+      id: selectionElementId('key', pos, index),
       index,
       name: pos.layerName || defaultName,
       zIndex: pos.zIndex ?? index,
@@ -67,7 +68,7 @@ export function buildLayerItems({
         : 'KPS';
     items.push({
       type: 'stat',
-      id: `stat-${index}`,
+      id: selectionElementId('stat', pos, index),
       index,
       name: pos.layerName || defaultName,
       zIndex: pos.zIndex ?? index,
@@ -89,7 +90,7 @@ export function buildLayerItems({
         : 'KPS Graph';
     items.push({
       type: 'graph',
-      id: `graph-${index}`,
+      id: selectionElementId('graph', pos, index),
       index,
       name: pos.layerName || defaultName,
       zIndex: pos.zIndex ?? index,
@@ -103,7 +104,7 @@ export function buildLayerItems({
   currentKnobPositions.forEach((pos, index) => {
     items.push({
       type: 'knob',
-      id: `knob-${index}`,
+      id: selectionElementId('knob', pos, index),
       index,
       name: pos.layerName || `Knob ${index + 1}`,
       zIndex: pos.zIndex ?? index,
