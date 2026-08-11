@@ -120,6 +120,9 @@ interface InFlightCommit {
   localFields: EditorField[];
   requestFields: EditorField[];
   gestureIds: string[];
+  // 낙관 적용 없이 전송되는 격리 플러그인 커밋. 승인 전 target을
+  // 로컬 pending이나 커밋 base로 세면 안 된다
+  isolated?: boolean;
 }
 
 const MAX_AUTO_REBASE_ATTEMPTS = 2;
@@ -486,6 +489,7 @@ export class EditorSaveCoordinator {
       localFields: getChangedEditorFields(baseDocument, target),
       requestFields,
       gestureIds: [],
+      isolated: true,
     };
     this.inFlight = inFlight;
     this.rememberOwnMutation(inFlight, true);
@@ -526,7 +530,21 @@ export class EditorSaveCoordinator {
       return clone(this.requireLastAck());
     } catch (error) {
       // 거절돼도 코디네이터는 건강한 상태 유지 - 오류는 플러그인 호출자에게만
-      // 전파하고 pending은 보존하지 않음 (store·로컬 모두 불변)
+      // 전파하고 pending은 보존하지 않음 (conflict resync 성공 시에만 로컬이
+      // canonical로 전진)
+      if (
+        isEditorCommitError(error) &&
+        error.errorCode === 'REVISION_CONFLICT'
+      ) {
+        // 플러그인 호출자는 sync()에 접근할 수 없다. revision이 뒤처져
+        // 거절됐다면 canonical만 재동기화해 다음 재시도가 성공하게 한다.
+        // patch 자동 재적용은 하지 않는다 - concurrent writer를 덮을 수 있다
+        try {
+          await this.fetchAndApplyCanonical('resync');
+        } catch {
+          // 재동기화 실패 시 원래 conflict 오류를 유지
+        }
+      }
       if (!this.conflict && !this.stopped) this.phase = 'idle';
       this.notify();
       throw error;
@@ -1117,11 +1135,6 @@ export class EditorSaveCoordinator {
       // 실패했을 때만 이 분기까지 오므로 store에도 적용해야 다음 flush가
       // 성공한 플러그인 변경을 낡은 로컬로 되돌리지 않는다
       if (this.isolatedMutations.delete(event.mutationId)) {
-        // 아직 해제 전인 자기 inFlight의 무ID target을 pending으로 오인해
-        // canonical 위에 되얹지 않게 먼저 내린다
-        if (this.inFlight?.mutationId === event.mutationId) {
-          this.inFlight = null;
-        }
         this.applyExternalCanonical(
           canonical,
           event.changedFields,
@@ -1238,10 +1251,19 @@ export class EditorSaveCoordinator {
     this.notify();
   }
 
+  // 격리 커밋의 target은 낙관 적용된 로컬 편집이 아니다. pending·base로
+  // 세면 외부 이벤트 병합이 미승인 플러그인 값(무ID)을 되얹거나, flush가
+  // 플러그인 필드를 사용자 의도로 오인한다
+  private optimisticInFlight(): InFlightCommit | null {
+    if (!this.inFlight || this.inFlight.isolated) return null;
+    return this.inFlight;
+  }
+
   private getLatestCommitBase(): EditorDocumentV1 {
     if (this.conflict) return clone(this.conflict.pendingLocal);
     if (this.pendingLocal) return clone(this.pendingLocal);
-    if (this.inFlight) return clone(this.inFlight.target);
+    const optimistic = this.optimisticInFlight();
+    if (optimistic) return clone(optimistic.target);
     return clone(this.requireLastAck());
   }
 
@@ -1249,7 +1271,7 @@ export class EditorSaveCoordinator {
     return (
       this.conflict?.pendingLocal ??
       this.pendingLocal ??
-      this.inFlight?.target ??
+      this.optimisticInFlight()?.target ??
       null
     );
   }
@@ -1260,7 +1282,8 @@ export class EditorSaveCoordinator {
   ): EditorField[] {
     if (this.conflict) return [...this.conflict.localFields];
     if (this.pendingLocal) return [...this.pendingFields];
-    if (this.inFlight) return [...this.inFlight.localFields];
+    const optimistic = this.optimisticInFlight();
+    if (optimistic) return [...optimistic.localFields];
     return getChangedEditorFields(comparisonBase, pending);
   }
 

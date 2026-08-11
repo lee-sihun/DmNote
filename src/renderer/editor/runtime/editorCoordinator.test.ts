@@ -507,7 +507,7 @@ describe('EditorSaveCoordinator', () => {
     expect(harness.getLocal().keyPositions['4key'][0].id).toBe(adaptedId);
   });
 
-  it('recovers via sync when the post-commit read and own event are both lost', async () => {
+  it('resyncs on retry conflict so plugin retries recover without ui sync', async () => {
     const base = makeDocument('A');
     const idBefore = base.keyPositions['4key'][0].id;
     const harness = createHarness(base);
@@ -536,15 +536,15 @@ describe('EditorSaveCoordinator', () => {
       base.keyPositions['4key'][0].dx,
     );
 
-    // revision이 뒤처진 즉시 재시도는 실백엔드 계약대로 충돌한다
+    // revision이 뒤처진 재시도는 실백엔드 계약대로 충돌하되, 격리 경로가
+    // conflict에서 canonical을 재동기화해 둔다 (플러그인은 sync 접근 불가)
     await expect(
       harness.coordinator.commitIsolatedPluginPatch(patch, {
         multiKey: false,
       }),
     ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
 
-    // 복구 경로: sync가 canonical(발급된 ID 포함)을 revision·lastAck·스토어에 적용
-    await harness.coordinator.sync();
+    // 별도 ui sync 없이도 conflict 반환 시점에 이미 복구돼 있다
     const adaptedId =
       harness.transport.canonical.document.keyPositions['4key'][0].id;
     expect(harness.getLocal().keyPositions['4key'][0].id).toBe(adaptedId);
@@ -552,7 +552,7 @@ describe('EditorSaveCoordinator', () => {
       moved['4key'][0].dx,
     );
 
-    // 복구 후 재시도는 정상 완료된다 (값 일치라 승계, no-op)
+    // 다음 재시도는 정상 완료된다 (값 일치라 승계, no-op)
     const retried = await harness.coordinator.commitIsolatedPluginPatch(patch, {
       multiKey: false,
     });
@@ -562,7 +562,6 @@ describe('EditorSaveCoordinator', () => {
 
   it('recovers the local store from the own event after a failed post-commit read', async () => {
     const base = makeDocument('A');
-    const idBefore = base.keyPositions['4key'][0].id;
     const harness = createHarness(base);
     emulateV1AdapterCommit(harness);
     await harness.coordinator.start();
@@ -646,6 +645,100 @@ describe('EditorSaveCoordinator', () => {
     const commitsBefore = harness.transport.commitMock.mock.calls.length;
     await harness.coordinator.commitEditorState();
     expect(harness.transport.commitMock.mock.calls.length).toBe(commitsBefore);
+    harness.coordinator.stop();
+  });
+
+  it('does not mistake an isolated in-flight target for pending when an external event lands first', async () => {
+    const base = makeDocument('A');
+    const idBefore = base.keyPositions['4key'][0].id;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    // 다른 창의 커밋이 먼저 반영됨 - 이벤트가 격리 커밋 in-flight 중 도착하고
+    // 격리 커밋은 실백엔드처럼 stale base로 거절된다
+    const external = structuredClone(base);
+    external.keys['4key'] = ['B'];
+    harness.transport.commitMock.mockImplementationOnce(async () => {
+      harness.transport.canonical = {
+        revision: 1,
+        document: structuredClone(external),
+      };
+      harness.transport.emit(eventFor(1, 'external-1', base, external));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      throw revisionConflict();
+    });
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(
+        { schemaVersion: 1, keys: base.keys, keyPositions: moved },
+        { multiKey: false },
+      ),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    // 화면은 거절된 플러그인 값이 아니라 외부 canonical이어야 한다
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keys['4key']).toEqual(['B']),
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+      base.keyPositions['4key'][0].dx,
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
+    harness.coordinator.stop();
+  });
+
+  it('keeps canonical ids when a late own event overlaps a retrying isolated commit', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    emulateV1AdapterCommit(harness);
+    await harness.coordinator.start();
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('ipc unavailable'),
+    );
+
+    const moved = strippedIdPositions(base);
+    moved['4key'][0].dx += 10;
+    const patch = {
+      schemaVersion: 1 as const,
+      keys: base.keys,
+      keyPositions: moved,
+    };
+    await expect(
+      harness.coordinator.commitIsolatedPluginPatch(patch, {
+        multiKey: false,
+      }),
+    ).rejects.toThrow('ipc unavailable');
+    const request = harness.transport.commitMock.mock.calls[0][0];
+    const adapted = structuredClone(harness.transport.canonical.document);
+
+    // 재시도가 전송 대기 중일 때 늦은 own 이벤트가 도착한다
+    const gate = deferred<EditorCommitResult>();
+    harness.transport.commitMock.mockImplementationOnce(() => gate.promise);
+    const retry = harness.coordinator.commitIsolatedPluginPatch(patch, {
+      multiKey: false,
+    });
+    await vi.waitFor(() =>
+      expect(harness.transport.commitMock.mock.calls.length).toBe(2),
+    );
+    harness.transport.emit(eventFor(1, request.mutationId, base, adapted));
+    await vi.waitFor(() =>
+      expect(harness.getLocal().keyPositions['4key'][0].id).toBe(
+        adapted.keyPositions['4key'][0].id,
+      ),
+    );
+
+    // 재시도는 실백엔드처럼 stale base로 거절되고, canonical UUID는 유지된다
+    gate.reject(revisionConflict());
+    await expect(retry).rejects.toMatchObject({
+      errorCode: 'REVISION_CONFLICT',
+    });
+    expect(harness.getLocal().keyPositions['4key'][0].id).toBe(
+      adapted.keyPositions['4key'][0].id,
+    );
+    expect(harness.getLocal().keyPositions['4key'][0].dx).toBe(
+      moved['4key'][0].dx,
+    );
     harness.coordinator.stop();
   });
 
