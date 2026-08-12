@@ -25,6 +25,7 @@ import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { mergeChangedAnimationFields } from '@src/types/key/counterAnimation';
 import {
   counterFillPair,
@@ -132,7 +133,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           ),
         },
       };
-    });
+    }).catch(reportElementOpError);
   };
 
   const handlePickerToggle = (target: Exclude<PickerTarget, null>) => {

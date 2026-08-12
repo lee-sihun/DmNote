@@ -4,6 +4,7 @@ import type { KeyCounterSettings } from '@src/types/key/keys';
 import { normalizeCounterSettings } from '@src/types/key/keys';
 import { applyAnimationIntentMask } from '@src/types/key/counterAnimation';
 import { applyElementPatchesById } from '@src/renderer/editor/runtime/elementPatch';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   LEGACY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,
@@ -92,7 +93,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             ),
           },
         };
-      });
+      }).catch(reportElementOpError);
       return;
     }
     handleBatchCounterUpdate({ animation: nextAnimation });

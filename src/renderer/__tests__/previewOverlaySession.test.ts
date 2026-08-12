@@ -538,7 +538,7 @@ describe('editGestureController', () => {
     // wire는 슬롯 안에서 최신 base로 재생성 - 호출 시점 full-record 금지
     expect(commitPatchMock).not.toHaveBeenCalled();
     expect(commitGeneratedPatchMock).toHaveBeenCalledOnce();
-    expect(commitGeneratedPatchMock.mock.calls[0][1]).toEqual({
+    expect(commitGeneratedPatchMock.mock.calls[0][1]).toMatchObject({
       gestureId: sessionId,
     });
     const patch = generatedPatches[0] as {

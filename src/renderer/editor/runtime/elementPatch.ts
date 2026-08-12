@@ -4,8 +4,12 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 
 import { resolveElementById } from '../model/elementIdMap';
-import { enqueueEditorCompatibilityWrite } from './editorCompatibilityQueue';
-import { editorCoordinator } from './editorStateCoordinator';
+import {
+  applyPropertyIntentsEagerly,
+  intentPatch,
+  runElementIntent,
+  type PropertyIntents,
+} from './elementIntent';
 
 import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
 
@@ -73,64 +77,44 @@ const selectedIdSet = (
   return wanted.size > 0 ? wanted : null;
 };
 
-// 클릭 시점 즉시 반영. 신원 해석은 현재 스토어 기준 - 이후 재정렬·삭제는
-// wire 생성 단계가 최신 문서에서 다시 해석한다
-const eagerRecordFor = <T extends KeyPosition>(
-  positions: Record<string, T[]>,
-  wanted: ReadonlySet<string>,
-  type: NativeElementType,
-  updater: ElementPatchUpdater,
-): Record<string, T[]> | null => {
-  const targets = new Map<string, Set<number>>();
-  for (const id of wanted) {
-    const locator = resolveElementById(type, id);
-    if (!locator) continue;
-    const indices = targets.get(locator.mode) ?? new Set<number>();
-    indices.add(locator.index);
-    targets.set(locator.mode, indices);
-  }
-  if (targets.size === 0) return null;
-  const next = { ...positions };
-  for (const [mode, indices] of targets) {
-    const list = next[mode];
-    if (!list) continue;
-    next[mode] = list.map((position, index) =>
-      indices.has(index) ? mergePosition(position, updater) : position,
-    );
-  }
-  return next;
-};
-
-const applyEagerly = (
+// 클릭 시점 낙관 의도: 현재 스토어에서 id를 해석해 updater 출력을 필드
+// 의도로 동결한다 (receipt CAS 복원의 before/expected 기준).
+// wire 생성은 슬롯에서 updater를 다시 실행하므로 이 동결과 별개다
+const buildEagerIntents = (
   selection: ElementIdSelection,
   updater: ElementPatchUpdater,
-): void => {
+): PropertyIntents => {
+  const intents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
   for (const type of NATIVE_ELEMENT_TYPES) {
     const wanted = selectedIdSet(selection, type);
     if (!wanted) continue;
-    if (type === 'key') {
-      const state = useKeyStore.getState();
-      const next = eagerRecordFor(
-        state.canonicalPositions,
-        wanted,
-        'key',
-        updater,
-      );
-      if (next) state.setPositions(next);
-    } else if (type === 'stat') {
-      const state = useStatItemStore.getState();
-      const next = eagerRecordFor(state.positions, wanted, 'stat', updater);
-      if (next) state.setPositions(next);
-    } else if (type === 'graph') {
-      const state = useGraphItemStore.getState();
-      const next = eagerRecordFor(state.positions, wanted, 'graph', updater);
-      if (next) state.setPositions(next);
-    } else {
-      const state = useKnobItemStore.getState();
-      const next = eagerRecordFor(state.positions, wanted, 'knob', updater);
-      if (next) state.setPositions(next);
+    const record = (
+      type === 'key'
+        ? useKeyStore.getState().canonicalPositions
+        : type === 'stat'
+        ? useStatItemStore.getState().positions
+        : type === 'graph'
+        ? useGraphItemStore.getState().positions
+        : useKnobItemStore.getState().positions
+    ) as Record<string, Array<KeyPosition>>;
+    for (const id of wanted) {
+      const locator = resolveElementById(type, id);
+      if (!locator) continue;
+      const current = record[locator.mode]?.[locator.index];
+      if (!current) continue;
+      // 스토어 원본을 updater에 직접 주지 않는다 - 입력 변조 방어
+      const { id: _ignored, ...patch } = {
+        ...updater({ ...current }),
+      } as Record<string, unknown>;
+      const byId = intents.get(type) ?? new Map();
+      byId.set(id, patch);
+      intents.set(type, byId);
     }
   }
+  return intents;
 };
 
 // 최신 base 문서에서 id를 다시 찾아 적용한다. 스토어 조회(resolveElementById)
@@ -197,30 +181,23 @@ const generatePatchFrom = (
 // 건너뛰고, 터치된 컬렉션들을 단일 커밋으로 저장해 결합 원자성(한 커밋 =
 // 한 undo 엔트리)을 유지한다. 전원 미발견이면 커밋하지 않는다.
 //
-// wire 커밋은 다른 first-party writer와 같은 compatibility 큐에 등록한다.
-// 큐는 commitPatch 호출 자체를 지연시키므로, 여기서 큐를 건너뛰면 먼저
-// 캡처하고 대기 중이던 writer가 나중에 실행되어 이 값을 되돌린다.
-//
-// 반환 promise는 reject하지 않는다. 값은 wire patch 생성 시점의 대상 수이고
-// 저장 성공 보장이 아니다 - 커밋 실패는 write barrier에서 관측된다
+// 낙관 반영·실패 복원은 runElementIntent가 소유한다: 편입 전 실패와 대상
+// 소실은 receipt로 즉시 복원되고, 오류는 원형 그대로 전파된다.
+// 반환값은 wire patch 생성 시점의 적용 대상 수
 export const applyElementPatchesById = (
   selection: ElementIdSelection,
   updater: ElementPatchUpdater,
 ): Promise<number> => {
-  applyEagerly(selection, updater);
   let generated = 0;
-  return enqueueEditorCompatibilityWrite(
-    () =>
-      editorCoordinator.commitGeneratedPatch((base) => {
-        const result = generatePatchFrom(base, selection, updater);
-        generated = result.applied;
-        return result.patch;
-      }),
-    () => generated,
-  ).catch((error) => {
-    console.error('Failed to commit element patches', error);
-    return generated;
-  });
+  return runElementIntent({
+    applyEager: () =>
+      applyPropertyIntentsEagerly(buildEagerIntents(selection, updater)),
+    generate: (base) => {
+      const result = generatePatchFrom(base, selection, updater);
+      generated = result.applied;
+      return intentPatch(result.patch);
+    },
+  }).then((result) => (result.committed ? generated : 0));
 };
 
 // 단일 완료는 배치의 1-ID 호출. false = wire에 실리지 않음(요소 없음 또는

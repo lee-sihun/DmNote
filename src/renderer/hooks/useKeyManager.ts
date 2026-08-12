@@ -6,6 +6,7 @@ import {
 } from '@stores/data/useHistoryStatusStore';
 import { historyApi } from '@api/modules/historyApi';
 import { rebindKeySlotById } from '@src/renderer/editor/runtime/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   reconcileSelectionAfterIndexedElementDeletion,
   useGridSelectionStore,
@@ -529,7 +530,7 @@ export function useKeyManager() {
     const positionId =
       useKeyStore.getState().canonicalPositions[selectedKeyType]?.[index]?.id;
     if (positionId) {
-      void rebindKeySlotById(positionId, newSlot);
+      void rebindKeySlotById(positionId, newSlot).catch(reportElementOpError);
       return;
     }
     const updatedMappings = updateKeyMapping(

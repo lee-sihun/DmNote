@@ -78,10 +78,14 @@ describe('applyElementPatchById', () => {
     slotBase = null;
     generatedPatches.length = 0;
     api.commitGeneratedPatch.mockImplementation(
-      async (generate: (base: EditorDocumentV1) => EditorPatchV1 | null) => {
+      async (
+        generate: (base: EditorDocumentV1) => EditorPatchV1 | null,
+        meta?: { onEnrolled?: () => void },
+      ) => {
         const base = (slotBase ?? documentFromStores)();
         const patch = generate(base);
         generatedPatches.push(patch);
+        if (patch !== null) meta?.onEnrolled?.();
         return base;
       },
     );
@@ -323,24 +327,66 @@ describe('applyElementPatchById', () => {
     expect(api.commitGeneratedPatch).toHaveBeenCalledOnce();
   });
 
-  it('커밋 실패는 내부에서 소비하고 대상 수를 반환한다', async () => {
+  it('편입 전 실패는 eager를 복원하고 원 오류로 reject한다', async () => {
+    // 편입(onEnrolled) 없이 실패 - 어떤 기존 복원 경로도 소유하지 않으므로
+    // receipt가 즉시 복원한다
     api.commitGeneratedPatch.mockImplementation(
       async (generate: (base: EditorDocumentV1) => EditorPatchV1 | null) => {
         generate(documentFromStores());
-        throw new Error('commit failed');
+        throw new Error('pre-enrollment failed');
       },
     );
-    const errorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined);
+
+    await expect(
+      applyElementPatchesById({ key: [ID_A] }, () => ({
+        inactiveImage: 'failed.png',
+      })),
+    ).rejects.toThrow('pre-enrollment failed');
+
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].inactiveImage ?? '',
+    ).toBe('');
+  });
+
+  it('편입 후 실패는 eager를 유지하고 reject한다 - pending 재시도가 소유', async () => {
+    api.commitGeneratedPatch.mockImplementation(
+      async (
+        generate: (base: EditorDocumentV1) => EditorPatchV1 | null,
+        meta?: { onEnrolled?: () => void },
+      ) => {
+        generate(documentFromStores());
+        meta?.onEnrolled?.();
+        throw new Error('transient after enrollment');
+      },
+    );
+
+    await expect(
+      applyElementPatchesById({ key: [ID_A] }, () => ({
+        inactiveImage: 'kept.png',
+      })),
+    ).rejects.toThrow('transient after enrollment');
+
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].inactiveImage,
+    ).toBe('kept.png');
+  });
+
+  it('대상 소실(generator null)은 eager를 복원한다', async () => {
+    slotBase = () => {
+      const base = documentFromStores();
+      base.keyPositions = { '4key': [keyAt(ID_B)] } as never;
+      return base;
+    };
 
     const applied = await applyElementPatchesById({ key: [ID_A] }, () => ({
-      inactiveImage: 'failed.png',
+      inactiveImage: 'lost.png',
     }));
 
-    expect(applied).toBe(1);
-    expect(errorSpy).toHaveBeenCalled();
-    errorSpy.mockRestore();
+    expect(applied).toBe(0);
+    // eager로 썼던 값이 receipt로 복원됨
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].inactiveImage ?? '',
+    ).toBe('');
   });
 
   it('활성 게스처를 정산하지 않는다', async () => {

@@ -24,6 +24,7 @@ import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { resolveElementByIdAcross } from '@src/renderer/editor/model/elementIdMap';
 import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
@@ -601,7 +602,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     }
     // id가 있는데 시작 시점 조회가 실패했으면 옛 index 폴백 대신 중단
     if (!boundElementType) return;
-    applyElementPatchById(boundElementType, id, () => patch);
+    applyElementPatchById(boundElementType, id, () => patch).catch(
+      reportElementOpError,
+    );
   };
 
   // 이미지 변경 핸들러

@@ -36,6 +36,7 @@ import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
 import { applyElementPatchesById } from '@src/renderer/editor/runtime/elementPatch';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   captureBatchElementBinding,
   useBatchElementBinding,
@@ -1037,7 +1038,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 if (batchImageBinding.binding === 'element-id') {
                   applyElementPatchesById(batchImageBinding.selection, () => ({
                     inactiveImage: imageUrl,
-                  }));
+                  })).catch(reportElementOpError);
                   return;
                 }
                 handleBatchStyleChangeComplete('inactiveImage', imageUrl);
@@ -1051,7 +1052,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                       knob: batchImageBinding.selection.knob,
                     },
                     () => ({ activeImage: imageUrl }),
-                  );
+                  ).catch(reportElementOpError);
                   return;
                 }
                 handleActiveCapableStyleChangeComplete('activeImage', imageUrl);
@@ -1444,7 +1445,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               if (graphImageBinding.binding === 'element-id') {
                 applyElementPatchesById(graphImageBinding.selection, () => ({
                   inactiveImage: imageUrl,
-                }));
+                })).catch(reportElementOpError);
                 return;
               }
               handleGraphBatchSharedSetting({ inactiveImage: imageUrl });
@@ -1453,7 +1454,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               if (graphImageBinding.binding === 'element-id') {
                 applyElementPatchesById(graphImageBinding.selection, () => ({
                   activeImage: imageUrl,
-                }));
+                })).catch(reportElementOpError);
                 return;
               }
               handleGraphBatchSharedSetting({ activeImage: imageUrl });
@@ -1762,7 +1763,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               if (knobImageBinding.binding === 'element-id') {
                 applyElementPatchesById(knobImageBinding.selection, () => ({
                   inactiveImage: imageUrl,
-                }));
+                })).catch(reportElementOpError);
                 return;
               }
               handleKnobBatchSharedSetting({ inactiveImage: imageUrl });
@@ -1771,7 +1772,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               if (knobImageBinding.binding === 'element-id') {
                 applyElementPatchesById(knobImageBinding.selection, () => ({
                   activeImage: imageUrl,
-                }));
+                })).catch(reportElementOpError);
                 return;
               }
               handleKnobBatchSharedSetting({ activeImage: imageUrl });

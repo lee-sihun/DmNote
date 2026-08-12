@@ -1,5 +1,6 @@
 import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 
@@ -15,7 +16,9 @@ export const commitElementPosition = (
   fallback: () => void,
 ): void => {
   if (elementId && !isSyntheticElementId(elementId)) {
-    void applyElementPatchById(type, elementId, () => ({ dx, dy }));
+    void applyElementPatchById(type, elementId, () => ({ dx, dy })).catch(
+      reportElementOpError,
+    );
     return;
   }
   fallback();

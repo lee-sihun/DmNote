@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
 import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import {
   STAT_BASE_OPTIONS,
@@ -358,7 +359,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
       handleGraphUpdate({ index: singleGraphIndex, ...patch });
       return;
     }
-    applyElementPatchById('graph', id, () => patch);
+    applyElementPatchById('graph', id, () => patch).catch(reportElementOpError);
   };
 
   const graphShapeOptions = [
@@ -852,7 +853,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       handleKnobUpdate({ index: singleKnobIndex, ...patch });
       return;
     }
-    applyElementPatchById('knob', id, () => patch);
+    applyElementPatchById('knob', id, () => patch).catch(reportElementOpError);
   };
 
   const panelRef = useRef<HTMLDivElement | null>(null);

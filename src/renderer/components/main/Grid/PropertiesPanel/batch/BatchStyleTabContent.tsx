@@ -29,6 +29,7 @@ import {
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
 import { applyElementPatchesById } from '@src/renderer/editor/runtime/elementPatch';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   LEGACY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,
@@ -1300,7 +1301,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               if (soundBinding.binding === 'element-id') {
                 applyElementPatchesById(soundBinding.selection, () => ({
                   soundPath: nextPath,
-                }));
+                })).catch(reportElementOpError);
                 return;
               }
               (

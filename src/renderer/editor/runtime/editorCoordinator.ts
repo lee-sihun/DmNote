@@ -355,6 +355,7 @@ export class EditorSaveCoordinator {
     newIntentFields: readonly EditorField[],
     requestFields: readonly EditorField[],
     gestureId?: string,
+    onEnrolled?: () => void,
   ): Promise<EditorDocumentV1> {
     if (gestureId) {
       this.replacePendingGestureIds([...this.pendingGestureIds, gestureId]);
@@ -371,6 +372,8 @@ export class EditorSaveCoordinator {
           conflict.localFields.includes(field) ||
           newlyChangedFields.includes(field),
       );
+      // conflict pendingLocal에 실제 편입 완료 - keepLocal 해소가 소유
+      onEnrolled?.();
       this.notify();
       return Promise.reject(this.error ?? new Error('editor conflict pending'));
     }
@@ -391,6 +394,8 @@ export class EditorSaveCoordinator {
     this.pendingRequestFields = EDITOR_FIELDS.filter((field) =>
       requested.has(field),
     );
+    // pending에 실제 편입 완료 - 이후 실패는 재시도·거절 경로가 소유
+    onEnrolled?.();
     this.error = null;
     this.failureKind = null;
     this.notify();
@@ -413,6 +418,7 @@ export class EditorSaveCoordinator {
   private commitPatchSettled(
     changes: EditorPatchV1,
     gestureId?: string,
+    onEnrolled?: () => void,
   ): Promise<EditorDocumentV1> {
     // gradient canonical 정규화를 assert 앞에 — optimistic·diff·invoke가 같은 값 사용
     const canonicalChanges = canonicalizeEditorGradients(changes);
@@ -440,6 +446,7 @@ export class EditorSaveCoordinator {
       newIntentFields,
       requestFields,
       gestureId,
+      onEnrolled,
     );
   }
 
@@ -449,7 +456,7 @@ export class EditorSaveCoordinator {
   // (mutation·낙관 적용·revision 전진 전부 없음)
   commitGeneratedPatch(
     generate: (base: EditorDocumentV1) => EditorPatchV1 | null,
-    meta?: { gestureId?: string },
+    meta?: { gestureId?: string; onEnrolled?: () => void },
   ): Promise<EditorDocumentV1> {
     this.assertWritable();
     return this.enqueueSerialized(async () => {
@@ -458,7 +465,14 @@ export class EditorSaveCoordinator {
       await this.eventQueue;
       const changes = generate(this.getLatestCommitBase());
       if (!changes) return clone(this.requireLastAck());
-      return this.commitPatchSettled(changes, meta?.gestureId);
+      // onEnrolled는 pending/conflict에 실제 편입된 직후 발화 - 호출자의
+      // 롤백 판별 기준. 편입 전 종료(사전 실패·생성 예외·검증 실패)는
+      // 어떤 기존 복원 경로도 이 intent를 소유하지 않는다
+      return this.commitPatchSettled(
+        changes,
+        meta?.gestureId,
+        meta?.onEnrolled,
+      );
     });
   }
 

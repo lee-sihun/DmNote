@@ -10,12 +10,16 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import type { EditorPatchV1 } from '@src/types/editor';
 import { PREVIEW_SCHEMA_VERSION, type PreviewDomain } from '@src/types/preview';
 
 import { previewOverlay } from './previewOverlay';
-import { enqueueEditorCompatibilityOperation } from './editorCompatibilityQueue';
-import { editorCoordinator } from './editorStateCoordinator';
+import {
+  applyPropertyIntentsEagerly,
+  generatePropertyIntentPatch,
+  intentPatch,
+  runElementIntent,
+  type PropertyIntents,
+} from './elementIntent';
 import { drainEditorWrites, trackEditorWrite } from './editorWriteBarrier';
 import { getEditSessionTarget } from './editSessionTarget';
 import {
@@ -57,16 +61,6 @@ type PositionsRecordLike = Record<
   Array<{ id?: string } & Record<string, unknown>>
 >;
 
-const DOMAIN_FIELDS: Record<
-  PreviewDomain,
-  'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
-> = {
-  keyPosition: 'keyPositions',
-  statPosition: 'statPositions',
-  graphPosition: 'graphPositions',
-  knobPosition: 'knobPositions',
-};
-
 const authorityRecordFor = (domain: PreviewDomain): PositionsRecordLike =>
   (domain === 'keyPosition'
     ? useKeyStore.getState().canonicalPositions
@@ -75,21 +69,6 @@ const authorityRecordFor = (domain: PreviewDomain): PositionsRecordLike =>
     : domain === 'graphPosition'
     ? useGraphItemStore.getState().positions
     : useKnobItemStore.getState().positions) as PositionsRecordLike;
-
-const writeAuthorityRecord = (
-  domain: PreviewDomain,
-  next: PositionsRecordLike,
-): void => {
-  if (domain === 'keyPosition') {
-    useKeyStore.getState().setPositions(next as never);
-  } else if (domain === 'statPosition') {
-    useStatItemStore.getState().setPositions(next as never);
-  } else if (domain === 'graphPosition') {
-    useGraphItemStore.getState().setPositions(next as never);
-  } else {
-    useKnobItemStore.getState().setPositions(next as never);
-  }
-};
 
 const INDEX_SENTINEL = 'index:';
 
@@ -103,24 +82,6 @@ const intentKeyFor = (
   return typeof id === 'string' && id.length > 0
     ? id
     : `${INDEX_SENTINEL}${index}`;
-};
-
-// resolved id 집합을 record 전 모드에서 찾아 patch 병합 (id 불변)
-const mergeIntentRecord = (
-  record: PositionsRecordLike,
-  resolved: ReadonlyMap<string, Record<string, unknown>>,
-): { next: PositionsRecordLike; touched: number } => {
-  let touched = 0;
-  const next: PositionsRecordLike = {};
-  for (const [mode, list] of Object.entries(record)) {
-    next[mode] = list.map((position) => {
-      const id = position.id;
-      if (typeof id !== 'string' || !resolved.has(id)) return position;
-      touched += 1;
-      return { ...position, ...resolved.get(id), id };
-    });
-  }
-  return { next, touched };
 };
 
 let active: ActiveGesture | null = null;
@@ -366,37 +327,28 @@ export const editGestureController = {
       return drainEditorWrites();
     }
 
-    // eager 반영 - 이후의 full-record 캡처가 이 값을 포함해 자가 치유
-    for (const [domain, resolved] of intents) {
-      const merged = mergeIntentRecord(authorityRecordFor(domain), resolved);
-      if (merged.touched > 0) writeAuthorityRecord(domain, merged.next);
-    }
-
-    // wire는 직렬 슬롯 안에서 최신 base로 재생성한다. 호출 시점 full-record는
-    // 대기 중 정산된 다른 커밋(격리 플러그인 등)의 값을 통째로 되돌린다.
-    // elementPatch applier는 rejection을 소비하므로 재사용 금지 - 정산은
-    // 거절되는 원 promise가 필요하다
-    const persisted = enqueueEditorCompatibilityOperation(() =>
-      editorCoordinator.commitGeneratedPatch(
-        (base) => {
-          const changes: EditorPatchV1 = { schemaVersion: 1 };
-          let hasChanges = false;
-          for (const [domain, resolved] of intents) {
-            const field = DOMAIN_FIELDS[domain];
-            const merged = mergeIntentRecord(
-              base[field] as PositionsRecordLike,
-              resolved,
-            );
-            if (merged.touched > 0) {
-              changes[field] = merged.next as never;
-              hasChanges = true;
-            }
-          }
-          return hasChanges ? changes : null;
-        },
-        { gestureId: gesture.sessionId },
-      ),
+    // (domain, id) 의도를 (type, id) 속성 의도로 변환 - eager 낙관과 실패
+    // 복원(편입 전·대상 소실)은 runElementIntent가 소유하고, wire는 직렬
+    // 슬롯 안에서 최신 base로 재생성된다. 정산에는 거절되는 원 promise가
+    // 필요하므로 오류를 삼키는 applier 경로는 쓰지 않는다
+    const DOMAIN_TO_TYPE = {
+      keyPosition: 'key',
+      statPosition: 'stat',
+      graphPosition: 'graph',
+      knobPosition: 'knob',
+    } as const;
+    const propertyIntents: PropertyIntents = new Map(
+      [...intents].map(([domain, resolved]) => [
+        DOMAIN_TO_TYPE[domain],
+        resolved,
+      ]),
     );
+    const persisted = runElementIntent({
+      applyEager: () => applyPropertyIntentsEagerly(propertyIntents),
+      generate: (base) =>
+        intentPatch(generatePropertyIntentPatch(base, propertyIntents)),
+      gestureId: gesture.sessionId,
+    });
     this.settleCommit(persisted);
     const own = await persisted.then(
       () => true,

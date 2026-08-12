@@ -16,11 +16,14 @@ const captured = vi.hoisted(() => ({
 }));
 
 const patches = vi.hoisted(() => ({
-  applyElementPatchesById: vi.fn(() => 1),
-  applyElementPatchById: vi.fn(() => true),
+  applyElementPatchesById: vi.fn(async () => 1),
+  applyElementPatchById: vi.fn(async () => true),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
+vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+  reportElementOpError: vi.fn(),
+}));
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
