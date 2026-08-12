@@ -139,8 +139,9 @@ export interface EditorReorderElementsOpV1 {
 }
 
 export type EditorElementPropertyPatchV1 =
-  | { hidden: boolean; layerName?: never }
-  | { hidden?: never; layerName: string | null };
+  | { hidden: boolean; layerName?: never; graphType?: never }
+  | { hidden?: never; layerName: string | null; graphType?: never }
+  | { hidden?: never; layerName?: never; graphType: 'line' | 'bar' };
 
 export interface EditorPatchElementOpV1 {
   kind: 'patchElement';
@@ -896,7 +897,11 @@ export function assertEditorOpsV1(
         (patchKeys.length === 1 &&
           patchKeys[0] === 'layerName' &&
           (typeof op.patch.layerName === 'string' ||
-            op.patch.layerName === null));
+            op.patch.layerName === null)) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'graphType' &&
+          op.elementType === 'graph' &&
+          (op.patch.graphType === 'line' || op.patch.graphType === 'bar'));
       if (!patchIsValid) {
         throw new EditorProtocolError(`${opLabel}.patch is invalid`);
       }

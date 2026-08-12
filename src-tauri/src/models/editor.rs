@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AppStoreData, GraphPosition, GraphPositions, KeyCounters, KeyMappings, KeyPosition,
+    AppStoreData, GraphPosition, GraphPositions, GraphType, KeyCounters, KeyMappings, KeyPosition,
     KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroups, SlotMatch, StatPosition,
     StatPositions,
 };
@@ -202,11 +202,12 @@ pub struct EditorBoundsV1 {
     pub height: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EditorElementPropertyPatchV1 {
     Hidden(EditorHiddenPropertyPatchV1),
     LayerName(EditorLayerNamePropertyPatchV1),
+    GraphType(EditorGraphTypePropertyPatchV1),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -220,6 +221,12 @@ pub struct EditorHiddenPropertyPatchV1 {
 pub struct EditorLayerNamePropertyPatchV1 {
     #[serde(deserialize_with = "deserialize_required_nullable_string")]
     pub layer_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorGraphTypePropertyPatchV1 {
+    pub graph_type: GraphType,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

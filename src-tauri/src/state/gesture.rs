@@ -367,6 +367,32 @@ mod tests {
         );
         decode_gesture_commit_request(layer_name_wire.clone()).unwrap();
 
+        let mut graph_type = gesture_request(&["plugin-a".to_string()]);
+        graph_type.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        graph_type.editor_ops = Some(vec![EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Graph,
+            id: uuid::Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1::GraphType(
+                crate::models::EditorGraphTypePropertyPatchV1 {
+                    graph_type: crate::models::GraphType::Bar,
+                },
+            ),
+        }]);
+        let graph_type_wire = serde_json::to_value(graph_type).unwrap();
+        assert_eq!(
+            graph_type_wire["editorOps"][0]["patch"],
+            serde_json::json!({ "graphType": "bar" })
+        );
+        decode_gesture_commit_request(graph_type_wire.clone()).unwrap();
+
+        let mut invalid_graph_type = graph_type_wire;
+        invalid_graph_type["editorOps"][0]["patch"]["graphType"] = serde_json::json!("area");
+        let error = decode_gesture_commit_request(invalid_graph_type).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
+        );
+
         let mut multiple_properties = layer_name_wire;
         multiple_properties["editorOps"][0]["patch"]["hidden"] = serde_json::json!(true);
         let error = decode_gesture_commit_request(multiple_properties).unwrap_err();

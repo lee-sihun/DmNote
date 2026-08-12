@@ -550,6 +550,8 @@ export const patchElementPropertyById = (
   const eagerPatch =
     'layerName' in patch
       ? { layerName: patch.layerName ?? undefined }
+      : 'graphType' in patch
+      ? { graphType: patch.graphType }
       : { hidden: patch.hidden };
   const intents: PropertyIntents = new Map([
     [type, new Map([[id, eagerPatch]])],
@@ -572,6 +574,59 @@ export const patchElementPropertyById = (
     });
 };
 
+interface ElementPropertyPatchTarget {
+  type: NativeElementType;
+  id: string;
+  patch: EditorElementPropertyPatchV1;
+}
+
+const patchElementPropertiesByIds = (
+  targets: readonly ElementPropertyPatchTarget[],
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (targets.length === 0 || targets.some((target) => !target.id)) {
+    return Promise.resolve(false);
+  }
+  const mutableIntents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const target of targets) {
+    const eagerPatch =
+      'layerName' in target.patch
+        ? { layerName: target.patch.layerName ?? undefined }
+        : 'graphType' in target.patch
+        ? { graphType: target.patch.graphType }
+        : { hidden: target.patch.hidden };
+    const byId = mutableIntents.get(target.type) ?? new Map();
+    byId.set(target.id, eagerPatch);
+    mutableIntents.set(target.type, byId);
+  }
+  const receipt = applyPropertyIntentsEagerly(mutableIntents);
+  let enrolled = false;
+  return commitSemanticOps(
+    targets.map(({ type, id, patch }) => ({
+      kind: 'patchElement' as const,
+      elementType: type,
+      id,
+      patch,
+    })),
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
 export const patchElementHiddenById = (
   type: NativeElementType,
   id: string,
@@ -586,6 +641,32 @@ export const patchElementLayerNameById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   return patchElementPropertyById(type, id, { layerName }, options);
+};
+
+export const patchGraphTypeById = (
+  id: string,
+  graphType: 'line' | 'bar',
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById('graph', id, { graphType }, options);
+};
+
+export const patchGraphTypesByIds = (
+  ids: readonly string[],
+  graphType: 'line' | 'bar',
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    ids.map((id) => ({ type: 'graph', id, patch: { graphType } })),
+    options,
+  );
 };
 
 // 다중 선택 정산: 대상 id들의 현재 canonical 기하(dx·dy)를 의도로 캡처해

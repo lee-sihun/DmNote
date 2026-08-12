@@ -14,21 +14,33 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const {
   batchKeyLikePropsMock,
+  batchGraphPropsMock,
   batchPropsMock,
+  graphUpdatePositionsMock,
+  patchGraphTypeMock,
+  patchGraphTypesMock,
+  patchGraphTypesViaAuthorityMock,
   previewMock,
   patchLayerNameMock,
   patchPropertyViaAuthorityMock,
   statUpdatePositionsMock,
   settleCommitMock,
+  singleGraphPropsMock,
   singleKeyStatPropsMock,
 } = vi.hoisted(() => ({
   batchKeyLikePropsMock: vi.fn(),
+  batchGraphPropsMock: vi.fn(),
   batchPropsMock: vi.fn(),
+  graphUpdatePositionsMock: vi.fn(() => Promise.resolve()),
+  patchGraphTypeMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphTypesMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphTypesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   previewMock: vi.fn(),
   patchLayerNameMock: vi.fn(() => Promise.resolve(true)),
   patchPropertyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   statUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   settleCommitMock: vi.fn(),
+  singleGraphPropsMock: vi.fn(),
   singleKeyStatPropsMock: vi.fn(),
 }));
 
@@ -42,14 +54,17 @@ vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: vi.fn() }),
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
+  patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   updatePluginElement: vi.fn(),
 }));
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementLayerNameById: patchLayerNameMock,
+  patchGraphTypeById: patchGraphTypeMock,
+  patchGraphTypesByIds: patchGraphTypesMock,
 }));
 vi.mock('@api/modules/itemsApi', () => ({
-  graphItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
+  graphItemsApi: { updatePositions: graphUpdatePositionsMock },
   knobItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
   layerGroupsApi: { update: vi.fn(() => Promise.resolve()) },
   statItemsApi: { updatePositions: statUpdatePositionsMock },
@@ -68,6 +83,10 @@ vi.mock('./PropertiesPanel/index', () => {
     singleKeyStatPropsMock(props);
     return <ScopeProbe id="single-key-stat" />;
   };
+  const SingleGraphPanel = (props: Record<string, unknown>) => {
+    singleGraphPropsMock(props);
+    return <div />;
+  };
   return {
     TABS: { STYLE: 'style', NOTE: 'note', COUNTER: 'counter' },
     PropertyRow: Stub,
@@ -77,14 +96,17 @@ vi.mock('./PropertiesPanel/index', () => {
     TextInput: Stub,
     LayerPanel: () => <div data-testid="layer-panel" />,
     PluginSelectionPanel: Stub,
-    SingleGraphPanel: Stub,
+    SingleGraphPanel,
     SingleKnobPanel: Stub,
     SingleKeyStatPanel,
     BatchKeyLikePanel: (props: Record<string, unknown>) => {
       batchKeyLikePropsMock(props);
       return <div />;
     },
-    BatchGraphOnlyPanel: Stub,
+    BatchGraphOnlyPanel: (props: Record<string, unknown>) => {
+      batchGraphPropsMock(props);
+      return <div />;
+    },
     BatchKnobOnlyPanel: Stub,
     PluginSettingsPanelView: () => <ScopeProbe id="plugin-settings" />,
     useBatchHandlers: (props: Record<string, unknown>) => {
@@ -152,10 +174,16 @@ const resetStores = () => {
   previewMock.mockClear();
   settleCommitMock.mockClear();
   singleKeyStatPropsMock.mockClear();
+  singleGraphPropsMock.mockClear();
+  batchGraphPropsMock.mockClear();
   batchPropsMock.mockClear();
   batchKeyLikePropsMock.mockClear();
   patchLayerNameMock.mockClear();
+  patchGraphTypeMock.mockClear();
+  patchGraphTypesMock.mockClear();
+  patchGraphTypesViaAuthorityMock.mockClear();
   patchPropertyViaAuthorityMock.mockClear();
+  graphUpdatePositionsMock.mockClear();
   statUpdatePositionsMock.mockClear();
   useKeyStore.setState({
     selectedKeyType: '4key',
@@ -318,6 +346,189 @@ describe('PropertiesPanel detached preview contract', () => {
     expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
     expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
   });
+
+  it('single stable graphType은 stale index 대신 선택 ID semantic leaf를 쓴다', async () => {
+    const id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const otherId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const base = useGraphItemStore.getState().positions['4key'][0];
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          { ...base, id },
+          { ...base, id: otherId },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'graph', id, index: 1 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+      handleGraphUpdate: (update: Record<string, unknown>) => void;
+    };
+
+    act(() => props.handleGraphUpdate({ index: 1, graphType: 'bar' }));
+
+    expect(patchGraphTypeMock).toHaveBeenCalledWith(id, 'bar');
+    expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+    expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it('panel single stable graphType은 exact authority RPC만 쓴다', async () => {
+    window.__dmn_window_type = 'panel';
+    const id = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [{ ...useGraphItemStore.getState().positions['4key'][0], id }],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'graph', id, index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+      handleGraphUpdate: (update: Record<string, unknown>) => void;
+    };
+
+    act(() => props.handleGraphUpdate({ index: 0, graphType: 'bar' }));
+
+    expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+      elementType: 'graph',
+      id,
+      patch: { graphType: 'bar' },
+    });
+    expect(patchGraphTypeMock).not.toHaveBeenCalled();
+    expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['main synthetic', 'main', 'graph-0'],
+    ['main empty', 'main', ''],
+    ['panel synthetic', 'panel', 'graph-0'],
+    ['panel empty', 'panel', ''],
+  ] as const)(
+    'single legacy graphType $label은 기존 writer를 유지한다',
+    (_label, windowType, id) => {
+      window.__dmn_window_type = windowType;
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'graph', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+        handleGraphUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.handleGraphUpdate({ index: 0, graphType: 'bar' }));
+
+      expect(patchGraphTypeMock).not.toHaveBeenCalled();
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('stable graphType batch는 선택 ID를 한 semantic commit으로 넘긴다', () => {
+    const ids = [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ];
+    const base = useGraphItemStore.getState().positions['4key'][0];
+    useGraphItemStore.setState({
+      positions: { '4key': ids.map((id) => ({ ...base, id })) },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: ids.map((id, index) => ({
+        type: 'graph' as const,
+        id,
+        index: 1 - index,
+      })),
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = batchGraphPropsMock.mock.lastCall?.[0] as {
+      handleGraphBatchSharedSetting: (update: Record<string, unknown>) => void;
+    };
+
+    act(() => props.handleGraphBatchSharedSetting({ graphType: 'bar' }));
+
+    expect(patchGraphTypesMock).toHaveBeenCalledWith(ids, 'bar');
+    expect(patchGraphTypesViaAuthorityMock).not.toHaveBeenCalled();
+    expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it('panel stable graphType batch는 authority batch RPC 하나만 쓴다', () => {
+    window.__dmn_window_type = 'panel';
+    const ids = [
+      '33333333-3333-4333-8333-333333333333',
+      '44444444-4444-4444-8444-444444444444',
+    ];
+    const base = useGraphItemStore.getState().positions['4key'][0];
+    useGraphItemStore.setState({
+      positions: { '4key': ids.map((id) => ({ ...base, id })) },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: ids.map((id, index) => ({
+        type: 'graph' as const,
+        id,
+        index,
+      })),
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = batchGraphPropsMock.mock.lastCall?.[0] as {
+      handleGraphBatchSharedSetting: (update: Record<string, unknown>) => void;
+    };
+
+    act(() => props.handleGraphBatchSharedSetting({ graphType: 'line' }));
+
+    expect(patchGraphTypesViaAuthorityMock).toHaveBeenCalledWith(ids, 'line');
+    expect(patchGraphTypesMock).not.toHaveBeenCalled();
+    expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['main synthetic', 'main', 'graph-0'],
+    ['main empty', 'main', ''],
+    ['panel synthetic', 'panel', 'graph-0'],
+    ['panel empty', 'panel', ''],
+  ] as const)(
+    '$label id가 섞인 graphType batch는 전체 기존 writer로 폴백한다',
+    (_label, windowType, legacyId) => {
+      window.__dmn_window_type = windowType;
+      const stableId = '55555555-5555-4555-8555-555555555555';
+      const base = useGraphItemStore.getState().positions['4key'][0];
+      useGraphItemStore.setState({
+        positions: {
+          '4key': [
+            { ...base, id: stableId },
+            { ...base, id: legacyId },
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [stableId, legacyId].map((id, index) => ({
+          type: 'graph' as const,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchGraphPropsMock.mock.lastCall?.[0] as {
+        handleGraphBatchSharedSetting: (
+          update: Record<string, unknown>,
+        ) => void;
+      };
+
+      act(() => props.handleGraphBatchSharedSetting({ graphType: 'bar' }));
+
+      expect(patchGraphTypesMock).not.toHaveBeenCalled();
+      expect(patchGraphTypesViaAuthorityMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
 
   it('single stat preview는 canonical 변경 없이 stat 도메인으로 전달', () => {
     useGridSelectionStore.setState({

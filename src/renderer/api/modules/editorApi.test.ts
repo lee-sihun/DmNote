@@ -123,6 +123,26 @@ describe('editorCommitRaw semantic op protocol', () => {
     expect(() =>
       assertEditorOpsV1([
         {
+          kind: 'patchElement',
+          elementType: 'graph',
+          id: '00000000-0000-4000-8000-00000000000b',
+          patch: { graphType: 'bar' },
+        },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'patchElement',
+          elementType: 'stat',
+          id: '00000000-0000-4000-8000-00000000000c',
+          patch: { graphType: 'bar' },
+        } as never,
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
           ...valid,
           elements: [
             {

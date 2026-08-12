@@ -23,6 +23,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchGraphTypes: vi.fn(
+    (
+      _ids?: unknown,
+      _graphType?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -94,6 +101,7 @@ vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementPropertyById: mocks.patchElementProperty,
+  patchGraphTypesByIds: mocks.patchGraphTypes,
 }));
 
 vi.mock(
@@ -157,6 +165,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.commitLayerDropIntent.mockResolvedValue(undefined);
     mocks.patchElementProperty.mockReset();
     mocks.patchElementProperty.mockResolvedValue(true);
+    mocks.patchGraphTypes.mockReset();
+    mocks.patchGraphTypes.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
     mocks.elements = [
       {
@@ -412,6 +422,7 @@ describe('plugin panel persisted element mutations', () => {
     ['가시성', { hidden: true }],
     ['이름', { layerName: 'renamed' }],
     ['이름 clear', { layerName: null }],
+    ['그래프 타입', { graphType: 'bar' }],
   ])(
     'native %s exact literal을 main semantic executor에 전달한다',
     async (_label, patch) => {
@@ -438,6 +449,39 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
     },
   );
+
+  it('graphType batch는 ordered stable IDs를 semantic batch executor에 한 번 전달한다', async () => {
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          {
+            elementType: 'graph',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+          {
+            elementType: 'graph',
+            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          },
+        ],
+        patch: { graphType: 'line' },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchGraphTypes).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchGraphTypes).toHaveBeenCalledWith(
+      [
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      ],
+      'line',
+      { preflight: expect.any(Function) },
+    );
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
 
   it.each([
     [
@@ -519,6 +563,63 @@ describe('plugin panel persisted element mutations', () => {
         },
       },
     ],
+    ['empty batch', { targets: [], patch: { graphType: 'bar' } }],
+    [
+      'oversized batch',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'graph',
+          id: `stable-${index}`,
+        })),
+        patch: { graphType: 'bar' },
+      },
+    ],
+    [
+      'duplicate batch id',
+      {
+        targets: [
+          { elementType: 'graph', id: 'stable' },
+          { elementType: 'graph', id: 'stable' },
+        ],
+        patch: { graphType: 'bar' },
+      },
+    ],
+    [
+      'batch wrong type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { graphType: 'bar' },
+      },
+    ],
+    [
+      'single graph leaf wrong type',
+      {
+        target: {
+          elementType: 'knob',
+          id: 'stable',
+          patch: { graphType: 'bar' },
+        },
+      },
+    ],
+    [
+      'batch non-graph leaf',
+      {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { hidden: true },
+      },
+    ],
+    [
+      'single and batch together',
+      {
+        target: {
+          elementType: 'graph',
+          id: 'single',
+          patch: { graphType: 'bar' },
+        },
+        targets: [{ elementType: 'graph', id: 'batch' }],
+        patch: { graphType: 'bar' },
+      },
+    ],
   ])(
     '%s native property payload를 실행 전에 거절한다',
     async (_label, payload) => {
@@ -526,6 +627,7 @@ describe('plugin panel persisted element mutations', () => {
 
       await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
       expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+      expect(mocks.patchGraphTypes).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
         error: { code: 'INVALID_PAYLOAD' },

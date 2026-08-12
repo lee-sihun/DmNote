@@ -2349,6 +2349,22 @@ mod tests {
         );
         decode_editor_commit_request(layer_name.clone()).unwrap();
 
+        let graph_type = serde_json::to_value(ops_request(vec![EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Graph,
+            id: Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1::GraphType(
+                crate::models::EditorGraphTypePropertyPatchV1 {
+                    graph_type: GraphType::Bar,
+                },
+            ),
+        }]))
+        .unwrap();
+        assert_eq!(
+            graph_type["ops"][0]["patch"],
+            serde_json::json!({ "graphType": "bar" })
+        );
+        decode_editor_commit_request(graph_type.clone()).unwrap();
+
         let mut unknown_property = property.clone();
         unknown_property["ops"][0]["patch"]["zIndex"] = serde_json::json!(3);
         let mut unknown_op = property;
@@ -2357,11 +2373,14 @@ mod tests {
         missing_property["ops"][0]["patch"] = serde_json::json!({});
         let mut multiple_properties = layer_name;
         multiple_properties["ops"][0]["patch"]["hidden"] = serde_json::json!(true);
+        let mut invalid_graph_type = graph_type;
+        invalid_graph_type["ops"][0]["patch"]["graphType"] = serde_json::json!("area");
         for wire in [
             unknown_property,
             unknown_op,
             missing_property,
             multiple_properties,
+            invalid_graph_type,
         ] {
             let error = decode_editor_commit_request(wire).unwrap_err();
             assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));

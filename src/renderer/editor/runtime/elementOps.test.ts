@@ -33,6 +33,8 @@ import {
   placeDuplicatedKey,
   patchElementHiddenById,
   patchElementLayerNameById,
+  patchGraphTypeById,
+  patchGraphTypesByIds,
   rebindKeySlotById,
 } from './elementOps';
 
@@ -42,6 +44,7 @@ import {
 } from './editorCompatibilityQueue';
 
 import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
 
 const ID_A = '11111111-1111-4111-8111-111111111111';
 const ID_B = '22222222-2222-4222-8222-222222222222';
@@ -50,6 +53,19 @@ const keyAt = (id: string, zIndex?: number) => ({
   ...createDefaultKeyPosition(),
   id,
   ...(zIndex !== undefined ? { zIndex } : {}),
+});
+
+const graphAt = (
+  id: string,
+  patch: Partial<GraphItemPosition> = {},
+): GraphItemPosition => ({
+  ...createDefaultKeyPosition(),
+  id,
+  statType: 'kps',
+  graphType: 'line',
+  graphSpeed: 1000,
+  graphColor: '#86EFAC',
+  ...patch,
 });
 
 // 슬롯 시점 base. 기본은 호출 시점 스토어 - 대기 중 재정렬·삭제는 테스트가
@@ -908,5 +924,84 @@ describe('elementOps', () => {
     expect(useKeyStore.getState().canonicalPositions['4key'][0].layerName).toBe(
       'Before',
     );
+  });
+
+  it('graphType single과 batch는 좁은 op를 한 커밋으로 전송한다', async () => {
+    const graphB = '00000000-0000-4000-8000-00000000008e';
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          graphAt(ID_A, { graphType: 'line' }),
+          graphAt(graphB, { graphType: 'line' }),
+        ],
+      },
+    });
+
+    await patchGraphTypeById(ID_A, 'bar');
+    expect(useGraphItemStore.getState().positions['4key'][0].graphType).toBe(
+      'bar',
+    );
+
+    api.commitSemanticOps.mockClear();
+    await patchGraphTypesByIds([ID_A, graphB], 'bar');
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: ID_A,
+        patch: { graphType: 'bar' },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: graphB,
+        patch: { graphType: 'bar' },
+      },
+    ]);
+  });
+
+  it('graphType batch 편입 전 실패는 모든 eager leaf를 복원한다', async () => {
+    const graphB = '00000000-0000-4000-8000-00000000008f';
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          graphAt(ID_A, { graphType: 'line' }),
+          graphAt(graphB, { graphType: 'line' }),
+        ],
+      },
+    });
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+
+    await expect(patchGraphTypesByIds([ID_A, graphB], 'bar')).rejects.toThrow(
+      'start failed',
+    );
+    expect(
+      useGraphItemStore
+        .getState()
+        .positions['4key'].map((position) => position.graphType),
+    ).toEqual(['line', 'line']);
+  });
+
+  it('graphType batch는 일부 missing이어도 생존 대상 적용으로 판정한다', async () => {
+    const missingId = '00000000-0000-4000-8000-000000000090';
+    api.commitSemanticOps.mockResolvedValueOnce({
+      document: documentFromStores(),
+      opResults: [{ status: 'applied' }, { status: 'targetMissing' }],
+    });
+
+    await expect(patchGraphTypesByIds([ID_A, missingId], 'bar')).resolves.toBe(
+      true,
+    );
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+  });
+
+  it('graphType batch의 빈 ID와 중복 ID는 eager와 wire 전에 거절한다', async () => {
+    await expect(patchGraphTypesByIds([ID_A, ''], 'bar')).resolves.toBe(false);
+    await expect(patchGraphTypesByIds([ID_A, ID_A], 'bar')).resolves.toBe(
+      false,
+    );
+
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
 });

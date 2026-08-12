@@ -50,7 +50,10 @@ import {
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
-import { patchElementPropertyById } from '@src/renderer/editor/runtime/elementOps';
+import {
+  patchElementPropertyById,
+  patchGraphTypesByIds,
+} from '@src/renderer/editor/runtime/elementOps';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type {
   LayerReorderAnchorsWire,
@@ -89,7 +92,7 @@ const LAYER_DELETE_TARGET_TYPES = new Set([
   'knob',
   'plugin',
 ]);
-const MAX_LAYER_DELETE_TARGETS = 4096;
+const MAX_LAYER_RPC_TARGETS = 4096;
 
 const hasExactKeys = (
   value: Record<string, unknown>,
@@ -110,7 +113,7 @@ const parseLayerDeleteTargets = (
   }
   if (
     payload.targets.length === 0 ||
-    payload.targets.length > MAX_LAYER_DELETE_TARGETS
+    payload.targets.length > MAX_LAYER_RPC_TARGETS
   ) {
     return null;
   }
@@ -155,10 +158,8 @@ interface NativeLayerPropertyTarget {
 }
 
 const parseNativeLayerPropertyTarget = (
-  payload: Record<string, unknown>,
+  value: unknown,
 ): NativeLayerPropertyTarget | null => {
-  if (!hasExactKeys(payload, ['target'])) return null;
-  const value = payload.target;
   if (
     value === null ||
     typeof value !== 'object' ||
@@ -188,9 +189,76 @@ const parseNativeLayerPropertyTarget = (
   const patchValid =
     (hasExactKeys(patch, ['hidden']) && typeof patch.hidden === 'boolean') ||
     (hasExactKeys(patch, ['layerName']) &&
-      (typeof patch.layerName === 'string' || patch.layerName === null));
-  if (!patchValid) return null;
+      (typeof patch.layerName === 'string' || patch.layerName === null)) ||
+    (hasExactKeys(patch, ['graphType']) &&
+      (patch.graphType === 'line' || patch.graphType === 'bar'));
+  if (
+    !patchValid ||
+    (hasExactKeys(patch, ['graphType']) && target.elementType !== 'graph')
+  ) {
+    return null;
+  }
   return target as unknown as NativeLayerPropertyTarget;
+};
+
+type NativeLayerPropertyRequest =
+  | { kind: 'single'; target: NativeLayerPropertyTarget }
+  | { kind: 'graphBatch'; ids: string[]; graphType: 'line' | 'bar' };
+
+const parseNativeLayerPropertyRequest = (
+  payload: Record<string, unknown>,
+): NativeLayerPropertyRequest | null => {
+  if (hasExactKeys(payload, ['target'])) {
+    const target = parseNativeLayerPropertyTarget(payload.target);
+    return target ? { kind: 'single', target } : null;
+  }
+  if (
+    !hasExactKeys(payload, ['targets', 'patch']) ||
+    !Array.isArray(payload.targets) ||
+    payload.targets.length === 0 ||
+    payload.targets.length > MAX_LAYER_RPC_TARGETS ||
+    payload.patch === null ||
+    typeof payload.patch !== 'object' ||
+    Array.isArray(payload.patch)
+  ) {
+    return null;
+  }
+  const patch = payload.patch as Record<string, unknown>;
+  if (
+    !hasExactKeys(patch, ['graphType']) ||
+    (patch.graphType !== 'line' && patch.graphType !== 'bar')
+  ) {
+    return null;
+  }
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const value of payload.targets) {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      !hasExactKeys(value as Record<string, unknown>, ['elementType', 'id'])
+    ) {
+      return null;
+    }
+    const target = value as Record<string, unknown>;
+    if (
+      target.elementType !== 'graph' ||
+      typeof target.id !== 'string' ||
+      target.id.trim().length === 0 ||
+      isSyntheticElementId(target.id) ||
+      seen.has(target.id)
+    ) {
+      return null;
+    }
+    seen.add(target.id);
+    ids.push(target.id);
+  }
+  return {
+    kind: 'graphBatch',
+    ids,
+    graphType: patch.graphType,
+  };
 };
 
 const MAX_LAYER_REORDER_IDS = 4096;
@@ -824,8 +892,8 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
   }
 
   if (envelope.operation === PLUGIN_RPC_OPERATIONS.patchLayerProperty) {
-    const target = parseNativeLayerPropertyTarget(envelope.payload);
-    if (!target) {
+    const request = parseNativeLayerPropertyRequest(envelope.payload);
+    if (!request) {
       respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
       return;
     }
@@ -836,13 +904,23 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
       return;
     }
-    void patchElementPropertyById(target.elementType, target.id, target.patch, {
+    const options = {
       preflight: () => {
         if (!generationLive()) {
           throw new Error('plugin authority generation changed');
         }
       },
-    })
+    };
+    const persisted =
+      request.kind === 'single'
+        ? patchElementPropertyById(
+            request.target.elementType,
+            request.target.id,
+            request.target.patch,
+            options,
+          )
+        : patchGraphTypesByIds(request.ids, request.graphType, options);
+    void persisted
       .then(() => {
         if (!generationLive()) {
           respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));

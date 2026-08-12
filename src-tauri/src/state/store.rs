@@ -4318,6 +4318,16 @@ mod tests {
         }
     }
 
+    fn patch_graph_type_op(id: impl Into<String>, graph_type: GraphType) -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Graph,
+            id: id.into(),
+            patch: EditorElementPropertyPatchV1::GraphType(
+                crate::models::EditorGraphTypePropertyPatchV1 { graph_type },
+            ),
+        }
+    }
+
     fn frozen_key_insert_op(id: impl Into<String>) -> EditorOpV1 {
         EditorOpV1::InsertFrozenElements {
             mode: "4key".to_string(),
@@ -7524,6 +7534,148 @@ mod tests {
             store.editor_get().document.key_positions["4key"][0].layer_name,
             None
         );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn graph_type_batch_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-graph-type-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut document = store.editor_get().document;
+        let template = document.key_positions["4key"][0].clone();
+        let first_id = uuid::Uuid::new_v4().to_string();
+        let second_id = uuid::Uuid::new_v4().to_string();
+        document.graph_positions.insert(
+            "4key".to_string(),
+            vec![
+                GraphPosition {
+                    stat_type: GraphStatType::Kps,
+                    graph_type: GraphType::Line,
+                    graph_speed: 1000,
+                    graph_color: "#111111".to_string(),
+                    show_avg_line: true,
+                    position: KeyPosition {
+                        id: first_id.clone(),
+                        ..template.clone()
+                    },
+                },
+                GraphPosition {
+                    stat_type: GraphStatType::Total,
+                    graph_type: GraphType::Line,
+                    graph_speed: 2000,
+                    graph_color: "#222222".to_string(),
+                    show_avg_line: false,
+                    position: KeyPosition {
+                        id: second_id.clone(),
+                        ..template
+                    },
+                },
+            ],
+        );
+        let setup = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    graph_positions: Some(document.graph_positions),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(
+            setup.result.revision,
+            &mutation_id,
+            vec![
+                patch_graph_type_op(&first_id, GraphType::Bar),
+                patch_graph_type_op(&second_id, GraphType::Bar),
+                patch_graph_type_op(missing_id, GraphType::Bar),
+            ],
+        );
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(changed.result.changed_fields, [EditorField::GraphPositions]);
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert!(changed.document.graph_positions["4key"]
+            .iter()
+            .all(|graph| graph.graph_type == GraphType::Bar));
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_graph_type_op(&first_id, GraphType::Line)]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![
+                    patch_graph_type_op(&first_id, GraphType::Bar),
+                    patch_graph_type_op(&second_id, GraphType::Bar),
+                ],
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert!(store.editor_get().document.graph_positions["4key"]
+            .iter()
+            .all(|graph| graph.graph_type == GraphType::Line));
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert!(store.editor_get().document.graph_positions["4key"]
+            .iter()
+            .all(|graph| graph.graph_type == GraphType::Bar));
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

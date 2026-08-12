@@ -33,6 +33,7 @@ import {
   type SettingsNormalizationErrorKind,
 } from '@plugins/runtime/settingsSections';
 import {
+  patchGraphTypesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -64,7 +65,11 @@ import {
   getPreviewOverlayVersion,
   subscribePreviewOverlay,
 } from '@src/renderer/editor/runtime/previewOverlay';
-import { patchElementLayerNameById } from '@src/renderer/editor/runtime/elementOps';
+import {
+  patchElementLayerNameById,
+  patchGraphTypeById,
+  patchGraphTypesByIds,
+} from '@src/renderer/editor/runtime/elementOps';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
 // 분리된 컴포넌트들 및 훅
@@ -1350,6 +1355,31 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     data: Partial<GraphItemPosition> & { index: number },
   ) => {
     const { index, ...updates } = data;
+    const updateKeys = Object.keys(updates);
+    const graphType = updates.graphType;
+    const selectedGraph =
+      selectedGraphElements.length === 1 ? selectedGraphElements[0] : null;
+    if (
+      updateKeys.length === 1 &&
+      updateKeys[0] === 'graphType' &&
+      (graphType === 'line' || graphType === 'bar') &&
+      selectedGraph &&
+      selectedGraph.id.length > 0 &&
+      !isSyntheticElementId(selectedGraph.id)
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'graph',
+              id: selectedGraph.id,
+              patch: { graphType },
+            })
+          : patchGraphTypeById(selectedGraph.id, graphType);
+      void commit.catch((error) => {
+        console.error('Failed to update graph type', error);
+      });
+      return;
+    }
     const mode = selectedKeyType;
     const current = useGraphItemStore.getState().positions;
     const list = current[mode] || [];
@@ -1957,6 +1987,25 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const handleGraphBatchSharedSetting = (
     updates: Partial<GraphItemPosition>,
   ) => {
+    const updateKeys = Object.keys(updates);
+    const graphType = updates.graphType;
+    const stableGraphIds = selectedGraphElements.map((element) => element.id);
+    if (
+      updateKeys.length === 1 &&
+      updateKeys[0] === 'graphType' &&
+      (graphType === 'line' || graphType === 'bar') &&
+      stableGraphIds.length > 0 &&
+      stableGraphIds.every((id) => id.length > 0 && !isSyntheticElementId(id))
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchGraphTypesViaAuthority(stableGraphIds, graphType)
+          : patchGraphTypesByIds(stableGraphIds, graphType);
+      void commit.catch((error) => {
+        console.error('Failed to batch update graph type', error);
+      });
+      return;
+    }
     const batchUpdates = selectedGraphElements
       .filter((el) => el.index !== undefined)
       .map((el) => ({ index: el.index!, ...updates })) as Array<

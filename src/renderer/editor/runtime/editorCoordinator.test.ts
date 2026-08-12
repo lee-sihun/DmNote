@@ -337,6 +337,9 @@ const applyOpsForTest = (
             else updated.layerName = op.patch.layerName;
             return updated;
           }
+          if ('graphType' in op.patch) {
+            return { ...position, graphType: op.patch.graphType };
+          }
           return { ...position, hidden: op.patch.hidden };
         });
       } else {
@@ -2926,6 +2929,42 @@ describe('commitSemanticOpsInternal', () => {
       'layerName',
     );
     expect(outcome.document.keyPositions['4key'][0].noteWidth).toBe(333);
+    harness.coordinator.stop();
+  });
+
+  it('graphType patch는 graph의 해당 leaf만 바꾼다', async () => {
+    const id = '00000000-0000-4000-8000-00000000008d';
+    const base = makeDocument();
+    base.graphPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id,
+          noteWidth: 321,
+          statType: 'kps',
+          graphType: 'line',
+          graphSpeed: 1000,
+          graphColor: '#86EFAC',
+        },
+      ],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id,
+        patch: { graphType: 'bar' as const },
+      } satisfies EditorOpV1,
+    ]);
+
+    expect(outcome.document.graphPositions['4key'][0]).toMatchObject({
+      graphType: 'bar',
+      id,
+      noteWidth: 321,
+    });
     harness.coordinator.stop();
   });
 
