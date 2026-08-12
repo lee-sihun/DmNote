@@ -1033,6 +1033,132 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('혼합 semantic gesture 성공은 ordered 결과로 lastAck를 전진시킨다', async () => {
+    const base = makeDocument('A');
+    const id = base.keyPositions['4key'][0].id!;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitGesture(
+      {
+        opsVersion: 1,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id,
+            bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+          },
+        ],
+      },
+      'gesture-ops',
+      async (context) => {
+        expect(context).toMatchObject({
+          editorOpsVersion: 1,
+          editorOps: [expect.objectContaining({ id })],
+        });
+        return {
+          revision: 1,
+          changedFields: ['keyPositions'],
+          opResults: [
+            {
+              status: 'applied',
+              bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+            },
+          ],
+        };
+      },
+    );
+
+    expect(
+      harness.coordinator.getState().lastAck?.keyPositions['4key'][0],
+    ).toMatchObject({ id, dx: 11, dy: 12, width: 60, height: 70 });
+    harness.coordinator.stop();
+  });
+
+  it('혼합 semantic gesture의 targetMissing은 canonical을 한 번 동기화한다', async () => {
+    const base = makeDocument('A');
+    const id = base.keyPositions['4key'][0].id!;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const missing = structuredClone(base);
+    missing.keys['4key'] = [];
+    missing.keyPositions['4key'] = [];
+    harness.transport.canonical = { revision: 1, document: missing };
+
+    await harness.coordinator.commitGesture(
+      {
+        opsVersion: 1,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id,
+            bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+          },
+        ],
+      },
+      'gesture-missing',
+      async () => ({
+        revision: 1,
+        changedFields: [],
+        opResults: [{ status: 'targetMissing' }],
+      }),
+    );
+
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.coordinator.getState().lastAck).toEqual(missing);
+    expect(harness.getLocal()).toEqual(missing);
+    harness.coordinator.stop();
+  });
+
+  it('혼합 semantic gesture 진행 중 외부 이벤트의 다른 필드를 보존한다', async () => {
+    const base = makeDocument('A');
+    const id = base.keyPositions['4key'][0].id!;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitGesture(
+      {
+        opsVersion: 1,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id,
+            bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+          },
+        ],
+      },
+      'gesture-external-event',
+      async () => {
+        const external = withGroups(base, 'external-group');
+        harness.transport.emit(eventFor(1, 'external', base, external));
+        await vi.waitFor(() =>
+          expect(harness.coordinator.getState().revision).toBe(1),
+        );
+        return {
+          revision: 2,
+          changedFields: ['keyPositions'],
+          opResults: [
+            {
+              status: 'applied',
+              bounds: { dx: 11, dy: 12, width: 60, height: 70 },
+            },
+          ],
+        };
+      },
+    );
+
+    expect(harness.coordinator.getState().lastAck).toMatchObject({
+      layerGroups: { '4key': [{ id: 'external-group' }] },
+      keyPositions: {
+        '4key': [expect.objectContaining({ id, dx: 11, width: 60 })],
+      },
+    });
+    harness.coordinator.stop();
+  });
+
   it('resyncs canonical state when a gesture result is outcome-unknown', async () => {
     const base = makeDocument('A');
     const target = makeDocument('B');

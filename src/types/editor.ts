@@ -127,11 +127,28 @@ export interface EditorCommitResult {
 
 export type EditorPluginCommitResult = Omit<EditorCommitResult, 'opResults'>;
 
-export interface EditorGestureCommitContext {
+interface EditorGestureCommitContextBase {
   editorBaseRevision: number;
   mutationId: string;
-  editorChanges?: EditorPatchV1;
 }
+
+export interface EditorGesturePatchCommitContext
+  extends EditorGestureCommitContextBase {
+  editorChanges?: EditorPatchV1;
+  editorOpsVersion?: never;
+  editorOps?: never;
+}
+
+export interface EditorGestureOpsCommitContext
+  extends EditorGestureCommitContextBase {
+  editorChanges?: never;
+  editorOpsVersion: typeof EDITOR_OPS_VERSION;
+  editorOps: EditorOpV1[];
+}
+
+export type EditorGestureCommitContext =
+  | EditorGesturePatchCommitContext
+  | EditorGestureOpsCommitContext;
 
 export interface EditorGetResult {
   revision: number;
@@ -652,6 +669,35 @@ export function assertEditorCommitResult(
       `editor_commit opResults[${index}].bounds`,
     );
   });
+}
+
+export function assertEditorOpCommitResult(
+  value: EditorCommitResult,
+  ops: readonly EditorOpV1[],
+): void {
+  assertEditorCommitResult(value, ops.length);
+  const opResults = value.opResults!;
+  const positionFields: Record<EditorElementTypeV1, EditorField> = {
+    key: 'keyPositions',
+    stat: 'statPositions',
+    graph: 'graphPositions',
+    knob: 'knobPositions',
+  };
+  const appliedFields = new Set(
+    ops.flatMap((op, index) =>
+      opResults[index].status === 'applied'
+        ? [positionFields[op.elementType]]
+        : [],
+    ),
+  );
+  if (
+    value.changedFields.length !== appliedFields.size ||
+    value.changedFields.some((field) => !appliedFields.has(field))
+  ) {
+    throw new EditorProtocolError(
+      'editor ops changedFields does not match opResults',
+    );
+  }
 }
 
 export function assertEditorCommittedEvent(value: EditorCommittedV1): void {

@@ -26,7 +26,10 @@ import {
 } from './instancesCommitQueue';
 import { schedulePluginPanelModelSync } from '@utils/plugin/panelModelSync';
 
-import type { EditorPatchGenerator } from '@src/renderer/editor/runtime/editorCoordinator';
+import type {
+  EditorGestureOpsMutation,
+  EditorPatchGenerator,
+} from '@src/renderer/editor/runtime/editorCoordinator';
 import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
 import type {
   PluginDefinitionInternal,
@@ -409,7 +412,10 @@ export const commitMixedGestureTransaction = (
   // generator는 coordinator 직렬 슬롯 안에서 최신 base로 평가된다 -
   // 호출 시점 캡처 full-record는 대기 중 정산된 커밋을 되돌린다.
   // null 반환 시 editorChanges 없이 plugin 변경만 커밋
-  editorChanges: EditorPatchV1 | EditorPatchGenerator,
+  editorChanges:
+    | EditorPatchV1
+    | EditorPatchGenerator
+    | EditorGestureOpsMutation,
   pluginIds: readonly string[],
   meta?: { onEnrolled?: () => void },
 ): Promise<void> => {
@@ -453,21 +459,32 @@ export const commitMixedGestureTransaction = (
           );
           committedDefinitions = definitions;
           notePluginInstancesMutation(context.mutationId);
-          const result = await gestureApi.commit({
+          const request = {
             gestureId,
             mutationId: context.mutationId,
             editorBaseRevision: context.editorBaseRevision,
             pluginBaseRevision: getBackendPluginRevision(),
             observedHistoryEpoch: useHistoryStatusStore.getState().historyEpoch,
             authorityGeneration: getPluginAuthorityGeneration(),
-            editorChanges: context.editorChanges,
+            ...('editorOps' in context
+              ? {
+                  editorOpsVersion: context.editorOpsVersion,
+                  editorOps: context.editorOps,
+                }
+              : context.editorChanges
+              ? { editorChanges: context.editorChanges }
+              : {}),
             pluginChanges,
-          });
+          };
+          const result = await gestureApi.commit(request);
           noteBackendPluginRevision(result.pluginModelRevision);
           gestureResult = result;
           return {
             revision: result.editorRevision,
             changedFields: result.changedFields,
+            ...('editorOps' in context
+              ? { opResults: result.editorOpResults }
+              : {}),
           };
         },
         meta,

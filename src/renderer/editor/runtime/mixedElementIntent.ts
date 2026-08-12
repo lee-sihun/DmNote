@@ -5,10 +5,15 @@ import {
 } from '@plugins/runtime/displayElement/gestureTransaction';
 
 import { isElementIntentAbort, reportElementOpSkipped } from './elementIntent';
+import { commitSemanticOps } from './editorSemanticOps';
 
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
-import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+import type {
+  EditorDocumentV1,
+  EditorOpV1,
+  EditorPatchV1,
+} from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 import type { ElementIntentReceipt } from './elementIntent';
@@ -53,6 +58,36 @@ export const runMixedElementIntent = async (options: {
     }
   } catch (error) {
     if (generatedNull || !enrolled) receipt?.rollback();
+    throw error;
+  }
+};
+
+export const runMixedElementBoundsIntent = async (options: {
+  gestureId: string;
+  pluginIds: readonly string[];
+  ops: readonly EditorOpV1[];
+  receipt: ElementIntentReceipt | null;
+}): Promise<void> => {
+  let enrolled = false;
+  try {
+    const onEnrolled = () => {
+      enrolled = true;
+    };
+    if (options.pluginIds.length === 0) {
+      await commitSemanticOps(options.ops, {
+        gestureId: options.gestureId,
+        onEnrolled,
+      });
+    } else {
+      await commitMixedGestureTransaction(
+        options.gestureId,
+        { opsVersion: 1, ops: options.ops },
+        options.pluginIds,
+        { onEnrolled },
+      );
+    }
+  } catch (error) {
+    if (!enrolled) options.receipt?.rollback();
     throw error;
   }
 };

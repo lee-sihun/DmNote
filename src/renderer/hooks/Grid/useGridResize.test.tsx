@@ -2,8 +2,6 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
-
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import type { ElementBounds } from '@utils/grid/smartGuides';
 import { useGridResize } from './useGridResize';
@@ -382,39 +380,20 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(mocks.commitMixedGesture).toHaveBeenCalledTimes(1);
     expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
       pluginGestureIds[0],
-      expect.any(Function),
+      {
+        opsVersion: 1,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id: STABLE_A,
+            bounds: { dx: 10, dy: 20, width: 80, height: 80 },
+          },
+        ],
+      },
       ['plugin-a'],
       expect.anything(),
     );
-    // generator는 슬롯 base에서 시작 동결 A의 id 의도만 재적용한다
-    const generate = (
-      mocks.commitMixedGesture.mock.calls[0] as unknown[]
-    )[1] as (base: unknown) => {
-      keyPositions?: Record<string, Array<Record<string, unknown>>>;
-    };
-    const base = {
-      schemaVersion: 1,
-      keys: { '4key': ['A'] },
-      keyPositions: {
-        '4key': [
-          { ...createDefaultKeyPosition(), id: STABLE_A, noteWidth: 111 },
-        ],
-      },
-      statPositions: {},
-      graphPositions: {},
-      knobPositions: {},
-      layerGroups: {},
-    };
-    const patch = generate(base);
-    // 시작 동결 bounds가 base에 재적용되고 base의 다른 필드는 보존된다
-    expect(patch?.keyPositions?.['4key'][0]).toMatchObject({
-      id: STABLE_A,
-      dx: 10,
-      dy: 20,
-      width: 80,
-      height: 80,
-      noteWidth: 111,
-    });
     expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
     expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();

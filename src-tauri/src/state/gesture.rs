@@ -23,15 +23,48 @@ pub(crate) fn validate_gesture_commit_request(
         validate_revision(epoch)?;
     }
 
-    let editor_envelope = EditorCommitRequest {
-        base_revision: request.editor_base_revision,
-        mutation_id: request.mutation_id.clone(),
-        multi_key: false,
-        gesture_id: Some(request.gesture_id.clone()),
-        gesture_ids: Vec::new(),
-        changes: Some(request.editor_changes.clone().unwrap_or_default()),
-        ops_version: None,
-        ops: None,
+    let editor_envelope = match (
+        request.editor_changes.as_ref(),
+        request.editor_ops_version,
+        request.editor_ops.as_ref(),
+    ) {
+        (Some(changes), None, None) => EditorCommitRequest {
+            base_revision: request.editor_base_revision,
+            mutation_id: request.mutation_id.clone(),
+            multi_key: false,
+            gesture_id: Some(request.gesture_id.clone()),
+            gesture_ids: Vec::new(),
+            changes: Some(changes.clone()),
+            ops_version: None,
+            ops: None,
+        },
+        (None, Some(version), Some(ops)) => EditorCommitRequest {
+            base_revision: request.editor_base_revision,
+            mutation_id: request.mutation_id.clone(),
+            multi_key: false,
+            gesture_id: Some(request.gesture_id.clone()),
+            gesture_ids: Vec::new(),
+            changes: None,
+            ops_version: Some(version),
+            ops: Some(ops.clone()),
+        },
+        // plugin-only도 기존과 같은 공통 mutation/gesture ID 검증을 통과
+        (None, None, None) => EditorCommitRequest {
+            base_revision: request.editor_base_revision,
+            mutation_id: request.mutation_id.clone(),
+            multi_key: false,
+            gesture_id: Some(request.gesture_id.clone()),
+            gesture_ids: Vec::new(),
+            changes: Some(Default::default()),
+            ops_version: None,
+            ops: None,
+        },
+        _ => {
+            return Err(EditorCommitError::validation(
+                "INVALID_GESTURE_EDITOR_MUTATION",
+                "gesture request must contain at most one complete editor mutation",
+            ));
+        }
     };
     validate_request_envelope(&editor_envelope)?;
     request_payload_size(&editor_envelope)?;
@@ -94,7 +127,10 @@ pub(crate) fn validate_gesture_commit_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::GesturePluginInstancesChange;
+    use crate::models::{
+        EditorBoundsV1, EditorElementTypeV1, EditorOpV1, EditorPatchV1,
+        GesturePluginInstancesChange, EDITOR_OPS_VERSION,
+    };
 
     fn gesture_request(plugin_ids: &[String]) -> GestureCommitRequest {
         GestureCommitRequest {
@@ -105,6 +141,8 @@ mod tests {
             observed_history_epoch: None,
             authority_generation: 1,
             editor_changes: None,
+            editor_ops_version: None,
+            editor_ops: None,
             plugin_changes: plugin_ids
                 .iter()
                 .map(|plugin_id| GesturePluginInstancesChange {
@@ -117,6 +155,66 @@ mod tests {
 
     fn validation_code(error: EditorCommitError) -> Option<String> {
         error.details.and_then(|details| details.validation_code)
+    }
+
+    fn set_bounds_op() -> EditorOpV1 {
+        EditorOpV1::SetBounds {
+            element_type: EditorElementTypeV1::Key,
+            id: uuid::Uuid::new_v4().to_string(),
+            bounds: EditorBoundsV1 {
+                dx: 1.0,
+                dy: 2.0,
+                width: 3.0,
+                height: 4.0,
+            },
+        }
+    }
+
+    #[test]
+    fn gesture_allows_plugin_only_patch_or_ops_but_not_both_editor_mutations() {
+        let plugin_ids = ["plugin-a".to_string()];
+        let plugin_only = gesture_request(&plugin_ids);
+        validate_gesture_commit_request(&plugin_only).unwrap();
+        let mut invalid_plugin_only = plugin_only.clone();
+        invalid_plugin_only.gesture_id = "not-a-uuid".to_string();
+        assert_eq!(
+            validate_gesture_commit_request(&invalid_plugin_only)
+                .unwrap_err()
+                .error_code,
+            crate::errors::EditorCommitErrorCode::InvalidGestureId
+        );
+
+        let mut patch = plugin_only.clone();
+        patch.editor_changes = Some(EditorPatchV1::default());
+        validate_gesture_commit_request(&patch).unwrap();
+
+        let mut ops = plugin_only.clone();
+        ops.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        ops.editor_ops = Some(vec![set_bounds_op()]);
+        validate_gesture_commit_request(&ops).unwrap();
+
+        let mut both = ops.clone();
+        both.editor_changes = Some(EditorPatchV1::default());
+        assert_eq!(
+            validation_code(validate_gesture_commit_request(&both).unwrap_err()).as_deref(),
+            Some("INVALID_GESTURE_EDITOR_MUTATION")
+        );
+
+        for invalid in [
+            GestureCommitRequest {
+                editor_ops: None,
+                ..ops.clone()
+            },
+            GestureCommitRequest {
+                editor_ops_version: None,
+                ..ops
+            },
+        ] {
+            assert_eq!(
+                validation_code(validate_gesture_commit_request(&invalid).unwrap_err()).as_deref(),
+                Some("INVALID_GESTURE_EDITOR_MUTATION")
+            );
+        }
     }
 
     #[test]

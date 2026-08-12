@@ -37,6 +37,7 @@ pub fn commit_gesture(
         .map_err(|_| EditorCommitError::history_in_progress())?;
     let mutation_id = request.mutation_id.clone();
     let gesture_id = request.gesture_id.clone();
+    let is_editor_ops = request.editor_ops.is_some();
     let requested_fields = request
         .editor_changes
         .as_ref()
@@ -58,7 +59,12 @@ pub fn commit_gesture(
     if let Some(change) = outcome.change.as_ref() {
         publish_editor_change(state.inner(), &app, change, false);
         if !outcome.replayed {
-            publish_legacy_editor_fields(state.inner(), &app, change, &requested_fields);
+            let legacy_fields = if is_editor_ops {
+                change.result.changed_fields.as_slice()
+            } else {
+                requested_fields.as_slice()
+            };
+            publish_legacy_editor_fields(state.inner(), &app, change, legacy_fields);
             if previous_mode.is_some_and(|mode| mode != change.selected_key_type) {
                 emit_best_effort(
                     &app,

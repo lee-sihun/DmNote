@@ -1128,13 +1128,30 @@ impl AppStore {
         }
 
         let current_store = guard.data.clone();
-        let (current_editor, candidate_editor, mut scratch, changed_fields) =
+        let (current_editor, candidate_editor, mut scratch, changed_fields, editor_op_results) =
             if let Some(changes) = request.editor_changes.as_ref() {
                 let touched_fields = changes.included_fields();
-                prepare_editor_patch_transition(&current_store, changes, &touched_fields)?
+                let (current, candidate, scratch, changed_fields) =
+                    prepare_editor_patch_transition(&current_store, changes, &touched_fields)?;
+                (current, candidate, scratch, changed_fields, None)
+            } else if let Some(ops) = request.editor_ops.as_ref() {
+                let transition = prepare_editor_ops_transition(&current_store, ops)?;
+                (
+                    transition.current,
+                    transition.candidate,
+                    transition.scratch,
+                    transition.changed_fields,
+                    Some(transition.op_results),
+                )
             } else {
                 let current = EditorDocumentV1::from_store(&current_store);
-                (current.clone(), current, current_store.clone(), Vec::new())
+                (
+                    current.clone(),
+                    current,
+                    current_store.clone(),
+                    Vec::new(),
+                    None,
+                )
             };
 
         let mut history_snapshots = Vec::with_capacity(request.plugin_changes.len() + 1);
@@ -1186,6 +1203,7 @@ impl AppStore {
         let result = GestureCommitResult {
             editor_revision,
             changed_fields: changed_fields.clone(),
+            editor_op_results: editor_op_results.clone(),
             plugin_model_revision,
             changed_plugin_ids: changed_plugin_ids.clone(),
             authority_generation: request.authority_generation,
@@ -1232,7 +1250,7 @@ impl AppStore {
             result: EditorCommitResult {
                 revision: editor_revision,
                 changed_fields: changed_fields.clone(),
-                op_results: None,
+                op_results: editor_op_results,
             },
             event: Some(EditorCommittedV1 {
                 schema_version: EDITOR_SCHEMA_VERSION,
@@ -4100,14 +4118,14 @@ mod tests {
         models::{
             AppStoreData, CommittedEditorChange, CustomCss, CustomFont, CustomTab, EditorBoundsV1,
             EditorCommitOrigin, EditorCommitRequest, EditorDocumentV1, EditorElementTypeV1,
-            EditorField, EditorOpResultStatusV1, EditorOpV1, EditorPatchV1, FontSettings, FontType,
-            GestureCommitRequest, GesturePluginInstancesChange, GraphPosition, GraphStatType,
-            GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot, KnobPosition, OverlayBounds,
-            PanelBounds, PendingProcessedWavReplacement, PluginInstancesCommitRequest,
-            PluginInstancesReconcileRequest, PluginPoint, SavedPluginInstance, SettingsPatchInput,
-            SlotMatch, SoundLibraryEntry, SoundSource, StatPosition, StatType, TabCss,
-            TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION,
-            EDITOR_SCHEMA_VERSION,
+            EditorField, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1,
+            FontSettings, FontType, GestureCommitRequest, GesturePluginInstancesChange,
+            GraphPosition, GraphStatType, GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot,
+            KnobPosition, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
+            PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
+            SavedPluginInstance, SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource,
+            StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
+            EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
         },
         services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
         state::{
@@ -4331,6 +4349,33 @@ mod tests {
             observed_history_epoch: Some(store.state.read().history.history_epoch()),
             authority_generation: 1,
             editor_changes: Some(editor_changes),
+            editor_ops_version: None,
+            editor_ops: None,
+            plugin_changes: vec![GesturePluginInstancesChange {
+                plugin_id: plugin_id.to_string(),
+                instances,
+            }],
+        }
+    }
+
+    fn gesture_ops_request(
+        store: &AppStore,
+        gesture_id: String,
+        mutation_id: String,
+        ops: Vec<EditorOpV1>,
+        plugin_id: &str,
+        instances: Vec<SavedPluginInstance>,
+    ) -> GestureCommitRequest {
+        GestureCommitRequest {
+            gesture_id,
+            mutation_id,
+            editor_base_revision: store.editor_get().revision,
+            plugin_base_revision: store.plugin_model_revision(),
+            observed_history_epoch: Some(store.state.read().history.history_epoch()),
+            authority_generation: 1,
+            editor_changes: None,
+            editor_ops_version: Some(EDITOR_OPS_VERSION),
+            editor_ops: Some(ops),
             plugin_changes: vec![GesturePluginInstancesChange {
                 plugin_id: plugin_id.to_string(),
                 instances,
@@ -4709,6 +4754,7 @@ mod tests {
             .unwrap();
         assert_eq!(first.outcome.result.editor_revision, 1);
         assert_eq!(first.outcome.result.plugin_model_revision, 1);
+        assert!(first.outcome.result.editor_op_results.is_none());
         drop(first);
 
         let second = store
@@ -4768,6 +4814,315 @@ mod tests {
                 expected_plugin_x
             );
         }
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_only_gesture_keeps_the_existing_editor_neutral_contract() {
+        let dir = test_directory("gesture-plugin-only-contract-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let editor_before = store.editor_get();
+        let mut request = gesture_request(
+            &store,
+            uuid::Uuid::new_v4().to_string(),
+            EditorPatchV1::default(),
+            "demo-plugin",
+            vec![saved_plugin_instance(15.0)],
+        );
+        request.editor_changes = None;
+
+        let committed = store.commit_gesture(request).unwrap();
+        assert_eq!(
+            committed.outcome.result.editor_revision,
+            editor_before.revision
+        );
+        assert!(committed.outcome.result.changed_fields.is_empty());
+        assert!(committed.outcome.result.editor_op_results.is_none());
+        assert!(committed.outcome.change.is_none());
+        assert_eq!(committed.outcome.result.plugin_model_revision, 1);
+        assert_eq!(committed.outcome.result.changed_plugin_ids, ["demo-plugin"]);
+        drop(committed);
+        assert_eq!(store.editor_get(), editor_before);
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(15.0)]
+        );
+        assert_eq!(store.history_status().history_revision, 1);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mixed_editor_op_and_plugin_gesture_replays_and_round_trips_atomically() {
+        let dir = test_directory("gesture-editor-op-plugin-atomic-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let target = store.editor_get().document.key_positions["4key"][0].clone();
+        let initial_bounds = bounds(&target);
+        let changed_bounds = EditorBoundsV1 {
+            dx: initial_bounds.dx + 40.0,
+            ..initial_bounds
+        };
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = gesture_ops_request(
+            &store,
+            uuid::Uuid::new_v4().to_string(),
+            mutation_id.clone(),
+            vec![set_bounds_op(
+                EditorElementTypeV1::Key,
+                &target.id,
+                changed_bounds,
+            )],
+            "demo-plugin",
+            vec![saved_plugin_instance(42.0)],
+        );
+        let persist_count = store.writer.persist_count();
+
+        let committed = store.commit_gesture(request.clone()).unwrap();
+        assert_eq!(committed.outcome.result.editor_revision, 1);
+        assert_eq!(committed.outcome.result.plugin_model_revision, 1);
+        assert_eq!(
+            committed.outcome.result.editor_op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: Some(changed_bounds),
+            }])
+        );
+        let change = committed.outcome.change.as_ref().unwrap();
+        assert_eq!(
+            change.result.op_results,
+            committed.outcome.result.editor_op_results
+        );
+        assert_eq!(
+            change.event.as_ref().unwrap().patch.schema_version,
+            EDITOR_SCHEMA_VERSION
+        );
+        assert!(change.event.as_ref().unwrap().patch.key_positions.is_some());
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        assert_eq!(store.history_status().history_revision, 1);
+        drop(committed);
+        assert_eq!(
+            bounds(
+                store.editor_get().document.key_positions["4key"]
+                    .iter()
+                    .find(|position| position.id == target.id)
+                    .unwrap()
+            ),
+            changed_bounds
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(42.0)]
+        );
+
+        let replay = store.commit_gesture(request.clone()).unwrap();
+        assert!(replay.outcome.replayed);
+        assert_eq!(
+            replay.outcome.result.editor_op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: Some(changed_bounds),
+            }])
+        );
+        assert!(replay.outcome.change.is_none());
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        drop(replay);
+
+        let mut reused = request;
+        reused.editor_ops = Some(vec![set_bounds_op(
+            EditorElementTypeV1::Key,
+            &target.id,
+            EditorBoundsV1 {
+                dx: changed_bounds.dx + 1.0,
+                ..changed_bounds
+            },
+        )]);
+        assert_eq!(
+            store.commit_gesture(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            bounds(
+                store.editor_get().document.key_positions["4key"]
+                    .iter()
+                    .find(|position| position.id == target.id)
+                    .unwrap()
+            ),
+            initial_bounds
+        );
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            bounds(
+                store.editor_get().document.key_positions["4key"]
+                    .iter()
+                    .find(|position| position.id == target.id)
+                    .unwrap()
+            ),
+            changed_bounds
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(42.0)]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mixed_editor_op_validation_and_persist_failures_leave_both_scopes_unchanged() {
+        let dir = test_directory("gesture-editor-op-plugin-failure-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let target = store.editor_get().document.key_positions["4key"][0].clone();
+        let changed_bounds = EditorBoundsV1 {
+            dx: target.dx + 25.0,
+            ..bounds(&target)
+        };
+        let before = store.snapshot();
+        let before_plugin_revision = store.plugin_model_revision();
+        let before_history_revision = store.history_status().history_revision;
+        let mut invalid_plugin = saved_plugin_instance(25.0);
+        invalid_plugin.position.x = f64::NAN;
+
+        let error = store
+            .commit_gesture(gesture_ops_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::new_v4().to_string(),
+                vec![set_bounds_op(
+                    EditorElementTypeV1::Stat,
+                    &target.id,
+                    changed_bounds,
+                )],
+                "demo-plugin",
+                vec![saved_plugin_instance(25.0)],
+            ))
+            .unwrap_err();
+        assert_eq!(error.error_code, EditorCommitErrorCode::ValidationFailed);
+        assert_eq!(
+            error
+                .details
+                .and_then(|details| details.validation_code)
+                .as_deref(),
+            Some("ELEMENT_TYPE_MISMATCH")
+        );
+        assert_eq!(store.snapshot(), before);
+
+        let error = store
+            .commit_gesture(gesture_ops_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::new_v4().to_string(),
+                vec![set_bounds_op(
+                    EditorElementTypeV1::Key,
+                    &target.id,
+                    changed_bounds,
+                )],
+                "demo-plugin",
+                vec![invalid_plugin],
+            ))
+            .unwrap_err();
+        assert_eq!(error.error_code, EditorCommitErrorCode::ValidationFailed);
+        assert_eq!(store.snapshot(), before);
+
+        store.writer.fail_next_persist();
+        let error = store
+            .commit_gesture(gesture_ops_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::new_v4().to_string(),
+                vec![set_bounds_op(
+                    EditorElementTypeV1::Key,
+                    &target.id,
+                    changed_bounds,
+                )],
+                "demo-plugin",
+                vec![saved_plugin_instance(25.0)],
+            ))
+            .unwrap_err();
+        assert_eq!(error.error_code, EditorCommitErrorCode::IoError);
+        assert_eq!(store.snapshot(), before);
+        assert_eq!(store.plugin_model_revision(), before_plugin_revision);
+        assert_eq!(
+            store.history_status().history_revision,
+            before_history_revision
+        );
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn missing_editor_op_does_not_block_the_plugin_half_of_a_gesture() {
+        let dir = test_directory("gesture-missing-editor-op-plugin-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before_editor_revision = store.editor_get().revision;
+
+        let committed = store
+            .commit_gesture(gesture_ops_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::new_v4().to_string(),
+                vec![set_bounds_op(
+                    EditorElementTypeV1::Key,
+                    uuid::Uuid::new_v4().to_string(),
+                    EditorBoundsV1 {
+                        dx: 1.0,
+                        dy: 2.0,
+                        width: 3.0,
+                        height: 4.0,
+                    },
+                )],
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+            ))
+            .unwrap();
+
+        assert_eq!(
+            committed.outcome.result.editor_revision,
+            before_editor_revision
+        );
+        assert_eq!(
+            committed.outcome.result.editor_op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::TargetMissing,
+                bounds: None,
+            }])
+        );
+        assert!(committed.outcome.result.changed_fields.is_empty());
+        assert!(committed.outcome.change.is_none());
+        assert_eq!(committed.outcome.result.changed_plugin_ids, ["demo-plugin"]);
+        drop(committed);
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(10.0)]
+        );
+        assert_eq!(store.history_status().history_revision, 1);
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
@@ -6600,6 +6955,167 @@ mod tests {
         assert!(no_change.event.is_none());
         assert_eq!(no_change.result.revision, 1);
         assert_eq!(store.history_status().history_revision, 1);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_group_bounds_partially_missing_targets_share_one_gesture_history_entry() {
+        let dir = test_directory("editor-group-bounds-partial-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get().document;
+        let first = initial.key_positions["4key"][0].clone();
+        let second = initial.key_positions["4key"][1].clone();
+        let first_before = bounds(&first);
+        let second_before = bounds(&second);
+        let first_after = EditorBoundsV1 {
+            dx: first.dx + 11.0,
+            dy: first.dy + 12.0,
+            width: first.width + 13.0,
+            height: first.height + 14.0,
+        };
+        let second_after = EditorBoundsV1 {
+            dx: second.dx + 21.0,
+            dy: second.dy + 22.0,
+            width: second.width + 23.0,
+            height: second.height + 24.0,
+        };
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+        let mut request = editor_ops_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            vec![
+                set_bounds_op(EditorElementTypeV1::Key, &first.id, first_after),
+                set_bounds_op(
+                    EditorElementTypeV1::Key,
+                    missing_id,
+                    EditorBoundsV1 {
+                        dx: 1.0,
+                        dy: 2.0,
+                        width: 3.0,
+                        height: 4.0,
+                    },
+                ),
+                set_bounds_op(EditorElementTypeV1::Key, &second.id, second_after),
+            ],
+        );
+        request.gesture_id = Some(gesture_id.clone());
+
+        let change = store.commit_editor_document(request).unwrap();
+
+        assert_eq!(change.result.revision, 1);
+        assert_eq!(change.result.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            change
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+                EditorOpResultStatusV1::Applied,
+            ]
+        );
+        assert_eq!(change.event.as_ref().unwrap().gesture_id, Some(gesture_id));
+        assert_eq!(change.history_status.as_ref().unwrap().history_revision, 1);
+        assert_eq!(store.history_status().history_revision, 1);
+        assert_eq!(
+            bounds(&change.document.key_positions["4key"][0]),
+            first_after
+        );
+        assert_eq!(
+            bounds(&change.document.key_positions["4key"][1]),
+            second_after
+        );
+
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&undo_id).unwrap();
+        let current_counters = store.snapshot().key_counters;
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &current_counters, || {})
+            .unwrap();
+        drop(barrier);
+
+        assert!(!undo.status.can_undo);
+        let restored = store.editor_get().document;
+        assert_eq!(bounds(&restored.key_positions["4key"][0]), first_before);
+        assert_eq!(bounds(&restored.key_positions["4key"][1]), second_before);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_group_bounds_reject_every_invalid_batch_atomically() {
+        let dir = test_directory("editor-group-bounds-atomic-validation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get();
+        let first = initial.document.key_positions["4key"][0].clone();
+        let second = initial.document.key_positions["4key"][1].clone();
+        let valid_first = set_bounds_op(
+            EditorElementTypeV1::Key,
+            &first.id,
+            EditorBoundsV1 {
+                dx: first.dx + 1.0,
+                ..bounds(&first)
+            },
+        );
+
+        let cases = [
+            (
+                vec![
+                    valid_first.clone(),
+                    set_bounds_op(
+                        EditorElementTypeV1::Key,
+                        &second.id,
+                        EditorBoundsV1 {
+                            width: 0.0,
+                            ..bounds(&second)
+                        },
+                    ),
+                ],
+                "DIMENSION_OUT_OF_RANGE",
+            ),
+            (
+                vec![
+                    valid_first.clone(),
+                    set_bounds_op(EditorElementTypeV1::Stat, &second.id, bounds(&second)),
+                ],
+                "ELEMENT_TYPE_MISMATCH",
+            ),
+            (
+                vec![
+                    valid_first.clone(),
+                    set_bounds_op(EditorElementTypeV1::Graph, &first.id, bounds(&first)),
+                ],
+                "DUPLICATE_EDITOR_OP_TARGET",
+            ),
+        ];
+
+        for (ops, expected_code) in cases {
+            let error = store
+                .commit_editor_document(editor_ops_request(
+                    0,
+                    uuid::Uuid::new_v4().to_string(),
+                    ops,
+                ))
+                .unwrap_err();
+            assert_eq!(
+                error.details.unwrap().validation_code.as_deref(),
+                Some(expected_code)
+            );
+            assert_eq!(store.editor_get(), initial);
+            assert_eq!(store.history_status().history_revision, 0);
+        }
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

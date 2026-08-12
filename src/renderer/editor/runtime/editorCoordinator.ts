@@ -9,6 +9,7 @@ import {
   assertEditorCommittedEvent,
   assertEditorDocument,
   assertEditorGetResult,
+  assertEditorOpCommitResult,
   assertEditorPatch,
   canonicalizeEditorGradients,
   isEditorCommitError,
@@ -79,6 +80,22 @@ export type EditorReadyUnsubscribe = (() => void) & { ready: Promise<void> };
 export type EditorPatchGenerator = (
   base: EditorDocumentV1,
 ) => EditorPatchV1 | null;
+
+export interface EditorGestureOpsMutation {
+  opsVersion: 1;
+  ops: readonly EditorOpV1[];
+}
+
+export type EditorGestureMutation =
+  | EditorPatchV1
+  | EditorPatchGenerator
+  | EditorGestureOpsMutation
+  | undefined;
+
+const isGestureOpsMutation = (
+  mutation: EditorGestureMutation,
+): mutation is EditorGestureOpsMutation =>
+  typeof mutation === 'object' && mutation !== null && 'opsVersion' in mutation;
 
 export interface EditorCoordinatorTransport {
   get(): Promise<EditorGetResult>;
@@ -627,23 +644,8 @@ export class EditorSaveCoordinator {
           }
         }
 
-        assertEditorCommitResult(result, ops.length);
+        assertEditorOpCommitResult(result, ops);
         const opResults = clone(result.opResults!);
-        const appliedFields = new Set(
-          ops.flatMap((op, index) =>
-            opResults[index].status === 'applied'
-              ? [SEMANTIC_POSITION_FIELDS[op.elementType]]
-              : [],
-          ),
-        );
-        if (
-          result.changedFields.length !== appliedFields.size ||
-          result.changedFields.some((field) => !appliedFields.has(field))
-        ) {
-          throw new EditorProtocolError(
-            'editor_commit ops changedFields does not match opResults',
-          );
-        }
         const hasMissing = opResults.some(
           (opResult) => opResult.status === 'targetMissing',
         );
@@ -652,7 +654,7 @@ export class EditorSaveCoordinator {
           await this.syncSemanticCanonical();
         } else if (result.revision >= currentRevision) {
           const acknowledged = applySemanticBounds(
-            baseDocument,
+            this.requireLastAck(),
             ops,
             opResults,
           );
@@ -916,7 +918,7 @@ export class EditorSaveCoordinator {
   }
 
   commitGesture(
-    changes: EditorPatchV1 | EditorPatchGenerator | undefined,
+    changes: EditorGestureMutation,
     gestureId: string,
     commit: (
       context: EditorGestureCommitContext,
@@ -1236,7 +1238,7 @@ export class EditorSaveCoordinator {
   }
 
   private async commitGestureInner(
-    changes: EditorPatchV1 | EditorPatchGenerator | undefined,
+    changes: EditorGestureMutation,
     gestureId: string,
     commit: (
       context: EditorGestureCommitContext,
@@ -1268,29 +1270,42 @@ export class EditorSaveCoordinator {
     // full-record는 대기 중 정산된 다른 커밋의 컬렉션 값을 되돌린다.
     // null 반환은 editorChanges 없음일 뿐 transaction callback은 실행된다
     // (plugin 변경만 커밋하는 혼합 게스처)
-    const resolvedChanges =
-      typeof changes === 'function' ? changes(clone(baseDocument)) : changes;
+    let ops: EditorOpV1[] | undefined;
+    let patchMutation: EditorPatchV1 | EditorPatchGenerator | undefined;
+    if (isGestureOpsMutation(changes)) {
+      ops = clone([...changes.ops]);
+    } else {
+      patchMutation = changes;
+    }
+    const resolvedChanges = ops
+      ? undefined
+      : typeof patchMutation === 'function'
+      ? patchMutation(clone(baseDocument))
+      : patchMutation;
     const canonicalChanges = resolvedChanges
       ? canonicalizeEditorGradients(resolvedChanges)
       : undefined;
     if (canonicalChanges) assertEditorPatch(canonicalChanges);
-    const target = canonicalChanges
+    const target = ops
+      ? applySemanticBounds(baseDocument, ops)
+      : canonicalChanges
       ? applyEditorPatch(baseDocument, canonicalChanges)
       : baseDocument;
-    const requestFields = canonicalChanges
+    const requestFields = ops
+      ? [...new Set(ops.map((op) => SEMANTIC_POSITION_FIELDS[op.elementType]))]
+      : canonicalChanges
       ? EDITOR_FIELDS.filter((field) => canonicalChanges[field] !== undefined)
       : [];
     const localFields = getChangedEditorFields(baseDocument, target);
     // 슬롯 내 로컬 낙관 재적용 - 선행 커밋(격리 plugin 쓰기 등)이 호출
     // 시점의 eager 값을 canonical 적용으로 지웠을 수 있다. wire만 고치면
     // 백엔드는 맞고 UI 스토어는 옛 값에 남는다
-    if (canonicalChanges) {
+    if (ops || canonicalChanges) {
       const currentDocument = this.readDocument();
       assertEditorDocument(currentDocument);
-      const optimisticDocument = applyEditorPatch(
-        currentDocument,
-        canonicalChanges,
-      );
+      const optimisticDocument = ops
+        ? applySemanticBounds(currentDocument, ops)
+        : applyEditorPatch(currentDocument, canonicalChanges!);
       if (
         getChangedEditorFields(currentDocument, optimisticDocument).length > 0
       ) {
@@ -1306,6 +1321,7 @@ export class EditorSaveCoordinator {
       localFields,
       requestFields,
       gestureIds: [gestureId],
+      semanticOps: ops !== undefined,
     };
     this.inFlight = inFlight;
     this.rememberOwnMutation(inFlight);
@@ -1324,7 +1340,9 @@ export class EditorSaveCoordinator {
         editorBaseRevision: inFlight.baseRevision,
         mutationId,
         // 게스처 커밋도 자사 전용 경로라 v2
-        ...(requestFields.length > 0
+        ...(ops
+          ? { editorOpsVersion: 1 as const, editorOps: ops }
+          : requestFields.length > 0
           ? {
               editorChanges: patchForFields(
                 target,
@@ -1334,8 +1352,14 @@ export class EditorSaveCoordinator {
             }
           : {}),
       });
-      assertEditorCommitResult(result);
-      await this.applyCommitResult(inFlight, result);
+      if (ops) {
+        assertEditorOpCommitResult(result, ops);
+        await this.applySemanticGestureCommitResult(ops, result);
+        this.logSemanticCommit(result, result.opResults!, 0);
+      } else {
+        assertEditorCommitResult(result);
+        await this.applyCommitResult(inFlight, result);
+      }
       this.error = null;
       this.failureKind = null;
       this.phase = 'idle';
@@ -1441,6 +1465,27 @@ export class EditorSaveCoordinator {
       ) {
         this.lastAck = clone(inFlight.target);
       }
+    }
+    this.error = null;
+    this.failureKind = null;
+  }
+
+  private async applySemanticGestureCommitResult(
+    ops: readonly EditorOpV1[],
+    result: EditorCommitResult,
+  ): Promise<void> {
+    const opResults = result.opResults!;
+    const currentRevision = this.requireRevision();
+    if (
+      opResults.some(({ status }) => status === 'targetMissing') ||
+      result.revision > currentRevision + 1
+    ) {
+      await this.syncSemanticCanonical();
+      return;
+    }
+    if (result.revision >= currentRevision) {
+      this.revision = result.revision;
+      this.lastAck = applySemanticBounds(this.requireLastAck(), ops, opResults);
     }
     this.error = null;
     this.failureKind = null;

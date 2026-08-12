@@ -16,8 +16,15 @@ import {
   type IndexIntents,
   type PropertyIntents,
 } from '@src/renderer/editor/runtime/elementIntent';
-import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
-import { runMixedElementIntent } from '@src/renderer/editor/runtime/mixedElementIntent';
+import type {
+  EditorDocumentV1,
+  EditorOpV1,
+  EditorPatchV1,
+} from '@src/types/editor';
+import {
+  runMixedElementBoundsIntent,
+  runMixedElementIntent,
+} from '@src/renderer/editor/runtime/mixedElementIntent';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { applyEditorPatch } from '@src/renderer/editor/runtime/editorCoordinator';
@@ -1283,13 +1290,38 @@ export function useGridResize({
         );
       if (groupPluginInvolved && settlementGestureId) {
         const frozenPluginIds = [...pluginResizeTokensRef.current.keys()];
-        void runMixedElementIntent({
-          gestureId: settlementGestureId,
-          pluginIds: frozenPluginIds,
-          applyEager: () => settlement.receipt,
-          generate,
-          skipContext: 'mixed group resize settlement',
-        }).catch(reportElementOpError);
+        if (settlement.syntheticIntents.size === 0) {
+          const ops: EditorOpV1[] = [];
+          for (const [elementType, byId] of settlement.stableIntents) {
+            for (const [id, bounds] of byId) {
+              ops.push({
+                kind: 'setBounds',
+                elementType,
+                id,
+                bounds: {
+                  dx: bounds.dx as number,
+                  dy: bounds.dy as number,
+                  width: bounds.width as number,
+                  height: bounds.height as number,
+                },
+              });
+            }
+          }
+          void runMixedElementBoundsIntent({
+            gestureId: settlementGestureId,
+            pluginIds: frozenPluginIds,
+            ops,
+            receipt: settlement.receipt,
+          }).catch(reportElementOpError);
+        } else {
+          void runMixedElementIntent({
+            gestureId: settlementGestureId,
+            pluginIds: frozenPluginIds,
+            applyEager: () => settlement.receipt,
+            generate,
+            skipContext: 'mixed group resize settlement',
+          }).catch(reportElementOpError);
+        }
       } else {
         void runElementIntent({
           applyEager: () => settlement.receipt,

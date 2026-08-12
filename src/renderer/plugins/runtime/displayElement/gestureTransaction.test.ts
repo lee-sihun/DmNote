@@ -289,6 +289,74 @@ describe('mixed gesture transaction lifecycle', () => {
     expect(mocks.stagedOwners.get('plugin-a')).toBe(nextGestureId);
   });
 
+  it('안정 bounds 혼합 transaction은 editor ops와 ordered 결과를 보존한다', async () => {
+    let coordinatorResult: unknown;
+    mocks.commitGesture.mockImplementationOnce(
+      async (_changes, _gestureId, commit) => {
+        coordinatorResult = await commit({
+          editorBaseRevision: 2,
+          mutationId: 'mutation-ops',
+          editorOpsVersion: 1,
+          editorOps: [
+            {
+              kind: 'setBounds',
+              elementType: 'key',
+              id: 'id-a',
+              bounds: { dx: 1, dy: 2, width: 3, height: 4 },
+            },
+          ],
+        });
+      },
+    );
+    mocks.commitApi.mockResolvedValueOnce({
+      editorRevision: 3,
+      changedFields: ['keyPositions'],
+      editorOpResults: [
+        {
+          status: 'applied',
+          bounds: { dx: 1, dy: 2, width: 3, height: 4 },
+        },
+      ],
+      pluginModelRevision: 6,
+      changedPluginIds: ['plugin-a'],
+      authorityGeneration: 3,
+    });
+
+    await commitMixedGestureTransaction(
+      gestureId,
+      {
+        opsVersion: 1,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id: 'id-a',
+            bounds: { dx: 1, dy: 2, width: 3, height: 4 },
+          },
+        ],
+      },
+      ['plugin-a'],
+    );
+
+    expect(mocks.commitApi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        editorOpsVersion: 1,
+        editorOps: [expect.objectContaining({ id: 'id-a' })],
+        pluginChanges: [expect.objectContaining({ pluginId: 'plugin-a' })],
+      }),
+    );
+    expect(coordinatorResult).toEqual({
+      revision: 3,
+      changedFields: ['keyPositions'],
+      opResults: [
+        {
+          status: 'applied',
+          bounds: { dx: 1, dy: 2, width: 3, height: 4 },
+        },
+      ],
+    });
+  });
+
   it('reapplies every plugin canonical snapshot when the transaction fails', async () => {
     const error = new Error('plugin validation failed');
     mocks.commitGesture.mockRejectedValueOnce(error);
