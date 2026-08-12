@@ -3,6 +3,13 @@
  * 아이템/그룹 드래그, 드롭 타깃 계산, 순서 재배치
  */
 
+import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import {
+  applyPropertyIntentsEagerly,
+  intentPatch,
+  reportElementOpError,
+  runElementIntent,
+} from '@src/renderer/editor/runtime/elementIntent';
 import { setPluginElementZIndexes } from '@plugins/rpc/pluginElementActions';
 import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -20,10 +27,146 @@ import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
 // 파라미터 타입
 // ============================================================================
 
+// 모드 한정 의도 재적용 - 레이어 순서는 mode-local이라 다른 모드로 이동한
+// 요소에 zIndex·groupId를 쓰면 안 된다
+export const generateModeScopedIntentPatch = (
+  base: import('@src/types/editor').EditorDocumentV1,
+  intents: ReadonlyMap<
+    'key' | 'stat' | 'graph' | 'knob',
+    ReadonlyMap<string, Record<string, unknown>>
+  >,
+  mode: string,
+): import('@src/types/editor').EditorPatchV1 | null => {
+  const FIELD_BY_TYPE = {
+    key: 'keyPositions',
+    stat: 'statPositions',
+    graph: 'graphPositions',
+    knob: 'knobPositions',
+  } as const;
+  const patch: import('@src/types/editor').EditorPatchV1 = {
+    schemaVersion: 1,
+  };
+  let touchedAny = false;
+  for (const [type, byId] of intents) {
+    const field = FIELD_BY_TYPE[type];
+    const record = base[field] as Record<
+      string,
+      Array<{ id?: string } & Record<string, unknown>>
+    >;
+    let touched = 0;
+    const modeList = record[mode] ?? [];
+    const nextList = modeList.map((position) => {
+      const id = position.id;
+      if (typeof id !== 'string') return position;
+      const intent = byId.get(id);
+      if (!intent) return position;
+      touched += 1;
+      return { ...position, ...intent, id };
+    });
+    if (touched > 0) {
+      patch[field] = { ...record, [mode]: nextList } as never;
+      touchedAny = true;
+    }
+  }
+  return touchedAny ? patch : null;
+};
+
+export interface DropAnchors {
+  toDisplayIndex: number;
+  targetGroupId: string | undefined;
+  anchorBeforeId?: string | null;
+  anchorAfterId?: string | null;
+  anchorHeaderGroupId?: string | null;
+  // 스캔이 layer 대신 그룹 헤더 경계에서 끝난 경우의 헤더 앵커
+  anchorBeforeHeaderGroupId?: string | null;
+  anchorAfterHeaderGroupId?: string | null;
+}
+
+export const resolveDropIndexFromAnchors = (
+  target: DropAnchors,
+  draggedSet: ReadonlySet<string>,
+  display: DisplayItem[],
+): number | null => {
+  if (
+    target.targetGroupId &&
+    !display.some(
+      (di) =>
+        di.displayType === 'group-header' &&
+        di.groupId === target.targetGroupId,
+    )
+  ) {
+    return null;
+  }
+  if (target.anchorHeaderGroupId) {
+    const headerIdx = display.findIndex(
+      (di) =>
+        di.displayType === 'group-header' &&
+        di.groupId === target.anchorHeaderGroupId,
+    );
+    return headerIdx !== -1 ? headerIdx + 1 : null;
+  }
+  // 이동 집합에 편입된 앵커는 소실 취급 - 함께 움직이는 요소는 고정
+  // 기준점이 될 수 없다 (캡처 후 선택 확장으로 편입된 경우 포함)
+  const findLayerIndex = (id: string | null | undefined): number =>
+    id == null || draggedSet.has(id)
+      ? -1
+      : display.findIndex(
+          (di) => di.displayType === 'layer' && di.item.id === id,
+        );
+  const findHeaderIndex = (groupId: string | null | undefined): number =>
+    groupId == null
+      ? -1
+      : display.findIndex(
+          (di) => di.displayType === 'group-header' && di.groupId === groupId,
+        );
+  // 각 측 앵커: layer 우선, 없으면 헤더 경계
+  const beforeCaptured =
+    target.anchorBeforeId != null || target.anchorBeforeHeaderGroupId != null;
+  const afterCaptured =
+    target.anchorAfterId != null || target.anchorAfterHeaderGroupId != null;
+  const beforeIdx =
+    target.anchorBeforeId != null
+      ? findLayerIndex(target.anchorBeforeId)
+      : findHeaderIndex(target.anchorBeforeHeaderGroupId);
+  const afterIdx =
+    target.anchorAfterId != null
+      ? findLayerIndex(target.anchorAfterId)
+      : findHeaderIndex(target.anchorAfterHeaderGroupId);
+  if (beforeCaptured && afterCaptured) {
+    if (beforeIdx !== -1 && afterIdx !== -1) {
+      // 순서 역전 = 병행 재정렬이 두 앵커 관계를 갈랐다 - 무커밋
+      if (beforeIdx >= afterIdx) return null;
+      for (let i = beforeIdx + 1; i < afterIdx; i++) {
+        const di = display[i];
+        if (di.displayType === 'group-header') return null;
+        if (di.displayType === 'layer' && !draggedSet.has(di.item.id)) {
+          return null;
+        }
+      }
+      return beforeIdx + 1;
+    }
+    if (beforeIdx !== -1) return beforeIdx + 1;
+    if (afterIdx !== -1) return afterIdx;
+    return null;
+  }
+  if (beforeCaptured) {
+    return beforeIdx !== -1 ? beforeIdx + 1 : null;
+  }
+  if (afterCaptured) {
+    return afterIdx !== -1 ? afterIdx : null;
+  }
+  // 앵커가 원래 없던 경계(빈 목록 최상단 등)는 캡처 index 유지
+  return target.toDisplayIndex;
+};
+
 interface UseLayerDnDParams {
   selectedKeyType: string;
   layerItemsRef: React.MutableRefObject<LayerItem[]>;
   displayItemsRef: React.MutableRefObject<DisplayItem[]>;
+  buildLiveLayerModel: () => {
+    layerItems: LayerItem[];
+    displayItems: DisplayItem[];
+  };
   scrollElementRef: React.MutableRefObject<HTMLDivElement | null>;
   clearPendingDeselect: () => void;
 }
@@ -36,6 +179,7 @@ export function useLayerDnD({
   selectedKeyType,
   layerItemsRef,
   displayItemsRef,
+  buildLiveLayerModel,
   scrollElementRef,
   clearPendingDeselect,
 }: UseLayerDnDParams) {
@@ -58,16 +202,16 @@ export function useLayerDnD({
   const didDragRef = useRef(false);
   const dragStateRef = useRef<{
     itemHeight: number;
-    currentDropTarget: {
-      toDisplayIndex: number;
-      targetGroupId: string | undefined;
-    } | null;
+    currentDropTarget: DropAnchors | null;
   } | null>(null);
   const draggedItemIdsRef = useRef<string[]>([]);
   const groupDragStateRef = useRef<{
     groupId: string;
     itemHeight: number;
     currentOverIndex: number | null;
+    anchors: DropAnchors | null;
+    // 앵커 후보에서 제외한 id들 - mouseup의 이동 집합과 대조해 축소 감지
+    excludedIds: string[];
   } | null>(null);
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -77,9 +221,11 @@ export function useLayerDnD({
   const resolveItemDropTarget = (
     displaySlotIndex: number,
     draggingItemIds: ReadonlySet<string>,
+    model?: { layerItems: LayerItem[]; displayItems: DisplayItem[] },
   ) => {
-    const items = layerItemsRef.current;
-    const currentDisplay = displayItemsRef.current;
+    // 커밋 판정은 mouseup의 live 모델을 받는다 - ref는 드래그 중 프리뷰 전용
+    const items = model?.layerItems ?? layerItemsRef.current;
+    const currentDisplay = model?.displayItems ?? displayItemsRef.current;
     const safeSlotIndex = Math.max(
       0,
       Math.min(currentDisplay.length, displaySlotIndex),
@@ -243,16 +389,33 @@ export function useLayerDnD({
   // 다중 아이템 드롭 처리
   // ──────────────────────────────────────────────────────────────────────────
 
+  // 앵커 소실 정책: 양생존·인접이면 사이, 하나 생존이면 그 기준, 양소실
+  // 또는 비인접이면 무커밋. 그룹 헤더 앵커는 그룹이 살아 있을 때만.
+  // 대상 그룹이 삭제됐으면 무커밋
   const performMultiDrop = async (
     draggedIds: string[],
     toDisplayIndex: number,
     dropContext?: {
       targetGroupId: string | undefined;
       preserveFullGroups?: boolean;
+      liveModel?: { layerItems: LayerItem[]; displayItems: DisplayItem[] };
     },
   ) => {
-    const items = [...layerItemsRef.current];
-    const currentDisplay = displayItemsRef.current;
+    // 순서 계산 입력도 authoritative 재구성 목록 - effect 지연 ref 금지
+    const liveModel = dropContext?.liveModel ?? buildLiveLayerModel();
+    const items = [...liveModel.layerItems];
+    const currentDisplay = liveModel.displayItems;
+    // 대상 그룹이 mouseup까지 살아있는지 최종 검증 - 삭제됐으면 ghost
+    // groupId 커밋 대신 무커밋 (anchors 해석을 안 거치는 호출 경로 방어)
+    if (dropContext?.targetGroupId) {
+      const targetAlive =
+        currentDisplay.some(
+          (di) =>
+            di.displayType === 'group-header' &&
+            di.groupId === dropContext.targetGroupId,
+        ) || items.some((item) => item.groupId === dropContext.targetGroupId);
+      if (!targetAlive) return;
+    }
     const draggedIdSet = new Set(draggedIds);
 
     const draggedItems = items.filter((item) => draggedIdSet.has(item.id));
@@ -405,85 +568,113 @@ export function useLayerDnD({
     );
     if (!orderChanged && !groupChanged) return;
 
-    // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-    const currentPositions = useKeyStore.getState().canonicalPositions;
-    const currentStatPositions = useStatItemStore.getState().positions;
-    const currentGraphPositions = useGraphItemStore.getState().positions;
-    const currentKnobPositions = useKnobItemStore.getState().positions;
-    const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-
-    // z-index 재계산 및 적용
+    // 새 표시 순서를 id 의도로 변환 - effect 지연 ref의 item.index로 현재
+    // 배열을 인덱싱하면 canonical 적용과 effect 사이 창에서 다른 요소를
+    // 수정한다. 적용은 전부 position.id 매칭
     const maxZIndex = newItems.length - 1;
-
-    const updatedPositions = { ...currentPositions };
-    const currentModePositions = [...(updatedPositions[selectedKeyType] || [])];
-    const updatedStatPositions = { ...currentStatPositions };
-    const currentStatModePositions = [
-      ...(updatedStatPositions[selectedKeyType] || []),
-    ];
-    const updatedGraphPositions = { ...currentGraphPositions };
-    const currentGraphModePositions = [
-      ...(updatedGraphPositions[selectedKeyType] || []),
-    ];
-    const updatedKnobPositions = { ...currentKnobPositions };
-    const currentKnobModePositions = [
-      ...(updatedKnobPositions[selectedKeyType] || []),
-    ];
-
     const pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }> = [];
+    const nativeIntents = new Map<
+      'key' | 'stat' | 'graph' | 'knob',
+      Map<string, Record<string, unknown>>
+    >();
     newItems.forEach((item, idx) => {
       const newZIndex = maxZIndex - idx;
-      const isDraggedItem = draggedIdSet.has(item.id);
-
-      if (item.type === 'key' && item.index !== undefined) {
-        if (currentModePositions[item.index]) {
-          currentModePositions[item.index] = {
-            ...currentModePositions[item.index],
-            zIndex: newZIndex,
-            ...(isDraggedItem && !preserveGroupIds.has(item.id)
-              ? { groupId: newGroupId }
-              : {}),
-          };
-        }
-      } else if (item.type === 'stat' && item.index !== undefined) {
-        if (currentStatModePositions[item.index]) {
-          currentStatModePositions[item.index] = {
-            ...currentStatModePositions[item.index],
-            zIndex: newZIndex,
-            ...(isDraggedItem && !preserveGroupIds.has(item.id)
-              ? { groupId: newGroupId }
-              : {}),
-          };
-        }
-      } else if (item.type === 'graph' && item.index !== undefined) {
-        if (currentGraphModePositions[item.index]) {
-          currentGraphModePositions[item.index] = {
-            ...currentGraphModePositions[item.index],
-            zIndex: newZIndex,
-            ...(isDraggedItem && !preserveGroupIds.has(item.id)
-              ? { groupId: newGroupId }
-              : {}),
-          };
-        }
-      } else if (item.type === 'knob' && item.index !== undefined) {
-        if (currentKnobModePositions[item.index]) {
-          currentKnobModePositions[item.index] = {
-            ...currentKnobModePositions[item.index],
-            zIndex: newZIndex,
-            ...(isDraggedItem && !preserveGroupIds.has(item.id)
-              ? { groupId: newGroupId }
-              : {}),
-          };
-        }
-      } else if (item.type === 'plugin') {
+      if (item.type === 'plugin') {
         pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
+        return;
       }
+      const intent: Record<string, unknown> = { zIndex: newZIndex };
+      if (draggedIdSet.has(item.id) && !preserveGroupIds.has(item.id)) {
+        intent.groupId = newGroupId;
+      }
+      const byId = nativeIntents.get(item.type) ?? new Map();
+      byId.set(item.id, intent);
+      nativeIntents.set(item.type, byId);
     });
 
-    updatedPositions[selectedKeyType] = currentModePositions;
-    updatedStatPositions[selectedKeyType] = currentStatModePositions;
-    updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
-    updatedKnobPositions[selectedKeyType] = currentKnobModePositions;
+    const modeNativeOnly = items.every(
+      (item) =>
+        item.type !== 'plugin' &&
+        item.id.length > 0 &&
+        !isSyntheticElementId(item.id),
+    );
+
+    if (modeNativeOnly) {
+      // native 전용: eager·receipt는 속성 의도가 소유하고, layerGroups
+      // 정규화는 슬롯의 base+의도에서 재계산해 생성 patch에만 싣는다
+      // (편입 시 낙관 적용이 그룹 정의를 반영)
+      void runElementIntent({
+        applyEager: () => applyPropertyIntentsEagerly(nativeIntents),
+        generate: (base) => {
+          // 모드 한정 재적용 - 대기 중 다른 모드로 이동한 요소는 skip
+          const propertyPatch = generateModeScopedIntentPatch(
+            base,
+            nativeIntents,
+            selectedKeyType,
+          );
+          if (!propertyPatch) return { kind: 'targetLost' };
+          const renormalized = normalizeLayerGroupsForMode({
+            mode: selectedKeyType,
+            keyPositions: (propertyPatch.keyPositions ??
+              base.keyPositions) as never,
+            statPositions: (propertyPatch.statPositions ??
+              base.statPositions) as never,
+            graphPositions: (propertyPatch.graphPositions ??
+              base.graphPositions) as never,
+            knobPositions: (propertyPatch.knobPositions ??
+              base.knobPositions) as never,
+            layerGroups: base.layerGroups as never,
+          });
+          return intentPatch({
+            schemaVersion: 1,
+            keyPositions: renormalized.keyPositions as never,
+            statPositions: renormalized.statPositions as never,
+            graphPositions: renormalized.graphPositions as never,
+            knobPositions: renormalized.knobPositions as never,
+            ...(renormalized.groupsChanged
+              ? { layerGroups: renormalized.layerGroups as never }
+              : {}),
+          });
+        },
+      }).catch(reportElementOpError);
+      return;
+    }
+
+    // plugin 포함 모드: 기존 full-record 경로 유지 (id 매칭 적용으로 개선)
+    const applyIntentsToMode = <T extends { id?: string }>(
+      record: Record<string, T[]>,
+      type: 'key' | 'stat' | 'graph' | 'knob',
+    ): Record<string, T[]> => {
+      const byId = nativeIntents.get(type);
+      if (!byId || byId.size === 0) return record;
+      return {
+        ...record,
+        [selectedKeyType]: (record[selectedKeyType] ?? []).map((position) => {
+          const id = position.id;
+          if (typeof id !== 'string') return position;
+          const intent = byId.get(id);
+          return intent ? { ...position, ...intent, id } : position;
+        }),
+      };
+    };
+
+    const updatedPositions = applyIntentsToMode(
+      useKeyStore.getState().canonicalPositions,
+      'key',
+    );
+    const updatedStatPositions = applyIntentsToMode(
+      useStatItemStore.getState().positions,
+      'stat',
+    );
+    const updatedGraphPositions = applyIntentsToMode(
+      useGraphItemStore.getState().positions,
+      'graph',
+    );
+    const updatedKnobPositions = applyIntentsToMode(
+      useKnobItemStore.getState().positions,
+      'knob',
+    );
+    const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
 
     const normalized = normalizeLayerGroupsForMode({
       mode: selectedKeyType,
@@ -507,6 +698,7 @@ export function useLayerDnD({
       await editorCoordinator.commitPatch({
         schemaVersion: 1,
         keyPositions: normalized.keyPositions,
+
         statPositions: normalized.statPositions,
         graphPositions: normalized.graphPositions,
         knobPositions: normalized.knobPositions,
@@ -524,9 +716,11 @@ export function useLayerDnD({
   const performGroupDrop = async (
     groupId: string,
     targetDisplayIndex: number,
+    liveModelInput?: { layerItems: LayerItem[]; displayItems: DisplayItem[] },
   ) => {
-    const items = [...layerItemsRef.current];
-    const currentDisplay = displayItemsRef.current;
+    const liveModel = liveModelInput ?? buildLiveLayerModel();
+    const items = [...liveModel.layerItems];
+    const currentDisplay = liveModel.displayItems;
 
     const groupChildren = items.filter((item) => item.groupId === groupId);
     const remainingItems = items.filter((item) => item.groupId !== groupId);
@@ -579,73 +773,78 @@ export function useLayerDnD({
     );
     if (!orderChanged) return;
 
-    // z-index 재계산
+    // 새 표시 순서를 id 의도로 변환 (그룹 이동은 zIndex만) - index 인덱싱 금지
     const maxZIndex = newItems.length - 1;
-
-    const updatedPositions = { ...useKeyStore.getState().canonicalPositions };
-    const currentModePositions = [...(updatedPositions[selectedKeyType] || [])];
-    const updatedStatPositions = {
-      ...useStatItemStore.getState().positions,
-    };
-    const currentStatModePositions = [
-      ...(updatedStatPositions[selectedKeyType] || []),
-    ];
-    const updatedGraphPositions = {
-      ...useGraphItemStore.getState().positions,
-    };
-    const currentGraphModePositions = [
-      ...(updatedGraphPositions[selectedKeyType] || []),
-    ];
-    const updatedKnobPositions = {
-      ...useKnobItemStore.getState().positions,
-    };
-    const currentKnobModePositions = [
-      ...(updatedKnobPositions[selectedKeyType] || []),
-    ];
-
     const pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }> = [];
+    const nativeIntents = new Map<
+      'key' | 'stat' | 'graph' | 'knob',
+      Map<string, Record<string, unknown>>
+    >();
     newItems.forEach((item, idx) => {
       const newZIndex = maxZIndex - idx;
-      if (item.type === 'key' && item.index !== undefined) {
-        if (currentModePositions[item.index]) {
-          currentModePositions[item.index] = {
-            ...currentModePositions[item.index],
-            zIndex: newZIndex,
-          };
-        }
-      } else if (item.type === 'stat' && item.index !== undefined) {
-        if (currentStatModePositions[item.index]) {
-          currentStatModePositions[item.index] = {
-            ...currentStatModePositions[item.index],
-            zIndex: newZIndex,
-          };
-        }
-      } else if (item.type === 'graph' && item.index !== undefined) {
-        if (currentGraphModePositions[item.index]) {
-          currentGraphModePositions[item.index] = {
-            ...currentGraphModePositions[item.index],
-            zIndex: newZIndex,
-          };
-        }
-      } else if (item.type === 'knob' && item.index !== undefined) {
-        if (currentKnobModePositions[item.index]) {
-          currentKnobModePositions[item.index] = {
-            ...currentKnobModePositions[item.index],
-            zIndex: newZIndex,
-          };
-        }
-      } else if (item.type === 'plugin') {
+      if (item.type === 'plugin') {
         pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
+        return;
       }
+      const byId = nativeIntents.get(item.type) ?? new Map();
+      byId.set(item.id, { zIndex: newZIndex });
+      nativeIntents.set(item.type, byId);
     });
 
-    updatedPositions[selectedKeyType] = currentModePositions;
+    const modeNativeOnly = items.every(
+      (item) =>
+        item.type !== 'plugin' &&
+        item.id.length > 0 &&
+        !isSyntheticElementId(item.id),
+    );
+    if (modeNativeOnly) {
+      void runElementIntent({
+        applyEager: () => applyPropertyIntentsEagerly(nativeIntents),
+        generate: (base) =>
+          intentPatch(
+            generateModeScopedIntentPatch(base, nativeIntents, selectedKeyType),
+          ),
+      }).catch(reportElementOpError);
+      return;
+    }
+
+    // plugin 포함 모드: 기존 full-record 경로 유지 (id 매칭 적용으로 개선)
+    const applyGroupIntents = <T extends { id?: string }>(
+      record: Record<string, T[]>,
+      type: 'key' | 'stat' | 'graph' | 'knob',
+    ): Record<string, T[]> => {
+      const byId = nativeIntents.get(type);
+      if (!byId || byId.size === 0) return record;
+      return {
+        ...record,
+        [selectedKeyType]: (record[selectedKeyType] ?? []).map((position) => {
+          const id = position.id;
+          if (typeof id !== 'string') return position;
+          const intent = byId.get(id);
+          return intent ? { ...position, ...intent, id } : position;
+        }),
+      };
+    };
+
+    const updatedPositions = applyGroupIntents(
+      useKeyStore.getState().canonicalPositions,
+      'key',
+    );
+    const updatedStatPositions = applyGroupIntents(
+      useStatItemStore.getState().positions,
+      'stat',
+    );
+    const updatedGraphPositions = applyGroupIntents(
+      useGraphItemStore.getState().positions,
+      'graph',
+    );
+    const updatedKnobPositions = applyGroupIntents(
+      useKnobItemStore.getState().positions,
+      'knob',
+    );
     useKeyStore.getState().setPositions(updatedPositions);
-    updatedStatPositions[selectedKeyType] = currentStatModePositions;
     useStatItemStore.getState().setPositions(updatedStatPositions);
-    updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
     useGraphItemStore.getState().setPositions(updatedGraphPositions);
-    updatedKnobPositions[selectedKeyType] = currentKnobModePositions;
     useKnobItemStore.getState().setPositions(updatedKnobPositions);
     setPluginElementZIndexes(pluginZIndexUpdates);
 
@@ -760,9 +959,45 @@ export function useLayerDnD({
       } else if (dropDisplayIndex == null) {
         dropDisplayIndex = dropTarget.toIndex;
       }
+      // 드롭 위치를 숫자 index가 아니라 이웃 앵커 id로도 캡처 - mouseup까지
+      // 외부 재정렬이 끼면 index는 다른 슬롯을 가리킨다 (그룹 헤더 아래는
+      // 명시적 그룹 앵커로 별도 보존)
+      const display = displayItemsRef.current;
+      let anchorBeforeId: string | null = null;
+      let anchorAfterId: string | null = null;
+      let anchorBeforeHeaderGroupId: string | null = null;
+      let anchorAfterHeaderGroupId: string | null = null;
+      for (let i = dropDisplayIndex - 1; i >= 0; i--) {
+        const di = display[i];
+        if (di.displayType === 'group-header') {
+          // 그룹 경계 자체를 앵커로 - 그룹 사이 빈 슬롯의 숫자 fallback 방지
+          anchorBeforeHeaderGroupId = di.groupId;
+          break;
+        }
+        if (di.displayType === 'layer' && !draggingSet.has(di.item.id)) {
+          anchorBeforeId = di.item.id;
+          break;
+        }
+      }
+      for (let i = dropDisplayIndex; i < display.length; i++) {
+        const di = display[i];
+        if (di.displayType === 'group-header') {
+          anchorAfterHeaderGroupId = di.groupId;
+          break;
+        }
+        if (di.displayType === 'layer' && !draggingSet.has(di.item.id)) {
+          anchorAfterId = di.item.id;
+          break;
+        }
+      }
       dragStateRef.current.currentDropTarget = {
         toDisplayIndex: dropDisplayIndex,
         targetGroupId: dropTarget.targetGroupId,
+        anchorBeforeId,
+        anchorAfterId,
+        anchorHeaderGroupId: dropTarget.indicatorHeaderBottomGroupId ?? null,
+        anchorBeforeHeaderGroupId,
+        anchorAfterHeaderGroupId,
       };
       setDragOverItemDisplayIndex(dropTarget.indicatorDisplayIndex);
       setDragOverHeaderBottomGroupId(dropTarget.indicatorHeaderBottomGroupId);
@@ -779,9 +1014,20 @@ export function useLayerDnD({
 
         if (target) {
           const draggedIds = draggedItemIdsRef.current;
-          performMultiDrop(draggedIds, target.toDisplayIndex, {
-            targetGroupId: target.targetGroupId,
-          });
+          // authoritative 재구성 목록에서 앵커를 재해석 - effect 지연 ref는
+          // 외부 재정렬을 한 렌더 늦게 본다. 소실·역전·비인접이면 무커밋
+          const liveModel = buildLiveLayerModel();
+          const resolvedIndex = resolveDropIndexFromAnchors(
+            target,
+            new Set(draggedIds),
+            liveModel.displayItems,
+          );
+          if (resolvedIndex != null) {
+            performMultiDrop(draggedIds, resolvedIndex, {
+              targetGroupId: target.targetGroupId,
+              liveModel,
+            });
+          }
         }
       }
 
@@ -817,6 +1063,8 @@ export function useLayerDnD({
       groupId,
       itemHeight: rect.height,
       currentOverIndex: null,
+      anchors: null,
+      excludedIds: [],
     };
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
@@ -864,6 +1112,66 @@ export function useLayerDnD({
       );
 
       groupDragStateRef.current.currentOverIndex = newIndex;
+      // 그룹 드래그도 이웃 앵커를 캡처 - 숫자 index는 mouseup까지의 외부
+      // 재정렬을 모른다. 그룹이 선택된 상태면 함께 이동할 추가 선택도
+      // 앵커 후보에서 제외 (이동 요소는 고정 기준점이 될 수 없다)
+      const groupDraggingSet = new Set(
+        layerItemsRef.current
+          .filter((item) => item.groupId === groupDragStateRef.current!.groupId)
+          .map((item) => item.id),
+      );
+      const captureSelection = useGridSelectionStore.getState();
+      if (
+        captureSelection.selectedGroupIds.includes(
+          groupDragStateRef.current.groupId,
+        )
+      ) {
+        for (const el of captureSelection.selectedElements) {
+          groupDraggingSet.add(el.id);
+        }
+      }
+      const groupDisplay = displayItemsRef.current;
+      let groupAnchorBeforeId: string | null = null;
+      let groupAnchorAfterId: string | null = null;
+      let groupAnchorBeforeHeaderId: string | null = null;
+      let groupAnchorAfterHeaderId: string | null = null;
+      const draggedHeaderGroupId = groupDragStateRef.current.groupId;
+      for (let i = newIndex - 1; i >= 0; i--) {
+        const di = groupDisplay[i];
+        if (di.displayType === 'group-header') {
+          if (di.groupId !== draggedHeaderGroupId) {
+            groupAnchorBeforeHeaderId = di.groupId;
+          }
+          break;
+        }
+        if (di.displayType === 'layer' && !groupDraggingSet.has(di.item.id)) {
+          groupAnchorBeforeId = di.item.id;
+          break;
+        }
+      }
+      for (let i = newIndex; i < groupDisplay.length; i++) {
+        const di = groupDisplay[i];
+        if (di.displayType === 'group-header') {
+          if (di.groupId !== draggedHeaderGroupId) {
+            groupAnchorAfterHeaderId = di.groupId;
+          }
+          break;
+        }
+        if (di.displayType === 'layer' && !groupDraggingSet.has(di.item.id)) {
+          groupAnchorAfterId = di.item.id;
+          break;
+        }
+      }
+      groupDragStateRef.current.anchors = {
+        toDisplayIndex: newIndex,
+        targetGroupId: undefined,
+        anchorBeforeId: groupAnchorBeforeId,
+        anchorAfterId: groupAnchorAfterId,
+        anchorHeaderGroupId: null,
+        anchorBeforeHeaderGroupId: groupAnchorBeforeHeaderId,
+        anchorAfterHeaderGroupId: groupAnchorAfterHeaderId,
+      };
+      groupDragStateRef.current.excludedIds = [...groupDraggingSet];
       setDragOverDisplayIndex(newIndex);
     };
     const moveScheduler = createRafLatestScheduler(applyMouseMove);
@@ -874,45 +1182,66 @@ export function useLayerDnD({
       moveScheduler.flush();
       moveScheduler.cancel();
       if (groupDragStateRef.current && isDraggingRef.current) {
-        const targetIdx = groupDragStateRef.current.currentOverIndex;
-        if (targetIdx !== null) {
+        const anchors = groupDragStateRef.current.anchors;
+        // 커밋 판정 순서: live 모델 → 그룹 생존 검증 → 이동 집합 확정 →
+        // 그 집합으로 앵커 해석. 앵커를 그룹 구성원만으로 먼저 풀면 함께
+        // 이동하는 추가 선택이 고정 기준점으로 해석된다
+        const liveModel = buildLiveLayerModel();
+        const liveGroupMemberIds = new Set(
+          liveModel.layerItems
+            .filter((item) => item.groupId === groupId)
+            .map((item) => item.id),
+        );
+        // 드래그 손잡이였던 그룹이 소실됐으면 무커밋 - 잔존 추가 선택만
+        // 단독 이동시키지 않는다
+        if (liveGroupMemberIds.size > 0) {
           const currentSel = useGridSelectionStore.getState().selectedElements;
           const currentGroupIds =
             useGridSelectionStore.getState().selectedGroupIds;
           const isGroupSelected = currentGroupIds.includes(groupId);
-
-          if (isGroupSelected && currentSel.length > 0) {
-            const groupChildIds = new Set(
-              layerItemsRef.current
-                .filter((item) => item.groupId === groupId)
-                .map((c) => c.id),
-            );
-            const hasExtraSelection = currentSel.some(
-              (el) => !groupChildIds.has(el.id),
-            );
-
-            if (hasExtraSelection) {
-              const allIds = [
-                ...layerItemsRef.current
-                  .filter((item) => item.groupId === groupId)
-                  .map((c) => c.id),
-                ...currentSel
-                  .filter((el) => !groupChildIds.has(el.id))
-                  .map((el) => el.id),
-              ];
+          const extraIds =
+            isGroupSelected && currentSel.length > 0
+              ? currentSel
+                  .filter((el) => !liveGroupMemberIds.has(el.id))
+                  .map((el) => el.id)
+              : [];
+          const movingIds = [...liveGroupMemberIds, ...extraIds];
+          const movingSet = new Set(movingIds);
+          // 캡처 때 이동 예정이라 앵커에서 제외했지만 mouseup에 이동 집합에서
+          // 빠진(선택 축소) 생존 요소가 있으면 무커밋 - 앵커가 그 요소의
+          // 잔류를 모르는 채 해석돼 단일 앵커 경로에서 오배치가 된다
+          const liveIdSet = new Set(
+            liveModel.layerItems.map((item) => item.id),
+          );
+          const excludedShrank = groupDragStateRef.current.excludedIds.some(
+            (id) => liveIdSet.has(id) && !movingSet.has(id),
+          );
+          const targetIdx = excludedShrank
+            ? null
+            : anchors
+            ? resolveDropIndexFromAnchors(
+                anchors,
+                movingSet,
+                liveModel.displayItems,
+              )
+            : groupDragStateRef.current.currentOverIndex;
+          if (targetIdx !== null) {
+            if (extraIds.length > 0) {
+              // live index를 live 모델로 재해석 - 지연 ref display로 풀면
+              // 옛 이웃 기준 targetGroupId가 나온다
               const dropTarget = resolveItemDropTarget(
                 targetIdx,
-                new Set(allIds),
+                movingSet,
+                liveModel,
               );
-              performMultiDrop(allIds, targetIdx, {
+              performMultiDrop(movingIds, targetIdx, {
                 targetGroupId: dropTarget.targetGroupId,
                 preserveFullGroups: true,
+                liveModel,
               });
             } else {
-              performGroupDrop(groupId, targetIdx);
+              performGroupDrop(groupId, targetIdx, liveModel);
             }
-          } else {
-            performGroupDrop(groupId, targetIdx);
           }
         }
       }

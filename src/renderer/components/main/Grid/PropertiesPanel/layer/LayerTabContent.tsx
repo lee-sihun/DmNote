@@ -228,12 +228,36 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   // DnD 훅
   // ──────────────────────────────────────────────────────────────────────────
 
+  // 드롭 확정 시점의 authoritative 재구성 - effect 지연 ref는 외부
+  // 재정렬을 한 렌더 늦게 본다
+  const buildLiveLayerModel = () => {
+    const keyState = useKeyStore.getState();
+    const liveLayerItems = buildLayerItems({
+      selectedKeyType,
+      positions: keyState.canonicalPositions,
+      keyMappings: keyState.keyMappings,
+      statPositions: useStatItemStore.getState().positions,
+      graphPositions: useGraphItemStore.getState().positions,
+      knobPositions: useKnobItemStore.getState().positions,
+      pluginElements: usePluginDisplayElementStore.getState().elements,
+    });
+    const groupState = useLayerGroupStore.getState();
+    const liveDisplayItems = buildDisplayItems({
+      layerItems: liveLayerItems,
+      layerGroupsForMode: groupState.layerGroups[selectedKeyType] || [],
+      collapsedGroups: groupState.collapsedGroups,
+      defaultGroupName: t('layerGroup.defaultName'),
+    });
+    return { layerItems: liveLayerItems, displayItems: liveDisplayItems };
+  };
+
   const dnd = useLayerDnD({
     selectedKeyType,
     layerItemsRef,
     displayItemsRef,
     scrollElementRef,
     clearPendingDeselect,
+    buildLiveLayerModel,
   });
 
   // 선택 상태 (렌더링용)
