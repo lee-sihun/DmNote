@@ -214,6 +214,7 @@ pub enum EditorElementPropertyPatchV1 {
     GraphSpeed(EditorGraphSpeedPropertyPatchV1),
     Reverse(EditorReversePropertyPatchV1),
     Sensitivity(EditorSensitivityPropertyPatchV1),
+    UseInlineStyles(EditorUseInlineStylesPropertyPatchV1),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -269,6 +270,12 @@ pub struct EditorReversePropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorSensitivityPropertyPatchV1 {
     pub sensitivity: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorUseInlineStylesPropertyPatchV1 {
+    pub use_inline_styles: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

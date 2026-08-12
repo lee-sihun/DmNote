@@ -443,6 +443,15 @@ mod tests {
                 ),
                 serde_json::json!({ "sensitivity": -7.25 }),
             ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::UseInlineStyles(
+                    crate::models::EditorUseInlineStylesPropertyPatchV1 {
+                        use_inline_styles: false,
+                    },
+                ),
+                serde_json::json!({ "useInlineStyles": false }),
+            ),
         ];
         for (element_type, patch, expected) in literal_properties {
             let mut request = gesture_request(&["plugin-a".to_string()]);

@@ -400,6 +400,26 @@ export const patchKnobPropertiesViaAuthority = (
 ): Promise<boolean> =>
   patchNativeLayerPropertiesViaAuthority('knob', ids, patch);
 
+export const patchUseInlineStylesViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  useInlineStyles: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { useInlineStyles },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
 export const drainPendingPluginElementWrites = async (): Promise<boolean> => {
   let succeeded = true;
   while (drainPromise || outboundQueue.length > 0) {

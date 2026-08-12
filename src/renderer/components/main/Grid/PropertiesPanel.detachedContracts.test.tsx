@@ -19,6 +19,8 @@ const {
   batchPropsMock,
   graphUpdatePositionsMock,
   knobUpdatePositionsMock,
+  keyLegacyUpdateMock,
+  legacyBatchStyleCommitMock,
   patchGraphColorMock,
   patchGraphColorsMock,
   patchGraphColorsViaAuthorityMock,
@@ -30,6 +32,9 @@ const {
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
+  patchUseInlineStylesMock,
+  patchUseInlineStylesTargetsMock,
+  patchUseInlineStylesViaAuthorityMock,
   previewMock,
   patchLayerNameMock,
   patchPropertyViaAuthorityMock,
@@ -45,6 +50,8 @@ const {
   batchPropsMock: vi.fn(),
   graphUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   knobUpdatePositionsMock: vi.fn(() => Promise.resolve()),
+  keyLegacyUpdateMock: vi.fn(),
+  legacyBatchStyleCommitMock: vi.fn(),
   patchGraphColorMock: vi.fn(() => Promise.resolve(true)),
   patchGraphColorsMock: vi.fn(() => Promise.resolve(true)),
   patchGraphColorsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
@@ -56,6 +63,9 @@ const {
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
+  patchUseInlineStylesMock: vi.fn(() => Promise.resolve(true)),
+  patchUseInlineStylesTargetsMock: vi.fn(() => Promise.resolve(true)),
+  patchUseInlineStylesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   previewMock: vi.fn(),
   patchLayerNameMock: vi.fn(() => Promise.resolve(true)),
   patchPropertyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
@@ -81,6 +91,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
+  patchUseInlineStylesViaAuthority: patchUseInlineStylesViaAuthorityMock,
   updatePluginElement: vi.fn(),
 }));
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
@@ -93,6 +104,8 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchGraphTypesByIds: patchGraphTypesMock,
   patchKnobPropertiesByIds: patchKnobPropertiesMock,
   patchKnobPropertyById: patchKnobPropertyMock,
+  patchUseInlineStylesById: patchUseInlineStylesMock,
+  patchUseInlineStylesByTargets: patchUseInlineStylesTargetsMock,
 }));
 vi.mock('@api/modules/itemsApi', () => ({
   graphItemsApi: { updatePositions: graphUpdatePositionsMock },
@@ -149,7 +162,9 @@ vi.mock('./PropertiesPanel/index', () => {
     PluginSettingsPanelView: () => <ScopeProbe id="plugin-settings" />,
     useBatchHandlers: (props: Record<string, unknown>) => {
       batchPropsMock(props);
-      return {};
+      return {
+        handleBatchStyleChangeComplete: legacyBatchStyleCommitMock,
+      };
     },
     usePanelScroll: () => ({
       batchScrollRefFor: () => vi.fn(),
@@ -196,7 +211,7 @@ const mountPanel = (
       root.render(
         <PropertiesPanel
           onPositionChange={vi.fn()}
-          onKeyUpdate={vi.fn()}
+          onKeyUpdate={keyLegacyUpdateMock}
           onKeyMappingChange={onKeyMappingChange}
           frameVariant="window"
           selectionSyncReady={ready}
@@ -229,9 +244,14 @@ const resetStores = () => {
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
+  patchUseInlineStylesMock.mockClear();
+  patchUseInlineStylesTargetsMock.mockClear();
+  patchUseInlineStylesViaAuthorityMock.mockClear();
   patchPropertyViaAuthorityMock.mockClear();
   graphUpdatePositionsMock.mockClear();
   knobUpdatePositionsMock.mockClear();
+  keyLegacyUpdateMock.mockClear();
+  legacyBatchStyleCommitMock.mockClear();
   singleKnobPropsMock.mockClear();
   statUpdatePositionsMock.mockClear();
   useKeyStore.setState({
@@ -1073,6 +1093,346 @@ describe('PropertiesPanel detached preview contract', () => {
         expect(patchKnobPropertiesMock).not.toHaveBeenCalled();
         expect(patchKnobPropertiesViaAuthorityMock).not.toHaveBeenCalled();
       }
+    },
+  );
+
+  it.each([
+    ['key', singleKeyStatPropsMock],
+    ['stat', singleKeyStatPropsMock],
+    ['graph', singleGraphPropsMock],
+    ['knob', singleKnobPropsMock],
+  ] as const)(
+    'single stable %s useInlineStyles는 선택 ID semantic leaf를 쓴다',
+    (type, propsMock) => {
+      const id = `f1111111-1111-4111-8111-${type.padEnd(12, '1')}`;
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: {
+            '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+          },
+          canonicalPositions: {
+            '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+          },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useStatItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      } else if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useGraphItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useKnobItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = propsMock.mock.lastCall?.[0] as Record<string, unknown>;
+      const handler =
+        type === 'key'
+          ? (props.onKeyUpdate as (update: Record<string, unknown>) => void)
+          : type === 'stat'
+          ? (props.handleStatUpdate as (
+              update: Record<string, unknown>,
+            ) => void)
+          : type === 'graph'
+          ? (props.handleGraphUpdate as (
+              update: Record<string, unknown>,
+            ) => void)
+          : (props.handleKnobUpdate as (
+              update: Record<string, unknown>,
+            ) => void);
+
+      act(() => handler({ index: 0, useInlineStyles: true }));
+
+      expect(patchUseInlineStylesMock).toHaveBeenCalledWith(type, id, true);
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key', singleKeyStatPropsMock],
+    ['stat', singleKeyStatPropsMock],
+    ['graph', singleGraphPropsMock],
+    ['knob', singleKnobPropsMock],
+  ] as const)(
+    'panel single stable %s useInlineStyles는 exact authority RPC만 쓴다',
+    (type, propsMock) => {
+      window.__dmn_window_type = 'panel';
+      const id = `f2222222-2222-4222-8222-${type.padEnd(12, '2')}`;
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: {
+            '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+          },
+          canonicalPositions: {
+            '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+          },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useStatItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      } else if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useGraphItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useKnobItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = propsMock.mock.lastCall?.[0] as Record<string, unknown>;
+      const handler =
+        type === 'key'
+          ? (props.onKeyUpdate as (update: Record<string, unknown>) => void)
+          : type === 'stat'
+          ? (props.handleStatUpdate as (
+              update: Record<string, unknown>,
+            ) => void)
+          : type === 'graph'
+          ? (props.handleGraphUpdate as (
+              update: Record<string, unknown>,
+            ) => void)
+          : (props.handleKnobUpdate as (
+              update: Record<string, unknown>,
+            ) => void);
+
+      act(() => handler({ index: 0, useInlineStyles: false }));
+
+      expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+        elementType: type,
+        id,
+        patch: { useInlineStyles: false },
+      });
+      expect(patchUseInlineStylesMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0', singleKeyStatPropsMock],
+    ['key empty', 'key', '', singleKeyStatPropsMock],
+    ['stat synthetic', 'stat', 'stat-0', singleKeyStatPropsMock],
+    ['stat empty', 'stat', '', singleKeyStatPropsMock],
+    ['graph synthetic', 'graph', 'graph-0', singleGraphPropsMock],
+    ['graph empty', 'graph', '', singleGraphPropsMock],
+    ['knob synthetic', 'knob', 'knob-0', singleKnobPropsMock],
+    ['knob empty', 'knob', '', singleKnobPropsMock],
+  ] as const)(
+    'panel single %s useInlineStyles는 기존 writer로 폴백한다',
+    (_label, type, id, propsMock) => {
+      window.__dmn_window_type = 'panel';
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: {
+            '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+          },
+          canonicalPositions: {
+            '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = propsMock.mock.lastCall?.[0] as Record<string, unknown>;
+      const handler =
+        type === 'key'
+          ? (props.onKeyUpdate as (update: Record<string, unknown>) => void)
+          : type === 'stat'
+          ? (props.handleStatUpdate as (
+              update: Record<string, unknown>,
+            ) => void)
+          : type === 'graph'
+          ? (props.handleGraphUpdate as (
+              update: Record<string, unknown>,
+            ) => void)
+          : (props.handleKnobUpdate as (
+              update: Record<string, unknown>,
+            ) => void);
+
+      act(() => handler({ index: 0, useInlineStyles: true }));
+
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(patchUseInlineStylesMock).not.toHaveBeenCalled();
+      if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      else if (type === 'stat')
+        expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+      else if (type === 'graph')
+        expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+      else expect(knobUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('single key useInlineStyles는 stale index 대신 선택 ID를 쓴다', () => {
+    const selectedId = 'f2333333-3333-4333-8333-333333333333';
+    const otherId = 'f2444444-4444-4444-8444-444444444444';
+    const position = { dx: 0, dy: 0, width: 60, height: 60 };
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A', 'B'] },
+      positions: {
+        '4key': [
+          { ...position, id: selectedId },
+          { ...position, id: otherId },
+        ] as never,
+      },
+      canonicalPositions: {
+        '4key': [
+          { ...position, id: selectedId },
+          { ...position, id: otherId },
+        ] as never,
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'key', id: selectedId, index: 1 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+      onKeyUpdate: (update: Record<string, unknown>) => void;
+    };
+
+    act(() => props.onKeyUpdate({ index: 1, useInlineStyles: true }));
+
+    expect(patchUseInlineStylesMock).toHaveBeenCalledWith(
+      'key',
+      selectedId,
+      true,
+    );
+  });
+
+  it.each([
+    ['main', 'main'],
+    ['panel', 'panel'],
+  ] as const)(
+    '$label mixed 4-type stable useInlineStyles batch는 ID target 한 commit만 쓴다',
+    (_label, windowType) => {
+      window.__dmn_window_type = windowType;
+      const targets = [
+        {
+          elementType: 'key' as const,
+          id: 'f3000000-0000-4000-8000-000000000001',
+        },
+        {
+          elementType: 'stat' as const,
+          id: 'f3000000-0000-4000-8000-000000000002',
+        },
+        {
+          elementType: 'graph' as const,
+          id: 'f3000000-0000-4000-8000-000000000003',
+        },
+        {
+          elementType: 'knob' as const,
+          id: 'f3000000-0000-4000-8000-000000000004',
+        },
+      ];
+      useGridSelectionStore.setState({
+        selectedElements: targets.map(({ elementType: type, id }, index) => ({
+          type,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        handleBatchStyleChangeComplete: (
+          property: string,
+          value: unknown,
+        ) => void;
+      };
+
+      act(() => props.handleBatchStyleChangeComplete('useInlineStyles', true));
+
+      if (windowType === 'panel') {
+        expect(patchUseInlineStylesViaAuthorityMock).toHaveBeenCalledWith(
+          targets,
+          true,
+        );
+        expect(patchUseInlineStylesTargetsMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchUseInlineStylesTargetsMock).toHaveBeenCalledWith(
+          targets,
+          true,
+        );
+        expect(patchUseInlineStylesViaAuthorityMock).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each([
+    ['synthetic', 'graph-0'],
+    ['empty', ''],
+  ] as const)(
+    'panel mixed useInlineStyles batch에 $label ID가 있으면 전체 legacy로 폴백한다',
+    (_label, legacyId) => {
+      window.__dmn_window_type = 'panel';
+      useGridSelectionStore.setState({
+        selectedElements: [
+          {
+            type: 'key',
+            id: 'f4000000-0000-4000-8000-000000000001',
+            index: 0,
+          },
+          { type: 'graph', id: legacyId, index: 0 },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        handleBatchStyleChangeComplete: (
+          property: string,
+          value: unknown,
+        ) => void;
+      };
+
+      act(() => props.handleBatchStyleChangeComplete('useInlineStyles', true));
+
+      expect(patchUseInlineStylesTargetsMock).not.toHaveBeenCalled();
+      expect(patchUseInlineStylesViaAuthorityMock).not.toHaveBeenCalled();
+      expect(legacyBatchStyleCommitMock).toHaveBeenCalledWith(
+        'useInlineStyles',
+        true,
+      );
     },
   );
 

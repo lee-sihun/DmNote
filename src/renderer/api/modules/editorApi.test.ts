@@ -359,6 +359,10 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['graph', { graphSpeed: 4_294_967_295 }],
     ['knob', { reverse: true }],
     ['knob', { sensitivity: -0.5 }],
+    ['key', { useInlineStyles: false }],
+    ['stat', { useInlineStyles: true }],
+    ['graph', { useInlineStyles: false }],
+    ['knob', { useInlineStyles: true }],
   ] as const)(
     'patchElement %s runtime leaf %j의 exact wire를 수용한다',
     (elementType, patch) => {
@@ -384,6 +388,7 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['graph', { reverse: true }],
     ['knob', { sensitivity: Number.POSITIVE_INFINITY }],
     ['knob', { reverse: true, sensitivity: 1 }],
+    ['key', { useInlineStyles: 1 }],
   ] as const)(
     'patchElement %s runtime leaf %j의 잘못된 wire를 거절한다',
     (elementType, patch) => {

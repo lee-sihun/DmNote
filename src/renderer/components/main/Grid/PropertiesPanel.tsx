@@ -38,6 +38,7 @@ import {
   patchGraphTypesViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
+  patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
 import {
@@ -52,6 +53,7 @@ import type { KnobItemPosition } from '@src/types/key/knobs';
 import type {
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
+  EditorElementTypeV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
@@ -82,6 +84,8 @@ import {
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
   patchKnobPropertyById,
+  patchUseInlineStylesById,
+  patchUseInlineStylesByTargets,
 } from '@src/renderer/editor/runtime/elementOps';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
@@ -191,6 +195,17 @@ const getKnobRuntimePropertyPatch = (
     return { sensitivity: updates.sensitivity };
   }
   return null;
+};
+
+const getUseInlineStylesPatch = (
+  updates: Partial<KeyPosition>,
+): boolean | null => {
+  const keys = Object.keys(updates);
+  return keys.length === 1 &&
+    keys[0] === 'useInlineStyles' &&
+    typeof updates.useInlineStyles === 'boolean'
+    ? updates.useInlineStyles
+    : null;
 };
 
 // ============================================================================
@@ -1310,6 +1325,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     data: Partial<StatItemPosition> & { index: number },
   ) => {
     const { index, ...updates } = data;
+    const useInlineStyles = getUseInlineStylesPatch(updates);
+    const selectedStat =
+      selectedStatElements.length === 1 ? selectedStatElements[0] : null;
+    if (
+      useInlineStyles !== null &&
+      selectedStat &&
+      selectedStat.id.length > 0 &&
+      !isSyntheticElementId(selectedStat.id)
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'stat',
+              id: selectedStat.id,
+              patch: { useInlineStyles },
+            })
+          : patchUseInlineStylesById('stat', selectedStat.id, useInlineStyles);
+      void commit.catch((error) => {
+        console.error('Failed to update stat inline style priority', error);
+      });
+      return;
+    }
     const mode = selectedKeyType;
     const current = useStatItemStore.getState().positions;
     const list = current[mode] || [];
@@ -1415,6 +1452,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const graphType = updates.graphType;
     const graphColor = updates.graphColor;
     const runtimePatch = getGraphRuntimePropertyPatch(updates);
+    const useInlineStyles = getUseInlineStylesPatch(updates);
     const selectedGraph =
       selectedGraphElements.length === 1 ? selectedGraphElements[0] : null;
     if (
@@ -1435,6 +1473,29 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           : patchGraphTypeById(selectedGraph.id, graphType);
       void commit.catch((error) => {
         console.error('Failed to update graph type', error);
+      });
+      return;
+    }
+    if (
+      useInlineStyles !== null &&
+      selectedGraph &&
+      selectedGraph.id.length > 0 &&
+      !isSyntheticElementId(selectedGraph.id)
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'graph',
+              id: selectedGraph.id,
+              patch: { useInlineStyles },
+            })
+          : patchUseInlineStylesById(
+              'graph',
+              selectedGraph.id,
+              useInlineStyles,
+            );
+      void commit.catch((error) => {
+        console.error('Failed to update graph inline style priority', error);
       });
       return;
     }
@@ -1505,6 +1566,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) => {
     const { index, ...updates } = data;
     const runtimePatch = getKnobRuntimePropertyPatch(updates);
+    const useInlineStyles = getUseInlineStylesPatch(updates);
     const selectedKnob =
       selectedKnobElements.length === 1 ? selectedKnobElements[0] : null;
     if (
@@ -1523,6 +1585,25 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           : patchKnobPropertyById(selectedKnob.id, runtimePatch);
       void commit.catch((error) => {
         console.error('Failed to update knob property', error);
+      });
+      return;
+    }
+    if (
+      useInlineStyles !== null &&
+      selectedKnob &&
+      selectedKnob.id.length > 0 &&
+      !isSyntheticElementId(selectedKnob.id)
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'knob',
+              id: selectedKnob.id,
+              patch: { useInlineStyles },
+            })
+          : patchUseInlineStylesById('knob', selectedKnob.id, useInlineStyles);
+      void commit.catch((error) => {
+        console.error('Failed to update knob inline style priority', error);
       });
       return;
     }
@@ -1919,7 +2000,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const {
     handleBatchStyleChange,
-    handleBatchStyleChangeComplete,
+    handleBatchStyleChangeComplete: handleLegacyBatchStyleChangeComplete,
     handleBatchShadowChangeComplete,
     handleBatchShadowEnabledChange,
     handleKeyOnlyStyleChangeComplete,
@@ -1965,6 +2046,65 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     onKnobPreview: handleKnobPreview,
     onKnobBatchPreview: handleKnobBatchPreview,
   });
+
+  const handleBatchStyleChangeComplete = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    if (property !== 'useInlineStyles' || typeof value !== 'boolean') {
+      handleLegacyBatchStyleChangeComplete(property, value);
+      return;
+    }
+    const targets = selectedBatchStyleElements.map((element) => ({
+      elementType: element.type as EditorElementTypeV1,
+      id: element.id,
+    }));
+    if (
+      targets.length === 0 ||
+      targets.some(
+        (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+      )
+    ) {
+      handleLegacyBatchStyleChangeComplete(property, value);
+      return;
+    }
+    const commit =
+      window.__dmn_window_type === 'panel'
+        ? patchUseInlineStylesViaAuthority(targets, value)
+        : patchUseInlineStylesByTargets(targets, value);
+    void commit.catch((error) => {
+      console.error('Failed to batch update inline style priority', error);
+    });
+  };
+
+  const handleKeyUpdateForPanel = (
+    data: Partial<KeyPosition> & { index: number },
+  ) => {
+    const { index: _index, ...updates } = data;
+    const useInlineStyles = getUseInlineStylesPatch(updates);
+    const selectedKey =
+      selectedKeyElements.length === 1 ? selectedKeyElements[0] : null;
+    if (
+      useInlineStyles === null ||
+      !selectedKey ||
+      selectedKey.id.length === 0 ||
+      isSyntheticElementId(selectedKey.id)
+    ) {
+      onKeyUpdate(data);
+      return;
+    }
+    const commit =
+      window.__dmn_window_type === 'panel'
+        ? patchNativeLayerPropertyViaAuthority({
+            elementType: 'key',
+            id: selectedKey.id,
+            patch: { useInlineStyles },
+          })
+        : patchUseInlineStylesById('key', selectedKey.id, useInlineStyles);
+    void commit.catch((error) => {
+      console.error('Failed to update key inline style priority', error);
+    });
+  };
 
   // NOTE 탭은 "키"에만 적용되어야 함
   const getSelectedKeyOnlyPositions = () => {
@@ -3055,7 +3195,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onPositionChange={onPositionChange}
-        onKeyUpdate={onKeyUpdate}
+        onKeyUpdate={handleKeyUpdateForPanel}
         onKeyPreview={onKeyPreview}
         onKeyMappingChange={onKeyMappingChange}
         handleStatUpdate={handleStatUpdate}

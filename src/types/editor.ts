@@ -148,6 +148,7 @@ interface EditorElementPropertyValuesV1 {
   graphSpeed: number;
   reverse: boolean;
   sensitivity: number;
+  useInlineStyles: boolean;
 }
 
 type ExactEditorPropertyPatchV1<K extends keyof EditorElementPropertyValuesV1> =
@@ -954,7 +955,10 @@ export function assertEditorOpsV1(
           patchKeys[0] === 'sensitivity' &&
           op.elementType === 'knob' &&
           typeof op.patch.sensitivity === 'number' &&
-          Number.isFinite(op.patch.sensitivity));
+          Number.isFinite(op.patch.sensitivity)) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'useInlineStyles' &&
+          typeof op.patch.useInlineStyles === 'boolean');
       if (!patchIsValid) {
         throw new EditorProtocolError(`${opLabel}.patch is invalid`);
       }

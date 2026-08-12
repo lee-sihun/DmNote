@@ -361,6 +361,9 @@ const applyOpsForTest = (
           if ('sensitivity' in op.patch) {
             return { ...position, sensitivity: op.patch.sensitivity };
           }
+          if ('useInlineStyles' in op.patch) {
+            return { ...position, useInlineStyles: op.patch.useInlineStyles };
+          }
           return { ...position, hidden: op.patch.hidden };
         });
       } else {
@@ -3194,6 +3197,39 @@ describe('commitSemanticOpsInternal', () => {
     const noChange = await harness.coordinator.commitSemanticOpsInternal(ops);
     expect(noChange.opResults).toEqual(ops.map(() => ({ status: 'noChange' })));
     expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('useInlineStyles false는 부재 leaf에도 raw applied로 저장하고 이후 noChange가 된다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000b3';
+    const base = withStableId(id);
+    delete base.keyPositions['4key'][0].useInlineStyles;
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { useInlineStyles: false },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.opResults).toEqual([{ status: 'applied' }]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      id,
+      useInlineStyles: false,
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document.keyPositions['4key'][0].useInlineStyles).toBe(
+      false,
+    );
     harness.coordinator.stop();
   });
 

@@ -877,6 +877,15 @@ pub(crate) fn prepare_editor_ops_transition(
                             true
                         }
                     }
+                    EditorElementPropertyPatchV1::UseInlineStyles(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.use_inline_styles == Some(patch.use_inline_styles) {
+                            false
+                        } else {
+                            position.use_inline_styles = Some(patch.use_inline_styles);
+                            true
+                        }
+                    }
                 };
                 op_results.push(EditorOpResultV1 {
                     status: if changed {
@@ -2080,6 +2089,128 @@ mod tests {
         );
         let error = prepare_editor_ops_transition(&store, &[invalid]).unwrap_err();
         assert_eq!(validation_code(&error), Some("INVALID_NUMBER"));
+    }
+
+    #[test]
+    fn inline_style_patch_preserves_raw_option_semantics_for_every_element_type() {
+        let mut store = store_with_every_reorder_type();
+        store.key_positions.get_mut("4key").unwrap()[0].use_inline_styles = None;
+        store.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .use_inline_styles = None;
+        store.graph_positions.get_mut("4key").unwrap()[0]
+            .position
+            .use_inline_styles = None;
+        store.knob_positions.get_mut("4key").unwrap()[0]
+            .position
+            .use_inline_styles = None;
+        let targets = [
+            (
+                EditorElementTypeV1::Key,
+                store.key_positions["4key"][0].id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                store.stat_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                store.graph_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                store.knob_positions["4key"][0].position.id.clone(),
+            ),
+        ];
+        let patch = EditorElementPropertyPatchV1::UseInlineStyles(
+            crate::models::EditorUseInlineStylesPropertyPatchV1 {
+                use_inline_styles: false,
+            },
+        );
+        let mut ops = targets
+            .iter()
+            .map(|(element_type, id)| patch_property_op(*element_type, id, patch.clone()))
+            .collect::<Vec<_>>();
+        ops.push(patch_property_op(
+            EditorElementTypeV1::Key,
+            uuid::Uuid::new_v4().to_string(),
+            patch.clone(),
+        ));
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(
+            transition.candidate.key_positions["4key"][0].use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            transition.candidate.graph_positions["4key"][0]
+                .position
+                .use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            transition.candidate.knob_positions["4key"][0]
+                .position
+                .use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                patch_property_op(EditorElementTypeV1::Key, &targets[0].1, patch.clone()),
+                patch_property_op(EditorElementTypeV1::Stat, &targets[2].1, patch),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        assert_eq!(store.key_positions["4key"][0].use_inline_styles, None);
     }
 
     #[test]

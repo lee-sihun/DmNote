@@ -56,6 +56,7 @@ import {
   patchGraphPropertiesByIds,
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
+  patchUseInlineStylesByTargets,
 } from '@src/renderer/editor/runtime/elementOps';
 import type {
   EditorElementPropertyPatchV1,
@@ -213,7 +214,9 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['sensitivity']) &&
       typeof patch.sensitivity === 'number' &&
       Number.isFinite(patch.sensitivity)) ||
-    (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean');
+    (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean') ||
+    (hasExactKeys(patch, ['useInlineStyles']) &&
+      typeof patch.useInlineStyles === 'boolean');
   const graphOnlyPatch =
     hasExactKeys(patch, ['graphType']) ||
     hasExactKeys(patch, ['graphColor']) ||
@@ -234,6 +237,11 @@ const parseNativeLayerPropertyTarget = (
 
 type NativeLayerPropertyRequest =
   | { kind: 'single'; target: NativeLayerPropertyTarget }
+  | {
+      kind: 'useInlineStylesBatch';
+      targets: Array<{ elementType: NativeElementType; id: string }>;
+      useInlineStyles: boolean;
+    }
   | { kind: 'graphTypeBatch'; ids: string[]; graphType: 'line' | 'bar' }
   | { kind: 'graphColorBatch'; ids: string[]; graphColor: string }
   | {
@@ -297,16 +305,28 @@ const parseNativeLayerPropertyRequest = (
       : hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean'
       ? { reverse: patch.reverse }
       : null;
+  const useInlineStyles =
+    hasExactKeys(patch, ['useInlineStyles']) &&
+    typeof patch.useInlineStyles === 'boolean'
+      ? patch.useInlineStyles
+      : null;
   if (
     graphType === null &&
     graphColor === null &&
     graphRuntimePatch === null &&
-    knobRuntimePatch === null
+    knobRuntimePatch === null &&
+    useInlineStyles === null
   ) {
     return null;
   }
-  const elementType = knobRuntimePatch === null ? 'graph' : 'knob';
+  const elementType =
+    useInlineStyles !== null
+      ? null
+      : knobRuntimePatch === null
+      ? 'graph'
+      : 'knob';
   const ids: string[] = [];
+  const targets: Array<{ elementType: NativeElementType; id: string }> = [];
   const seen = new Set<string>();
   for (const value of payload.targets) {
     if (
@@ -319,7 +339,9 @@ const parseNativeLayerPropertyRequest = (
     }
     const target = value as Record<string, unknown>;
     if (
-      target.elementType !== elementType ||
+      typeof target.elementType !== 'string' ||
+      !['key', 'stat', 'graph', 'knob'].includes(target.elementType) ||
+      (elementType !== null && target.elementType !== elementType) ||
       typeof target.id !== 'string' ||
       target.id.trim().length === 0 ||
       isSyntheticElementId(target.id) ||
@@ -329,6 +351,13 @@ const parseNativeLayerPropertyRequest = (
     }
     seen.add(target.id);
     ids.push(target.id);
+    targets.push({
+      elementType: target.elementType as NativeElementType,
+      id: target.id,
+    });
+  }
+  if (useInlineStyles !== null) {
+    return { kind: 'useInlineStylesBatch', targets, useInlineStyles };
   }
   if (graphType !== null) return { kind: 'graphTypeBatch', ids, graphType };
   if (graphColor !== null) {
@@ -1007,6 +1036,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       }
       if (request.kind === 'graphPropertyBatch') {
         return patchGraphPropertiesByIds(request.ids, request.patch, options);
+      }
+      if (request.kind === 'useInlineStylesBatch') {
+        return patchUseInlineStylesByTargets(
+          request.targets,
+          request.useInlineStyles,
+          options,
+        );
       }
       return patchKnobPropertiesByIds(request.ids, request.patch, options);
     })();

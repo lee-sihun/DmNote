@@ -8075,6 +8075,229 @@ mod tests {
     }
 
     #[test]
+    fn inline_style_batch_replays_and_round_trips_all_native_types() {
+        let dir = test_directory("editor-inline-style-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut document = store.editor_get().document;
+        let template = document.key_positions["4key"][0].clone();
+        let key_id = template.id.clone();
+        let stat_id = uuid::Uuid::new_v4().to_string();
+        let graph_id = uuid::Uuid::new_v4().to_string();
+        let knob_id = uuid::Uuid::new_v4().to_string();
+        document.stat_positions.insert(
+            "4key".to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: KeyPosition {
+                    id: stat_id.clone(),
+                    ..template.clone()
+                },
+            }],
+        );
+        document.graph_positions.insert(
+            "4key".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 1000,
+                graph_color: "raw".to_string(),
+                show_avg_line: true,
+                position: KeyPosition {
+                    id: graph_id.clone(),
+                    ..template.clone()
+                },
+            }],
+        );
+        document.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position: KeyPosition {
+                    id: knob_id.clone(),
+                    ..template
+                },
+            }],
+        );
+        let setup = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    stat_positions: Some(document.stat_positions),
+                    graph_positions: Some(document.graph_positions),
+                    knob_positions: Some(document.knob_positions),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        let patch = EditorElementPropertyPatchV1::UseInlineStyles(
+            crate::models::EditorUseInlineStylesPropertyPatchV1 {
+                use_inline_styles: false,
+            },
+        );
+        let ops = [
+            (EditorElementTypeV1::Key, key_id),
+            (EditorElementTypeV1::Stat, stat_id),
+            (EditorElementTypeV1::Graph, graph_id),
+            (EditorElementTypeV1::Knob, knob_id),
+        ]
+        .map(|(element_type, id)| patch_property_op(element_type, id, patch.clone()))
+        .into_iter()
+        .chain(std::iter::once(patch_property_op(
+            EditorElementTypeV1::Key,
+            uuid::Uuid::new_v4().to_string(),
+            patch,
+        )))
+        .collect::<Vec<_>>();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            changed.result.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert_eq!(
+            changed.document.key_positions["4key"][0].use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            changed.document.stat_positions["4key"][0]
+                .position
+                .use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            changed.document.graph_positions["4key"][0]
+                .position
+                .use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            changed.document.knob_positions["4key"][0]
+                .position
+                .use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &changed.document.key_positions["4key"][0].id,
+            EditorElementPropertyPatchV1::UseInlineStyles(
+                crate::models::EditorUseInlineStylesPropertyPatchV1 {
+                    use_inline_styles: true,
+                },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..4].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert_eq!(undone.key_positions["4key"][0].use_inline_styles, None);
+        assert_eq!(
+            undone.stat_positions["4key"][0].position.use_inline_styles,
+            None
+        );
+        assert_eq!(
+            undone.graph_positions["4key"][0].position.use_inline_styles,
+            None
+        );
+        assert_eq!(
+            undone.knob_positions["4key"][0].position.use_inline_styles,
+            None
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert_eq!(
+            redone.key_positions["4key"][0].use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            redone.stat_positions["4key"][0].position.use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            redone.graph_positions["4key"][0].position.use_inline_styles,
+            Some(false)
+        );
+        assert_eq!(
+            redone.knob_positions["4key"][0].position.use_inline_styles,
+            Some(false)
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn editor_op_reports_target_missing_after_legacy_deletes_its_stable_id() {
         let dir = test_directory("editor-op-after-legacy-delete-test");
         std::fs::create_dir_all(&dir).unwrap();

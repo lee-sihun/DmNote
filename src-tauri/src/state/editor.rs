@@ -2423,6 +2423,15 @@ mod tests {
                 ),
                 serde_json::json!({ "sensitivity": -7.25 }),
             ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::UseInlineStyles(
+                    crate::models::EditorUseInlineStylesPropertyPatchV1 {
+                        use_inline_styles: false,
+                    },
+                ),
+                serde_json::json!({ "useInlineStyles": false }),
+            ),
         ];
         for (element_type, patch, expected) in literal_properties {
             let wire = serde_json::to_value(ops_request(vec![EditorOpV1::PatchElement {
@@ -2454,6 +2463,7 @@ mod tests {
             serde_json::json!({ "graphSpeed": 1.5 }),
             serde_json::json!({ "reverse": "true" }),
             serde_json::json!({ "sensitivity": "1" }),
+            serde_json::json!({ "useInlineStyles": null }),
         ]
         .map(|patch| {
             let mut wire = graph_color.clone();

@@ -45,6 +45,13 @@ const mocks = vi.hoisted(() => ({
     (_ids?: unknown, _patch?: unknown, _options?: { preflight?: () => void }) =>
       Promise.resolve(true),
   ),
+  patchUseInlineStyles: vi.fn(
+    (
+      _targets?: unknown,
+      _useInlineStyles?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -120,6 +127,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
+  patchUseInlineStylesByTargets: mocks.patchUseInlineStyles,
 }));
 
 vi.mock(
@@ -191,6 +199,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchGraphProperties.mockResolvedValue(true);
     mocks.patchKnobProperties.mockReset();
     mocks.patchKnobProperties.mockResolvedValue(true);
+    mocks.patchUseInlineStyles.mockReset();
+    mocks.patchUseInlineStyles.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
     mocks.elements = [
       {
@@ -451,6 +461,7 @@ describe('plugin panel persisted element mutations', () => {
     ['평균선', { showAvgLine: false }],
     ['그래프 애니메이션', { graphAnimationEnabled: true }],
     ['그래프 속도', { graphSpeed: 1200 }],
+    ['인라인 스타일', { useInlineStyles: true }],
   ])(
     'native %s exact literal을 main semantic executor에 전달한다',
     async (_label, patch) => {
@@ -477,6 +488,42 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
     },
   );
+
+  it('인라인 스타일 batch는 혼합 native 대상을 ordered semantic commit 하나로 전달한다', async () => {
+    const targets = [
+      {
+        elementType: 'key',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat',
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+      {
+        elementType: 'graph',
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      },
+      {
+        elementType: 'knob',
+        id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      },
+    ] as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { useInlineStyles: false },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchUseInlineStyles).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchUseInlineStyles).toHaveBeenCalledWith(targets, false, {
+      preflight: expect.any(Function),
+    });
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
 
   it.each([
     ['민감도', { sensitivity: 1.25 }],
@@ -876,6 +923,23 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      '인라인 스타일 batch plugin target',
+      {
+        targets: [{ elementType: 'plugin', id: 'plugin-a:one' }],
+        patch: { useInlineStyles: true },
+      },
+    ],
+    [
+      '인라인 스타일 batch mixed duplicate id',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable' },
+          { elementType: 'knob', id: 'stable' },
+        ],
+        patch: { useInlineStyles: true },
+      },
+    ],
+    [
       'single and batch together',
       {
         target: {
@@ -898,6 +962,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchGraphColors).not.toHaveBeenCalled();
       expect(mocks.patchGraphProperties).not.toHaveBeenCalled();
       expect(mocks.patchKnobProperties).not.toHaveBeenCalled();
+      expect(mocks.patchUseInlineStyles).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
         error: { code: 'INVALID_PAYLOAD' },
@@ -994,6 +1059,31 @@ describe('plugin panel persisted element mutations', () => {
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'knob', id: 'stable' }],
         patch: { reverse: true },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('인라인 스타일 혼합 batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchUseInlineStyles.mockImplementationOnce(
+      async (_targets, _value, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          { elementType: 'key', id: 'stable-key' },
+          { elementType: 'knob', id: 'stable-knob' },
+        ],
+        patch: { useInlineStyles: true },
       }),
     );
 

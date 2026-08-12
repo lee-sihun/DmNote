@@ -41,6 +41,8 @@ import {
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
   patchKnobPropertyById,
+  patchUseInlineStylesById,
+  patchUseInlineStylesByTargets,
   rebindKeySlotById,
 } from './elementOps';
 
@@ -1172,5 +1174,73 @@ describe('elementOps', () => {
         .getState()
         .positions['4key'].map((position) => position.sensitivity),
     ).toEqual([1, 1]);
+  });
+
+  it('useInlineStyles는 4타입 target을 한 semantic commit으로 보낸다', async () => {
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: ID_B },
+      {
+        elementType: 'graph' as const,
+        id: '00000000-0000-4000-8000-0000000000b1',
+      },
+      {
+        elementType: 'knob' as const,
+        id: '00000000-0000-4000-8000-0000000000b2',
+      },
+    ];
+
+    await patchUseInlineStylesById('key', ID_A, true);
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { useInlineStyles: true },
+        },
+      ],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+
+    api.commitSemanticOps.mockClear();
+    await patchUseInlineStylesByTargets(targets, false);
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { useInlineStyles: false },
+      })),
+    );
+  });
+
+  it('useInlineStyles batch는 duplicate와 empty ID를 wire 전에 거절한다', async () => {
+    await expect(
+      patchUseInlineStylesByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'stat', id: ID_A },
+        ],
+        true,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchUseInlineStylesByTargets([{ elementType: 'graph', id: '' }], true),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('useInlineStyles 편입 전 실패는 자기 eager leaf를 복원한다', async () => {
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+
+    await expect(patchUseInlineStylesById('key', ID_A, false)).rejects.toThrow(
+      'start failed',
+    );
+
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].useInlineStyles,
+    ).toBeUndefined();
   });
 });

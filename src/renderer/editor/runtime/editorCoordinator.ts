@@ -478,6 +478,12 @@ const applySemanticOps = (
             if ('sensitivity' in op.patch) {
               return { ...position, sensitivity: op.patch.sensitivity };
             }
+            if ('useInlineStyles' in op.patch) {
+              return {
+                ...position,
+                useInlineStyles: op.patch.useInlineStyles,
+              };
+            }
             return { ...position, hidden: op.patch.hidden };
           }),
         } as never;

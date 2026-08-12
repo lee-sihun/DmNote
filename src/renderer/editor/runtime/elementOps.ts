@@ -753,6 +753,37 @@ export const patchKnobPropertiesByIds = (
   );
 };
 
+export const patchUseInlineStylesById = (
+  type: NativeElementType,
+  id: string,
+  useInlineStyles: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById(type, id, { useInlineStyles }, options);
+};
+
+export const patchUseInlineStylesByTargets = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  useInlineStyles: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some((target) => target.id.length === 0) ||
+    new Set(targets.map((target) => target.id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    targets.map(({ elementType, id }) => ({
+      type: elementType,
+      id,
+      patch: { useInlineStyles },
+    })),
+    options,
+  );
+};
+
 // 다중 선택 정산: 대상 id들의 현재 canonical 기하(dx·dy)를 의도로 캡처해
 // 슬롯 안에서 id 재해석으로 적용한다. 4컬렉션 full-record 캡처는 배타
 // mutation(카운터 프리셋 삭제 등)의 IPC 창과 겹치면 직렬화 때문에 그 직후에
