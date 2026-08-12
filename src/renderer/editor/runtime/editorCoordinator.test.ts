@@ -15,7 +15,10 @@ import {
   createEditorPatch,
   getChangedEditorFields,
 } from './editorCoordinator';
-import { enqueueEditorCompatibilityWrite } from './editorCompatibilityQueue';
+import {
+  enqueueEditorCompatibilityOperation,
+  enqueueEditorCompatibilityWrite,
+} from './editorCompatibilityQueue';
 
 import type {
   EditorCommitError,
@@ -2014,6 +2017,24 @@ describe('commitGeneratedPatch', () => {
     harness.coordinator.stop();
   });
 
+  it('생성 커밋의 gestureId가 wire 요청에 실린다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitGeneratedPatch(
+      (latest) => ({
+        schemaVersion: 1,
+        keyPositions: imageRecordFrom(latest),
+      }),
+      { gestureId: 'gesture-generated' },
+    );
+
+    const request = harness.transport.commitMock.mock.calls.at(-1)?.[0];
+    expect(request?.gestureIds).toEqual(['gesture-generated']);
+    harness.coordinator.stop();
+  });
+
   it('null 생성은 mutation·낙관 적용·revision 전진이 전부 없다', async () => {
     const base = makeDocument('A');
     const harness = createHarness(base);
@@ -2057,6 +2078,162 @@ describe('commitGeneratedPatch', () => {
     expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
       'generated.png',
     );
+    harness.coordinator.stop();
+  });
+
+  it('배타 legacy mutation은 in-flight 커밋 완료 후 실행되고 canonical을 재동기화한다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const gate = deferred<void>();
+    gatedDefaultCommit(harness, gate.promise);
+    const gesture = harness.coordinator.commitGesture(
+      { schemaVersion: 1, keys: { '4key': ['G'] } },
+      'gesture-g',
+      async (context) =>
+        harness.transport.commit({
+          baseRevision: context.editorBaseRevision,
+          mutationId: context.mutationId,
+          changes: context.editorChanges!,
+        }),
+    );
+
+    const mutationSpy = vi.fn(async () => {
+      // 백엔드가 문서를 직접 바꾸는 legacy 커맨드 흉내
+      const before = harness.transport.canonical.document;
+      harness.transport.canonical.document = applyEditorPatch(before, {
+        schemaVersion: 1,
+        keys: { '4key': ['L'] },
+      });
+      harness.transport.canonical.revision += 1;
+      return 'mutated';
+    });
+    const exclusive =
+      harness.coordinator.runExclusiveLegacyMutation(mutationSpy);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mutationSpy).not.toHaveBeenCalled();
+
+    gate.resolve();
+    await gesture;
+    const result = await exclusive;
+
+    expect(result).toBe('mutated');
+    // 슬롯 안 재동기화로 로컬 문서가 mutation 결과를 반영
+    expect(harness.getLocal().keys['4key']).toEqual(['L']);
+
+    // 이후 자사 커밋은 mutation 결과 위에서 진행
+    await harness.coordinator.commitPatch({
+      schemaVersion: 1,
+      keyPositions: imageRecordFrom(harness.getLocal()),
+    });
+    const finalDocument = harness.transport.canonical.document;
+    expect(finalDocument.keys['4key']).toEqual(['L']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('선행 stale compat write와 후행 generated가 배타 mutation 결과를 되돌리지 않는다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    // 선행 writer: 클릭 시점 캡처된 stale full record (compat 큐 대기)
+    const releaseC = deferred<void>();
+    const gate = enqueueEditorCompatibilityWrite(
+      () => releaseC.promise,
+      () => undefined,
+    );
+    const staleRecord = structuredClone(
+      harness.transport.canonical.document.keyPositions,
+    );
+    staleRecord['4key'] = staleRecord['4key'].map((position, index) =>
+      index === 0 ? { ...position, noteWidth: 111 } : position,
+    );
+    const staleWrite = enqueueEditorCompatibilityWrite(
+      () =>
+        harness.coordinator.commitPatch({
+          schemaVersion: 1,
+          keyPositions: staleRecord,
+        }),
+      () => undefined,
+    );
+
+    // 배타 legacy mutation (compat 큐 + 직렬 tail 점유)
+    const legacy = enqueueEditorCompatibilityOperation(() =>
+      harness.coordinator.runExclusiveLegacyMutation(async () => {
+        harness.transport.canonical.document = applyEditorPatch(
+          harness.transport.canonical.document,
+          { schemaVersion: 1, keys: { '4key': ['L'] } },
+        );
+        harness.transport.canonical.revision += 1;
+        return 'mutated';
+      }),
+    );
+
+    // 후행 generated
+    const generated = enqueueEditorCompatibilityOperation(() =>
+      harness.coordinator.commitGeneratedPatch((latest) => ({
+        schemaVersion: 1,
+        keyPositions: imageRecordFrom(latest),
+      })),
+    );
+
+    releaseC.resolve();
+    await Promise.all([gate, staleWrite, legacy, generated]);
+
+    const finalDocument = harness.transport.canonical.document;
+    // 셋 다 생존: stale write 값, mutation 결과, generated 값
+    expect(finalDocument.keyPositions['4key'][0].noteWidth).toBe(111);
+    expect(finalDocument.keys['4key']).toEqual(['L']);
+    expect(finalDocument.keyPositions['4key'][0].inactiveImage).toBe(
+      'generated.png',
+    );
+    harness.coordinator.stop();
+  });
+
+  it('배타 mutation 실패는 원 오류로 전파되고 tail은 계속 진행된다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.runExclusiveLegacyMutation(async () => {
+        throw new Error('legacy failed');
+      }),
+    ).rejects.toThrow('legacy failed');
+
+    await expect(
+      harness.coordinator.commitPatch({
+        schemaVersion: 1,
+        keys: { '4key': ['N'] },
+      }),
+    ).resolves.toBeTruthy();
+    harness.coordinator.stop();
+  });
+
+  it('배타 mutation 재동기화 실패는 mutation 성공을 뒤집지 않는다', async () => {
+    const base = makeDocument('A');
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    harness.transport.getMock.mockRejectedValueOnce(
+      new Error('ipc unavailable'),
+    );
+
+    const result = await harness.coordinator.runExclusiveLegacyMutation(
+      async () => 'ok',
+    );
+
+    expect(result).toBe('ok');
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
     harness.coordinator.stop();
   });
 

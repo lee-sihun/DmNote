@@ -449,6 +449,7 @@ export class EditorSaveCoordinator {
   // (mutation·낙관 적용·revision 전진 전부 없음)
   commitGeneratedPatch(
     generate: (base: EditorDocumentV1) => EditorPatchV1 | null,
+    meta?: { gestureId?: string },
   ): Promise<EditorDocumentV1> {
     this.assertWritable();
     return this.enqueueSerialized(async () => {
@@ -457,7 +458,28 @@ export class EditorSaveCoordinator {
       await this.eventQueue;
       const changes = generate(this.getLatestCommitBase());
       if (!changes) return clone(this.requireLastAck());
-      return this.commitPatchSettled(changes);
+      return this.commitPatchSettled(changes, meta?.gestureId);
+    });
+  }
+
+  // 백엔드가 문서를 직접 바꾸는 legacy 커맨드(프리셋 로드, 리셋 등) 전용
+  // 배타 실행. 직렬 tail을 점유해 대기 중 stale full-record가 mutation
+  // 결과를 되돌리는 순서를 차단하고, 슬롯 안에서 canonical을 재동기화한다.
+  // public sync()는 tail을 기다리므로 슬롯 안에서 부르면 자기 교착
+  runExclusiveLegacyMutation<T>(mutation: () => Promise<T>): Promise<T> {
+    this.assertWritable();
+    return this.enqueueSerialized(async () => {
+      await this.start();
+      await this.drainUntilSettled();
+      await this.eventQueue;
+      const result = await mutation();
+      try {
+        await this.fetchAndApplyCanonical('resync');
+      } catch (error) {
+        // 명령 성공을 재동기화 실패로 뒤집지 않음 - committed 이벤트가 보정
+        console.error('배타 legacy mutation 재동기화 실패', error);
+      }
+      return result;
     });
   }
 
