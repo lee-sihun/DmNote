@@ -980,6 +980,17 @@ export function useGridResize({
     if (selectedElements.length !== 1) return;
 
     const element = selectedElements[0];
+    const frozenTarget = frozenResizeTargetsRef.current[0];
+    if (
+      frozenResizeTargetsRef.current.length === 1 &&
+      frozenTarget &&
+      frozenTarget.type !== 'plugin' &&
+      frozenTarget.id.length > 0 &&
+      !isSyntheticElementId(frozenTarget.id)
+    ) {
+      handleElementResizePreview(frozenTarget.id, newBounds);
+      return;
+    }
     if (element.type === 'key' && element.index !== undefined) {
       handleKeyResizePreview(element.index, newBounds);
     } else if (element.type === 'stat' && element.index !== undefined) {

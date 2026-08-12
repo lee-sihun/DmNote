@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import type { ElementBounds } from '@utils/grid/smartGuides';
 import { useGridResize } from './useGridResize';
 
 const mocks = vi.hoisted(() => ({
@@ -20,6 +21,18 @@ const mocks = vi.hoisted(() => ({
   sendBridge: vi.fn(),
   commitBounds: vi.fn(() => Promise.resolve(true)),
   elements: [] as Array<{ fullId: string; pluginId: string }>,
+  keyPositions: [{ dx: 0, dy: 0, width: 40, height: 40 }] as Array<{
+    id?: string;
+    dx: number;
+    dy: number;
+    width: number;
+    height: number;
+  }>,
+  gridSettings: {
+    alignmentGuides: false,
+    spacingGuides: false,
+    sizeMatchGuides: false,
+  },
 }));
 
 vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
@@ -79,11 +92,7 @@ vi.mock('@stores/grid/useGridSelectionStore', () => ({
 vi.mock('@stores/useSettingsStore', () => ({
   useSettingsStore: {
     getState: () => ({
-      gridSettings: {
-        alignmentGuides: false,
-        spacingGuides: false,
-        sizeMatchGuides: false,
-      },
+      gridSettings: mocks.gridSettings,
     }),
   },
 }));
@@ -92,10 +101,10 @@ vi.mock('@stores/data/useKeyStore', () => ({
   useKeyStore: {
     getState: () => ({
       positions: {
-        '4key': [{ dx: 0, dy: 0, width: 40, height: 40 }],
+        '4key': mocks.keyPositions,
       },
       canonicalPositions: {
-        '4key': [{ dx: 0, dy: 0, width: 40, height: 40 }],
+        '4key': mocks.keyPositions,
       },
       setPositions: vi.fn(),
     }),
@@ -129,12 +138,18 @@ type ResizeApi = ReturnType<typeof useGridResize>;
 interface HarnessProps {
   selectedElements: SelectedElement[];
   expose: (api: ResizeApi) => void;
+  getOtherElements?: (excludeId: string) => ElementBounds[];
 }
 
-const Harness = ({ selectedElements, expose }: HarnessProps) => {
+const Harness = ({
+  selectedElements,
+  expose,
+  getOtherElements,
+}: HarnessProps) => {
   const api = useGridResize({
     selectedElements,
     selectedKeyType: '4key',
+    getOtherElements,
   });
   expose(api);
   return null;
@@ -168,11 +183,15 @@ describe('useGridResize plugin gesture lifecycle', () => {
   let events: string[];
   let pluginGestureIds: string[];
 
-  const renderHarness = async (selectedElements: SelectedElement[]) => {
+  const renderHarness = async (
+    selectedElements: SelectedElement[],
+    getOtherElements?: (excludeId: string) => ElementBounds[],
+  ) => {
     await act(async () => {
       root.render(
         <Harness
           selectedElements={selectedElements}
+          getOtherElements={getOtherElements}
           expose={(nextApi) => {
             api = nextApi;
           }}
@@ -201,6 +220,12 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.beginMixedGesture.mockClear();
     mocks.cancelMixedGesture.mockClear();
     mocks.elements = [];
+    mocks.keyPositions = [{ dx: 0, dy: 0, width: 40, height: 40 }];
+    mocks.gridSettings = {
+      alignmentGuides: false,
+      spacingGuides: false,
+      sizeMatchGuides: false,
+    };
     mocks.begin.mockImplementation((pluginId: string, gestureId: string) => {
       const token = `token-${++tokenSequence}`;
       pluginGestureIds.push(gestureId);
@@ -463,6 +488,38 @@ describe('useGridResize plugin gesture lifecycle', () => {
     const byId = intents.get('key')!;
     expect([...byId.keys()]).toEqual([STABLE_A]);
     expect(byId.get(STABLE_A)).toMatchObject({ width: 120, height: 80 });
+  });
+
+  it('리사이즈 중 재정렬돼도 프리뷰 가이드는 시작 요소를 제외한다', async () => {
+    const getOtherElements = vi.fn(() => [] as ElementBounds[]);
+    mocks.gridSettings = {
+      alignmentGuides: true,
+      spacingGuides: true,
+      sizeMatchGuides: true,
+    };
+    mocks.keyPositions = [
+      { id: STABLE_A, dx: 0, dy: 0, width: 120, height: 60 },
+      { id: STABLE_B, dx: 200, dy: 0, width: 120, height: 60 },
+    ];
+    await renderHarness([stableKeySelection(STABLE_A)], getOtherElements);
+    const activeResizeApi = api;
+
+    await act(async () => {
+      activeResizeApi.handleResizeStart();
+    });
+    mocks.keyPositions = [mocks.keyPositions[1], mocks.keyPositions[0]];
+    await renderHarness([stableKeySelection(STABLE_A, 1)], getOtherElements);
+    await act(async () => {
+      activeResizeApi.handleResize({
+        x: 0,
+        y: 0,
+        width: 118,
+        height: 60,
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+    });
+
+    expect(getOtherElements).toHaveBeenLastCalledWith(STABLE_A);
   });
 
   it('시작 baseline이 없는 합성 단일 resize는 eager와 wire 모두 무커밋한다', async () => {
