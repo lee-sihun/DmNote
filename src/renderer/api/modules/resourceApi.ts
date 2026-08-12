@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
-import { runLegacyEditorMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
+import {
+  runExclusiveLegacyMutation,
+  runLegacyEditorMutation,
+} from '@src/renderer/editor/runtime/legacyEditorMutation';
 
 export const fontApi = {
   load: () =>
@@ -27,7 +30,7 @@ export const soundApi = {
       displayName,
     }),
   remove: (soundPath: string) =>
-    runLegacyEditorMutation(() =>
+    runExclusiveLegacyMutation(() =>
       invoke<import('@src/types/plugin/api').SoundDeleteResult>(
         'sound_delete',
         {
@@ -142,14 +145,14 @@ export const counterAnimationApi = {
   update: (
     request: import('@src/types/plugin/api').CounterAnimationUpdateRequest,
   ) =>
-    runLegacyEditorMutation(() =>
+    runExclusiveLegacyMutation(() =>
       invoke<import('@src/types/plugin/api').CounterAnimationUpsertResponse>(
         'counter_animation_update',
         { request },
       ),
     ),
   remove: (id: string) =>
-    runLegacyEditorMutation(() =>
+    runExclusiveLegacyMutation(() =>
       invoke<import('@src/types/plugin/api').CounterAnimationDeleteResponse>(
         'counter_animation_delete',
         { id },

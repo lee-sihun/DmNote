@@ -323,6 +323,15 @@ positions['4key'][0].dx = 100;
 const committed = await dmn.keys.updatePositions(positions);
 ```
 
+Position writes from plugins are serialized on a dedicated queue and settle
+against the committed document: the promise resolves only after the commit and
+the follow-up read complete, and the returned collections carry the stable
+element `id` values the app assigned (elements submitted without an `id` get
+one issued). On failure the original error is rejected as-is; if a commit
+might have succeeded but the follow-up read failed, read the current value
+before retrying instead of resubmitting blindly. The same applies to
+`statItems`, `graphItems`, and `knobItems` `updatePositions`.
+
 <Callout type="warning">
   `keys[mode][i]` and `keyPositions[mode][i]` are coupled by index. A standalone
   `update()` or `updatePositions()` may fail with `PAIRED_UPDATE_REQUIRED` if it

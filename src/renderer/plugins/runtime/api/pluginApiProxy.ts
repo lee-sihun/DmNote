@@ -14,6 +14,7 @@ import {
   pluginEditorCommit,
   pluginKeysUpdate,
   pluginKeysUpdateWithPositions,
+  pluginPositionsUpdate,
 } from './pluginWriteGateway';
 
 interface CreatePluginApiProxyOptions {
@@ -77,6 +78,41 @@ export const createPluginApiProxy = (
           args[0] as Parameters<typeof pluginKeysUpdateWithPositions>[0],
           args[1] as Parameters<typeof pluginKeysUpdateWithPositions>[1],
           args[2] as Parameters<typeof pluginKeysUpdateWithPositions>[2],
+        ),
+      ),
+      // 위치 단독 쓰기도 격리 v1 - 자사 큐를 타면 wire v2가 되어 무ID
+      // 구 플러그인 입력이 거절된다
+      updatePositions: wrapWithContext((...args: unknown[]) =>
+        pluginPositionsUpdate(
+          'keyPositions',
+          args[0] as Record<string, unknown[]>,
+        ),
+      ),
+    },
+    statItems: {
+      ...((wrappedApi.statItems as Record<string, unknown>) ?? {}),
+      updatePositions: wrapWithContext((...args: unknown[]) =>
+        pluginPositionsUpdate(
+          'statPositions',
+          args[0] as Record<string, unknown[]>,
+        ),
+      ),
+    },
+    graphItems: {
+      ...((wrappedApi.graphItems as Record<string, unknown>) ?? {}),
+      updatePositions: wrapWithContext((...args: unknown[]) =>
+        pluginPositionsUpdate(
+          'graphPositions',
+          args[0] as Record<string, unknown[]>,
+        ),
+      ),
+    },
+    knobItems: {
+      ...((wrappedApi.knobItems as Record<string, unknown>) ?? {}),
+      updatePositions: wrapWithContext((...args: unknown[]) =>
+        pluginPositionsUpdate(
+          'knobPositions',
+          args[0] as Record<string, unknown[]>,
         ),
       ),
     },

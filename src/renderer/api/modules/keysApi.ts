@@ -3,7 +3,7 @@ import { subscribe } from './shared';
 import { rawKeyEventBus } from '@utils/core/rawKeyEventBus';
 import { enqueueEditorCompatibilityWrite } from '@src/renderer/editor/runtime/editorCompatibilityQueue';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
-import { runLegacyEditorMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
+import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
 
 import type {
   KeyCounterUpdate,
@@ -99,11 +99,11 @@ export const keysApi = {
   setMode: (mode: string) =>
     invoke<KeysModeResponse>('keys_set_mode', { mode }),
   resetAll: () =>
-    runLegacyEditorMutation(() =>
+    runExclusiveLegacyMutation(() =>
       invoke<KeysResetAllResponse>('keys_reset_all'),
     ),
   resetMode: (mode: string) =>
-    runLegacyEditorMutation(() =>
+    runExclusiveLegacyMutation(() =>
       invoke<KeysModeResponse>('keys_reset_mode', { mode }),
     ),
   setCounters: (counters: KeyCounters) =>
@@ -157,11 +157,11 @@ export const keysApi = {
   customTabs: {
     list: () => invoke<CustomTab[]>('custom_tabs_list'),
     create: (name: string) =>
-      runLegacyEditorMutation(() =>
+      runExclusiveLegacyMutation(() =>
         invoke<CustomTabResult>('custom_tabs_create', { name }),
       ),
     delete: (id: string) =>
-      runLegacyEditorMutation(() =>
+      runExclusiveLegacyMutation(() =>
         invoke<CustomTabDeleteResult>('custom_tabs_delete', { id }),
       ),
     select: (id: string) =>

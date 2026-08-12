@@ -194,6 +194,13 @@ current['4key'][0].dx = 100;
 await dmn.keys.updatePositions(current);
 ```
 
+플러그인의 위치 쓰기는 전용 큐로 직렬화되어 확정 문서 기준으로 정산됩니다.
+promise는 커밋과 후속 조회까지 끝난 뒤 resolve되고, 반환 컬렉션에는 앱이
+부여한 요소 안정 `id`가 담깁니다 (`id` 없이 제출한 요소는 새로 발급됨).
+실패 시 원 오류가 그대로 reject되며, 커밋은 성공했는데 후속 조회만 실패했을
+가능성이 있으면 무작정 재제출하지 말고 현재 값을 먼저 조회해 확인하세요.
+`statItems`·`graphItems`·`knobItems`의 `updatePositions`도 동일합니다.
+
 ### updateWithPositions(mappings, positions, options?)
 
 키 매핑과 인덱스로 결합된 위치 정보를 한 번의 원자적 커밋으로 갱신합니다.

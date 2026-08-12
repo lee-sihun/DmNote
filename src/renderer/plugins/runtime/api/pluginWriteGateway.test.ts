@@ -19,6 +19,7 @@ import {
   pluginEditorCommit,
   pluginKeysUpdate,
   pluginKeysUpdateWithPositions,
+  pluginPositionsUpdate,
 } from './pluginWriteGateway';
 import type { PluginEditorCommitRequest } from '@src/types/editor';
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
@@ -133,5 +134,44 @@ describe('pluginWriteGateway', () => {
 
     expect(runSerializedPluginCommit).toHaveBeenCalledTimes(1);
     expect(editorCommitRaw.mock.calls[0][0]).toBe(request);
+  });
+
+  it.each([
+    ['keyPositions'],
+    ['statPositions'],
+    ['graphPositions'],
+    ['knobPositions'],
+  ] as const)(
+    '%s 단독 쓰기는 격리 v1 커밋을 타고 canonical 필드를 돌려준다',
+    async (field) => {
+      const canonical = {
+        keys: {},
+        keyPositions: {},
+        statPositions: {},
+        graphPositions: {},
+        knobPositions: {},
+        [field]: { '4key': [{ id: 'adapter-issued', dx: 1 }] },
+      };
+      commitIsolatedPluginPatch.mockResolvedValue(canonical);
+
+      const input = { '4key': [{ dx: 1 }] };
+      const result = await pluginPositionsUpdate(field, input);
+
+      expect(commitIsolatedPluginPatch).toHaveBeenCalledWith(
+        { schemaVersion: 1, [field]: input },
+        { multiKey: false },
+      );
+      // 입력 에코가 아니라 adapter가 발급한 ID를 포함한 canonical
+      expect(result).toEqual({ '4key': [{ id: 'adapter-issued', dx: 1 }] });
+    },
+  );
+
+  it('위치 쓰기 실패는 원 오류 그대로 reject된다', async () => {
+    const original = { errorCode: 'VALIDATION_FAILED', message: 'bad' };
+    commitIsolatedPluginPatch.mockRejectedValueOnce(original);
+
+    await expect(
+      pluginPositionsUpdate('keyPositions', { '4key': [] }),
+    ).rejects.toBe(original);
   });
 });

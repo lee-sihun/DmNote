@@ -1,78 +1,118 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { runLegacyEditorMutationWith } from './legacyEditorMutation';
+const order = vi.hoisted(() => ({
+  calls: [] as string[],
+  settleResult: true,
+  activeIds: [] as Array<string | null>,
+  activeGestureId: vi.fn(() => order.activeIds.shift() ?? null),
+  commitPendingAsync: vi.fn(async () => {
+    order.calls.push('settle');
+    return order.settleResult;
+  }),
+  cancel: vi.fn(() => {
+    order.calls.push('cancel');
+  }),
+  exclusive: vi.fn(async (mutation: () => Promise<unknown>) => {
+    order.calls.push('exclusive');
+    return mutation();
+  }),
+}));
 
-describe('legacy editor mutation coordinator gate', () => {
-  it('coordinator 구독 확립 뒤 명령을 실행하고 canonical을 재적용한다', async () => {
-    const order: string[] = [];
-    const coordinator = {
-      start: vi.fn(async () => {
-        order.push('start');
-      }),
-      sync: vi.fn(async () => {
-        order.push('sync');
-      }),
-    };
+vi.mock('./editGestureController', () => ({
+  editGestureController: {
+    activeGestureId: order.activeGestureId,
+    commitPendingAsync: order.commitPendingAsync,
+    cancel: order.cancel,
+  },
+}));
+vi.mock('./editorStateCoordinator', () => ({
+  editorCoordinator: { runExclusiveLegacyMutation: order.exclusive },
+}));
 
-    const result = await runLegacyEditorMutationWith(coordinator, async () => {
-      order.push('mutation');
-      return 'saved';
+import { enqueueEditorCompatibilityWrite } from './editorCompatibilityQueue';
+import { runExclusiveLegacyMutation } from './legacyEditorMutation';
+
+describe('runExclusiveLegacyMutation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    order.calls.length = 0;
+    order.settleResult = true;
+    order.activeIds = [];
+  });
+
+  it('활성 게스처를 compat 슬롯 획득 전에 정산한다', async () => {
+    // 정산이 mutation 뒤로 밀리면 요소가 유지된 채 참조 필드만 재작성되는
+    // mutation(프리셋 삭제 fallback, 사운드 삭제)에서 삭제 참조가 부활한다
+    const result = await runExclusiveLegacyMutation(async () => {
+      order.calls.push('mutation');
+      return 'ok';
     });
 
-    expect(result).toBe('saved');
-    expect(order).toEqual(['start', 'mutation', 'sync']);
-    expect(coordinator.sync).toHaveBeenCalledWith();
+    expect(result).toBe('ok');
+    expect(order.calls).toEqual(['settle', 'exclusive', 'mutation']);
   });
 
-  it('coordinator 시작 실패 시 백엔드 mutation을 실행하지 않는다', async () => {
-    const failure = new Error('subscribe failed');
-    const mutation = vi.fn(async () => 'unexpected');
-    const coordinator = {
-      start: vi.fn(async () => {
-        throw failure;
-      }),
-      sync: vi.fn(async () => undefined),
-    };
+  it('정산 실패로 되살아난 같은 게스처만 폐기 후 진행한다', async () => {
+    // 살려두면 mutation이 재작성한 참조 위에 옛 patch가 재적용되어
+    // 삭제된 참조가 부활한다
+    order.settleResult = false;
+    order.activeIds = ['gesture-a', 'gesture-a'];
 
-    await expect(
-      runLegacyEditorMutationWith(coordinator, mutation),
-    ).rejects.toBe(failure);
-    expect(mutation).not.toHaveBeenCalled();
-    expect(coordinator.sync).not.toHaveBeenCalled();
+    await runExclusiveLegacyMutation(async () => 'ok');
+
+    expect(order.calls).toEqual(['settle', 'cancel', 'exclusive']);
   });
 
-  it('명령 성공 뒤 sync 실패는 성공 결과를 뒤집지 않는다', async () => {
-    const syncError = new Error('temporary read failure');
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const coordinator = {
-      start: vi.fn(async () => undefined),
-      sync: vi.fn(async () => {
-        throw syncError;
-      }),
-    };
+  it('정산 대기 중 시작된 새 게스처는 폐기하지 않는다', async () => {
+    // 실패한 A가 아니라 그 뒤의 최신 편집 B가 활성이면 건드리지 않는다
+    order.settleResult = false;
+    order.activeIds = ['gesture-a', 'gesture-b'];
 
-    await expect(
-      runLegacyEditorMutationWith(coordinator, async () => 42),
-    ).resolves.toBe(42);
-    expect(errorSpy).toHaveBeenCalledWith(
-      '레거시 편집 상태 재동기화 실패',
-      syncError,
+    await runExclusiveLegacyMutation(async () => 'ok');
+
+    expect(order.cancel).not.toHaveBeenCalled();
+  });
+
+  it('게스처 없이 drain만 실패한 경우 폐기하지 않는다', async () => {
+    order.settleResult = false;
+    order.activeIds = [null, null];
+
+    await runExclusiveLegacyMutation(async () => 'ok');
+
+    expect(order.cancel).not.toHaveBeenCalled();
+  });
+
+  it('정산 성공이면 게스처를 폐기하지 않는다', async () => {
+    order.activeIds = ['gesture-a', null];
+
+    await runExclusiveLegacyMutation(async () => 'ok');
+
+    expect(order.cancel).not.toHaveBeenCalled();
+  });
+
+  it('compat 큐 선행 작업 뒤에 실행된다', async () => {
+    let release!: () => void;
+    const blocker = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = enqueueEditorCompatibilityWrite(
+      async () => {
+        await blocker;
+        order.calls.push('prior-write');
+      },
+      () => undefined,
     );
-    errorSpy.mockRestore();
-  });
 
-  it('구독만 필요한 명령은 mutation 뒤 canonical sync를 생략한다', async () => {
-    const coordinator = {
-      start: vi.fn(async () => undefined),
-      sync: vi.fn(async () => undefined),
-    };
+    const pending = runExclusiveLegacyMutation(async () => 'done');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order.calls).not.toContain('exclusive');
 
-    await expect(
-      runLegacyEditorMutationWith(coordinator, async () => 'selected', {
-        syncAfter: false,
-      }),
-    ).resolves.toBe('selected');
-    expect(coordinator.start).toHaveBeenCalledOnce();
-    expect(coordinator.sync).not.toHaveBeenCalled();
+    release();
+    await first;
+    expect(await pending).toBe('done');
+    expect(order.calls.indexOf('prior-write')).toBeLessThan(
+      order.calls.indexOf('exclusive'),
+    );
   });
 });

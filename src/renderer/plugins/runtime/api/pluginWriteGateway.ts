@@ -77,6 +77,29 @@ export const pluginKeysUpdateWithPositions = async (
   return { keys: document.keys, positions: document.keyPositions };
 };
 
+type PluginPositionField =
+  | 'keyPositions'
+  | 'statPositions'
+  | 'graphPositions'
+  | 'knobPositions';
+
+// 위치 컬렉션 단독 쓰기도 격리 v1로 라우팅한다. 자사 호환 큐를 타면 사용자
+// 편집과 snapshot 병합되고 wire가 v2가 되어 ID 없는 구 플러그인 입력이
+// 거절된다 (v1 장기 수용 계약 회귀). canonical get까지 끝난 뒤 resolve하고
+// adapter가 발급한 ID를 포함한 canonical 필드를 반환한다. 오류는 wrapping
+// 없이 원형 그대로 reject - 커밋 성공 후 get 실패는 결과 불명이므로
+// 호출자는 재시도 전 조회로 확인해야 한다 (docs 안내)
+export const pluginPositionsUpdate = async <T>(
+  field: PluginPositionField,
+  positions: Record<string, T[]>,
+): Promise<Record<string, T[]>> => {
+  const document = await editorCoordinator.commitIsolatedPluginPatch(
+    { schemaVersion: 1, [field]: positions },
+    { multiKey: false },
+  );
+  return document[field] as Record<string, T[]>;
+};
+
 // 플러그인의 직접 editor_commit. keys를 포함하면 coordinator 큐로 직렬화해
 // 예약된 자사 변경보다 먼저 lock을 잡는 경합을 차단하고, envelope는 무가공
 // 전달 (multiKey는 플러그인이 선언한 값만 백엔드 게이트에 도달)
