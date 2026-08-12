@@ -205,7 +205,8 @@
     "acceptExternal": "외부 변경 수용"
   },
   "editorSave": {
-    "permanentFailure": "저장할 수 없는 편집 내용이라 마지막으로 저장된 상태로 되돌렸습니다. 방금 변경한 값을 확인해 주세요."
+    "permanentFailure": "저장하지 못해 변경 내용을 되돌렸습니다.\n방금 바꾼 값을 확인해 주세요.",
+    "capacityFailure": "저장 한도를 넘어 변경을 되돌렸습니다.\n일부 요소를 줄이고 다시 시도해 주세요."
   },
   "common": {
     "confirm": "확인",

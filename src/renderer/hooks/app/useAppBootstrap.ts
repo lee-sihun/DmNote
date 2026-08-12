@@ -73,6 +73,29 @@ import {
 } from '@utils/grid/cursorUtils';
 import type { CustomJs, JsPlugin } from '@src/types/plugin/js';
 
+const CAPACITY_VALIDATION_CODES = new Set([
+  'COLLECTION_TOO_LARGE',
+  'TOO_MANY_RENDER_ITEMS',
+  'TOO_MANY_LAYER_GROUPS',
+  'TOO_MANY_SLOTS_PER_MEMBER',
+  'REQUEST_TOO_LARGE',
+  'HISTORY_ENTRY_TOO_LARGE',
+]);
+
+const isEditorCapacityFailure = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'errorCode' in error &&
+  error.errorCode === 'VALIDATION_FAILED' &&
+  'retryable' in error &&
+  error.retryable === false &&
+  'details' in error &&
+  typeof error.details === 'object' &&
+  error.details !== null &&
+  'validationCode' in error.details &&
+  typeof error.details.validationCode === 'string' &&
+  CAPACITY_VALIDATION_CODES.has(error.details.validationCode);
+
 function clonePlugins(source?: CustomJs | null): JsPlugin[] {
   if (!source) return [];
   const fromPlugins = Array.isArray(source.plugins) ? source.plugins : [];
@@ -424,17 +447,21 @@ export function useAppBootstrap() {
         '저장할 수 없는 편집 내용을 마지막 저장 상태로 되돌렸습니다',
         state.error,
       );
-      void window.api.ui.dialog
-        .alert(
-          getEditorCopy(
+      const message = isEditorCapacityFailure(state.error)
+        ? getEditorCopy(
+            'editorSave.capacityFailure',
+            '저장 한도를 넘어 변경을 되돌렸습니다.\n일부 요소를 줄이고 다시 시도해 주세요.',
+            'This edit exceeded the save limit and was undone.\nRemove some elements and try again.',
+          )
+        : getEditorCopy(
             'editorSave.permanentFailure',
-            '저장할 수 없는 편집 내용이라 마지막으로 저장된 상태로 되돌렸습니다. 방금 변경한 값을 확인해 주세요.',
-            'This edit could not be saved, so the editor was restored to the last saved state. Please check the value you just changed.',
-          ),
-          {
-            confirmText: getEditorCopy('common.ok', '확인', 'OK'),
-          },
-        )
+            '저장하지 못해 변경 내용을 되돌렸습니다.\n방금 바꾼 값을 확인해 주세요.',
+            "Couldn't save this edit, so it was undone.\nCheck the value you just changed.",
+          );
+      void window.api.ui.dialog
+        .alert(message, {
+          confirmText: getEditorCopy('common.ok', '확인', 'OK'),
+        })
         .catch((error) => {
           console.error('편집 저장 실패 안내를 표시하지 못했습니다', error);
         });

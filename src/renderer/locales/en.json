@@ -205,7 +205,8 @@
     "acceptExternal": "Accept External Change"
   },
   "editorSave": {
-    "permanentFailure": "This edit could not be saved, so the editor was restored to the last saved state. Please check the value you just changed."
+    "permanentFailure": "Couldn't save this edit, so it was undone.\nCheck the value you just changed.",
+    "capacityFailure": "This edit exceeded the save limit and was undone.\nRemove some elements and try again."
   },
   "common": {
     "confirm": "Confirm",

@@ -205,7 +205,8 @@
     "acceptExternal": "接受外部變更"
   },
   "editorSave": {
-    "permanentFailure": "此編輯無法儲存，編輯器已還原到上次儲存的狀態。請檢查您剛剛變更的值。"
+    "permanentFailure": "無法儲存，已復原這次變更。\n請檢查剛才變更的值。",
+    "capacityFailure": "超過儲存上限，已復原這次變更。\n請刪除部分元素後再試。"
   },
   "common": {
     "confirm": "確認",

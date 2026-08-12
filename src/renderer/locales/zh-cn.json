@@ -205,7 +205,8 @@
     "acceptExternal": "接受外部更改"
   },
   "editorSave": {
-    "permanentFailure": "此编辑无法保存，编辑器已恢复到上次保存的状态。请检查您刚刚更改的值。"
+    "permanentFailure": "无法保存，已撤销这次更改。\n请检查刚才更改的值。",
+    "capacityFailure": "超出保存上限，已撤销这次更改。\n请删除部分元素后重试。"
   },
   "common": {
     "confirm": "确认",
