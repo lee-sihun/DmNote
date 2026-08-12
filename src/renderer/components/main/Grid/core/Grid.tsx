@@ -20,6 +20,7 @@ import {
   placeDuplicatedKey,
   type ZOrderTarget,
 } from '@src/renderer/editor/runtime/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   isSyntheticElementId,
   resolveElementById,
@@ -477,9 +478,6 @@ const Grid = ({
   } = useGridResize({
     selectedElements,
     selectedKeyType,
-    // 리사이즈 종료는 크기 필드까지 의도에 포함 (이동 경로는 dx·dy만)
-    onResizeEnd: (gestureId?: string) =>
-      syncSelectedElementsToOverlay(gestureId, { includeSize: true }),
     getOtherElements,
   });
 
@@ -751,7 +749,9 @@ const Grid = ({
       }
     }
     if (idTargets.length > 0) {
-      await applyZOrderByIds(idTargets, 'front', pluginZIndexesForMode());
+      await applyZOrderByIds(idTargets, 'front', pluginZIndexesForMode()).catch(
+        reportElementOpError,
+      );
     }
 
     syncSelectedElementsToOverlay();
@@ -788,7 +788,9 @@ const Grid = ({
       }
     }
     if (idTargets.length > 0) {
-      await applyZOrderByIds(idTargets, 'back', pluginZIndexesForMode());
+      await applyZOrderByIds(idTargets, 'back', pluginZIndexesForMode()).catch(
+        reportElementOpError,
+      );
     }
 
     syncSelectedElementsToOverlay();
@@ -1260,7 +1262,7 @@ const Grid = ({
               () => {
                 const id = position.id;
                 if (id) {
-                  void deleteElementById('key', id);
+                  void deleteElementById('key', id).catch(reportElementOpError);
                   return;
                 }
                 onKeyDelete(index);
@@ -1388,7 +1390,7 @@ const Grid = ({
             () => {
               const id = position.id;
               if (id) {
-                void deleteElementById('stat', id);
+                void deleteElementById('stat', id).catch(reportElementOpError);
                 return;
               }
               deleteStatAtIndex(index);
@@ -1524,7 +1526,7 @@ const Grid = ({
             () => {
               const id = position.id;
               if (id) {
-                void deleteElementById('graph', id);
+                void deleteElementById('graph', id).catch(reportElementOpError);
                 return;
               }
               deleteGraphAtIndex(index);
@@ -1639,7 +1641,7 @@ const Grid = ({
             () => {
               const id = position.id;
               if (id) {
-                void deleteElementById('knob', id);
+                void deleteElementById('knob', id).catch(reportElementOpError);
                 return;
               }
               deleteKnobAtIndex(index);
@@ -1864,7 +1866,7 @@ const Grid = ({
                 selectedKeyType,
                 snapped.x - width / 2,
                 snapped.y - height / 2,
-              );
+              ).catch(reportElementOpError);
             } else if (typeof onKeyDuplicate === 'function') {
               onKeyDuplicate(
                 duplicateState.sourceIndex,
@@ -2282,7 +2284,9 @@ const Grid = ({
                   t('confirm.removeStat', { name: displayName }),
                   () => {
                     if (contextElementId) {
-                      void deleteElementById('stat', contextElementId);
+                      void deleteElementById('stat', contextElementId).catch(
+                        reportElementOpError,
+                      );
                       return;
                     }
                     if (statIndex != null) deleteStatAtIndex(statIndex);
@@ -2297,7 +2301,7 @@ const Grid = ({
                     [{ type: 'stat', id: contextElementId }],
                     'front',
                     pluginZIndexesForMode(),
-                  );
+                  ).catch(reportElementOpError);
                 } else if (statIndex != null) {
                   moveStatToFront(statIndex);
                 }
@@ -2307,7 +2311,7 @@ const Grid = ({
                     [{ type: 'stat', id: contextElementId }],
                     'back',
                     pluginZIndexesForMode(),
-                  );
+                  ).catch(reportElementOpError);
                 } else if (statIndex != null) {
                   moveStatToBack(statIndex);
                 }
@@ -2333,7 +2337,9 @@ const Grid = ({
                   t('confirm.removeGraph', { name: displayName }),
                   () => {
                     if (contextElementId) {
-                      void deleteElementById('graph', contextElementId);
+                      void deleteElementById('graph', contextElementId).catch(
+                        reportElementOpError,
+                      );
                       return;
                     }
                     if (graphIndex != null) deleteGraphAtIndex(graphIndex);
@@ -2348,7 +2354,7 @@ const Grid = ({
                     [{ type: 'graph', id: contextElementId }],
                     'front',
                     pluginZIndexesForMode(),
-                  );
+                  ).catch(reportElementOpError);
                 } else if (graphIndex != null) {
                   moveGraphToFront(graphIndex);
                 }
@@ -2358,7 +2364,7 @@ const Grid = ({
                     [{ type: 'graph', id: contextElementId }],
                     'back',
                     pluginZIndexesForMode(),
-                  );
+                  ).catch(reportElementOpError);
                 } else if (graphIndex != null) {
                   moveGraphToBack(graphIndex);
                 }
@@ -2376,7 +2382,9 @@ const Grid = ({
                   t('confirm.removeKnob', { name: 'Knob' }),
                   () => {
                     if (contextElementId) {
-                      void deleteElementById('knob', contextElementId);
+                      void deleteElementById('knob', contextElementId).catch(
+                        reportElementOpError,
+                      );
                       return;
                     }
                     if (knobIndex != null) deleteKnobAtIndex(knobIndex);
@@ -2391,7 +2399,7 @@ const Grid = ({
                     [{ type: 'knob', id: contextElementId }],
                     'front',
                     pluginZIndexesForMode(),
-                  );
+                  ).catch(reportElementOpError);
                 } else if (knobIndex != null) {
                   moveKnobToFront(knobIndex);
                 }
@@ -2401,7 +2409,7 @@ const Grid = ({
                     [{ type: 'knob', id: contextElementId }],
                     'back',
                     pluginZIndexesForMode(),
-                  );
+                  ).catch(reportElementOpError);
                 } else if (knobIndex != null) {
                   moveKnobToBack(knobIndex);
                 }
@@ -2471,7 +2479,9 @@ const Grid = ({
                 t('confirm.removeKey', { name: displayName }),
                 () => {
                   if (contextElementId) {
-                    void deleteElementById('key', contextElementId);
+                    void deleteElementById('key', contextElementId).catch(
+                      reportElementOpError,
+                    );
                     return;
                   }
                   if (keyIndex != null) onKeyDelete(keyIndex);
@@ -2576,7 +2586,7 @@ const Grid = ({
                   [{ type: 'key', id: contextElementId }],
                   'front',
                   pluginZIndexesForMode(),
-                );
+                ).catch(reportElementOpError);
               } else {
                 const keyIndex = resolveContextTarget('key');
                 if (keyIndex != null && typeof onMoveToFront === 'function') {
@@ -2599,7 +2609,7 @@ const Grid = ({
                   [{ type: 'key', id: contextElementId }],
                   'back',
                   pluginZIndexesForMode(),
-                );
+                ).catch(reportElementOpError);
               } else {
                 const keyIndex = resolveContextTarget('key');
                 if (keyIndex != null && typeof onMoveToBack === 'function') {

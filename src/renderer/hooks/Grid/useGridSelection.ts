@@ -72,10 +72,7 @@ interface UseGridSelectionReturn {
   deleteSelectedElements: () => Promise<void>;
   copySelectedElements: () => void;
   pasteElements: () => Promise<void>;
-  syncSelectedElementsToOverlay: (
-    gestureId?: string,
-    options?: { includeSize?: boolean },
-  ) => void;
+  syncSelectedElementsToOverlay: (gestureId?: string) => void;
   clipboard: ClipboardItem[];
 }
 
@@ -97,10 +94,7 @@ export function useGridSelection({
 
   // 선택된 요소들의 최종 위치를 한 번에 저장
   // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-  const syncSelectedElementsToOverlay = (
-    gestureId?: string,
-    options?: { includeSize?: boolean },
-  ) => {
+  const syncSelectedElementsToOverlay = (gestureId?: string) => {
     const currentPositions = useKeyStore.getState().canonicalPositions;
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
@@ -152,11 +146,7 @@ export function useGridSelection({
       gestureId && isMixed
         ? commitMixedGestureTransaction(gestureId, editorChanges, pluginIds)
         : allStableIds
-        ? commitSelectedGeometryByIds(
-            nativeTargets,
-            gestureId,
-            options?.includeSize ? ['dx', 'dy', 'width', 'height'] : undefined,
-          )
+        ? commitSelectedGeometryByIds(nativeTargets, gestureId)
         : editorCoordinator.commitPatch(
             editorChanges,
             gestureId ? { gestureId } : undefined,
