@@ -331,10 +331,29 @@ pub(crate) fn validate_request_envelope(
                 ));
             }
 
+            let reorder_count = ops
+                .iter()
+                .filter(|op| matches!(op, crate::models::EditorOpV1::ReorderElements { .. }))
+                .count();
+            if reorder_count > 0 && (ops.len() != 1 || reorder_count != 1) {
+                return Err(EditorCommitError::validation(
+                    "INVALID_REORDER_BATCH",
+                    "reorderElements must be the only editor op",
+                ));
+            }
+
             let mut ids = HashSet::with_capacity(ops.len());
             for op in ops {
                 let Some(id) = op.target_id() else {
-                    validate_frozen_insert_envelope(op)?;
+                    match op {
+                        crate::models::EditorOpV1::InsertFrozenElements { .. } => {
+                            validate_frozen_insert_envelope(op)?;
+                        }
+                        crate::models::EditorOpV1::ReorderElements { .. } => {
+                            validate_reorder_envelope(op)?;
+                        }
+                        _ => {}
+                    }
                     continue;
                 };
                 if !crate::state::native_element_id::is_valid_element_id(id) {
@@ -499,6 +518,123 @@ fn validate_frozen_insert_envelope(
                     "insertFrozenElements z target '{}' appears more than once",
                     update.id
                 ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_reorder_envelope(op: &crate::models::EditorOpV1) -> Result<(), EditorCommitError> {
+    use crate::models::EditorOpV1;
+
+    let EditorOpV1::ReorderElements {
+        mode,
+        complete_mode_order,
+        z_updates,
+        group_updates,
+    } = op
+    else {
+        return Ok(());
+    };
+
+    if mode.is_empty() || mode.len() > MAX_MODE_ID_BYTES {
+        return Err(EditorCommitError::validation(
+            "INVALID_MODE_ID",
+            "reorderElements mode must be non-empty and within the mode ID limit",
+        ));
+    }
+    if z_updates.is_empty() {
+        return Err(EditorCommitError::validation(
+            "EMPTY_REORDER_BATCH",
+            "reorderElements must contain zUpdates",
+        ));
+    }
+    for (label, count) in [
+        ("zUpdates", z_updates.len()),
+        ("groupUpdates", group_updates.len()),
+    ] {
+        if count > MAX_RENDER_ITEMS {
+            return Err(EditorCommitError::validation(
+                "REORDER_BATCH_TOO_LARGE",
+                format!("reorderElements {label} count exceeds {MAX_RENDER_ITEMS}"),
+            ));
+        }
+    }
+    if !complete_mode_order && !group_updates.is_empty() {
+        return Err(EditorCommitError::validation(
+            "INVALID_PARTIAL_REORDER_GROUP_UPDATE",
+            "partial reorderElements cannot contain groupUpdates",
+        ));
+    }
+
+    let mut z_targets = HashMap::with_capacity(z_updates.len());
+    for update in z_updates {
+        if !crate::state::native_element_id::is_valid_element_id(&update.id) {
+            return Err(EditorCommitError::validation(
+                crate::state::native_element_id::INVALID_ELEMENT_ID,
+                format!("reorderElements z target '{}' has an invalid ID", update.id),
+            ));
+        }
+        if z_targets
+            .insert(update.id.as_str(), update.element_type)
+            .is_some()
+        {
+            return Err(EditorCommitError::validation(
+                "DUPLICATE_REORDER_Z_TARGET",
+                format!(
+                    "reorderElements z target '{}' appears more than once",
+                    update.id
+                ),
+            ));
+        }
+    }
+
+    let mut group_targets = HashSet::with_capacity(group_updates.len());
+    for update in group_updates {
+        if !crate::state::native_element_id::is_valid_element_id(&update.id) {
+            return Err(EditorCommitError::validation(
+                crate::state::native_element_id::INVALID_ELEMENT_ID,
+                format!(
+                    "reorderElements group target '{}' has an invalid ID",
+                    update.id
+                ),
+            ));
+        }
+        if !group_targets.insert(update.id.as_str()) {
+            return Err(EditorCommitError::validation(
+                "DUPLICATE_REORDER_GROUP_TARGET",
+                format!(
+                    "reorderElements group target '{}' appears more than once",
+                    update.id
+                ),
+            ));
+        }
+        let Some(z_type) = z_targets.get(update.id.as_str()) else {
+            return Err(EditorCommitError::validation(
+                "REORDER_GROUP_TARGET_NOT_IN_ORDER",
+                format!(
+                    "reorderElements group target '{}' has no matching z target",
+                    update.id
+                ),
+            ));
+        };
+        if *z_type != update.element_type {
+            return Err(EditorCommitError::validation(
+                "REORDER_TARGET_TYPE_CONFLICT",
+                format!(
+                    "reorderElements target '{}' uses conflicting element types",
+                    update.id
+                ),
+            ));
+        }
+        if update
+            .group_id
+            .as_ref()
+            .is_some_and(|group_id| group_id.is_empty() || group_id.len() > MAX_GROUP_ID_BYTES)
+        {
+            return Err(EditorCommitError::validation(
+                "INVALID_REORDER_GROUP_ID",
+                "reorderElements group ID is empty or exceeds its limit",
             ));
         }
     }
@@ -1799,9 +1935,9 @@ mod tests {
 
     use crate::models::{
         CustomTab, EditorBoundsV1, EditorCommitRequest, EditorDocumentV1, EditorElementTypeV1,
-        EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1, ElementShadowSpec,
-        GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
-        StatPosition, StatType,
+        EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1,
+        EditorZUpdateV1, ElementShadowSpec, GraphPosition, GraphStatType, GraphType, KeyPosition,
+        KnobPosition, LayerGroupDef, StatPosition, StatType,
     };
 
     use super::*;
@@ -1867,6 +2003,19 @@ mod tests {
             }],
             groups: Vec::new(),
             z_updates: Vec::new(),
+        }
+    }
+
+    fn reorder_op(id: impl Into<String>, complete_mode_order: bool) -> EditorOpV1 {
+        EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order,
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.into(),
+                z_index: 7,
+            }],
+            group_updates: Vec::new(),
         }
     }
 
@@ -2170,6 +2319,257 @@ mod tests {
         });
         let error = decode_editor_commit_request(invalid_slot).unwrap_err();
         assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+    }
+
+    #[test]
+    fn reorder_wire_is_exact_and_requires_explicit_nullable_group_id() {
+        let target_id = Uuid::new_v4().to_string();
+        let op = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: true,
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: target_id.clone(),
+                z_index: 3,
+            }],
+            group_updates: vec![EditorGroupUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: target_id,
+                group_id: None,
+            }],
+        };
+        let valid = serde_json::to_value(ops_request(vec![op])).unwrap();
+        assert_eq!(valid["ops"][0]["kind"], "reorderElements");
+        assert_eq!(valid["ops"][0]["completeModeOrder"], true);
+        assert!(valid["ops"][0]["groupUpdates"][0]["groupId"].is_null());
+        decode_editor_commit_request(valid.clone()).unwrap();
+
+        let mut missing_group_id = valid.clone();
+        missing_group_id["ops"][0]["groupUpdates"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("groupId");
+        let error = decode_editor_commit_request(missing_group_id).unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+
+        let mut unknown_z = valid.clone();
+        unknown_z["ops"][0]["zUpdates"][0]["unexpected"] = serde_json::json!(true);
+        let mut unknown_group = valid;
+        unknown_group["ops"][0]["groupUpdates"][0]["unexpected"] = serde_json::json!(true);
+        for wire in [unknown_z, unknown_group] {
+            let error = decode_editor_commit_request(wire).unwrap_err();
+            assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+        }
+    }
+
+    #[test]
+    fn reorder_is_a_bounded_sole_op_with_consistent_targets() {
+        let id = Uuid::new_v4().to_string();
+        let mixed = ops_request(vec![
+            reorder_op(id.clone(), false),
+            set_bounds_op(Uuid::new_v4().to_string(), EditorElementTypeV1::Key),
+        ]);
+        assert_eq!(
+            validation_code(&validate_request_envelope(&mixed).unwrap_err()),
+            Some("INVALID_REORDER_BATCH")
+        );
+
+        let empty = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: false,
+            z_updates: Vec::new(),
+            group_updates: Vec::new(),
+        };
+        assert_eq!(
+            validation_code(&validate_request_envelope(&ops_request(vec![empty])).unwrap_err()),
+            Some("EMPTY_REORDER_BATCH")
+        );
+
+        let duplicate_z = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: true,
+            z_updates: vec![
+                EditorZUpdateV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: id.clone(),
+                    z_index: 1,
+                },
+                EditorZUpdateV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: id.clone(),
+                    z_index: 2,
+                },
+            ],
+            group_updates: Vec::new(),
+        };
+        assert_eq!(
+            validation_code(
+                &validate_request_envelope(&ops_request(vec![duplicate_z])).unwrap_err()
+            ),
+            Some("DUPLICATE_REORDER_Z_TARGET")
+        );
+
+        let group_without_z = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: true,
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.clone(),
+                z_index: 1,
+            }],
+            group_updates: vec![EditorGroupUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: Uuid::new_v4().to_string(),
+                group_id: None,
+            }],
+        };
+        assert_eq!(
+            validation_code(
+                &validate_request_envelope(&ops_request(vec![group_without_z])).unwrap_err()
+            ),
+            Some("REORDER_GROUP_TARGET_NOT_IN_ORDER")
+        );
+
+        let duplicate_group = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: true,
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.clone(),
+                z_index: 1,
+            }],
+            group_updates: vec![
+                EditorGroupUpdateV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: id.clone(),
+                    group_id: None,
+                },
+                EditorGroupUpdateV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: id.clone(),
+                    group_id: None,
+                },
+            ],
+        };
+        assert_eq!(
+            validation_code(
+                &validate_request_envelope(&ops_request(vec![duplicate_group])).unwrap_err()
+            ),
+            Some("DUPLICATE_REORDER_GROUP_TARGET")
+        );
+
+        let conflicting_type = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: true,
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.clone(),
+                z_index: 1,
+            }],
+            group_updates: vec![EditorGroupUpdateV1 {
+                element_type: EditorElementTypeV1::Graph,
+                id: id.clone(),
+                group_id: None,
+            }],
+        };
+        assert_eq!(
+            validation_code(
+                &validate_request_envelope(&ops_request(vec![conflicting_type])).unwrap_err()
+            ),
+            Some("REORDER_TARGET_TYPE_CONFLICT")
+        );
+
+        let invalid_group_id = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: true,
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.clone(),
+                z_index: 1,
+            }],
+            group_updates: vec![EditorGroupUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.clone(),
+                group_id: Some(String::new()),
+            }],
+        };
+        assert_eq!(
+            validation_code(
+                &validate_request_envelope(&ops_request(vec![invalid_group_id])).unwrap_err()
+            ),
+            Some("INVALID_REORDER_GROUP_ID")
+        );
+
+        let partial_group = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: false,
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.clone(),
+                z_index: 1,
+            }],
+            group_updates: vec![EditorGroupUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.clone(),
+                group_id: None,
+            }],
+        };
+        assert_eq!(
+            validation_code(
+                &validate_request_envelope(&ops_request(vec![partial_group])).unwrap_err()
+            ),
+            Some("INVALID_PARTIAL_REORDER_GROUP_UPDATE")
+        );
+
+        let at_limit = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: false,
+            z_updates: (0..MAX_RENDER_ITEMS)
+                .map(|index| EditorZUpdateV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: Uuid::from_u128(index as u128 + 1).to_string(),
+                    z_index: index as i32,
+                })
+                .collect(),
+            group_updates: Vec::new(),
+        };
+        validate_request_envelope(&ops_request(vec![at_limit.clone()])).unwrap();
+        let mut too_wide = at_limit;
+        let EditorOpV1::ReorderElements { z_updates, .. } = &mut too_wide else {
+            unreachable!();
+        };
+        z_updates.push(EditorZUpdateV1 {
+            element_type: EditorElementTypeV1::Key,
+            id: Uuid::from_u128(MAX_RENDER_ITEMS as u128 + 1).to_string(),
+            z_index: 0,
+        });
+        assert_eq!(
+            validation_code(&validate_request_envelope(&ops_request(vec![too_wide])).unwrap_err()),
+            Some("REORDER_BATCH_TOO_LARGE")
+        );
+
+        let too_many_group_updates = EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: true,
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.clone(),
+                z_index: 1,
+            }],
+            group_updates: (0..=MAX_RENDER_ITEMS)
+                .map(|index| EditorGroupUpdateV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: Uuid::from_u128(index as u128 + 1).to_string(),
+                    group_id: None,
+                })
+                .collect(),
+        };
+        assert_eq!(
+            validation_code(
+                &validate_request_envelope(&ops_request(vec![too_many_group_updates])).unwrap_err()
+            ),
+            Some("REORDER_BATCH_TOO_LARGE")
+        );
     }
 
     #[test]

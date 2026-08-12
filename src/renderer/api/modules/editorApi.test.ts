@@ -178,6 +178,63 @@ describe('editorCommitRaw semantic op protocol', () => {
     ).toThrow(EditorProtocolError);
   });
 
+  it('reorderElements는 sole op와 complete 계약을 exact하게 강제한다', () => {
+    const valid = {
+      kind: 'reorderElements' as const,
+      mode: '4key',
+      completeModeOrder: true,
+      zUpdates: [
+        {
+          elementType: 'key' as const,
+          id: '00000000-0000-4000-8000-000000000031',
+          zIndex: 1,
+        },
+      ],
+      groupUpdates: [
+        {
+          elementType: 'key' as const,
+          id: '00000000-0000-4000-8000-000000000031',
+          groupId: null,
+        },
+      ],
+    };
+    expect(() => assertEditorOpsV1([valid])).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([
+        valid,
+        {
+          kind: 'deleteElement',
+          elementType: 'key',
+          id: valid.zUpdates[0].id,
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          ...valid,
+          completeModeOrder: false,
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          ...valid,
+          groupUpdates: [
+            {
+              ...valid.groupUpdates[0],
+              id: '00000000-0000-4000-8000-000000000032',
+            },
+          ],
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([{ ...valid, mode: '한'.repeat(43) }]),
+    ).toThrow(EditorProtocolError);
+  });
+
   it('insertFrozenElements는 sole op이며 groups-only 요청을 거절한다', () => {
     const groupsOnly = {
       kind: 'insertFrozenElements' as const,

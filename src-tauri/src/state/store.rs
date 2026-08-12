@@ -4119,7 +4119,7 @@ mod tests {
             AppStoreData, CommittedEditorChange, CustomCss, CustomFont, CustomTab, EditorBoundsV1,
             EditorCommitOrigin, EditorCommitRequest, EditorDocumentV1, EditorElementTypeV1,
             EditorField, EditorFrozenElementV1, EditorFrozenKeySlotV1, EditorOpResultStatusV1,
-            EditorOpResultV1, EditorOpV1, EditorPatchV1, FontSettings, FontType,
+            EditorOpResultV1, EditorOpV1, EditorPatchV1, EditorZUpdateV1, FontSettings, FontType,
             GestureCommitRequest, GesturePluginInstancesChange, GraphPosition, GraphStatType,
             GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot, KnobPosition, OverlayBounds,
             PanelBounds, PendingProcessedWavReplacement, PluginInstancesCommitRequest,
@@ -4302,6 +4302,23 @@ mod tests {
             }],
             groups: Vec::new(),
             z_updates: Vec::new(),
+        }
+    }
+
+    fn complete_key_reorder_op(document: &EditorDocumentV1) -> EditorOpV1 {
+        EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: true,
+            z_updates: document.key_positions["4key"]
+                .iter()
+                .enumerate()
+                .map(|(index, position)| EditorZUpdateV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: position.id.clone(),
+                    z_index: 100 - index as i32,
+                })
+                .collect(),
+            group_updates: Vec::new(),
         }
     }
 
@@ -5244,6 +5261,227 @@ mod tests {
         );
         assert_eq!(store.writer.persist_count(), persist_count);
         assert_eq!(store.history_status().history_revision, 0);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn reorder_commits_replays_and_round_trips_with_snapshot_history() {
+        let dir = test_directory("reorder-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get();
+        let before_revision = initial.revision;
+        let before = initial.document;
+        let op = complete_key_reorder_op(&before);
+        let request = editor_ops_request(
+            before_revision,
+            uuid::Uuid::new_v4().to_string(),
+            vec![op.clone()],
+        );
+        let persist_count = store.writer.persist_count();
+
+        let committed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            committed.result.op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: None,
+            }])
+        );
+        assert_eq!(committed.result.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            committed
+                .event
+                .as_ref()
+                .unwrap()
+                .patch
+                .key_positions
+                .as_ref()
+                .unwrap()["4key"][0]
+                .z_index,
+            Some(100)
+        );
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        assert_eq!(store.history_status().history_revision, 1);
+        let after = committed.document.clone();
+        drop(committed);
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(
+            replay.result.op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: None,
+            }])
+        );
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+
+        let mut reused = request;
+        let Some(EditorOpV1::ReorderElements { z_updates, .. }) =
+            reused.ops.as_mut().and_then(|ops| ops.first_mut())
+        else {
+            unreachable!();
+        };
+        z_updates[0].z_index += 1;
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                replay.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![op],
+            ))
+            .unwrap();
+        assert_eq!(
+            no_change.result.op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::NoChange,
+                bounds: None,
+            }])
+        );
+        assert_eq!(no_change.result.revision, replay.result.revision);
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        assert_eq!(store.history_status().history_revision, 1);
+
+        let counters = store.snapshot().key_counters;
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, before);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, after);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mixed_reorder_and_plugin_change_are_atomic_on_validation_and_persist_failure() {
+        let dir = test_directory("mixed-reorder-plugin-atomic-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.snapshot();
+        let before_plugin_revision = store.plugin_model_revision();
+        let before_history_revision = store.history_status().history_revision;
+        let valid_op = complete_key_reorder_op(&store.editor_get().document);
+
+        let mut missing = valid_op.clone();
+        let EditorOpV1::ReorderElements { z_updates, .. } = &mut missing else {
+            unreachable!();
+        };
+        z_updates[0].id = uuid::Uuid::new_v4().to_string();
+        let error = store
+            .commit_gesture(gesture_ops_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::new_v4().to_string(),
+                vec![missing],
+                "demo-plugin",
+                vec![saved_plugin_instance(50.0)],
+            ))
+            .unwrap_err();
+        assert_eq!(error.error_code, EditorCommitErrorCode::ValidationFailed);
+        assert_eq!(
+            error
+                .details
+                .and_then(|details| details.validation_code)
+                .as_deref(),
+            Some("REORDER_TARGET_MISSING")
+        );
+        assert_eq!(store.snapshot(), before);
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        store.writer.fail_next_persist();
+        let request = gesture_ops_request(
+            &store,
+            uuid::Uuid::new_v4().to_string(),
+            uuid::Uuid::new_v4().to_string(),
+            vec![valid_op],
+            "demo-plugin",
+            vec![saved_plugin_instance(50.0)],
+        );
+        assert_eq!(
+            store
+                .commit_gesture(request.clone())
+                .unwrap_err()
+                .error_code,
+            EditorCommitErrorCode::IoError
+        );
+        assert_eq!(store.snapshot(), before);
+        assert_eq!(store.plugin_model_revision(), before_plugin_revision);
+        assert_eq!(
+            store.history_status().history_revision,
+            before_history_revision
+        );
+
+        let committed = store.commit_gesture(request).unwrap();
+        assert_eq!(
+            committed.outcome.result.editor_op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: None,
+            }])
+        );
+        assert_eq!(committed.outcome.result.changed_plugin_ids, ["demo-plugin"]);
+        assert_eq!(store.history_status().history_revision, 1);
+        drop(committed);
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(50.0)]
+        );
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.key_positions,
+            before.key_positions
+        );
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].z_index,
+            Some(100)
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(50.0)]
+        );
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

@@ -154,8 +154,8 @@ pub(crate) fn validate_gesture_commit_request(
 mod tests {
     use super::*;
     use crate::models::{
-        EditorBoundsV1, EditorElementTypeV1, EditorOpV1, EditorPatchV1,
-        GesturePluginInstancesChange, EDITOR_OPS_VERSION,
+        EditorBoundsV1, EditorElementTypeV1, EditorGroupUpdateV1, EditorOpV1, EditorPatchV1,
+        EditorZUpdateV1, GesturePluginInstancesChange, EDITOR_OPS_VERSION,
     };
 
     fn gesture_request(plugin_ids: &[String]) -> GestureCommitRequest {
@@ -208,6 +208,24 @@ mod tests {
             }],
             groups: Vec::new(),
             z_updates: Vec::new(),
+        }
+    }
+
+    fn reorder_op() -> EditorOpV1 {
+        let id = uuid::Uuid::new_v4().to_string();
+        EditorOpV1::ReorderElements {
+            mode: "4key".to_string(),
+            complete_mode_order: true,
+            z_updates: vec![EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: id.clone(),
+                z_index: 1,
+            }],
+            group_updates: vec![EditorGroupUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id,
+                group_id: None,
+            }],
         }
     }
 
@@ -281,6 +299,32 @@ mod tests {
             validation_code(error).as_deref(),
             Some("INVALID_REQUEST_PAYLOAD")
         );
+    }
+
+    #[test]
+    fn gesture_reorder_wire_rejects_unknown_and_missing_nested_keys() {
+        let mut request = gesture_request(&["plugin-a".to_string()]);
+        request.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        request.editor_ops = Some(vec![reorder_op()]);
+        let valid = serde_json::to_value(request).unwrap();
+
+        let mut unknown_z = valid.clone();
+        unknown_z["editorOps"][0]["zUpdates"][0]["unexpected"] = serde_json::json!(true);
+        let mut unknown_group = valid.clone();
+        unknown_group["editorOps"][0]["groupUpdates"][0]["unexpected"] = serde_json::json!(true);
+        let mut missing_group_id = valid;
+        missing_group_id["editorOps"][0]["groupUpdates"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("groupId");
+
+        for wire in [unknown_z, unknown_group, missing_group_id] {
+            let error = decode_gesture_commit_request(wire).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
     }
 
     #[test]

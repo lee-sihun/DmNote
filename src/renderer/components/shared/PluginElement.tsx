@@ -45,8 +45,9 @@ import {
 import {
   beginPluginInstancesEditSession,
   endPluginInstancesEditSession,
-  rotatePluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import { commitStableLayerZOrder } from '@src/renderer/editor/runtime/layerZOrderIntent';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
@@ -1447,17 +1448,29 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     if (itemId === 'delete') {
       deletePluginElement();
     } else if (itemId === 'bringToFront') {
-      rotatePluginInstancesEditSession(element.pluginId);
-      usePluginDisplayElementStore.getState().bringToFront(element.fullId);
+      void commitStableLayerZOrder({
+        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
+        targets: [{ type: 'plugin', id: element.fullId }],
+        action: 'front',
+      }).catch(reportElementOpError);
     } else if (itemId === 'bringForward') {
-      rotatePluginInstancesEditSession(element.pluginId);
-      usePluginDisplayElementStore.getState().bringForward(element.fullId);
+      void commitStableLayerZOrder({
+        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
+        targets: [{ type: 'plugin', id: element.fullId }],
+        action: 'forward',
+      }).catch(reportElementOpError);
     } else if (itemId === 'sendBackward') {
-      rotatePluginInstancesEditSession(element.pluginId);
-      usePluginDisplayElementStore.getState().sendBackward(element.fullId);
+      void commitStableLayerZOrder({
+        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
+        targets: [{ type: 'plugin', id: element.fullId }],
+        action: 'backward',
+      }).catch(reportElementOpError);
     } else if (itemId === 'sendToBack') {
-      rotatePluginInstancesEditSession(element.pluginId);
-      usePluginDisplayElementStore.getState().sendToBack(element.fullId);
+      void commitStableLayerZOrder({
+        mode: element.tabId ?? useKeyStore.getState().selectedKeyType,
+        targets: [{ type: 'plugin', id: element.fullId }],
+        action: 'back',
+      }).catch(reportElementOpError);
     } else if (itemId.startsWith('custom-')) {
       const index = parseInt(itemId.replace('custom-', ''), 10);
       const customItem = element.contextMenu?.customItems?.[index];

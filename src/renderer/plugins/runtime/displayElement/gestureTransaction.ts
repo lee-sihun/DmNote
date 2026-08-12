@@ -172,7 +172,18 @@ export const commitMixedGestureIntent = (options: {
   // 실패 시 staged 해제·canonical pull 전에 동기 실행 - eager receipt
   // 복원의 소유 지점 (해제 후 복원은 stagedSavePending 재저장과 경합)
   onFailureBeforeSettle?: (error: unknown) => void;
+  retryEditorOnly?: boolean;
+  expectedAuthorityGeneration?: number;
 }): Promise<void> => {
+  const assertAuthorityGeneration = () => {
+    if (
+      options.expectedAuthorityGeneration !== undefined &&
+      options.expectedAuthorityGeneration !== getPluginAuthorityGeneration()
+    ) {
+      throw new ElementIntentAbort('plugin authority generation changed');
+    }
+  };
+  assertAuthorityGeneration();
   const scope = new Set(normalizePluginIds(options.initialPluginIds));
   const gestureId = options.gestureId;
   if (scope.size > 0) {
@@ -192,8 +203,10 @@ export const commitMixedGestureIntent = (options: {
     // 상한 도달 = 고정점 미성립 - 미drain 스코프를 봉인하면 fail-open이므로
     // 전체 중단한다
     for (let round = 0; round < 8; round += 1) {
+      assertAuthorityGeneration();
       if (scope.size > 0) {
         await drainPluginInstancesCommitQueues([...scope]);
+        assertAuthorityGeneration();
       }
       const elements = usePluginDisplayElementStore.getState().elements;
       const wanted = normalizePluginIds([
@@ -202,6 +215,7 @@ export const commitMixedGestureIntent = (options: {
       ]);
       const grew = wanted.some((pluginId) => !scope.has(pluginId));
       if (!grew) {
+        assertAuthorityGeneration();
         sealedProjection = elements;
         return;
       }
@@ -224,6 +238,7 @@ export const commitMixedGestureIntent = (options: {
     commitWork = editorCoordinator
       .commitGesture(
         (base) => {
+          assertAuthorityGeneration();
           const generation = options.generate({
             base,
             pluginProjection: sealedProjection,
@@ -237,19 +252,22 @@ export const commitMixedGestureIntent = (options: {
         },
         gestureId,
         async (context) => {
+          assertAuthorityGeneration();
           const projectionSource =
             lastGeneration?.desiredPluginProjection ?? sealedProjection;
           const scopeIds = normalizePluginIds([...scope]);
           if (scopeIds.length === 0) {
             editorOnlyCommit = true;
             if ('editorOps' in context) {
-              return editorApi.commit({
+              const result = await editorApi.commit({
                 baseRevision: context.editorBaseRevision,
                 mutationId: context.mutationId,
                 opsVersion: context.editorOpsVersion,
                 ops: context.editorOps,
                 gestureId,
               });
+              assertAuthorityGeneration();
+              return result;
             }
             if (!context.editorChanges) {
               return {
@@ -257,12 +275,14 @@ export const commitMixedGestureIntent = (options: {
                 changedFields: [],
               };
             }
-            return editorApi.commit({
+            const result = await editorApi.commit({
               baseRevision: context.editorBaseRevision,
               mutationId: context.mutationId,
               changes: context.editorChanges,
               gestureId,
             });
+            assertAuthorityGeneration();
+            return result;
           }
           const pluginElements = new Map(
             scopeIds.map((pluginId) => [
@@ -286,7 +306,9 @@ export const commitMixedGestureIntent = (options: {
             editorBaseRevision: context.editorBaseRevision,
             pluginBaseRevision: getBackendPluginRevision(),
             observedHistoryEpoch: useHistoryStatusStore.getState().historyEpoch,
-            authorityGeneration: getPluginAuthorityGeneration(),
+            authorityGeneration:
+              options.expectedAuthorityGeneration ??
+              getPluginAuthorityGeneration(),
             ...('editorOps' in context
               ? {
                   editorOpsVersion: context.editorOpsVersion,
@@ -297,6 +319,7 @@ export const commitMixedGestureIntent = (options: {
               : {}),
             pluginChanges,
           });
+          assertAuthorityGeneration();
           noteBackendPluginRevision(result.pluginModelRevision);
           gestureResult = result;
           return {
@@ -310,10 +333,12 @@ export const commitMixedGestureIntent = (options: {
         {
           onEnrolled: options.onEnrolled,
           prepare,
-          reconcileRetryableEditorIntent: () => editorOnlyCommit,
+          reconcileRetryableEditorIntent: () =>
+            editorOnlyCommit && options.retryEditorOnly !== false,
         },
       )
       .then(() => {
+        assertAuthorityGeneration();
         // prepare가 동적으로 편입한 plugin의 재계산 상태를 main store에도
         // 정렬 - 자기 mutation 이벤트는 무시되므로 여기서 반영하지 않으면
         // main·overlay·backend가 갈라진다. 3-way 정렬의 소유 단위는 영속

@@ -6,6 +6,7 @@ import {
 
 import { isElementIntentAbort, reportElementOpSkipped } from './elementIntent';
 import { commitSemanticOps } from './editorSemanticOps';
+import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
@@ -100,7 +101,17 @@ export const runMixedElementDeleteIntent = async (options: {
   deletedPluginFullIds: readonly string[];
   ops: readonly EditorOpV1[];
   receipt: ElementIntentReceipt | null;
+  expectedAuthorityGeneration?: number;
 }): Promise<void> => {
+  const assertAuthorityGeneration = () => {
+    if (
+      options.expectedAuthorityGeneration !== undefined &&
+      options.expectedAuthorityGeneration !== getPluginAuthorityGeneration()
+    ) {
+      throw new Error('plugin authority generation changed');
+    }
+  };
+  assertAuthorityGeneration();
   const deleted = new Set(options.deletedPluginFullIds);
   let enrolled = false;
   let rolledBack = false;
@@ -118,6 +129,7 @@ export const runMixedElementDeleteIntent = async (options: {
         gestureId: options.gestureId,
         onEnrolled,
       });
+      assertAuthorityGeneration();
       return;
     }
     await commitMixedGestureIntent({
@@ -135,6 +147,7 @@ export const runMixedElementDeleteIntent = async (options: {
       onFailureBeforeSettle: () => {
         if (!enrolled) rollbackOnce();
       },
+      expectedAuthorityGeneration: options.expectedAuthorityGeneration,
     });
   } catch (error) {
     if (!enrolled) rollbackOnce();
@@ -160,6 +173,8 @@ export const runMixedGestureElementIntent = async (options: {
     pluginProjection: readonly PluginDisplayElementInternal[];
   }) => MixedIntentGeneration;
   skipContext: string;
+  retryEditorOnly?: boolean;
+  expectedAuthorityGeneration?: number;
 }): Promise<{ committed: boolean; satisfied: boolean }> => {
   let enrolled = false;
   let lastKind: MixedIntentGeneration['kind'] | null = null;
@@ -187,6 +202,8 @@ export const runMixedGestureElementIntent = async (options: {
         // stagedSavePending 재저장을 예약하기 전에 동기 복원
         if (!enrolled || isElementIntentAbort(error)) rollbackOnce();
       },
+      retryEditorOnly: options.retryEditorOnly,
+      expectedAuthorityGeneration: options.expectedAuthorityGeneration,
     });
     if (lastKind === 'satisfied') {
       return { committed: false, satisfied: true };

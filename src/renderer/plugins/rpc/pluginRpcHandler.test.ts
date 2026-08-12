@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   applyProjection: vi.fn((_pluginId: string, apply: () => void) => apply()),
   rotateEditSession: vi.fn((pluginId: string) => `gesture-${pluginId}`),
   flushPanelModel: vi.fn(),
+  deleteFrozenSelection: vi.fn(() => Promise.resolve()),
+  commitLayerDropIntent: vi.fn(() => Promise.resolve()),
+  authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
 
@@ -74,7 +77,24 @@ vi.mock('@utils/plugin/panelModelSync', () => ({
 }));
 
 vi.mock('./pluginRpcClient', () => ({
-  getPluginAuthorityGeneration: () => 7,
+  getPluginAuthorityGeneration: () => mocks.authorityGeneration,
+}));
+
+vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
+  deleteFrozenSelection: mocks.deleteFrozenSelection,
+}));
+
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/layer/layerReorderIntent',
+  () => ({
+    commitLayerDropIntent: mocks.commitLayerDropIntent,
+  }),
+);
+
+vi.mock('@stores/data/useKeyStore', () => ({
+  useKeyStore: {
+    getState: () => ({ selectedKeyType: '4key' }),
+  },
 }));
 
 vi.mock('./pluginModelRevision', () => ({
@@ -98,6 +118,17 @@ const envelope = (
   payload,
 });
 
+const reorderAnchors = () => ({
+  toDisplayIndex: 2,
+  targetGroupId: null,
+  anchorBeforeId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  anchorAfterId: null,
+  anchorHeaderGroupId: null,
+  anchorBeforeHeaderGroupId: null,
+  anchorAfterHeaderGroupId: null,
+  boundary: null,
+});
+
 describe('plugin panel persisted element mutations', () => {
   beforeEach(async () => {
     vi.resetModules();
@@ -108,6 +139,11 @@ describe('plugin panel persisted element mutations', () => {
     mocks.applyProjection.mockClear();
     mocks.rotateEditSession.mockClear();
     mocks.flushPanelModel.mockClear();
+    mocks.deleteFrozenSelection.mockReset();
+    mocks.deleteFrozenSelection.mockResolvedValue(undefined);
+    mocks.commitLayerDropIntent.mockReset();
+    mocks.commitLayerDropIntent.mockResolvedValue(undefined);
+    mocks.authorityGeneration = 7;
     mocks.elements = [
       {
         fullId: 'plugin-a:one',
@@ -225,6 +261,304 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
       ok: false,
       error: { code: 'INVALID_PAYLOAD' },
+    });
+  });
+
+  it('레이어 삭제는 stable descriptor만 공용 main 실행기에 전달한다', async () => {
+    mocks.requestListener?.(
+      envelope('layers:deleteSelection', {
+        targets: [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+          { elementType: 'plugin', id: 'plugin-a:one' },
+        ],
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.deleteFrozenSelection).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.deleteFrozenSelection).toHaveBeenCalledWith(
+      [
+        {
+          type: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+        { type: 'plugin', id: 'plugin-a:one' },
+      ],
+      '4key',
+      {
+        expectedAuthorityGeneration: 7,
+        propagateErrors: true,
+      },
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.flushPanelModel).toHaveBeenCalledOnce();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ['top-level extra', { targets: [], changes: {} }],
+    ['empty targets', { targets: [] }],
+    [
+      'target extra',
+      {
+        targets: [
+          {
+            elementType: 'plugin',
+            id: 'plugin-a:one',
+            index: 0,
+          },
+        ],
+      },
+    ],
+    ['empty id', { targets: [{ elementType: 'plugin', id: ' ' }] }],
+    ['synthetic native id', { targets: [{ elementType: 'key', id: 'key-0' }] }],
+    [
+      'duplicate id',
+      {
+        targets: [
+          { elementType: 'plugin', id: 'plugin-a:one' },
+          { elementType: 'plugin', id: 'plugin-a:one' },
+        ],
+      },
+    ],
+    [
+      'unknown type',
+      { targets: [{ elementType: 'layer', id: 'plugin-a:one' }] },
+    ],
+    [
+      'too many targets',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'plugin',
+          id: `plugin-a:${index}`,
+        })),
+      },
+    ],
+  ])('%s payload를 실행 전에 거절한다', async (_label, payload) => {
+    mocks.requestListener?.(
+      envelope('layers:deleteSelection', payload as Record<string, unknown>),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.deleteFrozenSelection).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_PAYLOAD' },
+    });
+  });
+
+  it('레이어 삭제 완료 전에 generation이 바뀌면 성공으로 응답하지 않는다', async () => {
+    let finish!: () => void;
+    mocks.deleteFrozenSelection.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    mocks.requestListener?.(
+      envelope('layers:deleteSelection', {
+        targets: [{ elementType: 'plugin', id: 'plugin-a:one' }],
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.deleteFrozenSelection).toHaveBeenCalledOnce(),
+    );
+
+    mocks.authorityGeneration = 8;
+    finish();
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.flushPanelModel).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('낡은 generation의 레이어 삭제는 main 실행기를 시작하지 않는다', async () => {
+    mocks.authorityGeneration = 8;
+    mocks.requestListener?.(
+      envelope('layers:deleteSelection', {
+        targets: [{ elementType: 'plugin', id: 'plugin-a:one' }],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.deleteFrozenSelection).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('레이어 재정렬은 exact descriptor를 main executor에 전달한다', async () => {
+    mocks.requestListener?.(
+      envelope('layers:reorderSelection', {
+        descriptor: {
+          kind: 'items',
+          mode: '4key',
+          draggedIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+          collapsedGroupIds: ['panel-collapsed'],
+          anchors: reorderAnchors(),
+          preserveFullGroups: false,
+        },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.commitLayerDropIntent).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      {
+        kind: 'items',
+        mode: '4key',
+        draggedIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+        collapsedGroupIds: ['panel-collapsed'],
+        anchors: {
+          toDisplayIndex: 2,
+          targetGroupId: undefined,
+          anchorBeforeId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          anchorAfterId: null,
+          anchorHeaderGroupId: null,
+          anchorBeforeHeaderGroupId: null,
+          anchorAfterHeaderGroupId: null,
+          boundary: undefined,
+        },
+        preserveFullGroups: false,
+      },
+      { expectedAuthorityGeneration: 7 },
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    [
+      'top-level extra',
+      {
+        descriptor: {
+          kind: 'items',
+          mode: '4key',
+          draggedIds: ['stable-id'],
+          collapsedGroupIds: [],
+          anchors: reorderAnchors(),
+          preserveFullGroups: false,
+        },
+        ops: [],
+      },
+    ],
+    [
+      'descriptor extra',
+      {
+        descriptor: {
+          kind: 'items',
+          mode: '4key',
+          draggedIds: ['stable-id'],
+          collapsedGroupIds: [],
+          anchors: reorderAnchors(),
+          preserveFullGroups: false,
+          index: 0,
+        },
+      },
+    ],
+    [
+      'anchor missing',
+      {
+        descriptor: {
+          kind: 'items',
+          mode: '4key',
+          draggedIds: ['stable-id'],
+          collapsedGroupIds: [],
+          anchors: { ...reorderAnchors(), boundary: undefined },
+          preserveFullGroups: false,
+        },
+      },
+    ],
+    [
+      'duplicate ids',
+      {
+        descriptor: {
+          kind: 'items',
+          mode: '4key',
+          draggedIds: ['stable-id', 'stable-id'],
+          collapsedGroupIds: [],
+          anchors: reorderAnchors(),
+          preserveFullGroups: false,
+        },
+      },
+    ],
+    [
+      'empty items',
+      {
+        descriptor: {
+          kind: 'items',
+          mode: '4key',
+          draggedIds: [],
+          collapsedGroupIds: [],
+          anchors: reorderAnchors(),
+          preserveFullGroups: false,
+        },
+      },
+    ],
+    [
+      'invalid group',
+      {
+        descriptor: {
+          kind: 'group',
+          mode: '4key',
+          groupId: '',
+          extraIds: [],
+          collapsedGroupIds: [],
+          anchors: reorderAnchors(),
+        },
+      },
+    ],
+  ])('%s 재정렬 payload를 main 실행 전에 거절한다', async (_label, payload) => {
+    mocks.requestListener?.(
+      envelope('layers:reorderSelection', payload as Record<string, unknown>),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitLayerDropIntent).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_PAYLOAD' },
+    });
+  });
+
+  it('레이어 재정렬 완료 전 generation 변경은 성공으로 응답하지 않는다', async () => {
+    let finish!: () => void;
+    mocks.commitLayerDropIntent.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    mocks.requestListener?.(
+      envelope('layers:reorderSelection', {
+        descriptor: {
+          kind: 'group',
+          mode: '4key',
+          groupId: 'group-a',
+          extraIds: [],
+          collapsedGroupIds: [],
+          anchors: reorderAnchors(),
+        },
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.commitLayerDropIntent).toHaveBeenCalledOnce(),
+    );
+    mocks.authorityGeneration = 8;
+    finish();
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.flushPanelModel).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
     });
   });
 });

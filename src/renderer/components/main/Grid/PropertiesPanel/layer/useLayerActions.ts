@@ -3,10 +3,7 @@
  * 가시성 토글, 이름 변경, 컨텍스트 메뉴, 삭제, 그룹 연산 등
  */
 
-import {
-  setPluginElementsHidden,
-  deletePluginElements,
-} from '@plugins/rpc/pluginElementActions';
+import { setPluginElementsHidden } from '@plugins/rpc/pluginElementActions';
 import { keysApi } from '@api/modules/keysApi';
 import {
   graphItemsApi,
@@ -35,6 +32,7 @@ import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { ListItem } from '@components/main/Modal/ListPopup';
 import type { LayerItem, DisplayItem } from '../types';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
 
 // ============================================================================
 // 파라미터 / 반환 타입
@@ -863,154 +861,8 @@ export function useLayerActions({
       const selectedElements =
         useGridSelectionStore.getState().selectedElements;
       if (selectedElements.length === 0) return;
-
-      const keysToDelete = selectedElements
-        .filter((el) => el.type === 'key' && el.index !== undefined)
-        .map((el) => el.index as number);
-
-      const statsToDelete = selectedElements
-        .filter((el) => el.type === 'stat' && el.index !== undefined)
-        .map((el) => el.index as number);
-
-      const graphsToDelete = selectedElements
-        .filter((el) => el.type === 'graph' && el.index !== undefined)
-        .map((el) => el.index as number);
-
-      const knobsToDelete = selectedElements
-        .filter((el) => el.type === 'knob' && el.index !== undefined)
-        .map((el) => el.index as number);
-
-      const pluginsToDelete = selectedElements
-        .filter((el) => el.type === 'plugin')
-        .map((el) => el.id);
-
-      // 선택 해제
       onSelectionFromPanel?.();
-      useGridSelectionStore.getState().clearSelection();
-
-      const {
-        keyMappings: currentMappings,
-        canonicalPositions: currentKeyPositions,
-      } = useKeyStore.getState();
-      const currentStatPositions = useStatItemStore.getState().positions;
-      const currentGraphPositions = useGraphItemStore.getState().positions;
-      const currentKnobPositions = useKnobItemStore.getState().positions;
-      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-
-      const keyDeleteSet = new Set(keysToDelete);
-      const statDeleteSet = new Set(statsToDelete);
-      const graphDeleteSet = new Set(graphsToDelete);
-      const knobDeleteSet = new Set(knobsToDelete);
-
-      const nextMappings =
-        keysToDelete.length > 0
-          ? {
-              ...currentMappings,
-              [selectedKeyType]: (
-                currentMappings[selectedKeyType] || []
-              ).filter((_, index) => !keyDeleteSet.has(index)),
-            }
-          : currentMappings;
-      const nextKeyPositions =
-        keysToDelete.length > 0
-          ? {
-              ...currentKeyPositions,
-              [selectedKeyType]: (
-                currentKeyPositions[selectedKeyType] || []
-              ).filter((_, index) => !keyDeleteSet.has(index)),
-            }
-          : currentKeyPositions;
-      const nextStatPositions =
-        statsToDelete.length > 0
-          ? {
-              ...currentStatPositions,
-              [selectedKeyType]: (
-                currentStatPositions[selectedKeyType] || []
-              ).filter((_, index) => !statDeleteSet.has(index)),
-            }
-          : currentStatPositions;
-      const nextGraphPositions =
-        graphsToDelete.length > 0
-          ? {
-              ...currentGraphPositions,
-              [selectedKeyType]: (
-                currentGraphPositions[selectedKeyType] || []
-              ).filter((_, index) => !graphDeleteSet.has(index)),
-            }
-          : currentGraphPositions;
-      const nextKnobPositions =
-        knobsToDelete.length > 0
-          ? {
-              ...currentKnobPositions,
-              [selectedKeyType]: (
-                currentKnobPositions[selectedKeyType] || []
-              ).filter((_, index) => !knobDeleteSet.has(index)),
-            }
-          : currentKnobPositions;
-
-      // 플러그인 삭제 - 창 무관 진입점 (패널이면 main으로 RPC 위임)
-      if (pluginsToDelete.length > 0) {
-        deletePluginElements(pluginsToDelete);
-      }
-
-      const normalized = normalizeLayerGroupsForMode({
-        mode: selectedKeyType,
-        keyPositions: nextKeyPositions,
-        statPositions: nextStatPositions,
-        graphPositions: nextGraphPositions,
-        knobPositions: nextKnobPositions,
-        layerGroups: currentLayerGroups,
-      });
-
-      if (hasChanged(currentMappings, nextMappings)) {
-        useKeyStore
-          .getState()
-          .setKeyMappingsAndPositions(nextMappings, normalized.keyPositions);
-      } else if (hasChanged(currentKeyPositions, normalized.keyPositions)) {
-        useKeyStore.getState().setPositions(normalized.keyPositions);
-      }
-      if (hasChanged(currentStatPositions, normalized.statPositions)) {
-        useStatItemStore.getState().setPositions(normalized.statPositions);
-      }
-      if (hasChanged(currentGraphPositions, normalized.graphPositions)) {
-        useGraphItemStore.getState().setPositions(normalized.graphPositions);
-      }
-      if (hasChanged(currentKnobPositions, normalized.knobPositions)) {
-        useKnobItemStore.getState().setPositions(normalized.knobPositions);
-      }
-      if (hasChanged(currentLayerGroups, normalized.layerGroups)) {
-        useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-      }
-
-      const changes: EditorPatchV1 = {
-        schemaVersion: 1,
-      };
-      if (hasChanged(currentMappings, nextMappings)) {
-        changes.keys = nextMappings;
-        changes.keyPositions = normalized.keyPositions;
-      } else if (hasChanged(currentKeyPositions, normalized.keyPositions)) {
-        changes.keyPositions = normalized.keyPositions;
-      }
-      if (hasChanged(currentStatPositions, normalized.statPositions)) {
-        changes.statPositions = normalized.statPositions;
-      }
-      if (hasChanged(currentGraphPositions, normalized.graphPositions)) {
-        changes.graphPositions = normalized.graphPositions;
-      }
-      if (hasChanged(currentKnobPositions, normalized.knobPositions)) {
-        changes.knobPositions = normalized.knobPositions;
-      }
-      if (hasChanged(currentLayerGroups, normalized.layerGroups)) {
-        changes.layerGroups = normalized.layerGroups;
-      }
-
-      if (Object.keys(changes).length > 1) {
-        try {
-          await editorCoordinator.commitPatch(changes);
-        } catch (error) {
-          console.error('Failed to delete layers', error);
-        }
-      }
+      await deleteFrozenSelection(selectedElements, selectedKeyType);
     }
 
     setContextMenuOpen(false);

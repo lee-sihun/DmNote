@@ -11,6 +11,7 @@ import {
 } from '@api/modules/pluginRpcApi';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import { pluginInstancesApi } from '@api/modules/pluginInstancesApi';
 import {
   applyCommittedPluginInstancesProjection,
@@ -40,6 +41,18 @@ import {
   type PluginElementUpdatePatch,
 } from './pluginElementActions';
 import { handlePluginSettingsOperation } from './pluginSettingsSession';
+import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
+import {
+  commitLayerDropIntent,
+  type LayerDropIntent,
+} from '@components/main/Grid/PropertiesPanel/layer/layerReorderIntent';
+
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import type {
+  LayerReorderAnchorsWire,
+  LayerReorderIntentWire,
+} from './pluginElementActions';
 
 const failure = (requestId: string, errorCode: string): PluginRpcResponse => ({
   protocolVersion: PLUGIN_RPC_PROTOCOL_VERSION,
@@ -65,6 +78,242 @@ const asStringArray = (value: unknown): string[] | null =>
   Array.isArray(value) && value.every((item) => typeof item === 'string')
     ? (value as string[])
     : null;
+
+const LAYER_DELETE_TARGET_TYPES = new Set([
+  'key',
+  'stat',
+  'graph',
+  'knob',
+  'plugin',
+]);
+const MAX_LAYER_DELETE_TARGETS = 4096;
+
+const hasExactKeys = (
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): boolean => {
+  const keys = Object.keys(value);
+  return (
+    keys.length === expected.length &&
+    expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
+};
+
+const parseLayerDeleteTargets = (
+  payload: Record<string, unknown>,
+): SelectedElement[] | null => {
+  if (!hasExactKeys(payload, ['targets']) || !Array.isArray(payload.targets)) {
+    return null;
+  }
+  if (
+    payload.targets.length === 0 ||
+    payload.targets.length > MAX_LAYER_DELETE_TARGETS
+  ) {
+    return null;
+  }
+  const seen = new Set<string>();
+  const targets: SelectedElement[] = [];
+  for (const value of payload.targets) {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      !hasExactKeys(value as Record<string, unknown>, ['elementType', 'id'])
+    ) {
+      return null;
+    }
+    const { elementType, id } = value as {
+      elementType?: unknown;
+      id?: unknown;
+    };
+    if (
+      typeof elementType !== 'string' ||
+      !LAYER_DELETE_TARGET_TYPES.has(elementType) ||
+      typeof id !== 'string' ||
+      id.trim().length === 0 ||
+      (elementType !== 'plugin' && isSyntheticElementId(id)) ||
+      seen.has(id)
+    ) {
+      return null;
+    }
+    seen.add(id);
+    targets.push({
+      type: elementType as SelectedElement['type'],
+      id,
+    });
+  }
+  return targets;
+};
+
+const MAX_LAYER_REORDER_IDS = 4096;
+const MAX_LAYER_MODE_BYTES = 128;
+const MAX_LAYER_GROUP_ID_BYTES = 256;
+const textBytes = (value: string): number =>
+  new TextEncoder().encode(value).length;
+const validWireId = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+const validMode = (value: unknown): value is string =>
+  validWireId(value) && textBytes(value) <= MAX_LAYER_MODE_BYTES;
+const validGroupId = (value: unknown): value is string =>
+  validWireId(value) && textBytes(value) <= MAX_LAYER_GROUP_ID_BYTES;
+const validNullableId = (value: unknown): value is string | null =>
+  value === null || validWireId(value);
+
+const parseLayerReorderAnchors = (
+  value: unknown,
+): LayerReorderAnchorsWire | null => {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    !hasExactKeys(value as Record<string, unknown>, [
+      'toDisplayIndex',
+      'targetGroupId',
+      'anchorBeforeId',
+      'anchorAfterId',
+      'anchorHeaderGroupId',
+      'anchorBeforeHeaderGroupId',
+      'anchorAfterHeaderGroupId',
+      'boundary',
+    ])
+  ) {
+    return null;
+  }
+  const anchors = value as Record<string, unknown>;
+  if (
+    !Number.isSafeInteger(anchors.toDisplayIndex) ||
+    (anchors.toDisplayIndex as number) < 0 ||
+    !validNullableId(anchors.targetGroupId) ||
+    !validNullableId(anchors.anchorBeforeId) ||
+    !validNullableId(anchors.anchorAfterId) ||
+    !validNullableId(anchors.anchorHeaderGroupId) ||
+    !validNullableId(anchors.anchorBeforeHeaderGroupId) ||
+    !validNullableId(anchors.anchorAfterHeaderGroupId) ||
+    ![null, 'top', 'bottom'].includes(anchors.boundary as never)
+  ) {
+    return null;
+  }
+  if (
+    [
+      anchors.targetGroupId,
+      anchors.anchorHeaderGroupId,
+      anchors.anchorBeforeHeaderGroupId,
+      anchors.anchorAfterHeaderGroupId,
+    ].some((id) => typeof id === 'string' && !validGroupId(id))
+  ) {
+    return null;
+  }
+  return anchors as unknown as LayerReorderAnchorsWire;
+};
+
+const parseStableLayerIds = (value: unknown): string[] | null => {
+  if (
+    !Array.isArray(value) ||
+    value.length > MAX_LAYER_REORDER_IDS ||
+    value.some((id) => !validWireId(id))
+  ) {
+    return null;
+  }
+  const ids = value as string[];
+  if (new Set(ids).size !== ids.length) return null;
+  return ids;
+};
+
+const parseLayerReorderDescriptor = (
+  payload: Record<string, unknown>,
+): LayerReorderIntentWire | null => {
+  if (!hasExactKeys(payload, ['descriptor'])) return null;
+  const value = payload.descriptor;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const descriptor = value as Record<string, unknown>;
+  const anchors = parseLayerReorderAnchors(descriptor.anchors);
+  if (!anchors || !validMode(descriptor.mode)) return null;
+  if (descriptor.kind === 'items') {
+    if (
+      !hasExactKeys(descriptor, [
+        'kind',
+        'mode',
+        'draggedIds',
+        'collapsedGroupIds',
+        'anchors',
+        'preserveFullGroups',
+      ]) ||
+      typeof descriptor.preserveFullGroups !== 'boolean'
+    ) {
+      return null;
+    }
+    const draggedIds = parseStableLayerIds(descriptor.draggedIds);
+    const collapsedGroupIds = parseStableLayerIds(descriptor.collapsedGroupIds);
+    if (
+      !draggedIds ||
+      draggedIds.length === 0 ||
+      !collapsedGroupIds ||
+      collapsedGroupIds.some((id) => !validGroupId(id))
+    ) {
+      return null;
+    }
+    return {
+      kind: 'items',
+      mode: descriptor.mode,
+      draggedIds,
+      collapsedGroupIds,
+      anchors,
+      preserveFullGroups: descriptor.preserveFullGroups,
+    };
+  }
+  if (descriptor.kind === 'group') {
+    if (
+      !hasExactKeys(descriptor, [
+        'kind',
+        'mode',
+        'groupId',
+        'extraIds',
+        'collapsedGroupIds',
+        'anchors',
+      ]) ||
+      !validGroupId(descriptor.groupId)
+    ) {
+      return null;
+    }
+    const extraIds = parseStableLayerIds(descriptor.extraIds);
+    const collapsedGroupIds = parseStableLayerIds(descriptor.collapsedGroupIds);
+    if (
+      !extraIds ||
+      !collapsedGroupIds ||
+      collapsedGroupIds.some((id) => !validGroupId(id))
+    ) {
+      return null;
+    }
+    return {
+      kind: 'group',
+      mode: descriptor.mode,
+      groupId: descriptor.groupId,
+      extraIds,
+      collapsedGroupIds,
+      anchors,
+    };
+  }
+  return null;
+};
+
+const toLayerDropIntent = (
+  descriptor: LayerReorderIntentWire,
+): LayerDropIntent => ({
+  ...descriptor,
+  collapsedGroupIds: [...descriptor.collapsedGroupIds],
+  anchors: {
+    toDisplayIndex: descriptor.anchors.toDisplayIndex,
+    targetGroupId: descriptor.anchors.targetGroupId ?? undefined,
+    anchorBeforeId: descriptor.anchors.anchorBeforeId,
+    anchorAfterId: descriptor.anchors.anchorAfterId,
+    anchorHeaderGroupId: descriptor.anchors.anchorHeaderGroupId,
+    anchorBeforeHeaderGroupId: descriptor.anchors.anchorBeforeHeaderGroupId,
+    anchorAfterHeaderGroupId: descriptor.anchors.anchorAfterHeaderGroupId,
+    boundary: descriptor.anchors.boundary ?? undefined,
+  },
+});
 
 // 영속 필드(SavedPluginInstance 구성원)를 건드리는 patch만 canonical commit 대상
 const PERSISTED_PATCH_KEYS = new Set([
@@ -452,6 +701,77 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
   // 패널 미러가 낡은 모델 기준으로 보낸 mutation은 거절 - 재조회 유도
   if (envelope.expectedModelRevision < getPluginPanelModelRevision()) {
     respond(failure(envelope.requestId, 'MODEL_REVISION_STALE'));
+    return;
+  }
+
+  if (envelope.operation === PLUGIN_RPC_OPERATIONS.deleteLayerSelection) {
+    const targets = parseLayerDeleteTargets(envelope.payload);
+    if (!targets) {
+      respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
+      return;
+    }
+    const requestGeneration = envelope.authorityGeneration;
+    const generationLive = () =>
+      requestGeneration === getPluginAuthorityGeneration();
+    if (!generationLive()) {
+      respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+      return;
+    }
+    void deleteFrozenSelection(
+      targets,
+      useKeyStore.getState().selectedKeyType,
+      {
+        expectedAuthorityGeneration: requestGeneration,
+        propagateErrors: true,
+      },
+    )
+      .then(() => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        flushPluginPanelModelSyncNow();
+        respond(success(envelope.requestId));
+      })
+      .catch((error) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        console.error('Failed to delete panel layer selection', error);
+        respond(failure(envelope.requestId, 'DELETE_SELECTION_FAILED'));
+      });
+    return;
+  }
+
+  if (envelope.operation === PLUGIN_RPC_OPERATIONS.reorderLayerSelection) {
+    const descriptor = parseLayerReorderDescriptor(envelope.payload);
+    if (!descriptor) {
+      respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
+      return;
+    }
+    const requestGeneration = envelope.authorityGeneration;
+    const generationLive = () =>
+      requestGeneration === getPluginAuthorityGeneration();
+    void commitLayerDropIntent(toLayerDropIntent(descriptor), {
+      expectedAuthorityGeneration: requestGeneration,
+    })
+      .then(() => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        flushPluginPanelModelSyncNow();
+        respond(success(envelope.requestId));
+      })
+      .catch((error) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        console.error('Failed to reorder panel layer selection', error);
+        respond(failure(envelope.requestId, 'REORDER_SELECTION_FAILED'));
+      });
     return;
   }
 

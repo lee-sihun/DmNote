@@ -267,6 +267,45 @@ const applyOpsForTest = (
       });
       return;
     }
+    if (op.kind === 'reorderElements') {
+      const zById = new Map(
+        op.zUpdates.map((update) => [update.id, update] as const),
+      );
+      const groupById = new Map(
+        op.groupUpdates.map((update) => [update.id, update] as const),
+      );
+      const types = new Set([
+        ...op.zUpdates.map((update) => update.elementType),
+        ...op.groupUpdates.map((update) => update.elementType),
+      ]);
+      types.forEach((elementType) => {
+        const field = fields[elementType];
+        const record = next[field] as Record<
+          string,
+          Array<Record<string, unknown>>
+        >;
+        record[op.mode] = (record[op.mode] ?? []).map((position) => {
+          const id = position.id as string | undefined;
+          if (!id) return position;
+          const z = zById.get(id);
+          const group = groupById.get(id);
+          if (
+            z?.elementType !== elementType &&
+            group?.elementType !== elementType
+          ) {
+            return position;
+          }
+          const updated = { ...position };
+          if (z?.elementType === elementType) updated.zIndex = z.zIndex;
+          if (group?.elementType === elementType) {
+            if (group.groupId === null) delete updated.groupId;
+            else updated.groupId = group.groupId;
+          }
+          return updated;
+        });
+      });
+      return;
+    }
     const record = next[fields[op.elementType]] as Record<
       string,
       Array<Record<string, unknown>>
@@ -2794,6 +2833,61 @@ describe('commitSemanticOpsInternal', () => {
     ],
     groups: [{ id: 'shared-group', name: 'Shared' }],
     zUpdates: [],
+  });
+
+  const reorderKeyOp = (id: string, zIndex: number): EditorOpV1 => ({
+    kind: 'reorderElements',
+    mode: '4key',
+    completeModeOrder: false,
+    zUpdates: [{ elementType: 'key', id, zIndex }],
+    groupUpdates: [],
+  });
+
+  it('reorder op는 projected changedFields와 lastAck를 exact하게 맞춘다', async () => {
+    const id = '00000000-0000-4000-8000-000000000090';
+    const base = withStableId(id);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keyPositions'],
+      opResults: [{ status: 'applied' }],
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      reorderKeyOp(id, 14),
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0].zIndex).toBe(14);
+    expect(harness.getLocal().keyPositions['4key'][0].zIndex).toBe(14);
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ ops: [reorderKeyOp(id, 14)] }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('reorder 응답의 누락 changedField와 targetMissing을 거절한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000089';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: [],
+      opResults: [{ status: 'applied' }],
+    });
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([reorderKeyOp(id, 14)]),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: [],
+      opResults: [{ status: 'targetMissing' }],
+    });
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([reorderKeyOp(id, 14)]),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+    harness.coordinator.stop();
   });
 
   it('insert 슬롯 적용은 기존 eager record와 key slot을 final payload로 교체한다', async () => {

@@ -118,10 +118,31 @@ export interface EditorInsertFrozenElementsOpV1 {
   zUpdates: EditorFrozenZUpdateV1[];
 }
 
+export interface EditorReorderZUpdateV1 {
+  elementType: EditorElementTypeV1;
+  id: string;
+  zIndex: number;
+}
+
+export interface EditorReorderGroupUpdateV1 {
+  elementType: EditorElementTypeV1;
+  id: string;
+  groupId: string | null;
+}
+
+export interface EditorReorderElementsOpV1 {
+  kind: 'reorderElements';
+  mode: string;
+  zUpdates: EditorReorderZUpdateV1[];
+  groupUpdates: EditorReorderGroupUpdateV1[];
+  completeModeOrder: boolean;
+}
+
 export type EditorOpV1 =
   | EditorSetBoundsOpV1
   | EditorDeleteElementOpV1
-  | EditorInsertFrozenElementsOpV1;
+  | EditorInsertFrozenElementsOpV1
+  | EditorReorderElementsOpV1;
 
 export interface EditorOpsCommitRequest extends EditorCommitRequestBase {
   changes?: never;
@@ -792,12 +813,14 @@ export function assertEditorOpsV1(
   if (!Array.isArray(value) || value.length === 0) {
     throw new EditorProtocolError(`${label} must be a non-empty array`);
   }
-  const insertOps = value.filter(
-    (op) => isRecord(op) && op.kind === 'insertFrozenElements',
+  const soleOps = value.filter(
+    (op) =>
+      isRecord(op) &&
+      (op.kind === 'insertFrozenElements' || op.kind === 'reorderElements'),
   );
-  if (insertOps.length > 0 && value.length !== 1) {
+  if (soleOps.length > 0 && value.length !== 1) {
     throw new EditorProtocolError(
-      `${label} insertFrozenElements must be the sole operation`,
+      `${label} batch operation must be the sole operation`,
     );
   }
   value.forEach((op, index) => {
@@ -824,6 +847,83 @@ export function assertEditorOpsV1(
       ) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);
       }
+      return;
+    }
+    if (op.kind === 'reorderElements') {
+      assertExactKeys(
+        op,
+        ['kind', 'mode', 'zUpdates', 'groupUpdates', 'completeModeOrder'],
+        opLabel,
+      );
+      if (
+        typeof op.mode !== 'string' ||
+        op.mode.length === 0 ||
+        new TextEncoder().encode(op.mode).length > 128 ||
+        !Array.isArray(op.zUpdates) ||
+        !Array.isArray(op.groupUpdates) ||
+        typeof op.completeModeOrder !== 'boolean' ||
+        op.zUpdates.length === 0 ||
+        op.zUpdates.length > 4096 ||
+        op.groupUpdates.length > 4096 ||
+        (!op.completeModeOrder && op.groupUpdates.length > 0)
+      ) {
+        throw new EditorProtocolError(`${opLabel} is invalid`);
+      }
+      const assertTarget = (
+        target: Record<string, unknown>,
+        targetLabel: string,
+      ) => {
+        if (
+          !['key', 'stat', 'graph', 'knob'].includes(
+            target.elementType as string,
+          ) ||
+          typeof target.id !== 'string' ||
+          target.id.length === 0
+        ) {
+          throw new EditorProtocolError(`${targetLabel} target is invalid`);
+        }
+      };
+      const zTypesById = new Map<string, EditorElementTypeV1>();
+      op.zUpdates.forEach((update, updateIndex) => {
+        const updateLabel = `${opLabel}.zUpdates[${updateIndex}]`;
+        if (!isRecord(update)) {
+          throw new EditorProtocolError(`${updateLabel} is invalid`);
+        }
+        assertExactKeys(update, ['elementType', 'id', 'zIndex'], updateLabel);
+        assertTarget(update, updateLabel);
+        if (
+          !Number.isSafeInteger(update.zIndex) ||
+          (update.zIndex as number) < -2_147_483_648 ||
+          (update.zIndex as number) > 2_147_483_647 ||
+          zTypesById.has(update.id as string)
+        ) {
+          throw new EditorProtocolError(`${updateLabel} is invalid`);
+        }
+        zTypesById.set(
+          update.id as string,
+          update.elementType as EditorElementTypeV1,
+        );
+      });
+      const groupIds = new Set<string>();
+      op.groupUpdates.forEach((update, updateIndex) => {
+        const updateLabel = `${opLabel}.groupUpdates[${updateIndex}]`;
+        if (!isRecord(update)) {
+          throw new EditorProtocolError(`${updateLabel} is invalid`);
+        }
+        assertExactKeys(update, ['elementType', 'id', 'groupId'], updateLabel);
+        assertTarget(update, updateLabel);
+        if (
+          (update.groupId !== null &&
+            (typeof update.groupId !== 'string' ||
+              update.groupId.length === 0 ||
+              update.groupId.length > 256)) ||
+          zTypesById.get(update.id as string) !== update.elementType ||
+          groupIds.has(update.id as string)
+        ) {
+          throw new EditorProtocolError(`${updateLabel} is invalid`);
+        }
+        groupIds.add(update.id as string);
+      });
       return;
     }
     if (op.kind !== 'insertFrozenElements') {
@@ -1002,6 +1102,39 @@ export function assertEditorOpCommitResult(
       if (op.elementType === 'key') {
         requiredFields.add('keys');
         allowedFields.add('keys');
+      }
+      return;
+    }
+    if (op.kind === 'reorderElements') {
+      if (
+        result.status === 'targetMissing' ||
+        ('bounds' in result && result.bounds !== undefined)
+      ) {
+        throw new EditorProtocolError(
+          `editor_commit opResults[${index}] is invalid for reorderElements`,
+        );
+      }
+      const touched = new Set<EditorField>();
+      op.zUpdates.forEach((update) =>
+        touched.add(positionFields[update.elementType]),
+      );
+      op.groupUpdates.forEach((update) =>
+        touched.add(positionFields[update.elementType]),
+      );
+      if (op.completeModeOrder) touched.add('layerGroups');
+      touched.forEach((field) => allowedFields.add(field));
+      if (result.status === 'noChange') {
+        if (value.changedFields.length !== 0) {
+          throw new EditorProtocolError(
+            'editor ops changedFields does not match opResults',
+          );
+        }
+        return;
+      }
+      if (value.changedFields.length === 0) {
+        throw new EditorProtocolError(
+          'editor ops changedFields does not match opResults',
+        );
       }
       return;
     }

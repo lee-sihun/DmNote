@@ -13,14 +13,50 @@ import {
 } from '@utils/plugin/panelModelSync';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 
-import { sendPluginRpc } from './pluginRpcClient';
+import { getPluginAuthorityGeneration, sendPluginRpc } from './pluginRpcClient';
 
 export const PLUGIN_RPC_OPERATIONS = {
   setHidden: 'elements:setHidden',
   remove: 'elements:delete',
   setZIndexes: 'elements:setZIndexes',
   update: 'elements:update',
+  deleteLayerSelection: 'layers:deleteSelection',
+  reorderLayerSelection: 'layers:reorderSelection',
 } as const;
+
+export type LayerDeleteTarget = {
+  elementType: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
+  id: string;
+};
+
+export interface LayerReorderAnchorsWire {
+  toDisplayIndex: number;
+  targetGroupId: string | null;
+  anchorBeforeId: string | null;
+  anchorAfterId: string | null;
+  anchorHeaderGroupId: string | null;
+  anchorBeforeHeaderGroupId: string | null;
+  anchorAfterHeaderGroupId: string | null;
+  boundary: 'top' | 'bottom' | null;
+}
+
+export type LayerReorderIntentWire =
+  | {
+      kind: 'items';
+      mode: string;
+      draggedIds: string[];
+      collapsedGroupIds: string[];
+      anchors: LayerReorderAnchorsWire;
+      preserveFullGroups: boolean;
+    }
+  | {
+      kind: 'group';
+      mode: string;
+      groupId: string;
+      extraIds: string[];
+      collapsedGroupIds: string[];
+      anchors: LayerReorderAnchorsWire;
+    };
 
 const isPanelWindow = () => window.__dmn_window_type === 'panel';
 
@@ -81,6 +117,9 @@ const requestFreshSnapshot = () => {
 interface QueuedElementOp {
   operation: string;
   payload: Record<string, unknown>;
+  authorityGeneration?: number;
+  retryPolicy?: 'default' | 'idempotentDelete' | 'none';
+  resolve?: (succeeded: boolean) => void;
 }
 
 const outboundQueue: QueuedElementOp[] = [];
@@ -89,7 +128,12 @@ let drainPromise: Promise<boolean> | null = null;
 const RECONCILE_WAIT_MS = 1000;
 
 const sendQueuedOp = async (op: QueuedElementOp) => {
-  const outcome = await sendPluginRpc(op.operation, op.payload, mirrorRevision);
+  const outcome = await sendPluginRpc(
+    op.operation,
+    op.payload,
+    mirrorRevision,
+    op.authorityGeneration,
+  );
   // 응답에는 성공·실패 모두 최신 backend revision이 실림
   if (outcome.kind !== 'unknown' && outcome.response) {
     notePluginMirrorRevision(outcome.response.modelRevision);
@@ -102,7 +146,28 @@ const drainQueue = async (): Promise<boolean> => {
   while (outboundQueue.length > 0) {
     const op = outboundQueue.shift()!;
     const outcome = await sendQueuedOp(op);
-    if (outcome.kind === 'ok') continue;
+    if (outcome.kind === 'ok') {
+      op.resolve?.(true);
+      continue;
+    }
+    if (op.retryPolicy === 'none') {
+      succeeded = false;
+      op.resolve?.(false);
+      requestFreshSnapshot();
+      continue;
+    }
+    const retryableDeleteOutcome =
+      op.retryPolicy === 'idempotentDelete' &&
+      (outcome.kind === 'unknown' ||
+        (outcome.kind === 'error' &&
+          (outcome.errorCode === 'MODEL_REVISION_STALE' ||
+            outcome.errorCode === 'PLUGIN_MODEL_REVISION_CONFLICT')));
+    if (op.retryPolicy === 'idempotentDelete' && !retryableDeleteOutcome) {
+      succeeded = false;
+      op.resolve?.(false);
+      requestFreshSnapshot();
+      continue;
+    }
     if (outcome.kind === 'error') {
       console.error(`Plugin RPC ${op.operation} failed: ${outcome.errorCode}`);
     }
@@ -110,9 +175,21 @@ const drainQueue = async (): Promise<boolean> => {
     // 거절·불명 - fresh snapshot 수렴 뒤 마지막 의도를 1회 재시도
     requestFreshSnapshot();
     await waitForMirrorRevisionAdvance(RECONCILE_WAIT_MS);
+    if (
+      op.authorityGeneration !== undefined &&
+      op.authorityGeneration !== getPluginAuthorityGeneration()
+    ) {
+      succeeded = false;
+      op.resolve?.(false);
+      continue;
+    }
     const retry = await sendQueuedOp(op);
-    if (retry.kind === 'ok') continue;
+    if (retry.kind === 'ok') {
+      op.resolve?.(true);
+      continue;
+    }
     succeeded = false;
+    op.resolve?.(false);
     if (retry.kind === 'error') {
       console.error(
         `Plugin RPC ${op.operation} retry failed: ${retry.errorCode}`,
@@ -215,6 +292,38 @@ const delegate = (
   }
   outboundQueue.push({ operation, payload });
   void ensureQueueDrain();
+};
+
+export const deleteLayerSelectionViaAuthority = (
+  targets: readonly LayerDeleteTarget[],
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.deleteLayerSelection,
+      payload: { targets: targets.map((target) => ({ ...target })) },
+      authorityGeneration,
+      retryPolicy: 'idempotentDelete',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const reorderLayerSelectionViaAuthority = (
+  descriptor: LayerReorderIntentWire,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.reorderLayerSelection,
+      payload: { descriptor: structuredClone(descriptor) },
+      authorityGeneration,
+      retryPolicy: 'none',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
 };
 
 export const drainPendingPluginElementWrites = async (): Promise<boolean> => {

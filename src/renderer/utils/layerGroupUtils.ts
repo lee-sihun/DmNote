@@ -7,6 +7,11 @@ import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { LayerGroups, LayerGroupDef } from '@src/types/layerGroups';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
+export const isPluginVisibleInMode = (
+  element: Pick<PluginDisplayElementInternal, 'tabId'>,
+  mode: string,
+): boolean => !element.tabId || element.tabId === mode;
+
 type Groupable = SelectedElement & {
   type: 'key' | 'stat' | 'graph' | 'knob';
   index: number;
@@ -399,7 +404,7 @@ export function buildLayerItemsForMode(
   });
 
   pluginElements
-    .filter((el) => el.tabId === mode)
+    .filter((el) => isPluginVisibleInMode(el, mode))
     .forEach((el) => {
       items.push({
         type: 'plugin',

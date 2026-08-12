@@ -13,6 +13,7 @@ import type { KeyPosition } from '@src/types/key/keys';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 import { useGridSelection } from './useGridSelection';
+import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
 
 const mocks = vi.hoisted(() => ({
   commitGeometry: vi.fn(() => Promise.resolve(1)),
@@ -30,11 +31,15 @@ const mocks = vi.hoisted(() => ({
   runMixedGestureIntent: vi.fn(() =>
     Promise.resolve({ committed: true, satisfied: true }),
   ),
-  runMixedDeleteIntent: vi.fn(() => Promise.resolve()),
+  runMixedDeleteIntent: vi.fn(
+    (_options?: { receipt?: { rollback: () => void } | null }) =>
+      Promise.resolve(),
+  ),
   commitPatch: vi.fn((_patch: unknown, _options?: { gestureId?: string }) =>
     Promise.resolve(),
   ),
   deletePluginElements: vi.fn(),
+  deleteLayerSelectionViaAuthority: vi.fn(() => Promise.resolve(true)),
   rotateSession: vi.fn(),
   beginMixedGesture: vi.fn(),
   cancelUncommittedMixedGesture: vi.fn(),
@@ -84,6 +89,11 @@ vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
 
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   deletePluginElements: mocks.deletePluginElements,
+  deleteLayerSelectionViaAuthority: mocks.deleteLayerSelectionViaAuthority,
+}));
+
+vi.mock('@plugins/rpc/pluginRpcClient', () => ({
+  getPluginAuthorityGeneration: () => 7,
 }));
 
 vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
@@ -147,8 +157,10 @@ describe('useGridSelection compound history gesture', () => {
   let root: Root;
   let api: SelectionApi;
   let randomUUID: ReturnType<typeof vi.spyOn>;
+  let originalWindowType: typeof window.__dmn_window_type;
 
   beforeEach(async () => {
+    originalWindowType = window.__dmn_window_type;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     mocks.commitPatch.mockClear();
     mocks.commitGeometry.mockClear();
@@ -158,6 +170,8 @@ describe('useGridSelection compound history gesture', () => {
     mocks.runMixedGestureIntent.mockClear();
     mocks.runMixedDeleteIntent.mockClear();
     mocks.deletePluginElements.mockClear();
+    mocks.deleteLayerSelectionViaAuthority.mockClear();
+    mocks.deleteLayerSelectionViaAuthority.mockResolvedValue(true);
     mocks.rotateSession.mockClear();
     mocks.beginMixedGesture.mockClear();
     mocks.cancelUncommittedMixedGesture.mockClear();
@@ -177,6 +191,7 @@ describe('useGridSelection compound history gesture', () => {
     useLayerGroupStore.setState({ layerGroups: {} });
     usePluginDisplayElementStore.setState({ elements: [pluginElement()] });
     useGridSelectionStore.getState().clearSelection();
+    window.__dmn_window_type = 'main';
 
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -196,6 +211,8 @@ describe('useGridSelection compound history gesture', () => {
     await act(async () => root.unmount());
     host.remove();
     randomUUID.mockRestore();
+    if (originalWindowType === undefined) delete window.__dmn_window_type;
+    else window.__dmn_window_type = originalWindowType;
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
   });
 
@@ -234,6 +251,84 @@ describe('useGridSelection compound history gesture', () => {
       },
     ]);
     expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('분리 패널 삭제는 stable descriptor만 main authority에 위임한다', async () => {
+    window.__dmn_window_type = 'panel';
+    await act(async () => {
+      useGridSelectionStore.getState().setSelectedElements([
+        { type: 'key', id: STABLE_KEY_ID, index: 0 },
+        { type: 'plugin', id: 'plugin-a:element' },
+      ]);
+    });
+
+    await act(async () => api.deleteSelectedElements());
+
+    expect(mocks.deleteLayerSelectionViaAuthority).toHaveBeenCalledWith([
+      { elementType: 'key', id: STABLE_KEY_ID },
+      { elementType: 'plugin', id: 'plugin-a:element' },
+    ]);
+    expect(mocks.runMixedDeleteIntent).not.toHaveBeenCalled();
+    expect(mocks.deletePluginElements).not.toHaveBeenCalled();
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
+  });
+
+  it('분리 패널의 synthetic 선택은 삭제를 main에 보내지 않는다', async () => {
+    window.__dmn_window_type = 'panel';
+    await act(async () => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: 'key-0', index: 0 }]);
+    });
+
+    await act(async () => api.deleteSelectedElements());
+
+    expect(mocks.deleteLayerSelectionViaAuthority).not.toHaveBeenCalled();
+    expect(mocks.runMixedDeleteIntent).not.toHaveBeenCalled();
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([
+      { type: 'key', id: 'key-0', index: 0 },
+    ]);
+  });
+
+  it('stable 삭제 실패 복원은 main의 무관한 현재 mode 변경과 격리된다', async () => {
+    const otherPosition = {
+      ...keyPosition,
+      id: '77777777-7777-4777-8777-777777777777',
+    };
+    useKeyStore.setState({
+      selectedKeyType: '7key',
+      keyMappings: { '4key': ['KeyA'], '7key': ['KeyZ'] },
+      positions: { '4key': [keyPosition], '7key': [otherPosition] },
+      canonicalPositions: {
+        '4key': [keyPosition],
+        '7key': [otherPosition],
+      },
+    });
+    mocks.runMixedDeleteIntent.mockImplementationOnce(async (rawOptions) => {
+      const options = rawOptions as {
+        receipt?: { rollback: () => void };
+      };
+      const state = useKeyStore.getState();
+      state.setKeyMappingsAndPositions(
+        { ...state.keyMappings, '7key': ['KeyY'] },
+        {
+          ...state.canonicalPositions,
+          '7key': [{ ...state.canonicalPositions['7key'][0], width: 321 }],
+        },
+      );
+      options.receipt?.rollback();
+    });
+
+    await deleteFrozenSelection([{ type: 'key', id: STABLE_KEY_ID }], '7key');
+
+    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['KeyA']);
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([
+      keyPosition,
+    ]);
+    expect(useKeyStore.getState().keyMappings['7key']).toEqual(['KeyY']);
+    expect(useKeyStore.getState().canonicalPositions['7key'][0].width).toBe(
+      321,
+    );
   });
 
   it('혼합 삭제 중 동기 예외가 나도 staged를 정산하고 editor eager를 복원한다', async () => {

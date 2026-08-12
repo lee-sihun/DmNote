@@ -223,13 +223,22 @@ pub enum EditorOpV1 {
         #[serde(rename = "zUpdates")]
         z_updates: Vec<EditorZUpdateV1>,
     },
+    ReorderElements {
+        mode: String,
+        #[serde(rename = "completeModeOrder")]
+        complete_mode_order: bool,
+        #[serde(rename = "zUpdates")]
+        z_updates: Vec<EditorZUpdateV1>,
+        #[serde(rename = "groupUpdates")]
+        group_updates: Vec<EditorGroupUpdateV1>,
+    },
 }
 
 impl EditorOpV1 {
     pub fn target_id(&self) -> Option<&str> {
         match self {
             Self::SetBounds { id, .. } | Self::DeleteElement { id, .. } => Some(id),
-            Self::InsertFrozenElements { .. } => None,
+            Self::InsertFrozenElements { .. } | Self::ReorderElements { .. } => None,
         }
     }
 }
@@ -303,6 +312,22 @@ pub struct EditorZUpdateV1 {
     pub element_type: EditorElementTypeV1,
     pub id: String,
     pub z_index: i32,
+}
+
+fn deserialize_required_nullable_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorGroupUpdateV1 {
+    pub element_type: EditorElementTypeV1,
+    pub id: String,
+    #[serde(deserialize_with = "deserialize_required_nullable_string")]
+    pub group_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

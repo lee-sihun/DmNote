@@ -17,12 +17,15 @@ const mocks = vi.hoisted(() => ({
   })),
   captureBaseline: vi.fn(() => null),
   reportElementOpError: vi.fn(),
+  reportElementOpSkipped: vi.fn(),
   setPluginZIndexes: vi.fn(),
   commitPatch: vi.fn(() => Promise.resolve()),
   setKeyPositions: vi.fn(),
   setLayerGroups: vi.fn(),
   selectedElements: [] as Array<{ id: string }>,
   selectedGroupIds: [] as string[],
+  commitLayerDropIntent: vi.fn(() => Promise.resolve()),
+  reorderViaAuthority: vi.fn(() => Promise.resolve(true)),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
@@ -34,11 +37,12 @@ vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   intentPatch: (patch: unknown) =>
     patch === null ? { kind: 'targetLost' } : { kind: 'patch', patch },
   reportElementOpError: mocks.reportElementOpError,
-  reportElementOpSkipped: vi.fn(),
+  reportElementOpSkipped: mocks.reportElementOpSkipped,
 }));
 
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   setPluginElementZIndexes: mocks.setPluginZIndexes,
+  reorderLayerSelectionViaAuthority: mocks.reorderViaAuthority,
 }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
@@ -48,7 +52,42 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   },
 }));
 
+vi.mock('./layerReorderIntent', () => ({
+  commitLayerDropIntent: mocks.commitLayerDropIntent,
+  resolveDropIndexFromAnchors: (
+    target: {
+      toDisplayIndex: number;
+      anchorBeforeId?: string | null;
+      anchorAfterId?: string | null;
+    },
+    draggedSet: ReadonlySet<string>,
+    display: DisplayItem[],
+  ) => {
+    const before = target.anchorBeforeId
+      ? display.findIndex(
+          (item) =>
+            item.displayType === 'layer' &&
+            item.item.id === target.anchorBeforeId &&
+            !draggedSet.has(item.item.id),
+        )
+      : -1;
+    const after = target.anchorAfterId
+      ? display.findIndex(
+          (item) =>
+            item.displayType === 'layer' &&
+            item.item.id === target.anchorAfterId &&
+            !draggedSet.has(item.item.id),
+        )
+      : -1;
+    if (before >= 0 && after >= 0) return before < after ? before + 1 : null;
+    if (before >= 0) return before + 1;
+    if (after >= 0) return after;
+    return target.toDisplayIndex;
+  },
+}));
+
 vi.mock('@stores/data/useKeyStore', () => ({
+  registerRenderedPositionsComposer: vi.fn(),
   useKeyStore: {
     getState: () => ({
       canonicalPositions: { '4key': [] },
@@ -75,12 +114,14 @@ vi.mock('@stores/data/useLayerGroupStore', () => ({
   useLayerGroupStore: {
     getState: () => ({
       layerGroups: {},
+      collapsedGroups: new Set(),
       setLayerGroups: mocks.setLayerGroups,
     }),
   },
 }));
 vi.mock('@stores/grid/useGridSelectionStore', () => ({
   useGridSelectionStore: {
+    subscribe: vi.fn(() => vi.fn()),
     getState: () => ({
       selectedElements: mocks.selectedElements,
       selectedGroupIds: mocks.selectedGroupIds,
@@ -211,12 +252,16 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       receipt: { rollback: vi.fn() },
     }));
     mocks.reportElementOpError.mockClear();
+    mocks.reportElementOpSkipped.mockClear();
     mocks.setPluginZIndexes.mockClear();
     mocks.commitPatch.mockClear();
     mocks.setKeyPositions.mockClear();
     mocks.setLayerGroups.mockClear();
     mocks.selectedElements = [];
     mocks.selectedGroupIds = [];
+    mocks.commitLayerDropIntent.mockClear();
+    mocks.reorderViaAuthority.mockClear();
+    window.__dmn_window_type = 'main';
   });
 
   afterEach(async () => {
@@ -271,16 +316,43 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       displayItems: toDisplay(liveItems),
     });
 
-    // native intent는 러너가 소유, plugin z-index는 별도 authority 쓰기,
-    // 호출 시점 full-record commitPatch는 금지
-    expect(mocks.runElementIntent).toHaveBeenCalledTimes(1);
-    expect(mocks.applyGestureEagerly).toHaveBeenCalledTimes(1);
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'items',
+        mode: '4key',
+        draggedIds: [ID_A],
+      }),
+    );
     expect(mocks.commitPatch).not.toHaveBeenCalled();
-    expect(mocks.setPluginZIndexes).toHaveBeenCalledTimes(1);
-    const byId = eagerIntents();
-    // 최종 순서 [B, A, plugin] - live 순서 기준 zIndex
-    expect(byId.get(ID_B)).toMatchObject({ zIndex: 2 });
-    expect(byId.get(ID_A)).toMatchObject({ zIndex: 1 });
+    expect(mocks.setPluginZIndexes).not.toHaveBeenCalled();
+  });
+
+  it('panel stable 드롭은 exact descriptor를 main authority로 위임한다', async () => {
+    window.__dmn_window_type = 'panel';
+    const startItems = [nativeItem(ID_A, 0, 2), nativeItem(ID_B, 1, 1)];
+    await dragItemToEnd(startItems, {
+      layerItems: startItems,
+      displayItems: toDisplay(startItems),
+    });
+
+    expect(mocks.commitLayerDropIntent).not.toHaveBeenCalled();
+    expect(mocks.reorderViaAuthority).toHaveBeenCalledWith({
+      kind: 'items',
+      mode: '4key',
+      draggedIds: [ID_A],
+      preserveFullGroups: false,
+      collapsedGroupIds: [],
+      anchors: {
+        toDisplayIndex: expect.any(Number),
+        targetGroupId: null,
+        anchorBeforeId: expect.anything(),
+        anchorAfterId: null,
+        anchorHeaderGroupId: null,
+        anchorBeforeHeaderGroupId: null,
+        anchorAfterHeaderGroupId: null,
+        boundary: null,
+      },
+    });
   });
 
   it('native 전용 편입 전 실패는 runner가 소유하고 layerGroups는 eager를 건드리지 않는다', async () => {
@@ -295,17 +367,10 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       displayItems: toDisplay(startItems),
     });
 
-    expect(mocks.runElementIntent).toHaveBeenCalledTimes(1);
-    // eager는 속성 의도만 - 그룹 정의·포지션 스토어 직접 쓰기 없음
-    expect(mocks.applyGestureEagerly).toHaveBeenCalledTimes(1);
-    const byId = eagerIntents() as Map<string, Record<string, number>>;
-    expect(byId.get(ID_B)).toMatchObject({ zIndex: 1 });
-    expect(byId.get(ID_A)).toMatchObject({ zIndex: 0 });
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledOnce();
     expect(mocks.setLayerGroups).not.toHaveBeenCalled();
     expect(mocks.setKeyPositions).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
-    // 실패는 경계 로거로 보고되고 복원은 러너 receipt가 소유
-    expect(mocks.reportElementOpError).toHaveBeenCalledTimes(1);
   });
 
   const ID_C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -353,13 +418,6 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     });
   };
 
-  const eagerIntents = () => {
-    const [options] = mocks.applyGestureEagerly.mock.calls[0] as unknown as [
-      { propertyIntents: Map<string, Map<string, Record<string, unknown>>> },
-    ];
-    return options.propertyIntents.get('key')!;
-  };
-
   it('합성 항목 드래그의 baseline은 paired keys를 포함해 캡처한다', async () => {
     // 합성 id 항목 - 드래그 시작 시 baseline 캡처가 발화
     const syntheticItem: LayerItem = {
@@ -384,6 +442,63 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     );
   });
 
+  it('panel 합성 항목 드래그는 authority와 local writer를 모두 막는다', async () => {
+    window.__dmn_window_type = 'panel';
+    const syntheticItem: LayerItem = {
+      type: 'key',
+      id: 'key-0',
+      index: 0,
+      name: 'legacy',
+      zIndex: 1,
+      hidden: false,
+    };
+    const itemB = nativeItem(ID_B, 1, 0);
+    const startItems = [syntheticItem, itemB];
+    await dragItemToEnd(startItems, {
+      layerItems: startItems,
+      displayItems: toDisplay(startItems),
+    });
+
+    expect(mocks.reorderViaAuthority).not.toHaveBeenCalled();
+    expect(mocks.commitLayerDropIntent).not.toHaveBeenCalled();
+    expect(mocks.runElementIntent).not.toHaveBeenCalled();
+    expect(mocks.setPluginZIndexes).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+    expect(mocks.reportElementOpSkipped).toHaveBeenCalledWith(
+      'panel synthetic layer drop',
+    );
+  });
+
+  it('panel 합성 그룹 드래그도 local writer 없이 중단한다', async () => {
+    window.__dmn_window_type = 'panel';
+    const synthetic = nativeItem('key-0', 0, 2, 'G');
+    const itemB = nativeItem(ID_B, 1, 1);
+    const items = [synthetic, itemB];
+    const display: DisplayItem[] = [
+      headerRow('G', 1),
+      { displayType: 'layer', item: synthetic, groupDepth: 1, flatIndex: 0 },
+      { displayType: 'layer', item: itemB, groupDepth: 0, flatIndex: 1 },
+    ];
+    await renderDnD({
+      layerItems: items,
+      displayItems: display,
+      liveModel: { layerItems: items, displayItems: display },
+    });
+    await finishDrag(
+      () => api.handleGroupMouseDown(mouseDownEvent(), 'G'),
+      200,
+    );
+
+    expect(mocks.reorderViaAuthority).not.toHaveBeenCalled();
+    expect(mocks.commitLayerDropIntent).not.toHaveBeenCalled();
+    expect(mocks.runElementIntent).not.toHaveBeenCalled();
+    expect(mocks.setPluginZIndexes).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+    expect(mocks.reportElementOpSkipped).toHaveBeenCalledWith(
+      'panel synthetic group drop',
+    );
+  });
+
   it('plugin-only 드롭은 editor를 커밋하지 않는다', async () => {
     const pluginA = pluginItem('plugin-x:one', 1);
     const pluginB = pluginItem('plugin-y:one', 0);
@@ -393,7 +508,10 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       displayItems: toDisplay(startItems),
     });
 
-    expect(mocks.setPluginZIndexes).toHaveBeenCalledTimes(1);
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'items', draggedIds: ['plugin-x:one'] }),
+    );
+    expect(mocks.setPluginZIndexes).not.toHaveBeenCalled();
     expect(mocks.runElementIntent).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
@@ -414,12 +532,9 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       200,
     );
 
-    expect(mocks.runElementIntent).toHaveBeenCalledTimes(1);
-    const byId = eagerIntents();
-    // 최신 순서 [C, A, B] - stale ref 순서라면 [B, A, C]가 된다
-    expect(byId.get(ID_C)).toMatchObject({ zIndex: 2 });
-    expect(byId.get(ID_A)).toMatchObject({ zIndex: 1 });
-    expect(byId.get(ID_B)).toMatchObject({ zIndex: 0 });
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'items', draggedIds: [ID_A] }),
+    );
   });
 
   it('그룹+추가 선택 드래그는 mouseup 시점 live 구성원 전체를 함께 옮긴다', async () => {
@@ -454,13 +569,13 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       200,
     );
 
-    expect(mocks.runElementIntent).toHaveBeenCalledTimes(1);
-    const byId = eagerIntents();
-    // 최종 순서 [Y, A, B, X] - 새 구성원 B가 그룹과 함께 이동
-    expect(byId.get(ID_Y)).toMatchObject({ zIndex: 3 });
-    expect(byId.get(ID_A)).toMatchObject({ zIndex: 2 });
-    expect(byId.get(ID_B)).toMatchObject({ zIndex: 1 });
-    expect(byId.get(ID_X)).toMatchObject({ zIndex: 0 });
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'group',
+        groupId: 'G',
+        extraIds: [ID_X],
+      }),
+    );
   });
 
   it('추가 선택이 앵커 후보였던 드롭도 살아있는 비이동 앵커 기준으로 배치한다', async () => {
@@ -496,13 +611,13 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     // 살아있는 비이동 앵커 Y 기준으로 해석돼야 한다
     await finishDrag(() => api.handleGroupMouseDown(mouseDownEvent(), 'G'), 74);
 
-    expect(mocks.runElementIntent).toHaveBeenCalledTimes(1);
-    const byId = eagerIntents();
-    // 최종 순서 [Z, A, X, Y] - live Y 앵커 앞 배치
-    expect(byId.get(ID_B)).toMatchObject({ zIndex: 3 });
-    expect(byId.get(ID_A)).toMatchObject({ zIndex: 2 });
-    expect(byId.get(ID_X)).toMatchObject({ zIndex: 1 });
-    expect(byId.get(ID_Y)).toMatchObject({ zIndex: 0 });
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'group',
+        groupId: 'G',
+        extraIds: [ID_X],
+      }),
+    );
   });
 
   it('캡처 후 선택 축소로 이동 집합이 줄면 무커밋한다', async () => {

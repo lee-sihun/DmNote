@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   commitMixedIntent: vi.fn(),
   commitSemantic: vi.fn(),
   reportSkipped: vi.fn(),
+  authorityGeneration: 7,
 }));
 
 vi.mock('@plugins/runtime/displayElement/gestureTransaction', () => ({
@@ -18,6 +19,10 @@ vi.mock('./editorSemanticOps', () => ({
 
 vi.mock('./elementIntent', () => ({
   reportElementOpSkipped: mocks.reportSkipped,
+}));
+
+vi.mock('@plugins/rpc/pluginRpcClient', () => ({
+  getPluginAuthorityGeneration: () => mocks.authorityGeneration,
 }));
 
 import {
@@ -45,6 +50,7 @@ describe('runMixedElementIntent receipt 소유권', () => {
     mocks.commitMixedIntent.mockReset();
     mocks.commitSemantic.mockReset();
     mocks.reportSkipped.mockClear();
+    mocks.authorityGeneration = 7;
   });
 
   it('generatedNull은 성공해도 receipt를 복원하고 skip을 관측한다', async () => {
@@ -347,6 +353,43 @@ describe('runMixedElementIntent receipt 소유권', () => {
       }),
     );
     expect(mocks.commitMixedIntent).not.toHaveBeenCalled();
+    expect(rollback).not.toHaveBeenCalled();
+  });
+
+  it('panel 삭제 generation은 mixed commit까지 그대로 전달된다', async () => {
+    mocks.commitMixedIntent.mockImplementationOnce(async (options) => {
+      expect(options.expectedAuthorityGeneration).toBe(7);
+      options.onEnrolled?.();
+    });
+
+    await runMixedElementDeleteIntent({
+      gestureId: 'gesture-panel-delete',
+      pluginIds: ['plugin-a'],
+      deletedPluginFullIds: ['plugin-a:gone'],
+      ops: [],
+      receipt: null,
+      expectedAuthorityGeneration: 7,
+    });
+  });
+
+  it('editor-only 삭제 완료 중 generation이 바뀌면 성공으로 마치지 않는다', async () => {
+    const rollback = vi.fn();
+    mocks.commitSemantic.mockImplementationOnce(async (_ops, meta) => {
+      meta.onEnrolled?.();
+      mocks.authorityGeneration = 8;
+      return { document: {}, opResults: [{ status: 'applied' }] };
+    });
+
+    await expect(
+      runMixedElementDeleteIntent({
+        gestureId: 'gesture-panel-delete',
+        pluginIds: [],
+        deletedPluginFullIds: [],
+        ops: [],
+        receipt: { rollback },
+        expectedAuthorityGeneration: 7,
+      }),
+    ).rejects.toThrow('plugin authority generation changed');
     expect(rollback).not.toHaveBeenCalled();
   });
 });

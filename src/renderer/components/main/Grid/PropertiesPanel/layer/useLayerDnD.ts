@@ -17,12 +17,55 @@ import {
 } from '@src/renderer/editor/runtime/elementIntent';
 import { applyEditorPatch } from '@src/renderer/editor/runtime/editorCoordinator';
 import { setPluginElementZIndexes } from '@plugins/rpc/pluginElementActions';
+import {
+  reorderLayerSelectionViaAuthority,
+  type LayerReorderIntentWire,
+} from '@plugins/rpc/pluginElementActions';
 import { useState, useRef } from 'react';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import type { LayerItem, DisplayItem } from '../types';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
+import {
+  commitLayerDropIntent,
+  resolveDropIndexFromAnchors,
+  type DropAnchors,
+} from './layerReorderIntent';
+
+export { resolveDropIndexFromAnchors } from './layerReorderIntent';
+
+const toReorderWire = (
+  descriptor: import('./layerReorderIntent').LayerDropIntent,
+): LayerReorderIntentWire => ({
+  ...descriptor,
+  anchors: {
+    toDisplayIndex: descriptor.anchors.toDisplayIndex,
+    targetGroupId: descriptor.anchors.targetGroupId ?? null,
+    anchorBeforeId: descriptor.anchors.anchorBeforeId ?? null,
+    anchorAfterId: descriptor.anchors.anchorAfterId ?? null,
+    anchorHeaderGroupId: descriptor.anchors.anchorHeaderGroupId ?? null,
+    anchorBeforeHeaderGroupId:
+      descriptor.anchors.anchorBeforeHeaderGroupId ?? null,
+    anchorAfterHeaderGroupId:
+      descriptor.anchors.anchorAfterHeaderGroupId ?? null,
+    boundary: descriptor.anchors.boundary ?? null,
+  },
+});
+
+const commitLayerDropFromCurrentWindow = (
+  descriptor: import('./layerReorderIntent').LayerDropIntent,
+): Promise<void> => {
+  if (window.__dmn_window_type !== 'panel') {
+    return commitLayerDropIntent(descriptor);
+  }
+  return reorderLayerSelectionViaAuthority(toReorderWire(descriptor)).then(
+    (succeeded) => {
+      if (!succeeded) reportElementOpSkipped('panel layer drop settlement');
+    },
+  );
+};
 
 // ============================================================================
 // 파라미터 타입
@@ -70,94 +113,6 @@ export const generateModeScopedIntentPatch = (
     }
   }
   return touchedAny ? patch : null;
-};
-
-export interface DropAnchors {
-  toDisplayIndex: number;
-  targetGroupId: string | undefined;
-  anchorBeforeId?: string | null;
-  anchorAfterId?: string | null;
-  anchorHeaderGroupId?: string | null;
-  // 스캔이 layer 대신 그룹 헤더 경계에서 끝난 경우의 헤더 앵커
-  anchorBeforeHeaderGroupId?: string | null;
-  anchorAfterHeaderGroupId?: string | null;
-}
-
-export const resolveDropIndexFromAnchors = (
-  target: DropAnchors,
-  draggedSet: ReadonlySet<string>,
-  display: DisplayItem[],
-): number | null => {
-  if (
-    target.targetGroupId &&
-    !display.some(
-      (di) =>
-        di.displayType === 'group-header' &&
-        di.groupId === target.targetGroupId,
-    )
-  ) {
-    return null;
-  }
-  if (target.anchorHeaderGroupId) {
-    const headerIdx = display.findIndex(
-      (di) =>
-        di.displayType === 'group-header' &&
-        di.groupId === target.anchorHeaderGroupId,
-    );
-    return headerIdx !== -1 ? headerIdx + 1 : null;
-  }
-  // 이동 집합에 편입된 앵커는 소실 취급 - 함께 움직이는 요소는 고정
-  // 기준점이 될 수 없다 (캡처 후 선택 확장으로 편입된 경우 포함)
-  const findLayerIndex = (id: string | null | undefined): number =>
-    id == null || draggedSet.has(id)
-      ? -1
-      : display.findIndex(
-          (di) => di.displayType === 'layer' && di.item.id === id,
-        );
-  const findHeaderIndex = (groupId: string | null | undefined): number =>
-    groupId == null
-      ? -1
-      : display.findIndex(
-          (di) => di.displayType === 'group-header' && di.groupId === groupId,
-        );
-  // 각 측 앵커: layer 우선, 없으면 헤더 경계
-  const beforeCaptured =
-    target.anchorBeforeId != null || target.anchorBeforeHeaderGroupId != null;
-  const afterCaptured =
-    target.anchorAfterId != null || target.anchorAfterHeaderGroupId != null;
-  const beforeIdx =
-    target.anchorBeforeId != null
-      ? findLayerIndex(target.anchorBeforeId)
-      : findHeaderIndex(target.anchorBeforeHeaderGroupId);
-  const afterIdx =
-    target.anchorAfterId != null
-      ? findLayerIndex(target.anchorAfterId)
-      : findHeaderIndex(target.anchorAfterHeaderGroupId);
-  if (beforeCaptured && afterCaptured) {
-    if (beforeIdx !== -1 && afterIdx !== -1) {
-      // 순서 역전 = 병행 재정렬이 두 앵커 관계를 갈랐다 - 무커밋
-      if (beforeIdx >= afterIdx) return null;
-      for (let i = beforeIdx + 1; i < afterIdx; i++) {
-        const di = display[i];
-        if (di.displayType === 'group-header') return null;
-        if (di.displayType === 'layer' && !draggedSet.has(di.item.id)) {
-          return null;
-        }
-      }
-      return beforeIdx + 1;
-    }
-    if (beforeIdx !== -1) return beforeIdx + 1;
-    if (afterIdx !== -1) return afterIdx;
-    return null;
-  }
-  if (beforeCaptured) {
-    return beforeIdx !== -1 ? beforeIdx + 1 : null;
-  }
-  if (afterCaptured) {
-    return afterIdx !== -1 ? afterIdx : null;
-  }
-  // 앵커가 원래 없던 경계(빈 목록 최상단 등)는 캡처 index 유지
-  return target.toDisplayIndex;
 };
 
 interface UseLayerDnDParams {
@@ -945,6 +900,16 @@ export function useLayerDnD({
         anchorHeaderGroupId: dropTarget.indicatorHeaderBottomGroupId ?? null,
         anchorBeforeHeaderGroupId,
         anchorAfterHeaderGroupId,
+        ...(!anchorBeforeId &&
+        !anchorAfterId &&
+        !anchorBeforeHeaderGroupId &&
+        !anchorAfterHeaderGroupId &&
+        !dropTarget.indicatorHeaderBottomGroupId
+          ? {
+              boundary:
+                dropDisplayIndex <= 0 ? ('top' as const) : ('bottom' as const),
+            }
+          : {}),
       };
       setDragOverItemDisplayIndex(dropTarget.indicatorDisplayIndex);
       setDragOverHeaderBottomGroupId(dropTarget.indicatorHeaderBottomGroupId);
@@ -964,16 +929,36 @@ export function useLayerDnD({
           // authoritative 재구성 목록에서 앵커를 재해석 - effect 지연 ref는
           // 외부 재정렬을 한 렌더 늦게 본다. 소실·역전·비인접이면 무커밋
           const liveModel = buildLiveLayerModel();
-          const resolvedIndex = resolveDropIndexFromAnchors(
-            target,
-            new Set(draggedIds),
-            liveModel.displayItems,
+          const hasSynthetic = liveModel.layerItems.some(
+            (item) =>
+              item.type !== 'plugin' &&
+              (item.id.length === 0 || isSyntheticElementId(item.id)),
           );
-          if (resolvedIndex != null) {
-            performMultiDrop(draggedIds, resolvedIndex, {
-              targetGroupId: target.targetGroupId,
-              liveModel,
-            });
+          if (!hasSynthetic) {
+            void commitLayerDropFromCurrentWindow({
+              kind: 'items',
+              mode: selectedKeyType,
+              draggedIds: [...draggedIds],
+              anchors: target,
+              preserveFullGroups: false,
+              collapsedGroupIds: [
+                ...useLayerGroupStore.getState().collapsedGroups,
+              ],
+            }).catch(reportElementOpError);
+          } else if (window.__dmn_window_type !== 'panel') {
+            const resolvedIndex = resolveDropIndexFromAnchors(
+              target,
+              new Set(draggedIds),
+              liveModel.displayItems,
+            );
+            if (resolvedIndex != null) {
+              performMultiDrop(draggedIds, resolvedIndex, {
+                targetGroupId: target.targetGroupId,
+                liveModel,
+              });
+            }
+          } else {
+            reportElementOpSkipped('panel synthetic layer drop');
           }
         }
       }
@@ -1118,6 +1103,14 @@ export function useLayerDnD({
         anchorHeaderGroupId: null,
         anchorBeforeHeaderGroupId: groupAnchorBeforeHeaderId,
         anchorAfterHeaderGroupId: groupAnchorAfterHeaderId,
+        ...(!groupAnchorBeforeId &&
+        !groupAnchorAfterId &&
+        !groupAnchorBeforeHeaderId &&
+        !groupAnchorAfterHeaderId
+          ? {
+              boundary: newIndex <= 0 ? ('top' as const) : ('bottom' as const),
+            }
+          : {}),
       };
       groupDragStateRef.current.excludedIds = [...groupDraggingSet];
       setDragOverDisplayIndex(newIndex);
@@ -1173,7 +1166,27 @@ export function useLayerDnD({
                 liveModel.displayItems,
               )
             : groupDragStateRef.current.currentOverIndex;
-          if (targetIdx !== null) {
+          const hasSynthetic = liveModel.layerItems.some(
+            (item) =>
+              item.type !== 'plugin' &&
+              (item.id.length === 0 || isSyntheticElementId(item.id)),
+          );
+          if (!excludedShrank && anchors && !hasSynthetic) {
+            void commitLayerDropFromCurrentWindow({
+              kind: 'group',
+              mode: selectedKeyType,
+              groupId,
+              extraIds,
+              anchors,
+              collapsedGroupIds: [
+                ...useLayerGroupStore.getState().collapsedGroups,
+              ],
+            }).catch(reportElementOpError);
+          } else if (
+            targetIdx !== null &&
+            hasSynthetic &&
+            window.__dmn_window_type !== 'panel'
+          ) {
             if (extraIds.length > 0) {
               // live index를 live 모델로 재해석 - 지연 ref display로 풀면
               // 옛 이웃 기준 targetGroupId가 나온다
@@ -1190,6 +1203,8 @@ export function useLayerDnD({
             } else {
               performGroupDrop(groupId, targetIdx, liveModel);
             }
+          } else if (hasSynthetic && window.__dmn_window_type === 'panel') {
+            reportElementOpSkipped('panel synthetic group drop');
           }
         }
       }

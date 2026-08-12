@@ -30,7 +30,6 @@ import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
-  normalizeLayerGroupsForMode,
   buildNextLayerGroupName,
   buildLayerItemsForMode,
   applyZIndexToLayerOrder,
@@ -39,38 +38,28 @@ import { commitSelectedGeometryByIds } from '@src/renderer/editor/runtime/elemen
 import {
   ElementIntentAbort,
   applySealedSliceMutation,
-  captureIndexIntentBaseline,
   combineReceipts,
   createPropertyReceipt,
   generatePropertyIntentPatch,
-  indexBaselineMatches,
   reportElementOpError,
   reportElementOpSkipped,
-  runElementIntent,
   type ElementIntentReceipt,
   type PropertyIntents,
   type PropertyReceiptEntry,
 } from '@src/renderer/editor/runtime/elementIntent';
 import {
   applyPluginAdditionEagerly,
-  applyPluginRemovalEagerly,
-  runMixedElementDeleteIntent,
   runMixedElementIntent,
   runMixedGestureElementIntent,
 } from '@src/renderer/editor/runtime/mixedElementIntent';
 import { stableStringify } from '@utils/core/stableStringify';
-import type {
-  EditorDocumentV1,
-  EditorInsertFrozenElementsOpV1,
-  EditorOpV1,
-  EditorPatchV1,
-} from '@src/types/editor';
+import type { EditorInsertFrozenElementsOpV1 } from '@src/types/editor';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
-import { deletePluginElements } from '@plugins/rpc/pluginElementActions';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
 import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
@@ -106,7 +95,6 @@ export function useGridSelection({
   keyMappings: _keyMappings,
   positions: _positions,
 }: UseGridSelectionParams): UseGridSelectionReturn {
-  const clearSelection = useGridSelectionStore((state) => state.clearSelection);
   const setSelectedElements = useGridSelectionStore(
     (state) => state.setSelectedElements,
   );
@@ -441,418 +429,7 @@ export function useGridSelection({
   // base에서 재생성. full-record 캡처 커밋 금지 - 대기 중 정산된 다른
   // 커밋을 되돌린다. destructive라 fingerprint 불일치는 전체 중단
   const deleteSelectedElements = async () => {
-    if (selectedElements.length === 0) return;
-    const gestureId = crypto.randomUUID();
-
-    // 삭제 계획 동결
-    const stableTargets: Array<{
-      type: 'key' | 'stat' | 'graph' | 'knob';
-      id: string;
-    }> = [];
-    const syntheticIndexTargets: Array<{
-      type: 'key' | 'stat' | 'graph' | 'knob';
-      index: number;
-    }> = [];
-    for (const element of selectedElements) {
-      if (element.type === 'plugin') continue;
-      const type = element.type as 'key' | 'stat' | 'graph' | 'knob';
-      if (element.id.length > 0 && !isSyntheticElementId(element.id)) {
-        stableTargets.push({ type, id: element.id });
-      } else if (element.index !== undefined) {
-        syntheticIndexTargets.push({ type, index: element.index });
-      }
-    }
-    const pluginsToDelete = selectedElements
-      .filter((el) => el.type === 'plugin')
-      .map((el) => el.id);
-    const pluginIdsToDelete = [
-      ...new Set(
-        usePluginDisplayElementStore
-          .getState()
-          .elements.filter((element) =>
-            pluginsToDelete.includes(element.fullId),
-          )
-          .map((element) => element.pluginId),
-      ),
-    ];
-    const hasEditorDeletion =
-      stableTargets.length > 0 || syntheticIndexTargets.length > 0;
-
-    // 합성 대상은 invocation 시점 구조 증명 아래에서만 index 삭제
-    const syntheticBaseline =
-      syntheticIndexTargets.length > 0
-        ? captureIndexIntentBaseline(
-            editorCoordinator.getState().lastAck,
-            selectedKeyType,
-            [
-              'keys',
-              'keyPositions',
-              'statPositions',
-              'graphPositions',
-              'knobPositions',
-              'layerGroups',
-            ],
-          )
-        : null;
-    if (syntheticIndexTargets.length > 0 && !syntheticBaseline) {
-      reportElementOpSkipped('batch delete (no baseline)');
-      return;
-    }
-    if (syntheticIndexTargets.length > 0 && syntheticBaseline) {
-      // eager 게이트: 스토어 구조가 invocation baseline과 다르면 index
-      // 신원이 무효 - 아무것도 적용하지 않고 전체 fail-closed
-      const storeDocument = {
-        keys: useKeyStore.getState().keyMappings,
-        keyPositions: useKeyStore.getState().canonicalPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        knobPositions: useKnobItemStore.getState().positions,
-        layerGroups: useLayerGroupStore.getState().layerGroups,
-      } as unknown as Record<string, unknown>;
-      if (!indexBaselineMatches(syntheticBaseline, storeDocument)) {
-        reportElementOpSkipped('batch delete (baseline mismatch)');
-        return;
-      }
-    }
-
-    // 삭제 mask 계산: 문서(base 또는 스토어 뷰)에서 (type, mode) → index 집합
-    const collectRemoval = (document: {
-      keys: Record<string, unknown[]>;
-      keyPositions: Record<string, Array<{ id?: string }>>;
-      statPositions: Record<string, Array<{ id?: string }>>;
-      graphPositions: Record<string, Array<{ id?: string }>>;
-      knobPositions: Record<string, Array<{ id?: string }>>;
-      layerGroups: Record<string, unknown[]>;
-    }) => {
-      const FIELD_OF = {
-        key: 'keyPositions',
-        stat: 'statPositions',
-        graph: 'graphPositions',
-        knob: 'knobPositions',
-      } as const;
-      const removal = new Map<
-        'key' | 'stat' | 'graph' | 'knob',
-        Map<string, Set<number>>
-      >();
-      let found = 0;
-      const mark = (
-        type: 'key' | 'stat' | 'graph' | 'knob',
-        mode: string,
-        index: number,
-      ) => {
-        const byMode = removal.get(type) ?? new Map<string, Set<number>>();
-        const set = byMode.get(mode) ?? new Set<number>();
-        set.add(index);
-        byMode.set(mode, set);
-        removal.set(type, byMode);
-        found += 1;
-      };
-      for (const target of stableTargets) {
-        const record = document[FIELD_OF[target.type]];
-        for (const [mode, list] of Object.entries(record)) {
-          const index = list.findIndex((position) => position.id === target.id);
-          if (index !== -1) {
-            mark(target.type, mode, index);
-            break;
-          }
-        }
-      }
-      for (const target of syntheticIndexTargets) {
-        const list = document[FIELD_OF[target.type]][selectedKeyType];
-        if (list && target.index < list.length) {
-          mark(target.type, selectedKeyType, target.index);
-        }
-      }
-      return { removal, found };
-    };
-
-    const applyRemoval = (
-      document: Parameters<typeof collectRemoval>[0],
-      removal: ReadonlyMap<
-        'key' | 'stat' | 'graph' | 'knob',
-        ReadonlyMap<string, ReadonlySet<number>>
-      >,
-    ) => {
-      const next = {
-        keys: { ...document.keys },
-        keyPositions: { ...document.keyPositions },
-        statPositions: { ...document.statPositions },
-        graphPositions: { ...document.graphPositions },
-        knobPositions: { ...document.knobPositions },
-        layerGroups: document.layerGroups,
-      };
-      const affectedModes = new Set<string>();
-      for (const [type, byMode] of removal) {
-        const field =
-          type === 'key'
-            ? 'keyPositions'
-            : type === 'stat'
-            ? 'statPositions'
-            : type === 'graph'
-            ? 'graphPositions'
-            : 'knobPositions';
-        for (const [mode, indexSet] of byMode) {
-          affectedModes.add(mode);
-          next[field] = {
-            ...next[field],
-            [mode]: (next[field][mode] ?? []).filter(
-              (_, index) => !indexSet.has(index),
-            ),
-          };
-          if (type === 'key') {
-            // pair 결합: 같은 index mask를 keys에도 적용 - mask 전 길이
-            // 일치와 index 유효성이 증명돼야 한다
-            const pairLength = (next.keys[mode] ?? []).length;
-            const positionLength = (document.keyPositions[mode] ?? []).length;
-            if (pairLength !== positionLength) {
-              throw new ElementIntentAbort('key pair length mismatch');
-            }
-            for (const index of indexSet) {
-              if (index < 0 || index >= pairLength) {
-                throw new ElementIntentAbort('key pair index out of range');
-              }
-            }
-            next.keys = {
-              ...next.keys,
-              [mode]: (next.keys[mode] ?? []).filter(
-                (_, index) => !indexSet.has(index),
-              ),
-            };
-          }
-        }
-      }
-      // 삭제가 발생한 모든 mode에 그룹 재정규화
-      let layerGroups = document.layerGroups;
-      let groupsChanged = false;
-      for (const mode of affectedModes) {
-        const normalized = normalizeLayerGroupsForMode({
-          mode,
-          keyPositions: next.keyPositions as never,
-          statPositions: next.statPositions as never,
-          graphPositions: next.graphPositions as never,
-          knobPositions: next.knobPositions as never,
-          layerGroups: layerGroups as never,
-        });
-        next.keyPositions = normalized.keyPositions as never;
-        next.statPositions = normalized.statPositions as never;
-        next.graphPositions = normalized.graphPositions as never;
-        next.knobPositions = normalized.knobPositions as never;
-        if (normalized.groupsChanged) {
-          layerGroups = normalized.layerGroups as never;
-          groupsChanged = true;
-        }
-      }
-      return { next, layerGroups, groupsChanged, affectedModes };
-    };
-
-    // 먼저 선택 해제 (삭제된 참조 방지) - 실패 시 선택 미복원(기록된 정책)
-    clearSelection();
-
-    // eager 단계 동기 예외도 staged 정산 안전망을 거친다
-    try {
-      await deleteWithFrozenPlan();
-    } finally {
-      cancelUncommittedMixedGestureTransaction(gestureId);
-    }
-
-    async function deleteWithFrozenPlan(): Promise<void> {
-      // eager 전에 삭제 대상 plugin scope를 stage - staging 전 스토어 변이는
-      // debounce 저장이 abort보다 먼저 영속시킬 수 있다
-      if (pluginIdsToDelete.length > 0) {
-        beginMixedGestureTransaction(gestureId, pluginIdsToDelete);
-      }
-      // eager: 스토어 뷰에서 mask 계산·적용, 봉인 구조 receipt로 복원 소유
-      const storeView = () => ({
-        keys: useKeyStore.getState().keyMappings as Record<string, unknown[]>,
-        keyPositions: useKeyStore.getState().canonicalPositions as Record<
-          string,
-          Array<{ id?: string }>
-        >,
-        statPositions: useStatItemStore.getState().positions as Record<
-          string,
-          Array<{ id?: string }>
-        >,
-        graphPositions: useGraphItemStore.getState().positions as Record<
-          string,
-          Array<{ id?: string }>
-        >,
-        knobPositions: useKnobItemStore.getState().positions as Record<
-          string,
-          Array<{ id?: string }>
-        >,
-        layerGroups: useLayerGroupStore.getState().layerGroups as Record<
-          string,
-          unknown[]
-        >,
-      });
-      const eagerView = storeView();
-      const eagerPlan = collectRemoval(eagerView);
-      const eagerModes = new Set<string>([selectedKeyType]);
-      for (const byMode of eagerPlan.removal.values()) {
-        for (const mode of byMode.keys()) eagerModes.add(mode);
-      }
-      const editorReceipt = hasEditorDeletion
-        ? applySealedSliceMutation({
-            modes: [...eagerModes],
-            fields: [
-              'keys',
-              'keyPositions',
-              'statPositions',
-              'graphPositions',
-              'knobPositions',
-              'layerGroups',
-            ],
-            mutate: () => {
-              if (eagerPlan.found === 0) return;
-              const applied = applyRemoval(eagerView, eagerPlan.removal);
-              useKeyStore
-                .getState()
-                .setKeyMappingsAndPositions(
-                  applied.next.keys as never,
-                  applied.next.keyPositions as never,
-                );
-              useStatItemStore
-                .getState()
-                .setPositions(applied.next.statPositions as never);
-              useGraphItemStore
-                .getState()
-                .setPositions(applied.next.graphPositions as never);
-              useKnobItemStore
-                .getState()
-                .setPositions(applied.next.knobPositions as never);
-              if (applied.groupsChanged) {
-                useLayerGroupStore
-                  .getState()
-                  .setLayerGroups(applied.layerGroups as never);
-              }
-            },
-          })
-        : null;
-      let pluginReceipt: ElementIntentReceipt | null = null;
-      try {
-        pluginReceipt = applyPluginRemovalEagerly(pluginsToDelete, () => {
-          if (pluginsToDelete.length > 0) {
-            deletePluginElements(pluginsToDelete, gestureId);
-          }
-        });
-      } catch (error) {
-        // plugin eager 실패 시 editor eager 잔존 방지
-        editorReceipt?.rollback();
-        throw error;
-      }
-      const receipt = combineReceipts(editorReceipt, pluginReceipt);
-
-      if (syntheticIndexTargets.length === 0 && stableTargets.length > 0) {
-        const ops: EditorOpV1[] = stableTargets.map((target) => ({
-          kind: 'deleteElement',
-          elementType: target.type,
-          id: target.id,
-        }));
-        try {
-          await runMixedElementDeleteIntent({
-            gestureId,
-            pluginIds: pluginIdsToDelete,
-            deletedPluginFullIds: pluginsToDelete,
-            ops,
-            receipt,
-          });
-        } catch (error) {
-          console.error('Failed to persist selected element deletion', error);
-        }
-        return;
-      }
-
-      // wire generator: 슬롯 base에서 동결 대상 재해석
-      const generateDeletionPatch = (
-        base: EditorDocumentV1,
-      ): { patch: EditorPatchV1 | null; satisfied: boolean } => {
-        const baseView = {
-          keys: base.keys as Record<string, unknown[]>,
-          keyPositions: base.keyPositions as never,
-          statPositions: base.statPositions as never,
-          graphPositions: base.graphPositions as never,
-          knobPositions: base.knobPositions as never,
-          layerGroups: base.layerGroups as Record<string, unknown[]>,
-        };
-        if (
-          syntheticIndexTargets.length > 0 &&
-          (!syntheticBaseline ||
-            !indexBaselineMatches(
-              syntheticBaseline,
-              base as unknown as Record<string, unknown>,
-            ))
-        ) {
-          throw new ElementIntentAbort('batch delete baseline mismatch');
-        }
-        const plan = collectRemoval(baseView);
-        if (plan.found === 0) {
-          // 전부 이미 삭제됨 - canonical 기실현
-          return { patch: null, satisfied: true };
-        }
-        const applied = applyRemoval(baseView, plan.removal);
-        const patch: EditorPatchV1 = {
-          schemaVersion: 1,
-          keys: applied.next.keys as never,
-          keyPositions: applied.next.keyPositions as never,
-          statPositions: applied.next.statPositions as never,
-          graphPositions: applied.next.graphPositions as never,
-          knobPositions: applied.next.knobPositions as never,
-          ...(applied.groupsChanged
-            ? { layerGroups: applied.layerGroups as never }
-            : {}),
-        };
-        return { patch, satisfied: false };
-      };
-
-      try {
-        if (pluginsToDelete.length > 0) {
-          // 혼합: 삭제된 fullId를 뺀 desired projection을 transaction이 저장
-          const deletedSet = new Set(pluginsToDelete);
-          await runMixedGestureElementIntent({
-            gestureId,
-            initialPluginIds: pluginIdsToDelete,
-            pluginScope: () => pluginIdsToDelete,
-            receipt,
-            generate: ({ base, pluginProjection }) => {
-              const result = generateDeletionPatch(base);
-              const desired = pluginProjection.filter(
-                (element) => !deletedSet.has(element.fullId),
-              );
-              if (
-                result.satisfied &&
-                desired.length === pluginProjection.length
-              ) {
-                return { kind: 'satisfied' };
-              }
-              return {
-                kind: 'patch',
-                patch: result.patch,
-                desiredPluginProjection: desired,
-              };
-            },
-            skipContext: 'batch delete settlement',
-          });
-        } else if (hasEditorDeletion) {
-          await runElementIntent({
-            applyEager: () => receipt,
-            generate: (base) => {
-              const result = generateDeletionPatch(base);
-              if (result.satisfied) return { kind: 'satisfied' };
-              return result.patch
-                ? { kind: 'patch', patch: result.patch }
-                : { kind: 'satisfied' };
-            },
-            gestureId,
-          }).then((result) => {
-            if (!result.committed && !result.satisfied) {
-              reportElementOpSkipped('batch delete settlement');
-            }
-          });
-        }
-      } catch (error) {
-        console.error('Failed to persist selected element deletion', error);
-      }
-    }
+    await deleteFrozenSelection(selectedElements, selectedKeyType);
   };
 
   // 선택된 요소들 복사

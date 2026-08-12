@@ -12,6 +12,7 @@ import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { PluginPanelElementView } from '@src/types/plugin/api';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { LayerItem, DisplayItem } from '../types';
+import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
 
 // ============================================================================
 // layerItems 생성
@@ -114,16 +115,18 @@ export function buildLayerItems({
   });
 
   // 플러그인 아이템
-  pluginElements.forEach((el) => {
-    items.push({
-      type: 'plugin',
-      id: el.fullId,
-      name: el.definitionId || 'Plugin',
-      zIndex: el.zIndex ?? 0,
-      hidden: !!el.hidden,
-      groupId: undefined,
+  pluginElements
+    .filter((el) => isPluginVisibleInMode(el, selectedKeyType))
+    .forEach((el) => {
+      items.push({
+        type: 'plugin',
+        id: el.fullId,
+        name: el.definitionId || 'Plugin',
+        zIndex: el.zIndex ?? 0,
+        hidden: !!el.hidden,
+        groupId: undefined,
+      });
     });
-  });
 
   // z-index 내림차순 정렬
   items.sort((a, b) => b.zIndex - a.zIndex);

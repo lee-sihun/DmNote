@@ -213,31 +213,41 @@ export const applyPropertyIntentsEagerly = (
   intents: PropertyIntents,
 ): ElementIntentReceipt | null => {
   const entries: PropertyReceiptEntry[] = [];
-
-  for (const [type, byId] of intents) {
-    const record = readRecord(type);
-    let touched = false;
-    const next: LooseRecord = {};
-    for (const [mode, list] of Object.entries(record)) {
-      next[mode] = list.map((position) => {
-        const id = position.id;
-        if (typeof id !== 'string') return position;
-        const patch = byId.get(id);
-        if (!patch) return position;
-        touched = true;
-        for (const [field, expected] of Object.entries(patch)) {
-          entries.push({
-            type,
-            id,
-            field,
-            before: position[field],
-            expected,
-          });
-        }
-        return { ...position, ...patch, id };
-      });
+  try {
+    for (const [type, byId] of intents) {
+      const record = readRecord(type);
+      let touched = false;
+      const next: LooseRecord = {};
+      for (const [mode, list] of Object.entries(record)) {
+        next[mode] = list.map((position) => {
+          const id = position.id;
+          if (typeof id !== 'string') return position;
+          const patch = byId.get(id);
+          if (!patch) return position;
+          touched = true;
+          for (const [field, expected] of Object.entries(patch)) {
+            entries.push({
+              type,
+              id,
+              field,
+              before: position[field],
+              expected,
+            });
+          }
+          return { ...position, ...patch, id };
+        });
+      }
+      if (touched) {
+        writeRecord(type, next);
+      }
     }
-    if (touched) writeRecord(type, next);
+  } catch (error) {
+    try {
+      createPropertyReceipt(entries)?.rollback();
+    } catch {
+      // 원래 오류 보존
+    }
+    throw error;
   }
 
   return createPropertyReceipt(entries);

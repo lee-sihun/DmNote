@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   updateElement: vi.fn(),
   setElements: vi.fn(),
   rotateEditSession: vi.fn(),
+  authorityGeneration: 7,
   elements: [] as Array<{
     fullId: string;
     pluginId: string;
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('./pluginRpcClient', () => ({
   sendPluginRpc: mocks.sendPluginRpc,
+  getPluginAuthorityGeneration: () => mocks.authorityGeneration,
 }));
 
 vi.mock('@utils/plugin/bridgeMessages', () => ({
@@ -49,6 +51,7 @@ describe('plugin element panel queue', () => {
     mocks.updateElement.mockReset();
     mocks.setElements.mockReset();
     mocks.rotateEditSession.mockReset();
+    mocks.authorityGeneration = 7;
     mocks.elements = [];
     window.__dmn_window_type = 'panel';
     actions = await import('./pluginElementActions');
@@ -110,6 +113,128 @@ describe('plugin element panel queue', () => {
       measuredSize: { width: 240, height: 80 },
       settings: { accent: 'blue', opacity: 0.8 },
     });
+  });
+
+  it('레이어 삭제는 stable descriptor와 enqueue 시점 generation을 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+
+    await expect(
+      actions.deleteLayerSelectionViaAuthority([
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+        { elementType: 'plugin', id: 'plugin-a:one' },
+      ]),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:deleteSelection',
+      {
+        targets: [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+          { elementType: 'plugin', id: 'plugin-a:one' },
+        ],
+      },
+      0,
+      7,
+    );
+  });
+
+  it.each([
+    { kind: 'unknown' },
+    {
+      kind: 'error',
+      errorCode: 'MODEL_REVISION_STALE',
+      response: { modelRevision: 1 },
+    },
+  ])(
+    '같은 generation의 $kind 삭제는 snapshot 뒤 한 번만 재시도한다',
+    async (first) => {
+      mocks.sendPluginRpc.mockResolvedValueOnce(first).mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+
+      const deleted = actions.deleteLayerSelectionViaAuthority([
+        { elementType: 'plugin', id: 'plugin-a:one' },
+      ]);
+      await vi.waitFor(() =>
+        expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+      );
+      actions.notePluginMirrorRevision(2);
+
+      await expect(deleted).resolves.toBe(true);
+      expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[0]).toBe(
+        mocks.sendPluginRpc.mock.calls[0]?.[0],
+      );
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+        mocks.sendPluginRpc.mock.calls[0]?.[1],
+      );
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[2]).toBe(2);
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+    },
+  );
+
+  it('snapshot 대기 중 generation이 바뀌면 삭제를 재시도하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+
+    const deleted = actions.deleteLayerSelectionViaAuthority([
+      { elementType: 'plugin', id: 'plugin-a:one' },
+    ]);
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    mocks.authorityGeneration = 8;
+    actions.notePluginMirrorRevision(1);
+
+    await expect(deleted).resolves.toBe(false);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { kind: 'unknown' },
+    { kind: 'error', errorCode: 'MODEL_REVISION_STALE' },
+  ])('레이어 재정렬 $kind 결과는 자동 재실행하지 않는다', async (outcome) => {
+    mocks.sendPluginRpc.mockResolvedValueOnce(outcome);
+    const descriptor: import('./pluginElementActions').LayerReorderIntentWire =
+      {
+        kind: 'items',
+        mode: '4key',
+        draggedIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+        collapsedGroupIds: ['group-collapsed'],
+        anchors: {
+          toDisplayIndex: 2,
+          targetGroupId: null,
+          anchorBeforeId: null,
+          anchorAfterId: null,
+          anchorHeaderGroupId: null,
+          anchorBeforeHeaderGroupId: null,
+          anchorAfterHeaderGroupId: null,
+          boundary: 'bottom',
+        },
+        preserveFullGroups: false,
+      };
+
+    await expect(
+      actions.reorderLayerSelectionViaAuthority(descriptor),
+    ).resolves.toBe(false);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:reorderSelection',
+      { descriptor },
+      expect.any(Number),
+      7,
+    );
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
   });
 
   it('main의 discrete 삭제는 대상 플러그인별 세션을 먼저 분리한다', () => {

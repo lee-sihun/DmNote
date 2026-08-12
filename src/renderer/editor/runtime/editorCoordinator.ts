@@ -229,6 +229,17 @@ const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
     if (op.groups.length > 0) fields.add('layerGroups');
     return [...fields];
   }
+  if (op.kind === 'reorderElements') {
+    const fields = new Set<EditorField>();
+    op.zUpdates.forEach((update) =>
+      fields.add(SEMANTIC_POSITION_FIELDS[update.elementType]),
+    );
+    op.groupUpdates.forEach((update) =>
+      fields.add(SEMANTIC_POSITION_FIELDS[update.elementType]),
+    );
+    if (op.completeModeOrder) fields.add('layerGroups');
+    return [...fields];
+  }
   const positionField = SEMANTIC_POSITION_FIELDS[op.elementType];
   if (op.kind === 'setBounds') return [positionField];
   return op.elementType === 'key' ? ['keys', 'keyPositions'] : [positionField];
@@ -355,6 +366,66 @@ const applySemanticOps = (
               : position,
           ),
         } as never;
+      }
+      return;
+    }
+    if (op.kind === 'reorderElements') {
+      if (result?.status === 'noChange') return;
+      const zById = new Map(
+        op.zUpdates.map((update) => [update.id, update] as const),
+      );
+      const groupById = new Map(
+        op.groupUpdates.map((update) => [update.id, update] as const),
+      );
+      const touchedTypes = new Set([
+        ...op.zUpdates.map((update) => update.elementType),
+        ...op.groupUpdates.map((update) => update.elementType),
+      ]);
+      for (const elementType of touchedTypes) {
+        const field = SEMANTIC_POSITION_FIELDS[elementType];
+        const record = next[field] as Record<
+          string,
+          Array<Record<string, unknown> & { id?: string }>
+        >;
+        next[field] = {
+          ...record,
+          [op.mode]: (record[op.mode] ?? []).map((position) => {
+            const id = position.id;
+            if (!id) return position;
+            const zUpdate = zById.get(id);
+            const groupUpdate = groupById.get(id);
+            if (
+              zUpdate?.elementType !== elementType &&
+              groupUpdate?.elementType !== elementType
+            ) {
+              return position;
+            }
+            const updated = { ...position };
+            if (zUpdate?.elementType === elementType) {
+              updated.zIndex = zUpdate.zIndex;
+            }
+            if (groupUpdate?.elementType === elementType) {
+              if (groupUpdate.groupId === null) delete updated.groupId;
+              else updated.groupId = groupUpdate.groupId;
+            }
+            return updated;
+          }),
+        } as never;
+      }
+      if (op.completeModeOrder) {
+        const normalized = normalizeLayerGroupsForMode({
+          mode: op.mode,
+          keyPositions: next.keyPositions,
+          statPositions: next.statPositions,
+          graphPositions: next.graphPositions,
+          knobPositions: next.knobPositions,
+          layerGroups: next.layerGroups,
+        });
+        next.keyPositions = normalized.keyPositions;
+        next.statPositions = normalized.statPositions;
+        next.graphPositions = normalized.graphPositions;
+        next.knobPositions = normalized.knobPositions;
+        next.layerGroups = normalized.layerGroups;
       }
       return;
     }

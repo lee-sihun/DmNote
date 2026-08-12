@@ -26,6 +26,10 @@ import {
   placeDuplicatedKey,
   type ZOrderTarget,
 } from '@src/renderer/editor/runtime/elementOps';
+import {
+  commitStableLayerZOrder,
+  orderStableZTargetsForBatch,
+} from '@src/renderer/editor/runtime/layerZOrderIntent';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   isSyntheticElementId,
@@ -491,13 +495,24 @@ const Grid = ({
   const handleSelectedMoveForward = async () => {
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
-    if (selected.type === 'key') {
+    if (
+      selected.type === 'plugin' ||
+      ((selected.type === 'key' ||
+        selected.type === 'stat' ||
+        selected.type === 'graph' ||
+        selected.type === 'knob') &&
+        selected.id.length > 0 &&
+        !isSyntheticElementId(selected.id))
+    ) {
+      await commitStableLayerZOrder({
+        mode: selectedKeyType,
+        targets: [{ type: selected.type, id: selected.id }],
+        action: 'forward',
+      });
+    } else if (selected.type === 'key') {
       await onMoveForward(selected.index);
     } else if (selected.type === 'stat') {
       await moveStatForward(selected.index);
-    } else if (selected.type === 'plugin') {
-      rotatePluginElementSessions([selected.id]);
-      usePluginDisplayElementStore.getState().bringForward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphForward(selected.index);
     } else if (selected.type === 'knob') {
@@ -509,13 +524,24 @@ const Grid = ({
   const handleSelectedMoveBackward = async () => {
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
-    if (selected.type === 'key') {
+    if (
+      selected.type === 'plugin' ||
+      ((selected.type === 'key' ||
+        selected.type === 'stat' ||
+        selected.type === 'graph' ||
+        selected.type === 'knob') &&
+        selected.id.length > 0 &&
+        !isSyntheticElementId(selected.id))
+    ) {
+      await commitStableLayerZOrder({
+        mode: selectedKeyType,
+        targets: [{ type: selected.type, id: selected.id }],
+        action: 'backward',
+      });
+    } else if (selected.type === 'key') {
       await onMoveBackward(selected.index);
     } else if (selected.type === 'stat') {
       await moveStatBackward(selected.index);
-    } else if (selected.type === 'plugin') {
-      rotatePluginElementSessions([selected.id]);
-      usePluginDisplayElementStore.getState().sendBackward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphBackward(selected.index);
     } else if (selected.type === 'knob') {
@@ -725,6 +751,26 @@ const Grid = ({
   const moveSelectedToFront = async () => {
     if (selectedElements.length === 0) return;
 
+    if (
+      selectedElements.every(
+        (element) =>
+          element.type === 'plugin' || isStableNativeSelection(element),
+      )
+    ) {
+      await commitStableLayerZOrder({
+        mode: selectedKeyType,
+        targets: orderStableZTargetsForBatch(
+          selectedElements.map((element) => ({
+            type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'plugin',
+            id: element.id,
+          })),
+        ),
+        action: 'front',
+      }).catch(reportElementOpError);
+      syncSelectedElementsToOverlay();
+      return;
+    }
+
     rotatePluginElementSessions(
       selectedElements
         .filter((element) => element.type === 'plugin')
@@ -765,6 +811,26 @@ const Grid = ({
 
   const moveSelectedToBack = async () => {
     if (selectedElements.length === 0) return;
+
+    if (
+      selectedElements.every(
+        (element) =>
+          element.type === 'plugin' || isStableNativeSelection(element),
+      )
+    ) {
+      await commitStableLayerZOrder({
+        mode: selectedKeyType,
+        targets: orderStableZTargetsForBatch(
+          selectedElements.map((element) => ({
+            type: element.type as 'key' | 'stat' | 'graph' | 'knob' | 'plugin',
+            id: element.id,
+          })),
+        ),
+        action: 'back',
+      }).catch(reportElementOpError);
+      syncSelectedElementsToOverlay();
+      return;
+    }
 
     rotatePluginElementSessions(
       selectedElements
@@ -2303,21 +2369,21 @@ const Grid = ({
                 if (statIndex != null) beginDuplicateStat(statIndex);
               } else if (id === 'bringToFront') {
                 if (contextElementId) {
-                  void applyZOrderByIds(
-                    [{ type: 'stat', id: contextElementId }],
-                    'front',
-                    pluginZIndexesForMode(),
-                  ).catch(reportElementOpError);
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'stat', id: contextElementId }],
+                    action: 'front',
+                  }).catch(reportElementOpError);
                 } else if (statIndex != null) {
                   moveStatToFront(statIndex);
                 }
               } else if (id === 'sendToBack') {
                 if (contextElementId) {
-                  void applyZOrderByIds(
-                    [{ type: 'stat', id: contextElementId }],
-                    'back',
-                    pluginZIndexesForMode(),
-                  ).catch(reportElementOpError);
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'stat', id: contextElementId }],
+                    action: 'back',
+                  }).catch(reportElementOpError);
                 } else if (statIndex != null) {
                   moveStatToBack(statIndex);
                 }
@@ -2356,21 +2422,21 @@ const Grid = ({
                 if (graphIndex != null) beginDuplicateGraph(graphIndex);
               } else if (id === 'bringToFront') {
                 if (contextElementId) {
-                  void applyZOrderByIds(
-                    [{ type: 'graph', id: contextElementId }],
-                    'front',
-                    pluginZIndexesForMode(),
-                  ).catch(reportElementOpError);
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'graph', id: contextElementId }],
+                    action: 'front',
+                  }).catch(reportElementOpError);
                 } else if (graphIndex != null) {
                   moveGraphToFront(graphIndex);
                 }
               } else if (id === 'sendToBack') {
                 if (contextElementId) {
-                  void applyZOrderByIds(
-                    [{ type: 'graph', id: contextElementId }],
-                    'back',
-                    pluginZIndexesForMode(),
-                  ).catch(reportElementOpError);
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'graph', id: contextElementId }],
+                    action: 'back',
+                  }).catch(reportElementOpError);
                 } else if (graphIndex != null) {
                   moveGraphToBack(graphIndex);
                 }
@@ -2401,21 +2467,21 @@ const Grid = ({
                 if (knobIndex != null) beginDuplicateKnob(knobIndex);
               } else if (id === 'bringToFront') {
                 if (contextElementId) {
-                  void applyZOrderByIds(
-                    [{ type: 'knob', id: contextElementId }],
-                    'front',
-                    pluginZIndexesForMode(),
-                  ).catch(reportElementOpError);
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'knob', id: contextElementId }],
+                    action: 'front',
+                  }).catch(reportElementOpError);
                 } else if (knobIndex != null) {
                   moveKnobToFront(knobIndex);
                 }
               } else if (id === 'sendToBack') {
                 if (contextElementId) {
-                  void applyZOrderByIds(
-                    [{ type: 'knob', id: contextElementId }],
-                    'back',
-                    pluginZIndexesForMode(),
-                  ).catch(reportElementOpError);
+                  void commitStableLayerZOrder({
+                    mode: selectedKeyType,
+                    targets: [{ type: 'knob', id: contextElementId }],
+                    action: 'back',
+                  }).catch(reportElementOpError);
                 } else if (knobIndex != null) {
                   moveKnobToBack(knobIndex);
                 }
@@ -2588,11 +2654,11 @@ const Grid = ({
               );
             } else if (id === 'bringToFront') {
               if (contextElementId) {
-                void applyZOrderByIds(
-                  [{ type: 'key', id: contextElementId }],
-                  'front',
-                  pluginZIndexesForMode(),
-                ).catch(reportElementOpError);
+                void commitStableLayerZOrder({
+                  mode: selectedKeyType,
+                  targets: [{ type: 'key', id: contextElementId }],
+                  action: 'front',
+                }).catch(reportElementOpError);
               } else {
                 const keyIndex = resolveContextTarget('key');
                 if (keyIndex != null && typeof onMoveToFront === 'function') {
@@ -2600,22 +2666,38 @@ const Grid = ({
                 }
               }
             } else if (id === 'bringForward') {
-              const keyIndex = resolveContextTarget('key');
-              if (keyIndex != null && typeof onMoveForward === 'function') {
-                onMoveForward(keyIndex);
+              if (contextElementId) {
+                void commitStableLayerZOrder({
+                  mode: selectedKeyType,
+                  targets: [{ type: 'key', id: contextElementId }],
+                  action: 'forward',
+                }).catch(reportElementOpError);
+              } else {
+                const keyIndex = resolveContextTarget('key');
+                if (keyIndex != null && typeof onMoveForward === 'function') {
+                  onMoveForward(keyIndex);
+                }
               }
             } else if (id === 'sendBackward') {
-              const keyIndex = resolveContextTarget('key');
-              if (keyIndex != null && typeof onMoveBackward === 'function') {
-                onMoveBackward(keyIndex);
+              if (contextElementId) {
+                void commitStableLayerZOrder({
+                  mode: selectedKeyType,
+                  targets: [{ type: 'key', id: contextElementId }],
+                  action: 'backward',
+                }).catch(reportElementOpError);
+              } else {
+                const keyIndex = resolveContextTarget('key');
+                if (keyIndex != null && typeof onMoveBackward === 'function') {
+                  onMoveBackward(keyIndex);
+                }
               }
             } else if (id === 'sendToBack') {
               if (contextElementId) {
-                void applyZOrderByIds(
-                  [{ type: 'key', id: contextElementId }],
-                  'back',
-                  pluginZIndexesForMode(),
-                ).catch(reportElementOpError);
+                void commitStableLayerZOrder({
+                  mode: selectedKeyType,
+                  targets: [{ type: 'key', id: contextElementId }],
+                  action: 'back',
+                }).catch(reportElementOpError);
               } else {
                 const keyIndex = resolveContextTarget('key');
                 if (keyIndex != null && typeof onMoveToBack === 'function') {
