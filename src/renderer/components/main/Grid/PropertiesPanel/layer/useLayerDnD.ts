@@ -5,18 +5,19 @@
 
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import {
-  applyPropertyIntentsEagerly,
+  applyGestureIntentsEagerly,
+  captureIndexIntentBaseline,
+  generateIndexIntentPatch,
+  indexBaselineMatches,
   intentPatch,
   reportElementOpError,
+  reportElementOpSkipped,
   runElementIntent,
+  type IndexIntentBaseline,
 } from '@src/renderer/editor/runtime/elementIntent';
+import { applyEditorPatch } from '@src/renderer/editor/runtime/editorCoordinator';
 import { setPluginElementZIndexes } from '@plugins/rpc/pluginElementActions';
 import { useState, useRef } from 'react';
-import { useKeyStore } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useKnobItemStore } from '@stores/data/useKnobItemStore';
-import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
@@ -213,6 +214,9 @@ export function useLayerDnD({
     // 앵커 후보에서 제외한 id들 - mouseup의 이동 집합과 대조해 축소 감지
     excludedIds: string[];
   } | null>(null);
+  // 합성 id 항목용 드래그 시작 시점 구조 fingerprint - index 적용은 시작과
+  // 슬롯 base가 정확히 같다는 증명 아래에서만 허용
+  const dndBaselineRef = useRef<IndexIntentBaseline | null>(null);
 
   // ──────────────────────────────────────────────────────────────────────────
   // 아이템 드롭 타깃 계산
@@ -392,6 +396,162 @@ export function useLayerDnD({
   // 앵커 소실 정책: 양생존·인접이면 사이, 하나 생존이면 그 기준, 양소실
   // 또는 비인접이면 무커밋. 그룹 헤더 앵커는 그룹이 살아 있을 때만.
   // 대상 그룹이 삭제됐으면 무커밋
+  // 드래그 시작 시점 baseline 캡처 - 현재 목록에 합성 native가 있을 때만
+  const captureDnDBaseline = (): void => {
+    const hasSynthetic = layerItemsRef.current.some(
+      (item) =>
+        item.type !== 'plugin' &&
+        (item.id.length === 0 || isSyntheticElementId(item.id)),
+    );
+    dndBaselineRef.current = hasSynthetic
+      ? captureIndexIntentBaseline(
+          editorCoordinator.getState().lastAck,
+          selectedKeyType,
+          [
+            'keys',
+            'keyPositions',
+            'statPositions',
+            'graphPositions',
+            'knobPositions',
+            'layerGroups',
+          ],
+        )
+      : null;
+  };
+
+  interface DropIntentSets {
+    nativeIntents: Map<
+      'key' | 'stat' | 'graph' | 'knob',
+      Map<string, Record<string, unknown>>
+    >;
+    syntheticIndexIntents: Map<
+      'key' | 'stat' | 'graph' | 'knob',
+      Map<number, Record<string, unknown>>
+    >;
+    pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }>;
+  }
+
+  // 새 표시 순서를 의도 집합으로 변환 - 안정 id는 id 의도, 합성은 시작
+  // index 의도(시작 fingerprint 증명 필요), plugin은 별도 authority 쓰기
+  const buildDropIntentSets = (
+    newItems: LayerItem[],
+    intentFieldsFor?: (item: LayerItem) => Record<string, unknown>,
+  ): DropIntentSets => {
+    const maxZIndex = newItems.length - 1;
+    const sets: DropIntentSets = {
+      nativeIntents: new Map(),
+      syntheticIndexIntents: new Map(),
+      pluginZIndexUpdates: [],
+    };
+    newItems.forEach((item, idx) => {
+      const newZIndex = maxZIndex - idx;
+      if (item.type === 'plugin') {
+        sets.pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
+        return;
+      }
+      const intent: Record<string, unknown> = {
+        zIndex: newZIndex,
+        ...(intentFieldsFor ? intentFieldsFor(item) : {}),
+      };
+      if (item.id.length > 0 && !isSyntheticElementId(item.id)) {
+        const byId = sets.nativeIntents.get(item.type) ?? new Map();
+        byId.set(item.id, intent);
+        sets.nativeIntents.set(item.type, byId);
+      } else if (item.index !== undefined) {
+        const byIndex = sets.syntheticIndexIntents.get(item.type) ?? new Map();
+        byIndex.set(item.index, intent);
+        sets.syntheticIndexIntents.set(item.type, byIndex);
+      }
+    });
+    return sets;
+  };
+
+  // 드롭 커밋 단일 소유: eager receipt와 wire 생성 전부 러너 계약으로.
+  // plugin-only는 editor 무커밋, wire patch는 슬롯 base에서 재생성한다 -
+  // 호출 시점 full-record는 대기 중 정산된 격리 plugin 쓰기를 되돌린다.
+  // plugin z-index는 별도 authority 쓰기로 editor 커밋과 비원자(기존 의미론)
+  const commitDropIntents = (sets: DropIntentSets, skipContext: string) => {
+    if (sets.pluginZIndexUpdates.length > 0) {
+      setPluginElementZIndexes(sets.pluginZIndexUpdates);
+    }
+    const hasNativeIntent =
+      sets.nativeIntents.size > 0 || sets.syntheticIndexIntents.size > 0;
+    if (!hasNativeIntent) return;
+    const baseline = dndBaselineRef.current;
+    const hasSynthetic = sets.syntheticIndexIntents.size > 0;
+    // 결합 eager 단일 소유 - preflight 게이트, 양쪽 적용, 최종 봉인이
+    // 한 호출 안에서 일어난다. 불일치면 아무것도 적용하지 않고 fail-closed
+    const eager = applyGestureIntentsEagerly({
+      baseline,
+      indexIntents: sets.syntheticIndexIntents,
+      propertyIntents: sets.nativeIntents,
+    });
+    if (!eager.matched) {
+      reportElementOpSkipped(skipContext);
+      return;
+    }
+    void runElementIntent({
+      applyEager: () => eager.receipt,
+      generate: (base) => {
+        if (
+          hasSynthetic &&
+          (!baseline ||
+            !indexBaselineMatches(
+              baseline,
+              base as unknown as Record<string, unknown>,
+            ))
+        ) {
+          return { kind: 'targetLost' };
+        }
+        let working = base;
+        if (sets.nativeIntents.size > 0) {
+          const propertyPatch = generateModeScopedIntentPatch(
+            working,
+            sets.nativeIntents,
+            selectedKeyType,
+          );
+          if (!propertyPatch) return { kind: 'targetLost' };
+          working = applyEditorPatch(working, propertyPatch);
+        }
+        if (hasSynthetic && baseline) {
+          const syntheticPatch = generateIndexIntentPatch(
+            working,
+            baseline,
+            sets.syntheticIndexIntents,
+            { skipFingerprint: true },
+          );
+          if (syntheticPatch) {
+            working = applyEditorPatch(working, syntheticPatch);
+          }
+        }
+        const renormalized = normalizeLayerGroupsForMode({
+          mode: selectedKeyType,
+          keyPositions: working.keyPositions as never,
+          statPositions: working.statPositions as never,
+          graphPositions: working.graphPositions as never,
+          knobPositions: working.knobPositions as never,
+          layerGroups: working.layerGroups as never,
+        });
+        return intentPatch({
+          schemaVersion: 1,
+          keyPositions: renormalized.keyPositions as never,
+          statPositions: renormalized.statPositions as never,
+          graphPositions: renormalized.graphPositions as never,
+          knobPositions: renormalized.knobPositions as never,
+          ...(renormalized.groupsChanged
+            ? { layerGroups: renormalized.layerGroups as never }
+            : {}),
+        });
+      },
+    })
+      .then((result) => {
+        if (!result.committed && !result.satisfied) {
+          reportElementOpSkipped(skipContext);
+        }
+      })
+      .catch(reportElementOpError);
+  };
+
   const performMultiDrop = async (
     draggedIds: string[],
     toDisplayIndex: number,
@@ -568,145 +728,14 @@ export function useLayerDnD({
     );
     if (!orderChanged && !groupChanged) return;
 
-    // 새 표시 순서를 id 의도로 변환 - effect 지연 ref의 item.index로 현재
-    // 배열을 인덱싱하면 canonical 적용과 effect 사이 창에서 다른 요소를
-    // 수정한다. 적용은 전부 position.id 매칭
-    const maxZIndex = newItems.length - 1;
-    const pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }> = [];
-    const nativeIntents = new Map<
-      'key' | 'stat' | 'graph' | 'knob',
-      Map<string, Record<string, unknown>>
-    >();
-    newItems.forEach((item, idx) => {
-      const newZIndex = maxZIndex - idx;
-      if (item.type === 'plugin') {
-        pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
-        return;
-      }
-      const intent: Record<string, unknown> = { zIndex: newZIndex };
-      if (draggedIdSet.has(item.id) && !preserveGroupIds.has(item.id)) {
-        intent.groupId = newGroupId;
-      }
-      const byId = nativeIntents.get(item.type) ?? new Map();
-      byId.set(item.id, intent);
-      nativeIntents.set(item.type, byId);
-    });
-
-    const modeNativeOnly = items.every(
-      (item) =>
-        item.type !== 'plugin' &&
-        item.id.length > 0 &&
-        !isSyntheticElementId(item.id),
+    // 새 표시 순서를 의도로 변환 - 안정 id는 id 매칭, 합성은 시작
+    // fingerprint가 증명될 때만 index 적용. full-record 캡처 커밋 금지
+    const sets = buildDropIntentSets(newItems, (item) =>
+      draggedIdSet.has(item.id) && !preserveGroupIds.has(item.id)
+        ? { groupId: newGroupId }
+        : {},
     );
-
-    if (modeNativeOnly) {
-      // native 전용: eager·receipt는 속성 의도가 소유하고, layerGroups
-      // 정규화는 슬롯의 base+의도에서 재계산해 생성 patch에만 싣는다
-      // (편입 시 낙관 적용이 그룹 정의를 반영)
-      void runElementIntent({
-        applyEager: () => applyPropertyIntentsEagerly(nativeIntents),
-        generate: (base) => {
-          // 모드 한정 재적용 - 대기 중 다른 모드로 이동한 요소는 skip
-          const propertyPatch = generateModeScopedIntentPatch(
-            base,
-            nativeIntents,
-            selectedKeyType,
-          );
-          if (!propertyPatch) return { kind: 'targetLost' };
-          const renormalized = normalizeLayerGroupsForMode({
-            mode: selectedKeyType,
-            keyPositions: (propertyPatch.keyPositions ??
-              base.keyPositions) as never,
-            statPositions: (propertyPatch.statPositions ??
-              base.statPositions) as never,
-            graphPositions: (propertyPatch.graphPositions ??
-              base.graphPositions) as never,
-            knobPositions: (propertyPatch.knobPositions ??
-              base.knobPositions) as never,
-            layerGroups: base.layerGroups as never,
-          });
-          return intentPatch({
-            schemaVersion: 1,
-            keyPositions: renormalized.keyPositions as never,
-            statPositions: renormalized.statPositions as never,
-            graphPositions: renormalized.graphPositions as never,
-            knobPositions: renormalized.knobPositions as never,
-            ...(renormalized.groupsChanged
-              ? { layerGroups: renormalized.layerGroups as never }
-              : {}),
-          });
-        },
-      }).catch(reportElementOpError);
-      return;
-    }
-
-    // plugin 포함 모드: 기존 full-record 경로 유지 (id 매칭 적용으로 개선)
-    const applyIntentsToMode = <T extends { id?: string }>(
-      record: Record<string, T[]>,
-      type: 'key' | 'stat' | 'graph' | 'knob',
-    ): Record<string, T[]> => {
-      const byId = nativeIntents.get(type);
-      if (!byId || byId.size === 0) return record;
-      return {
-        ...record,
-        [selectedKeyType]: (record[selectedKeyType] ?? []).map((position) => {
-          const id = position.id;
-          if (typeof id !== 'string') return position;
-          const intent = byId.get(id);
-          return intent ? { ...position, ...intent, id } : position;
-        }),
-      };
-    };
-
-    const updatedPositions = applyIntentsToMode(
-      useKeyStore.getState().canonicalPositions,
-      'key',
-    );
-    const updatedStatPositions = applyIntentsToMode(
-      useStatItemStore.getState().positions,
-      'stat',
-    );
-    const updatedGraphPositions = applyIntentsToMode(
-      useGraphItemStore.getState().positions,
-      'graph',
-    );
-    const updatedKnobPositions = applyIntentsToMode(
-      useKnobItemStore.getState().positions,
-      'knob',
-    );
-    const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-
-    const normalized = normalizeLayerGroupsForMode({
-      mode: selectedKeyType,
-      keyPositions: updatedPositions,
-      statPositions: updatedStatPositions,
-      graphPositions: updatedGraphPositions,
-      knobPositions: updatedKnobPositions,
-      layerGroups: currentLayerGroups,
-    });
-
-    useGraphItemStore.getState().setPositions(normalized.graphPositions);
-    useKeyStore.getState().setPositions(normalized.keyPositions);
-    useStatItemStore.getState().setPositions(normalized.statPositions);
-    useKnobItemStore.getState().setPositions(normalized.knobPositions);
-    setPluginElementZIndexes(pluginZIndexUpdates);
-    if (normalized.groupsChanged) {
-      useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-    }
-
-    try {
-      await editorCoordinator.commitPatch({
-        schemaVersion: 1,
-        keyPositions: normalized.keyPositions,
-
-        statPositions: normalized.statPositions,
-        graphPositions: normalized.graphPositions,
-        knobPositions: normalized.knobPositions,
-        layerGroups: normalized.layerGroups,
-      });
-    } catch (error) {
-      console.error('Failed to reorder layers', error);
-    }
+    commitDropIntents(sets, 'layer drop settlement');
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -773,92 +802,9 @@ export function useLayerDnD({
     );
     if (!orderChanged) return;
 
-    // 새 표시 순서를 id 의도로 변환 (그룹 이동은 zIndex만) - index 인덱싱 금지
-    const maxZIndex = newItems.length - 1;
-    const pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }> = [];
-    const nativeIntents = new Map<
-      'key' | 'stat' | 'graph' | 'knob',
-      Map<string, Record<string, unknown>>
-    >();
-    newItems.forEach((item, idx) => {
-      const newZIndex = maxZIndex - idx;
-      if (item.type === 'plugin') {
-        pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
-        return;
-      }
-      const byId = nativeIntents.get(item.type) ?? new Map();
-      byId.set(item.id, { zIndex: newZIndex });
-      nativeIntents.set(item.type, byId);
-    });
-
-    const modeNativeOnly = items.every(
-      (item) =>
-        item.type !== 'plugin' &&
-        item.id.length > 0 &&
-        !isSyntheticElementId(item.id),
-    );
-    if (modeNativeOnly) {
-      void runElementIntent({
-        applyEager: () => applyPropertyIntentsEagerly(nativeIntents),
-        generate: (base) =>
-          intentPatch(
-            generateModeScopedIntentPatch(base, nativeIntents, selectedKeyType),
-          ),
-      }).catch(reportElementOpError);
-      return;
-    }
-
-    // plugin 포함 모드: 기존 full-record 경로 유지 (id 매칭 적용으로 개선)
-    const applyGroupIntents = <T extends { id?: string }>(
-      record: Record<string, T[]>,
-      type: 'key' | 'stat' | 'graph' | 'knob',
-    ): Record<string, T[]> => {
-      const byId = nativeIntents.get(type);
-      if (!byId || byId.size === 0) return record;
-      return {
-        ...record,
-        [selectedKeyType]: (record[selectedKeyType] ?? []).map((position) => {
-          const id = position.id;
-          if (typeof id !== 'string') return position;
-          const intent = byId.get(id);
-          return intent ? { ...position, ...intent, id } : position;
-        }),
-      };
-    };
-
-    const updatedPositions = applyGroupIntents(
-      useKeyStore.getState().canonicalPositions,
-      'key',
-    );
-    const updatedStatPositions = applyGroupIntents(
-      useStatItemStore.getState().positions,
-      'stat',
-    );
-    const updatedGraphPositions = applyGroupIntents(
-      useGraphItemStore.getState().positions,
-      'graph',
-    );
-    const updatedKnobPositions = applyGroupIntents(
-      useKnobItemStore.getState().positions,
-      'knob',
-    );
-    useKeyStore.getState().setPositions(updatedPositions);
-    useStatItemStore.getState().setPositions(updatedStatPositions);
-    useGraphItemStore.getState().setPositions(updatedGraphPositions);
-    useKnobItemStore.getState().setPositions(updatedKnobPositions);
-    setPluginElementZIndexes(pluginZIndexUpdates);
-
-    try {
-      await editorCoordinator.commitPatch({
-        schemaVersion: 1,
-        keyPositions: updatedPositions,
-        statPositions: updatedStatPositions,
-        graphPositions: updatedGraphPositions,
-        knobPositions: updatedKnobPositions,
-      });
-    } catch (error) {
-      console.error('Failed to reorder group', error);
-    }
+    // 새 표시 순서를 의도로 변환 (그룹 이동은 zIndex만)
+    const sets = buildDropIntentSets(newItems);
+    commitDropIntents(sets, 'group drop settlement');
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -899,6 +845,7 @@ export function useLayerDnD({
         if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
         isDraggingRef.current = true;
         didDragRef.current = true;
+        captureDnDBaseline();
 
         const currentSel = useGridSelectionStore.getState().selectedElements;
         const isInSelection = currentSel.some((el) => el.id === item.id);
@@ -1084,6 +1031,7 @@ export function useLayerDnD({
         if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
         isDraggingRef.current = true;
         didDragRef.current = true;
+        captureDnDBaseline();
         setDraggedGroupId(groupId);
         setIsDragging(true);
       }

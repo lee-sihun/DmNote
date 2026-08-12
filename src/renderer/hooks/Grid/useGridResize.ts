@@ -1,10 +1,26 @@
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import {
-  applyPropertyIntentsEagerly,
+  applyGestureIntentsEagerly,
+  applyIndexIntentsEagerly,
+  captureIndexIntentBaseline,
+  generateIndexIntentPatch,
+  generatePropertyIntentPatch,
+  indexBaselineMatches,
+  intentPatch,
   reportElementOpError,
+  reportElementOpSkipped,
+  runElementIntent,
+  type ElementIntentReceipt,
+  type IndexBaselineField,
+  type IndexIntentBaseline,
+  type IndexIntents,
+  type PropertyIntents,
 } from '@src/renderer/editor/runtime/elementIntent';
+import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+import { runMixedElementIntent } from '@src/renderer/editor/runtime/mixedElementIntent';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { applyEditorPatch } from '@src/renderer/editor/runtime/editorCoordinator';
 import { commitElementBoundsById } from '@src/renderer/editor/runtime/elementOps';
 import { useEffect, useRef, useState } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -22,10 +38,6 @@ import {
 import { selectionElementId } from '@stores/grid/useGridSelectionStore';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import type { KeyPositions } from '@src/types/key/keys';
-import type { StatItemPositions } from '@src/types/key/statItems';
-import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { ElementBounds } from '@utils/grid/smartGuides';
 import {
   beginPluginInstancesEditSession,
@@ -33,7 +45,6 @@ import {
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import {
   beginMixedGestureTransaction,
-  commitMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
 
@@ -89,6 +100,9 @@ export function useGridResize({
   const frozenResizeTargetsRef = useRef<
     Array<{ type: string; id: string; index?: number }>
   >([]);
+  // 합성 id 대상용 시작 시점 구조 fingerprint - 완료 시점 캡처는 시작과
+  // 완료 사이 정산된 외부 재정렬을 통과시킨다
+  const syntheticBaselineRef = useRef<IndexIntentBaseline | null>(null);
 
   // 그룹 리사이즈용 상태
   const [previewGroupBounds, setPreviewGroupBounds] =
@@ -118,6 +132,97 @@ export function useGridResize({
           );
         }
       });
+  };
+
+  // 합성 대상이 있으면 시작 시점 lastAck에서 관련 컬렉션 fingerprint 동결
+  const captureSyntheticBaseline = (
+    elements: ReadonlyArray<{ type: string; id: string }>,
+  ): IndexIntentBaseline | null => {
+    const syntheticTypes = new Set(
+      elements
+        .filter(
+          (element) =>
+            element.type !== 'plugin' &&
+            (element.id.length === 0 || isSyntheticElementId(element.id)),
+        )
+        .map((element) => element.type as 'key' | 'stat' | 'graph' | 'knob'),
+    );
+    if (syntheticTypes.size === 0) return null;
+    const fields: IndexBaselineField[] = [];
+    for (const type of syntheticTypes) {
+      if (type === 'key') {
+        fields.push('keyPositions', 'keys');
+      } else if (type === 'stat') {
+        fields.push('statPositions');
+      } else if (type === 'graph') {
+        fields.push('graphPositions');
+      } else {
+        fields.push('knobPositions');
+      }
+    }
+    return captureIndexIntentBaseline(
+      editorCoordinator.getState().lastAck,
+      selectedKeyType,
+      fields,
+    );
+  };
+
+  const boundsFieldsOf = (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): Record<string, number> => ({
+    dx: bounds.x,
+    dy: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+  });
+
+  // 안정 id 의도 + 합성 index 의도를 슬롯 base에서 결합 재생성.
+  // 합성이 있으면 base fingerprint가 시작과 정확히 일치해야 하고,
+  // 불일치 시 편집 전체 무커밋(null)
+  const generateCombinedBoundsPatch = (
+    base: EditorDocumentV1,
+    stableIntents: PropertyIntents,
+    syntheticIntents: IndexIntents,
+    baseline: IndexIntentBaseline | null,
+  ): EditorPatchV1 | null => {
+    const hasSynthetic = syntheticIntents.size > 0;
+    if (hasSynthetic) {
+      if (
+        !baseline ||
+        !indexBaselineMatches(
+          baseline,
+          base as unknown as Record<string, unknown>,
+        )
+      ) {
+        return null;
+      }
+    }
+    let patch: EditorPatchV1 | null = null;
+    let working = base;
+    if (stableIntents.size > 0) {
+      const stablePatch = generatePropertyIntentPatch(working, stableIntents);
+      if (stablePatch) {
+        patch = stablePatch;
+        working = applyEditorPatch(working, stablePatch);
+      }
+    }
+    if (hasSynthetic && baseline) {
+      const syntheticPatch = generateIndexIntentPatch(
+        working,
+        baseline,
+        syntheticIntents,
+        { skipFingerprint: true },
+      );
+      if (syntheticPatch) {
+        patch = patch
+          ? { ...patch, ...syntheticPatch, schemaVersion: 1 }
+          : syntheticPatch;
+      }
+    }
+    return patch;
   };
 
   // plugin-only·혼합 완료의 오버레이 동기화 - editor 커밋과 분리
@@ -160,6 +265,7 @@ export function useGridResize({
       id: element.id,
       index: element.index,
     }));
+    syntheticBaselineRef.current = captureSyntheticBaseline(selectedElements);
     beginPluginResizeSessions(gestureId);
     if (
       pluginResizeTokensRef.current.size > 0 &&
@@ -934,97 +1040,37 @@ export function useGridResize({
           ]),
           resizeGestureIdRef.current ?? undefined,
         ).catch(reportElementOpError);
-      } else if (element.type === 'key' && element.index !== undefined) {
-        // 키 요소에 최종 크기 적용 - 커밋 base는 canonical
-        const positions = useKeyStore.getState().canonicalPositions;
-        const setPositions = useKeyStore.getState().setPositions;
-        const current = positions[selectedKeyType] || [];
-        const nextPositions: KeyPositions = {
-          ...positions,
-          [selectedKeyType]: current.map((pos, i) =>
-            i === element.index
-              ? {
-                  ...pos,
-                  dx: finalBounds.x,
-                  dy: finalBounds.y,
-                  width: finalBounds.width,
-                  height: finalBounds.height,
-                }
-              : pos,
-          ),
-        };
-        setPositions(nextPositions);
-
-        // 백엔드에 저장
-        window.api.keys.updatePositions(nextPositions).catch((error) => {
-          console.error('Failed to update key positions after resize', error);
-        });
-      } else if (element.type === 'stat' && element.index !== undefined) {
-        const statStore = useStatItemStore.getState();
-        const statPositions = statStore.positions;
-        const current = statPositions[selectedKeyType] || [];
-        const nextPositions: StatItemPositions = {
-          ...statPositions,
-          [selectedKeyType]: current.map((pos, i) =>
-            i === element.index
-              ? {
-                  ...pos,
-                  dx: finalBounds.x,
-                  dy: finalBounds.y,
-                  width: finalBounds.width,
-                  height: finalBounds.height,
-                }
-              : pos,
-          ),
-        };
-        statStore.setPositions(nextPositions);
-        window.api.statItems.updatePositions(nextPositions).catch((error) => {
-          console.error('Failed to update stat positions after resize', error);
-        });
-      } else if (element.type === 'graph' && element.index !== undefined) {
-        const graphStore = useGraphItemStore.getState();
-        const graphPositions = graphStore.positions;
-        const current = graphPositions[selectedKeyType] || [];
-        const nextPositions: GraphItemPositions = {
-          ...graphPositions,
-          [selectedKeyType]: current.map((pos, i) =>
-            i === element.index
-              ? {
-                  ...pos,
-                  dx: finalBounds.x,
-                  dy: finalBounds.y,
-                  width: finalBounds.width,
-                  height: finalBounds.height,
-                }
-              : pos,
-          ),
-        };
-        graphStore.setPositions(nextPositions);
-        window.api.graphItems.updatePositions(nextPositions).catch((error) => {
-          console.error('Failed to update graph positions after resize', error);
-        });
-      } else if (element.type === 'knob' && element.index !== undefined) {
-        const knobStore = useKnobItemStore.getState();
-        const knobPositions = knobStore.positions;
-        const current = knobPositions[selectedKeyType] || [];
-        const nextPositions: KnobItemPositions = {
-          ...knobPositions,
-          [selectedKeyType]: current.map((pos, i) =>
-            i === element.index
-              ? {
-                  ...pos,
-                  dx: finalBounds.x,
-                  dy: finalBounds.y,
-                  width: finalBounds.width,
-                  height: finalBounds.height,
-                }
-              : pos,
-          ),
-        };
-        knobStore.setPositions(nextPositions);
-        window.api.knobItems.updatePositions(nextPositions).catch((error) => {
-          console.error('Failed to update knob positions after resize', error);
-        });
+      } else if (element.type !== 'plugin' && element.index !== undefined) {
+        // 합성 id: 시작 fingerprint가 증명될 때만 index 적용 - full-record
+        // 캡처 커밋은 대기 중 정산된 다른 커밋을 되돌린다. eager 불일치는
+        // 전체 intent fail-closed (wire로 부활 금지)
+        const baseline = syntheticBaselineRef.current;
+        const indexIntents: IndexIntents = new Map([
+          [
+            element.type,
+            new Map([[element.index, boundsFieldsOf(finalBounds)]]),
+          ],
+        ]);
+        const eager = applyIndexIntentsEagerly(baseline, indexIntents);
+        if (!eager.matched) {
+          reportElementOpSkipped('synthetic resize settlement');
+        } else {
+          const gestureId = resizeGestureIdRef.current ?? undefined;
+          void runElementIntent({
+            applyEager: () => eager.receipt,
+            generate: (base) =>
+              intentPatch(
+                generateIndexIntentPatch(base, baseline, indexIntents),
+              ),
+            ...(gestureId ? { gestureId } : {}),
+          })
+            .then((result) => {
+              if (!result.committed && !result.satisfied) {
+                reportElementOpSkipped('synthetic resize settlement');
+              }
+            })
+            .catch(reportElementOpError);
+        }
       } else if (element.type === 'plugin') {
         // 플러그인 요소에 최종 크기 적용
         const pluginStore = usePluginDisplayElementStore.getState();
@@ -1044,11 +1090,12 @@ export function useGridResize({
 
     // 정산은 시작 시 동결한 구성으로 여기서 완결 - 완료 시점 live 선택을
     // 읽는 외부 콜백 금지. plugin이 움직였으면 오버레이만 동기화
-    // (plugin-only는 editor 무커밋 계약). 합성 native 단일은 위 legacy
-    // 경로의 updatePositions가 이미 저장했다
+    // (plugin-only는 editor 무커밋 계약). 합성 native 단일은 위에서 시작
+    // fingerprint 증명 아래 index 러너로 정산했다
     if (frozenTargets.some((target) => target.type === 'plugin')) {
       syncPluginElementsToOverlay();
     }
+    syntheticBaselineRef.current = null;
     endPluginResizeSessions();
   };
 
@@ -1068,6 +1115,15 @@ export function useGridResize({
     let groupHandledNatively = false;
     let groupPluginInvolved = false;
     let groupHasNative = false;
+    let groupSettlement:
+      | {
+          kind: 'intents';
+          stableIntents: PropertyIntents;
+          syntheticIntents: IndexIntents;
+          receipt: ElementIntentReceipt | null;
+        }
+      | { kind: 'failClosed' }
+      | null = null;
     frozenResizeTargetsRef.current = [];
 
     // 스마트 가이드 클리어
@@ -1078,27 +1134,14 @@ export function useGridResize({
 
     const finalData = finalGroupBoundsRef.current;
     if (finalData && finalData.elementBounds.length > 0) {
-      // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-      const positions = useKeyStore.getState().canonicalPositions;
-      const setPositions = useKeyStore.getState().setPositions;
-      const current = positions[selectedKeyType] || [];
       const pluginStore = usePluginDisplayElementStore.getState();
-      const statStore = useStatItemStore.getState();
-      const statPositions = statStore.positions;
-      const currentStats = statPositions[selectedKeyType] || [];
-      const graphStore = useGraphItemStore.getState();
-      const graphPositions = graphStore.positions;
-      const currentGraphs = graphPositions[selectedKeyType] || [];
-      const knobStore = useKnobItemStore.getState();
-      const knobPositions = knobStore.positions;
-      const currentKnobs = knobPositions[selectedKeyType] || [];
       // 프리뷰 값을 그대로 사용 (스냅은 이미 드래그 중에 적용됨)
       // 추가 스냅 적용 시 프리뷰와 최종 위치가 달라지는 문제 발생
 
       // 시작 시 동결된 entries(elementBounds)의 안정 id에 최종 bounds 의도
       // 구성. 플러그인 없고 전원 안정 id면 전용 의도 커밋이 eager와 wire를
-      // 함께 소유, 혼합이면 eager만 반영 후 기존 mixed 경로가 보정된
-      // 스토어에서 full record를 만든다. 합성 id는 index 경로 유지
+      // 함께 소유, 혼합·합성 포함이면 eager receipt를 결합해 두고 wire는
+      // 슬롯 generator가 소유한다
       const stableBoundsIntents = new Map<
         'key' | 'stat' | 'graph' | 'knob',
         Map<string, Record<string, number>>
@@ -1129,137 +1172,46 @@ export function useGridResize({
       groupHasNative = finalData.elementBounds.some(
         ({ element }) => element.type !== 'plugin',
       );
+      // 합성 entries는 시작 fingerprint 아래 index 의도로 - full-record
+      // 캡처·직접 스토어 쓰기 금지 (대기 중 정산 커밋을 되돌린다)
+      const syntheticIndexIntents = new Map<
+        'key' | 'stat' | 'graph' | 'knob',
+        Map<number, Record<string, number>>
+      >();
+      for (const { element, bounds } of finalData.elementBounds) {
+        if (element.type === 'plugin' || isStableEntry(element)) continue;
+        if (element.index === undefined) continue;
+        const type = element.type as 'key' | 'stat' | 'graph' | 'knob';
+        const byIndex = syntheticIndexIntents.get(type) ?? new Map();
+        byIndex.set(element.index, boundsFieldsOf(bounds));
+        syntheticIndexIntents.set(type, byIndex);
+      }
+
       if (!pluginInvolved && allStable && stableBoundsIntents.size > 0) {
         groupHandledNatively = true;
         void commitElementBoundsById(
           stableBoundsIntents,
           resizeGestureIdRef.current ?? undefined,
         ).catch(reportElementOpError);
-      } else if (stableBoundsIntents.size > 0) {
-        applyPropertyIntentsEagerly(stableBoundsIntents);
-      }
-
-      // 키 요소들 업데이트 (합성 id 폴백)
-      const keyUpdates = finalData.elementBounds.filter(
-        ({ element }) =>
-          element.type === 'key' &&
-          element.index !== undefined &&
-          !isStableEntry(element),
-      );
-
-      if (keyUpdates.length > 0) {
-        const nextPositions: KeyPositions = {
-          ...positions,
-          [selectedKeyType]: current.map((pos, i) => {
-            const update = keyUpdates.find(
-              ({ element }) => element.index === i,
-            );
-            if (update) {
-              return {
-                ...pos,
-                dx: update.bounds.x,
-                dy: update.bounds.y,
-                width: update.bounds.width,
-                height: update.bounds.height,
-              };
-            }
-            return pos;
-          }),
-        };
-        setPositions(nextPositions);
-      }
-
-      // 통계 요소들 업데이트
-      const statUpdates = finalData.elementBounds.filter(
-        ({ element }) =>
-          element.type === 'stat' &&
-          element.index !== undefined &&
-          !isStableEntry(element),
-      );
-
-      if (statUpdates.length > 0) {
-        const nextStatPositions: StatItemPositions = {
-          ...statPositions,
-          [selectedKeyType]: currentStats.map((pos, i) => {
-            const update = statUpdates.find(
-              ({ element }) => element.index === i,
-            );
-            if (update) {
-              return {
-                ...pos,
-                dx: update.bounds.x,
-                dy: update.bounds.y,
-                width: update.bounds.width,
-                height: update.bounds.height,
-              };
-            }
-            return pos;
-          }),
-        };
-
-        statStore.setPositions(nextStatPositions);
-      }
-
-      // 그래프 요소들 업데이트
-      const graphUpdates = finalData.elementBounds.filter(
-        ({ element }) =>
-          element.type === 'graph' &&
-          element.index !== undefined &&
-          !isStableEntry(element),
-      );
-
-      if (graphUpdates.length > 0) {
-        const nextGraphPositions: GraphItemPositions = {
-          ...graphPositions,
-          [selectedKeyType]: currentGraphs.map((pos, i) => {
-            const update = graphUpdates.find(
-              ({ element }) => element.index === i,
-            );
-            if (update) {
-              return {
-                ...pos,
-                dx: update.bounds.x,
-                dy: update.bounds.y,
-                width: update.bounds.width,
-                height: update.bounds.height,
-              };
-            }
-            return pos;
-          }),
-        };
-
-        graphStore.setPositions(nextGraphPositions);
-      }
-
-      // 노브 요소들 업데이트
-      const knobUpdates = finalData.elementBounds.filter(
-        ({ element }) =>
-          element.type === 'knob' &&
-          element.index !== undefined &&
-          !isStableEntry(element),
-      );
-
-      if (knobUpdates.length > 0) {
-        const nextKnobPositions: KnobItemPositions = {
-          ...knobPositions,
-          [selectedKeyType]: currentKnobs.map((pos, i) => {
-            const update = knobUpdates.find(
-              ({ element }) => element.index === i,
-            );
-            if (update) {
-              return {
-                ...pos,
-                dx: update.bounds.x,
-                dy: update.bounds.y,
-                width: update.bounds.width,
-                height: update.bounds.height,
-              };
-            }
-            return pos;
-          }),
-        };
-
-        knobStore.setPositions(nextKnobPositions);
+      } else {
+        // 결합 eager 단일 소유 - preflight 게이트, 양쪽 적용, 최종 봉인이
+        // 한 호출 안. 불일치면 stable 포함 아무것도 적용하지 않고 정산
+        // 전체 fail-closed (혼합이면 plugin 변경만 커밋)
+        const eager = applyGestureIntentsEagerly({
+          baseline: syntheticBaselineRef.current,
+          indexIntents: syntheticIndexIntents,
+          propertyIntents: stableBoundsIntents,
+        });
+        if (!eager.matched) {
+          groupSettlement = { kind: 'failClosed' };
+        } else {
+          groupSettlement = {
+            kind: 'intents',
+            stableIntents: stableBoundsIntents,
+            syntheticIntents: syntheticIndexIntents,
+            receipt: eager.receipt,
+          };
+        }
       }
 
       // 플러그인 요소들 업데이트
@@ -1283,40 +1235,73 @@ export function useGridResize({
     setPreviewElementBounds(null);
     finalGroupBoundsRef.current = null;
 
-    // 정산 완결 - 완료 시점 live 선택 금지. 혼합: 보정된 스토어 full-record를
-    // 시작 시점 plugin ID 집합과 mixed 트랜잭션으로 / plugin-only: editor
-    // 무커밋 + 오버레이 동기화 / 합성 포함 native: full-record 커밋(기록된
-    // legacy 이연 계열, 크기 저장 보존)
+    // 정산 완결 - 완료 시점 live 선택 금지. wire patch는 coordinator 직렬
+    // 슬롯 안에서 시작 동결 의도(안정 id + fingerprint 증명된 index)를 최신
+    // base에 재생성한다 - 호출 시점 full-record 캡처는 대기 중 정산된 격리
+    // plugin 쓰기의 다른 필드를 되돌린다. 혼합은 시작 plugin ID 집합과 mixed
+    // 트랜잭션으로 / plugin-only: editor 무커밋 + 오버레이 동기화
     const settlementGestureId = resizeGestureIdRef.current ?? undefined;
-    if (!groupHandledNatively && groupHasNative) {
-      const editorChanges = {
-        schemaVersion: 1 as const,
-        keyPositions: useKeyStore.getState().canonicalPositions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        knobPositions: useKnobItemStore.getState().positions,
-      };
+    if (
+      !groupHandledNatively &&
+      groupHasNative &&
+      groupSettlement &&
+      groupSettlement.kind === 'failClosed'
+    ) {
+      // eager 게이트 불일치 - editor 무커밋. 혼합이면 시작된 mixed
+      // 트랜잭션으로 plugin 변경만 정산
+      reportElementOpSkipped('group resize settlement');
+      if (groupPluginInvolved && settlementGestureId) {
+        void runMixedElementIntent({
+          gestureId: settlementGestureId,
+          pluginIds: [...pluginResizeTokensRef.current.keys()],
+          applyEager: () => null,
+          generate: () => null,
+          skipContext: 'group resize settlement',
+          expectNull: true,
+        }).catch(reportElementOpError);
+      }
+    } else if (
+      !groupHandledNatively &&
+      groupHasNative &&
+      groupSettlement &&
+      groupSettlement.kind === 'intents'
+    ) {
+      const settlement = groupSettlement;
+      const baseline = syntheticBaselineRef.current;
+      const generate = (base: EditorDocumentV1): EditorPatchV1 | null =>
+        generateCombinedBoundsPatch(
+          base,
+          settlement.stableIntents,
+          settlement.syntheticIntents,
+          baseline,
+        );
       if (groupPluginInvolved && settlementGestureId) {
         const frozenPluginIds = [...pluginResizeTokensRef.current.keys()];
-        void commitMixedGestureTransaction(
-          settlementGestureId,
-          editorChanges,
-          frozenPluginIds,
-        ).catch(reportElementOpError);
+        void runMixedElementIntent({
+          gestureId: settlementGestureId,
+          pluginIds: frozenPluginIds,
+          applyEager: () => settlement.receipt,
+          generate,
+          skipContext: 'mixed group resize settlement',
+        }).catch(reportElementOpError);
       } else {
-        void editorCoordinator
-          .commitPatch(
-            editorChanges,
-            settlementGestureId
-              ? { gestureId: settlementGestureId }
-              : undefined,
-          )
+        void runElementIntent({
+          applyEager: () => settlement.receipt,
+          generate: (base) => intentPatch(generate(base)),
+          ...(settlementGestureId ? { gestureId: settlementGestureId } : {}),
+        })
+          .then((result) => {
+            if (!result.committed && !result.satisfied) {
+              reportElementOpSkipped('group resize settlement');
+            }
+          })
           .catch(reportElementOpError);
       }
     }
     if (groupPluginInvolved) {
       syncPluginElementsToOverlay();
     }
+    syntheticBaselineRef.current = null;
     endPluginResizeSessions();
   };
 

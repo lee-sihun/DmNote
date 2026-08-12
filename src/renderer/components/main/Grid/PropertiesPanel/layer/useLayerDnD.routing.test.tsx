@@ -11,7 +11,11 @@ const mocks = vi.hoisted(() => ({
     (_options: unknown): Promise<unknown> =>
       Promise.resolve({ committed: true }),
   ),
-  applyPropertyIntentsEagerly: vi.fn(() => ({ rollback: vi.fn() })),
+  applyGestureEagerly: vi.fn(() => ({
+    matched: true,
+    receipt: { rollback: vi.fn() },
+  })),
+  captureBaseline: vi.fn(() => null),
   reportElementOpError: vi.fn(),
   setPluginZIndexes: vi.fn(),
   commitPatch: vi.fn(() => Promise.resolve()),
@@ -23,10 +27,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   runElementIntent: mocks.runElementIntent,
-  applyPropertyIntentsEagerly: mocks.applyPropertyIntentsEagerly,
+  applyGestureIntentsEagerly: mocks.applyGestureEagerly,
+  captureIndexIntentBaseline: mocks.captureBaseline,
+  generateIndexIntentPatch: vi.fn(() => null),
+  indexBaselineMatches: vi.fn(() => true),
   intentPatch: (patch: unknown) =>
     patch === null ? { kind: 'targetLost' } : { kind: 'patch', patch },
   reportElementOpError: mocks.reportElementOpError,
+  reportElementOpSkipped: vi.fn(),
 }));
 
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
@@ -34,7 +42,10 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitPatch: mocks.commitPatch },
+  editorCoordinator: {
+    commitPatch: mocks.commitPatch,
+    getState: () => ({ lastAck: null }),
+  },
 }));
 
 vi.mock('@stores/data/useKeyStore', () => ({
@@ -193,7 +204,12 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       (options as { applyEager: () => unknown }).applyEager();
       return Promise.resolve({ committed: true });
     });
-    mocks.applyPropertyIntentsEagerly.mockClear();
+    mocks.applyGestureEagerly.mockClear();
+    mocks.captureBaseline.mockClear();
+    mocks.applyGestureEagerly.mockImplementation(() => ({
+      matched: true,
+      receipt: { rollback: vi.fn() },
+    }));
     mocks.reportElementOpError.mockClear();
     mocks.setPluginZIndexes.mockClear();
     mocks.commitPatch.mockClear();
@@ -246,7 +262,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     });
   };
 
-  it('mouseup 시점 live 모델에 plugin이 있으면 native intent 경로에 진입하지 않는다', async () => {
+  it('plugin 포함 native 드롭도 id 의도 러너로 커밋하고 full-record를 보내지 않는다', async () => {
     const startItems = [nativeItem(ID_A, 0, 2), nativeItem(ID_B, 1, 1)];
     // 드래그 중 plugin 요소가 추가된 라이브 모델
     const liveItems = [...startItems, pluginItem('plugin-x:one', 0)];
@@ -255,10 +271,16 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       displayItems: toDisplay(liveItems),
     });
 
-    expect(mocks.runElementIntent).not.toHaveBeenCalled();
-    expect(mocks.applyPropertyIntentsEagerly).not.toHaveBeenCalled();
-    expect(mocks.commitPatch).toHaveBeenCalledTimes(1);
+    // native intent는 러너가 소유, plugin z-index는 별도 authority 쓰기,
+    // 호출 시점 full-record commitPatch는 금지
+    expect(mocks.runElementIntent).toHaveBeenCalledTimes(1);
+    expect(mocks.applyGestureEagerly).toHaveBeenCalledTimes(1);
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
     expect(mocks.setPluginZIndexes).toHaveBeenCalledTimes(1);
+    const byId = eagerIntents();
+    // 최종 순서 [B, A, plugin] - live 순서 기준 zIndex
+    expect(byId.get(ID_B)).toMatchObject({ zIndex: 2 });
+    expect(byId.get(ID_A)).toMatchObject({ zIndex: 1 });
   });
 
   it('native 전용 편입 전 실패는 runner가 소유하고 layerGroups는 eager를 건드리지 않는다', async () => {
@@ -275,12 +297,8 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
 
     expect(mocks.runElementIntent).toHaveBeenCalledTimes(1);
     // eager는 속성 의도만 - 그룹 정의·포지션 스토어 직접 쓰기 없음
-    expect(mocks.applyPropertyIntentsEagerly).toHaveBeenCalledTimes(1);
-    const [intents] = mocks.applyPropertyIntentsEagerly.mock
-      .calls[0] as unknown as [
-      Map<string, Map<string, Record<string, number>>>,
-    ];
-    const byId = intents.get('key')!;
+    expect(mocks.applyGestureEagerly).toHaveBeenCalledTimes(1);
+    const byId = eagerIntents() as Map<string, Record<string, number>>;
     expect(byId.get(ID_B)).toMatchObject({ zIndex: 1 });
     expect(byId.get(ID_A)).toMatchObject({ zIndex: 0 });
     expect(mocks.setLayerGroups).not.toHaveBeenCalled();
@@ -336,12 +354,49 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
   };
 
   const eagerIntents = () => {
-    const [intents] = mocks.applyPropertyIntentsEagerly.mock
-      .calls[0] as unknown as [
-      Map<string, Map<string, Record<string, unknown>>>,
+    const [options] = mocks.applyGestureEagerly.mock.calls[0] as unknown as [
+      { propertyIntents: Map<string, Map<string, Record<string, unknown>>> },
     ];
-    return intents.get('key')!;
+    return options.propertyIntents.get('key')!;
   };
+
+  it('합성 항목 드래그의 baseline은 paired keys를 포함해 캡처한다', async () => {
+    // 합성 id 항목 - 드래그 시작 시 baseline 캡처가 발화
+    const syntheticItem: LayerItem = {
+      type: 'key',
+      id: 'key-0',
+      index: 0,
+      name: 'legacy',
+      zIndex: 1,
+      hidden: false,
+    };
+    const itemB = nativeItem(ID_B, 1, 0);
+    const startItems = [syntheticItem, itemB];
+    await dragItemToEnd(startItems, {
+      layerItems: startItems,
+      displayItems: toDisplay(startItems),
+    });
+
+    expect(mocks.captureBaseline).toHaveBeenCalledWith(
+      null,
+      '4key',
+      expect.arrayContaining(['keys', 'keyPositions', 'layerGroups']),
+    );
+  });
+
+  it('plugin-only 드롭은 editor를 커밋하지 않는다', async () => {
+    const pluginA = pluginItem('plugin-x:one', 1);
+    const pluginB = pluginItem('plugin-y:one', 0);
+    const startItems = [pluginA, pluginB];
+    await dragItemToEnd(startItems, {
+      layerItems: startItems,
+      displayItems: toDisplay(startItems),
+    });
+
+    expect(mocks.setPluginZIndexes).toHaveBeenCalledTimes(1);
+    expect(mocks.runElementIntent).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
 
   it('외부 재정렬 후 드롭은 최신 순서 기준으로 커밋한다', async () => {
     const itemA = nativeItem(ID_A, 0, 2);
@@ -483,7 +538,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
 
     // X 잔류를 앵커가 모르는 채 해석하면 [X, A, Y] 오배치 - 무커밋이어야 한다
     expect(mocks.runElementIntent).not.toHaveBeenCalled();
-    expect(mocks.applyPropertyIntentsEagerly).not.toHaveBeenCalled();
+    expect(mocks.applyGestureEagerly).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
@@ -514,7 +569,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     );
 
     expect(mocks.runElementIntent).not.toHaveBeenCalled();
-    expect(mocks.applyPropertyIntentsEagerly).not.toHaveBeenCalled();
+    expect(mocks.applyGestureEagerly).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
@@ -553,7 +608,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     );
 
     expect(mocks.runElementIntent).not.toHaveBeenCalled();
-    expect(mocks.applyPropertyIntentsEagerly).not.toHaveBeenCalled();
+    expect(mocks.applyGestureEagerly).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 });
