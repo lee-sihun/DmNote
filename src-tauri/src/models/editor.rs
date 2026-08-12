@@ -183,7 +183,7 @@ impl EditorPatchV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum EditorElementTypeV1 {
     Key,
@@ -210,12 +210,17 @@ pub enum EditorOpV1 {
         id: String,
         bounds: EditorBoundsV1,
     },
+    DeleteElement {
+        #[serde(rename = "elementType")]
+        element_type: EditorElementTypeV1,
+        id: String,
+    },
 }
 
 impl EditorOpV1 {
     pub fn id(&self) -> &str {
         match self {
-            Self::SetBounds { id, .. } => id,
+            Self::SetBounds { id, .. } | Self::DeleteElement { id, .. } => id,
         }
     }
 }

@@ -88,7 +88,13 @@ export interface EditorSetBoundsOpV1 {
   bounds: EditorBoundsV1;
 }
 
-export type EditorOpV1 = EditorSetBoundsOpV1;
+export interface EditorDeleteElementOpV1 {
+  kind: 'deleteElement';
+  elementType: EditorElementTypeV1;
+  id: string;
+}
+
+export type EditorOpV1 = EditorSetBoundsOpV1 | EditorDeleteElementOpV1;
 
 export interface EditorOpsCommitRequest extends EditorCommitRequestBase {
   changes?: never;
@@ -115,7 +121,7 @@ export type EditorOpResultV1 =
       bounds: EditorBoundsV1;
     }
   | {
-      status: 'targetMissing';
+      status: 'applied' | 'targetMissing';
       bounds?: never;
     };
 
@@ -664,10 +670,12 @@ export function assertEditorCommitResult(
         `editor_commit opResults[${index}] has an unknown status`,
       );
     }
-    assertEditorBounds(
-      result.bounds,
-      `editor_commit opResults[${index}].bounds`,
-    );
+    if (result.bounds !== undefined) {
+      assertEditorBounds(
+        result.bounds,
+        `editor_commit opResults[${index}].bounds`,
+      );
+    }
   });
 }
 
@@ -683,16 +691,41 @@ export function assertEditorOpCommitResult(
     graph: 'graphPositions',
     knob: 'knobPositions',
   };
-  const appliedFields = new Set(
-    ops.flatMap((op, index) =>
-      opResults[index].status === 'applied'
-        ? [positionFields[op.elementType]]
-        : [],
-    ),
-  );
+  const requiredFields = new Set<EditorField>();
+  let allowsLayerGroups = false;
+  ops.forEach((op, index) => {
+    const result = opResults[index];
+    if (op.kind === 'setBounds') {
+      if (
+        result.status !== 'targetMissing' &&
+        ((result.status !== 'applied' && result.status !== 'noChange') ||
+          result.bounds === undefined)
+      ) {
+        throw new EditorProtocolError(
+          `editor_commit opResults[${index}] is invalid for setBounds`,
+        );
+      }
+    } else if (
+      result.status === 'noChange' ||
+      ('bounds' in result && result.bounds !== undefined)
+    ) {
+      throw new EditorProtocolError(
+        `editor_commit opResults[${index}] is invalid for deleteElement`,
+      );
+    }
+    if (result.status !== 'applied') return;
+    requiredFields.add(positionFields[op.elementType]);
+    if (op.kind === 'deleteElement') {
+      allowsLayerGroups = true;
+      if (op.elementType === 'key') requiredFields.add('keys');
+    }
+  });
+  const allowedFields = new Set(requiredFields);
+  if (allowsLayerGroups) allowedFields.add('layerGroups');
   if (
-    value.changedFields.length !== appliedFields.size ||
-    value.changedFields.some((field) => !appliedFields.has(field))
+    [...requiredFields].some((field) => !value.changedFields.includes(field)) ||
+    new Set(value.changedFields).size !== value.changedFields.length ||
+    value.changedFields.some((field) => !allowedFields.has(field))
   ) {
     throw new EditorProtocolError(
       'editor ops changedFields does not match opResults',

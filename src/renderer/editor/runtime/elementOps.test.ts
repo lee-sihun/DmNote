@@ -4,10 +4,14 @@ import { createDefaultKeyPosition } from '../model/keys';
 const api = vi.hoisted(() => ({
   commitGeneratedPatch: vi.fn(),
   commitSemanticOps: vi.fn(),
+  lastAck: null as EditorDocumentV1 | null,
 }));
 
 vi.mock('./editorStateCoordinator', () => ({
-  editorCoordinator: { commitGeneratedPatch: api.commitGeneratedPatch },
+  editorCoordinator: {
+    commitGeneratedPatch: api.commitGeneratedPatch,
+    getState: () => ({ lastAck: api.lastAck }),
+  },
 }));
 
 vi.mock('./editorSemanticOps', () => ({
@@ -17,6 +21,7 @@ vi.mock('./editorSemanticOps', () => ({
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
@@ -29,7 +34,10 @@ import {
   rebindKeySlotById,
 } from './elementOps';
 
-import { enqueueEditorCompatibilityWrite } from './editorCompatibilityQueue';
+import {
+  enqueueEditorCompatibilityOperation,
+  enqueueEditorCompatibilityWrite,
+} from './editorCompatibilityQueue';
 
 import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
 
@@ -55,7 +63,7 @@ const documentFromStores = (): EditorDocumentV1 =>
     statPositions: structuredClone(useStatItemStore.getState().positions),
     graphPositions: structuredClone(useGraphItemStore.getState().positions),
     knobPositions: structuredClone(useKnobItemStore.getState().positions),
-    layerGroups: {},
+    layerGroups: structuredClone(useLayerGroupStore.getState().layerGroups),
   } as unknown as EditorDocumentV1);
 
 describe('elementOps', () => {
@@ -63,6 +71,7 @@ describe('elementOps', () => {
     vi.clearAllMocks();
     slotBase = null;
     generatedPatches.length = 0;
+    api.lastAck = null;
     api.commitGeneratedPatch.mockImplementation(
       async (generate: (base: EditorDocumentV1) => EditorPatchV1 | null) => {
         const base = (slotBase ?? documentFromStores)();
@@ -70,16 +79,19 @@ describe('elementOps', () => {
         return base;
       },
     );
-    api.commitSemanticOps.mockImplementation(async (_ops, meta) => {
-      meta?.onEnrolled?.();
-      return {
-        document: documentFromStores(),
-        opResults: _ops.map((op) => ({
-          status: 'applied',
-          bounds: op.bounds,
-        })),
-      };
-    });
+    api.commitSemanticOps.mockImplementation((_ops, meta) =>
+      enqueueEditorCompatibilityOperation(async () => {
+        meta?.onEnrolled?.();
+        return {
+          document: documentFromStores(),
+          opResults: _ops.map((op) =>
+            op.kind === 'setBounds'
+              ? { status: 'applied', bounds: op.bounds }
+              : { status: 'applied' },
+          ),
+        };
+      }),
+    );
     useKeyStore.setState({
       selectedKeyType: '4key',
       keyMappings: { '4key': ['A', 'B'] },
@@ -89,6 +101,7 @@ describe('elementOps', () => {
     useStatItemStore.setState({ positions: {} });
     useGraphItemStore.setState({ positions: {} });
     useKnobItemStore.setState({ positions: {} });
+    useLayerGroupStore.setState({ layerGroups: {} });
     useGridSelectionStore.setState({ selectedElements: [] });
   });
 
@@ -104,10 +117,11 @@ describe('elementOps', () => {
     expect(
       useKeyStore.getState().canonicalPositions['4key'].map((p) => p.id),
     ).toEqual([ID_B]);
-    // wire: paired 제거
-    const patch = generatedPatches[0];
-    expect(patch?.keys?.['4key']).toEqual(['B']);
-    expect(patch?.keyPositions?.['4key'].map((p) => p.id)).toEqual([ID_B]);
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [{ kind: 'deleteElement', elementType: 'key', id: ID_A }],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+    expect(api.commitGeneratedPatch).not.toHaveBeenCalled();
   });
 
   it('삭제 확정 시점에 재정렬돼 있어도 같은 id를 제거한다', async () => {
@@ -120,9 +134,27 @@ describe('elementOps', () => {
 
     await deleteElementById('key', ID_A);
 
-    const patch = generatedPatches[0];
-    expect(patch?.keys?.['4key']).toEqual(['B']);
-    expect(patch?.keyPositions?.['4key'].map((p) => p.id)).toEqual([ID_B]);
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: ID_A })],
+      expect.anything(),
+    );
+  });
+
+  it('단일 삭제가 마지막 그룹 멤버면 로컬 빈 그룹도 정리한다', async () => {
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A'] },
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }],
+      },
+      positions: { '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }] },
+    });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+
+    await deleteElementById('key', ID_A);
+
+    expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([]);
   });
 
   it('확정 시점에 이미 삭제된 대상은 커밋하지 않는다', async () => {
@@ -135,7 +167,10 @@ describe('elementOps', () => {
 
     await deleteElementById('key', ID_A);
 
-    expect(generatedPatches).toEqual([null]);
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: ID_A })],
+      expect.anything(),
+    );
   });
 
   it('복제 배치는 동결 payload를 새 id로 추가한다', async () => {
@@ -558,7 +593,7 @@ describe('elementOps', () => {
   });
 
   it('삭제의 편입 전 실패는 로컬 pair를 복원한다', async () => {
-    api.commitGeneratedPatch.mockRejectedValue(new Error('start failed'));
+    api.commitSemanticOps.mockRejectedValue(new Error('start failed'));
 
     await expect(deleteElementById('key', ID_A)).rejects.toThrow(
       'start failed',
@@ -568,6 +603,119 @@ describe('elementOps', () => {
     expect(
       useKeyStore.getState().canonicalPositions['4key'].map((p) => p.id),
     ).toEqual([ID_A, ID_B]);
+  });
+
+  it('삭제의 편입 전 실패는 eager로 정리한 빈 그룹도 복원한다', async () => {
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A'] },
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }],
+      },
+      positions: { '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }] },
+    });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+
+    await expect(deleteElementById('key', ID_A)).rejects.toThrow(
+      'start failed',
+    );
+
+    expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([
+      { id: 'group-a', name: 'Group A' },
+    ]);
+  });
+
+  it('그룹 복원은 큐 대기 중 추가된 무관 그룹을 보존한다', async () => {
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A'] },
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }],
+      },
+      positions: { '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }] },
+    });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+    api.commitSemanticOps.mockImplementationOnce(async () => {
+      useLayerGroupStore.getState().setLayerGroups({
+        '4key': [{ id: 'group-b', name: 'Group B' }],
+      });
+      throw new Error('start failed');
+    });
+
+    await expect(deleteElementById('key', ID_A)).rejects.toThrow(
+      'start failed',
+    );
+
+    expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([
+      { id: 'group-a', name: 'Group A' },
+      { id: 'group-b', name: 'Group B' },
+    ]);
+  });
+
+  it('편입 전 외부 canonical에서 이미 삭제된 대상은 rollback으로 부활시키지 않는다', async () => {
+    api.commitSemanticOps.mockImplementationOnce(async () => {
+      const canonical = documentFromStores();
+      canonical.keys = { '4key': ['B'] };
+      canonical.keyPositions = { '4key': [keyAt(ID_B)] } as never;
+      api.lastAck = canonical;
+      useKeyStore.setState({
+        keyMappings: canonical.keys,
+        canonicalPositions: canonical.keyPositions,
+        positions: canonical.keyPositions,
+      });
+      throw new Error('start failed');
+    });
+
+    await expect(deleteElementById('key', ID_A)).rejects.toThrow(
+      'start failed',
+    );
+
+    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['B']);
+    expect(
+      useKeyStore
+        .getState()
+        .canonicalPositions['4key'].map((position) => position.id),
+    ).toEqual([ID_B]);
+  });
+
+  it('외부 canonical이 같은 ID를 다시 넣으면 옛 그룹 정의를 복원하지 않는다', async () => {
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A'] },
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }],
+      },
+      positions: { '4key': [{ ...keyAt(ID_A), groupId: 'group-a' }] },
+    });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+    api.commitSemanticOps.mockImplementationOnce(async () => {
+      const restored = keyAt(ID_A);
+      const canonical = documentFromStores();
+      canonical.keys = { '4key': ['A'] };
+      canonical.keyPositions = { '4key': [restored] } as never;
+      canonical.layerGroups = { '4key': [] };
+      api.lastAck = canonical;
+      useKeyStore.setState({
+        keyMappings: canonical.keys,
+        canonicalPositions: canonical.keyPositions,
+        positions: canonical.keyPositions,
+      });
+      useLayerGroupStore.setState({ layerGroups: { '4key': [] } });
+      throw new Error('start failed');
+    });
+
+    await expect(deleteElementById('key', ID_A)).rejects.toThrow(
+      'start failed',
+    );
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([
+      keyAt(ID_A),
+    ]);
+    expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([]);
   });
 
   it('복제의 편입 전 실패는 추가한 pair를 제거한다', async () => {
@@ -602,15 +750,18 @@ describe('elementOps', () => {
     const pre = documentFromStores();
     slotBase = () => pre;
     const pending = deleteElementById('key', ID_A);
+    let settled = false;
+    void pending.finally(() => {
+      settled = true;
+    });
     await Promise.resolve();
     await Promise.resolve();
-    // 큐를 건너뛰면 여기서 이미 커밋된다
-    expect(api.commitGeneratedPatch).not.toHaveBeenCalled();
+    expect(settled).toBe(false);
 
     release();
     await first;
     expect(await pending).toBe(true);
-    expect(api.commitGeneratedPatch).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
   });
 
   it('재바인딩 대상이 사라졌으면 커밋하지 않는다', async () => {

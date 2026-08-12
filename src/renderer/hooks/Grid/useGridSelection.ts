@@ -54,11 +54,16 @@ import {
 import {
   applyPluginAdditionEagerly,
   applyPluginRemovalEagerly,
+  runMixedElementDeleteIntent,
   runMixedElementIntent,
   runMixedGestureElementIntent,
 } from '@src/renderer/editor/runtime/mixedElementIntent';
 import { stableStringify } from '@utils/core/stableStringify';
-import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+import type {
+  EditorDocumentV1,
+  EditorOpV1,
+  EditorPatchV1,
+} from '@src/types/editor';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
@@ -735,6 +740,26 @@ export function useGridSelection({
         throw error;
       }
       const receipt = combineReceipts(editorReceipt, pluginReceipt);
+
+      if (syntheticIndexTargets.length === 0 && stableTargets.length > 0) {
+        const ops: EditorOpV1[] = stableTargets.map((target) => ({
+          kind: 'deleteElement',
+          elementType: target.type,
+          id: target.id,
+        }));
+        try {
+          await runMixedElementDeleteIntent({
+            gestureId,
+            pluginIds: pluginIdsToDelete,
+            deletedPluginFullIds: pluginsToDelete,
+            ops,
+            receipt,
+          });
+        } catch (error) {
+          console.error('Failed to persist selected element deletion', error);
+        }
+        return;
+      }
 
       // wire generator: 슬롯 base에서 동결 대상 재해석
       const generateDeletionPatch = (

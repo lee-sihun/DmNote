@@ -4279,6 +4279,13 @@ mod tests {
         }
     }
 
+    fn delete_element_op(element_type: EditorElementTypeV1, id: impl Into<String>) -> EditorOpV1 {
+        EditorOpV1::DeleteElement {
+            element_type,
+            id: id.into(),
+        }
+    }
+
     fn position_patch(store: &AppStore, dx: f64) -> EditorPatchV1 {
         let mut positions = store.editor_get().document.key_positions;
         positions.get_mut("4key").unwrap()[0].dx = dx;
@@ -5123,6 +5130,88 @@ mod tests {
             vec![saved_plugin_instance(10.0)]
         );
         assert_eq!(store.history_status().history_revision, 1);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn delete_op_and_plugin_change_commit_and_restore_as_one_gesture() {
+        let dir = test_directory("gesture-delete-op-plugin-atomic-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.editor_get().document;
+        let deleted_id = before.key_positions["4key"][0].id.clone();
+        let request = gesture_ops_request(
+            &store,
+            uuid::Uuid::new_v4().to_string(),
+            uuid::Uuid::new_v4().to_string(),
+            vec![delete_element_op(EditorElementTypeV1::Key, &deleted_id)],
+            "demo-plugin",
+            vec![saved_plugin_instance(10.0)],
+        );
+
+        let committed = store.commit_gesture(request.clone()).unwrap();
+        assert_eq!(
+            committed.outcome.result.editor_op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: None,
+            }])
+        );
+        assert_eq!(
+            committed.outcome.result.changed_fields,
+            [EditorField::Keys, EditorField::KeyPositions]
+        );
+        assert_eq!(committed.outcome.result.changed_plugin_ids, ["demo-plugin"]);
+        assert_eq!(store.history_status().history_revision, 1);
+        drop(committed);
+        assert!(!store.editor_get().document.key_positions["4key"]
+            .iter()
+            .any(|position| position.id == deleted_id));
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(10.0)]
+        );
+        let replay = store.commit_gesture(request).unwrap();
+        assert!(replay.outcome.replayed);
+        assert_eq!(
+            replay.outcome.result.editor_op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: None,
+            }])
+        );
+        drop(replay);
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, before);
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert!(!store.editor_get().document.key_positions["4key"]
+            .iter()
+            .any(|position| position.id == deleted_id));
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(10.0)]
+        );
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
@@ -7048,6 +7137,435 @@ mod tests {
         let restored = store.editor_get().document;
         assert_eq!(bounds(&restored.key_positions["4key"][0]), first_before);
         assert_eq!(bounds(&restored.key_positions["4key"][1]), second_before);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn legacy_delete_patch_keeps_key_pair_and_empty_group_cleanup_atomic() {
+        let dir = test_directory("legacy-delete-pair-group-contract-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut grouped = store.editor_get().document;
+        grouped.key_positions.get_mut("4key").unwrap()[0].group_id =
+            Some("delete-group".to_string());
+        grouped.layer_groups.insert(
+            "4key".to_string(),
+            vec![crate::models::LayerGroupDef {
+                id: "delete-group".to_string(),
+                name: "Delete Group".to_string(),
+            }],
+        );
+        let setup = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    key_positions: Some(grouped.key_positions.clone()),
+                    layer_groups: Some(grouped.layer_groups.clone()),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        assert_eq!(setup.result.revision, 1);
+        let grouped = setup.document;
+        let deleted_id = grouped.key_positions["4key"][0].id.clone();
+        let deleted_slot = grouped.keys["4key"][0].clone();
+        let deleted_position = grouped.key_positions["4key"][0].clone();
+        let mut keys = grouped.keys.clone();
+        keys.get_mut("4key").unwrap().remove(0);
+        let mut positions = grouped.key_positions.clone();
+        positions.get_mut("4key").unwrap().remove(0);
+        let mut groups = grouped.layer_groups.clone();
+        groups.insert("4key".to_string(), Vec::new());
+
+        let deleted = store
+            .commit_editor_document(editor_request(
+                1,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    keys: Some(keys),
+                    key_positions: Some(positions),
+                    layer_groups: Some(groups),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+
+        assert_eq!(
+            deleted.result.changed_fields,
+            [
+                EditorField::Keys,
+                EditorField::KeyPositions,
+                EditorField::LayerGroups,
+            ]
+        );
+        assert_eq!(
+            deleted.document.keys["4key"].len(),
+            grouped.keys["4key"].len() - 1
+        );
+        assert_eq!(
+            deleted.document.key_positions["4key"].len(),
+            grouped.key_positions["4key"].len() - 1
+        );
+        assert!(!deleted.document.key_positions["4key"]
+            .iter()
+            .any(|position| position.id == deleted_id));
+        assert!(deleted.document.layer_groups["4key"].is_empty());
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let gate = store.history_gate();
+        let barrier = gate.close(&operation_id).unwrap();
+        let counters = store.snapshot().key_counters;
+        store
+            .apply_history_operation(HistoryDirection::Undo, &operation_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        let restored = store.editor_get().document;
+        assert_eq!(restored.keys["4key"][0], deleted_slot);
+        assert_eq!(restored.key_positions["4key"][0], deleted_position);
+        assert_eq!(restored.layer_groups["4key"], grouped.layer_groups["4key"]);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn delete_ops_remove_all_types_in_request_order_and_round_trip_one_history_entry() {
+        let dir = test_directory("delete-ops-all-types-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut setup = store.editor_get().document;
+        let template = setup.key_positions["4key"][0].clone();
+        setup.key_positions.get_mut("4key").unwrap()[0].group_id = Some("delete-group".to_string());
+        setup.key_positions.get_mut("4key").unwrap()[1].group_id =
+            Some("survive-group".to_string());
+        setup.key_positions.get_mut("4key").unwrap()[2].group_id =
+            Some("survive-group".to_string());
+
+        let mut stat_position = template.clone();
+        stat_position.id = uuid::Uuid::new_v4().to_string();
+        stat_position.group_id = Some("delete-group".to_string());
+        let stat_id = stat_position.id.clone();
+        setup.stat_positions.insert(
+            "4key".to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: stat_position,
+            }],
+        );
+        let mut graph_position = template.clone();
+        graph_position.id = uuid::Uuid::new_v4().to_string();
+        graph_position.group_id = None;
+        let graph_id = graph_position.id.clone();
+        setup.graph_positions.insert(
+            "4key".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 1,
+                graph_color: "#FFFFFF".to_string(),
+                show_avg_line: true,
+                position: graph_position,
+            }],
+        );
+        let mut knob_position = template;
+        knob_position.id = uuid::Uuid::new_v4().to_string();
+        knob_position.group_id = None;
+        let knob_id = knob_position.id.clone();
+        setup.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "delete-axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position: knob_position,
+            }],
+        );
+        setup.layer_groups.insert(
+            "4key".to_string(),
+            vec![
+                crate::models::LayerGroupDef {
+                    id: "delete-group".to_string(),
+                    name: "Delete Group".to_string(),
+                },
+                crate::models::LayerGroupDef {
+                    id: "survive-group".to_string(),
+                    name: "Survive Group".to_string(),
+                },
+            ],
+        );
+        setup.layer_groups.insert(
+            "5key".to_string(),
+            vec![crate::models::LayerGroupDef {
+                id: "unaffected-mode-group".to_string(),
+                name: "Unaffected Mode Group".to_string(),
+            }],
+        );
+        let setup = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    key_positions: Some(setup.key_positions),
+                    stat_positions: Some(setup.stat_positions),
+                    graph_positions: Some(setup.graph_positions),
+                    knob_positions: Some(setup.knob_positions),
+                    layer_groups: Some(setup.layer_groups),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap()
+            .document;
+        let first_key_id = setup.key_positions["4key"][0].id.clone();
+        let second_key_id = setup.key_positions["4key"][1].id.clone();
+        let surviving_key_id = setup.key_positions["4key"][2].id.clone();
+        let surviving_slot = setup.keys["4key"][2].clone();
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(
+            1,
+            mutation_id,
+            vec![
+                delete_element_op(EditorElementTypeV1::Key, &first_key_id),
+                delete_element_op(EditorElementTypeV1::Graph, &missing_id),
+                delete_element_op(EditorElementTypeV1::Key, &second_key_id),
+                delete_element_op(EditorElementTypeV1::Stat, &stat_id),
+                delete_element_op(EditorElementTypeV1::Graph, &graph_id),
+                delete_element_op(EditorElementTypeV1::Knob, &knob_id),
+            ],
+        );
+
+        let change = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            change
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| (result.status, result.bounds))
+                .collect::<Vec<_>>(),
+            vec![
+                (EditorOpResultStatusV1::Applied, None),
+                (EditorOpResultStatusV1::TargetMissing, None),
+                (EditorOpResultStatusV1::Applied, None),
+                (EditorOpResultStatusV1::Applied, None),
+                (EditorOpResultStatusV1::Applied, None),
+                (EditorOpResultStatusV1::Applied, None),
+            ]
+        );
+        assert_eq!(
+            change.result.changed_fields,
+            [
+                EditorField::Keys,
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ]
+        );
+        assert_eq!(change.document.keys["4key"][0], surviving_slot);
+        assert_eq!(
+            change.document.key_positions["4key"][0].id,
+            surviving_key_id
+        );
+        assert!(change.document.stat_positions["4key"].is_empty());
+        assert!(change.document.graph_positions["4key"].is_empty());
+        assert!(change.document.knob_positions["4key"].is_empty());
+        assert_eq!(
+            change.document.layer_groups["4key"]
+                .iter()
+                .map(|group| group.id.as_str())
+                .collect::<Vec<_>>(),
+            ["survive-group"]
+        );
+        assert_eq!(
+            change.document.layer_groups["5key"][0].id,
+            "unaffected-mode-group"
+        );
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, change.result);
+        assert_eq!(store.history_status().history_revision, 2);
+        let mut reused = request;
+        reused.ops = Some(vec![delete_element_op(
+            EditorElementTypeV1::Key,
+            &surviving_key_id,
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, setup);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, change.document);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn delete_op_keeps_a_group_definition_while_another_native_member_survives() {
+        let dir = test_directory("delete-op-surviving-group-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut document = store.editor_get().document;
+        document.key_positions.get_mut("4key").unwrap()[0].group_id =
+            Some("shared-group".to_string());
+        document.key_positions.get_mut("4key").unwrap()[1].group_id =
+            Some("shared-group".to_string());
+        document.layer_groups.insert(
+            "4key".to_string(),
+            vec![crate::models::LayerGroupDef {
+                id: "shared-group".to_string(),
+                name: "Shared Group".to_string(),
+            }],
+        );
+        let setup = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    key_positions: Some(document.key_positions),
+                    layer_groups: Some(document.layer_groups),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        let target_id = setup.document.key_positions["4key"][0].id.clone();
+
+        let deleted = store
+            .commit_editor_document(editor_ops_request(
+                1,
+                uuid::Uuid::new_v4().to_string(),
+                vec![delete_element_op(EditorElementTypeV1::Key, target_id)],
+            ))
+            .unwrap();
+
+        assert_eq!(
+            deleted.result.changed_fields,
+            [EditorField::Keys, EditorField::KeyPositions]
+        );
+        assert_eq!(deleted.document.layer_groups["4key"][0].id, "shared-group");
+        assert_eq!(
+            deleted.document.key_positions["4key"][0]
+                .group_id
+                .as_deref(),
+            Some("shared-group")
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn delete_op_all_missing_is_acknowledged_without_revision_or_history() {
+        let dir = test_directory("delete-op-all-missing-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let request = editor_ops_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            vec![delete_element_op(
+                EditorElementTypeV1::Graph,
+                uuid::Uuid::new_v4().to_string(),
+            )],
+        );
+
+        let missing = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(missing.result.revision, 0);
+        assert!(missing.result.changed_fields.is_empty());
+        assert_eq!(
+            missing.result.op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::TargetMissing,
+                bounds: None,
+            }])
+        );
+        assert!(missing.event.is_none());
+        assert_eq!(store.history_status().history_revision, 0);
+        let replay = store.commit_editor_document(request).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, missing.result);
+        assert_eq!(store.history_status().history_revision, 0);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn delete_op_type_mismatch_and_missing_key_pair_fail_atomically() {
+        let dir = test_directory("delete-op-atomic-validation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get();
+        let target_id = initial.document.key_positions["4key"][0].id.clone();
+        let valid_id = initial.document.key_positions["4key"][1].id.clone();
+        let mismatch = store
+            .commit_editor_document(editor_ops_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                vec![
+                    delete_element_op(EditorElementTypeV1::Key, valid_id),
+                    delete_element_op(EditorElementTypeV1::Stat, &target_id),
+                ],
+            ))
+            .unwrap_err();
+        assert_eq!(
+            mismatch
+                .details
+                .and_then(|details| details.validation_code)
+                .as_deref(),
+            Some("ELEMENT_TYPE_MISMATCH")
+        );
+        assert_eq!(store.editor_get(), initial);
+
+        {
+            let mut state = store.state.write();
+            state.data.keys.remove("4key");
+        }
+        let malformed = store.editor_get();
+        let error = store
+            .commit_editor_document(editor_ops_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                vec![delete_element_op(EditorElementTypeV1::Key, target_id)],
+            ))
+            .unwrap_err();
+        assert_eq!(
+            error
+                .details
+                .and_then(|details| details.validation_code)
+                .as_deref(),
+            Some("KEY_POSITION_LENGTH_MISMATCH")
+        );
+        assert_eq!(store.editor_get(), malformed);
+        assert_eq!(store.history_status().history_revision, 0);
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

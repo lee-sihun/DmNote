@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   commitMixed: vi.fn(),
+  commitMixedIntent: vi.fn(),
   commitSemantic: vi.fn(),
   reportSkipped: vi.fn(),
 }));
 
 vi.mock('@plugins/runtime/displayElement/gestureTransaction', () => ({
   commitMixedGestureTransaction: mocks.commitMixed,
+  commitMixedGestureIntent: mocks.commitMixedIntent,
 }));
 
 vi.mock('./editorSemanticOps', () => ({
@@ -18,8 +20,11 @@ vi.mock('./elementIntent', () => ({
   reportElementOpSkipped: mocks.reportSkipped,
 }));
 
-import { runMixedElementIntent } from './mixedElementIntent';
-import { runMixedElementBoundsIntent } from './mixedElementIntent';
+import {
+  runMixedElementBoundsIntent,
+  runMixedElementDeleteIntent,
+  runMixedElementIntent,
+} from './mixedElementIntent';
 
 import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
 
@@ -37,6 +42,7 @@ const baseOptions = (rollback: () => void, generate: Generate) => ({
 describe('runMixedElementIntent receipt 소유권', () => {
   beforeEach(() => {
     mocks.commitMixed.mockReset();
+    mocks.commitMixedIntent.mockReset();
     mocks.commitSemantic.mockReset();
     mocks.reportSkipped.mockClear();
   });
@@ -264,5 +270,83 @@ describe('runMixedElementIntent receipt 소유권', () => {
 
     expect(mocks.commitMixed).not.toHaveBeenCalled();
     expect(rollback).toHaveBeenCalledOnce();
+  });
+
+  it('삭제 의도는 재주입 대상을 거르고 봉인 뒤 신규 요소를 보존한다', async () => {
+    const rollback = vi.fn();
+    const ops = [
+      {
+        kind: 'deleteElement' as const,
+        elementType: 'key' as const,
+        id: 'native-id',
+      },
+    ];
+    mocks.commitMixedIntent.mockImplementationOnce(async (options) => {
+      const generation = options.generate({
+        base: {} as EditorDocumentV1,
+        pluginProjection: [
+          { fullId: 'plugin-a:gone', definitionId: 'plugin-a' },
+          { fullId: 'plugin-a:new', definitionId: 'plugin-a' },
+        ],
+      });
+      expect(generation).toEqual({
+        kind: 'ops',
+        ops,
+        desiredPluginProjection: [
+          { fullId: 'plugin-a:new', definitionId: 'plugin-a' },
+        ],
+      });
+      options.onEnrolled?.();
+    });
+
+    await runMixedElementDeleteIntent({
+      gestureId: 'gesture-delete',
+      pluginIds: ['plugin-a'],
+      deletedPluginFullIds: ['plugin-a:gone'],
+      ops,
+      receipt: { rollback },
+    });
+
+    expect(mocks.commitMixedIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gestureId: 'gesture-delete',
+        initialPluginIds: ['plugin-a'],
+        pluginScope: expect.any(Function),
+      }),
+    );
+    expect(rollback).not.toHaveBeenCalled();
+  });
+
+  it('plugin scope가 빈 삭제는 semantic 재시도 경로로 보낸다', async () => {
+    const rollback = vi.fn();
+    const ops = [
+      {
+        kind: 'deleteElement' as const,
+        elementType: 'key' as const,
+        id: 'native-id',
+      },
+    ];
+    mocks.commitSemantic.mockImplementationOnce(async (_ops, meta) => {
+      meta.onEnrolled?.();
+      return { document: {}, opResults: [{ status: 'applied' }] };
+    });
+
+    await runMixedElementDeleteIntent({
+      gestureId: 'gesture-native-delete',
+      pluginIds: [],
+      deletedPluginFullIds: [],
+      ops,
+      receipt: { rollback },
+    });
+
+    expect(mocks.commitSemantic).toHaveBeenCalledWith(
+      ops,
+      expect.objectContaining({
+        gestureId: 'gesture-native-delete',
+        onEnrolled: expect.any(Function),
+      }),
+    );
+    expect(mocks.commitMixedIntent).not.toHaveBeenCalled();
+    expect(rollback).not.toHaveBeenCalled();
   });
 });

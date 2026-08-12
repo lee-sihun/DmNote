@@ -1634,6 +1634,13 @@ mod tests {
         }
     }
 
+    fn delete_element_op(id: impl Into<String>, element_type: EditorElementTypeV1) -> EditorOpV1 {
+        EditorOpV1::DeleteElement {
+            element_type,
+            id: id.into(),
+        }
+    }
+
     fn validation_code(error: &EditorCommitError) -> Option<&str> {
         error
             .details
@@ -1805,6 +1812,30 @@ mod tests {
         assert_eq!(encoded["ops"][0]["elementType"], "key");
         assert!(encoded.get("changes").is_none());
 
+        let delete_id = Uuid::new_v4().to_string();
+        let delete_wire = serde_json::json!({
+            "baseRevision": 0,
+            "mutationId": Uuid::new_v4().to_string(),
+            "opsVersion": EDITOR_OPS_VERSION,
+            "ops": [{
+                "kind": "deleteElement",
+                "elementType": "graph",
+                "id": delete_id,
+            }],
+        });
+        let delete = decode_editor_commit_request(delete_wire).unwrap();
+        assert_eq!(
+            delete.ops,
+            Some(vec![delete_element_op(
+                delete_id,
+                EditorElementTypeV1::Graph,
+            )])
+        );
+        let encoded_delete = serde_json::to_value(delete).unwrap();
+        assert_eq!(encoded_delete["ops"][0]["kind"], "deleteElement");
+        assert_eq!(encoded_delete["ops"][0]["elementType"], "graph");
+        assert!(encoded_delete["ops"][0].get("bounds").is_none());
+
         let mut both = base.clone();
         both["changes"] = changes;
         both["opsVersion"] = serde_json::json!(EDITOR_OPS_VERSION);
@@ -1874,6 +1905,20 @@ mod tests {
             let error = decode_editor_commit_request(wire).unwrap_err();
             assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
         }
+
+        let delete_with_bounds = serde_json::json!({
+            "baseRevision": 0,
+            "mutationId": Uuid::new_v4().to_string(),
+            "opsVersion": EDITOR_OPS_VERSION,
+            "ops": [{
+                "kind": "deleteElement",
+                "elementType": "key",
+                "id": Uuid::new_v4().to_string(),
+                "bounds": { "dx": 0.0, "dy": 0.0, "width": 1.0, "height": 1.0 },
+            }],
+        });
+        let error = decode_editor_commit_request(delete_with_bounds).unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
     }
 
     #[test]
@@ -1916,7 +1961,7 @@ mod tests {
 
         let duplicate = ops_request(vec![
             set_bounds_op(&id, EditorElementTypeV1::Key),
-            set_bounds_op(&id, EditorElementTypeV1::Graph),
+            delete_element_op(&id, EditorElementTypeV1::Graph),
         ]);
         assert_eq!(
             validation_code(&validate_request_envelope(&duplicate).unwrap_err()),
@@ -2000,6 +2045,12 @@ mod tests {
         assert_ne!(
             request_fingerprint(&left).unwrap(),
             request_fingerprint(&right).unwrap()
+        );
+
+        let delete = ops_request(vec![delete_element_op(&id, EditorElementTypeV1::Key)]);
+        assert_ne!(
+            request_fingerprint(&left).unwrap(),
+            request_fingerprint(&delete).unwrap()
         );
     }
 

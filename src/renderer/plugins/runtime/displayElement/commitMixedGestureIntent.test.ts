@@ -10,6 +10,14 @@ const mocks = vi.hoisted(() => ({
       changedFields: [],
       changedPluginIds: [],
       pluginModelRevision: 1,
+      authorityGeneration: 1,
+    } as {
+      editorRevision: number;
+      changedFields: string[];
+      editorOpResults?: unknown[];
+      changedPluginIds: string[];
+      pluginModelRevision: number;
+      authorityGeneration?: number;
     }),
   ),
   editorCommit: vi.fn(() =>
@@ -49,22 +57,33 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
           editorBaseRevision: number;
           mutationId: string;
           editorChanges?: unknown;
+          editorOpsVersion?: 1;
+          editorOps?: unknown[];
         }) => Promise<unknown>,
         meta?: { onEnrolled?: () => void; prepare?: () => Promise<void> },
       ) => {
         await meta?.prepare?.();
-        const patch =
+        const mutation =
           typeof changes === 'function'
             ? (changes as (base: unknown) => unknown)({ schemaVersion: 1 })
             : changes;
+        const isOps =
+          typeof mutation === 'object' &&
+          mutation !== null &&
+          'opsVersion' in mutation;
         meta?.onEnrolled?.();
         await commit({
           editorBaseRevision: 0,
           mutationId: 'mutation-1',
-          ...(patch
+          ...(isOps
+            ? {
+                editorOpsVersion: 1,
+                editorOps: (mutation as unknown as { ops: unknown[] }).ops,
+              }
+            : mutation
             ? {
                 editorChanges: {
-                  ...(patch as Record<string, unknown>),
+                  ...(mutation as Record<string, unknown>),
                   schemaVersion: 2,
                 },
               }
@@ -222,6 +241,82 @@ describe('commitMixedGestureIntent', () => {
       fullId: 'plugin-a:one',
       zIndex: 42,
     });
+  });
+
+  it('삭제 ops는 재주입된 대상을 desired에서 제거하고 신규 요소를 보존한다', async () => {
+    const target = {
+      fullId: 'plugin-a:target',
+      definitionId: 'plugin-a',
+      zIndex: 0,
+    };
+    const survivor = {
+      fullId: 'plugin-a:survivor',
+      definitionId: 'plugin-a',
+      zIndex: 1,
+    };
+    const newcomer = {
+      fullId: 'plugin-a:new',
+      definitionId: 'plugin-a',
+      zIndex: 2,
+    };
+    mocks.elements = [target, survivor];
+    mocks.gestureCommit.mockResolvedValueOnce({
+      editorRevision: 2,
+      changedFields: ['keys', 'keyPositions'],
+      editorOpResults: [{ status: 'applied' }],
+      changedPluginIds: ['plugin-a'],
+      pluginModelRevision: 2,
+      authorityGeneration: 1,
+    });
+
+    await commitMixedGestureIntent({
+      gestureId: 'gesture-delete',
+      initialPluginIds: ['plugin-a'],
+      pluginScope: () => ['plugin-a'],
+      generate: ({ pluginProjection }) => {
+        // 봉인 뒤 다음 gesture가 대상과 신규 요소를 다시 store에 넣은 상황
+        mocks.elements = [...pluginProjection, newcomer];
+        return {
+          kind: 'ops',
+          ops: [
+            {
+              kind: 'deleteElement',
+              elementType: 'key',
+              id: 'native-id',
+            },
+          ],
+          desiredPluginProjection: pluginProjection.filter(
+            (element) => element.fullId !== target.fullId,
+          ),
+        };
+      },
+    });
+
+    expect(mocks.gestureCommit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        editorOpsVersion: 1,
+        editorOps: [
+          {
+            kind: 'deleteElement',
+            elementType: 'key',
+            id: 'native-id',
+          },
+        ],
+        pluginChanges: [
+          {
+            pluginId: 'plugin-a',
+            instances: ['plugin-a:plugin-a:survivor:1'],
+          },
+        ],
+      }),
+    );
+    const [merged] = mocks.setElements.mock.calls.at(-1) as unknown as [
+      Array<{ fullId: string }>,
+    ];
+    expect(merged.map((element) => element.fullId)).toEqual([
+      survivor.fullId,
+      newcomer.fullId,
+    ]);
   });
 
   it('동적 발견 plugin은 stage 후 rotate되고 다음 drain이 관측한다', async () => {

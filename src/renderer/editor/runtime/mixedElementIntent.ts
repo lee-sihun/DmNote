@@ -62,7 +62,7 @@ export const runMixedElementIntent = async (options: {
   }
 };
 
-export const runMixedElementBoundsIntent = async (options: {
+export const runMixedElementOpsIntent = async (options: {
   gestureId: string;
   pluginIds: readonly string[];
   ops: readonly EditorOpV1[];
@@ -88,6 +88,56 @@ export const runMixedElementBoundsIntent = async (options: {
     }
   } catch (error) {
     if (!enrolled) options.receipt?.rollback();
+    throw error;
+  }
+};
+
+export const runMixedElementBoundsIntent = runMixedElementOpsIntent;
+
+export const runMixedElementDeleteIntent = async (options: {
+  gestureId: string;
+  pluginIds: readonly string[];
+  deletedPluginFullIds: readonly string[];
+  ops: readonly EditorOpV1[];
+  receipt: ElementIntentReceipt | null;
+}): Promise<void> => {
+  const deleted = new Set(options.deletedPluginFullIds);
+  let enrolled = false;
+  let rolledBack = false;
+  const rollbackOnce = () => {
+    if (rolledBack) return;
+    rolledBack = true;
+    options.receipt?.rollback();
+  };
+  try {
+    const onEnrolled = () => {
+      enrolled = true;
+    };
+    if (options.pluginIds.length === 0) {
+      await commitSemanticOps(options.ops, {
+        gestureId: options.gestureId,
+        onEnrolled,
+      });
+      return;
+    }
+    await commitMixedGestureIntent({
+      gestureId: options.gestureId,
+      initialPluginIds: options.pluginIds,
+      pluginScope: () => options.pluginIds,
+      generate: ({ pluginProjection }) => ({
+        kind: 'ops',
+        ops: options.ops,
+        desiredPluginProjection: pluginProjection.filter(
+          (element) => !deleted.has(element.fullId),
+        ),
+      }),
+      onEnrolled,
+      onFailureBeforeSettle: () => {
+        if (!enrolled) rollbackOnce();
+      },
+    });
+  } catch (error) {
+    if (!enrolled) rollbackOnce();
     throw error;
   }
 };

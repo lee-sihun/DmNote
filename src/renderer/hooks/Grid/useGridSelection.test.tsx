@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   runMixedGestureIntent: vi.fn(() =>
     Promise.resolve({ committed: true, satisfied: true }),
   ),
+  runMixedDeleteIntent: vi.fn(() => Promise.resolve()),
   commitPatch: vi.fn((_patch: unknown, _options?: { gestureId?: string }) =>
     Promise.resolve(),
   ),
@@ -78,6 +79,7 @@ vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
   },
   runMixedElementIntent: mocks.runMixedIntent,
   runMixedGestureElementIntent: mocks.runMixedGestureIntent,
+  runMixedElementDeleteIntent: mocks.runMixedDeleteIntent,
 }));
 
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
@@ -154,6 +156,7 @@ describe('useGridSelection compound history gesture', () => {
     mocks.commitGeneratedPatch.mockClear();
     mocks.pluginAdditionThrows = false;
     mocks.runMixedGestureIntent.mockClear();
+    mocks.runMixedDeleteIntent.mockClear();
     mocks.deletePluginElements.mockClear();
     mocks.rotateSession.mockClear();
     mocks.beginMixedGesture.mockClear();
@@ -211,15 +214,25 @@ describe('useGridSelection compound history gesture', () => {
       gestureId,
     );
     // wire는 슬롯 정합 mixed intent - full-record 커밋 금지
-    expect(mocks.runMixedGestureIntent).toHaveBeenCalledTimes(1);
+    expect(mocks.runMixedDeleteIntent).toHaveBeenCalledTimes(1);
     const intentOptions = (
-      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+      mocks.runMixedDeleteIntent.mock.calls[0] as unknown[]
     )[0] as {
       gestureId: string;
-      initialPluginIds: readonly string[];
+      pluginIds: readonly string[];
+      deletedPluginFullIds: readonly string[];
+      ops: readonly unknown[];
     };
     expect(intentOptions.gestureId).toBe(gestureId);
-    expect(intentOptions.initialPluginIds).toEqual(['plugin-a']);
+    expect(intentOptions.pluginIds).toEqual(['plugin-a']);
+    expect(intentOptions.deletedPluginFullIds).toEqual(['plugin-a:element']);
+    expect(intentOptions.ops).toEqual([
+      {
+        kind: 'deleteElement',
+        elementType: 'key',
+        id: STABLE_KEY_ID,
+      },
+    ]);
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
@@ -335,25 +348,6 @@ describe('useGridSelection compound history gesture', () => {
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
-  const deletionBase = () => ({
-    schemaVersion: 1,
-    keys: { '4key': ['KeyA', 'KeyB'] },
-    keyPositions: {
-      '4key': [
-        { ...keyPosition, id: STABLE_KEY_ID },
-        {
-          ...keyPosition,
-          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-          noteWidth: 111,
-        },
-      ],
-    },
-    statPositions: {},
-    graphPositions: {},
-    knobPositions: {},
-    layerGroups: {},
-  });
-
   it('editor 전용 삭제는 슬롯 base에서 id 재해석으로 pair mask 재생성한다', async () => {
     await act(async () => {
       useGridSelectionStore
@@ -362,18 +356,20 @@ describe('useGridSelection compound history gesture', () => {
     });
     await act(async () => api.deleteSelectedElements());
 
-    expect(mocks.commitGeneratedPatch).toHaveBeenCalledTimes(1);
-    const generate = (
-      mocks.commitGeneratedPatch.mock.calls[0] as unknown[]
-    )[0] as (base: unknown) => {
-      keys?: Record<string, string[]>;
-      keyPositions?: Record<string, Array<Record<string, unknown>>>;
-    } | null;
-    const patch = generate(deletionBase());
-    // 대상만 제거되고 pair가 같은 mask로 - 대기 중 정산된 noteWidth는 생존
-    expect(patch?.keys?.['4key']).toEqual(['KeyB']);
-    expect(patch?.keyPositions?.['4key']).toHaveLength(1);
-    expect(patch?.keyPositions?.['4key'][0]).toMatchObject({ noteWidth: 111 });
+    expect(mocks.runMixedDeleteIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gestureId,
+        pluginIds: [],
+        ops: [
+          {
+            kind: 'deleteElement',
+            elementType: 'key',
+            id: STABLE_KEY_ID,
+          },
+        ],
+      }),
+    );
+    expect(mocks.commitGeneratedPatch).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
@@ -387,10 +383,15 @@ describe('useGridSelection compound history gesture', () => {
     });
     await act(async () => api.deleteSelectedElements());
 
-    const generate = (
-      mocks.commitGeneratedPatch.mock.calls[0] as unknown[]
-    )[0] as (base: unknown) => unknown;
-    expect(generate(deletionBase())).toBeNull();
+    expect(mocks.runMixedDeleteIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ops: [
+          expect.objectContaining({
+            id: '99999999-9999-4999-8999-999999999999',
+          }),
+        ],
+      }),
+    );
   });
 
   it('paste generator는 슬롯 base에 동결 payload를 재적용하고 멱등·충돌을 판별한다', async () => {

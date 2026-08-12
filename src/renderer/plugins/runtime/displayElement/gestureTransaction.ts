@@ -30,7 +30,11 @@ import type {
   EditorGestureOpsMutation,
   EditorPatchGenerator,
 } from '@src/renderer/editor/runtime/editorCoordinator';
-import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+import type {
+  EditorDocumentV1,
+  EditorOpV1,
+  EditorPatchV1,
+} from '@src/types/editor';
 import type {
   PluginDefinitionInternal,
   PluginDisplayElementInternal,
@@ -143,8 +147,9 @@ export const cancelUncommittedMixedGestureTransaction = (
 // raw 봉인본이 아니라 desired를 저장한다 - 호출 시점 스냅샷과 슬롯 base를
 // 섞으면 stale z-order가 재발한다
 export interface MixedIntentGeneration {
-  kind: 'patch' | 'satisfied';
+  kind: 'patch' | 'ops' | 'satisfied';
   patch?: EditorPatchV1 | null;
+  ops?: readonly EditorOpV1[];
   // 계약: scope 전체 projection을 표현해야 한다 - 성공 후 3-way 정렬이
   // "봉인에 있었고 desired에 없음"을 커밋된 삭제로 해석하므로, 부분
   // projection을 반환하면 scope 요소가 조용히 삭제된다
@@ -224,7 +229,11 @@ export const commitMixedGestureIntent = (options: {
             pluginProjection: sealedProjection,
           });
           lastGeneration = generation;
-          return generation.kind === 'patch' ? generation.patch ?? null : null;
+          if (generation.kind === 'patch') return generation.patch ?? null;
+          if (generation.kind === 'ops') {
+            return { opsVersion: 1, ops: generation.ops ?? [] };
+          }
+          return null;
         },
         gestureId,
         async (context) => {
@@ -233,6 +242,15 @@ export const commitMixedGestureIntent = (options: {
           const scopeIds = normalizePluginIds([...scope]);
           if (scopeIds.length === 0) {
             editorOnlyCommit = true;
+            if ('editorOps' in context) {
+              return editorApi.commit({
+                baseRevision: context.editorBaseRevision,
+                mutationId: context.mutationId,
+                opsVersion: context.editorOpsVersion,
+                ops: context.editorOps,
+                gestureId,
+              });
+            }
             if (!context.editorChanges) {
               return {
                 revision: context.editorBaseRevision,
@@ -269,7 +287,14 @@ export const commitMixedGestureIntent = (options: {
             pluginBaseRevision: getBackendPluginRevision(),
             observedHistoryEpoch: useHistoryStatusStore.getState().historyEpoch,
             authorityGeneration: getPluginAuthorityGeneration(),
-            editorChanges: context.editorChanges,
+            ...('editorOps' in context
+              ? {
+                  editorOpsVersion: context.editorOpsVersion,
+                  editorOps: context.editorOps,
+                }
+              : context.editorChanges
+              ? { editorChanges: context.editorChanges }
+              : {}),
             pluginChanges,
           });
           noteBackendPluginRevision(result.pluginModelRevision);
@@ -277,6 +302,9 @@ export const commitMixedGestureIntent = (options: {
           return {
             revision: result.editorRevision,
             changedFields: result.changedFields,
+            ...('editorOps' in context
+              ? { opResults: result.editorOpResults }
+              : {}),
           };
         },
         {

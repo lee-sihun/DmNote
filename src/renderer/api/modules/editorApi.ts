@@ -3,6 +3,7 @@ import { subscribe } from './shared';
 
 import {
   assertEditorCommitResult,
+  assertEditorOpCommitResult,
   assertEditorCommittedEvent,
   assertEditorGetResult,
   assertSafeEditorRevision,
@@ -26,7 +27,8 @@ export const editorCommitRaw = async (
   const result = await invoke<EditorCommitResult>('editor_commit', {
     request,
   });
-  assertEditorCommitResult(result, request.ops?.length);
+  if (request.ops) assertEditorOpCommitResult(result, request.ops);
+  else assertEditorCommitResult(result);
   return result;
 };
 

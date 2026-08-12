@@ -1,4 +1,5 @@
 import { stableStringify } from '@utils/core/stableStringify';
+import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
 
 import {
   EDITOR_COMMIT_SCHEMA_VERSION,
@@ -86,9 +87,13 @@ export interface EditorGestureOpsMutation {
   ops: readonly EditorOpV1[];
 }
 
+type EditorGestureMutationGenerator = (
+  base: EditorDocumentV1,
+) => EditorPatchV1 | EditorGestureOpsMutation | null;
+
 export type EditorGestureMutation =
   | EditorPatchV1
-  | EditorPatchGenerator
+  | EditorGestureMutationGenerator
   | EditorGestureOpsMutation
   | undefined;
 
@@ -210,7 +215,13 @@ const SEMANTIC_POSITION_FIELDS: Record<EditorElementTypeV1, EditorField> = {
   knob: 'knobPositions',
 };
 
-const applySemanticBounds = (
+const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
+  const positionField = SEMANTIC_POSITION_FIELDS[op.elementType];
+  if (op.kind === 'setBounds') return [positionField];
+  return op.elementType === 'key' ? ['keys', 'keyPositions'] : [positionField];
+};
+
+const applySemanticOps = (
   base: EditorDocumentV1,
   ops: readonly EditorOpV1[],
   results?: readonly EditorOpResultV1[],
@@ -219,7 +230,6 @@ const applySemanticBounds = (
   ops.forEach((op, opIndex) => {
     const result = results?.[opIndex];
     if (result?.status === 'targetMissing') return;
-    const bounds = result?.bounds ?? op.bounds;
     const field = SEMANTIC_POSITION_FIELDS[op.elementType];
     const positionsByMode = next[field] as Record<
       string,
@@ -228,9 +238,37 @@ const applySemanticBounds = (
     for (const [mode, positions] of Object.entries(positionsByMode)) {
       const index = positions.findIndex((position) => position.id === op.id);
       if (index < 0) continue;
-      positionsByMode[mode] = positions.map((position, positionIndex) =>
-        positionIndex === index ? { ...position, ...bounds } : position,
+      if (op.kind === 'setBounds') {
+        const bounds = result?.bounds ?? op.bounds;
+        positionsByMode[mode] = positions.map((position, positionIndex) =>
+          positionIndex === index ? { ...position, ...bounds } : position,
+        );
+        break;
+      }
+      positionsByMode[mode] = positions.filter(
+        (_, positionIndex) => positionIndex !== index,
       );
+      if (op.elementType === 'key') {
+        next.keys = {
+          ...next.keys,
+          [mode]: (next.keys[mode] ?? []).filter(
+            (_, slotIndex) => slotIndex !== index,
+          ),
+        };
+      }
+      const normalized = normalizeLayerGroupsForMode({
+        mode,
+        keyPositions: next.keyPositions,
+        statPositions: next.statPositions,
+        graphPositions: next.graphPositions,
+        knobPositions: next.knobPositions,
+        layerGroups: next.layerGroups,
+      });
+      next.keyPositions = normalized.keyPositions;
+      next.statPositions = normalized.statPositions;
+      next.graphPositions = normalized.graphPositions;
+      next.knobPositions = normalized.knobPositions;
+      next.layerGroups = normalized.layerGroups;
       break;
     }
   });
@@ -589,18 +627,16 @@ export class EditorSaveCoordinator {
         ops,
         ...(meta.gestureId ? { gestureId: meta.gestureId } : {}),
       };
-      const target = applySemanticBounds(baseDocument, ops);
+      const target = applySemanticOps(baseDocument, ops);
       const currentDocument = this.readDocument();
       assertEditorDocument(currentDocument);
-      const optimisticDocument = applySemanticBounds(currentDocument, ops);
+      const optimisticDocument = applySemanticOps(currentDocument, ops);
       if (
         getChangedEditorFields(currentDocument, optimisticDocument).length > 0
       ) {
         this.applyDocument(clone(optimisticDocument), 'localPatch');
       }
-      const requestFields = [
-        ...new Set(ops.map((op) => SEMANTIC_POSITION_FIELDS[op.elementType])),
-      ];
+      const requestFields = [...new Set(ops.flatMap(fieldsForSemanticOp))];
       const inFlight: InFlightCommit = {
         mutationId,
         baseRevision,
@@ -646,6 +682,7 @@ export class EditorSaveCoordinator {
 
         assertEditorOpCommitResult(result, ops);
         const opResults = clone(result.opResults!);
+        this.assertSemanticChangedFields(baseDocument, ops, opResults, result);
         const hasMissing = opResults.some(
           (opResult) => opResult.status === 'targetMissing',
         );
@@ -653,7 +690,7 @@ export class EditorSaveCoordinator {
         if (hasMissing || result.revision > currentRevision + 1) {
           await this.syncSemanticCanonical();
         } else if (result.revision >= currentRevision) {
-          const acknowledged = applySemanticBounds(
+          const acknowledged = applySemanticOps(
             this.requireLastAck(),
             ops,
             opResults,
@@ -1270,29 +1307,26 @@ export class EditorSaveCoordinator {
     // full-record는 대기 중 정산된 다른 커밋의 컬렉션 값을 되돌린다.
     // null 반환은 editorChanges 없음일 뿐 transaction callback은 실행된다
     // (plugin 변경만 커밋하는 혼합 게스처)
+    const resolvedMutation =
+      typeof changes === 'function' ? changes(clone(baseDocument)) : changes;
     let ops: EditorOpV1[] | undefined;
-    let patchMutation: EditorPatchV1 | EditorPatchGenerator | undefined;
-    if (isGestureOpsMutation(changes)) {
-      ops = clone([...changes.ops]);
+    let resolvedChanges: EditorPatchV1 | null | undefined;
+    if (isGestureOpsMutation(resolvedMutation)) {
+      ops = clone([...resolvedMutation.ops]);
     } else {
-      patchMutation = changes;
+      resolvedChanges = resolvedMutation;
     }
-    const resolvedChanges = ops
-      ? undefined
-      : typeof patchMutation === 'function'
-      ? patchMutation(clone(baseDocument))
-      : patchMutation;
     const canonicalChanges = resolvedChanges
       ? canonicalizeEditorGradients(resolvedChanges)
       : undefined;
     if (canonicalChanges) assertEditorPatch(canonicalChanges);
     const target = ops
-      ? applySemanticBounds(baseDocument, ops)
+      ? applySemanticOps(baseDocument, ops)
       : canonicalChanges
       ? applyEditorPatch(baseDocument, canonicalChanges)
       : baseDocument;
     const requestFields = ops
-      ? [...new Set(ops.map((op) => SEMANTIC_POSITION_FIELDS[op.elementType]))]
+      ? [...new Set(ops.flatMap(fieldsForSemanticOp))]
       : canonicalChanges
       ? EDITOR_FIELDS.filter((field) => canonicalChanges[field] !== undefined)
       : [];
@@ -1304,7 +1338,7 @@ export class EditorSaveCoordinator {
       const currentDocument = this.readDocument();
       assertEditorDocument(currentDocument);
       const optimisticDocument = ops
-        ? applySemanticBounds(currentDocument, ops)
+        ? applySemanticOps(currentDocument, ops)
         : applyEditorPatch(currentDocument, canonicalChanges!);
       if (
         getChangedEditorFields(currentDocument, optimisticDocument).length > 0
@@ -1354,6 +1388,12 @@ export class EditorSaveCoordinator {
       });
       if (ops) {
         assertEditorOpCommitResult(result, ops);
+        this.assertSemanticChangedFields(
+          inFlight.baseDocument,
+          ops,
+          result.opResults!,
+          result,
+        );
         await this.applySemanticGestureCommitResult(ops, result);
         this.logSemanticCommit(result, result.opResults!, 0);
       } else {
@@ -1485,10 +1525,30 @@ export class EditorSaveCoordinator {
     }
     if (result.revision >= currentRevision) {
       this.revision = result.revision;
-      this.lastAck = applySemanticBounds(this.requireLastAck(), ops, opResults);
+      this.lastAck = applySemanticOps(this.requireLastAck(), ops, opResults);
     }
     this.error = null;
     this.failureKind = null;
+  }
+
+  private assertSemanticChangedFields(
+    base: EditorDocumentV1,
+    ops: readonly EditorOpV1[],
+    opResults: readonly EditorOpResultV1[],
+    result: EditorCommitResult,
+  ): void {
+    const expected = getChangedEditorFields(
+      base,
+      applySemanticOps(base, ops, opResults),
+    );
+    if (
+      expected.length !== result.changedFields.length ||
+      expected.some((field) => !result.changedFields.includes(field))
+    ) {
+      throw new EditorProtocolError(
+        'editor ops changedFields does not match canonical projection',
+      );
+    }
   }
 
   private async handleRevisionConflict(

@@ -2,11 +2,13 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { reconcileSelectionAfterIndexedElementDeletion } from '@stores/grid/useGridSelectionStore';
 
 import { resolveElementById } from '../model/elementIdMap';
 import { cloneKeyPositionForDuplicate } from '../model/keys';
 import { cloneSlot } from '@utils/keySlot';
+import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
 import {
   applyPropertyIntentsEagerly,
   intentPatch,
@@ -16,6 +18,7 @@ import {
   type PropertyIntents,
 } from './elementIntent';
 import { commitSemanticOps } from './editorSemanticOps';
+import { editorCoordinator } from './editorStateCoordinator';
 
 import type {
   EditorBoundsV1,
@@ -36,15 +39,6 @@ type LooseRecord = Record<
   string,
   Array<{ id?: string } & Record<string, unknown>>
 >;
-
-const COLLECTION_FIELDS: Record<
-  Exclude<NativeElementType, 'key'>,
-  'statPositions' | 'graphPositions' | 'knobPositions'
-> = {
-  stat: 'statPositions',
-  graph: 'graphPositions',
-  knob: 'knobPositions',
-};
 
 const findInRecord = (
   record: LooseRecord,
@@ -79,6 +73,8 @@ export const deleteElementById = (
   const applyEager = (): ElementIntentReceipt | null => {
     const locator = resolveElementById(type, id);
     if (!locator) return null;
+    const layerGroupsBefore = useLayerGroupStore.getState().layerGroups;
+    let removedGroups: Array<{ id: string; name: string; index: number }> = [];
 
     let removedSlot: unknown;
     let removedPosition: Record<string, unknown> | undefined;
@@ -124,8 +120,80 @@ export const deleteElementById = (
       reconcileSelectionAfterIndexedElementDeletion(type, locator.index);
     }
 
+    const keyState = useKeyStore.getState();
+    const normalized = normalizeLayerGroupsForMode({
+      mode: locator.mode,
+      keyPositions: keyState.canonicalPositions,
+      statPositions: useStatItemStore.getState().positions,
+      graphPositions: useGraphItemStore.getState().positions,
+      knobPositions: useKnobItemStore.getState().positions,
+      layerGroups: useLayerGroupStore.getState().layerGroups,
+    });
+    if (normalized.positionsChanged) {
+      keyState.setKeyMappingsAndPositions(
+        keyState.keyMappings,
+        normalized.keyPositions,
+      );
+      useStatItemStore.getState().setPositions(normalized.statPositions);
+      useGraphItemStore.getState().setPositions(normalized.graphPositions);
+      useKnobItemStore.getState().setPositions(normalized.knobPositions);
+    }
+    if (normalized.groupsChanged) {
+      const remaining = new Set(
+        (normalized.layerGroups[locator.mode] ?? []).map((group) => group.id),
+      );
+      removedGroups = (layerGroupsBefore[locator.mode] ?? [])
+        .map((group, index) => ({ ...group, index }))
+        .filter((group) => !remaining.has(group.id));
+      useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
+    }
+
     return {
       rollback: () => {
+        const canonical = editorCoordinator.getState().lastAck;
+        const canonicalRecord = canonical?.[
+          type === 'key'
+            ? 'keyPositions'
+            : type === 'stat'
+            ? 'statPositions'
+            : type === 'graph'
+            ? 'graphPositions'
+            : 'knobPositions'
+        ] as LooseRecord | undefined;
+        if (canonicalRecord && !findInRecord(canonicalRecord, id)) return;
+        const currentRecord =
+          type === 'key'
+            ? (useKeyStore.getState()
+                .canonicalPositions as unknown as LooseRecord)
+            : type === 'stat'
+            ? (useStatItemStore.getState().positions as unknown as LooseRecord)
+            : type === 'graph'
+            ? (useGraphItemStore.getState().positions as unknown as LooseRecord)
+            : (useKnobItemStore.getState().positions as unknown as LooseRecord);
+        // 다른 경로가 같은 ID를 이미 복원·갱신했으면 그룹까지 그 경로 소유
+        if (findInRecord(currentRecord, id)) return;
+        if (removedGroups.length > 0) {
+          const layerGroupState = useLayerGroupStore.getState();
+          const currentMode = [
+            ...(layerGroupState.layerGroups[locator.mode] ?? []),
+          ];
+          let restored = false;
+          for (const group of removedGroups) {
+            if (currentMode.some((candidate) => candidate.id === group.id))
+              continue;
+            currentMode.splice(Math.min(group.index, currentMode.length), 0, {
+              id: group.id,
+              name: group.name,
+            });
+            restored = true;
+          }
+          if (restored) {
+            layerGroupState.setLayerGroups({
+              ...layerGroupState.layerGroups,
+              [locator.mode]: currentMode,
+            });
+          }
+        }
         if (!removedPosition) return;
         // membership CAS: id가 이미 돌아와 있으면(다른 경로 복원) 중복 금지
         if (type === 'key') {
@@ -177,47 +245,18 @@ export const deleteElementById = (
     };
   };
 
-  let found = false;
-  return runElementIntent({
-    applyEager,
-    generate: (base): ElementIntentGeneration => {
-      if (type === 'key') {
-        const located = findInRecord(
-          base.keyPositions as unknown as LooseRecord,
-          id,
-        );
-        // 이미 canonical에서 사라짐 = 의도 달성 - 재삽입 롤백 금지
-        if (!located) return { kind: 'satisfied' };
-        found = true;
-        return intentPatch({
-          schemaVersion: 1,
-          keys: {
-            ...base.keys,
-            [located.mode]: (base.keys[located.mode] ?? []).filter(
-              (_, i) => i !== located.index,
-            ),
-          },
-          keyPositions: removeAt(
-            base.keyPositions as unknown as LooseRecord,
-            located.mode,
-            located.index,
-          ) as never,
-        });
-      }
-      const field = COLLECTION_FIELDS[type];
-      const located = findInRecord(base[field] as unknown as LooseRecord, id);
-      if (!located) return { kind: 'satisfied' };
-      found = true;
-      return intentPatch({
-        schemaVersion: 1,
-        [field]: removeAt(
-          base[field] as unknown as LooseRecord,
-          located.mode,
-          located.index,
-        ),
-      } as EditorPatchV1);
+  const receipt = applyEager();
+  let enrolled = false;
+  return commitSemanticOps([{ kind: 'deleteElement', elementType: type, id }], {
+    onEnrolled: () => {
+      enrolled = true;
     },
-  }).then((result) => (result.committed && found) || result.satisfied);
+  })
+    .then(() => true)
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
 };
 
 // 복제 배치: 시작 시점에 동결한 payload(slot + position)를 현재 모드에 새

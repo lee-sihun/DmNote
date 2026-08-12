@@ -29,6 +29,7 @@ import type {
   EditorGetResult,
   EditorOpResultV1,
   EditorOpV1,
+  EditorSetBoundsOpV1,
 } from '@src/types/editor';
 import type { KeySlot } from '@src/types/key/keys';
 import type {
@@ -118,10 +119,14 @@ class FakeTransport implements EditorCoordinatorTransport {
         ...(request.ops
           ? {
               opResults: request.ops.map(
-                (op): EditorOpResultV1 => ({
-                  status: changedFields.length > 0 ? 'applied' : 'noChange',
-                  bounds: op.bounds,
-                }),
+                (op): EditorOpResultV1 =>
+                  op.kind === 'setBounds'
+                    ? {
+                        status:
+                          changedFields.length > 0 ? 'applied' : 'noChange',
+                        bounds: op.bounds,
+                      }
+                    : { status: 'applied' },
               ),
             }
           : {}),
@@ -236,9 +241,20 @@ const applyOpsForTest = (
     Object.entries(record).some(([mode, positions]) => {
       const index = positions.findIndex((position) => position.id === op.id);
       if (index < 0) return false;
-      record[mode] = positions.map((position, positionIndex) =>
-        positionIndex === index ? { ...position, ...op.bounds } : position,
-      );
+      if (op.kind === 'setBounds') {
+        record[mode] = positions.map((position, positionIndex) =>
+          positionIndex === index ? { ...position, ...op.bounds } : position,
+        );
+      } else {
+        record[mode] = positions.filter(
+          (_, positionIndex) => positionIndex !== index,
+        );
+        if (op.elementType === 'key') {
+          next.keys[mode] = (next.keys[mode] ?? []).filter(
+            (_, slotIndex) => slotIndex !== index,
+          );
+        }
+      }
       return true;
     });
   });
@@ -2225,7 +2241,7 @@ describe('EditorSaveCoordinator', () => {
     expect(harness.transport.commitMock.mock.calls[0][0]).not.toHaveProperty(
       'ops',
     );
-    expect(
+    await expect(
       harness.transport.commitMock.mock.results[0].value,
     ).resolves.not.toHaveProperty('opResults');
     expect(harness.coordinator.getState()).toMatchObject({
@@ -2715,11 +2731,129 @@ describe('commitSemanticOpsInternal', () => {
     return document;
   };
 
-  const setBoundsOp = (id: string): EditorOpV1 => ({
+  const setBoundsOp = (id: string): EditorSetBoundsOpV1 => ({
     kind: 'setBounds',
     elementType: 'key',
     id,
     bounds: { dx: 12, dy: 13, width: 140, height: 150 },
+  });
+
+  const deleteElementOp = (id: string): EditorOpV1 => ({
+    kind: 'deleteElement',
+    elementType: 'key',
+    id,
+  });
+
+  it('delete op는 key pair와 마지막 빈 그룹을 lastAck에서 함께 정리한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000099';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.layerGroups = { '4key': [{ id: 'group-a', name: 'Group A' }] };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keys', 'keyPositions', 'layerGroups'],
+      opResults: [{ status: 'applied' }],
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      deleteElementOp(id),
+    ]);
+
+    expect(outcome.opResults).toEqual([{ status: 'applied' }]);
+    expect(outcome.document).toMatchObject({
+      keys: { '4key': [] },
+      keyPositions: { '4key': [] },
+      layerGroups: { '4key': [] },
+    });
+    expect(harness.getLocal()).toMatchObject({
+      keys: { '4key': [] },
+      keyPositions: { '4key': [] },
+      layerGroups: { '4key': [] },
+    });
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ ops: [deleteElementOp(id)] }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('delete op의 layerGroups changedField는 실제 정리 시에만 선택적으로 수용한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000098';
+    const base = withStableId(id);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keys', 'keyPositions'],
+      opResults: [{ status: 'applied' }],
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([deleteElementOp(id)]),
+    ).resolves.toMatchObject({ opResults: [{ status: 'applied' }] });
+    harness.coordinator.stop();
+  });
+
+  it('공유 그룹이 생존하는 delete 응답의 가짜 layerGroups를 거절한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000097';
+    const survivorId = '00000000-0000-4000-8000-000000000096';
+    const base = withStableId(id);
+    base.keys['4key'].push('B');
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.keyPositions['4key'].push({
+      ...base.keyPositions['4key'][0],
+      id: survivorId,
+    });
+    base.layerGroups = { '4key': [{ id: 'group-a', name: 'Group A' }] };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keys', 'keyPositions', 'layerGroups'],
+      opResults: [{ status: 'applied' }],
+    });
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([deleteElementOp(id)]),
+    ).rejects.toBeInstanceOf(EditorProtocolError);
+    harness.coordinator.stop();
+  });
+
+  it('다중 delete의 targetMissing은 생존 삭제 뒤 canonical로 정렬한다', async () => {
+    const missingId = '00000000-0000-4000-8000-000000000095';
+    const appliedId = '00000000-0000-4000-8000-000000000094';
+    const base = withStableId(missingId);
+    base.keys['4key'].push('B');
+    base.keyPositions['4key'].push({
+      ...base.keyPositions['4key'][0],
+      id: appliedId,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const canonical = structuredClone(base);
+    canonical.keys['4key'] = [];
+    canonical.keyPositions['4key'] = [];
+    harness.transport.canonical = { revision: 1, document: canonical };
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keys', 'keyPositions'],
+      opResults: [{ status: 'targetMissing' }, { status: 'applied' }],
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      deleteElementOp(missingId),
+      deleteElementOp(appliedId),
+    ]);
+
+    expect(outcome.opResults).toEqual([
+      { status: 'targetMissing' },
+      { status: 'applied' },
+    ]);
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(outcome.document).toEqual(canonical);
+    expect(harness.getLocal()).toEqual(canonical);
+    harness.coordinator.stop();
   });
 
   it('ordered opResults로 정확한 base의 lastAck를 갱신한다', async () => {
