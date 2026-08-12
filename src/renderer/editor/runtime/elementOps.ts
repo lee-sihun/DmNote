@@ -7,8 +7,15 @@ import { reconcileSelectionAfterIndexedElementDeletion } from '@stores/grid/useG
 import { resolveElementById } from '../model/elementIdMap';
 import { cloneKeyPositionForDuplicate } from '../model/keys';
 import { cloneSlot } from '@utils/keySlot';
-import { enqueueEditorCompatibilityOperation } from './editorCompatibilityQueue';
-import { editorCoordinator } from './editorStateCoordinator';
+import {
+  applyPropertyIntentsEagerly,
+  generatePropertyIntentPatch,
+  intentPatch,
+  runElementIntent,
+  type ElementIntentGeneration,
+  type ElementIntentReceipt,
+  type PropertyIntents,
+} from './elementIntent';
 
 import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
 
@@ -55,107 +62,157 @@ const removeAt = (
 });
 
 // 삭제: 키는 keys와 keyPositions의 인덱스 결합을 함께 제거, 아이템은 해당
-// 컬렉션만. 반환 false = 실행 시점에 대상 없음(이미 삭제)
+// 컬렉션만. 반환 false = 실행 시점에 대상 없음(이미 삭제).
+// 오류는 전파된다 - 편입 전 실패는 receipt가 로컬 삭제를 되돌린다.
+// 선택 보정은 정책상 eager와 함께 즉시 수행하고 실패해도 복구하지 않는다
 export const deleteElementById = (
   type: NativeElementType,
   id: string,
 ): Promise<boolean> => {
   if (!id) return Promise.resolve(false);
-  const locator = resolveElementById(type, id);
-  if (!locator) return Promise.resolve(false);
 
-  // eager 반영 + 선택 재조정 - 이후의 캡처가 삭제를 포함해 자가 치유
-  if (type === 'key') {
-    const state = useKeyStore.getState();
-    const mappings = state.keyMappings;
-    const nextMappings = {
-      ...mappings,
-      [locator.mode]: (mappings[locator.mode] ?? []).filter(
-        (_, i) => i !== locator.index,
-      ),
+  const applyEager = (): ElementIntentReceipt | null => {
+    const locator = resolveElementById(type, id);
+    if (!locator) return null;
+
+    let removedSlot: unknown;
+    let removedPosition: Record<string, unknown> | undefined;
+    if (type === 'key') {
+      const state = useKeyStore.getState();
+      removedSlot = state.keyMappings[locator.mode]?.[locator.index];
+      removedPosition = (state.canonicalPositions as unknown as LooseRecord)[
+        locator.mode
+      ]?.[locator.index];
+      const nextMappings = {
+        ...state.keyMappings,
+        [locator.mode]: (state.keyMappings[locator.mode] ?? []).filter(
+          (_, i) => i !== locator.index,
+        ),
+      };
+      const nextPositions = removeAt(
+        state.canonicalPositions as unknown as LooseRecord,
+        locator.mode,
+        locator.index,
+      );
+      state.setKeyMappingsAndPositions(nextMappings, nextPositions as never);
+    } else {
+      const state =
+        type === 'stat'
+          ? useStatItemStore.getState()
+          : type === 'graph'
+          ? useGraphItemStore.getState()
+          : useKnobItemStore.getState();
+      removedPosition = (state.positions as unknown as LooseRecord)[
+        locator.mode
+      ]?.[locator.index];
+      state.setPositions(
+        removeAt(
+          state.positions as unknown as LooseRecord,
+          locator.mode,
+          locator.index,
+        ) as never,
+      );
+    }
+    // 선택 보정은 현재 모드 배열 기준 - 다른 모드로 이동한 대상의 index로
+    // 현재 모드의 무관한 선택을 지우면 안 된다
+    if (locator.mode === useKeyStore.getState().selectedKeyType) {
+      reconcileSelectionAfterIndexedElementDeletion(type, locator.index);
+    }
+
+    return {
+      rollback: () => {
+        if (!removedPosition) return;
+        // membership CAS: id가 이미 돌아와 있으면(다른 경로 복원) 중복 금지
+        if (type === 'key') {
+          const state = useKeyStore.getState();
+          const record = state.canonicalPositions as unknown as LooseRecord;
+          if (findInRecord(record, id)) return;
+          const list = record[locator.mode] ?? [];
+          const at = Math.min(locator.index, list.length);
+          const mappings = state.keyMappings[locator.mode] ?? [];
+          state.setKeyMappingsAndPositions(
+            {
+              ...state.keyMappings,
+              [locator.mode]: [
+                ...mappings.slice(0, at),
+                removedSlot as never,
+                ...mappings.slice(at),
+              ],
+            },
+            {
+              ...record,
+              [locator.mode]: [
+                ...list.slice(0, at),
+                removedPosition,
+                ...list.slice(at),
+              ],
+            } as never,
+          );
+          return;
+        }
+        const state =
+          type === 'stat'
+            ? useStatItemStore.getState()
+            : type === 'graph'
+            ? useGraphItemStore.getState()
+            : useKnobItemStore.getState();
+        const record = state.positions as unknown as LooseRecord;
+        if (findInRecord(record, id)) return;
+        const list = record[locator.mode] ?? [];
+        const at = Math.min(locator.index, list.length);
+        state.setPositions({
+          ...record,
+          [locator.mode]: [
+            ...list.slice(0, at),
+            removedPosition,
+            ...list.slice(at),
+          ],
+        } as never);
+      },
     };
-    const nextPositions = removeAt(
-      state.canonicalPositions as unknown as LooseRecord,
-      locator.mode,
-      locator.index,
-    );
-    state.setKeyMappingsAndPositions(nextMappings, nextPositions as never);
-  } else if (type === 'stat') {
-    const state = useStatItemStore.getState();
-    state.setPositions(
-      removeAt(
-        state.positions as unknown as LooseRecord,
-        locator.mode,
-        locator.index,
-      ) as never,
-    );
-  } else if (type === 'graph') {
-    const state = useGraphItemStore.getState();
-    state.setPositions(
-      removeAt(
-        state.positions as unknown as LooseRecord,
-        locator.mode,
-        locator.index,
-      ) as never,
-    );
-  } else {
-    const state = useKnobItemStore.getState();
-    state.setPositions(
-      removeAt(
-        state.positions as unknown as LooseRecord,
-        locator.mode,
-        locator.index,
-      ) as never,
-    );
-  }
-  // 선택 보정은 현재 모드 배열 기준 - 다른 모드로 이동한 대상의 index로
-  // 현재 모드의 무관한 선택을 지우면 안 된다
-  if (locator.mode === useKeyStore.getState().selectedKeyType) {
-    reconcileSelectionAfterIndexedElementDeletion(type, locator.index);
-  }
+  };
 
-  return enqueueEditorCompatibilityOperation(() =>
-    editorCoordinator.commitGeneratedPatch((base) => {
+  let found = false;
+  return runElementIntent({
+    applyEager,
+    generate: (base): ElementIntentGeneration => {
       if (type === 'key') {
-        const found = findInRecord(
+        const located = findInRecord(
           base.keyPositions as unknown as LooseRecord,
           id,
         );
-        if (!found) return null;
-        return {
+        // 이미 canonical에서 사라짐 = 의도 달성 - 재삽입 롤백 금지
+        if (!located) return { kind: 'satisfied' };
+        found = true;
+        return intentPatch({
           schemaVersion: 1,
           keys: {
             ...base.keys,
-            [found.mode]: (base.keys[found.mode] ?? []).filter(
-              (_, i) => i !== found.index,
+            [located.mode]: (base.keys[located.mode] ?? []).filter(
+              (_, i) => i !== located.index,
             ),
           },
           keyPositions: removeAt(
             base.keyPositions as unknown as LooseRecord,
-            found.mode,
-            found.index,
+            located.mode,
+            located.index,
           ) as never,
-        };
+        });
       }
       const field = COLLECTION_FIELDS[type];
-      const found = findInRecord(base[field] as unknown as LooseRecord, id);
-      if (!found) return null;
-      return {
+      const located = findInRecord(base[field] as unknown as LooseRecord, id);
+      if (!located) return { kind: 'satisfied' };
+      found = true;
+      return intentPatch({
         schemaVersion: 1,
         [field]: removeAt(
           base[field] as unknown as LooseRecord,
-          found.mode,
-          found.index,
+          located.mode,
+          located.index,
         ),
-      } as EditorPatchV1;
-    }),
-  ).then(
-    () => true,
-    (error) => {
-      console.error('Failed to commit element deletion', error);
-      return true;
+      } as EditorPatchV1);
     },
-  );
+  }).then((result) => (result.committed && found) || result.satisfied);
 };
 
 // 복제 배치: 시작 시점에 동결한 payload(slot + position)를 현재 모드에 새
@@ -177,25 +234,47 @@ export const placeDuplicatedKey = (
   const newId = newPosition.id as string;
   const frozenSlot = cloneSlot(frozen.slot as never);
 
-  const state = useKeyStore.getState();
-  state.setKeyMappingsAndPositions(
-    {
-      ...state.keyMappings,
-      [mode]: [...(state.keyMappings[mode] ?? []), frozenSlot as never],
-    },
-    {
-      ...state.canonicalPositions,
-      [mode]: [...(state.canonicalPositions[mode] ?? []), newPosition],
-    } as never,
-  );
+  const applyEager = (): ElementIntentReceipt => {
+    const state = useKeyStore.getState();
+    state.setKeyMappingsAndPositions(
+      {
+        ...state.keyMappings,
+        [mode]: [...(state.keyMappings[mode] ?? []), frozenSlot as never],
+      },
+      {
+        ...state.canonicalPositions,
+        [mode]: [...(state.canonicalPositions[mode] ?? []), newPosition],
+      } as never,
+    );
+    return {
+      rollback: () => {
+        // membership CAS: 우리가 넣은 newId가 아직 있으면 pair 제거
+        const current = useKeyStore.getState();
+        const record = current.canonicalPositions as unknown as LooseRecord;
+        const located = findInRecord(record, newId);
+        if (!located) return;
+        current.setKeyMappingsAndPositions(
+          {
+            ...current.keyMappings,
+            [located.mode]: (current.keyMappings[located.mode] ?? []).filter(
+              (_, i) => i !== located.index,
+            ),
+          },
+          removeAt(record, located.mode, located.index) as never,
+        );
+      },
+    };
+  };
 
-  return enqueueEditorCompatibilityOperation(() =>
-    editorCoordinator.commitGeneratedPatch((base: EditorDocumentV1) => {
-      // 이미 같은 id가 들어가 있으면(이중 실행) 재추가 금지
+  return runElementIntent({
+    applyEager,
+    generate: (base: EditorDocumentV1): ElementIntentGeneration => {
+      // 이미 같은 id가 들어가 있으면(이중 실행·선반영) 재추가 금지 -
+      // canonical 달성으로 보고 로컬 복제를 되돌리지 않는다
       if (findInRecord(base.keyPositions as unknown as LooseRecord, newId)) {
-        return null;
+        return { kind: 'satisfied' };
       }
-      return {
+      return intentPatch({
         schemaVersion: 1,
         keys: {
           ...base.keys,
@@ -205,15 +284,9 @@ export const placeDuplicatedKey = (
           ...base.keyPositions,
           [mode]: [...(base.keyPositions[mode] ?? []), newPosition],
         } as never,
-      };
-    }),
-  ).then(
-    () => true,
-    (error) => {
-      console.error('Failed to commit key duplication', error);
-      return true;
+      });
     },
-  );
+  }).then((result) => result.committed || result.satisfied);
 };
 
 // z-order: 모드 전역(4 컬렉션 + 외부 플러그인 z) 기준으로 대상 id들에
@@ -316,37 +389,41 @@ const storeDocumentSnapshot = (): EditorDocumentV1 =>
     layerGroups: {},
   } as unknown as EditorDocumentV1);
 
-const applyZOrderEagerly = (patch: EditorPatchV1): void => {
-  if (patch.keyPositions) {
-    useKeyStore.getState().setPositions(patch.keyPositions as never);
-  }
-  if (patch.statPositions) {
-    useStatItemStore.getState().setPositions(patch.statPositions as never);
-  }
-  if (patch.graphPositions) {
-    useGraphItemStore.getState().setPositions(patch.graphPositions as never);
-  }
-  if (patch.knobPositions) {
-    useKnobItemStore.getState().setPositions(patch.knobPositions as never);
-  }
-};
-
 export const applyZOrderByIds = (
   targets: readonly ZOrderTarget[],
   direction: 'front' | 'back',
   externalZIndexes: readonly number[] = [],
 ): Promise<number> => {
-  const eager = computeZOrderPatch(
-    storeDocumentSnapshot(),
-    targets,
-    direction,
-    externalZIndexes,
-  );
-  if (eager.patch) applyZOrderEagerly(eager.patch);
-
   let applied = 0;
-  return enqueueEditorCompatibilityOperation(() =>
-    editorCoordinator.commitGeneratedPatch((base) => {
+  return runElementIntent({
+    applyEager: () => {
+      // eager z를 id별 속성 의도로 변환해 receipt CAS 복원을 얻는다
+      const eager = computeZOrderPatch(
+        storeDocumentSnapshot(),
+        targets,
+        direction,
+        externalZIndexes,
+      );
+      if (!eager.patch) return null;
+      const intents = new Map<
+        NativeElementType,
+        Map<string, Record<string, unknown>>
+      >();
+      for (const target of targets) {
+        if (!target.id) continue;
+        const field = FIELD_BY_TYPE[target.type];
+        const record = eager.patch[field] as unknown as LooseRecord | undefined;
+        if (!record) continue;
+        const located = findInRecord(record, target.id);
+        if (!located) continue;
+        const zIndex = record[located.mode][located.index].zIndex;
+        const byId = intents.get(target.type) ?? new Map();
+        byId.set(target.id, { zIndex });
+        intents.set(target.type, byId);
+      }
+      return applyPropertyIntentsEagerly(intents);
+    },
+    generate: (base) => {
       const generated = computeZOrderPatch(
         base,
         targets,
@@ -354,15 +431,9 @@ export const applyZOrderByIds = (
         externalZIndexes,
       );
       applied = generated.applied;
-      return generated.patch;
-    }),
-  ).then(
-    () => applied,
-    (error) => {
-      console.error('Failed to commit z-order change', error);
-      return applied;
+      return intentPatch(generated.patch);
     },
-  );
+  }).then((result) => (result.committed ? applied : 0));
 };
 
 // 키 슬롯 재바인딩: keys만 바꾸되 대상은 paired 위치의 안정 id로 재결합한다.
@@ -373,41 +444,61 @@ export const rebindKeySlotById = (
   newSlot: unknown,
 ): Promise<boolean> => {
   if (!positionId) return Promise.resolve(false);
-  const locator = resolveElementById('key', positionId);
-  if (!locator) return Promise.resolve(false);
 
-  const state = useKeyStore.getState();
-  state.setKeyMappings({
-    ...state.keyMappings,
-    [locator.mode]: (state.keyMappings[locator.mode] ?? []).map((slot, i) =>
-      i === locator.index ? newSlot : slot,
-    ),
-  } as never);
+  const applyEager = (): ElementIntentReceipt | null => {
+    const locator = resolveElementById('key', positionId);
+    if (!locator) return null;
+    const state = useKeyStore.getState();
+    const beforeSlot = state.keyMappings[locator.mode]?.[locator.index];
+    state.setKeyMappings({
+      ...state.keyMappings,
+      [locator.mode]: (state.keyMappings[locator.mode] ?? []).map((slot, i) =>
+        i === locator.index ? newSlot : slot,
+      ),
+    } as never);
+    return {
+      rollback: () => {
+        // paired CAS: 위치 id의 현재 자리 슬롯이 우리가 쓴 값일 때만 복원
+        const current = useKeyStore.getState();
+        const located = findInRecord(
+          current.canonicalPositions as unknown as LooseRecord,
+          positionId,
+        );
+        if (!located) return;
+        if (current.keyMappings[located.mode]?.[located.index] !== newSlot) {
+          return;
+        }
+        current.setKeyMappings({
+          ...current.keyMappings,
+          [located.mode]: (current.keyMappings[located.mode] ?? []).map(
+            (slot, i) => (i === located.index ? beforeSlot : slot),
+          ),
+        } as never);
+      },
+    };
+  };
 
-  return enqueueEditorCompatibilityOperation(() =>
-    editorCoordinator.commitGeneratedPatch((base) => {
-      const found = findInRecord(
+  let found = false;
+  return runElementIntent({
+    applyEager,
+    generate: (base) => {
+      const located = findInRecord(
         base.keyPositions as unknown as LooseRecord,
         positionId,
       );
-      if (!found) return null;
-      return {
+      if (!located) return { kind: 'targetLost' };
+      found = true;
+      return intentPatch({
         schemaVersion: 1,
         keys: {
           ...base.keys,
-          [found.mode]: (base.keys[found.mode] ?? []).map((slot, i) =>
-            i === found.index ? newSlot : slot,
+          [located.mode]: (base.keys[located.mode] ?? []).map((slot, i) =>
+            i === located.index ? newSlot : slot,
           ),
         } as never,
-      };
-    }),
-  ).then(
-    () => true,
-    (error) => {
-      console.error('Failed to commit key slot rebinding', error);
-      return true;
+      });
     },
-  );
+  }).then((result) => result.committed && found);
 };
 
 // 다중 선택 정산: 대상 id들의 현재 canonical 기하(dx·dy)를 의도로 캡처해
@@ -453,39 +544,53 @@ export const commitSelectedGeometryByIds = (
   if (intents.size === 0) return Promise.resolve(0);
 
   let applied = 0;
-  return enqueueEditorCompatibilityOperation(() =>
-    editorCoordinator.commitGeneratedPatch(
-      (base) => {
-        const patch: EditorPatchV1 = { schemaVersion: 1 };
-        let touchedAny = false;
-        for (const [type, byId] of intents) {
-          const field = FIELD_BY_TYPE[type];
-          const record = base[field] as unknown as LooseRecord;
-          let touched = 0;
-          const next: LooseRecord = {};
-          for (const [mode, list] of Object.entries(record)) {
-            next[mode] = list.map((position) => {
-              const id = position.id;
-              if (typeof id !== 'string' || !byId.has(id)) return position;
-              touched += 1;
-              return { ...position, ...byId.get(id) };
-            });
-          }
-          if (touched > 0) {
-            patch[field] = next as never;
-            applied += touched;
-            touchedAny = true;
-          }
+  return runElementIntent({
+    // 드래그가 이미 스토어에 최종값을 반영했으므로 eager 없음 - 실패 시
+    // 남는 값은 드래그 산출물이며 수용된 낙관 의미론(V-5)을 따른다
+    applyEager: () => null,
+    generate: (base) => {
+      const patch: EditorPatchV1 = { schemaVersion: 1 };
+      let touchedAny = false;
+      for (const [type, byId] of intents) {
+        const field = FIELD_BY_TYPE[type];
+        const record = base[field] as unknown as LooseRecord;
+        let touched = 0;
+        const next: LooseRecord = {};
+        for (const [mode, list] of Object.entries(record)) {
+          next[mode] = list.map((position) => {
+            const id = position.id;
+            if (typeof id !== 'string' || !byId.has(id)) return position;
+            touched += 1;
+            return { ...position, ...byId.get(id) };
+          });
         }
-        return touchedAny ? patch : null;
-      },
-      gestureId ? { gestureId } : undefined,
-    ),
-  ).then(
-    () => applied,
-    (error) => {
-      console.error('Failed to commit selection geometry', error);
-      return applied;
+        if (touched > 0) {
+          patch[field] = next as never;
+          applied += touched;
+          touchedAny = true;
+        }
+      }
+      return intentPatch(touchedAny ? patch : null);
     },
-  );
+    ...(gestureId ? { gestureId } : {}),
+  }).then((result) => (result.committed ? applied : 0));
+};
+
+// 리사이즈 완료 전용: 시작 시 동결한 대상 id들에 최종 bounds를 하나의
+// intent로 - eager와 wire, receipt를 같은 의도가 소유한다. 대상 소실은
+// targetLost로 eager 복원, 오류는 전파
+export const commitElementBoundsById = (
+  intents: PropertyIntents,
+  gestureId?: string,
+): Promise<boolean> => {
+  let hasIntent = false;
+  for (const byId of intents.values()) {
+    if (byId.size > 0) hasIntent = true;
+  }
+  if (!hasIntent) return Promise.resolve(false);
+  return runElementIntent({
+    applyEager: () => applyPropertyIntentsEagerly(intents),
+    generate: (base) => intentPatch(generatePropertyIntentPatch(base, intents)),
+    ...(gestureId ? { gestureId } : {}),
+  }).then((result) => result.committed);
 };

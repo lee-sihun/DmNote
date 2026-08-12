@@ -16,6 +16,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
   applyZOrderByIds,
+  commitElementBoundsById,
   commitSelectedGeometryByIds,
   deleteElementById,
   placeDuplicatedKey,
@@ -237,7 +238,7 @@ describe('elementOps', () => {
     );
 
     expect(applied).toBe(1);
-    expect(api.commitGeneratedPatch.mock.calls[0][1]).toEqual({
+    expect(api.commitGeneratedPatch.mock.calls[0][1]).toMatchObject({
       gestureId: 'gesture-sync',
     });
     const record = generatedPatches[0]?.keyPositions?.['4key'];
@@ -309,6 +310,82 @@ describe('elementOps', () => {
     expect(generatedPatches).toEqual([null]);
   });
 
+  it('bounds 의도의 편입 전 실패는 4필드를 CAS 복원한다', async () => {
+    api.commitGeneratedPatch.mockRejectedValue(new Error('start failed'));
+    const before = structuredClone(
+      useKeyStore.getState().canonicalPositions['4key'][0],
+    );
+
+    await expect(
+      commitElementBoundsById(
+        new Map([
+          ['key', new Map([[ID_A, { dx: 50, dy: 60, width: 90, height: 80 }]])],
+        ]),
+      ),
+    ).rejects.toThrow('start failed');
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      dx: before.dx,
+      dy: before.dy,
+      width: before.width,
+      height: before.height,
+    });
+  });
+
+  it('bounds 의도의 대상 소실은 eager를 복원하고 미커밋한다', async () => {
+    const pre = documentFromStores();
+    pre.keyPositions = { '4key': [keyAt(ID_B)] } as never;
+    slotBase = () => pre;
+    const before = structuredClone(
+      useKeyStore.getState().canonicalPositions['4key'][0],
+    );
+
+    const committed = await commitElementBoundsById(
+      new Map([
+        ['key', new Map([[ID_A, { dx: 50, dy: 60, width: 90, height: 80 }]])],
+      ]),
+    );
+
+    expect(committed).toBe(false);
+    expect(generatedPatches).toEqual([null]);
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      dx: before.dx,
+      width: before.width,
+    });
+  });
+
+  it('삭제의 편입 전 실패는 로컬 pair를 복원한다', async () => {
+    api.commitGeneratedPatch.mockRejectedValue(new Error('start failed'));
+
+    await expect(deleteElementById('key', ID_A)).rejects.toThrow(
+      'start failed',
+    );
+
+    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['A', 'B']);
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'].map((p) => p.id),
+    ).toEqual([ID_A, ID_B]);
+  });
+
+  it('복제의 편입 전 실패는 추가한 pair를 제거한다', async () => {
+    api.commitGeneratedPatch.mockRejectedValue(new Error('start failed'));
+
+    await expect(
+      placeDuplicatedKey({ slot: 'A', position: keyAt(ID_A) }, '4key', 1, 2),
+    ).rejects.toThrow('start failed');
+
+    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['A', 'B']);
+    expect(useKeyStore.getState().canonicalPositions['4key']).toHaveLength(2);
+  });
+
+  it('재바인딩의 편입 전 실패는 슬롯을 복원한다', async () => {
+    api.commitGeneratedPatch.mockRejectedValue(new Error('start failed'));
+
+    await expect(rebindKeySlotById(ID_A, 'Z')).rejects.toThrow('start failed');
+
+    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['A', 'B']);
+  });
+
   it('semantic op는 compat 큐 선행 작업 뒤에 커밋한다', async () => {
     let release!: () => void;
     const blocker = new Promise<void>((resolve) => {
@@ -319,6 +396,8 @@ describe('elementOps', () => {
       () => undefined,
     );
 
+    const pre = documentFromStores();
+    slotBase = () => pre;
     const pending = deleteElementById('key', ID_A);
     await Promise.resolve();
     await Promise.resolve();
