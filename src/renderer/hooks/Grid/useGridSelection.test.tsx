@@ -410,6 +410,18 @@ describe('useGridSelection compound history gesture', () => {
     )[0] as {
       generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
         kind: string;
+        ops?: Array<{
+          kind: string;
+          elements: Array<{
+            elementType: string;
+            slot?: unknown;
+            position: Record<string, unknown>;
+          }>;
+          zUpdates: Array<{
+            id: string;
+            zIndex: number;
+          }>;
+        }>;
         patch?: {
           keys?: Record<string, unknown[]>;
           keyPositions?: Record<string, Array<Record<string, unknown>>>;
@@ -428,35 +440,360 @@ describe('useGridSelection compound history gesture', () => {
       layerGroups: {},
     };
     const result = options.generate({ base: emptyBase, pluginProjection: [] });
-    expect(result.kind).toBe('patch');
-    expect(result.patch?.keys?.['4key']).toEqual(['KeyB']);
-    expect(result.patch?.keyPositions?.['4key']).toHaveLength(1);
-    const pastedId = result.patch?.keyPositions?.['4key'][0].id as string;
+    expect(result.kind).toBe('ops');
+    expect(result.ops).toEqual([
+      expect.objectContaining({
+        kind: 'insertFrozenElements',
+        mode: '4key',
+        elements: [
+          expect.objectContaining({
+            elementType: 'key',
+            slot: 'KeyB',
+          }),
+        ],
+      }),
+    ]);
+    const pastedPosition = result.ops![0].elements[0].position;
+    const pastedId = pastedPosition.id as string;
 
-    // 멱등 재시도: 같은 payload가 이미 base에 있으면 satisfied
+    // 멱등 재시도: whole plan을 보내 backend noChange로 판정
     const appliedBase = {
       ...emptyBase,
       keys: { '4key': ['KeyB'] },
       keyPositions: {
-        '4key': [result.patch!.keyPositions!['4key'][0]],
+        '4key': [pastedPosition],
       },
     };
     expect(
       options.generate({ base: appliedBase, pluginProjection: [] }).kind,
-    ).toBe('satisfied');
+    ).toBe('ops');
 
     // 충돌: 같은 id에 다른 payload면 전체 중단 sentinel
     const conflictedBase = {
       ...appliedBase,
       keyPositions: {
-        '4key': [
-          { ...result.patch!.keyPositions!['4key'][0], dx: 987, id: pastedId },
-        ],
+        '4key': [{ ...pastedPosition, dx: 987, id: pastedId }],
       },
     };
     expect(() =>
       options.generate({ base: conflictedBase, pluginProjection: [] }),
     ).toThrowError(/paste id collision/);
+  });
+
+  it('paste batch의 일부 ID나 신규 group만 이미 있으면 전체를 중단한다', async () => {
+    const firstId = '10000000-0000-4000-8000-000000000011';
+    const secondId = '10000000-0000-4000-8000-000000000012';
+    randomUUID
+      .mockReturnValueOnce(gestureId)
+      .mockReturnValueOnce(firstId)
+      .mockReturnValueOnce(secondId);
+    act(() => {
+      useGridSelectionStore.getState().setClipboard([
+        { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        { type: 'key', keyCode: 'KeyC', position: keyPosition },
+      ]);
+    });
+    await act(async () => api.pasteElements());
+
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        kind: string;
+      };
+    };
+    const partiallyApplied = {
+      schemaVersion: 1,
+      keys: { '4key': ['KeyB'] },
+      keyPositions: {
+        '4key': [
+          {
+            ...keyPosition,
+            id: firstId,
+            dx: keyPosition.dx + 20,
+            dy: keyPosition.dy + 20,
+          },
+        ],
+      },
+      statPositions: {},
+      graphPositions: {},
+      knobPositions: {},
+      layerGroups: {},
+    };
+    expect(() =>
+      options.generate({ base: partiallyApplied, pluginProjection: [] }),
+    ).toThrowError(/paste partial state collision/);
+
+    const groupId = '10000000-0000-4000-8000-000000000013';
+    const groupedElementId = '10000000-0000-4000-8000-000000000014';
+    randomUUID
+      .mockReset()
+      .mockReturnValueOnce(gestureId)
+      .mockReturnValueOnce(groupId)
+      .mockReturnValueOnce(groupedElementId);
+    act(() => {
+      useGridSelectionStore.getState().setClipboard(
+        [
+          {
+            type: 'key',
+            keyCode: 'KeyD',
+            position: { ...keyPosition, groupId: 'source-group' },
+          },
+        ],
+        [{ id: 'source-group', name: 'Group' }],
+      );
+    });
+    await act(async () => api.pasteElements());
+    const groupedOptions = (
+      mocks.runMixedGestureIntent.mock.calls[1] as unknown[]
+    )[0] as {
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        kind: string;
+        ops: Array<{
+          groups: Array<{ id: string; name: string }>;
+        }>;
+      };
+    };
+    const emptyGroupedBase = {
+      schemaVersion: 1,
+      keys: { '4key': [] },
+      keyPositions: { '4key': [] },
+      statPositions: {},
+      graphPositions: {},
+      knobPositions: {},
+      layerGroups: {},
+    };
+    const frozenGroup = groupedOptions.generate({
+      base: emptyGroupedBase,
+      pluginProjection: [],
+    }).ops[0].groups[0];
+    expect(() =>
+      groupedOptions.generate({
+        base: {
+          ...emptyGroupedBase,
+          layerGroups: {
+            '4key': [frozenGroup],
+          },
+        },
+        pluginProjection: [],
+      }),
+    ).toThrowError(/paste partial state collision/);
+  });
+
+  it('paste op는 key pair와 네 native 타입의 full payload를 한 batch에 싣는다', async () => {
+    const ids = [
+      '10000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000002',
+      '10000000-0000-4000-8000-000000000003',
+      '10000000-0000-4000-8000-000000000004',
+    ];
+    randomUUID
+      .mockReturnValueOnce(gestureId)
+      .mockReturnValueOnce(ids[0])
+      .mockReturnValueOnce(ids[1])
+      .mockReturnValueOnce(ids[2])
+      .mockReturnValueOnce(ids[3]);
+    act(() => {
+      useGridSelectionStore.getState().setClipboard([
+        { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        {
+          type: 'stat',
+          position: { ...keyPosition, statType: 'kps' },
+        },
+        {
+          type: 'graph',
+          position: {
+            ...keyPosition,
+            statType: 'total',
+            graphType: 'line',
+            graphSpeed: 1,
+            graphColor: '#ffffff',
+          },
+        },
+        {
+          type: 'knob',
+          position: {
+            ...keyPosition,
+            axisId: 'axis',
+            sensitivity: 1,
+            reverse: false,
+          },
+        },
+      ]);
+    });
+    await act(async () => api.pasteElements());
+
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        kind: string;
+        ops: Array<{
+          kind: string;
+          elements: Array<{
+            elementType: string;
+            slot?: unknown;
+            position: Record<string, unknown>;
+          }>;
+        }>;
+      };
+    };
+    const result = options.generate({
+      base: {
+        schemaVersion: 1,
+        keys: { '4key': ['KeyA'] },
+        keyPositions: { '4key': [keyPosition] },
+        statPositions: {},
+        graphPositions: {},
+        knobPositions: {},
+        layerGroups: {},
+      },
+      pluginProjection: [],
+    });
+
+    expect(result.kind).toBe('ops');
+    expect(result.ops[0].kind).toBe('insertFrozenElements');
+    expect(
+      result.ops[0].elements.map((element) => element.elementType),
+    ).toEqual(['key', 'stat', 'graph', 'knob']);
+    expect(result.ops[0].elements[0]).toMatchObject({
+      elementType: 'key',
+      slot: 'KeyB',
+      position: { id: ids[0] },
+    });
+    expect(
+      result.ops[0].elements.map((element) => element.position.id),
+    ).toEqual(ids);
+  });
+
+  it('plugin-only paste도 existing native z를 batch op로 함께 정산한다', async () => {
+    act(() => {
+      useGridSelectionStore
+        .getState()
+        .setClipboard([{ type: 'plugin', element: pluginClipboardElement() }]);
+    });
+    await act(async () => api.pasteElements());
+
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: {
+        base: unknown;
+        pluginProjection: PluginDisplayElementInternal[];
+      }) => {
+        kind: string;
+        ops: Array<{
+          elements: unknown[];
+          zUpdates: Array<{ id: string }>;
+        }>;
+        desiredPluginProjection: PluginDisplayElementInternal[];
+      };
+    };
+    const result = options.generate({
+      base: {
+        schemaVersion: 1,
+        keys: { '4key': ['KeyA'] },
+        keyPositions: { '4key': [keyPosition] },
+        statPositions: {},
+        graphPositions: {},
+        knobPositions: {},
+        layerGroups: {},
+      },
+      pluginProjection: [],
+    });
+
+    expect(result.kind).toBe('ops');
+    expect(result.ops[0].elements).toEqual([]);
+    expect(result.ops[0].zUpdates).toEqual([
+      expect.objectContaining({ id: STABLE_KEY_ID }),
+    ]);
+    expect(result.desiredPluginProjection).toHaveLength(1);
+  });
+
+  it('기존 native에 synthetic ID가 하나라도 있으면 전체 legacy patch로 fallback한다', async () => {
+    const firstId = '10000000-0000-4000-8000-000000000023';
+    const secondId = '10000000-0000-4000-8000-000000000024';
+    randomUUID
+      .mockReturnValueOnce(gestureId)
+      .mockReturnValueOnce(firstId)
+      .mockReturnValueOnce(secondId);
+    act(() => {
+      useGridSelectionStore.getState().setClipboard([
+        { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        { type: 'key', keyCode: 'KeyC', position: keyPosition },
+      ]);
+    });
+    await act(async () => api.pasteElements());
+
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        kind: string;
+        patch?: Record<string, unknown>;
+        ops?: unknown[];
+      };
+    };
+    const result = options.generate({
+      base: {
+        schemaVersion: 1,
+        keys: { '4key': ['KeyA', 'KeyB'] },
+        keyPositions: {
+          '4key': [
+            { ...keyPosition, id: 'key-0' },
+            {
+              ...keyPosition,
+              id: firstId,
+              dx: keyPosition.dx + 20,
+              dy: keyPosition.dy + 20,
+            },
+          ],
+        },
+        statPositions: {},
+        graphPositions: {},
+        knobPositions: {},
+        layerGroups: {},
+      },
+      pluginProjection: [],
+    });
+
+    expect(result.kind).toBe('patch');
+    expect(result.patch).toEqual(
+      expect.objectContaining({ keys: expect.any(Object) }),
+    );
+    expect(result.ops).toBeUndefined();
+  });
+
+  it('paste 선택은 성공 뒤 신규 ID로 이동하고 실패하면 기존 선택을 유지한다', async () => {
+    const pastedId = '10000000-0000-4000-8000-000000000021';
+    randomUUID.mockReturnValueOnce(gestureId).mockReturnValueOnce(pastedId);
+    act(() => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+      useGridSelectionStore
+        .getState()
+        .setClipboard([
+          { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        ]);
+    });
+    await act(async () => api.pasteElements());
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([
+      { type: 'key', id: pastedId, index: 1 },
+    ]);
+
+    mocks.runMixedGestureIntent.mockRejectedValueOnce(
+      new Error('paste failed'),
+    );
+    const nextId = '10000000-0000-4000-8000-000000000022';
+    randomUUID
+      .mockReset()
+      .mockReturnValueOnce(gestureId)
+      .mockReturnValueOnce(nextId);
+    await act(async () => api.pasteElements());
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([
+      { type: 'key', id: pastedId, index: 1 },
+    ]);
   });
 
   it('그룹 앵커는 당시 자식이 사라져도 살아있는 그룹 경계로 재해석한다', async () => {
@@ -489,6 +826,10 @@ describe('useGridSelection compound history gesture', () => {
       mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
     )[0] as {
       generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        ops?: Array<{
+          elements: Array<{ position: Record<string, unknown> }>;
+          zUpdates: Array<{ id: string; zIndex: number }>;
+        }>;
         patch?: {
           keyPositions?: Record<string, Array<Record<string, unknown>>>;
         };
@@ -513,22 +854,15 @@ describe('useGridSelection compound history gesture', () => {
       layerGroups: { '4key': [{ id: 'g1', name: 'g1' }] },
     };
     const result = options.generate({ base, pluginProjection: [] });
-    const positions = result.patch?.keyPositions?.['4key'] ?? [];
-    const pasted = positions.find(
-      (position) =>
-        position.id !== STABLE_KEY_ID &&
-        position.id !== survivorId &&
-        position.id !== topId,
+    const inserted = result.ops?.[0].elements[0].position;
+    const zUpdates = new Map(
+      result.ops?.[0].zUpdates.map((update) => [update.id, update.zIndex]),
     );
-    const survivor = positions.find((position) => position.id === survivorId);
-    const top = positions.find((position) => position.id === topId);
     // 그룹 경계 위에 삽입 - 살아있는 g1 자식보다 위지만 그룹 밖 최상단
     // 요소보다는 아래 (element 앵커 소실의 전역 최상단 폴백과 구별)
-    expect(pasted).toBeDefined();
-    expect((pasted!.zIndex as number) > (survivor!.zIndex as number)).toBe(
-      true,
-    );
-    expect((pasted!.zIndex as number) < (top!.zIndex as number)).toBe(true);
+    expect(inserted).toBeDefined();
+    expect((inserted!.zIndex as number) > zUpdates.get(survivorId)!).toBe(true);
+    expect((inserted!.zIndex as number) < zUpdates.get(topId)!).toBe(true);
   });
 
   it('plugin eager가 실패하면 editor eager도 함께 복원한다', async () => {

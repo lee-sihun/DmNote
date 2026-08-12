@@ -4,7 +4,8 @@ const runtime = vi.hoisted(() => ({ invoke: vi.fn() }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: runtime.invoke }));
 
-import { EditorProtocolError } from '@src/types/editor';
+import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+import { EditorProtocolError, assertEditorOpsV1 } from '@src/types/editor';
 import { editorCommitRaw } from './editorApi';
 
 describe('editorCommitRaw semantic op protocol', () => {
@@ -78,5 +79,197 @@ describe('editorCommitRaw semantic op protocol', () => {
         ],
       }),
     ).rejects.toBeInstanceOf(EditorProtocolError);
+  });
+
+  it('insertFrozenElements nested wire는 exact key와 i32 z를 강제한다', () => {
+    const valid = {
+      kind: 'insertFrozenElements' as const,
+      mode: '4key',
+      elements: [
+        {
+          elementType: 'key' as const,
+          slot: 'KeyA',
+          position: {
+            ...createDefaultKeyPosition(),
+            id: '00000000-0000-4000-8000-000000000006',
+            zIndex: 2_147_483_647,
+          },
+        },
+      ],
+      groups: [{ id: 'group-a', name: 'Group A' }],
+      zUpdates: [
+        {
+          elementType: 'key' as const,
+          id: '00000000-0000-4000-8000-000000000007',
+          zIndex: -2_147_483_648,
+        },
+      ],
+    };
+
+    expect(() => assertEditorOpsV1([valid])).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          ...valid,
+          elements: [
+            {
+              ...valid.elements[0],
+              position: { ...valid.elements[0].position, unknown: true },
+            },
+          ],
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          ...valid,
+          elements: [
+            {
+              ...valid.elements[0],
+              position: {
+                ...valid.elements[0].position,
+                counter: {
+                  ...valid.elements[0].position.counter,
+                  unexpected: true,
+                },
+              },
+            },
+          ],
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+    for (const slot of [
+      { keys: ['KeyA', 'KeyA'], match: 'all' as const },
+      { keys: ['KeyA', 'Key+B'], match: 'any' as const },
+    ]) {
+      expect(() =>
+        assertEditorOpsV1([
+          {
+            ...valid,
+            elements: [{ ...valid.elements[0], slot }],
+          },
+        ]),
+      ).toThrow(EditorProtocolError);
+    }
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          ...valid,
+          zUpdates: [{ ...valid.zUpdates[0], zIndex: 2_147_483_648 }],
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          ...valid,
+          elements: [
+            {
+              ...valid.elements[0],
+              position: {
+                ...valid.elements[0].position,
+                zIndex: -2_147_483_649,
+              },
+            },
+          ],
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+  });
+
+  it('insertFrozenElements는 sole op이며 groups-only 요청을 거절한다', () => {
+    const groupsOnly = {
+      kind: 'insertFrozenElements' as const,
+      mode: '4key',
+      elements: [],
+      groups: [{ id: 'group-a', name: 'Group A' }],
+      zUpdates: [],
+    };
+    expect(() => assertEditorOpsV1([groupsOnly])).toThrow(EditorProtocolError);
+    const insert = {
+      ...groupsOnly,
+      elements: [
+        {
+          elementType: 'key' as const,
+          slot: 'KeyA',
+          position: {
+            ...createDefaultKeyPosition(),
+            id: '00000000-0000-4000-8000-000000000009',
+          },
+        },
+      ],
+    };
+    expect(() =>
+      assertEditorOpsV1([
+        insert,
+        {
+          kind: 'deleteElement',
+          elementType: 'key',
+          id: '00000000-0000-4000-8000-000000000008',
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+  });
+
+  it('insertFrozenElements 결과는 applied와 noChange만 wire 계약대로 수용한다', async () => {
+    const request = {
+      baseRevision: 0,
+      mutationId: '00000000-0000-4000-8000-000000000010',
+      opsVersion: 1 as const,
+      ops: [
+        {
+          kind: 'insertFrozenElements' as const,
+          mode: '4key',
+          elements: [
+            {
+              elementType: 'key' as const,
+              slot: 'KeyA',
+              position: {
+                ...createDefaultKeyPosition(),
+                id: '00000000-0000-4000-8000-000000000011',
+              },
+            },
+          ],
+          groups: [{ id: 'group-a', name: 'Group A' }],
+          zUpdates: [],
+        },
+      ],
+    };
+    runtime.invoke.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keys', 'keyPositions', 'layerGroups'],
+      opResults: [{ status: 'applied' }],
+    });
+    await expect(editorCommitRaw(request)).resolves.toMatchObject({
+      opResults: [{ status: 'applied' }],
+    });
+
+    runtime.invoke.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    await expect(editorCommitRaw(request)).resolves.toMatchObject({
+      opResults: [{ status: 'noChange' }],
+    });
+
+    runtime.invoke.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: [],
+      opResults: [{ status: 'targetMissing' }],
+    });
+    await expect(editorCommitRaw(request)).rejects.toBeInstanceOf(
+      EditorProtocolError,
+    );
+
+    runtime.invoke.mockResolvedValueOnce({
+      revision: 1,
+      changedFields: ['keys', 'keyPositions'],
+      opResults: [{ status: 'applied' }],
+    });
+    await expect(editorCommitRaw(request)).rejects.toBeInstanceOf(
+      EditorProtocolError,
+    );
   });
 });

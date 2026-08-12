@@ -360,6 +360,66 @@ describe('commitMixedGestureIntent', () => {
     expect(lastDrainOrder).toBeLessThan(generatorOrder);
   });
 
+  it('초기 scope가 비어도 prepare 중 발견한 plugin을 editor ops와 함께 저장한다', async () => {
+    mocks.elements = [
+      {
+        fullId: 'plugin-b:new',
+        definitionId: 'plugin-b',
+        zIndex: 0,
+      },
+    ];
+    await commitMixedGestureIntent({
+      gestureId: 'gesture-empty-discover',
+      initialPluginIds: [],
+      pluginScope: (elements) =>
+        elements.map((element) => element.definitionId as string),
+      generate: ({ pluginProjection }) => ({
+        kind: 'ops',
+        ops: [
+          {
+            kind: 'insertFrozenElements',
+            mode: '4key',
+            elements: [],
+            groups: [],
+            zUpdates: [
+              {
+                elementType: 'key',
+                id: '00000000-0000-4000-8000-000000000031',
+                zIndex: 1,
+              },
+            ],
+          },
+        ],
+        desiredPluginProjection: pluginProjection.map((element) => ({
+          ...element,
+          zIndex: 2,
+        })),
+      }),
+    });
+
+    expect(mocks.stageGesture).toHaveBeenCalledWith(
+      'plugin-b',
+      'gesture-empty-discover',
+    );
+    expect(mocks.rotateSession).toHaveBeenCalledWith(
+      'plugin-b',
+      'gesture-empty-discover',
+    );
+    expect(mocks.editorCommit).not.toHaveBeenCalled();
+    expect(mocks.gestureCommit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        editorOpsVersion: 1,
+        editorOps: [expect.objectContaining({ kind: 'insertFrozenElements' })],
+        pluginChanges: [
+          {
+            pluginId: 'plugin-b',
+            instances: ['plugin-b:plugin-b:new:2'],
+          },
+        ],
+      }),
+    );
+  });
+
   it('비영속 필드만 바뀐 요소도 영속 필드 CAS로 desired z를 적용한다', async () => {
     const handler = () => 'runtime';
     mocks.elements = [

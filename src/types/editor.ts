@@ -1,16 +1,20 @@
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
 import {
   keyPositionSchema,
   keySlotSchema,
   type KeyMappings,
+  type KeyPosition,
   type KeyPositions,
+  type KeySlot,
 } from '@src/types/key/keys';
-import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { KnobItemPosition, KnobItemPositions } from '@src/types/key/knobs';
 import {
   STAT_ITEM_TYPES,
+  type StatItemPosition,
   type StatItemPositions,
 } from '@src/types/key/statItems';
-import type { LayerGroups } from '@src/types/layerGroups';
+import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
 import { canonicalizePositionGradients } from '@src/types/color';
 
 export const EDITOR_SCHEMA_VERSION = 1 as const;
@@ -94,7 +98,30 @@ export interface EditorDeleteElementOpV1 {
   id: string;
 }
 
-export type EditorOpV1 = EditorSetBoundsOpV1 | EditorDeleteElementOpV1;
+export type EditorFrozenElementV1 =
+  | { elementType: 'key'; slot: KeySlot; position: KeyPosition }
+  | { elementType: 'stat'; position: StatItemPosition }
+  | { elementType: 'graph'; position: GraphItemPosition }
+  | { elementType: 'knob'; position: KnobItemPosition };
+
+export interface EditorFrozenZUpdateV1 {
+  elementType: EditorElementTypeV1;
+  id: string;
+  zIndex: number;
+}
+
+export interface EditorInsertFrozenElementsOpV1 {
+  kind: 'insertFrozenElements';
+  mode: string;
+  elements: EditorFrozenElementV1[];
+  groups: LayerGroupDef[];
+  zUpdates: EditorFrozenZUpdateV1[];
+}
+
+export type EditorOpV1 =
+  | EditorSetBoundsOpV1
+  | EditorDeleteElementOpV1
+  | EditorInsertFrozenElementsOpV1;
 
 export interface EditorOpsCommitRequest extends EditorCommitRequestBase {
   changes?: never;
@@ -121,7 +148,7 @@ export type EditorOpResultV1 =
       bounds: EditorBoundsV1;
     }
   | {
-      status: 'applied' | 'targetMissing';
+      status: 'applied' | 'noChange' | 'targetMissing';
       bounds?: never;
     };
 
@@ -222,6 +249,7 @@ const EDITOR_FIELD_SET = new Set<string>(EDITOR_FIELDS);
 const EDITOR_PATCH_KEYS = new Set<string>(['schemaVersion', ...EDITOR_FIELDS]);
 const STAT_TYPES = new Set<string>(STAT_ITEM_TYPES);
 const GRAPH_TYPES = new Set(['line', 'bar']);
+const KEY_POSITION_KEYS = new Set(Object.keys(keyPositionSchema.shape));
 
 // Rust Option 필드는 IPC에서 null로 직렬화되므로 검증할 때 "값 없음"으로 취급
 const NULLABLE_POSITION_FIELDS = new Set([
@@ -289,6 +317,19 @@ export function assertSafeEditorRevision(
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+const assertExactKeys = (
+  value: Record<string, unknown>,
+  keys: readonly string[],
+  label: string,
+): void => {
+  if (
+    Object.keys(value).length !== keys.length ||
+    keys.some((key) => !(key in value))
+  ) {
+    throw new EditorProtocolError(`${label} has unsupported fields`);
+  }
+};
+
 function assertModeRecord(
   value: unknown,
   label: string,
@@ -335,6 +376,62 @@ const assertPosition = (value: unknown, label: string): void => {
     !keyPositionSchema.safeParse(normalizePositionForValidation(value)).success
   ) {
     throw new EditorProtocolError(`${label} is not a valid position`);
+  }
+};
+
+const assertExactPosition = (
+  value: unknown,
+  extraKeys: readonly string[],
+  label: string,
+): void => {
+  if (!isRecord(value)) {
+    throw new EditorProtocolError(`${label} is not a valid position`);
+  }
+  const allowed = new Set([...KEY_POSITION_KEYS, ...extraKeys]);
+  const unknownKey = Object.keys(value).find((key) => !allowed.has(key));
+  if (unknownKey) {
+    throw new EditorProtocolError(`${label}.${unknownKey} is not supported`);
+  }
+  const parsed = keyPositionSchema.safeParse(value);
+  if (!parsed.success) return;
+  const assertRawKeysPreserved = (
+    raw: unknown,
+    canonical: unknown,
+    path: string,
+  ): void => {
+    if (Array.isArray(raw)) {
+      if (!Array.isArray(canonical)) return;
+      raw.forEach((item, index) =>
+        assertRawKeysPreserved(item, canonical[index], `${path}[${index}]`),
+      );
+      return;
+    }
+    if (!isRecord(raw)) return;
+    if (!isRecord(canonical)) {
+      throw new EditorProtocolError(`${path} has unsupported fields`);
+    }
+    for (const [key, child] of Object.entries(raw)) {
+      if (!(key in canonical)) {
+        throw new EditorProtocolError(`${path}.${key} is not supported`);
+      }
+      assertRawKeysPreserved(child, canonical[key], `${path}.${key}`);
+    }
+  };
+  for (const key of Object.keys(value)) {
+    if (!KEY_POSITION_KEYS.has(key)) continue;
+    assertRawKeysPreserved(value[key], parsed.data[key], `${label}.${key}`);
+  }
+};
+
+const assertFrozenPositionZIndex = (value: unknown, label: string): void => {
+  if (!isRecord(value)) return;
+  if (
+    value.zIndex !== undefined &&
+    (!Number.isSafeInteger(value.zIndex) ||
+      (value.zIndex as number) < -2_147_483_648 ||
+      (value.zIndex as number) > 2_147_483_647)
+  ) {
+    throw new EditorProtocolError(`${label}.zIndex is invalid`);
   }
 };
 
@@ -626,6 +723,184 @@ function assertEditorBounds(
   }
 }
 
+function assertEditorFrozenElement(
+  value: unknown,
+  label: string,
+): asserts value is EditorFrozenElementV1 {
+  if (!isRecord(value)) {
+    throw new EditorProtocolError(`${label} is invalid`);
+  }
+  if (value.elementType === 'key') {
+    assertExactKeys(value, ['elementType', 'slot', 'position'], label);
+    if (typeof value.slot !== 'string') {
+      if (!isRecord(value.slot)) {
+        throw new EditorProtocolError(`${label}.slot is invalid`);
+      }
+      assertExactKeys(value.slot, ['keys', 'match'], `${label}.slot`);
+    }
+    if (!keySlotSchema.safeParse(value.slot).success) {
+      throw new EditorProtocolError(`${label}.slot is invalid`);
+    }
+    if (typeof value.slot !== 'string') {
+      const members = value.slot.keys as string[];
+      if (
+        new Set(members).size !== members.length ||
+        members.some((member) => member.includes('+') || member.includes('|'))
+      ) {
+        throw new EditorProtocolError(`${label}.slot is invalid`);
+      }
+    }
+    assertExactPosition(value.position, [], `${label}.position`);
+    assertPosition(value.position, `${label}.position`);
+    assertFrozenPositionZIndex(value.position, `${label}.position`);
+    return;
+  }
+  assertExactKeys(value, ['elementType', 'position'], label);
+  if (value.elementType === 'stat') {
+    assertExactPosition(value.position, ['statType'], `${label}.position`);
+    assertStatPosition(value.position, `${label}.position`);
+    assertFrozenPositionZIndex(value.position, `${label}.position`);
+    return;
+  }
+  if (value.elementType === 'graph') {
+    assertExactPosition(
+      value.position,
+      ['statType', 'graphType', 'graphSpeed', 'graphColor', 'showAvgLine'],
+      `${label}.position`,
+    );
+    assertGraphPosition(value.position, `${label}.position`);
+    assertFrozenPositionZIndex(value.position, `${label}.position`);
+    return;
+  }
+  if (value.elementType === 'knob') {
+    assertExactPosition(
+      value.position,
+      ['axisId', 'sensitivity', 'reverse'],
+      `${label}.position`,
+    );
+    assertKnobPosition(value.position, `${label}.position`);
+    assertFrozenPositionZIndex(value.position, `${label}.position`);
+    return;
+  }
+  throw new EditorProtocolError(`${label}.elementType is invalid`);
+}
+
+export function assertEditorOpsV1(
+  value: unknown,
+  label = 'editor ops',
+): asserts value is EditorOpV1[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new EditorProtocolError(`${label} must be a non-empty array`);
+  }
+  const insertOps = value.filter(
+    (op) => isRecord(op) && op.kind === 'insertFrozenElements',
+  );
+  if (insertOps.length > 0 && value.length !== 1) {
+    throw new EditorProtocolError(
+      `${label} insertFrozenElements must be the sole operation`,
+    );
+  }
+  value.forEach((op, index) => {
+    const opLabel = `${label}[${index}]`;
+    if (!isRecord(op)) throw new EditorProtocolError(`${opLabel} is invalid`);
+    if (op.kind === 'setBounds') {
+      assertExactKeys(op, ['kind', 'elementType', 'id', 'bounds'], opLabel);
+      if (
+        !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
+        typeof op.id !== 'string' ||
+        op.id.length === 0
+      ) {
+        throw new EditorProtocolError(`${opLabel} target is invalid`);
+      }
+      assertEditorBounds(op.bounds, `${opLabel}.bounds`);
+      return;
+    }
+    if (op.kind === 'deleteElement') {
+      assertExactKeys(op, ['kind', 'elementType', 'id'], opLabel);
+      if (
+        !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
+        typeof op.id !== 'string' ||
+        op.id.length === 0
+      ) {
+        throw new EditorProtocolError(`${opLabel} target is invalid`);
+      }
+      return;
+    }
+    if (op.kind !== 'insertFrozenElements') {
+      throw new EditorProtocolError(`${opLabel}.kind is invalid`);
+    }
+    assertExactKeys(
+      op,
+      ['kind', 'mode', 'elements', 'groups', 'zUpdates'],
+      opLabel,
+    );
+    if (
+      typeof op.mode !== 'string' ||
+      op.mode.length === 0 ||
+      !Array.isArray(op.elements) ||
+      !Array.isArray(op.groups) ||
+      !Array.isArray(op.zUpdates) ||
+      (op.elements.length === 0 && op.zUpdates.length === 0)
+    ) {
+      throw new EditorProtocolError(`${opLabel} is invalid`);
+    }
+    const insertedIds = new Set<string>();
+    op.elements.forEach((element, elementIndex) => {
+      assertEditorFrozenElement(
+        element,
+        `${opLabel}.elements[${elementIndex}]`,
+      );
+      const id = element.position.id;
+      if (typeof id !== 'string' || id.length === 0 || insertedIds.has(id)) {
+        throw new EditorProtocolError(
+          `${opLabel}.elements contains an invalid or duplicate ID`,
+        );
+      }
+      insertedIds.add(id);
+    });
+    const groupIds = new Set<string>();
+    op.groups.forEach((group, groupIndex) => {
+      const groupLabel = `${opLabel}.groups[${groupIndex}]`;
+      if (!isRecord(group)) {
+        throw new EditorProtocolError(`${groupLabel} is invalid`);
+      }
+      assertExactKeys(group, ['id', 'name'], groupLabel);
+      if (
+        typeof group.id !== 'string' ||
+        group.id.length === 0 ||
+        typeof group.name !== 'string' ||
+        groupIds.has(group.id)
+      ) {
+        throw new EditorProtocolError(`${groupLabel} is invalid`);
+      }
+      groupIds.add(group.id);
+    });
+    const updateIds = new Set<string>();
+    op.zUpdates.forEach((update, updateIndex) => {
+      const updateLabel = `${opLabel}.zUpdates[${updateIndex}]`;
+      if (!isRecord(update)) {
+        throw new EditorProtocolError(`${updateLabel} is invalid`);
+      }
+      assertExactKeys(update, ['elementType', 'id', 'zIndex'], updateLabel);
+      if (
+        !['key', 'stat', 'graph', 'knob'].includes(
+          update.elementType as string,
+        ) ||
+        typeof update.id !== 'string' ||
+        update.id.length === 0 ||
+        !Number.isSafeInteger(update.zIndex) ||
+        (update.zIndex as number) < -2_147_483_648 ||
+        (update.zIndex as number) > 2_147_483_647 ||
+        updateIds.has(update.id) ||
+        insertedIds.has(update.id)
+      ) {
+        throw new EditorProtocolError(`${updateLabel} is invalid`);
+      }
+      updateIds.add(update.id);
+    });
+  });
+}
+
 export function assertEditorCommitResult(
   value: EditorCommitResult,
   expectedOpCount?: number,
@@ -692,7 +967,7 @@ export function assertEditorOpCommitResult(
     knob: 'knobPositions',
   };
   const requiredFields = new Set<EditorField>();
-  let allowsLayerGroups = false;
+  const allowedFields = new Set<EditorField>();
   ops.forEach((op, index) => {
     const result = opResults[index];
     if (op.kind === 'setBounds') {
@@ -705,23 +980,68 @@ export function assertEditorOpCommitResult(
           `editor_commit opResults[${index}] is invalid for setBounds`,
         );
       }
-    } else if (
-      result.status === 'noChange' ||
+      if (result.status === 'applied') {
+        requiredFields.add(positionFields[op.elementType]);
+        allowedFields.add(positionFields[op.elementType]);
+      }
+      return;
+    }
+    if (op.kind === 'deleteElement') {
+      if (
+        result.status === 'noChange' ||
+        ('bounds' in result && result.bounds !== undefined)
+      ) {
+        throw new EditorProtocolError(
+          `editor_commit opResults[${index}] is invalid for deleteElement`,
+        );
+      }
+      if (result.status !== 'applied') return;
+      requiredFields.add(positionFields[op.elementType]);
+      allowedFields.add(positionFields[op.elementType]);
+      allowedFields.add('layerGroups');
+      if (op.elementType === 'key') {
+        requiredFields.add('keys');
+        allowedFields.add('keys');
+      }
+      return;
+    }
+    if (
+      result.status === 'targetMissing' ||
       ('bounds' in result && result.bounds !== undefined)
     ) {
       throw new EditorProtocolError(
-        `editor_commit opResults[${index}] is invalid for deleteElement`,
+        `editor_commit opResults[${index}] is invalid for insertFrozenElements`,
       );
     }
-    if (result.status !== 'applied') return;
-    requiredFields.add(positionFields[op.elementType]);
-    if (op.kind === 'deleteElement') {
-      allowsLayerGroups = true;
-      if (op.elementType === 'key') requiredFields.add('keys');
+    const touched = new Set<EditorField>();
+    op.elements.forEach((element) => {
+      touched.add(positionFields[element.elementType]);
+      if (element.elementType === 'key') touched.add('keys');
+    });
+    op.zUpdates.forEach((update) =>
+      touched.add(positionFields[update.elementType]),
+    );
+    if (op.groups.length > 0) touched.add('layerGroups');
+    touched.forEach((field) => allowedFields.add(field));
+    if (result.status === 'noChange') {
+      if (value.changedFields.length !== 0) {
+        throw new EditorProtocolError(
+          'editor ops changedFields does not match opResults',
+        );
+      }
+      return;
+    }
+    op.elements.forEach((element) => {
+      requiredFields.add(positionFields[element.elementType]);
+      if (element.elementType === 'key') requiredFields.add('keys');
+    });
+    if (op.groups.length > 0) requiredFields.add('layerGroups');
+    if (value.changedFields.length === 0) {
+      throw new EditorProtocolError(
+        'editor ops changedFields does not match opResults',
+      );
     }
   });
-  const allowedFields = new Set(requiredFields);
-  if (allowsLayerGroups) allowedFields.add('layerGroups');
   if (
     [...requiredFields].some((field) => !value.changedFields.includes(field)) ||
     new Set(value.changedFields).size !== value.changedFields.length ||

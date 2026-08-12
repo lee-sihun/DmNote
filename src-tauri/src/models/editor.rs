@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AppStoreData, GraphPositions, KeyCounters, KeyMappings, KeyPositions, KnobPositions,
-    LayerGroups, StatPositions,
+    AppStoreData, GraphPosition, GraphPositions, KeyCounters, KeyMappings, KeyPosition,
+    KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroups, SlotMatch, StatPosition,
+    StatPositions,
 };
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
@@ -215,14 +216,93 @@ pub enum EditorOpV1 {
         element_type: EditorElementTypeV1,
         id: String,
     },
+    InsertFrozenElements {
+        mode: String,
+        elements: Vec<EditorFrozenElementV1>,
+        groups: Vec<EditorFrozenGroupV1>,
+        #[serde(rename = "zUpdates")]
+        z_updates: Vec<EditorZUpdateV1>,
+    },
 }
 
 impl EditorOpV1 {
-    pub fn id(&self) -> &str {
+    pub fn target_id(&self) -> Option<&str> {
         match self {
-            Self::SetBounds { id, .. } | Self::DeleteElement { id, .. } => id,
+            Self::SetBounds { id, .. } | Self::DeleteElement { id, .. } => Some(id),
+            Self::InsertFrozenElements { .. } => None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "elementType", rename_all = "camelCase", deny_unknown_fields)]
+pub enum EditorFrozenElementV1 {
+    Key {
+        slot: EditorFrozenKeySlotV1,
+        position: KeyPosition,
+    },
+    Stat {
+        position: StatPosition,
+    },
+    Graph {
+        position: GraphPosition,
+    },
+    Knob {
+        position: KnobPosition,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EditorFrozenKeySlotV1 {
+    Single(String),
+    Multi(EditorFrozenMultiKeySlotV1),
+}
+
+impl EditorFrozenKeySlotV1 {
+    pub fn to_key_slot(&self) -> KeySlot {
+        match self {
+            Self::Single(key) => KeySlot::Single(key.clone()),
+            Self::Multi(slot) => KeySlot::Multi {
+                keys: slot.keys.clone(),
+                match_mode: slot.match_mode,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorFrozenMultiKeySlotV1 {
+    pub keys: Vec<String>,
+    #[serde(rename = "match")]
+    pub match_mode: SlotMatch,
+}
+
+impl EditorFrozenElementV1 {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Key { position, .. } => &position.id,
+            Self::Stat { position } => &position.position.id,
+            Self::Graph { position } => &position.position.id,
+            Self::Knob { position } => &position.position.id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorFrozenGroupV1 {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorZUpdateV1 {
+    pub element_type: EditorElementTypeV1,
+    pub id: String,
+    pub z_index: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

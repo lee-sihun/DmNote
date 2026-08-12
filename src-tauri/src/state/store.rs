@@ -4118,14 +4118,15 @@ mod tests {
         models::{
             AppStoreData, CommittedEditorChange, CustomCss, CustomFont, CustomTab, EditorBoundsV1,
             EditorCommitOrigin, EditorCommitRequest, EditorDocumentV1, EditorElementTypeV1,
-            EditorField, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1,
-            FontSettings, FontType, GestureCommitRequest, GesturePluginInstancesChange,
-            GraphPosition, GraphStatType, GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot,
-            KnobPosition, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
-            PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
-            SavedPluginInstance, SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource,
-            StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
-            EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
+            EditorField, EditorFrozenElementV1, EditorFrozenKeySlotV1, EditorOpResultStatusV1,
+            EditorOpResultV1, EditorOpV1, EditorPatchV1, FontSettings, FontType,
+            GestureCommitRequest, GesturePluginInstancesChange, GraphPosition, GraphStatType,
+            GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot, KnobPosition, OverlayBounds,
+            PanelBounds, PendingProcessedWavReplacement, PluginInstancesCommitRequest,
+            PluginInstancesReconcileRequest, PluginPoint, SavedPluginInstance, SettingsPatchInput,
+            SlotMatch, SoundLibraryEntry, SoundSource, StatPosition, StatType, TabCss,
+            TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION,
+            EDITOR_SCHEMA_VERSION,
         },
         services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
         state::{
@@ -4283,6 +4284,24 @@ mod tests {
         EditorOpV1::DeleteElement {
             element_type,
             id: id.into(),
+        }
+    }
+
+    fn frozen_key_insert_op(id: impl Into<String>) -> EditorOpV1 {
+        EditorOpV1::InsertFrozenElements {
+            mode: "4key".to_string(),
+            elements: vec![EditorFrozenElementV1::Key {
+                slot: EditorFrozenKeySlotV1::Single("FROZEN".to_string()),
+                position: KeyPosition {
+                    id: id.into(),
+                    dx: 111.0,
+                    dy: 222.0,
+                    z_index: Some(100),
+                    ..KeyPosition::default()
+                },
+            }],
+            groups: Vec::new(),
+            z_updates: Vec::new(),
         }
     }
 
@@ -5079,6 +5098,153 @@ mod tests {
             store.history_status().history_revision,
             before_history_revision
         );
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn frozen_insert_commits_replays_and_round_trips_with_snapshot_history() {
+        let dir = test_directory("frozen-insert-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.editor_get().document;
+        let inserted_id = uuid::Uuid::new_v4().to_string();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(
+            0,
+            mutation_id.clone(),
+            vec![frozen_key_insert_op(&inserted_id)],
+        );
+        let persist_count = store.writer.persist_count();
+
+        let committed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            committed.result.op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: None,
+            }])
+        );
+        assert_eq!(
+            committed.result.changed_fields,
+            [EditorField::Keys, EditorField::KeyPositions]
+        );
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        assert_eq!(store.history_status().history_revision, 1);
+        drop(committed);
+
+        let replay = store.commit_editor_document(request).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        assert_eq!(
+            replay.result.op_results.unwrap()[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+
+        let counters = store.snapshot().key_counters;
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, before);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert!(store.editor_get().document.key_positions["4key"]
+            .iter()
+            .any(|position| position.id == inserted_id));
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mixed_frozen_insert_and_plugin_change_are_atomic_on_persist_failure() {
+        let dir = test_directory("mixed-frozen-insert-plugin-atomic-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.snapshot();
+        let plugin_revision = store.plugin_model_revision();
+        let history_revision = store.history_status().history_revision;
+        let inserted_id = uuid::Uuid::new_v4().to_string();
+        let request = gesture_ops_request(
+            &store,
+            uuid::Uuid::new_v4().to_string(),
+            uuid::Uuid::new_v4().to_string(),
+            vec![frozen_key_insert_op(&inserted_id)],
+            "demo-plugin",
+            vec![saved_plugin_instance(55.0)],
+        );
+
+        store.writer.fail_next_persist();
+        assert_eq!(
+            store
+                .commit_gesture(request.clone())
+                .unwrap_err()
+                .error_code,
+            EditorCommitErrorCode::IoError
+        );
+        assert_eq!(store.snapshot(), before);
+        assert_eq!(store.plugin_model_revision(), plugin_revision);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let committed = store.commit_gesture(request).unwrap();
+        assert_eq!(committed.outcome.result.editor_revision, 1);
+        assert_eq!(committed.outcome.result.plugin_model_revision, 1);
+        assert_eq!(committed.outcome.result.changed_plugin_ids, ["demo-plugin"]);
+        assert_eq!(store.history_status().history_revision, 1);
+        drop(committed);
+        assert!(store.editor_get().document.key_positions["4key"]
+            .iter()
+            .any(|position| position.id == inserted_id));
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(55.0)]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn frozen_insert_z_only_no_change_keeps_revision_history_and_persist_count() {
+        let dir = test_directory("frozen-insert-z-no-change-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let target = store.editor_get().document.key_positions["4key"][0].clone();
+        let request = editor_ops_request(
+            0,
+            uuid::Uuid::new_v4().to_string(),
+            vec![EditorOpV1::InsertFrozenElements {
+                mode: "4key".to_string(),
+                elements: Vec::new(),
+                groups: Vec::new(),
+                z_updates: vec![crate::models::EditorZUpdateV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: target.id,
+                    z_index: target.z_index.unwrap_or_default(),
+                }],
+            }],
+        );
+        let persist_count = store.writer.persist_count();
+
+        let result = store.commit_editor_document(request).unwrap();
+        assert_eq!(result.result.revision, 0);
+        assert!(result.result.changed_fields.is_empty());
+        assert_eq!(
+            result.result.op_results.unwrap()[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert_eq!(store.writer.persist_count(), persist_count);
+        assert_eq!(store.history_status().history_revision, 0);
+
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -61,6 +61,7 @@ import {
 import { stableStringify } from '@utils/core/stableStringify';
 import type {
   EditorDocumentV1,
+  EditorInsertFrozenElementsOpV1,
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
@@ -1166,6 +1167,8 @@ export function useGridSelection({
       layerGroups: Record<string, Array<{ id: string; name: string }>>;
       groupsChanged: boolean;
       desiredProjection: PluginDisplayElementInternal[];
+      nativeBatchState: 'fresh' | 'realized' | 'partial';
+      frozenGroupConflict: boolean;
     } => {
       const mode = selectedKeyType;
       let appended = false;
@@ -1197,6 +1200,9 @@ export function useGridSelection({
       const nextKnobPositions = { ...view.knobPositions };
 
       const appendedNativeIds = new Set<string>();
+      let realizedFrozenNativeParts = 0;
+      let missingFrozenNativeParts = 0;
+      let frozenGroupConflict = false;
       for (const entry of keysToAdd) {
         const existing = findNativeById(entry.position.id!);
         if (existing) {
@@ -1214,6 +1220,7 @@ export function useGridSelection({
           ) {
             throw new ElementIntentAbort('paste id collision');
           }
+          realizedFrozenNativeParts += 1;
           continue;
         }
         nextKeys[mode] = [...(nextKeys[mode] ?? []), entry.keyCode];
@@ -1222,6 +1229,7 @@ export function useGridSelection({
           entry.position,
         ];
         appendedNativeIds.add(entry.position.id!);
+        missingFrozenNativeParts += 1;
         appended = true;
       }
       const appendSimple = <T extends { id?: string }>(
@@ -1245,10 +1253,12 @@ export function useGridSelection({
             ) {
               throw new ElementIntentAbort('paste id collision');
             }
+            realizedFrozenNativeParts += 1;
             continue;
           }
           next = { ...next, [mode]: [...(next[mode] ?? []), entry.position] };
           appendedNativeIds.add(entry.position.id!);
+          missingFrozenNativeParts += 1;
           appended = true;
         }
         return next;
@@ -1275,8 +1285,18 @@ export function useGridSelection({
       if (frozenNewGroups.length > 0) {
         const modeGroups = [...(layerGroups[mode] ?? [])];
         for (const group of frozenNewGroups) {
-          if (modeGroups.some((existing) => existing.id === group.id)) continue;
+          const existing = modeGroups.find(
+            (candidate) => candidate.id === group.id,
+          );
+          if (existing) {
+            if (existing.name !== group.name) {
+              frozenGroupConflict = true;
+            }
+            realizedFrozenNativeParts += 1;
+            continue;
+          }
           modeGroups.push({ id: group.id, name: group.name });
+          missingFrozenNativeParts += 1;
           groupsChanged = true;
         }
         if (groupsChanged) {
@@ -1370,6 +1390,102 @@ export function useGridSelection({
         layerGroups,
         groupsChanged,
         desiredProjection,
+        nativeBatchState:
+          realizedFrozenNativeParts > 0 && missingFrozenNativeParts > 0
+            ? 'partial'
+            : realizedFrozenNativeParts > 0
+            ? 'realized'
+            : 'fresh',
+        frozenGroupConflict,
+      };
+    };
+
+    const buildFrozenInsertOp = (
+      view: PasteDocView,
+      plan: ReturnType<typeof computePaste>,
+    ):
+      | { kind: 'ops'; op: EditorInsertFrozenElementsOpV1 | null }
+      | { kind: 'legacy' } => {
+      const mode = selectedKeyType;
+      const frozenNativeIds = new Set([
+        ...keysToAdd.map((entry) => entry.position.id!),
+        ...statsToAdd.map((entry) => entry.position.id!),
+        ...graphsToAdd.map((entry) => entry.position.id!),
+        ...knobsToAdd.map((entry) => entry.position.id!),
+      ]);
+      const finalById = <T extends { id?: string }>(
+        record: Record<string, T[]>,
+      ) =>
+        new Map(
+          (record[mode] ?? []).map((position) => [position.id, position]),
+        );
+      const finalKeys = finalById(plan.zPatch.keyPositions);
+      const finalStats = finalById(plan.zPatch.statPositions);
+      const finalGraphs = finalById(plan.zPatch.graphPositions);
+      const finalKnobs = finalById(plan.zPatch.knobPositions);
+      const elements: EditorInsertFrozenElementsOpV1['elements'] = [
+        ...keysToAdd.map((entry) => ({
+          elementType: 'key' as const,
+          slot: entry.keyCode,
+          position: finalKeys.get(entry.position.id!) ?? entry.position,
+        })),
+        ...statsToAdd.map((entry) => ({
+          elementType: 'stat' as const,
+          position: finalStats.get(entry.position.id!) ?? entry.position,
+        })),
+        ...graphsToAdd.map((entry) => ({
+          elementType: 'graph' as const,
+          position: finalGraphs.get(entry.position.id!) ?? entry.position,
+        })),
+        ...knobsToAdd.map((entry) => ({
+          elementType: 'knob' as const,
+          position: finalKnobs.get(entry.position.id!) ?? entry.position,
+        })),
+      ];
+      const zUpdates: EditorInsertFrozenElementsOpV1['zUpdates'] = [];
+      const collectZUpdates = (
+        elementType: 'key' | 'stat' | 'graph' | 'knob',
+        current: Array<{ id?: string }>,
+        final: Map<string | undefined, { id?: string; zIndex?: number }>,
+      ) => {
+        for (const position of current) {
+          const id = position.id;
+          if (!id || isSyntheticElementId(id)) return false;
+          if (frozenNativeIds.has(id)) continue;
+          const zIndex = final.get(id)?.zIndex;
+          if (!Number.isSafeInteger(zIndex)) return false;
+          zUpdates.push({ elementType, id, zIndex: zIndex! });
+        }
+        return true;
+      };
+      const stable =
+        collectZUpdates('key', view.keyPositions[mode] ?? [], finalKeys) &&
+        collectZUpdates('stat', view.statPositions[mode] ?? [], finalStats) &&
+        collectZUpdates(
+          'graph',
+          view.graphPositions[mode] ?? [],
+          finalGraphs,
+        ) &&
+        collectZUpdates('knob', view.knobPositions[mode] ?? [], finalKnobs);
+      if (!stable) return { kind: 'legacy' };
+      if (plan.frozenGroupConflict) {
+        throw new ElementIntentAbort('paste group id collision');
+      }
+      if (plan.nativeBatchState === 'partial') {
+        throw new ElementIntentAbort('paste partial state collision');
+      }
+      if (elements.length === 0 && zUpdates.length === 0) {
+        return { kind: 'ops', op: null };
+      }
+      return {
+        kind: 'ops',
+        op: {
+          kind: 'insertFrozenElements',
+          mode,
+          elements,
+          groups: frozenNewGroups.map(({ id, name }) => ({ id, name })),
+          zUpdates,
+        },
       };
     };
 
@@ -1512,10 +1628,33 @@ export function useGridSelection({
               },
               pluginProjection,
             );
-            if (!plan.appended) {
-              // 전부 이미 반영됨(재시도 멱등) - z 재부여도 이전 성공분
-              return { kind: 'satisfied' };
+            const insert = buildFrozenInsertOp(
+              {
+                keys: base.keys as never,
+                keyPositions: base.keyPositions as never,
+                statPositions: base.statPositions as never,
+                graphPositions: base.graphPositions as never,
+                knobPositions: base.knobPositions as never,
+                layerGroups: base.layerGroups as never,
+              },
+              plan,
+            );
+            if (insert.kind === 'ops') {
+              if (insert.op) {
+                return {
+                  kind: 'ops',
+                  ops: [insert.op],
+                  desiredPluginProjection: plan.desiredProjection,
+                };
+              }
+              if (!plan.appended) return { kind: 'satisfied' };
+              return {
+                kind: 'patch',
+                patch: null,
+                desiredPluginProjection: plan.desiredProjection,
+              };
             }
+            if (!plan.appended) return { kind: 'satisfied' };
             return {
               kind: 'patch',
               patch: {

@@ -234,6 +234,39 @@ const applyOpsForTest = (
     knob: 'knobPositions',
   } as const;
   ops.forEach((op) => {
+    if (op.kind === 'insertFrozenElements') {
+      next.layerGroups[op.mode] = [
+        ...(next.layerGroups[op.mode] ?? []),
+        ...op.groups,
+      ];
+      op.elements.forEach((element) => {
+        if (element.elementType === 'key') {
+          next.keys[op.mode] = [...(next.keys[op.mode] ?? []), element.slot];
+          next.keyPositions[op.mode] = [
+            ...(next.keyPositions[op.mode] ?? []),
+            element.position,
+          ];
+        } else {
+          const field = fields[element.elementType];
+          (next[field] as Record<string, unknown[]>)[op.mode] = [
+            ...((next[field] as Record<string, unknown[]>)[op.mode] ?? []),
+            element.position,
+          ];
+        }
+      });
+      op.zUpdates.forEach((update) => {
+        const record = next[fields[update.elementType]] as Record<
+          string,
+          Array<Record<string, unknown>>
+        >;
+        record[op.mode] = (record[op.mode] ?? []).map((position) =>
+          position.id === update.id
+            ? { ...position, zIndex: update.zIndex }
+            : position,
+        );
+      });
+      return;
+    }
     const record = next[fields[op.elementType]] as Record<
       string,
       Array<Record<string, unknown>>
@@ -2742,6 +2775,100 @@ describe('commitSemanticOpsInternal', () => {
     kind: 'deleteElement',
     elementType: 'key',
     id,
+  });
+
+  const insertFrozenKeyOp = (id: string, zIndex: number): EditorOpV1 => ({
+    kind: 'insertFrozenElements',
+    mode: '4key',
+    elements: [
+      {
+        elementType: 'key',
+        slot: 'B',
+        position: {
+          ...createDefaultKeyPosition(),
+          id,
+          zIndex,
+          groupId: 'shared-group',
+        },
+      },
+    ],
+    groups: [{ id: 'shared-group', name: 'Shared' }],
+    zUpdates: [],
+  });
+
+  it('insert 슬롯 적용은 기존 eager record와 key slot을 final payload로 교체한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000093';
+    const base = makeDocument();
+    const eager = structuredClone(base);
+    eager.keys['4key'].push('OLD');
+    eager.keyPositions['4key'].push({
+      ...createDefaultKeyPosition(),
+      id,
+      zIndex: 1,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.setLocal(eager);
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      insertFrozenKeyOp(id, 9),
+    ]);
+
+    expect(harness.getLocal().keys['4key']).toEqual(['A', 'B']);
+    expect(harness.getLocal().keyPositions['4key'][1]).toMatchObject({
+      id,
+      zIndex: 9,
+      groupId: 'shared-group',
+    });
+    expect(outcome.document).toEqual(harness.getLocal());
+    harness.coordinator.stop();
+  });
+
+  it('다른 모드의 같은 group ID는 target mode 신규 그룹 삽입을 막지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000092';
+    const base = makeDocument();
+    base.keys['5key'] = [];
+    base.keyPositions['5key'] = [];
+    base.layerGroups['5key'] = [{ id: 'shared-group', name: 'Other' }];
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      insertFrozenKeyOp(id, 9),
+    ]);
+
+    expect(outcome.document.layerGroups).toEqual({
+      '4key': [{ id: 'shared-group', name: 'Shared' }],
+      '5key': [{ id: 'shared-group', name: 'Other' }],
+    });
+    harness.coordinator.stop();
+  });
+
+  it('zIndex 부재와 0의 canonical 동등성은 noChange에서 local을 갈라놓지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-000000000091';
+    const base = withStableId(id);
+    delete base.keyPositions['4key'][0].zIndex;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 0,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'insertFrozenElements',
+        mode: '4key',
+        elements: [],
+        groups: [],
+        zUpdates: [{ elementType: 'key', id, zIndex: 0 }],
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0].zIndex).toBeUndefined();
+    expect(harness.getLocal().keyPositions['4key'][0].zIndex).toBeUndefined();
+    harness.coordinator.stop();
   });
 
   it('delete op는 key pair와 마지막 빈 그룹을 lastAck에서 함께 정리한다', async () => {

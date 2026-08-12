@@ -11,6 +11,7 @@ import {
   assertEditorDocument,
   assertEditorGetResult,
   assertEditorOpCommitResult,
+  assertEditorOpsV1,
   assertEditorPatch,
   canonicalizeEditorGradients,
   isEditorCommitError,
@@ -216,6 +217,18 @@ const SEMANTIC_POSITION_FIELDS: Record<EditorElementTypeV1, EditorField> = {
 };
 
 const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
+  if (op.kind === 'insertFrozenElements') {
+    const fields = new Set<EditorField>();
+    op.elements.forEach((element) => {
+      fields.add(SEMANTIC_POSITION_FIELDS[element.elementType]);
+      if (element.elementType === 'key') fields.add('keys');
+    });
+    op.zUpdates.forEach((update) =>
+      fields.add(SEMANTIC_POSITION_FIELDS[update.elementType]),
+    );
+    if (op.groups.length > 0) fields.add('layerGroups');
+    return [...fields];
+  }
   const positionField = SEMANTIC_POSITION_FIELDS[op.elementType];
   if (op.kind === 'setBounds') return [positionField];
   return op.elementType === 'key' ? ['keys', 'keyPositions'] : [positionField];
@@ -230,6 +243,121 @@ const applySemanticOps = (
   ops.forEach((op, opIndex) => {
     const result = results?.[opIndex];
     if (result?.status === 'targetMissing') return;
+    if (op.kind === 'insertFrozenElements') {
+      if (result?.status === 'noChange') return;
+      if (op.groups.length > 0) {
+        const existingGroupIds = new Set(
+          (next.layerGroups[op.mode] ?? []).map((group) => group.id),
+        );
+        next.layerGroups = {
+          ...next.layerGroups,
+          [op.mode]: [
+            ...(next.layerGroups[op.mode] ?? []),
+            ...op.groups
+              .filter((group) => !existingGroupIds.has(group.id))
+              .map((group) => ({ ...group })),
+          ],
+        };
+      }
+      for (const element of op.elements) {
+        let existing:
+          | { elementType: EditorElementTypeV1; mode: string; index: number }
+          | undefined;
+        for (const [elementType, field] of Object.entries(
+          SEMANTIC_POSITION_FIELDS,
+        ) as Array<[EditorElementTypeV1, EditorField]>) {
+          for (const [mode, positions] of Object.entries(next[field])) {
+            const index = positions.findIndex(
+              (position) => position.id === element.position.id,
+            );
+            if (index >= 0) {
+              existing = { elementType, mode, index };
+              break;
+            }
+          }
+          if (existing) break;
+        }
+        if (existing) {
+          if (
+            existing.elementType !== element.elementType ||
+            existing.mode !== op.mode
+          ) {
+            continue;
+          }
+          const field = SEMANTIC_POSITION_FIELDS[element.elementType];
+          const record = next[field] as Record<
+            string,
+            Array<Record<string, unknown>>
+          >;
+          next[field] = {
+            ...record,
+            [op.mode]: (record[op.mode] ?? []).map((position, index) =>
+              index === existing!.index
+                ? (clone(element.position) as Record<string, unknown>)
+                : position,
+            ),
+          } as never;
+          if (element.elementType === 'key') {
+            next.keys = {
+              ...next.keys,
+              [op.mode]: (next.keys[op.mode] ?? []).map((slot, index) =>
+                index === existing!.index ? clone(element.slot) : slot,
+              ),
+            };
+          }
+          continue;
+        }
+        if (element.elementType === 'key') {
+          next.keys = {
+            ...next.keys,
+            [op.mode]: [...(next.keys[op.mode] ?? []), clone(element.slot)],
+          };
+          next.keyPositions = {
+            ...next.keyPositions,
+            [op.mode]: [
+              ...(next.keyPositions[op.mode] ?? []),
+              clone(element.position),
+            ],
+          };
+        } else {
+          const field = SEMANTIC_POSITION_FIELDS[element.elementType];
+          const record = next[field] as Record<
+            string,
+            Array<Record<string, unknown>>
+          >;
+          next[field] = {
+            ...record,
+            [op.mode]: [
+              ...(record[op.mode] ?? []),
+              clone(element.position) as Record<string, unknown>,
+            ],
+          } as never;
+        }
+      }
+      for (const update of op.zUpdates) {
+        const field = SEMANTIC_POSITION_FIELDS[update.elementType];
+        const record = next[field] as Record<
+          string,
+          Array<Record<string, unknown> & { id?: string }>
+        >;
+        const positions = record[op.mode] ?? [];
+        const index = positions.findIndex(
+          (position) => position.id === update.id,
+        );
+        if (index < 0) continue;
+        next[field] = {
+          ...record,
+          [op.mode]: positions.map((position, positionIndex) =>
+            positionIndex === index
+              ? (position.zIndex ?? 0) === update.zIndex
+                ? position
+                : { ...position, zIndex: update.zIndex }
+              : position,
+          ),
+        } as never;
+      }
+      return;
+    }
     const field = SEMANTIC_POSITION_FIELDS[op.elementType];
     const positionsByMode = next[field] as Record<
       string,
@@ -604,6 +732,7 @@ export class EditorSaveCoordinator {
     inputOps: readonly EditorOpV1[],
     meta: EditorSemanticCommitMeta,
   ): Promise<EditorSemanticCommitOutcome> {
+    assertEditorOpsV1(inputOps);
     await this.start();
     await this.drainUntilSettled();
     await this.eventQueue;
@@ -1313,6 +1442,7 @@ export class EditorSaveCoordinator {
     let resolvedChanges: EditorPatchV1 | null | undefined;
     if (isGestureOpsMutation(resolvedMutation)) {
       ops = clone([...resolvedMutation.ops]);
+      assertEditorOpsV1(ops);
     } else {
       resolvedChanges = resolvedMutation;
     }

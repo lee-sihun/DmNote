@@ -6,6 +6,7 @@ import {
   assertEditorOpCommitResult,
   assertEditorCommittedEvent,
   assertEditorGetResult,
+  assertEditorOpsV1,
   assertSafeEditorRevision,
 } from '@src/types/editor';
 import { EditorReadOnlyError } from '@src/renderer/editor/runtime/editorCoordinator';
@@ -24,6 +25,7 @@ export const editorCommitRaw = async (
 ): Promise<EditorCommitResult> => {
   if (window.__dmn_runtime === 'obs') throw new EditorReadOnlyError();
   assertSafeEditorRevision(request.baseRevision, 'baseRevision');
+  if (request.ops) assertEditorOpsV1(request.ops);
   const result = await invoke<EditorCommitResult>('editor_commit', {
     request,
   });

@@ -207,12 +207,77 @@ pub(crate) fn decode_editor_commit_request(
         ));
     }
 
-    serde_json::from_value(value).map_err(|error| {
+    let has_frozen_insert = value
+        .get("ops")
+        .and_then(Value::as_array)
+        .is_some_and(|ops| {
+            ops.iter()
+                .any(|op| op.get("kind").and_then(Value::as_str) == Some("insertFrozenElements"))
+        });
+    if !has_frozen_insert {
+        return serde_json::from_value(value).map_err(|error| {
+            EditorCommitError::validation(
+                "INVALID_REQUEST_PAYLOAD",
+                format!("invalid editor request: {error}"),
+            )
+        });
+    }
+
+    decode_exact_frozen_insert(value, "editor")
+}
+
+pub(crate) fn decode_exact_frozen_insert<T>(
+    value: Value,
+    label: &str,
+) -> Result<T, EditorCommitError>
+where
+    T: serde::de::DeserializeOwned + Serialize,
+{
+    let raw_value = value.clone();
+    let request: T = serde_json::from_value(value).map_err(|error| {
         EditorCommitError::validation(
             "INVALID_REQUEST_PAYLOAD",
-            format!("invalid editor request: {error}"),
+            format!("invalid {label} request: {error}"),
         )
-    })
+    })?;
+    let canonical = serde_json::to_value(&request).map_err(|error| {
+        EditorCommitError::validation(
+            "INVALID_REQUEST_PAYLOAD",
+            format!("could not inspect decoded {label} request: {error}"),
+        )
+    })?;
+    if let Some(path) = first_unknown_json_key(&raw_value, &canonical, label) {
+        return Err(EditorCommitError::validation(
+            "INVALID_REQUEST_PAYLOAD",
+            format!("{label} request contains unknown key '{path}'"),
+        ));
+    }
+    Ok(request)
+}
+
+fn first_unknown_json_key(raw: &Value, canonical: &Value, path: &str) -> Option<String> {
+    match (raw, canonical) {
+        (Value::Object(raw), Value::Object(canonical)) => raw.iter().find_map(|(key, value)| {
+            let child_path = format!("{path}.{key}");
+            canonical.get(key).map_or_else(
+                || Some(child_path.clone()),
+                |canonical| first_unknown_json_key(value, canonical, &child_path),
+            )
+        }),
+        (Value::Array(raw), Value::Array(canonical)) => {
+            if raw.len() != canonical.len() {
+                return Some(path.to_string());
+            }
+            raw.iter()
+                .zip(canonical)
+                .enumerate()
+                .find_map(|(index, (value, canonical))| {
+                    first_unknown_json_key(value, canonical, &format!("{path}[{index}]"))
+                })
+        }
+        (Value::Object(_) | Value::Array(_), _) => Some(path.to_string()),
+        _ => None,
+    }
 }
 
 pub(crate) fn validate_request_envelope(
@@ -255,18 +320,33 @@ pub(crate) fn validate_request_envelope(
                 ));
             }
 
+            let frozen_insert_count = ops
+                .iter()
+                .filter(|op| matches!(op, crate::models::EditorOpV1::InsertFrozenElements { .. }))
+                .count();
+            if frozen_insert_count > 0 && (ops.len() != 1 || frozen_insert_count != 1) {
+                return Err(EditorCommitError::validation(
+                    "INVALID_FROZEN_INSERT_BATCH",
+                    "insertFrozenElements must be the only editor op",
+                ));
+            }
+
             let mut ids = HashSet::with_capacity(ops.len());
             for op in ops {
-                if !crate::state::native_element_id::is_valid_element_id(op.id()) {
+                let Some(id) = op.target_id() else {
+                    validate_frozen_insert_envelope(op)?;
+                    continue;
+                };
+                if !crate::state::native_element_id::is_valid_element_id(id) {
                     return Err(EditorCommitError::validation(
                         crate::state::native_element_id::INVALID_ELEMENT_ID,
-                        format!("editor op target '{}' has an invalid ID", op.id()),
+                        format!("editor op target '{id}' has an invalid ID"),
                     ));
                 }
-                if !ids.insert(op.id()) {
+                if !ids.insert(id) {
                     return Err(EditorCommitError::validation(
                         "DUPLICATE_EDITOR_OP_TARGET",
-                        format!("editor op target '{}' appears more than once", op.id()),
+                        format!("editor op target '{id}' appears more than once"),
                     ));
                 }
             }
@@ -311,6 +391,140 @@ pub(crate) fn validate_request_envelope(
         return Err(EditorCommitError::invalid_gesture_id());
     }
 
+    Ok(())
+}
+
+fn validate_frozen_insert_envelope(
+    op: &crate::models::EditorOpV1,
+) -> Result<(), EditorCommitError> {
+    use crate::models::EditorOpV1;
+
+    let EditorOpV1::InsertFrozenElements {
+        mode,
+        elements,
+        groups,
+        z_updates,
+    } = op
+    else {
+        return Ok(());
+    };
+
+    if mode.is_empty() || mode.len() > MAX_MODE_ID_BYTES {
+        return Err(EditorCommitError::validation(
+            "INVALID_MODE_ID",
+            "insertFrozenElements mode must be non-empty and within the mode ID limit",
+        ));
+    }
+    if elements.is_empty() && z_updates.is_empty() {
+        return Err(EditorCommitError::validation(
+            "EMPTY_FROZEN_INSERT_BATCH",
+            "insertFrozenElements must contain elements or zUpdates",
+        ));
+    }
+    for (label, count) in [
+        ("elements", elements.len()),
+        ("groups", groups.len()),
+        ("zUpdates", z_updates.len()),
+    ] {
+        if count > MAX_RENDER_ITEMS {
+            return Err(EditorCommitError::validation(
+                "FROZEN_INSERT_BATCH_TOO_LARGE",
+                format!("insertFrozenElements {label} count exceeds {MAX_RENDER_ITEMS}"),
+            ));
+        }
+    }
+    let mut inserted_ids = HashSet::with_capacity(elements.len());
+    for element in elements {
+        if let crate::models::EditorFrozenElementV1::Key { slot, .. } = element {
+            validate_frozen_key_slot(slot)?;
+        }
+        let id = element.id();
+        if !crate::state::native_element_id::is_valid_element_id(id) {
+            return Err(EditorCommitError::validation(
+                crate::state::native_element_id::INVALID_ELEMENT_ID,
+                format!("insertFrozenElements element '{id}' has an invalid ID"),
+            ));
+        }
+        if !inserted_ids.insert(id) {
+            return Err(EditorCommitError::validation(
+                "DUPLICATE_FROZEN_INSERT_ID",
+                format!("insertFrozenElements element '{id}' appears more than once"),
+            ));
+        }
+    }
+
+    let mut group_ids = HashSet::with_capacity(groups.len());
+    for group in groups {
+        if group.id.is_empty() || group.id.len() > MAX_GROUP_ID_BYTES {
+            return Err(EditorCommitError::validation(
+                "INVALID_GROUP_ID",
+                "insertFrozenElements group ID is empty or exceeds its limit",
+            ));
+        }
+        if !group_ids.insert(group.id.as_str()) {
+            return Err(EditorCommitError::validation(
+                "DUPLICATE_GROUP_ID",
+                format!(
+                    "insertFrozenElements group '{}' appears more than once",
+                    group.id
+                ),
+            ));
+        }
+    }
+
+    let mut z_ids = HashSet::with_capacity(z_updates.len());
+    for update in z_updates {
+        if !crate::state::native_element_id::is_valid_element_id(&update.id) {
+            return Err(EditorCommitError::validation(
+                crate::state::native_element_id::INVALID_ELEMENT_ID,
+                format!(
+                    "insertFrozenElements z target '{}' has an invalid ID",
+                    update.id
+                ),
+            ));
+        }
+        if inserted_ids.contains(update.id.as_str()) {
+            return Err(EditorCommitError::validation(
+                "FROZEN_INSERT_Z_TARGET_OVERLAP",
+                format!(
+                    "insertFrozenElements z target '{}' is also inserted",
+                    update.id
+                ),
+            ));
+        }
+        if !z_ids.insert(update.id.as_str()) {
+            return Err(EditorCommitError::validation(
+                "DUPLICATE_FROZEN_Z_TARGET",
+                format!(
+                    "insertFrozenElements z target '{}' appears more than once",
+                    update.id
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_frozen_key_slot(
+    slot: &crate::models::EditorFrozenKeySlotV1,
+) -> Result<(), EditorCommitError> {
+    let crate::models::EditorFrozenKeySlotV1::Multi(slot) = slot else {
+        return Ok(());
+    };
+    let mut members = HashSet::with_capacity(slot.keys.len());
+    if !(2..=crate::models::MAX_SLOT_KEYS).contains(&slot.keys.len())
+        || slot.keys.iter().any(|member| {
+            member.is_empty()
+                || member.contains('+')
+                || member.contains('|')
+                || !members.insert(member.as_str())
+        })
+    {
+        return Err(EditorCommitError::validation(
+            "INVALID_FROZEN_KEY_SLOT",
+            "insertFrozenElements key slot is not canonical",
+        ));
+    }
     Ok(())
 }
 
@@ -1641,6 +1855,21 @@ mod tests {
         }
     }
 
+    fn frozen_insert_op(id: impl Into<String>) -> EditorOpV1 {
+        EditorOpV1::InsertFrozenElements {
+            mode: "4key".to_string(),
+            elements: vec![crate::models::EditorFrozenElementV1::Key {
+                slot: crate::models::EditorFrozenKeySlotV1::Single("FROZEN".to_string()),
+                position: KeyPosition {
+                    id: id.into(),
+                    ..KeyPosition::default()
+                },
+            }],
+            groups: Vec::new(),
+            z_updates: Vec::new(),
+        }
+    }
+
     fn validation_code(error: &EditorCommitError) -> Option<&str> {
         error
             .details
@@ -1919,6 +2148,199 @@ mod tests {
         });
         let error = decode_editor_commit_request(delete_with_bounds).unwrap_err();
         assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+    }
+
+    #[test]
+    fn frozen_insert_wire_is_exact_through_nested_full_records() {
+        let request = ops_request(vec![frozen_insert_op(Uuid::new_v4().to_string())]);
+        let mut valid = serde_json::to_value(request).unwrap();
+        valid["ops"][0]["elements"][0]["position"]["unexpected"] = serde_json::json!(1);
+
+        let error = decode_editor_commit_request(valid).unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+
+        let mut invalid_slot = serde_json::to_value(ops_request(vec![frozen_insert_op(
+            Uuid::new_v4().to_string(),
+        )]))
+        .unwrap();
+        invalid_slot["ops"][0]["elements"][0]["slot"] = serde_json::json!({
+            "keys": ["A", "B"],
+            "match": "all",
+            "unexpected": true,
+        });
+        let error = decode_editor_commit_request(invalid_slot).unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+    }
+
+    #[test]
+    fn frozen_insert_is_a_bounded_sole_op_with_unique_disjoint_ids() {
+        let id = Uuid::new_v4().to_string();
+        let mixed = ops_request(vec![
+            frozen_insert_op(id.clone()),
+            set_bounds_op(Uuid::new_v4().to_string(), EditorElementTypeV1::Key),
+        ]);
+        assert_eq!(
+            validation_code(&validate_request_envelope(&mixed).unwrap_err()),
+            Some("INVALID_FROZEN_INSERT_BATCH")
+        );
+
+        let duplicate = EditorOpV1::InsertFrozenElements {
+            mode: "4key".to_string(),
+            elements: vec![
+                crate::models::EditorFrozenElementV1::Key {
+                    slot: crate::models::EditorFrozenKeySlotV1::Single("A".to_string()),
+                    position: KeyPosition {
+                        id: id.clone(),
+                        ..KeyPosition::default()
+                    },
+                },
+                crate::models::EditorFrozenElementV1::Key {
+                    slot: crate::models::EditorFrozenKeySlotV1::Single("B".to_string()),
+                    position: KeyPosition {
+                        id: id.clone(),
+                        ..KeyPosition::default()
+                    },
+                },
+            ],
+            groups: Vec::new(),
+            z_updates: Vec::new(),
+        };
+        assert_eq!(
+            validation_code(&validate_request_envelope(&ops_request(vec![duplicate])).unwrap_err()),
+            Some("DUPLICATE_FROZEN_INSERT_ID")
+        );
+
+        let overlap = EditorOpV1::InsertFrozenElements {
+            mode: "4key".to_string(),
+            elements: vec![crate::models::EditorFrozenElementV1::Key {
+                slot: crate::models::EditorFrozenKeySlotV1::Single("A".to_string()),
+                position: KeyPosition {
+                    id: id.clone(),
+                    ..KeyPosition::default()
+                },
+            }],
+            groups: Vec::new(),
+            z_updates: vec![crate::models::EditorZUpdateV1 {
+                element_type: EditorElementTypeV1::Key,
+                id,
+                z_index: 1,
+            }],
+        };
+        assert_eq!(
+            validation_code(&validate_request_envelope(&ops_request(vec![overlap])).unwrap_err()),
+            Some("FROZEN_INSERT_Z_TARGET_OVERLAP")
+        );
+
+        let malformed_slot = EditorOpV1::InsertFrozenElements {
+            mode: "4key".to_string(),
+            elements: vec![crate::models::EditorFrozenElementV1::Key {
+                slot: crate::models::EditorFrozenKeySlotV1::Multi(
+                    crate::models::EditorFrozenMultiKeySlotV1 {
+                        keys: vec!["A".to_string()],
+                        match_mode: crate::models::SlotMatch::All,
+                    },
+                ),
+                position: KeyPosition {
+                    id: Uuid::new_v4().to_string(),
+                    ..KeyPosition::default()
+                },
+            }],
+            groups: Vec::new(),
+            z_updates: Vec::new(),
+        };
+        assert_eq!(
+            validation_code(
+                &validate_request_envelope(&ops_request(vec![malformed_slot])).unwrap_err()
+            ),
+            Some("INVALID_FROZEN_KEY_SLOT")
+        );
+
+        for match_mode in [crate::models::SlotMatch::All, crate::models::SlotMatch::Any] {
+            let valid_multi = EditorOpV1::InsertFrozenElements {
+                mode: "4key".to_string(),
+                elements: vec![crate::models::EditorFrozenElementV1::Key {
+                    slot: crate::models::EditorFrozenKeySlotV1::Multi(
+                        crate::models::EditorFrozenMultiKeySlotV1 {
+                            keys: vec!["A".to_string(), "B".to_string()],
+                            match_mode,
+                        },
+                    ),
+                    position: KeyPosition {
+                        id: Uuid::new_v4().to_string(),
+                        ..KeyPosition::default()
+                    },
+                }],
+                groups: Vec::new(),
+                z_updates: Vec::new(),
+            };
+            validate_request_envelope(&ops_request(vec![valid_multi])).unwrap();
+        }
+
+        for members in [
+            vec!["A".to_string(), "A".to_string()],
+            vec!["".to_string(), "B".to_string()],
+            vec!["A+B".to_string(), "C".to_string()],
+            vec!["A|B".to_string(), "C".to_string()],
+        ] {
+            let invalid_multi = EditorOpV1::InsertFrozenElements {
+                mode: "4key".to_string(),
+                elements: vec![crate::models::EditorFrozenElementV1::Key {
+                    slot: crate::models::EditorFrozenKeySlotV1::Multi(
+                        crate::models::EditorFrozenMultiKeySlotV1 {
+                            keys: members,
+                            match_mode: crate::models::SlotMatch::All,
+                        },
+                    ),
+                    position: KeyPosition {
+                        id: Uuid::new_v4().to_string(),
+                        ..KeyPosition::default()
+                    },
+                }],
+                groups: Vec::new(),
+                z_updates: Vec::new(),
+            };
+            assert_eq!(
+                validation_code(
+                    &validate_request_envelope(&ops_request(vec![invalid_multi])).unwrap_err()
+                ),
+                Some("INVALID_FROZEN_KEY_SLOT")
+            );
+        }
+
+        let inserted_id = Uuid::from_u128((MAX_RENDER_ITEMS + 1) as u128).to_string();
+        let wide_plan = EditorOpV1::InsertFrozenElements {
+            mode: "4key".to_string(),
+            elements: vec![crate::models::EditorFrozenElementV1::Key {
+                slot: crate::models::EditorFrozenKeySlotV1::Single("A".to_string()),
+                position: KeyPosition {
+                    id: inserted_id,
+                    ..KeyPosition::default()
+                },
+            }],
+            groups: Vec::new(),
+            z_updates: (0..MAX_RENDER_ITEMS)
+                .map(|index| crate::models::EditorZUpdateV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: Uuid::from_u128(index as u128 + 1).to_string(),
+                    z_index: index as i32,
+                })
+                .collect(),
+        };
+        validate_request_envelope(&ops_request(vec![wide_plan.clone()])).unwrap();
+
+        let mut too_wide = wide_plan;
+        let EditorOpV1::InsertFrozenElements { z_updates, .. } = &mut too_wide else {
+            unreachable!();
+        };
+        z_updates.push(crate::models::EditorZUpdateV1 {
+            element_type: EditorElementTypeV1::Key,
+            id: Uuid::from_u128((MAX_RENDER_ITEMS + 2) as u128).to_string(),
+            z_index: 0,
+        });
+        assert_eq!(
+            validation_code(&validate_request_envelope(&ops_request(vec![too_wide])).unwrap_err()),
+            Some("FROZEN_INSERT_BATCH_TOO_LARGE")
+        );
     }
 
     #[test]

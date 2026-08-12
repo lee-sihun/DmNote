@@ -4,6 +4,7 @@ import {
   EDITOR_OPS_VERSION,
   assertEditorCommitResult,
   assertEditorOpCommitResult,
+  assertEditorOpsV1,
   assertSafeEditorRevision,
 } from '@src/types/editor';
 
@@ -83,9 +84,13 @@ const assertGestureCommitResult = (
 };
 
 export const gestureApi = {
-  commit: async (request: GestureCommitRequest): Promise<GestureCommitResult> =>
-    assertGestureCommitResult(
+  commit: async (
+    request: GestureCommitRequest,
+  ): Promise<GestureCommitResult> => {
+    if (request.editorOps) assertEditorOpsV1(request.editorOps);
+    return assertGestureCommitResult(
       await invoke<GestureCommitResult>('commit_gesture', { request }),
       request,
-    ),
+    );
+  },
 };

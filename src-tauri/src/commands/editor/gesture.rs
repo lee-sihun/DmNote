@@ -6,9 +6,12 @@ use crate::{
         plugin::instances::publish_plugin_instances_changed,
     },
     errors::{CmdResult, EditorCommitError},
-    models::{GestureCommitRequest, GestureCommitResult, PluginInstancesChangedPayload},
+    models::{GestureCommitResult, PluginInstancesChangedPayload},
     services::preview_broker::PreviewBroker,
-    state::{gesture::validate_gesture_commit_request, AppState},
+    state::{
+        gesture::{decode_gesture_commit_request, validate_gesture_commit_request},
+        AppState,
+    },
 };
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -19,8 +22,9 @@ pub fn commit_gesture(
     broker: State<'_, PreviewBroker>,
     app: AppHandle,
     window: WebviewWindow,
-    request: GestureCommitRequest,
+    request: serde_json::Value,
 ) -> CmdResult<GestureCommitResult> {
+    let request = decode_gesture_commit_request(request)?;
     validate_gesture_commit_request(&request)?;
     if window.label() != MAIN_WINDOW_LABEL {
         return Err(crate::errors::CommandError::msg(

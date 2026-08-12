@@ -1,17 +1,43 @@
 use std::collections::HashSet;
 
+use serde_json::Value;
+
 use crate::{
     errors::EditorCommitError,
     models::{EditorCommitRequest, GestureCommitRequest, PluginInstancesCommitRequest},
 };
 
 use super::{
-    editor::{request_payload_size, validate_request_envelope, validate_revision},
+    editor::{
+        decode_exact_frozen_insert, request_payload_size, validate_request_envelope,
+        validate_revision,
+    },
     plugin::validate_plugin_instances_request,
 };
 
 const MAX_GESTURE_PLUGINS: usize = 64;
 const MAX_GESTURE_REQUEST_BYTES: usize = 16 * 1024 * 1024;
+
+pub(crate) fn decode_gesture_commit_request(
+    value: Value,
+) -> Result<GestureCommitRequest, EditorCommitError> {
+    let has_frozen_insert = value
+        .get("editorOps")
+        .and_then(Value::as_array)
+        .is_some_and(|ops| {
+            ops.iter()
+                .any(|op| op.get("kind").and_then(Value::as_str) == Some("insertFrozenElements"))
+        });
+    if !has_frozen_insert {
+        return serde_json::from_value(value).map_err(|error| {
+            EditorCommitError::validation(
+                "INVALID_REQUEST_PAYLOAD",
+                format!("invalid gesture request: {error}"),
+            )
+        });
+    }
+    decode_exact_frozen_insert(value, "gesture")
+}
 
 pub(crate) fn validate_gesture_commit_request(
     request: &GestureCommitRequest,
@@ -170,6 +196,21 @@ mod tests {
         }
     }
 
+    fn frozen_insert_op() -> EditorOpV1 {
+        EditorOpV1::InsertFrozenElements {
+            mode: "4key".to_string(),
+            elements: vec![crate::models::EditorFrozenElementV1::Key {
+                slot: crate::models::EditorFrozenKeySlotV1::Single("FROZEN".to_string()),
+                position: crate::models::KeyPosition {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    ..crate::models::KeyPosition::default()
+                },
+            }],
+            groups: Vec::new(),
+            z_updates: Vec::new(),
+        }
+    }
+
     #[test]
     fn gesture_allows_plugin_only_patch_or_ops_but_not_both_editor_mutations() {
         let plugin_ids = ["plugin-a".to_string()];
@@ -224,6 +265,21 @@ mod tests {
         assert_eq!(
             validation_code(error).as_deref(),
             Some("INVALID_GESTURE_PLUGIN_COUNT")
+        );
+    }
+
+    #[test]
+    fn gesture_frozen_insert_wire_rejects_unknown_nested_keys() {
+        let mut request = gesture_request(&["plugin-a".to_string()]);
+        request.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        request.editor_ops = Some(vec![frozen_insert_op()]);
+        let mut wire = serde_json::to_value(request).unwrap();
+        wire["editorOps"][0]["elements"][0]["position"]["unexpected"] = serde_json::json!(true);
+
+        let error = decode_gesture_commit_request(wire).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
         );
     }
 
