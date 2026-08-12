@@ -7,6 +7,11 @@ import type { KeyPosition } from '@src/types/key/keys';
 
 export type NativeElementType = 'key' | 'stat' | 'graph' | 'knob';
 
+// 무ID 구형 요소의 합성 신원(`${type}-${index}`). 안정 ID처럼 다루면
+// 조회가 항상 실패해 legacy 폴백까지 막힌다
+export const isSyntheticElementId = (id: string): boolean =>
+  /^(key|stat|graph|knob)-\d+$/.test(id);
+
 export interface ElementLocator {
   type: NativeElementType;
   mode: string;

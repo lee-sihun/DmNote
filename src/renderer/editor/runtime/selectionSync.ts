@@ -3,6 +3,11 @@
  * 로컬 선택 변경을 백엔드 세션에 publish하고, 원격 스냅샷을 revision 게이트로 반영
  * 반영 중 재-publish를 막아 에코 루프 차단
  */
+import {
+  isSyntheticElementId,
+  resolveElementById,
+  type NativeElementType,
+} from '../model/elementIdMap';
 
 import {
   selectionSessionApi,
@@ -125,7 +130,31 @@ const applyRemote = (snapshot: SelectionSessionSnapshot): void => {
   if (snapshot.selectionRevision <= appliedRevision) return;
   appliedRevision = snapshot.selectionRevision;
 
-  const remoteElements = fromWireElements(snapshot.selectedElements);
+  // wire index는 발신 창 스냅샷 기준 - 이 창의 배열과 어긋날 수 있다.
+  // 안정 id는 현재 문서에서 재해석하고 삭제된 id는 버린다. 합성 id
+  // (구형 무ID 요소의 `${type}-${index}`)만 기존 표현을 유지한다
+  const NATIVE_SELECTION_TYPES: ReadonlySet<string> = new Set([
+    'key',
+    'stat',
+    'graph',
+    'knob',
+  ]);
+
+  const currentMode = useKeyStore.getState().selectedKeyType;
+  const remoteElements = fromWireElements(snapshot.selectedElements).flatMap(
+    (element) => {
+      if (!NATIVE_SELECTION_TYPES.has(element.type)) return [element];
+      const locator = resolveElementById(
+        element.type as NativeElementType,
+        element.id,
+      );
+      if (locator) {
+        if (locator.mode !== currentMode) return [];
+        return [{ ...element, index: locator.index }];
+      }
+      return isSyntheticElementId(element.id) ? [element] : [];
+    },
+  );
   const fingerprint = stableStringify({
     selectedElements: remoteElements,
     selectedGroupIds: snapshot.selectedGroupIds,

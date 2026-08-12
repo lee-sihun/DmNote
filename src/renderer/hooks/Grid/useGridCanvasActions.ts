@@ -10,7 +10,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { reconcileSelectionAfterIndexedElementDeletion } from '@stores/grid/useGridSelectionStore';
-import type { KeyPosition } from '@src/types/key/keys';
+import type { KeySlot, KeyPosition } from '@src/types/key/keys';
 import type {
   StatItemPosition,
   StatItemPositions,
@@ -198,6 +198,8 @@ export interface CanvasActions {
 export interface DuplicateState {
   elementType: 'key' | 'stat' | 'graph' | 'knob';
   sourceIndex: number;
+  // 키 복제의 시작 시점 동결 슬롯 - 배치 시 sourceIndex 재조회 금지
+  slot?: KeySlot;
   keyName: string;
   position:
     | KeyPosition

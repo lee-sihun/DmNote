@@ -43,6 +43,8 @@ import {
   findPasteAnchorIndex,
   applyZIndexToLayerOrder,
 } from '@utils/layerGroupUtils';
+import { commitSelectedGeometryByIds } from '@src/renderer/editor/runtime/elementOps';
+import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { deletePluginElements } from '@plugins/rpc/pluginElementActions';
@@ -70,7 +72,10 @@ interface UseGridSelectionReturn {
   deleteSelectedElements: () => Promise<void>;
   copySelectedElements: () => void;
   pasteElements: () => Promise<void>;
-  syncSelectedElementsToOverlay: (gestureId?: string) => void;
+  syncSelectedElementsToOverlay: (
+    gestureId?: string,
+    options?: { includeSize?: boolean },
+  ) => void;
   clipboard: ClipboardItem[];
 }
 
@@ -92,7 +97,10 @@ export function useGridSelection({
 
   // 선택된 요소들의 최종 위치를 한 번에 저장
   // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-  const syncSelectedElementsToOverlay = (gestureId?: string) => {
+  const syncSelectedElementsToOverlay = (
+    gestureId?: string,
+    options?: { includeSize?: boolean },
+  ) => {
     const currentPositions = useKeyStore.getState().canonicalPositions;
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
@@ -123,9 +131,32 @@ export function useGridSelection({
     const isMixed =
       currentSelection.some((element) => element.type !== 'plugin') &&
       pluginIds.length > 0;
+    // 안정 id native 선택은 기하 의도 커밋 - full-record 캡처는 배타
+    // mutation 직후에 착지해 무관 필드 재작성을 되돌린다. 합성 id가 하나라도
+    // 있으면 전체 legacy 폴백 (혼합 플러그인 트랜잭션도 기존 경로 유지)
+    const nativeTargets = currentSelection
+      .filter(
+        (element): element is (typeof currentSelection)[number] =>
+          element.type !== 'plugin',
+      )
+      .map((element) => ({
+        type: element.type as 'key' | 'stat' | 'graph' | 'knob',
+        id: element.id,
+      }));
+    const allStableIds =
+      nativeTargets.length > 0 &&
+      nativeTargets.every(
+        (target) => target.id.length > 0 && !isSyntheticElementId(target.id),
+      );
     const persisted =
       gestureId && isMixed
         ? commitMixedGestureTransaction(gestureId, editorChanges, pluginIds)
+        : allStableIds
+        ? commitSelectedGeometryByIds(
+            nativeTargets,
+            gestureId,
+            options?.includeSize ? ['dx', 'dy', 'width', 'height'] : undefined,
+          )
         : editorCoordinator.commitPatch(
             editorChanges,
             gestureId ? { gestureId } : undefined,

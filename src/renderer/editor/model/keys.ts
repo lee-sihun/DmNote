@@ -114,24 +114,12 @@ export function removeKey(
 // 키 복제
 // ----------------------------------------------------------------------------
 
-/** 키 복제 후 새 mappings/positions 반환 */
-export function duplicateKey(
-  mappings: KeyMappings,
-  positions: KeyPositions,
-  mode: string,
-  sourceIndex: number,
+/** 복제용 위치 클론: 새 신원 발급 + 참조 분리 + 좌표 반올림 + 기본값 백필 */
+export function cloneKeyPositionForDuplicate(
+  sourcePosition: KeyPosition,
   targetDx: number,
   targetDy: number,
-): AddKeyResult | null {
-  const mapping = mappings[mode] || [];
-  const pos = positions[mode] || [];
-  const sourceKey = mapping[sourceIndex];
-  const sourcePosition = pos[sourceIndex];
-
-  if (typeof sourceKey === 'undefined' || !sourcePosition) {
-    return null;
-  }
-
+): KeyPosition {
   const clonedNoteColor =
     sourcePosition.noteColor &&
     typeof sourcePosition.noteColor === 'object' &&
@@ -159,7 +147,7 @@ export function duplicateKey(
     },
   };
 
-  const clonedPosition: KeyPosition = {
+  return {
     ...sourcePosition,
     // 복제본은 새 신원. source id를 물려받으면 후보 안 중복으로 커밋이 거절된다
     id: newElementId(),
@@ -173,6 +161,31 @@ export function duplicateKey(
     noteGlowColor: clonedNoteColor,
     noteAutoYCorrection: sourcePosition.noteAutoYCorrection ?? true,
   };
+}
+
+/** 키 복제 후 새 mappings/positions 반환 */
+export function duplicateKey(
+  mappings: KeyMappings,
+  positions: KeyPositions,
+  mode: string,
+  sourceIndex: number,
+  targetDx: number,
+  targetDy: number,
+): AddKeyResult | null {
+  const mapping = mappings[mode] || [];
+  const pos = positions[mode] || [];
+  const sourceKey = mapping[sourceIndex];
+  const sourcePosition = pos[sourceIndex];
+
+  if (typeof sourceKey === 'undefined' || !sourcePosition) {
+    return null;
+  }
+
+  const clonedPosition = cloneKeyPositionForDuplicate(
+    sourcePosition,
+    targetDx,
+    targetDy,
+  );
 
   return {
     mappings: {

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   selectionListeners: new Set<SelectionListener>(),
   selectionState: null as FakeSelectionState | null,
   selectedKeyType: '4key',
+  keyPositions: {} as Record<string, Array<{ id?: string }>>,
 }));
 
 const notifySelection = () => {
@@ -80,7 +81,10 @@ vi.mock('@stores/grid/useGridSelectionStore', () => ({
 
 vi.mock('@stores/data/useKeyStore', () => ({
   useKeyStore: {
-    getState: () => ({ selectedKeyType: mocks.selectedKeyType }),
+    getState: () => ({
+      selectedKeyType: mocks.selectedKeyType,
+      canonicalPositions: mocks.keyPositions,
+    }),
   },
 }));
 
@@ -123,7 +127,52 @@ describe('selection sync drain', () => {
       selectedGroupIds: [],
       clearSelection: () => setSelection([]),
     };
+    mocks.keyPositions = {};
     selectionSync = await import('./selectionSync');
+  });
+
+  const UUID_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const UUID_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+  // S-F1: 수신 wire index는 발신 창 스냅샷 기준이라 이 창 배열과 어긋날 수 있다
+  it('수신 선택의 stale index를 안정 id로 재해석한다', () => {
+    mocks.keyPositions = { '4key': [{ id: UUID_B }, { id: UUID_A }] };
+    const stop = selectionSync.initSelectionSync();
+
+    mocks.changedListener!(
+      responseFor([{ elementType: 'key', index: 0, fullId: UUID_A }], 5),
+    );
+
+    expect(mocks.selectionState!.selectedElements).toEqual([
+      { type: 'key', id: UUID_A, index: 1 },
+    ]);
+    stop();
+  });
+
+  it('수신 선택에서 삭제된 안정 id는 버린다', () => {
+    mocks.keyPositions = { '4key': [{ id: UUID_B }] };
+    const stop = selectionSync.initSelectionSync();
+
+    mocks.changedListener!(
+      responseFor([{ elementType: 'key', index: 0, fullId: UUID_A }], 5),
+    );
+
+    expect(mocks.selectionState!.selectedElements).toEqual([]);
+    stop();
+  });
+
+  it('합성 id(무ID 구형)는 wire 표현을 유지한다', () => {
+    mocks.keyPositions = { '4key': [{}] };
+    const stop = selectionSync.initSelectionSync();
+
+    mocks.changedListener!(
+      responseFor([{ elementType: 'key', index: 0, fullId: 'key-0' }], 5),
+    );
+
+    expect(mocks.selectionState!.selectedElements).toEqual([
+      { type: 'key', id: 'key-0', index: 0 },
+    ]);
+    stop();
   });
 
   it('예약된 publish의 ACK까지 기다린다', async () => {

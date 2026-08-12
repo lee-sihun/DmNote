@@ -13,6 +13,17 @@ declare global {
 }
 import { useTranslation } from '@contexts/useTranslation';
 import DraggableKey from '@components/shared/Key';
+import { commitElementPosition } from '@src/renderer/hooks/Grid/elementPositionCommit';
+import {
+  applyZOrderByIds,
+  deleteElementById,
+  placeDuplicatedKey,
+  type ZOrderTarget,
+} from '@src/renderer/editor/runtime/elementOps';
+import {
+  isSyntheticElementId,
+  resolveElementById,
+} from '@src/renderer/editor/model/elementIdMap';
 import GridKeySettingModal from './GridKeySettingModal';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
@@ -160,7 +171,12 @@ interface GridProps {
   setSelectedKey: (key: SelectedKeyInfo | null) => void;
   keyMappings: KeyMappings;
   positions: KeyPositions;
-  onPositionChange: (index: number, dx: number, dy: number) => void;
+  onPositionChange: (
+    index: number,
+    dx: number,
+    dy: number,
+    elementId?: string,
+  ) => void;
   onKeyUpdate: (data: Omit<SaveData, 'counter'>) => void;
   onKeyPreview: (index: number, updates: KeyPreviewUpdates) => void;
   onNoteColorUpdate: (
@@ -461,7 +477,9 @@ const Grid = ({
   } = useGridResize({
     selectedElements,
     selectedKeyType,
-    onResizeEnd: syncSelectedElementsToOverlay,
+    // 리사이즈 종료는 크기 필드까지 의도에 포함 (이동 경로는 dx·dy만)
+    onResizeEnd: (gestureId?: string) =>
+      syncSelectedElementsToOverlay(gestureId, { includeSize: true }),
     getOtherElements,
   });
 
@@ -520,6 +538,8 @@ const Grid = ({
   // 키 컨텍스트 메뉴
   const [isContextOpen, setIsContextOpen] = useState<boolean>(false);
   const [contextIndex, setContextIndex] = useState<number | null>(null);
+  // 메뉴 대상의 안정 신원 - 열림 동안 재정렬돼도 액션이 같은 요소를 향한다
+  const [contextElementId, setContextElementId] = useState<string | null>(null);
   const [contextType, setContextType] = useState<string>('key');
   const contextRef = useRef<HTMLElement | null>(null);
   const [contextPosition, setContextPosition] = useState<{
@@ -680,6 +700,24 @@ const Grid = ({
     await pasteElements();
   };
 
+  // 합성 id(`${type}-${index}`)가 아닌 안정 id를 가진 native 선택 판별
+  const isStableNativeSelection = (el: {
+    type: string;
+    id: string;
+  }): el is { type: 'key' | 'stat' | 'graph' | 'knob'; id: string } =>
+    (el.type === 'key' ||
+      el.type === 'stat' ||
+      el.type === 'graph' ||
+      el.type === 'knob') &&
+    el.id.length > 0 &&
+    !isSyntheticElementId(el.id);
+
+  const pluginZIndexesForMode = (): number[] =>
+    usePluginDisplayElementStore
+      .getState()
+      .elements.filter((el) => !el.tabId || el.tabId === selectedKeyType)
+      .map((el) => el.zIndex ?? 0);
+
   const moveSelectedToFront = async () => {
     if (selectedElements.length === 0) return;
 
@@ -689,20 +727,31 @@ const Grid = ({
         .map((element) => element.id),
     );
 
+    // id 보유 native 요소는 단일 트랜잭션 - 루프-await는 반복 사이 재정렬과
+    // 렌더 클로저 base의 상호 덮어쓰기(lost update)를 만든다
+    const idTargets: ZOrderTarget[] = [];
     for (const el of selectedElements) {
-      if (el.type === 'key' && el.index !== undefined) {
-        if (typeof onMoveToFront === 'function') {
-          await onMoveToFront(el.index);
-        }
-      } else if (el.type === 'stat' && el.index !== undefined) {
-        moveStatToFront(el.index);
-      } else if (el.type === 'graph' && el.index !== undefined) {
-        moveGraphToFront(el.index);
-      } else if (el.type === 'knob' && el.index !== undefined) {
-        moveKnobToFront(el.index);
-      } else if (el.type === 'plugin') {
+      if (el.type === 'plugin') {
         usePluginDisplayElementStore.getState().bringToFront(el.id);
+        continue;
       }
+      if (isStableNativeSelection(el)) {
+        idTargets.push({ type: el.type, id: el.id });
+        continue;
+      }
+      if (el.index === undefined) continue;
+      if (el.type === 'key') {
+        if (typeof onMoveToFront === 'function') await onMoveToFront(el.index);
+      } else if (el.type === 'stat') {
+        moveStatToFront(el.index);
+      } else if (el.type === 'graph') {
+        moveGraphToFront(el.index);
+      } else if (el.type === 'knob') {
+        moveKnobToFront(el.index);
+      }
+    }
+    if (idTargets.length > 0) {
+      await applyZOrderByIds(idTargets, 'front', pluginZIndexesForMode());
     }
 
     syncSelectedElementsToOverlay();
@@ -717,20 +766,29 @@ const Grid = ({
         .map((element) => element.id),
     );
 
+    const idTargets: ZOrderTarget[] = [];
     for (const el of selectedElements) {
-      if (el.type === 'key' && el.index !== undefined) {
-        if (typeof onMoveToBack === 'function') {
-          await onMoveToBack(el.index);
-        }
-      } else if (el.type === 'stat' && el.index !== undefined) {
-        moveStatToBack(el.index);
-      } else if (el.type === 'graph' && el.index !== undefined) {
-        moveGraphToBack(el.index);
-      } else if (el.type === 'knob' && el.index !== undefined) {
-        moveKnobToBack(el.index);
-      } else if (el.type === 'plugin') {
+      if (el.type === 'plugin') {
         usePluginDisplayElementStore.getState().sendToBack(el.id);
+        continue;
       }
+      if (isStableNativeSelection(el)) {
+        idTargets.push({ type: el.type, id: el.id });
+        continue;
+      }
+      if (el.index === undefined) continue;
+      if (el.type === 'key') {
+        if (typeof onMoveToBack === 'function') await onMoveToBack(el.index);
+      } else if (el.type === 'stat') {
+        moveStatToBack(el.index);
+      } else if (el.type === 'graph') {
+        moveGraphToBack(el.index);
+      } else if (el.type === 'knob') {
+        moveKnobToBack(el.index);
+      }
+    }
+    if (idTargets.length > 0) {
+      await applyZOrderByIds(idTargets, 'back', pluginZIndexesForMode());
     }
 
     syncSelectedElementsToOverlay();
@@ -922,6 +980,11 @@ const Grid = ({
     }
     setContextType(type);
     setContextIndex(index);
+    setContextElementId(
+      typeof clickedPosition?.id === 'string' && clickedPosition.id.length > 0
+        ? clickedPosition.id
+        : null,
+    );
     contextRef.current = ref;
     setContextPosition({ x: clientX, y: clientY });
     setIsContextOpen(true);
@@ -991,7 +1054,15 @@ const Grid = ({
     return positions[selectedKeyType].map(
       (position: KeyPosition, index: number) => {
         const handlers = stableHandlers(position.id || `key-${index}`, {
-          onPositionChange: onPositionChange,
+          onPositionChange: (
+            targetIndex: number,
+            dx: number,
+            dy: number,
+            elementId?: string,
+          ) =>
+            commitElementPosition('key', elementId, dx, dy, () =>
+              onPositionChange(targetIndex, dx, dy),
+            ),
           onClick: () => {
             selectElementWithGroup('key', index);
             // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
@@ -1186,7 +1257,14 @@ const Grid = ({
             const displayName = slotDisplayName(slot);
             showConfirm(
               t('confirm.removeKey', { name: displayName }),
-              () => onKeyDelete(index),
+              () => {
+                const id = position.id;
+                if (id) {
+                  void deleteElementById('key', id);
+                  return;
+                }
+                onKeyDelete(index);
+              },
               { confirmText: t('confirm.remove') },
             );
           },
@@ -1240,22 +1318,33 @@ const Grid = ({
       index: number,
       dx: number,
       dy: number,
+      elementId?: string,
     ) => {
-      const current = useStatItemStore.getState().positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const prev = tabPositions[index];
-      if (!prev) return;
-      if (prev.dx === dx && prev.dy === dy) return;
-
-      const nextTabPositions = tabPositions.map((pos, i) =>
-        i === index ? { ...pos, dx, dy } : pos,
+      // 합성 id는 commitElementPosition이 fallback으로 돌린다 - 기존 index
+      // 커밋을 fallback 클로저로 넘겨 무ID 요소의 저장을 유지
+      commitElementPosition('stat', elementId, dx, dy, () =>
+        legacyPositionCommit(),
       );
-      const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
+      function legacyPositionCommit() {
+        const current = useStatItemStore.getState().positions;
+        const tabPositions = current[selectedKeyType] || [];
+        const prev = tabPositions[index];
+        if (!prev) return;
+        if (prev.dx === dx && prev.dy === dy) return;
 
-      useStatItemStore.getState().setPositions(nextPositions);
-      window.api.statItems.updatePositions(nextPositions).catch((error) => {
-        console.error('Failed to update stat item positions', error);
-      });
+        const nextTabPositions = tabPositions.map((pos, i) =>
+          i === index ? { ...pos, dx, dy } : pos,
+        );
+        const nextPositions = {
+          ...current,
+          [selectedKeyType]: nextTabPositions,
+        };
+
+        useStatItemStore.getState().setPositions(nextPositions);
+        window.api.statItems.updatePositions(nextPositions).catch((error) => {
+          console.error('Failed to update stat item positions', error);
+        });
+      }
     };
 
     return items.map((position: StatItemPosition, index: number) => {
@@ -1296,7 +1385,14 @@ const Grid = ({
           const displayName = getStatTypeLabel(position.statType);
           showConfirm(
             t('confirm.removeStat', { name: displayName }),
-            () => deleteStatAtIndex(index),
+            () => {
+              const id = position.id;
+              if (id) {
+                void deleteElementById('stat', id);
+                return;
+              }
+              deleteStatAtIndex(index);
+            },
             { confirmText: t('confirm.remove') },
           );
         },
@@ -1348,22 +1444,33 @@ const Grid = ({
       index: number,
       dx: number,
       dy: number,
+      elementId?: string,
     ) => {
-      const current = useGraphItemStore.getState().positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const prev = tabPositions[index];
-      if (!prev) return;
-      if (prev.dx === dx && prev.dy === dy) return;
-
-      const nextTabPositions = tabPositions.map((pos, i) =>
-        i === index ? { ...pos, dx, dy } : pos,
+      // 합성 id는 commitElementPosition이 fallback으로 돌린다 - 기존 index
+      // 커밋을 fallback 클로저로 넘겨 무ID 요소의 저장을 유지
+      commitElementPosition('graph', elementId, dx, dy, () =>
+        legacyPositionCommit(),
       );
-      const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
+      function legacyPositionCommit() {
+        const current = useGraphItemStore.getState().positions;
+        const tabPositions = current[selectedKeyType] || [];
+        const prev = tabPositions[index];
+        if (!prev) return;
+        if (prev.dx === dx && prev.dy === dy) return;
 
-      useGraphItemStore.getState().setPositions(nextPositions);
-      window.api.graphItems.updatePositions(nextPositions).catch((error) => {
-        console.error('Failed to update graph item positions', error);
-      });
+        const nextTabPositions = tabPositions.map((pos, i) =>
+          i === index ? { ...pos, dx, dy } : pos,
+        );
+        const nextPositions = {
+          ...current,
+          [selectedKeyType]: nextTabPositions,
+        };
+
+        useGraphItemStore.getState().setPositions(nextPositions);
+        window.api.graphItems.updatePositions(nextPositions).catch((error) => {
+          console.error('Failed to update graph item positions', error);
+        });
+      }
     };
 
     return items.map((position, index) => (
@@ -1414,7 +1521,14 @@ const Grid = ({
           const displayName = getStatTypeLabel(position.statType);
           showConfirm(
             t('confirm.removeGraph', { name: displayName }),
-            () => deleteGraphAtIndex(index),
+            () => {
+              const id = position.id;
+              if (id) {
+                void deleteElementById('graph', id);
+                return;
+              }
+              deleteGraphAtIndex(index);
+            },
             { confirmText: t('confirm.remove') },
           );
         }}
@@ -1446,22 +1560,33 @@ const Grid = ({
       index: number,
       dx: number,
       dy: number,
+      elementId?: string,
     ) => {
-      const current = useKnobItemStore.getState().positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const prev = tabPositions[index];
-      if (!prev) return;
-      if (prev.dx === dx && prev.dy === dy) return;
-
-      const nextTabPositions = tabPositions.map((pos, i) =>
-        i === index ? { ...pos, dx, dy } : pos,
+      // 합성 id는 commitElementPosition이 fallback으로 돌린다 - 기존 index
+      // 커밋을 fallback 클로저로 넘겨 무ID 요소의 저장을 유지
+      commitElementPosition('knob', elementId, dx, dy, () =>
+        legacyPositionCommit(),
       );
-      const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
+      function legacyPositionCommit() {
+        const current = useKnobItemStore.getState().positions;
+        const tabPositions = current[selectedKeyType] || [];
+        const prev = tabPositions[index];
+        if (!prev) return;
+        if (prev.dx === dx && prev.dy === dy) return;
 
-      useKnobItemStore.getState().setPositions(nextPositions);
-      window.api.knobItems.updatePositions(nextPositions).catch((error) => {
-        console.error('Failed to update knob item positions', error);
-      });
+        const nextTabPositions = tabPositions.map((pos, i) =>
+          i === index ? { ...pos, dx, dy } : pos,
+        );
+        const nextPositions = {
+          ...current,
+          [selectedKeyType]: nextTabPositions,
+        };
+
+        useKnobItemStore.getState().setPositions(nextPositions);
+        window.api.knobItems.updatePositions(nextPositions).catch((error) => {
+          console.error('Failed to update knob item positions', error);
+        });
+      }
     };
 
     return items.map((position, index) => (
@@ -1511,7 +1636,14 @@ const Grid = ({
         onEraserClick={() => {
           showConfirm(
             t('confirm.removeKnob', { name: 'Knob' }),
-            () => deleteKnobAtIndex(index),
+            () => {
+              const id = position.id;
+              if (id) {
+                void deleteElementById('knob', id);
+                return;
+              }
+              deleteKnobAtIndex(index);
+            },
             { confirmText: t('confirm.remove') },
           );
         }}
@@ -1720,12 +1852,26 @@ const Grid = ({
           const height = duplicateState.position.height || 60;
           const type = duplicateState.elementType || 'key';
 
-          if (type === 'key' && typeof onKeyDuplicate === 'function') {
-            onKeyDuplicate(
-              duplicateState.sourceIndex,
-              snapped.x - width / 2,
-              snapped.y - height / 2,
-            );
+          if (type === 'key') {
+            if (typeof duplicateState.slot !== 'undefined') {
+              // 시작 시점 동결 payload로 배치 - sourceIndex 재조회는 고스트
+              // 대기 중 재정렬 시 다른 키를 복제한다
+              void placeDuplicatedKey(
+                {
+                  slot: duplicateState.slot,
+                  position: duplicateState.position as KeyPosition,
+                },
+                selectedKeyType,
+                snapped.x - width / 2,
+                snapped.y - height / 2,
+              );
+            } else if (typeof onKeyDuplicate === 'function') {
+              onKeyDuplicate(
+                duplicateState.sourceIndex,
+                snapped.x - width / 2,
+                snapped.y - height / 2,
+              );
+            }
           } else if (type === 'stat') {
             placeDuplicateStat(
               duplicateState.position as StatItemPosition,
@@ -2104,25 +2250,67 @@ const Grid = ({
 
             if (contextIndex == null) return;
 
+            // 메뉴가 열린 동안의 재정렬·삭제를 액션 시점에 재해석.
+            // 모드 밖으로 이동한 대상은 소실로 취급한다
+            const resolveContextTarget = (
+              targetType: 'key' | 'stat' | 'graph' | 'knob',
+            ): number | null => {
+              if (contextElementId) {
+                const locator = resolveElementById(
+                  targetType,
+                  contextElementId,
+                );
+                return locator && locator.mode === selectedKeyType
+                  ? locator.index
+                  : null;
+              }
+              return contextIndex;
+            };
+
             if (contextType === 'stat') {
+              const statIndex = resolveContextTarget('stat');
               const pos =
-                useStatItemStore.getState().positions?.[selectedKeyType]?.[
-                  contextIndex
-                ] || null;
+                statIndex != null
+                  ? useStatItemStore.getState().positions?.[selectedKeyType]?.[
+                      statIndex
+                    ] || null
+                  : null;
               const displayName = pos ? getStatTypeLabel(pos.statType) : '';
 
               if (id === 'delete') {
                 showConfirm(
                   t('confirm.removeStat', { name: displayName }),
-                  () => deleteStatAtIndex(contextIndex),
+                  () => {
+                    if (contextElementId) {
+                      void deleteElementById('stat', contextElementId);
+                      return;
+                    }
+                    if (statIndex != null) deleteStatAtIndex(statIndex);
+                  },
                   { confirmText: t('confirm.remove') },
                 );
               } else if (id === 'duplicate') {
-                beginDuplicateStat(contextIndex);
+                if (statIndex != null) beginDuplicateStat(statIndex);
               } else if (id === 'bringToFront') {
-                moveStatToFront(contextIndex);
+                if (contextElementId) {
+                  void applyZOrderByIds(
+                    [{ type: 'stat', id: contextElementId }],
+                    'front',
+                    pluginZIndexesForMode(),
+                  );
+                } else if (statIndex != null) {
+                  moveStatToFront(statIndex);
+                }
               } else if (id === 'sendToBack') {
-                moveStatToBack(contextIndex);
+                if (contextElementId) {
+                  void applyZOrderByIds(
+                    [{ type: 'stat', id: contextElementId }],
+                    'back',
+                    pluginZIndexesForMode(),
+                  );
+                } else if (statIndex != null) {
+                  moveStatToBack(statIndex);
+                }
               }
 
               setIsContextOpen(false);
@@ -2131,24 +2319,49 @@ const Grid = ({
             }
 
             if (contextType === 'graph') {
+              const graphIndex = resolveContextTarget('graph');
               const pos =
-                useGraphItemStore.getState().positions?.[selectedKeyType]?.[
-                  contextIndex
-                ] || null;
+                graphIndex != null
+                  ? useGraphItemStore.getState().positions?.[selectedKeyType]?.[
+                      graphIndex
+                    ] || null
+                  : null;
               const displayName = pos ? getStatTypeLabel(pos.statType) : '';
 
               if (id === 'delete') {
                 showConfirm(
                   t('confirm.removeGraph', { name: displayName }),
-                  () => deleteGraphAtIndex(contextIndex),
+                  () => {
+                    if (contextElementId) {
+                      void deleteElementById('graph', contextElementId);
+                      return;
+                    }
+                    if (graphIndex != null) deleteGraphAtIndex(graphIndex);
+                  },
                   { confirmText: t('confirm.remove') },
                 );
               } else if (id === 'duplicate') {
-                beginDuplicateGraph(contextIndex);
+                if (graphIndex != null) beginDuplicateGraph(graphIndex);
               } else if (id === 'bringToFront') {
-                moveGraphToFront(contextIndex);
+                if (contextElementId) {
+                  void applyZOrderByIds(
+                    [{ type: 'graph', id: contextElementId }],
+                    'front',
+                    pluginZIndexesForMode(),
+                  );
+                } else if (graphIndex != null) {
+                  moveGraphToFront(graphIndex);
+                }
               } else if (id === 'sendToBack') {
-                moveGraphToBack(contextIndex);
+                if (contextElementId) {
+                  void applyZOrderByIds(
+                    [{ type: 'graph', id: contextElementId }],
+                    'back',
+                    pluginZIndexesForMode(),
+                  );
+                } else if (graphIndex != null) {
+                  moveGraphToBack(graphIndex);
+                }
               }
 
               setIsContextOpen(false);
@@ -2157,18 +2370,41 @@ const Grid = ({
             }
 
             if (contextType === 'knob') {
+              const knobIndex = resolveContextTarget('knob');
               if (id === 'delete') {
                 showConfirm(
                   t('confirm.removeKnob', { name: 'Knob' }),
-                  () => deleteKnobAtIndex(contextIndex),
+                  () => {
+                    if (contextElementId) {
+                      void deleteElementById('knob', contextElementId);
+                      return;
+                    }
+                    if (knobIndex != null) deleteKnobAtIndex(knobIndex);
+                  },
                   { confirmText: t('confirm.remove') },
                 );
               } else if (id === 'duplicate') {
-                beginDuplicateKnob(contextIndex);
+                if (knobIndex != null) beginDuplicateKnob(knobIndex);
               } else if (id === 'bringToFront') {
-                moveKnobToFront(contextIndex);
+                if (contextElementId) {
+                  void applyZOrderByIds(
+                    [{ type: 'knob', id: contextElementId }],
+                    'front',
+                    pluginZIndexesForMode(),
+                  );
+                } else if (knobIndex != null) {
+                  moveKnobToFront(knobIndex);
+                }
               } else if (id === 'sendToBack') {
-                moveKnobToBack(contextIndex);
+                if (contextElementId) {
+                  void applyZOrderByIds(
+                    [{ type: 'knob', id: contextElementId }],
+                    'back',
+                    pluginZIndexesForMode(),
+                  );
+                } else if (knobIndex != null) {
+                  moveKnobToBack(knobIndex);
+                }
               }
 
               setIsContextOpen(false);
@@ -2181,16 +2417,22 @@ const Grid = ({
               (item) => item.fullId === id,
             );
             if (pluginItem) {
+              const keyIndex = resolveContextTarget('key');
+              if (keyIndex == null) return;
               const positionForContext =
-                positions[selectedKeyType]?.[contextIndex];
+                useKeyStore.getState().canonicalPositions[selectedKeyType]?.[
+                  keyIndex
+                ];
               if (!positionForContext) return;
               const context = {
                 // 플러그인 메뉴 표면은 canonical 문자열 유지
                 keyCode: slotCanonical(
-                  keyMappings[selectedKeyType]?.[contextIndex] ?? '',
+                  useKeyStore.getState().keyMappings[selectedKeyType]?.[
+                    keyIndex
+                  ] ?? '',
                 ),
                 id: positionForContext.id ?? '',
-                index: contextIndex,
+                index: keyIndex,
                 position: positionForContext,
                 mode: selectedKeyType,
               };
@@ -2219,20 +2461,39 @@ const Grid = ({
 
             // 기본 메뉴 처리
             if (id === 'delete') {
-              const slot = keyMappings[selectedKeyType]?.[contextIndex] ?? '';
+              const keyIndex = resolveContextTarget('key');
+              const slot =
+                keyIndex != null
+                  ? keyMappings[selectedKeyType]?.[keyIndex] ?? ''
+                  : '';
               const displayName = slotDisplayName(slot);
               showConfirm(
                 t('confirm.removeKey', { name: displayName }),
-                () => onKeyDelete(contextIndex),
+                () => {
+                  if (contextElementId) {
+                    void deleteElementById('key', contextElementId);
+                    return;
+                  }
+                  if (keyIndex != null) onKeyDelete(keyIndex);
+                },
                 { confirmText: t('confirm.remove') },
               );
             } else if (id === 'duplicate') {
-              const displayLabel = slotDisplayName(
-                keyMappings[selectedKeyType]?.[contextIndex] ?? '',
-              );
+              const keyIndex = resolveContextTarget('key');
+              const sourceSlot =
+                keyIndex != null
+                  ? useKeyStore.getState().keyMappings[selectedKeyType]?.[
+                      keyIndex
+                    ]
+                  : undefined;
+              const displayLabel = slotDisplayName(sourceSlot ?? '');
               const position =
-                positions[selectedKeyType]?.[contextIndex] || null;
-              if (position) {
+                keyIndex != null
+                  ? useKeyStore.getState().canonicalPositions[
+                      selectedKeyType
+                    ]?.[keyIndex] || null
+                  : null;
+              if (position && typeof sourceSlot !== 'undefined') {
                 const clonedNoteColor =
                   position.noteColor &&
                   typeof position.noteColor === 'object' &&
@@ -2266,7 +2527,10 @@ const Grid = ({
                 );
                 setDuplicateState({
                   elementType: 'key',
-                  sourceIndex: contextIndex,
+                  sourceIndex: keyIndex,
+                  // 배치 시 재조회 금지 - 고스트를 따라다니는 동안의 재정렬이
+                  // 다른 키를 복제하게 만든다
+                  slot: sourceSlot,
                   keyName: displayLabel,
                   position: {
                     ...position,
@@ -2277,13 +2541,24 @@ const Grid = ({
                 setDuplicateCursor(initialCursor);
               }
             } else if (id === 'counterReset') {
-              const slot = keyMappings[selectedKeyType]?.[contextIndex] ?? '';
-              // 카운터 리셋 커맨드의 key 인자 = canonical (계약 §7)
-              const globalKey = slotCanonical(slot);
+              const menuIndex = resolveContextTarget('key');
+              const slot =
+                menuIndex != null
+                  ? keyMappings[selectedKeyType]?.[menuIndex] ?? ''
+                  : '';
               const displayName = slotDisplayName(slot);
               showConfirm(
                 t('confirm.resetKeyCounter', { name: displayName }),
                 async () => {
+                  // 확인 시점 재해석 - 모달이 떠 있는 동안의 재바인딩 반영
+                  const confirmIndex = resolveContextTarget('key');
+                  if (confirmIndex == null) return;
+                  // 카운터 리셋 커맨드의 key 인자 = canonical (계약 §7)
+                  const globalKey = slotCanonical(
+                    useKeyStore.getState().keyMappings[selectedKeyType]?.[
+                      confirmIndex
+                    ] ?? '',
+                  );
                   try {
                     await window.api.keys.resetSingleCounter(
                       selectedKeyType,
@@ -2296,20 +2571,40 @@ const Grid = ({
                 { confirmText: t('confirm.reset') },
               );
             } else if (id === 'bringToFront') {
-              if (typeof onMoveToFront === 'function') {
-                onMoveToFront(contextIndex);
+              if (contextElementId) {
+                void applyZOrderByIds(
+                  [{ type: 'key', id: contextElementId }],
+                  'front',
+                  pluginZIndexesForMode(),
+                );
+              } else {
+                const keyIndex = resolveContextTarget('key');
+                if (keyIndex != null && typeof onMoveToFront === 'function') {
+                  onMoveToFront(keyIndex);
+                }
               }
             } else if (id === 'bringForward') {
-              if (typeof onMoveForward === 'function') {
-                onMoveForward(contextIndex);
+              const keyIndex = resolveContextTarget('key');
+              if (keyIndex != null && typeof onMoveForward === 'function') {
+                onMoveForward(keyIndex);
               }
             } else if (id === 'sendBackward') {
-              if (typeof onMoveBackward === 'function') {
-                onMoveBackward(contextIndex);
+              const keyIndex = resolveContextTarget('key');
+              if (keyIndex != null && typeof onMoveBackward === 'function') {
+                onMoveBackward(keyIndex);
               }
             } else if (id === 'sendToBack') {
-              if (typeof onMoveToBack === 'function') {
-                onMoveToBack(contextIndex);
+              if (contextElementId) {
+                void applyZOrderByIds(
+                  [{ type: 'key', id: contextElementId }],
+                  'back',
+                  pluginZIndexesForMode(),
+                );
+              } else {
+                const keyIndex = resolveContextTarget('key');
+                if (keyIndex != null && typeof onMoveToBack === 'function') {
+                  onMoveToBack(keyIndex);
+                }
               }
             }
             setIsContextOpen(false);

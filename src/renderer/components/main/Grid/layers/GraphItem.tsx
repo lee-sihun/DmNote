@@ -44,7 +44,12 @@ interface GraphItemProps {
   index: number;
   elementId?: string;
   position: GraphPosition;
-  onPositionChange: (index: number, dx: number, dy: number) => void;
+  onPositionChange: (
+    index: number,
+    dx: number,
+    dy: number,
+    elementId?: string,
+  ) => void;
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
@@ -152,7 +157,8 @@ const GraphItem = ({
     initialY: dy,
     onPositionChange: (newDx: number, newDy: number) => {
       if (!isSelectionMode) {
-        onPositionChange(index, newDx, newDy);
+        // 프리즈된 index의 재해석은 수신 측이 elementId로 수행
+        onPositionChange(index, newDx, newDy, elementId);
       }
     },
     zoom,

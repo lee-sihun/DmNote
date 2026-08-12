@@ -5,6 +5,7 @@ import {
   syncHistoryStatus,
 } from '@stores/data/useHistoryStatusStore';
 import { historyApi } from '@api/modules/historyApi';
+import { rebindKeySlotById } from '@src/renderer/editor/runtime/elementOps';
 import {
   reconcileSelectionAfterIndexedElementDeletion,
   useGridSelectionStore,
@@ -523,6 +524,14 @@ export function useKeyManager() {
   // ────────────────────────────────────────────────────────────────────────
 
   const handleKeyMappingChange = (index: number, newSlot: KeySlot) => {
+    // keys 단독 full-record 커밋은 same-shape 재정렬과 겹치면 다른 위치
+    // id와 잘못 결합된다 - 위치 안정 id로 paired index를 재결합해 커밋
+    const positionId =
+      useKeyStore.getState().canonicalPositions[selectedKeyType]?.[index]?.id;
+    if (positionId) {
+      void rebindKeySlotById(positionId, newSlot);
+      return;
+    }
     const updatedMappings = updateKeyMapping(
       keyMappings,
       selectedKeyType,
