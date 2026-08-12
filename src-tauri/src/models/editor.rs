@@ -209,6 +209,11 @@ pub enum EditorElementPropertyPatchV1 {
     LayerName(EditorLayerNamePropertyPatchV1),
     GraphType(EditorGraphTypePropertyPatchV1),
     GraphColor(EditorGraphColorPropertyPatchV1),
+    ShowAvgLine(EditorShowAvgLinePropertyPatchV1),
+    GraphAnimationEnabled(EditorGraphAnimationEnabledPropertyPatchV1),
+    GraphSpeed(EditorGraphSpeedPropertyPatchV1),
+    Reverse(EditorReversePropertyPatchV1),
+    Sensitivity(EditorSensitivityPropertyPatchV1),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -234,6 +239,36 @@ pub struct EditorGraphTypePropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorGraphColorPropertyPatchV1 {
     pub graph_color: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorShowAvgLinePropertyPatchV1 {
+    pub show_avg_line: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorGraphAnimationEnabledPropertyPatchV1 {
+    pub graph_animation_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorGraphSpeedPropertyPatchV1 {
+    pub graph_speed: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorReversePropertyPatchV1 {
+    pub reverse: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorSensitivityPropertyPatchV1 {
+    pub sensitivity: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

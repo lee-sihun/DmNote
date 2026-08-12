@@ -4340,6 +4340,18 @@ mod tests {
         }
     }
 
+    fn patch_property_op(
+        element_type: EditorElementTypeV1,
+        id: impl Into<String>,
+        patch: EditorElementPropertyPatchV1,
+    ) -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type,
+            id: id.into(),
+            patch,
+        }
+    }
+
     fn frozen_key_insert_op(id: impl Into<String>) -> EditorOpV1 {
         EditorOpV1::InsertFrozenElements {
             mode: "4key".to_string(),
@@ -7833,6 +7845,230 @@ mod tests {
         assert!(store.editor_get().document.graph_positions["4key"]
             .iter()
             .all(|graph| graph.graph_color == raw_color));
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn graph_and_knob_literal_batch_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-graph-knob-literal-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut document = store.editor_get().document;
+        let template = document.key_positions["4key"][0].clone();
+        let graph_ids = (0..3)
+            .map(|_| uuid::Uuid::new_v4().to_string())
+            .collect::<Vec<_>>();
+        let knob_ids = (0..2)
+            .map(|_| uuid::Uuid::new_v4().to_string())
+            .collect::<Vec<_>>();
+        document.graph_positions.insert(
+            "4key".to_string(),
+            graph_ids
+                .iter()
+                .map(|id| GraphPosition {
+                    stat_type: GraphStatType::Kps,
+                    graph_type: GraphType::Line,
+                    graph_speed: 1000,
+                    graph_color: "raw".to_string(),
+                    show_avg_line: true,
+                    position: KeyPosition {
+                        id: id.clone(),
+                        graph_animation_enabled: None,
+                        ..template.clone()
+                    },
+                })
+                .collect(),
+        );
+        document.knob_positions.insert(
+            "4key".to_string(),
+            knob_ids
+                .iter()
+                .map(|id| KnobPosition {
+                    axis_id: "axis".to_string(),
+                    sensitivity: 1.0,
+                    reverse: false,
+                    position: KeyPosition {
+                        id: id.clone(),
+                        ..template.clone()
+                    },
+                })
+                .collect(),
+        );
+        let setup = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    graph_positions: Some(document.graph_positions),
+                    knob_positions: Some(document.knob_positions),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_ids[0],
+                EditorElementPropertyPatchV1::ShowAvgLine(
+                    crate::models::EditorShowAvgLinePropertyPatchV1 {
+                        show_avg_line: false,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_ids[1],
+                EditorElementPropertyPatchV1::GraphAnimationEnabled(
+                    crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
+                        graph_animation_enabled: true,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_ids[2],
+                EditorElementPropertyPatchV1::GraphSpeed(
+                    crate::models::EditorGraphSpeedPropertyPatchV1 {
+                        graph_speed: u32::MAX,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_ids[0],
+                EditorElementPropertyPatchV1::Reverse(
+                    crate::models::EditorReversePropertyPatchV1 { reverse: true },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_ids[1],
+                EditorElementPropertyPatchV1::Sensitivity(
+                    crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: -7.25 },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                missing_id,
+                EditorElementPropertyPatchV1::GraphSpeed(
+                    crate::models::EditorGraphSpeedPropertyPatchV1 { graph_speed: 0 },
+                ),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            changed.result.changed_fields,
+            [EditorField::GraphPositions, EditorField::KnobPositions]
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let graphs = &changed.document.graph_positions["4key"];
+        let knobs = &changed.document.knob_positions["4key"];
+        assert!(!graphs[0].show_avg_line);
+        assert_eq!(graphs[1].position.graph_animation_enabled, Some(true));
+        assert_eq!(graphs[2].graph_speed, u32::MAX);
+        assert!(knobs[0].reverse);
+        assert_eq!(knobs[1].sensitivity, -7.25);
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Graph,
+            &graph_ids[0],
+            EditorElementPropertyPatchV1::ShowAvgLine(
+                crate::models::EditorShowAvgLinePropertyPatchV1 {
+                    show_avg_line: true,
+                },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..5].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert!(undone.graph_positions["4key"]
+            .iter()
+            .all(|graph| graph.show_avg_line
+                && graph.graph_speed == 1000
+                && graph.position.graph_animation_enabled.is_none()));
+        assert!(undone.knob_positions["4key"]
+            .iter()
+            .all(|knob| !knob.reverse && knob.sensitivity == 1.0));
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert!(!redone.graph_positions["4key"][0].show_avg_line);
+        assert_eq!(
+            redone.graph_positions["4key"][1]
+                .position
+                .graph_animation_enabled,
+            Some(true)
+        );
+        assert_eq!(redone.graph_positions["4key"][2].graph_speed, u32::MAX);
+        assert!(redone.knob_positions["4key"][0].reverse);
+        assert_eq!(redone.knob_positions["4key"][1].sensitivity, -7.25);
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

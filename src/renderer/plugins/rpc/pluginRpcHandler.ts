@@ -53,9 +53,15 @@ import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap'
 import {
   patchElementPropertyById,
   patchGraphColorsByIds,
+  patchGraphPropertiesByIds,
   patchGraphTypesByIds,
+  patchKnobPropertiesByIds,
 } from '@src/renderer/editor/runtime/elementOps';
-import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
+import type {
+  EditorElementPropertyPatchV1,
+  EditorGraphRuntimePropertyPatchV1,
+  EditorKnobRuntimePropertyPatchV1,
+} from '@src/types/editor';
 import type {
   LayerReorderAnchorsWire,
   LayerReorderIntentWire,
@@ -194,10 +200,33 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['graphType']) &&
       (patch.graphType === 'line' || patch.graphType === 'bar')) ||
     (hasExactKeys(patch, ['graphColor']) &&
-      typeof patch.graphColor === 'string');
+      typeof patch.graphColor === 'string') ||
+    (hasExactKeys(patch, ['showAvgLine']) &&
+      typeof patch.showAvgLine === 'boolean') ||
+    (hasExactKeys(patch, ['graphAnimationEnabled']) &&
+      typeof patch.graphAnimationEnabled === 'boolean') ||
+    (hasExactKeys(patch, ['graphSpeed']) &&
+      typeof patch.graphSpeed === 'number' &&
+      Number.isSafeInteger(patch.graphSpeed) &&
+      patch.graphSpeed >= 0 &&
+      patch.graphSpeed <= 4_294_967_295) ||
+    (hasExactKeys(patch, ['sensitivity']) &&
+      typeof patch.sensitivity === 'number' &&
+      Number.isFinite(patch.sensitivity)) ||
+    (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean');
   const graphOnlyPatch =
-    hasExactKeys(patch, ['graphType']) || hasExactKeys(patch, ['graphColor']);
-  if (!patchValid || (graphOnlyPatch && target.elementType !== 'graph')) {
+    hasExactKeys(patch, ['graphType']) ||
+    hasExactKeys(patch, ['graphColor']) ||
+    hasExactKeys(patch, ['showAvgLine']) ||
+    hasExactKeys(patch, ['graphAnimationEnabled']) ||
+    hasExactKeys(patch, ['graphSpeed']);
+  const knobOnlyPatch =
+    hasExactKeys(patch, ['sensitivity']) || hasExactKeys(patch, ['reverse']);
+  if (
+    !patchValid ||
+    (graphOnlyPatch && target.elementType !== 'graph') ||
+    (knobOnlyPatch && target.elementType !== 'knob')
+  ) {
     return null;
   }
   return target as unknown as NativeLayerPropertyTarget;
@@ -206,7 +235,17 @@ const parseNativeLayerPropertyTarget = (
 type NativeLayerPropertyRequest =
   | { kind: 'single'; target: NativeLayerPropertyTarget }
   | { kind: 'graphTypeBatch'; ids: string[]; graphType: 'line' | 'bar' }
-  | { kind: 'graphColorBatch'; ids: string[]; graphColor: string };
+  | { kind: 'graphColorBatch'; ids: string[]; graphColor: string }
+  | {
+      kind: 'graphPropertyBatch';
+      ids: string[];
+      patch: EditorGraphRuntimePropertyPatchV1;
+    }
+  | {
+      kind: 'knobPropertyBatch';
+      ids: string[];
+      patch: EditorKnobRuntimePropertyPatchV1;
+    };
 
 const parseNativeLayerPropertyRequest = (
   payload: Record<string, unknown>,
@@ -236,9 +275,37 @@ const parseNativeLayerPropertyRequest = (
     hasExactKeys(patch, ['graphColor']) && typeof patch.graphColor === 'string'
       ? patch.graphColor
       : null;
-  if (graphType === null && graphColor === null) {
+  const graphRuntimePatch: EditorGraphRuntimePropertyPatchV1 | null =
+    hasExactKeys(patch, ['showAvgLine']) &&
+    typeof patch.showAvgLine === 'boolean'
+      ? { showAvgLine: patch.showAvgLine }
+      : hasExactKeys(patch, ['graphAnimationEnabled']) &&
+        typeof patch.graphAnimationEnabled === 'boolean'
+      ? { graphAnimationEnabled: patch.graphAnimationEnabled }
+      : hasExactKeys(patch, ['graphSpeed']) &&
+        typeof patch.graphSpeed === 'number' &&
+        Number.isSafeInteger(patch.graphSpeed) &&
+        patch.graphSpeed >= 0 &&
+        patch.graphSpeed <= 4_294_967_295
+      ? { graphSpeed: patch.graphSpeed }
+      : null;
+  const knobRuntimePatch: EditorKnobRuntimePropertyPatchV1 | null =
+    hasExactKeys(patch, ['sensitivity']) &&
+    typeof patch.sensitivity === 'number' &&
+    Number.isFinite(patch.sensitivity)
+      ? { sensitivity: patch.sensitivity }
+      : hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean'
+      ? { reverse: patch.reverse }
+      : null;
+  if (
+    graphType === null &&
+    graphColor === null &&
+    graphRuntimePatch === null &&
+    knobRuntimePatch === null
+  ) {
     return null;
   }
+  const elementType = knobRuntimePatch === null ? 'graph' : 'knob';
   const ids: string[] = [];
   const seen = new Set<string>();
   for (const value of payload.targets) {
@@ -252,7 +319,7 @@ const parseNativeLayerPropertyRequest = (
     }
     const target = value as Record<string, unknown>;
     if (
-      target.elementType !== 'graph' ||
+      target.elementType !== elementType ||
       typeof target.id !== 'string' ||
       target.id.trim().length === 0 ||
       isSyntheticElementId(target.id) ||
@@ -263,9 +330,14 @@ const parseNativeLayerPropertyRequest = (
     seen.add(target.id);
     ids.push(target.id);
   }
-  return graphType !== null
-    ? { kind: 'graphTypeBatch', ids, graphType }
-    : { kind: 'graphColorBatch', ids, graphColor: graphColor! };
+  if (graphType !== null) return { kind: 'graphTypeBatch', ids, graphType };
+  if (graphColor !== null) {
+    return { kind: 'graphColorBatch', ids, graphColor };
+  }
+  if (graphRuntimePatch !== null) {
+    return { kind: 'graphPropertyBatch', ids, patch: graphRuntimePatch };
+  }
+  return { kind: 'knobPropertyBatch', ids, patch: knobRuntimePatch! };
 };
 
 const MAX_LAYER_REORDER_IDS = 4096;
@@ -930,7 +1002,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       if (request.kind === 'graphTypeBatch') {
         return patchGraphTypesByIds(request.ids, request.graphType, options);
       }
-      return patchGraphColorsByIds(request.ids, request.graphColor, options);
+      if (request.kind === 'graphColorBatch') {
+        return patchGraphColorsByIds(request.ids, request.graphColor, options);
+      }
+      if (request.kind === 'graphPropertyBatch') {
+        return patchGraphPropertiesByIds(request.ids, request.patch, options);
+      }
+      return patchKnobPropertiesByIds(request.ids, request.patch, options);
     })();
     void persisted
       .then(() => {

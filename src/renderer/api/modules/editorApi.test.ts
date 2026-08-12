@@ -353,6 +353,53 @@ describe('editorCommitRaw semantic op protocol', () => {
     ).toThrow(EditorProtocolError);
   });
 
+  it.each([
+    ['graph', { showAvgLine: true }],
+    ['graph', { graphAnimationEnabled: false }],
+    ['graph', { graphSpeed: 4_294_967_295 }],
+    ['knob', { reverse: true }],
+    ['knob', { sensitivity: -0.5 }],
+  ] as const)(
+    'patchElement %s runtime leaf %j의 exact wire를 수용한다',
+    (elementType, patch) => {
+      expect(() =>
+        assertEditorOpsV1([
+          {
+            kind: 'patchElement',
+            elementType,
+            id: '00000000-0000-4000-8000-000000000043',
+            patch,
+          },
+        ]),
+      ).not.toThrow();
+    },
+  );
+
+  it.each([
+    ['stat', { showAvgLine: true }],
+    ['knob', { graphAnimationEnabled: true }],
+    ['graph', { graphSpeed: -1 }],
+    ['graph', { graphSpeed: 4_294_967_296 }],
+    ['graph', { graphSpeed: 1.5 }],
+    ['graph', { reverse: true }],
+    ['knob', { sensitivity: Number.POSITIVE_INFINITY }],
+    ['knob', { reverse: true, sensitivity: 1 }],
+  ] as const)(
+    'patchElement %s runtime leaf %j의 잘못된 wire를 거절한다',
+    (elementType, patch) => {
+      expect(() =>
+        assertEditorOpsV1([
+          {
+            kind: 'patchElement',
+            elementType,
+            id: '00000000-0000-4000-8000-000000000044',
+            patch,
+          } as never,
+        ]),
+      ).toThrow(EditorProtocolError);
+    },
+  );
+
   it('insertFrozenElements는 sole op이며 groups-only 요청을 거절한다', () => {
     const groupsOnly = {
       kind: 'insertFrozenElements' as const,

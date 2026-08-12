@@ -2381,6 +2381,60 @@ mod tests {
         );
         decode_editor_commit_request(graph_color.clone()).unwrap();
 
+        let literal_properties = [
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::ShowAvgLine(
+                    crate::models::EditorShowAvgLinePropertyPatchV1 {
+                        show_avg_line: false,
+                    },
+                ),
+                serde_json::json!({ "showAvgLine": false }),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::GraphAnimationEnabled(
+                    crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
+                        graph_animation_enabled: true,
+                    },
+                ),
+                serde_json::json!({ "graphAnimationEnabled": true }),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::GraphSpeed(
+                    crate::models::EditorGraphSpeedPropertyPatchV1 {
+                        graph_speed: u32::MAX,
+                    },
+                ),
+                serde_json::json!({ "graphSpeed": u32::MAX }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::Reverse(
+                    crate::models::EditorReversePropertyPatchV1 { reverse: true },
+                ),
+                serde_json::json!({ "reverse": true }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::Sensitivity(
+                    crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: -7.25 },
+                ),
+                serde_json::json!({ "sensitivity": -7.25 }),
+            ),
+        ];
+        for (element_type, patch, expected) in literal_properties {
+            let wire = serde_json::to_value(ops_request(vec![EditorOpV1::PatchElement {
+                element_type,
+                id: Uuid::new_v4().to_string(),
+                patch,
+            }]))
+            .unwrap();
+            assert_eq!(wire["ops"][0]["patch"], expected);
+            decode_editor_commit_request(wire).unwrap();
+        }
+
         let mut unknown_property = property.clone();
         unknown_property["ops"][0]["patch"]["zIndex"] = serde_json::json!(3);
         let mut unknown_op = property;
@@ -2391,8 +2445,21 @@ mod tests {
         multiple_properties["ops"][0]["patch"]["hidden"] = serde_json::json!(true);
         let mut invalid_graph_type = graph_type;
         invalid_graph_type["ops"][0]["patch"]["graphType"] = serde_json::json!("area");
-        let mut invalid_graph_color = graph_color;
+        let mut invalid_graph_color = graph_color.clone();
         invalid_graph_color["ops"][0]["patch"]["graphColor"] = serde_json::json!(42);
+        let invalid_literal_properties = [
+            serde_json::json!({ "showAvgLine": 1 }),
+            serde_json::json!({ "graphAnimationEnabled": null }),
+            serde_json::json!({ "graphSpeed": -1 }),
+            serde_json::json!({ "graphSpeed": 1.5 }),
+            serde_json::json!({ "reverse": "true" }),
+            serde_json::json!({ "sensitivity": "1" }),
+        ]
+        .map(|patch| {
+            let mut wire = graph_color.clone();
+            wire["ops"][0]["patch"] = patch;
+            wire
+        });
         for wire in [
             unknown_property,
             unknown_op,
@@ -2400,7 +2467,10 @@ mod tests {
             multiple_properties,
             invalid_graph_type,
             invalid_graph_color,
-        ] {
+        ]
+        .into_iter()
+        .chain(invalid_literal_properties)
+        {
             let error = decode_editor_commit_request(wire).unwrap_err();
             assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
         }

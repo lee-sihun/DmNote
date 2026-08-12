@@ -24,6 +24,8 @@ import type {
   EditorBoundsV1,
   EditorDocumentV1,
   EditorElementPropertyPatchV1,
+  EditorGraphRuntimePropertyPatchV1,
+  EditorKnobRuntimePropertyPatchV1,
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
@@ -554,7 +556,7 @@ export const patchElementPropertyById = (
       ? { graphType: patch.graphType }
       : 'graphColor' in patch
       ? { graphColor: patch.graphColor }
-      : { hidden: patch.hidden };
+      : { ...patch };
   const intents: PropertyIntents = new Map([
     [type, new Map([[id, eagerPatch]])],
   ]);
@@ -601,7 +603,7 @@ const patchElementPropertiesByIds = (
         ? { graphType: target.patch.graphType }
         : 'graphColor' in target.patch
         ? { graphColor: target.patch.graphColor }
-        : { hidden: target.patch.hidden };
+        : { ...target.patch };
     const byId = mutableIntents.get(target.type) ?? new Map();
     byId.set(target.id, eagerPatch);
     mutableIntents.set(target.type, byId);
@@ -695,6 +697,58 @@ export const patchGraphColorsByIds = (
   }
   return patchElementPropertiesByIds(
     ids.map((id) => ({ type: 'graph', id, patch: { graphColor } })),
+    options,
+  );
+};
+
+export const patchGraphPropertyById = (
+  id: string,
+  patch: EditorGraphRuntimePropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById('graph', id, patch, options);
+};
+
+export const patchGraphPropertiesByIds = (
+  ids: readonly string[],
+  patch: EditorGraphRuntimePropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    ids.map((id) => ({ type: 'graph', id, patch })),
+    options,
+  );
+};
+
+export const patchKnobPropertyById = (
+  id: string,
+  patch: EditorKnobRuntimePropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById('knob', id, patch, options);
+};
+
+export const patchKnobPropertiesByIds = (
+  ids: readonly string[],
+  patch: EditorKnobRuntimePropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    ids.map((id) => ({ type: 'knob', id, patch })),
     options,
   );
 };

@@ -13,7 +13,11 @@ import {
 } from '@utils/plugin/panelModelSync';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
-import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
+import type {
+  EditorElementPropertyPatchV1,
+  EditorGraphRuntimePropertyPatchV1,
+  EditorKnobRuntimePropertyPatchV1,
+} from '@src/types/editor';
 
 import { getPluginAuthorityGeneration, sendPluginRpc } from './pluginRpcClient';
 
@@ -351,17 +355,18 @@ export const patchNativeLayerPropertyViaAuthority = (
   });
 };
 
-export const patchGraphTypesViaAuthority = (
+const patchNativeLayerPropertiesViaAuthority = (
+  elementType: 'graph' | 'knob',
   ids: readonly string[],
-  graphType: 'line' | 'bar',
+  patch: EditorElementPropertyPatchV1,
 ): Promise<boolean> => {
   const authorityGeneration = getPluginAuthorityGeneration();
   return new Promise((resolve) => {
     outboundQueue.push({
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
-        targets: ids.map((id) => ({ elementType: 'graph', id })),
-        patch: { graphType },
+        targets: ids.map((id) => ({ elementType, id })),
+        patch: structuredClone(patch),
       },
       authorityGeneration,
       retryPolicy: 'default',
@@ -371,25 +376,29 @@ export const patchGraphTypesViaAuthority = (
   });
 };
 
+export const patchGraphTypesViaAuthority = (
+  ids: readonly string[],
+  graphType: 'line' | 'bar',
+): Promise<boolean> =>
+  patchNativeLayerPropertiesViaAuthority('graph', ids, { graphType });
+
 export const patchGraphColorsViaAuthority = (
   ids: readonly string[],
   graphColor: string,
-): Promise<boolean> => {
-  const authorityGeneration = getPluginAuthorityGeneration();
-  return new Promise((resolve) => {
-    outboundQueue.push({
-      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
-      payload: {
-        targets: ids.map((id) => ({ elementType: 'graph', id })),
-        patch: { graphColor },
-      },
-      authorityGeneration,
-      retryPolicy: 'default',
-      resolve,
-    });
-    void ensureQueueDrain();
-  });
-};
+): Promise<boolean> =>
+  patchNativeLayerPropertiesViaAuthority('graph', ids, { graphColor });
+
+export const patchGraphPropertiesViaAuthority = (
+  ids: readonly string[],
+  patch: EditorGraphRuntimePropertyPatchV1,
+): Promise<boolean> =>
+  patchNativeLayerPropertiesViaAuthority('graph', ids, patch);
+
+export const patchKnobPropertiesViaAuthority = (
+  ids: readonly string[],
+  patch: EditorKnobRuntimePropertyPatchV1,
+): Promise<boolean> =>
+  patchNativeLayerPropertiesViaAuthority('knob', ids, patch);
 
 export const drainPendingPluginElementWrites = async (): Promise<boolean> => {
   let succeeded = true;

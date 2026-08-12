@@ -403,6 +403,60 @@ mod tests {
         );
         decode_gesture_commit_request(graph_color_wire.clone()).unwrap();
 
+        let literal_properties = [
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::ShowAvgLine(
+                    crate::models::EditorShowAvgLinePropertyPatchV1 {
+                        show_avg_line: true,
+                    },
+                ),
+                serde_json::json!({ "showAvgLine": true }),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::GraphAnimationEnabled(
+                    crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
+                        graph_animation_enabled: false,
+                    },
+                ),
+                serde_json::json!({ "graphAnimationEnabled": false }),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::GraphSpeed(
+                    crate::models::EditorGraphSpeedPropertyPatchV1 { graph_speed: 0 },
+                ),
+                serde_json::json!({ "graphSpeed": 0 }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::Reverse(
+                    crate::models::EditorReversePropertyPatchV1 { reverse: true },
+                ),
+                serde_json::json!({ "reverse": true }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::Sensitivity(
+                    crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: -7.25 },
+                ),
+                serde_json::json!({ "sensitivity": -7.25 }),
+            ),
+        ];
+        for (element_type, patch, expected) in literal_properties {
+            let mut request = gesture_request(&["plugin-a".to_string()]);
+            request.editor_ops_version = Some(EDITOR_OPS_VERSION);
+            request.editor_ops = Some(vec![EditorOpV1::PatchElement {
+                element_type,
+                id: uuid::Uuid::new_v4().to_string(),
+                patch,
+            }]);
+            let wire = serde_json::to_value(request).unwrap();
+            assert_eq!(wire["editorOps"][0]["patch"], expected);
+            decode_gesture_commit_request(wire).unwrap();
+        }
+
         let mut invalid_graph_color = graph_color_wire;
         invalid_graph_color["editorOps"][0]["patch"]["graphColor"] = serde_json::json!(false);
         let error = decode_gesture_commit_request(invalid_graph_color).unwrap_err();

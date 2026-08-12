@@ -34,7 +34,9 @@ import {
 } from '@plugins/runtime/settingsSections';
 import {
   patchGraphColorsViaAuthority,
+  patchGraphPropertiesViaAuthority,
   patchGraphTypesViaAuthority,
+  patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -47,6 +49,10 @@ import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import type {
+  EditorGraphRuntimePropertyPatchV1,
+  EditorKnobRuntimePropertyPatchV1,
+} from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
   PluginSettingSchema,
@@ -70,8 +76,12 @@ import {
   patchElementLayerNameById,
   patchGraphColorById,
   patchGraphColorsByIds,
+  patchGraphPropertiesByIds,
+  patchGraphPropertyById,
   patchGraphTypeById,
   patchGraphTypesByIds,
+  patchKnobPropertiesByIds,
+  patchKnobPropertyById,
 } from '@src/renderer/editor/runtime/elementOps';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
@@ -139,6 +149,49 @@ const shouldNormalizePropertyTabToStyle = (
 
 // 서브 페이지 exit 전환 시간 — --ui-duration-page와 동기
 const PAGE_EXIT_MS = 250;
+
+const getGraphRuntimePropertyPatch = (
+  updates: Partial<GraphItemPosition>,
+): EditorGraphRuntimePropertyPatchV1 | null => {
+  const keys = Object.keys(updates);
+  if (keys.length !== 1) return null;
+  if (keys[0] === 'showAvgLine' && typeof updates.showAvgLine === 'boolean') {
+    return { showAvgLine: updates.showAvgLine };
+  }
+  if (
+    keys[0] === 'graphAnimationEnabled' &&
+    typeof updates.graphAnimationEnabled === 'boolean'
+  ) {
+    return { graphAnimationEnabled: updates.graphAnimationEnabled };
+  }
+  if (
+    keys[0] === 'graphSpeed' &&
+    Number.isSafeInteger(updates.graphSpeed) &&
+    (updates.graphSpeed as number) >= 0 &&
+    (updates.graphSpeed as number) <= 4_294_967_295
+  ) {
+    return { graphSpeed: updates.graphSpeed as number };
+  }
+  return null;
+};
+
+const getKnobRuntimePropertyPatch = (
+  updates: Partial<KnobItemPosition>,
+): EditorKnobRuntimePropertyPatchV1 | null => {
+  const keys = Object.keys(updates);
+  if (keys.length !== 1) return null;
+  if (keys[0] === 'reverse' && typeof updates.reverse === 'boolean') {
+    return { reverse: updates.reverse };
+  }
+  if (
+    keys[0] === 'sensitivity' &&
+    typeof updates.sensitivity === 'number' &&
+    Number.isFinite(updates.sensitivity)
+  ) {
+    return { sensitivity: updates.sensitivity };
+  }
+  return null;
+};
 
 // ============================================================================
 // 메인 컴포넌트 Props
@@ -1361,6 +1414,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const updateKeys = Object.keys(updates);
     const graphType = updates.graphType;
     const graphColor = updates.graphColor;
+    const runtimePatch = getGraphRuntimePropertyPatch(updates);
     const selectedGraph =
       selectedGraphElements.length === 1 ? selectedGraphElements[0] : null;
     if (
@@ -1381,6 +1435,25 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           : patchGraphTypeById(selectedGraph.id, graphType);
       void commit.catch((error) => {
         console.error('Failed to update graph type', error);
+      });
+      return;
+    }
+    if (
+      runtimePatch &&
+      selectedGraph &&
+      selectedGraph.id.length > 0 &&
+      !isSyntheticElementId(selectedGraph.id)
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'graph',
+              id: selectedGraph.id,
+              patch: runtimePatch,
+            })
+          : patchGraphPropertyById(selectedGraph.id, runtimePatch);
+      void commit.catch((error) => {
+        console.error('Failed to update graph property', error);
       });
       return;
     }
@@ -1431,6 +1504,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     data: Partial<KnobItemPosition> & { index: number },
   ) => {
     const { index, ...updates } = data;
+    const runtimePatch = getKnobRuntimePropertyPatch(updates);
+    const selectedKnob =
+      selectedKnobElements.length === 1 ? selectedKnobElements[0] : null;
+    if (
+      runtimePatch &&
+      selectedKnob &&
+      selectedKnob.id.length > 0 &&
+      !isSyntheticElementId(selectedKnob.id)
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'knob',
+              id: selectedKnob.id,
+              patch: runtimePatch,
+            })
+          : patchKnobPropertyById(selectedKnob.id, runtimePatch);
+      void commit.catch((error) => {
+        console.error('Failed to update knob property', error);
+      });
+      return;
+    }
     const mode = selectedKeyType;
     const current = useKnobItemStore.getState().positions;
     const list = current[mode] || [];
@@ -2015,6 +2110,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const updateKeys = Object.keys(updates);
     const graphType = updates.graphType;
     const graphColor = updates.graphColor;
+    const runtimePatch = getGraphRuntimePropertyPatch(updates);
     const stableGraphIds = selectedGraphElements.map((element) => element.id);
     if (
       updateKeys.length === 1 &&
@@ -2029,6 +2125,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           : patchGraphTypesByIds(stableGraphIds, graphType);
       void commit.catch((error) => {
         console.error('Failed to batch update graph type', error);
+      });
+      return;
+    }
+    if (
+      runtimePatch &&
+      stableGraphIds.length > 0 &&
+      stableGraphIds.every((id) => id.length > 0 && !isSyntheticElementId(id))
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchGraphPropertiesViaAuthority(stableGraphIds, runtimePatch)
+          : patchGraphPropertiesByIds(stableGraphIds, runtimePatch);
+      void commit.catch((error) => {
+        console.error('Failed to batch update graph property', error);
       });
       return;
     }
@@ -2057,6 +2167,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   const handleKnobBatchSharedSetting = (updates: Partial<KnobItemPosition>) => {
+    const runtimePatch = getKnobRuntimePropertyPatch(updates);
+    const stableKnobIds = selectedKnobElements.map((element) => element.id);
+    if (
+      runtimePatch &&
+      stableKnobIds.length > 0 &&
+      stableKnobIds.every((id) => id.length > 0 && !isSyntheticElementId(id))
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchKnobPropertiesViaAuthority(stableKnobIds, runtimePatch)
+          : patchKnobPropertiesByIds(stableKnobIds, runtimePatch);
+      void commit.catch((error) => {
+        console.error('Failed to batch update knob property', error);
+      });
+      return;
+    }
     const batchUpdates = selectedKnobElements
       .filter((el) => el.index !== undefined)
       .map((el) => ({ index: el.index!, ...updates })) as Array<

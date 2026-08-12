@@ -138,31 +138,36 @@ export interface EditorReorderElementsOpV1 {
   completeModeOrder: boolean;
 }
 
-export type EditorElementPropertyPatchV1 =
-  | {
-      hidden: boolean;
-      layerName?: never;
-      graphType?: never;
-      graphColor?: never;
-    }
-  | {
-      hidden?: never;
-      layerName: string | null;
-      graphType?: never;
-      graphColor?: never;
-    }
-  | {
-      hidden?: never;
-      layerName?: never;
-      graphType: 'line' | 'bar';
-      graphColor?: never;
-    }
-  | {
-      hidden?: never;
-      layerName?: never;
-      graphType?: never;
-      graphColor: string;
-    };
+interface EditorElementPropertyValuesV1 {
+  hidden: boolean;
+  layerName: string | null;
+  graphType: 'line' | 'bar';
+  graphColor: string;
+  showAvgLine: boolean;
+  graphAnimationEnabled: boolean;
+  graphSpeed: number;
+  reverse: boolean;
+  sensitivity: number;
+}
+
+type ExactEditorPropertyPatchV1<K extends keyof EditorElementPropertyValuesV1> =
+  Pick<EditorElementPropertyValuesV1, K> &
+    Partial<Record<Exclude<keyof EditorElementPropertyValuesV1, K>, never>>;
+
+type EditorPropertyPatchUnionV1<K extends keyof EditorElementPropertyValuesV1> =
+  { [P in K]: ExactEditorPropertyPatchV1<P> }[K];
+
+export type EditorGraphRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'showAvgLine' | 'graphAnimationEnabled' | 'graphSpeed'
+>;
+
+export type EditorKnobRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'reverse' | 'sensitivity'
+>;
+
+export type EditorElementPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  keyof EditorElementPropertyValuesV1
+>;
 
 export interface EditorPatchElementOpV1 {
   kind: 'patchElement';
@@ -926,7 +931,30 @@ export function assertEditorOpsV1(
         (patchKeys.length === 1 &&
           patchKeys[0] === 'graphColor' &&
           op.elementType === 'graph' &&
-          typeof op.patch.graphColor === 'string');
+          typeof op.patch.graphColor === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'showAvgLine' &&
+          op.elementType === 'graph' &&
+          typeof op.patch.showAvgLine === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'graphAnimationEnabled' &&
+          op.elementType === 'graph' &&
+          typeof op.patch.graphAnimationEnabled === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'graphSpeed' &&
+          op.elementType === 'graph' &&
+          Number.isSafeInteger(op.patch.graphSpeed) &&
+          (op.patch.graphSpeed as number) >= 0 &&
+          (op.patch.graphSpeed as number) <= 4_294_967_295) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'reverse' &&
+          op.elementType === 'knob' &&
+          typeof op.patch.reverse === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'sensitivity' &&
+          op.elementType === 'knob' &&
+          typeof op.patch.sensitivity === 'number' &&
+          Number.isFinite(op.patch.sensitivity));
       if (!patchIsValid) {
         throw new EditorProtocolError(`${opLabel}.patch is invalid`);
       }

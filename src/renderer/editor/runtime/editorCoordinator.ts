@@ -460,6 +460,24 @@ const applySemanticOps = (
             if ('graphColor' in op.patch) {
               return { ...position, graphColor: op.patch.graphColor };
             }
+            if ('showAvgLine' in op.patch) {
+              return { ...position, showAvgLine: op.patch.showAvgLine };
+            }
+            if ('graphAnimationEnabled' in op.patch) {
+              return {
+                ...position,
+                graphAnimationEnabled: op.patch.graphAnimationEnabled,
+              };
+            }
+            if ('graphSpeed' in op.patch) {
+              return { ...position, graphSpeed: op.patch.graphSpeed };
+            }
+            if ('reverse' in op.patch) {
+              return { ...position, reverse: op.patch.reverse };
+            }
+            if ('sensitivity' in op.patch) {
+              return { ...position, sensitivity: op.patch.sensitivity };
+            }
             return { ...position, hidden: op.patch.hidden };
           }),
         } as never;

@@ -35,8 +35,12 @@ import {
   patchElementLayerNameById,
   patchGraphColorById,
   patchGraphColorsByIds,
+  patchGraphPropertiesByIds,
+  patchGraphPropertyById,
   patchGraphTypeById,
   patchGraphTypesByIds,
+  patchKnobPropertiesByIds,
+  patchKnobPropertyById,
   rebindKeySlotById,
 } from './elementOps';
 
@@ -1056,5 +1060,117 @@ describe('elementOps', () => {
         .getState()
         .positions['4key'].map((position) => position.graphColor),
     ).toEqual(['#86EFAC', '#86EFAC']);
+  });
+
+  it.each([
+    [{ showAvgLine: true }],
+    [{ graphAnimationEnabled: false }],
+    [{ graphSpeed: 2400 }],
+  ] as const)(
+    'graph runtime leaf %j는 single과 batch를 좁은 op 한 커밋으로 보낸다',
+    async (patch) => {
+      const graphB = '00000000-0000-4000-8000-000000000094';
+      useGraphItemStore.setState({
+        positions: { '4key': [graphAt(ID_A), graphAt(graphB)] },
+      });
+
+      await patchGraphPropertyById(ID_A, patch);
+      expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+        [
+          {
+            kind: 'patchElement',
+            elementType: 'graph',
+            id: ID_A,
+            patch,
+          },
+        ],
+        expect.objectContaining({ onEnrolled: expect.any(Function) }),
+      );
+
+      api.commitSemanticOps.mockClear();
+      await patchGraphPropertiesByIds([ID_A, graphB], patch);
+      expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+      expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
+        expect.objectContaining({ id: ID_A, patch }),
+        expect.objectContaining({ id: graphB, patch }),
+      ]);
+    },
+  );
+
+  it.each([[{ reverse: true }], [{ sensitivity: 2.5 }]] as const)(
+    'knob runtime leaf %j는 single과 batch를 좁은 op 한 커밋으로 보낸다',
+    async (patch) => {
+      const knobB = '00000000-0000-4000-8000-000000000095';
+      const knob = (id: string) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        axisId: 'HIDA:test',
+        sensitivity: 1,
+        reverse: false,
+      });
+      useKnobItemStore.setState({
+        positions: { '4key': [knob(ID_A), knob(knobB)] },
+      });
+
+      await patchKnobPropertyById(ID_A, patch);
+      expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+        [
+          {
+            kind: 'patchElement',
+            elementType: 'knob',
+            id: ID_A,
+            patch,
+          },
+        ],
+        expect.objectContaining({ onEnrolled: expect.any(Function) }),
+      );
+
+      api.commitSemanticOps.mockClear();
+      await patchKnobPropertiesByIds([ID_A, knobB], patch);
+      expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+      expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
+        expect.objectContaining({ id: ID_A, patch }),
+        expect.objectContaining({ id: knobB, patch }),
+      ]);
+    },
+  );
+
+  it('runtime leaf batch 편입 전 실패는 graph와 knob eager를 각각 복원한다', async () => {
+    const otherId = '00000000-0000-4000-8000-000000000096';
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          graphAt(ID_A, { graphSpeed: 1000 }),
+          graphAt(otherId, { graphSpeed: 1000 }),
+        ],
+      },
+    });
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+    await expect(
+      patchGraphPropertiesByIds([ID_A, otherId], { graphSpeed: 2200 }),
+    ).rejects.toThrow('start failed');
+    expect(
+      useGraphItemStore
+        .getState()
+        .positions['4key'].map((position) => position.graphSpeed),
+    ).toEqual([1000, 1000]);
+
+    useKnobItemStore.setState({
+      positions: {
+        '4key': [
+          { ...createDefaultKeyPosition(), id: ID_A, sensitivity: 1 },
+          { ...createDefaultKeyPosition(), id: otherId, sensitivity: 1 },
+        ] as never,
+      },
+    });
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+    await expect(
+      patchKnobPropertiesByIds([ID_A, otherId], { sensitivity: 3 }),
+    ).rejects.toThrow('start failed');
+    expect(
+      useKnobItemStore
+        .getState()
+        .positions['4key'].map((position) => position.sensitivity),
+    ).toEqual([1, 1]);
   });
 });

@@ -343,6 +343,24 @@ const applyOpsForTest = (
           if ('graphColor' in op.patch) {
             return { ...position, graphColor: op.patch.graphColor };
           }
+          if ('showAvgLine' in op.patch) {
+            return { ...position, showAvgLine: op.patch.showAvgLine };
+          }
+          if ('graphAnimationEnabled' in op.patch) {
+            return {
+              ...position,
+              graphAnimationEnabled: op.patch.graphAnimationEnabled,
+            };
+          }
+          if ('graphSpeed' in op.patch) {
+            return { ...position, graphSpeed: op.patch.graphSpeed };
+          }
+          if ('reverse' in op.patch) {
+            return { ...position, reverse: op.patch.reverse };
+          }
+          if ('sensitivity' in op.patch) {
+            return { ...position, sensitivity: op.patch.sensitivity };
+          }
           return { ...position, hidden: op.patch.hidden };
         });
       } else {
@@ -3004,6 +3022,178 @@ describe('commitSemanticOpsInternal', () => {
       graphType: 'line',
       graphSpeed: 1234,
     });
+    harness.coordinator.stop();
+  });
+
+  it.each([
+    [{ showAvgLine: true }],
+    [{ graphAnimationEnabled: false }],
+    [{ graphSpeed: 3200 }],
+  ] as const)('graph runtime patch %j는 해당 leaf만 바꾼다', async (patch) => {
+    const id = '00000000-0000-4000-8000-000000000097';
+    const base = makeDocument();
+    base.graphPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id,
+          statType: 'kps',
+          graphType: 'line',
+          graphSpeed: 1000,
+          graphColor: '#before',
+          showAvgLine: false,
+          graphAnimationEnabled: true,
+        },
+      ],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id,
+        patch,
+      },
+    ]);
+
+    expect(outcome.document.graphPositions['4key'][0]).toMatchObject({
+      id,
+      graphType: 'line',
+      graphColor: '#before',
+      ...patch,
+    });
+    harness.coordinator.stop();
+  });
+
+  it.each([[{ reverse: true }], [{ sensitivity: 2.5 }]] as const)(
+    'knob runtime patch %j는 해당 leaf만 바꾼다',
+    async (patch) => {
+      const id = '00000000-0000-4000-8000-000000000098';
+      const base = makeDocument();
+      base.knobPositions = {
+        '4key': [
+          {
+            ...createDefaultKeyPosition(),
+            id,
+            axisId: 'HIDA:test',
+            sensitivity: 1,
+            reverse: false,
+          },
+        ],
+      };
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+
+      const outcome = await harness.coordinator.commitSemanticOpsInternal([
+        {
+          kind: 'patchElement',
+          elementType: 'knob',
+          id,
+          patch,
+        },
+      ]);
+
+      expect(outcome.document.knobPositions['4key'][0]).toMatchObject({
+        id,
+        axisId: 'HIDA:test',
+        ...patch,
+      });
+      harness.coordinator.stop();
+    },
+  );
+
+  it('graph와 knob runtime leaf 5개를 한 commit에서 순서대로 적용하고 noChange를 보존한다', async () => {
+    const graphIds = [
+      '00000000-0000-4000-8000-0000000000a1',
+      '00000000-0000-4000-8000-0000000000a2',
+      '00000000-0000-4000-8000-0000000000a3',
+    ];
+    const knobIds = [
+      '00000000-0000-4000-8000-0000000000a4',
+      '00000000-0000-4000-8000-0000000000a5',
+    ];
+    const base = makeDocument();
+    base.graphPositions = {
+      '4key': graphIds.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        statType: 'kps' as const,
+        graphType: 'line' as const,
+        graphSpeed: 1000,
+        graphColor: '#before',
+        showAvgLine: false,
+        graphAnimationEnabled: true,
+      })),
+    };
+    base.knobPositions = {
+      '4key': knobIds.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        axisId: 'HIDA:test',
+        sensitivity: 1,
+        reverse: false,
+      })),
+    };
+    const ops: EditorOpV1[] = [
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: graphIds[0],
+        patch: { showAvgLine: true },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: graphIds[1],
+        patch: { graphAnimationEnabled: false },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: graphIds[2],
+        patch: { graphSpeed: 3200 },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'knob',
+        id: knobIds[0],
+        patch: { reverse: true },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'knob',
+        id: knobIds[1],
+        patch: { sensitivity: 2.5 },
+      },
+    ];
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal(ops);
+    expect(applied.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    expect(applied.document.graphPositions['4key']).toEqual([
+      expect.objectContaining({ showAvgLine: true, graphColor: '#before' }),
+      expect.objectContaining({
+        graphAnimationEnabled: false,
+        graphColor: '#before',
+      }),
+      expect.objectContaining({ graphSpeed: 3200, graphColor: '#before' }),
+    ]);
+    expect(applied.document.knobPositions['4key']).toEqual([
+      expect.objectContaining({ reverse: true, axisId: 'HIDA:test' }),
+      expect.objectContaining({ sensitivity: 2.5, axisId: 'HIDA:test' }),
+    ]);
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: ops.map(() => ({ status: 'noChange' })),
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal(ops);
+    expect(noChange.opResults).toEqual(ops.map(() => ({ status: 'noChange' })));
+    expect(noChange.document).toEqual(applied.document);
     harness.coordinator.stop();
   });
 

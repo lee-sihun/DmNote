@@ -278,6 +278,66 @@ describe('plugin element panel queue', () => {
   });
 
   it.each([
+    ['graph', { showAvgLine: false }],
+    ['graph', { graphAnimationEnabled: true }],
+    ['graph', { graphSpeed: 1200 }],
+    ['knob', { sensitivity: 1.25 }],
+    ['knob', { reverse: true }],
+  ] as const)(
+    '%s runtime batch는 absolute literal과 안정 ID 배열을 한 요청으로 고정한다',
+    async (elementType, patch) => {
+      mocks.sendPluginRpc.mockResolvedValue({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+      const ids = [
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      ];
+
+      const request =
+        elementType === 'graph'
+          ? actions.patchGraphPropertiesViaAuthority(ids, patch)
+          : actions.patchKnobPropertiesViaAuthority(ids, patch);
+      await expect(request).resolves.toBe(true);
+
+      expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+        'layers:patchProperty',
+        {
+          targets: ids.map((id) => ({ elementType, id })),
+          patch,
+        },
+        0,
+        7,
+      );
+    },
+  );
+
+  it('toggle batch outcome-unknown은 같은 generation에서 absolute literal 그대로 재시도한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchKnobPropertiesViaAuthority(
+      ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+      { reverse: true },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
+  it.each([
     { kind: 'unknown' },
     { kind: 'error', errorCode: 'MODEL_REVISION_STALE' },
   ])(

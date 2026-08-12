@@ -655,12 +655,21 @@ pub(crate) fn prepare_editor_ops_transition(
                 patch,
                 EditorElementPropertyPatchV1::GraphType(_)
                     | EditorElementPropertyPatchV1::GraphColor(_)
+                    | EditorElementPropertyPatchV1::ShowAvgLine(_)
+                    | EditorElementPropertyPatchV1::GraphAnimationEnabled(_)
+                    | EditorElementPropertyPatchV1::GraphSpeed(_)
             ) {
                 validate_editor_op_target_type(
                     op_index,
                     EditorElementTypeV1::Graph,
                     *element_type,
                 )?;
+            } else if matches!(
+                patch,
+                EditorElementPropertyPatchV1::Reverse(_)
+                    | EditorElementPropertyPatchV1::Sensitivity(_)
+            ) {
+                validate_editor_op_target_type(op_index, EditorElementTypeV1::Knob, *element_type)?;
             }
         }
     }
@@ -772,6 +781,99 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             graph.graph_color.clone_from(&patch.graph_color);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::ShowAvgLine(patch) => {
+                        let graph = candidate
+                            .graph_positions
+                            .get_mut(&location.mode)
+                            .and_then(|positions| positions.get_mut(location.index))
+                            .ok_or_else(|| {
+                                EditorCommitError::validation(
+                                    "ELEMENT_LOCATOR_INVALID",
+                                    "graph property target no longer matches its stable ID",
+                                )
+                            })?;
+                        if graph.show_avg_line == patch.show_avg_line {
+                            false
+                        } else {
+                            graph.show_avg_line = patch.show_avg_line;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::GraphAnimationEnabled(patch) => {
+                        let graph = candidate
+                            .graph_positions
+                            .get_mut(&location.mode)
+                            .and_then(|positions| positions.get_mut(location.index))
+                            .ok_or_else(|| {
+                                EditorCommitError::validation(
+                                    "ELEMENT_LOCATOR_INVALID",
+                                    "graph property target no longer matches its stable ID",
+                                )
+                            })?;
+                        if graph.position.graph_animation_enabled
+                            == Some(patch.graph_animation_enabled)
+                        {
+                            false
+                        } else {
+                            graph.position.graph_animation_enabled =
+                                Some(patch.graph_animation_enabled);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::GraphSpeed(patch) => {
+                        let graph = candidate
+                            .graph_positions
+                            .get_mut(&location.mode)
+                            .and_then(|positions| positions.get_mut(location.index))
+                            .ok_or_else(|| {
+                                EditorCommitError::validation(
+                                    "ELEMENT_LOCATOR_INVALID",
+                                    "graph property target no longer matches its stable ID",
+                                )
+                            })?;
+                        if graph.graph_speed == patch.graph_speed {
+                            false
+                        } else {
+                            graph.graph_speed = patch.graph_speed;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::Reverse(patch) => {
+                        let knob = candidate
+                            .knob_positions
+                            .get_mut(&location.mode)
+                            .and_then(|positions| positions.get_mut(location.index))
+                            .ok_or_else(|| {
+                                EditorCommitError::validation(
+                                    "ELEMENT_LOCATOR_INVALID",
+                                    "knob property target no longer matches its stable ID",
+                                )
+                            })?;
+                        if knob.reverse == patch.reverse {
+                            false
+                        } else {
+                            knob.reverse = patch.reverse;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::Sensitivity(patch) => {
+                        let knob = candidate
+                            .knob_positions
+                            .get_mut(&location.mode)
+                            .and_then(|positions| positions.get_mut(location.index))
+                            .ok_or_else(|| {
+                                EditorCommitError::validation(
+                                    "ELEMENT_LOCATOR_INVALID",
+                                    "knob property target no longer matches its stable ID",
+                                )
+                            })?;
+                        if knob.sensitivity == patch.sensitivity {
+                            false
+                        } else {
+                            knob.sensitivity = patch.sensitivity;
                             true
                         }
                     }
@@ -1062,6 +1164,18 @@ mod tests {
                     graph_color: graph_color.into(),
                 },
             ),
+        }
+    }
+
+    fn patch_property_op(
+        element_type: EditorElementTypeV1,
+        id: impl Into<String>,
+        patch: EditorElementPropertyPatchV1,
+    ) -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type,
+            id: id.into(),
+            patch,
         }
     }
 
@@ -1778,6 +1892,194 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+    }
+
+    #[test]
+    fn graph_and_knob_literal_patches_are_typed_leaf_intents() {
+        let mut store = store_with_every_reorder_type();
+        let graph_template = store.graph_positions["4key"][0].clone();
+        let knob_template = store.knob_positions["4key"][0].clone();
+        let graph_ids = (0..3)
+            .map(|_| uuid::Uuid::new_v4().to_string())
+            .collect::<Vec<_>>();
+        let knob_ids = (0..2)
+            .map(|_| uuid::Uuid::new_v4().to_string())
+            .collect::<Vec<_>>();
+        store.graph_positions.insert(
+            "4key".to_string(),
+            graph_ids
+                .iter()
+                .map(|id| GraphPosition {
+                    position: KeyPosition {
+                        id: id.clone(),
+                        graph_animation_enabled: None,
+                        ..graph_template.position.clone()
+                    },
+                    ..graph_template.clone()
+                })
+                .collect(),
+        );
+        store.knob_positions.insert(
+            "4key".to_string(),
+            knob_ids
+                .iter()
+                .map(|id| KnobPosition {
+                    position: KeyPosition {
+                        id: id.clone(),
+                        ..knob_template.position.clone()
+                    },
+                    ..knob_template.clone()
+                })
+                .collect(),
+        );
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_ids[0],
+                EditorElementPropertyPatchV1::ShowAvgLine(
+                    crate::models::EditorShowAvgLinePropertyPatchV1 {
+                        show_avg_line: !graph_template.show_avg_line,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_ids[1],
+                EditorElementPropertyPatchV1::GraphAnimationEnabled(
+                    crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
+                        graph_animation_enabled: true,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_ids[2],
+                EditorElementPropertyPatchV1::GraphSpeed(
+                    crate::models::EditorGraphSpeedPropertyPatchV1 {
+                        graph_speed: u32::MAX,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_ids[0],
+                EditorElementPropertyPatchV1::Reverse(
+                    crate::models::EditorReversePropertyPatchV1 {
+                        reverse: !knob_template.reverse,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_ids[1],
+                EditorElementPropertyPatchV1::Sensitivity(
+                    crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: -7.25 },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::GraphSpeed(
+                    crate::models::EditorGraphSpeedPropertyPatchV1 { graph_speed: 0 },
+                ),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let graphs = &transition.candidate.graph_positions["4key"];
+        let knobs = &transition.candidate.knob_positions["4key"];
+        assert_eq!(graphs[0].show_avg_line, !graph_template.show_avg_line);
+        assert_eq!(graphs[0].graph_color, graph_template.graph_color);
+        assert_eq!(graphs[1].position.graph_animation_enabled, Some(true));
+        assert_eq!(graphs[1].graph_speed, graph_template.graph_speed);
+        assert_eq!(graphs[2].graph_speed, u32::MAX);
+        assert_eq!(graphs[2].graph_type, graph_template.graph_type);
+        assert_eq!(knobs[0].reverse, !knob_template.reverse);
+        assert_eq!(knobs[0].sensitivity, knob_template.sensitivity);
+        assert_eq!(knobs[1].sensitivity, -7.25);
+        assert_eq!(knobs[1].axis_id, knob_template.axis_id);
+        assert_eq!(
+            transition.changed_fields,
+            [EditorField::GraphPositions, EditorField::KnobPositions]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let key_id = store.key_positions["4key"][0].id.clone();
+        for patch in [
+            EditorElementPropertyPatchV1::ShowAvgLine(
+                crate::models::EditorShowAvgLinePropertyPatchV1 {
+                    show_avg_line: false,
+                },
+            ),
+            EditorElementPropertyPatchV1::GraphAnimationEnabled(
+                crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
+                    graph_animation_enabled: false,
+                },
+            ),
+            EditorElementPropertyPatchV1::GraphSpeed(
+                crate::models::EditorGraphSpeedPropertyPatchV1 { graph_speed: 0 },
+            ),
+            EditorElementPropertyPatchV1::Reverse(crate::models::EditorReversePropertyPatchV1 {
+                reverse: false,
+            }),
+            EditorElementPropertyPatchV1::Sensitivity(
+                crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: 0.0 },
+            ),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    patch_hidden_op(EditorElementTypeV1::Key, &key_id, true),
+                    patch_property_op(EditorElementTypeV1::Key, &key_id, patch),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        }
+
+        let invalid = patch_property_op(
+            EditorElementTypeV1::Knob,
+            &knob_ids[0],
+            EditorElementPropertyPatchV1::Sensitivity(
+                crate::models::EditorSensitivityPropertyPatchV1 {
+                    sensitivity: f64::INFINITY,
+                },
+            ),
+        );
+        let error = prepare_editor_ops_transition(&store, &[invalid]).unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_NUMBER"));
     }
 
     #[test]

@@ -15,14 +15,21 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const {
   batchKeyLikePropsMock,
   batchGraphPropsMock,
+  batchKnobPropsMock,
   batchPropsMock,
   graphUpdatePositionsMock,
+  knobUpdatePositionsMock,
   patchGraphColorMock,
   patchGraphColorsMock,
   patchGraphColorsViaAuthorityMock,
+  patchGraphPropertiesMock,
+  patchGraphPropertiesViaAuthorityMock,
   patchGraphTypeMock,
   patchGraphTypesMock,
   patchGraphTypesViaAuthorityMock,
+  patchKnobPropertiesMock,
+  patchKnobPropertiesViaAuthorityMock,
+  patchKnobPropertyMock,
   previewMock,
   patchLayerNameMock,
   patchPropertyViaAuthorityMock,
@@ -30,17 +37,25 @@ const {
   settleCommitMock,
   singleGraphPropsMock,
   singleKeyStatPropsMock,
+  singleKnobPropsMock,
 } = vi.hoisted(() => ({
   batchKeyLikePropsMock: vi.fn(),
   batchGraphPropsMock: vi.fn(),
+  batchKnobPropsMock: vi.fn(),
   batchPropsMock: vi.fn(),
   graphUpdatePositionsMock: vi.fn(() => Promise.resolve()),
+  knobUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   patchGraphColorMock: vi.fn(() => Promise.resolve(true)),
   patchGraphColorsMock: vi.fn(() => Promise.resolve(true)),
   patchGraphColorsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphPropertiesMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchGraphTypeMock: vi.fn(() => Promise.resolve(true)),
   patchGraphTypesMock: vi.fn(() => Promise.resolve(true)),
   patchGraphTypesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
+  patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
   previewMock: vi.fn(),
   patchLayerNameMock: vi.fn(() => Promise.resolve(true)),
   patchPropertyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
@@ -48,6 +63,7 @@ const {
   settleCommitMock: vi.fn(),
   singleGraphPropsMock: vi.fn(),
   singleKeyStatPropsMock: vi.fn(),
+  singleKnobPropsMock: vi.fn(),
 }));
 
 vi.mock('@contexts/useTranslation', () => ({
@@ -61,7 +77,9 @@ vi.mock('@hooks/useLenis', () => ({
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchGraphColorsViaAuthority: patchGraphColorsViaAuthorityMock,
+  patchGraphPropertiesViaAuthority: patchGraphPropertiesViaAuthorityMock,
   patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
+  patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   updatePluginElement: vi.fn(),
 }));
@@ -69,12 +87,16 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementLayerNameById: patchLayerNameMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
+  patchGraphPropertiesByIds: patchGraphPropertiesMock,
+  patchGraphPropertyById: patchGraphPropertiesMock,
   patchGraphTypeById: patchGraphTypeMock,
   patchGraphTypesByIds: patchGraphTypesMock,
+  patchKnobPropertiesByIds: patchKnobPropertiesMock,
+  patchKnobPropertyById: patchKnobPropertyMock,
 }));
 vi.mock('@api/modules/itemsApi', () => ({
   graphItemsApi: { updatePositions: graphUpdatePositionsMock },
-  knobItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
+  knobItemsApi: { updatePositions: knobUpdatePositionsMock },
   layerGroupsApi: { update: vi.fn(() => Promise.resolve()) },
   statItemsApi: { updatePositions: statUpdatePositionsMock },
 }));
@@ -96,6 +118,10 @@ vi.mock('./PropertiesPanel/index', () => {
     singleGraphPropsMock(props);
     return <div />;
   };
+  const SingleKnobPanel = (props: Record<string, unknown>) => {
+    singleKnobPropsMock(props);
+    return <div />;
+  };
   return {
     TABS: { STYLE: 'style', NOTE: 'note', COUNTER: 'counter' },
     PropertyRow: Stub,
@@ -106,7 +132,7 @@ vi.mock('./PropertiesPanel/index', () => {
     LayerPanel: () => <div data-testid="layer-panel" />,
     PluginSelectionPanel: Stub,
     SingleGraphPanel,
-    SingleKnobPanel: Stub,
+    SingleKnobPanel,
     SingleKeyStatPanel,
     BatchKeyLikePanel: (props: Record<string, unknown>) => {
       batchKeyLikePropsMock(props);
@@ -116,7 +142,10 @@ vi.mock('./PropertiesPanel/index', () => {
       batchGraphPropsMock(props);
       return <div />;
     },
-    BatchKnobOnlyPanel: Stub,
+    BatchKnobOnlyPanel: (props: Record<string, unknown>) => {
+      batchKnobPropsMock(props);
+      return <div />;
+    },
     PluginSettingsPanelView: () => <ScopeProbe id="plugin-settings" />,
     useBatchHandlers: (props: Record<string, unknown>) => {
       batchPropsMock(props);
@@ -185,6 +214,7 @@ const resetStores = () => {
   singleKeyStatPropsMock.mockClear();
   singleGraphPropsMock.mockClear();
   batchGraphPropsMock.mockClear();
+  batchKnobPropsMock.mockClear();
   batchPropsMock.mockClear();
   batchKeyLikePropsMock.mockClear();
   patchLayerNameMock.mockClear();
@@ -192,10 +222,17 @@ const resetStores = () => {
   patchGraphColorMock.mockClear();
   patchGraphColorsMock.mockClear();
   patchGraphColorsViaAuthorityMock.mockClear();
+  patchGraphPropertiesMock.mockClear();
+  patchGraphPropertiesViaAuthorityMock.mockClear();
   patchGraphTypesMock.mockClear();
   patchGraphTypesViaAuthorityMock.mockClear();
+  patchKnobPropertiesMock.mockClear();
+  patchKnobPropertiesViaAuthorityMock.mockClear();
+  patchKnobPropertyMock.mockClear();
   patchPropertyViaAuthorityMock.mockClear();
   graphUpdatePositionsMock.mockClear();
+  knobUpdatePositionsMock.mockClear();
+  singleKnobPropsMock.mockClear();
   statUpdatePositionsMock.mockClear();
   useKeyStore.setState({
     selectedKeyType: '4key',
@@ -711,6 +748,331 @@ describe('PropertiesPanel detached preview contract', () => {
       expect(patchGraphColorsMock).not.toHaveBeenCalled();
       expect(patchGraphColorsViaAuthorityMock).not.toHaveBeenCalled();
       expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['show average', { showAvgLine: true }],
+    ['animation', { graphAnimationEnabled: false }],
+    ['speed', { graphSpeed: 2300 }],
+  ] as const)(
+    'single stable graph $label literal은 main에서 선택 ID semantic leaf를 쓴다',
+    (_label, patch) => {
+      const id = 'c1111111-1111-4111-8111-111111111111';
+      useGraphItemStore.setState({
+        positions: {
+          '4key': [
+            { ...useGraphItemStore.getState().positions['4key'][0], id },
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'graph', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+        handleGraphUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.handleGraphUpdate({ index: 0, ...patch }));
+
+      expect(patchGraphPropertiesMock).toHaveBeenCalledWith(id, patch);
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['show average', { showAvgLine: false }],
+    ['animation', { graphAnimationEnabled: true }],
+    ['speed', { graphSpeed: 4100 }],
+  ] as const)(
+    'panel single stable graph $label literal은 authority RPC만 쓴다',
+    (_label, patch) => {
+      window.__dmn_window_type = 'panel';
+      const id = 'c2222222-2222-4222-8222-222222222222';
+      useGraphItemStore.setState({
+        positions: {
+          '4key': [
+            { ...useGraphItemStore.getState().positions['4key'][0], id },
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'graph', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+        handleGraphUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.handleGraphUpdate({ index: 0, ...patch }));
+
+      expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+        elementType: 'graph',
+        id,
+        patch,
+      });
+      expect(patchGraphPropertiesMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['show average', { showAvgLine: true }],
+    ['animation', { graphAnimationEnabled: false }],
+    ['speed', { graphSpeed: 1700 }],
+  ] as const)(
+    'stable graph $label batch는 main과 panel에서 ID batch 하나만 쓴다',
+    (_label, patch) => {
+      const ids = [
+        'c3333333-3333-4333-8333-333333333331',
+        'c3333333-3333-4333-8333-333333333332',
+      ];
+      const base = useGraphItemStore.getState().positions['4key'][0];
+      useGraphItemStore.setState({
+        positions: { '4key': ids.map((id) => ({ ...base, id })) },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: ids.map((id, index) => ({
+          type: 'graph' as const,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchGraphPropsMock.mock.lastCall?.[0] as {
+        handleGraphBatchSharedSetting: (
+          update: Record<string, unknown>,
+        ) => void;
+      };
+
+      act(() => props.handleGraphBatchSharedSetting(patch));
+      expect(patchGraphPropertiesMock).toHaveBeenCalledWith(ids, patch);
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+
+      act(() => mounted.root.unmount());
+      mounted.container.remove();
+      resetStores();
+      window.__dmn_window_type = 'panel';
+      useGraphItemStore.setState({
+        positions: { '4key': ids.map((id) => ({ ...base, id })) },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: ids.map((id, index) => ({
+          type: 'graph' as const,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const panelProps = batchGraphPropsMock.mock.lastCall?.[0] as {
+        handleGraphBatchSharedSetting: (
+          update: Record<string, unknown>,
+        ) => void;
+      };
+
+      act(() => panelProps.handleGraphBatchSharedSetting(patch));
+      expect(patchGraphPropertiesViaAuthorityMock).toHaveBeenCalledWith(
+        ids,
+        patch,
+      );
+      expect(patchGraphPropertiesMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['reverse', { reverse: true }],
+    ['sensitivity', { sensitivity: 2.5 }],
+  ] as const)(
+    'single stable knob $label literal은 main과 panel에서 exact leaf를 쓴다',
+    (_label, patch) => {
+      const id = 'd1111111-1111-4111-8111-111111111111';
+      useKnobItemStore.setState({
+        positions: {
+          '4key': [{ ...useKnobItemStore.getState().positions['4key'][0], id }],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'knob', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKnobPropsMock.mock.lastCall?.[0] as {
+        handleKnobUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.handleKnobUpdate({ index: 0, ...patch }));
+      expect(patchKnobPropertyMock).toHaveBeenCalledWith(id, patch);
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+
+      act(() => mounted.root.unmount());
+      mounted.container.remove();
+      resetStores();
+      window.__dmn_window_type = 'panel';
+      useKnobItemStore.setState({
+        positions: {
+          '4key': [{ ...useKnobItemStore.getState().positions['4key'][0], id }],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'knob', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const panelProps = singleKnobPropsMock.mock.lastCall?.[0] as {
+        handleKnobUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => panelProps.handleKnobUpdate({ index: 0, ...patch }));
+      expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+        elementType: 'knob',
+        id,
+        patch,
+      });
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['reverse', { reverse: false }],
+    ['sensitivity', { sensitivity: 4 }],
+  ] as const)(
+    'stable knob $label batch는 main과 panel에서 ID batch 하나만 쓴다',
+    (_label, patch) => {
+      const ids = [
+        'd2222222-2222-4222-8222-222222222221',
+        'd2222222-2222-4222-8222-222222222222',
+      ];
+      const base = useKnobItemStore.getState().positions['4key'][0];
+      useKnobItemStore.setState({
+        positions: { '4key': ids.map((id) => ({ ...base, id })) },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: ids.map((id, index) => ({
+          type: 'knob' as const,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchKnobPropsMock.mock.lastCall?.[0] as {
+        handleKnobBatchSharedSetting: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.handleKnobBatchSharedSetting(patch));
+      expect(patchKnobPropertiesMock).toHaveBeenCalledWith(ids, patch);
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+
+      act(() => mounted.root.unmount());
+      mounted.container.remove();
+      resetStores();
+      window.__dmn_window_type = 'panel';
+      useKnobItemStore.setState({
+        positions: { '4key': ids.map((id) => ({ ...base, id })) },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: ids.map((id, index) => ({
+          type: 'knob' as const,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const panelProps = batchKnobPropsMock.mock.lastCall?.[0] as {
+        handleKnobBatchSharedSetting: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => panelProps.handleKnobBatchSharedSetting(patch));
+      expect(patchKnobPropertiesViaAuthorityMock).toHaveBeenCalledWith(
+        ids,
+        patch,
+      );
+      expect(patchKnobPropertiesMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['graph single', 'graph', { showAvgLine: true }],
+    ['knob single', 'knob', { reverse: true }],
+  ] as const)(
+    'panel synthetic $label runtime leaf는 기존 writer로 폴백한다',
+    (_label, type, patch) => {
+      window.__dmn_window_type = 'panel';
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id: `${type}-0`, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      if (type === 'graph') {
+        const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+          handleGraphUpdate: (update: Record<string, unknown>) => void;
+        };
+        act(() => props.handleGraphUpdate({ index: 0, ...patch }));
+        expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+      } else {
+        const props = singleKnobPropsMock.mock.lastCall?.[0] as {
+          handleKnobUpdate: (update: Record<string, unknown>) => void;
+        };
+        act(() => props.handleKnobUpdate({ index: 0, ...patch }));
+        expect(knobUpdatePositionsMock).toHaveBeenCalledOnce();
+      }
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['graph synthetic', 'graph', 'graph-0', { showAvgLine: true }],
+    ['graph empty', 'graph', '', { graphSpeed: 1800 }],
+    ['knob synthetic', 'knob', 'knob-0', { reverse: true }],
+    ['knob empty', 'knob', '', { sensitivity: 3 }],
+  ] as const)(
+    'panel $label batch는 semantic 분할 없이 전체 기존 writer로 폴백한다',
+    (_label, type, legacyId, patch) => {
+      window.__dmn_window_type = 'panel';
+      const stableId =
+        type === 'graph'
+          ? 'e1111111-1111-4111-8111-111111111111'
+          : 'e2222222-2222-4222-8222-222222222222';
+      useGridSelectionStore.setState({
+        selectedElements: [stableId, legacyId].map((id, index) => ({
+          type,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+
+      if (type === 'graph') {
+        const props = batchGraphPropsMock.mock.lastCall?.[0] as {
+          handleGraphBatchSharedSetting: (
+            update: Record<string, unknown>,
+          ) => void;
+        };
+        act(() => props.handleGraphBatchSharedSetting(patch));
+        expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+        expect(patchGraphPropertiesMock).not.toHaveBeenCalled();
+        expect(patchGraphPropertiesViaAuthorityMock).not.toHaveBeenCalled();
+      } else {
+        const props = batchKnobPropsMock.mock.lastCall?.[0] as {
+          handleKnobBatchSharedSetting: (
+            update: Record<string, unknown>,
+          ) => void;
+        };
+        act(() => props.handleKnobBatchSharedSetting(patch));
+        expect(knobUpdatePositionsMock).toHaveBeenCalledOnce();
+        expect(patchKnobPropertiesMock).not.toHaveBeenCalled();
+        expect(patchKnobPropertiesViaAuthorityMock).not.toHaveBeenCalled();
+      }
     },
   );
 
