@@ -10,8 +10,14 @@ vi.mock('./editorStateCoordinator', () => ({
 }));
 
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
+  applyGestureIntentsEagerly,
+  applySealedSliceMutation,
+  applyIndexIntentsEagerly,
   applyPropertyIntentsEagerly,
+  captureIndexIntentBaseline,
+  generateIndexIntentPatch,
   intentPatch,
   runElementIntent,
 } from './elementIntent';
@@ -148,6 +154,212 @@ describe('elementIntent', () => {
     expect(result.committed).toBe(false);
     expect(result.satisfied).toBe(true);
     expect(rollback).not.toHaveBeenCalled();
+  });
+
+  const baselineDocument = (overrides?: {
+    keys?: Record<string, unknown[]>;
+    layerGroups?: Record<string, unknown[]>;
+    positions?: Array<Record<string, unknown>>;
+  }) => ({
+    schemaVersion: 1,
+    keys: overrides?.keys ?? { '4key': ['KeyA', 'KeyB'] },
+    keyPositions: {
+      '4key': overrides?.positions ?? [
+        { ...createDefaultKeyPosition(), width: 40 },
+        { ...createDefaultKeyPosition(), width: 80 },
+      ],
+    },
+    statPositions: {},
+    graphPositions: {},
+    knobPositions: {},
+    layerGroups: overrides?.layerGroups ?? {},
+  });
+
+  const syncStoreToBaselineDocument = (
+    document: ReturnType<typeof baselineDocument>,
+  ) => {
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      keyMappings: document.keys as never,
+      canonicalPositions: structuredClone(document.keyPositions) as never,
+      positions: structuredClone(document.keyPositions) as never,
+    });
+    useLayerGroupStore.setState({
+      layerGroups: structuredClone(document.layerGroups) as never,
+    });
+  };
+
+  it('index eager는 keys pair만 변경돼도 fail-closed로 무적용한다', () => {
+    const document = baselineDocument();
+    const baseline = captureIndexIntentBaseline(document, '4key', [
+      'keyPositions',
+      'keys',
+    ]);
+    syncStoreToBaselineDocument(document);
+    // 대기 중 rebind가 keys[mode]만 교체
+    useKeyStore.setState({
+      keyMappings: { '4key': ['KeyC', 'KeyB'] } as never,
+    });
+
+    const eager = applyIndexIntentsEagerly(
+      baseline,
+      new Map([['key', new Map([[0, { width: 120 }]])]]),
+    );
+
+    expect(eager.matched).toBe(false);
+    expect(eager.receipt).toBeNull();
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].width).toBe(40);
+  });
+
+  it('index wire는 layerGroups만 변경돼도 null이다', () => {
+    const document = baselineDocument();
+    const baseline = captureIndexIntentBaseline(document, '4key', [
+      'keyPositions',
+      'layerGroups',
+    ]);
+    const movedBase = {
+      ...structuredClone(document),
+      layerGroups: { '4key': [{ id: 'g1', name: 'g1' }] },
+    };
+
+    const patch = generateIndexIntentPatch(
+      movedBase as never,
+      baseline,
+      new Map([['key', new Map([[0, { width: 120 }]])]]),
+    );
+
+    expect(patch).toBeNull();
+  });
+
+  it('index receipt는 재정렬 후 값이 충돌해도 다른 요소를 오염시키지 않는다', () => {
+    const document = baselineDocument();
+    const baseline = captureIndexIntentBaseline(document, '4key', [
+      'keyPositions',
+      'keys',
+    ]);
+    syncStoreToBaselineDocument(document);
+
+    // index 0을 80으로 eager - 이제 index 1(원래 80)과 값이 같다
+    const eager = applyIndexIntentsEagerly(
+      baseline,
+      new Map([['key', new Map([[0, { width: 80 }]])]]),
+    );
+    expect(eager.matched).toBe(true);
+
+    // 격리 커밋이 두 요소를 재정렬 (index 0 자리에 다른 요소, width 80)
+    const current = useKeyStore.getState().canonicalPositions['4key'];
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [current[1], current[0]] } as never,
+    });
+
+    eager.receipt!.rollback();
+
+    // 신원 증명 실패 - 어느 요소도 40으로 되돌리지 않는다
+    const after = useKeyStore.getState().canonicalPositions['4key'];
+    expect(after[0].width).toBe(80);
+    expect(after[1].width).toBe(80);
+  });
+
+  it('index receipt는 무간섭이면 baseline 값으로 복원한다', () => {
+    const document = baselineDocument();
+    const baseline = captureIndexIntentBaseline(document, '4key', [
+      'keyPositions',
+      'keys',
+    ]);
+    syncStoreToBaselineDocument(document);
+
+    const eager = applyIndexIntentsEagerly(
+      baseline,
+      new Map([['key', new Map([[0, { width: 120 }]])]]),
+    );
+    expect(eager.matched).toBe(true);
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].width).toBe(
+      120,
+    );
+
+    eager.receipt!.rollback();
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].width).toBe(40);
+    expect(useKeyStore.getState().canonicalPositions['4key'][1].width).toBe(80);
+  });
+
+  it('결합 eager 복원은 stable과 합성을 함께 되돌린다', () => {
+    const stablePosition = {
+      ...createDefaultKeyPosition(),
+      id: ID_A,
+      width: 40,
+    };
+    const syntheticPosition = { ...createDefaultKeyPosition(), width: 80 };
+    const document = baselineDocument({
+      positions: [stablePosition, syntheticPosition],
+    });
+    const baseline = captureIndexIntentBaseline(document, '4key', [
+      'keyPositions',
+      'keys',
+    ]);
+    syncStoreToBaselineDocument(document);
+
+    const eager = applyGestureIntentsEagerly({
+      baseline,
+      indexIntents: new Map([['key', new Map([[1, { width: 200 }]])]]),
+      propertyIntents: new Map([['key', new Map([[ID_A, { width: 150 }]])]]),
+    });
+    expect(eager.matched).toBe(true);
+    const applied = useKeyStore.getState().canonicalPositions['4key'];
+    expect(applied[0].width).toBe(150);
+    expect(applied[1].width).toBe(200);
+
+    // targetLost·편입 전 실패의 복원 - stable 변경이 봉인 이전이므로
+    // 합성 신원 검사가 자기 자신을 외부 개입으로 오판하지 않아야 한다
+    eager.receipt!.rollback();
+
+    const after = useKeyStore.getState().canonicalPositions['4key'];
+    expect(after[0].width).toBe(40);
+    expect(after[1].width).toBe(80);
+  });
+
+  it('index wire는 keys pair만 변경돼도 null이다', () => {
+    const document = baselineDocument();
+    const baseline = captureIndexIntentBaseline(document, '4key', [
+      'keyPositions',
+      'keys',
+    ]);
+    const reboundBase = {
+      ...structuredClone(document),
+      keys: { '4key': ['KeyC', 'KeyB'] },
+    };
+
+    const patch = generateIndexIntentPatch(
+      reboundBase as never,
+      baseline,
+      new Map([['key', new Map([[0, { width: 120 }]])]]),
+    );
+
+    expect(patch).toBeNull();
+  });
+
+  it('봉인 mutate가 도중에 throw하면 부분 변경을 즉시 복원한다', () => {
+    const document = baselineDocument();
+    syncStoreToBaselineDocument(document);
+
+    expect(() =>
+      applySealedSliceMutation({
+        modes: ['4key'],
+        fields: ['keys', 'keyPositions'],
+        mutate: () => {
+          const state = useKeyStore.getState();
+          state.setPositions({
+            '4key': [{ ...state.canonicalPositions['4key'][0], width: 999 }],
+          } as never);
+          throw new Error('mid-mutation failure');
+        },
+      }),
+    ).toThrow('mid-mutation failure');
+
+    // 부분 적용이 남지 않는다
+    const positions = useKeyStore.getState().canonicalPositions['4key'];
+    expect(positions).toHaveLength(2);
+    expect(positions[0].width).toBe(40);
   });
 
   it('대상 소실(null)은 receipt 호출 후 committed false', async () => {
