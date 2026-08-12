@@ -1,4 +1,5 @@
 import { gestureApi } from '@api/modules/gestureApi';
+import { editorApi } from '@api/modules/editorApi';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
 import { ElementIntentAbort } from '@src/renderer/editor/runtime/elementIntent';
@@ -176,6 +177,7 @@ export const commitMixedGestureIntent = (options: {
   let lastGeneration: MixedIntentGeneration | null = null;
   let gestureResult: Awaited<ReturnType<typeof gestureApi.commit>> | null =
     null;
+  let editorOnlyCommit = false;
 
   const prepare = async (): Promise<void> => {
     // 고정점: drain 중 나타난 신규 definition을 stage하고 다시 drain.
@@ -226,6 +228,21 @@ export const commitMixedGestureIntent = (options: {
           const projectionSource =
             lastGeneration?.desiredPluginProjection ?? sealedProjection;
           const scopeIds = normalizePluginIds([...scope]);
+          if (scopeIds.length === 0) {
+            editorOnlyCommit = true;
+            if (!context.editorChanges) {
+              return {
+                revision: context.editorBaseRevision,
+                changedFields: [],
+              };
+            }
+            return editorApi.commit({
+              baseRevision: context.editorBaseRevision,
+              mutationId: context.mutationId,
+              changes: context.editorChanges,
+              gestureId,
+            });
+          }
           const pluginElements = new Map(
             scopeIds.map((pluginId) => [
               pluginId,
@@ -259,7 +276,11 @@ export const commitMixedGestureIntent = (options: {
             changedFields: result.changedFields,
           };
         },
-        { onEnrolled: options.onEnrolled, prepare },
+        {
+          onEnrolled: options.onEnrolled,
+          prepare,
+          reconcileRetryableEditorIntent: () => editorOnlyCommit,
+        },
       )
       .then(() => {
         // prepare가 동적으로 편입한 plugin의 재계산 상태를 main store에도

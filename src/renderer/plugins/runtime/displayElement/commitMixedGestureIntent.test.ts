@@ -12,6 +12,12 @@ const mocks = vi.hoisted(() => ({
       pluginModelRevision: 1,
     }),
   ),
+  editorCommit: vi.fn(() =>
+    Promise.resolve({
+      revision: 1,
+      changedFields: [],
+    }),
+  ),
   buildSaved: vi.fn(
     (elements: Array<{ fullId: string; zIndex?: number }>, pluginId: string) =>
       elements.map(
@@ -26,6 +32,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@api/modules/gestureApi', () => ({
   gestureApi: { commit: mocks.gestureCommit },
+}));
+
+vi.mock('@api/modules/editorApi', () => ({
+  editorApi: { commit: mocks.editorCommit },
 }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
@@ -51,7 +61,14 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
         await commit({
           editorBaseRevision: 0,
           mutationId: 'mutation-1',
-          ...(patch ? { editorChanges: patch } : {}),
+          ...(patch
+            ? {
+                editorChanges: {
+                  ...(patch as Record<string, unknown>),
+                  schemaVersion: 2,
+                },
+              }
+            : {}),
         });
         return {};
       },
@@ -118,6 +135,7 @@ describe('commitMixedGestureIntent', () => {
     mocks.stageGesture.mockClear();
     mocks.unstageGesture.mockClear();
     mocks.gestureCommit.mockClear();
+    mocks.editorCommit.mockClear();
     mocks.buildSaved.mockClear();
     mocks.applyCanonical.mockClear();
     mocks.setElements.mockClear();
@@ -125,6 +143,27 @@ describe('commitMixedGestureIntent', () => {
     mocks.drainQueues.mockReset();
     mocks.drainQueues.mockImplementation(() => Promise.resolve());
     mocks.elements = [];
+  });
+
+  it('plugin scope가 비어 있으면 일반 editor 커밋으로 저장한다', async () => {
+    await commitMixedGestureIntent({
+      gestureId: 'gesture-native-only',
+      initialPluginIds: [],
+      pluginScope: () => [],
+      generate: () => ({
+        kind: 'patch',
+        patch: { schemaVersion: 1, statPositions: {} },
+      }),
+    });
+
+    expect(mocks.editorCommit).toHaveBeenCalledWith({
+      baseRevision: 0,
+      mutationId: 'mutation-1',
+      changes: { schemaVersion: 2, statPositions: {} },
+      gestureId: 'gesture-native-only',
+    });
+    expect(mocks.gestureCommit).not.toHaveBeenCalled();
+    expect(mocks.buildSaved).not.toHaveBeenCalled();
   });
 
   it('prepare 고정점이 상한까지 수렴하지 않으면 전체 중단한다', async () => {

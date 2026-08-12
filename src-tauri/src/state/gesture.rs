@@ -88,3 +88,66 @@ pub(crate) fn validate_gesture_commit_request(
     }
     Ok(size)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::GesturePluginInstancesChange;
+
+    fn gesture_request(plugin_ids: &[String]) -> GestureCommitRequest {
+        GestureCommitRequest {
+            gesture_id: uuid::Uuid::new_v4().to_string(),
+            mutation_id: uuid::Uuid::new_v4().to_string(),
+            editor_base_revision: 0,
+            plugin_base_revision: 0,
+            observed_history_epoch: None,
+            authority_generation: 1,
+            editor_changes: None,
+            plugin_changes: plugin_ids
+                .iter()
+                .map(|plugin_id| GesturePluginInstancesChange {
+                    plugin_id: plugin_id.clone(),
+                    instances: Vec::new(),
+                })
+                .collect(),
+        }
+    }
+
+    fn validation_code(error: EditorCommitError) -> Option<String> {
+        error.details.and_then(|details| details.validation_code)
+    }
+
+    #[test]
+    fn gesture_requires_at_least_one_plugin_change() {
+        let error = validate_gesture_commit_request(&gesture_request(&[])).unwrap_err();
+
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_GESTURE_PLUGIN_COUNT")
+        );
+    }
+
+    #[test]
+    fn gesture_rejects_more_than_sixty_four_plugin_changes() {
+        let plugin_ids = (0..65)
+            .map(|index| format!("plugin-{index}"))
+            .collect::<Vec<_>>();
+        let error = validate_gesture_commit_request(&gesture_request(&plugin_ids)).unwrap_err();
+
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_GESTURE_PLUGIN_COUNT")
+        );
+    }
+
+    #[test]
+    fn gesture_rejects_duplicate_plugin_changes() {
+        let plugin_ids = vec!["plugin-a".to_string(), "plugin-a".to_string()];
+        let error = validate_gesture_commit_request(&gesture_request(&plugin_ids)).unwrap_err();
+
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("DUPLICATE_GESTURE_PLUGIN")
+        );
+    }
+}
