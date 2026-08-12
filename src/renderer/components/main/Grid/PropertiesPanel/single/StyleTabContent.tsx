@@ -20,6 +20,7 @@ import {
   TextInput,
   FontStyleToggle,
 } from '../PropertyInputs';
+import { createFontStyleToggleHandlers } from '../fontStyleToggleHandlers';
 import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { resolveElementByIdAcross } from '@src/renderer/editor/model/elementIdMap';
@@ -1024,18 +1025,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             isItalic={keyPosition.fontItalic ?? false}
             isUnderline={keyPosition.fontUnderline ?? false}
             isStrikethrough={keyPosition.fontStrikethrough ?? false}
-            onBoldChange={(value) =>
-              handleStyleChangeComplete('fontWeight', value ? 700 : 400)
-            }
-            onItalicChange={(value) =>
-              handleStyleChangeComplete('fontItalic', value)
-            }
-            onUnderlineChange={(value) =>
-              handleStyleChangeComplete('fontUnderline', value)
-            }
-            onStrikethroughChange={(value) =>
-              handleStyleChangeComplete('fontStrikethrough', value)
-            }
+            {...createFontStyleToggleHandlers(handleStyleChangeComplete)}
           />
         </PropertyRow>
       </PropertySection>

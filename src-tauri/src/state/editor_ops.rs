@@ -886,6 +886,42 @@ pub(crate) fn prepare_editor_ops_transition(
                             true
                         }
                     }
+                    EditorElementPropertyPatchV1::FontWeight(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.font_weight == Some(patch.font_weight) {
+                            false
+                        } else {
+                            position.font_weight = Some(patch.font_weight);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::FontItalic(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.font_italic == Some(patch.font_italic) {
+                            false
+                        } else {
+                            position.font_italic = Some(patch.font_italic);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::FontUnderline(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.font_underline == Some(patch.font_underline) {
+                            false
+                        } else {
+                            position.font_underline = Some(patch.font_underline);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::FontStrikethrough(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.font_strikethrough == Some(patch.font_strikethrough) {
+                            false
+                        } else {
+                            position.font_strikethrough = Some(patch.font_strikethrough);
+                            true
+                        }
+                    }
                 };
                 op_results.push(EditorOpResultV1 {
                     status: if changed {
@@ -2211,6 +2247,188 @@ mod tests {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].use_inline_styles, None);
+    }
+
+    #[test]
+    fn font_literal_patches_preserve_raw_options_across_native_types() {
+        let mut store = store_with_every_reorder_type();
+        store.key_positions.get_mut("4key").unwrap()[0].font_weight = None;
+        store.key_positions.get_mut("4key").unwrap()[0]
+            .counter
+            .font_weight = 123;
+        store.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .font_italic = None;
+        store.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .counter
+            .font_italic = true;
+        store.graph_positions.get_mut("4key").unwrap()[0]
+            .position
+            .font_underline = None;
+        store.graph_positions.get_mut("4key").unwrap()[0]
+            .position
+            .counter
+            .font_underline = true;
+        store.knob_positions.get_mut("4key").unwrap()[0]
+            .position
+            .font_strikethrough = None;
+        store.knob_positions.get_mut("4key").unwrap()[0]
+            .position
+            .counter
+            .font_strikethrough = true;
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let graph_id = store.graph_positions["4key"][0].position.id.clone();
+        let knob_id = store.knob_positions["4key"][0].position.id.clone();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::FontWeight(
+                    crate::models::EditorFontWeightPropertyPatchV1 { font_weight: 400 },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::FontItalic(
+                    crate::models::EditorFontItalicPropertyPatchV1 { font_italic: false },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_id,
+                EditorElementPropertyPatchV1::FontUnderline(
+                    crate::models::EditorFontUnderlinePropertyPatchV1 {
+                        font_underline: false,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_id,
+                EditorElementPropertyPatchV1::FontStrikethrough(
+                    crate::models::EditorFontStrikethroughPropertyPatchV1 {
+                        font_strikethrough: false,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::FontWeight(
+                    crate::models::EditorFontWeightPropertyPatchV1 {
+                        font_weight: u32::MAX,
+                    },
+                ),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(
+            transition.candidate.key_positions["4key"][0].font_weight,
+            Some(400)
+        );
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .font_italic,
+            Some(false)
+        );
+        assert_eq!(
+            transition.candidate.graph_positions["4key"][0]
+                .position
+                .font_underline,
+            Some(false)
+        );
+        assert_eq!(
+            transition.candidate.knob_positions["4key"][0]
+                .position
+                .font_strikethrough,
+            Some(false)
+        );
+        assert_eq!(
+            transition.candidate.key_positions["4key"][0]
+                .counter
+                .font_weight,
+            123
+        );
+        assert!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .counter
+                .font_italic
+        );
+        assert!(
+            transition.candidate.graph_positions["4key"][0]
+                .position
+                .counter
+                .font_underline
+        );
+        assert!(
+            transition.candidate.knob_positions["4key"][0]
+                .position
+                .counter
+                .font_strikethrough
+        );
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                ops[0].clone(),
+                patch_property_op(
+                    EditorElementTypeV1::Stat,
+                    &graph_id,
+                    EditorElementPropertyPatchV1::FontItalic(
+                        crate::models::EditorFontItalicPropertyPatchV1 { font_italic: true },
+                    ),
+                ),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        assert_eq!(store.key_positions["4key"][0].font_weight, None);
     }
 
     #[test]

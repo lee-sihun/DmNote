@@ -43,6 +43,7 @@ import {
   OptionalNumberInput,
   TextInput,
 } from './PropertyInputs';
+import { createFontStyleToggleHandlers } from './fontStyleToggleHandlers';
 import { MAX_EXPRESSION_LENGTH } from '@utils/core/arithmeticExpression';
 import { finalizeEditorDraftForLifecycle } from '@src/renderer/editor/runtime/lifecycleEditorDraft';
 
@@ -1819,4 +1820,22 @@ describe('FontStyleToggle visual-first commit', () => {
     await flushAfterPaintCommit();
     expect(onBoldChange).toHaveBeenCalledWith(true);
   });
+
+  it.each([
+    ['onBoldChange', true, 'fontWeight', 700],
+    ['onBoldChange', false, 'fontWeight', 400],
+    ['onItalicChange', true, 'fontItalic', true],
+    ['onUnderlineChange', false, 'fontUnderline', false],
+    ['onStrikethroughChange', true, 'fontStrikethrough', true],
+  ] as const)(
+    '%s는 outer font style one-leaf %s=%s로 변환한다',
+    (handlerName, input, property, value) => {
+      const onChange = vi.fn();
+      const handlers = createFontStyleToggleHandlers(onChange);
+
+      handlers[handlerName](input);
+
+      expect(onChange).toHaveBeenCalledWith(property, value);
+    },
+  );
 });

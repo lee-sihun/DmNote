@@ -8075,12 +8075,15 @@ mod tests {
     }
 
     #[test]
-    fn inline_style_batch_replays_and_round_trips_all_native_types() {
+    fn common_option_batches_replay_and_round_trip_all_native_types() {
         let dir = test_directory("editor-inline-style-history-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
         let mut document = store.editor_get().document;
-        let template = document.key_positions["4key"][0].clone();
+        let mut template = document.key_positions["4key"][0].clone();
+        template.counter.font_italic = true;
+        template.counter.font_underline = true;
+        template.counter.font_strikethrough = true;
         let key_id = template.id.clone();
         let stat_id = uuid::Uuid::new_v4().to_string();
         let graph_id = uuid::Uuid::new_v4().to_string();
@@ -8291,6 +8294,269 @@ mod tests {
         assert_eq!(
             redone.knob_positions["4key"][0].position.use_inline_styles,
             Some(false)
+        );
+
+        let counter_font_weight = redone.key_positions["4key"][0].counter.font_weight;
+        let font_ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &redone.key_positions["4key"][0].id,
+                EditorElementPropertyPatchV1::FontWeight(
+                    crate::models::EditorFontWeightPropertyPatchV1 {
+                        font_weight: u32::MAX,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &redone.stat_positions["4key"][0].position.id,
+                EditorElementPropertyPatchV1::FontItalic(
+                    crate::models::EditorFontItalicPropertyPatchV1 { font_italic: false },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &redone.graph_positions["4key"][0].position.id,
+                EditorElementPropertyPatchV1::FontUnderline(
+                    crate::models::EditorFontUnderlinePropertyPatchV1 {
+                        font_underline: false,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &redone.knob_positions["4key"][0].position.id,
+                EditorElementPropertyPatchV1::FontStrikethrough(
+                    crate::models::EditorFontStrikethroughPropertyPatchV1 {
+                        font_strikethrough: false,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::FontWeight(
+                    crate::models::EditorFontWeightPropertyPatchV1 {
+                        font_weight: u32::MAX,
+                    },
+                ),
+            ),
+        ];
+        let font_mutation_id = uuid::Uuid::new_v4().to_string();
+        let font_request = editor_ops_request(
+            store.editor_get().revision,
+            &font_mutation_id,
+            font_ops.clone(),
+        );
+        let font_changed = store.commit_editor_document(font_request.clone()).unwrap();
+        assert_eq!(
+            font_changed.result.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            font_changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert_eq!(
+            font_changed.document.key_positions["4key"][0].font_weight,
+            Some(u32::MAX)
+        );
+        assert_eq!(
+            font_changed.document.stat_positions["4key"][0]
+                .position
+                .font_italic,
+            Some(false)
+        );
+        assert_eq!(
+            font_changed.document.graph_positions["4key"][0]
+                .position
+                .font_underline,
+            Some(false)
+        );
+        assert_eq!(
+            font_changed.document.knob_positions["4key"][0]
+                .position
+                .font_strikethrough,
+            Some(false)
+        );
+        assert_eq!(
+            font_changed.document.key_positions["4key"][0]
+                .counter
+                .font_weight,
+            counter_font_weight
+        );
+        assert!(
+            font_changed.document.stat_positions["4key"][0]
+                .position
+                .counter
+                .font_italic
+        );
+        assert!(
+            font_changed.document.graph_positions["4key"][0]
+                .position
+                .counter
+                .font_underline
+        );
+        assert!(
+            font_changed.document.knob_positions["4key"][0]
+                .position
+                .counter
+                .font_strikethrough
+        );
+
+        let font_replay = store.commit_editor_document(font_request.clone()).unwrap();
+        assert!(font_replay.replayed);
+        assert_eq!(font_replay.result, font_changed.result);
+
+        let mut font_reused = font_request;
+        font_reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &font_changed.document.key_positions["4key"][0].id,
+            EditorElementPropertyPatchV1::FontWeight(
+                crate::models::EditorFontWeightPropertyPatchV1 { font_weight: 700 },
+            ),
+        )]);
+        assert_eq!(
+            store
+                .commit_editor_document(font_reused)
+                .unwrap_err()
+                .error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let font_no_change = store
+            .commit_editor_document(editor_ops_request(
+                font_changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                font_ops[..4].to_vec(),
+            ))
+            .unwrap();
+        assert!(font_no_change.result.changed_fields.is_empty());
+        assert!(font_no_change.event.is_none());
+
+        let font_undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&font_undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &font_undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let font_undone = store.editor_get().document;
+        assert_eq!(font_undone.key_positions["4key"][0].font_weight, None);
+        assert_eq!(
+            font_undone.stat_positions["4key"][0].position.font_italic,
+            None
+        );
+        assert_eq!(
+            font_undone.graph_positions["4key"][0]
+                .position
+                .font_underline,
+            None
+        );
+        assert_eq!(
+            font_undone.knob_positions["4key"][0]
+                .position
+                .font_strikethrough,
+            None
+        );
+        assert_eq!(
+            font_undone.key_positions["4key"][0].counter.font_weight,
+            counter_font_weight
+        );
+        assert!(
+            font_undone.stat_positions["4key"][0]
+                .position
+                .counter
+                .font_italic
+        );
+        assert!(
+            font_undone.graph_positions["4key"][0]
+                .position
+                .counter
+                .font_underline
+        );
+        assert!(
+            font_undone.knob_positions["4key"][0]
+                .position
+                .counter
+                .font_strikethrough
+        );
+
+        let font_redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&font_redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &font_redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let font_redone = store.editor_get().document;
+        assert_eq!(
+            font_redone.key_positions["4key"][0].font_weight,
+            Some(u32::MAX)
+        );
+        assert_eq!(
+            font_redone.stat_positions["4key"][0].position.font_italic,
+            Some(false)
+        );
+        assert_eq!(
+            font_redone.graph_positions["4key"][0]
+                .position
+                .font_underline,
+            Some(false)
+        );
+        assert_eq!(
+            font_redone.knob_positions["4key"][0]
+                .position
+                .font_strikethrough,
+            Some(false)
+        );
+        assert_eq!(
+            font_redone.key_positions["4key"][0].counter.font_weight,
+            counter_font_weight
+        );
+        assert!(
+            font_redone.stat_positions["4key"][0]
+                .position
+                .counter
+                .font_italic
+        );
+        assert!(
+            font_redone.graph_positions["4key"][0]
+                .position
+                .counter
+                .font_underline
+        );
+        assert!(
+            font_redone.knob_positions["4key"][0]
+                .position
+                .counter
+                .font_strikethrough
         );
 
         store.flush_and_shutdown().unwrap();

@@ -2432,6 +2432,40 @@ mod tests {
                 ),
                 serde_json::json!({ "useInlineStyles": false }),
             ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::FontWeight(
+                    crate::models::EditorFontWeightPropertyPatchV1 {
+                        font_weight: u32::MAX,
+                    },
+                ),
+                serde_json::json!({ "fontWeight": u32::MAX }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::FontItalic(
+                    crate::models::EditorFontItalicPropertyPatchV1 { font_italic: false },
+                ),
+                serde_json::json!({ "fontItalic": false }),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::FontUnderline(
+                    crate::models::EditorFontUnderlinePropertyPatchV1 {
+                        font_underline: true,
+                    },
+                ),
+                serde_json::json!({ "fontUnderline": true }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::FontStrikethrough(
+                    crate::models::EditorFontStrikethroughPropertyPatchV1 {
+                        font_strikethrough: false,
+                    },
+                ),
+                serde_json::json!({ "fontStrikethrough": false }),
+            ),
         ];
         for (element_type, patch, expected) in literal_properties {
             let wire = serde_json::to_value(ops_request(vec![EditorOpV1::PatchElement {
@@ -2464,6 +2498,11 @@ mod tests {
             serde_json::json!({ "reverse": "true" }),
             serde_json::json!({ "sensitivity": "1" }),
             serde_json::json!({ "useInlineStyles": null }),
+            serde_json::json!({ "fontWeight": -1 }),
+            serde_json::json!({ "fontWeight": 1.5 }),
+            serde_json::json!({ "fontItalic": null }),
+            serde_json::json!({ "fontUnderline": 1 }),
+            serde_json::json!({ "fontStrikethrough": "false" }),
         ]
         .map(|patch| {
             let mut wire = graph_color.clone();

@@ -484,6 +484,21 @@ const applySemanticOps = (
                 useInlineStyles: op.patch.useInlineStyles,
               };
             }
+            if ('fontWeight' in op.patch) {
+              return { ...position, fontWeight: op.patch.fontWeight };
+            }
+            if ('fontItalic' in op.patch) {
+              return { ...position, fontItalic: op.patch.fontItalic };
+            }
+            if ('fontUnderline' in op.patch) {
+              return { ...position, fontUnderline: op.patch.fontUnderline };
+            }
+            if ('fontStrikethrough' in op.patch) {
+              return {
+                ...position,
+                fontStrikethrough: op.patch.fontStrikethrough,
+              };
+            }
             return { ...position, hidden: op.patch.hidden };
           }),
         } as never;

@@ -149,6 +149,10 @@ interface EditorElementPropertyValuesV1 {
   reverse: boolean;
   sensitivity: number;
   useInlineStyles: boolean;
+  fontWeight: number;
+  fontItalic: boolean;
+  fontUnderline: boolean;
+  fontStrikethrough: boolean;
 }
 
 type ExactEditorPropertyPatchV1<K extends keyof EditorElementPropertyValuesV1> =
@@ -164,6 +168,10 @@ export type EditorGraphRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
 
 export type EditorKnobRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'reverse' | 'sensitivity'
+>;
+
+export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'fontWeight' | 'fontItalic' | 'fontUnderline' | 'fontStrikethrough'
 >;
 
 export type EditorElementPropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -958,7 +966,21 @@ export function assertEditorOpsV1(
           Number.isFinite(op.patch.sensitivity)) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'useInlineStyles' &&
-          typeof op.patch.useInlineStyles === 'boolean');
+          typeof op.patch.useInlineStyles === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'fontWeight' &&
+          Number.isSafeInteger(op.patch.fontWeight) &&
+          (op.patch.fontWeight as number) >= 0 &&
+          (op.patch.fontWeight as number) <= 4_294_967_295) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'fontItalic' &&
+          typeof op.patch.fontItalic === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'fontUnderline' &&
+          typeof op.patch.fontUnderline === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'fontStrikethrough' &&
+          typeof op.patch.fontStrikethrough === 'boolean');
       if (!patchIsValid) {
         throw new EditorProtocolError(`${opLabel}.patch is invalid`);
       }

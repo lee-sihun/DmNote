@@ -364,6 +364,21 @@ const applyOpsForTest = (
           if ('useInlineStyles' in op.patch) {
             return { ...position, useInlineStyles: op.patch.useInlineStyles };
           }
+          if ('fontWeight' in op.patch) {
+            return { ...position, fontWeight: op.patch.fontWeight };
+          }
+          if ('fontItalic' in op.patch) {
+            return { ...position, fontItalic: op.patch.fontItalic };
+          }
+          if ('fontUnderline' in op.patch) {
+            return { ...position, fontUnderline: op.patch.fontUnderline };
+          }
+          if ('fontStrikethrough' in op.patch) {
+            return {
+              ...position,
+              fontStrikethrough: op.patch.fontStrikethrough,
+            };
+          }
           return { ...position, hidden: op.patch.hidden };
         });
       } else {
@@ -3230,6 +3245,77 @@ describe('commitSemanticOpsInternal', () => {
     expect(noChange.document.keyPositions['4key'][0].useInlineStyles).toBe(
       false,
     );
+    harness.coordinator.stop();
+  });
+
+  it('font style 4 leaf를 한 commit으로 적용하고 nested counter를 보존한다', async () => {
+    const ids = [
+      '00000000-0000-4000-8000-0000000000c1',
+      '00000000-0000-4000-8000-0000000000c2',
+      '00000000-0000-4000-8000-0000000000c3',
+      '00000000-0000-4000-8000-0000000000c4',
+    ];
+    const base = makeDocument();
+    base.keyPositions = {
+      '4key': ids.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        counter: {
+          ...createDefaultKeyPosition().counter,
+          fontWeight: 600,
+          fontItalic: true,
+          fontUnderline: true,
+          fontStrikethrough: true,
+        },
+      })),
+    };
+    base.keys = { '4key': ['A', 'B', 'C', 'D'] };
+    const ops: EditorOpV1[] = [
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[0],
+        patch: { fontWeight: 700 },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[1],
+        patch: { fontItalic: false },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[2],
+        patch: { fontUnderline: false },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[3],
+        patch: { fontStrikethrough: false },
+      },
+    ];
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
+
+    expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    expect(outcome.document.keyPositions['4key']).toEqual([
+      expect.objectContaining({ fontWeight: 700 }),
+      expect.objectContaining({ fontItalic: false }),
+      expect.objectContaining({ fontUnderline: false }),
+      expect.objectContaining({ fontStrikethrough: false }),
+    ]);
+    for (const position of outcome.document.keyPositions['4key']) {
+      expect(position.counter).toMatchObject({
+        fontWeight: 600,
+        fontItalic: true,
+        fontUnderline: true,
+        fontStrikethrough: true,
+      });
+    }
     harness.coordinator.stop();
   });
 

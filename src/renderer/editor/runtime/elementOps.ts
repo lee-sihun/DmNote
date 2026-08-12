@@ -24,6 +24,7 @@ import type {
   EditorBoundsV1,
   EditorDocumentV1,
   EditorElementPropertyPatchV1,
+  EditorFontStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorOpV1,
@@ -779,6 +780,37 @@ export const patchUseInlineStylesByTargets = (
       type: elementType,
       id,
       patch: { useInlineStyles },
+    })),
+    options,
+  );
+};
+
+export const patchFontStyleById = (
+  type: NativeElementType,
+  id: string,
+  patch: EditorFontStylePropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById(type, id, patch, options);
+};
+
+export const patchFontStyleByTargets = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorFontStylePropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some((target) => target.id.length === 0) ||
+    new Set(targets.map((target) => target.id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    targets.map(({ elementType, id }) => ({
+      type: elementType,
+      id,
+      patch,
     })),
     options,
   );

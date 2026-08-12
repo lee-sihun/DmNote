@@ -52,6 +52,7 @@ import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import {
   patchElementPropertyById,
+  patchFontStyleByTargets,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
   patchGraphTypesByIds,
@@ -60,6 +61,7 @@ import {
 } from '@src/renderer/editor/runtime/elementOps';
 import type {
   EditorElementPropertyPatchV1,
+  EditorFontStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
 } from '@src/types/editor';
@@ -216,7 +218,18 @@ const parseNativeLayerPropertyTarget = (
       Number.isFinite(patch.sensitivity)) ||
     (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean') ||
     (hasExactKeys(patch, ['useInlineStyles']) &&
-      typeof patch.useInlineStyles === 'boolean');
+      typeof patch.useInlineStyles === 'boolean') ||
+    (hasExactKeys(patch, ['fontWeight']) &&
+      typeof patch.fontWeight === 'number' &&
+      Number.isSafeInteger(patch.fontWeight) &&
+      patch.fontWeight >= 0 &&
+      patch.fontWeight <= 4_294_967_295) ||
+    (hasExactKeys(patch, ['fontItalic']) &&
+      typeof patch.fontItalic === 'boolean') ||
+    (hasExactKeys(patch, ['fontUnderline']) &&
+      typeof patch.fontUnderline === 'boolean') ||
+    (hasExactKeys(patch, ['fontStrikethrough']) &&
+      typeof patch.fontStrikethrough === 'boolean');
   const graphOnlyPatch =
     hasExactKeys(patch, ['graphType']) ||
     hasExactKeys(patch, ['graphColor']) ||
@@ -241,6 +254,11 @@ type NativeLayerPropertyRequest =
       kind: 'useInlineStylesBatch';
       targets: Array<{ elementType: NativeElementType; id: string }>;
       useInlineStyles: boolean;
+    }
+  | {
+      kind: 'fontStyleBatch';
+      targets: Array<{ elementType: NativeElementType; id: string }>;
+      patch: EditorFontStylePropertyPatchV1;
     }
   | { kind: 'graphTypeBatch'; ids: string[]; graphType: 'line' | 'bar' }
   | { kind: 'graphColorBatch'; ids: string[]; graphColor: string }
@@ -310,17 +328,35 @@ const parseNativeLayerPropertyRequest = (
     typeof patch.useInlineStyles === 'boolean'
       ? patch.useInlineStyles
       : null;
+  const fontStylePatch: EditorFontStylePropertyPatchV1 | null =
+    hasExactKeys(patch, ['fontWeight']) &&
+    typeof patch.fontWeight === 'number' &&
+    Number.isSafeInteger(patch.fontWeight) &&
+    patch.fontWeight >= 0 &&
+    patch.fontWeight <= 4_294_967_295
+      ? { fontWeight: patch.fontWeight }
+      : hasExactKeys(patch, ['fontItalic']) &&
+        typeof patch.fontItalic === 'boolean'
+      ? { fontItalic: patch.fontItalic }
+      : hasExactKeys(patch, ['fontUnderline']) &&
+        typeof patch.fontUnderline === 'boolean'
+      ? { fontUnderline: patch.fontUnderline }
+      : hasExactKeys(patch, ['fontStrikethrough']) &&
+        typeof patch.fontStrikethrough === 'boolean'
+      ? { fontStrikethrough: patch.fontStrikethrough }
+      : null;
   if (
     graphType === null &&
     graphColor === null &&
     graphRuntimePatch === null &&
     knobRuntimePatch === null &&
-    useInlineStyles === null
+    useInlineStyles === null &&
+    fontStylePatch === null
   ) {
     return null;
   }
   const elementType =
-    useInlineStyles !== null
+    useInlineStyles !== null || fontStylePatch !== null
       ? null
       : knobRuntimePatch === null
       ? 'graph'
@@ -358,6 +394,9 @@ const parseNativeLayerPropertyRequest = (
   }
   if (useInlineStyles !== null) {
     return { kind: 'useInlineStylesBatch', targets, useInlineStyles };
+  }
+  if (fontStylePatch !== null) {
+    return { kind: 'fontStyleBatch', targets, patch: fontStylePatch };
   }
   if (graphType !== null) return { kind: 'graphTypeBatch', ids, graphType };
   if (graphColor !== null) {
@@ -1043,6 +1082,9 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           request.useInlineStyles,
           options,
         );
+      }
+      if (request.kind === 'fontStyleBatch') {
+        return patchFontStyleByTargets(request.targets, request.patch, options);
       }
       return patchKnobPropertiesByIds(request.ids, request.patch, options);
     })();

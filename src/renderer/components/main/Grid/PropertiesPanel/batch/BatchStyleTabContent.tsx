@@ -9,6 +9,7 @@ import {
   TextInput,
   PropertySection,
   FontStyleToggle,
+  createFontStyleToggleHandlers,
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -1120,21 +1121,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   isStrikethrough={
                     getMixedValue((pos) => pos.fontStrikethrough, false).value
                   }
-                  onBoldChange={(value) =>
-                    handleBatchStyleChangeComplete(
-                      'fontWeight',
-                      value ? 700 : 400,
-                    )
-                  }
-                  onItalicChange={(value) =>
-                    handleBatchStyleChangeComplete('fontItalic', value)
-                  }
-                  onUnderlineChange={(value) =>
-                    handleBatchStyleChangeComplete('fontUnderline', value)
-                  }
-                  onStrikethroughChange={(value) =>
-                    handleBatchStyleChangeComplete('fontStrikethrough', value)
-                  }
+                  {...createFontStyleToggleHandlers(
+                    handleBatchStyleChangeComplete,
+                  )}
                 />
               </PropertyRow>
             </>

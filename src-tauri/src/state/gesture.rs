@@ -452,6 +452,38 @@ mod tests {
                 ),
                 serde_json::json!({ "useInlineStyles": false }),
             ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::FontWeight(
+                    crate::models::EditorFontWeightPropertyPatchV1 { font_weight: 400 },
+                ),
+                serde_json::json!({ "fontWeight": 400 }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::FontItalic(
+                    crate::models::EditorFontItalicPropertyPatchV1 { font_italic: false },
+                ),
+                serde_json::json!({ "fontItalic": false }),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::FontUnderline(
+                    crate::models::EditorFontUnderlinePropertyPatchV1 {
+                        font_underline: true,
+                    },
+                ),
+                serde_json::json!({ "fontUnderline": true }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::FontStrikethrough(
+                    crate::models::EditorFontStrikethroughPropertyPatchV1 {
+                        font_strikethrough: false,
+                    },
+                ),
+                serde_json::json!({ "fontStrikethrough": false }),
+            ),
         ];
         for (element_type, patch, expected) in literal_properties {
             let mut request = gesture_request(&["plugin-a".to_string()]);
@@ -469,6 +501,24 @@ mod tests {
         let mut invalid_graph_color = graph_color_wire;
         invalid_graph_color["editorOps"][0]["patch"]["graphColor"] = serde_json::json!(false);
         let error = decode_gesture_commit_request(invalid_graph_color).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
+        );
+
+        let mut request = gesture_request(&["plugin-a".to_string()]);
+        request.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        request.editor_ops = Some(vec![EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Stat,
+            id: uuid::Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1::FontItalic(
+                crate::models::EditorFontItalicPropertyPatchV1 { font_italic: false },
+            ),
+        }]);
+        let mut invalid_font = serde_json::to_value(request).unwrap();
+        invalid_font["editorOps"][0]["patch"] =
+            serde_json::json!({ "fontItalic": false, "fontWeight": 400 });
+        let error = decode_gesture_commit_request(invalid_font).unwrap_err();
         assert_eq!(
             validation_code(error).as_deref(),
             Some("INVALID_REQUEST_PAYLOAD")

@@ -36,6 +36,7 @@ import {
   patchGraphColorsViaAuthority,
   patchGraphPropertiesViaAuthority,
   patchGraphTypesViaAuthority,
+  patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
   patchUseInlineStylesViaAuthority,
@@ -51,6 +52,7 @@ import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type {
+  EditorFontStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorElementTypeV1,
@@ -76,6 +78,8 @@ import {
 } from '@src/renderer/editor/runtime/previewOverlay';
 import {
   patchElementLayerNameById,
+  patchFontStyleById,
+  patchFontStyleByTargets,
   patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -206,6 +210,44 @@ const getUseInlineStylesPatch = (
     typeof updates.useInlineStyles === 'boolean'
     ? updates.useInlineStyles
     : null;
+};
+
+const getFontStylePatch = (
+  updates: Partial<KeyPosition>,
+): EditorFontStylePropertyPatchV1 | null => {
+  const keys = Object.keys(updates);
+  if (keys.length !== 1) return null;
+  if (
+    keys[0] === 'fontWeight' &&
+    Number.isSafeInteger(updates.fontWeight) &&
+    (updates.fontWeight as number) >= 0 &&
+    (updates.fontWeight as number) <= 4_294_967_295
+  ) {
+    return { fontWeight: updates.fontWeight as number };
+  }
+  if (keys[0] === 'fontItalic' && typeof updates.fontItalic === 'boolean') {
+    return { fontItalic: updates.fontItalic };
+  }
+  if (
+    keys[0] === 'fontUnderline' &&
+    typeof updates.fontUnderline === 'boolean'
+  ) {
+    return { fontUnderline: updates.fontUnderline };
+  }
+  if (
+    keys[0] === 'fontStrikethrough' &&
+    typeof updates.fontStrikethrough === 'boolean'
+  ) {
+    return { fontStrikethrough: updates.fontStrikethrough };
+  }
+  return null;
+};
+
+const getFontStylePatchFromProperty = (
+  property: keyof KeyPosition,
+  value: KeyPosition[keyof KeyPosition],
+): EditorFontStylePropertyPatchV1 | null => {
+  return getFontStylePatch({ [property]: value });
 };
 
 // ============================================================================
@@ -1325,9 +1367,29 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     data: Partial<StatItemPosition> & { index: number },
   ) => {
     const { index, ...updates } = data;
+    const fontStylePatch = getFontStylePatch(updates);
     const useInlineStyles = getUseInlineStylesPatch(updates);
     const selectedStat =
       selectedStatElements.length === 1 ? selectedStatElements[0] : null;
+    if (
+      fontStylePatch &&
+      selectedStat &&
+      selectedStat.id.length > 0 &&
+      !isSyntheticElementId(selectedStat.id)
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'stat',
+              id: selectedStat.id,
+              patch: fontStylePatch,
+            })
+          : patchFontStyleById('stat', selectedStat.id, fontStylePatch);
+      void commit.catch((error) => {
+        console.error('Failed to update stat font style', error);
+      });
+      return;
+    }
     if (
       useInlineStyles !== null &&
       selectedStat &&
@@ -2051,7 +2113,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => {
-    if (property !== 'useInlineStyles' || typeof value !== 'boolean') {
+    const fontStylePatch = getFontStylePatchFromProperty(property, value);
+    const useInlineStyles =
+      property === 'useInlineStyles' && typeof value === 'boolean'
+        ? value
+        : null;
+    if (!fontStylePatch && useInlineStyles === null) {
       handleLegacyBatchStyleChangeComplete(property, value);
       return;
     }
@@ -2069,11 +2136,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       return;
     }
     const commit =
-      window.__dmn_window_type === 'panel'
-        ? patchUseInlineStylesViaAuthority(targets, value)
-        : patchUseInlineStylesByTargets(targets, value);
+      fontStylePatch !== null
+        ? window.__dmn_window_type === 'panel'
+          ? patchFontStyleViaAuthority(targets, fontStylePatch)
+          : patchFontStyleByTargets(targets, fontStylePatch)
+        : window.__dmn_window_type === 'panel'
+        ? patchUseInlineStylesViaAuthority(targets, useInlineStyles!)
+        : patchUseInlineStylesByTargets(targets, useInlineStyles!);
     void commit.catch((error) => {
-      console.error('Failed to batch update inline style priority', error);
+      console.error('Failed to batch update element style property', error);
     });
   };
 
@@ -2081,11 +2152,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     data: Partial<KeyPosition> & { index: number },
   ) => {
     const { index: _index, ...updates } = data;
+    const fontStylePatch = getFontStylePatch(updates);
     const useInlineStyles = getUseInlineStylesPatch(updates);
     const selectedKey =
       selectedKeyElements.length === 1 ? selectedKeyElements[0] : null;
     if (
-      useInlineStyles === null ||
+      (!fontStylePatch && useInlineStyles === null) ||
       !selectedKey ||
       selectedKey.id.length === 0 ||
       isSyntheticElementId(selectedKey.id)
@@ -2094,15 +2166,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       return;
     }
     const commit =
-      window.__dmn_window_type === 'panel'
+      fontStylePatch !== null
+        ? window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'key',
+              id: selectedKey.id,
+              patch: fontStylePatch,
+            })
+          : patchFontStyleById('key', selectedKey.id, fontStylePatch)
+        : window.__dmn_window_type === 'panel'
         ? patchNativeLayerPropertyViaAuthority({
             elementType: 'key',
             id: selectedKey.id,
-            patch: { useInlineStyles },
+            patch: { useInlineStyles: useInlineStyles! },
           })
-        : patchUseInlineStylesById('key', selectedKey.id, useInlineStyles);
+        : patchUseInlineStylesById('key', selectedKey.id, useInlineStyles!);
     void commit.catch((error) => {
-      console.error('Failed to update key inline style priority', error);
+      console.error('Failed to update key style property', error);
     });
   };
 

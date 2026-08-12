@@ -215,6 +215,10 @@ pub enum EditorElementPropertyPatchV1 {
     Reverse(EditorReversePropertyPatchV1),
     Sensitivity(EditorSensitivityPropertyPatchV1),
     UseInlineStyles(EditorUseInlineStylesPropertyPatchV1),
+    FontWeight(EditorFontWeightPropertyPatchV1),
+    FontItalic(EditorFontItalicPropertyPatchV1),
+    FontUnderline(EditorFontUnderlinePropertyPatchV1),
+    FontStrikethrough(EditorFontStrikethroughPropertyPatchV1),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -276,6 +280,30 @@ pub struct EditorSensitivityPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorUseInlineStylesPropertyPatchV1 {
     pub use_inline_styles: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorFontWeightPropertyPatchV1 {
+    pub font_weight: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorFontItalicPropertyPatchV1 {
+    pub font_italic: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorFontUnderlinePropertyPatchV1 {
+    pub font_underline: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorFontStrikethroughPropertyPatchV1 {
+    pub font_strikethrough: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

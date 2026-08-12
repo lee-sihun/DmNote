@@ -15,6 +15,7 @@ import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElemen
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import type {
   EditorElementPropertyPatchV1,
+  EditorFontStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
 } from '@src/types/editor';
@@ -411,6 +412,26 @@ export const patchUseInlineStylesViaAuthority = (
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
         patch: { useInlineStyles },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchFontStyleViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorFontStylePropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: structuredClone(patch),
       },
       authorityGeneration,
       retryPolicy: 'default',

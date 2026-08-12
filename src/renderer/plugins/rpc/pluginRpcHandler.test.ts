@@ -52,6 +52,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchFontStyle: vi.fn(
+    (
+      _targets?: unknown,
+      _patch?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -124,6 +131,7 @@ vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementPropertyById: mocks.patchElementProperty,
   patchGraphColorsByIds: mocks.patchGraphColors,
+  patchFontStyleByTargets: mocks.patchFontStyle,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -201,6 +209,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchKnobProperties.mockResolvedValue(true);
     mocks.patchUseInlineStyles.mockReset();
     mocks.patchUseInlineStyles.mockResolvedValue(true);
+    mocks.patchFontStyle.mockReset();
+    mocks.patchFontStyle.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
     mocks.elements = [
       {
@@ -462,6 +472,10 @@ describe('plugin panel persisted element mutations', () => {
     ['그래프 애니메이션', { graphAnimationEnabled: true }],
     ['그래프 속도', { graphSpeed: 1200 }],
     ['인라인 스타일', { useInlineStyles: true }],
+    ['글꼴 굵기', { fontWeight: 700 }],
+    ['글꼴 기울임', { fontItalic: true }],
+    ['글꼴 밑줄', { fontUnderline: false }],
+    ['글꼴 취소선', { fontStrikethrough: true }],
   ])(
     'native %s exact literal을 main semantic executor에 전달한다',
     async (_label, patch) => {
@@ -524,6 +538,47 @@ describe('plugin panel persisted element mutations', () => {
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
+
+  it.each([
+    [{ fontWeight: 700 }],
+    [{ fontItalic: true }],
+    [{ fontUnderline: false }],
+    [{ fontStrikethrough: true }],
+  ] as const)(
+    'font style batch %j는 혼합 native 대상을 ordered semantic commit 하나로 전달한다',
+    async (patch) => {
+      const targets = [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+        {
+          elementType: 'stat',
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        },
+        {
+          elementType: 'graph',
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        },
+        {
+          elementType: 'knob',
+          id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        },
+      ] as const;
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', { targets, patch }),
+      );
+
+      await vi.waitFor(() =>
+        expect(mocks.patchFontStyle).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.patchFontStyle).toHaveBeenCalledWith(targets, patch, {
+        preflight: expect.any(Function),
+      });
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
 
   it.each([
     ['민감도', { sensitivity: 1.25 }],
@@ -916,6 +971,82 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'font leaves combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { fontItalic: true, fontUnderline: true },
+      },
+    ],
+    [
+      'font leaf extra',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { fontItalic: true, extra: true },
+      },
+    ],
+    [
+      'fontWeight fractional',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { fontWeight: 700.5 },
+      },
+    ],
+    [
+      'fontWeight negative',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { fontWeight: -1 },
+      },
+    ],
+    [
+      'fontWeight overflow',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { fontWeight: 4_294_967_296 },
+      },
+    ],
+    [
+      'font boolean wrong type',
+      {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { fontStrikethrough: 1 },
+      },
+    ],
+    [
+      'font batch duplicate id',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable' },
+          { elementType: 'knob', id: 'stable' },
+        ],
+        patch: { fontUnderline: true },
+      },
+    ],
+    [
+      'font batch synthetic id',
+      {
+        targets: [{ elementType: 'stat', id: 'stat-0' }],
+        patch: { fontItalic: true },
+      },
+    ],
+    [
+      'font batch empty id',
+      {
+        targets: [{ elementType: 'key', id: ' ' }],
+        patch: { fontWeight: 700 },
+      },
+    ],
+    [
+      'font batch oversized',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'key',
+          id: `stable-font-${index}`,
+        })),
+        patch: { fontWeight: 700 },
+      },
+    ],
+    [
       'batch non-graph leaf',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
@@ -963,6 +1094,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchGraphProperties).not.toHaveBeenCalled();
       expect(mocks.patchKnobProperties).not.toHaveBeenCalled();
       expect(mocks.patchUseInlineStyles).not.toHaveBeenCalled();
+      expect(mocks.patchFontStyle).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
         error: { code: 'INVALID_PAYLOAD' },
@@ -1084,6 +1216,31 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'knob', id: 'stable-knob' },
         ],
         patch: { useInlineStyles: true },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('font style 혼합 batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchFontStyle.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          { elementType: 'key', id: 'stable-key' },
+          { elementType: 'graph', id: 'stable-graph' },
+        ],
+        patch: { fontWeight: 700 },
       }),
     );
 

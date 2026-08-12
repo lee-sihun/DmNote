@@ -29,6 +29,9 @@ const {
   patchGraphTypeMock,
   patchGraphTypesMock,
   patchGraphTypesViaAuthorityMock,
+  patchFontStyleMock,
+  patchFontStyleTargetsMock,
+  patchFontStyleViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -60,6 +63,9 @@ const {
   patchGraphTypeMock: vi.fn(() => Promise.resolve(true)),
   patchGraphTypesMock: vi.fn(() => Promise.resolve(true)),
   patchGraphTypesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchFontStyleMock: vi.fn(() => Promise.resolve(true)),
+  patchFontStyleTargetsMock: vi.fn(() => Promise.resolve(true)),
+  patchFontStyleViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -89,6 +95,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchGraphColorsViaAuthority: patchGraphColorsViaAuthorityMock,
   patchGraphPropertiesViaAuthority: patchGraphPropertiesViaAuthorityMock,
   patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
+  patchFontStyleViaAuthority: patchFontStyleViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchUseInlineStylesViaAuthority: patchUseInlineStylesViaAuthorityMock,
@@ -96,6 +103,8 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
 }));
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementLayerNameById: patchLayerNameMock,
+  patchFontStyleById: patchFontStyleMock,
+  patchFontStyleByTargets: patchFontStyleTargetsMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -241,6 +250,9 @@ const resetStores = () => {
   patchGraphPropertiesViaAuthorityMock.mockClear();
   patchGraphTypesMock.mockClear();
   patchGraphTypesViaAuthorityMock.mockClear();
+  patchFontStyleMock.mockClear();
+  patchFontStyleTargetsMock.mockClear();
+  patchFontStyleViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -1431,6 +1443,223 @@ describe('PropertiesPanel detached preview contract', () => {
       expect(patchUseInlineStylesViaAuthorityMock).not.toHaveBeenCalled();
       expect(legacyBatchStyleCommitMock).toHaveBeenCalledWith(
         'useInlineStyles',
+        true,
+      );
+    },
+  );
+
+  it.each([
+    ['main', 'key', { fontWeight: 700 }],
+    ['main', 'key', { fontItalic: true }],
+    ['main', 'key', { fontUnderline: true }],
+    ['main', 'key', { fontStrikethrough: true }],
+    ['main', 'stat', { fontWeight: 400 }],
+    ['main', 'stat', { fontItalic: false }],
+    ['main', 'stat', { fontUnderline: false }],
+    ['main', 'stat', { fontStrikethrough: false }],
+    ['panel', 'key', { fontWeight: 700 }],
+    ['panel', 'key', { fontItalic: true }],
+    ['panel', 'key', { fontUnderline: true }],
+    ['panel', 'key', { fontStrikethrough: true }],
+    ['panel', 'stat', { fontWeight: 400 }],
+    ['panel', 'stat', { fontItalic: false }],
+    ['panel', 'stat', { fontUnderline: false }],
+    ['panel', 'stat', { fontStrikethrough: false }],
+  ] as const)(
+    '%s single stable %s font style %j은 선택 ID의 exact leaf만 쓴다',
+    (windowType, type, patch) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'f5111111-1111-4111-8111-111111111111'
+          : 'f5222222-2222-4222-8222-222222222222';
+      if (type === 'key') {
+        const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] as never },
+          canonicalPositions: { '4key': [position] as never },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useStatItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onKeyUpdate: (update: Record<string, unknown>) => void;
+        handleStatUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => {
+        const handler =
+          type === 'key' ? props.onKeyUpdate : props.handleStatUpdate;
+        handler({ index: 0, ...patch });
+      });
+
+      if (windowType === 'panel') {
+        expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+          elementType: type,
+          id,
+          patch,
+        });
+        expect(patchFontStyleMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchFontStyleMock).toHaveBeenCalledWith(type, id, patch);
+        expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat synthetic', 'stat', 'stat-0'],
+    ['stat empty', 'stat', ''],
+  ] as const)(
+    'panel single %s font style은 기존 writer로 폴백한다',
+    (_label, type, id) => {
+      window.__dmn_window_type = 'panel';
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: {
+            '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+          },
+          canonicalPositions: {
+            '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onKeyUpdate: (update: Record<string, unknown>) => void;
+        handleStatUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => {
+        const handler =
+          type === 'key' ? props.onKeyUpdate : props.handleStatUpdate;
+        handler({ index: 0, fontItalic: true });
+      });
+
+      expect(patchFontStyleMock).not.toHaveBeenCalled();
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      else expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['main', { fontWeight: 700 }],
+    ['main', { fontItalic: true }],
+    ['main', { fontUnderline: true }],
+    ['main', { fontStrikethrough: true }],
+    ['panel', { fontWeight: 400 }],
+    ['panel', { fontItalic: false }],
+    ['panel', { fontUnderline: false }],
+    ['panel', { fontStrikethrough: false }],
+  ] as const)(
+    '%s mixed 4-type font style %j은 ID target 한 commit만 쓴다',
+    (windowType, patch) => {
+      window.__dmn_window_type = windowType;
+      const targets = [
+        {
+          elementType: 'key' as const,
+          id: 'f5333333-3333-4333-8333-333333333331',
+        },
+        {
+          elementType: 'stat' as const,
+          id: 'f5333333-3333-4333-8333-333333333332',
+        },
+        {
+          elementType: 'graph' as const,
+          id: 'f5333333-3333-4333-8333-333333333333',
+        },
+        {
+          elementType: 'knob' as const,
+          id: 'f5333333-3333-4333-8333-333333333334',
+        },
+      ];
+      useGridSelectionStore.setState({
+        selectedElements: targets.map(({ elementType: type, id }, index) => ({
+          type,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        handleBatchStyleChangeComplete: (
+          property: string,
+          value: unknown,
+        ) => void;
+      };
+      const [property, value] = Object.entries(patch)[0];
+
+      act(() => props.handleBatchStyleChangeComplete(property, value));
+
+      if (windowType === 'panel') {
+        expect(patchFontStyleViaAuthorityMock).toHaveBeenCalledWith(
+          targets,
+          patch,
+        );
+        expect(patchFontStyleTargetsMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchFontStyleTargetsMock).toHaveBeenCalledWith(targets, patch);
+        expect(patchFontStyleViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(legacyBatchStyleCommitMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['synthetic', 'graph-0'],
+    ['empty', ''],
+  ] as const)(
+    'panel mixed font style batch에 %s ID가 있으면 전체 legacy로 폴백한다',
+    (_label, legacyId) => {
+      window.__dmn_window_type = 'panel';
+      useGridSelectionStore.setState({
+        selectedElements: [
+          {
+            type: 'key',
+            id: 'f5444444-4444-4444-8444-444444444441',
+            index: 0,
+          },
+          { type: 'graph', id: legacyId, index: 0 },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        handleBatchStyleChangeComplete: (
+          property: string,
+          value: unknown,
+        ) => void;
+      };
+
+      act(() => props.handleBatchStyleChangeComplete('fontUnderline', true));
+
+      expect(patchFontStyleTargetsMock).not.toHaveBeenCalled();
+      expect(patchFontStyleViaAuthorityMock).not.toHaveBeenCalled();
+      expect(legacyBatchStyleCommitMock).toHaveBeenCalledWith(
+        'fontUnderline',
         true,
       );
     },

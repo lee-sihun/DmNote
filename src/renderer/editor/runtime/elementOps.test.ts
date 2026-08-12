@@ -33,6 +33,8 @@ import {
   placeDuplicatedKey,
   patchElementHiddenById,
   patchElementLayerNameById,
+  patchFontStyleById,
+  patchFontStyleByTargets,
   patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -1242,5 +1244,84 @@ describe('elementOps', () => {
     expect(
       useKeyStore.getState().canonicalPositions['4key'][0].useInlineStyles,
     ).toBeUndefined();
+  });
+
+  it('font style은 단일과 혼합 4타입 target을 exact leaf 한 commit으로 보낸다', async () => {
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: ID_B },
+      {
+        elementType: 'graph' as const,
+        id: '00000000-0000-4000-8000-0000000000c1',
+      },
+      {
+        elementType: 'knob' as const,
+        id: '00000000-0000-4000-8000-0000000000c2',
+      },
+    ];
+
+    await patchFontStyleById('key', ID_A, { fontWeight: 700 });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { fontWeight: 700 },
+        },
+      ],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+
+    api.commitSemanticOps.mockClear();
+    await patchFontStyleByTargets(targets, { fontItalic: false });
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { fontItalic: false },
+      })),
+    );
+  });
+
+  it('font style batch는 duplicate와 empty ID를 wire 전에 거절한다', async () => {
+    await expect(
+      patchFontStyleByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'stat', id: ID_A },
+        ],
+        { fontUnderline: true },
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchFontStyleByTargets([{ elementType: 'graph', id: '' }], {
+        fontStrikethrough: true,
+      }),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('font style 편입 전 실패는 자기 eager leaf만 복원한다', async () => {
+    useKeyStore.setState((state) => ({
+      canonicalPositions: {
+        ...state.canonicalPositions,
+        '4key': state.canonicalPositions['4key'].map((position) => ({
+          ...position,
+          fontItalic: false,
+        })),
+      },
+    }));
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+
+    await expect(
+      patchFontStyleById('key', ID_A, { fontItalic: true }),
+    ).rejects.toThrow('start failed');
+
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].fontItalic,
+    ).toBe(false);
   });
 });
