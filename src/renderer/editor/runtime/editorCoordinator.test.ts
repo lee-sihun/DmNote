@@ -1012,6 +1012,196 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('editor 전용 gesture의 IO 실패는 최신 문서에서 자동 재시도한다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    const transientError = ioError();
+    harness.transport.commitMock
+      .mockRejectedValueOnce(transientError)
+      .mockResolvedValueOnce({ revision: 1, changedFields: ['keys'] });
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-native-only',
+        (context) =>
+          harness.transport.commit({
+            baseRevision: context.editorBaseRevision,
+            mutationId: context.mutationId,
+            changes: context.editorChanges!,
+          }),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).resolves.toEqual(target);
+
+    expect(harness.getLocal()).toEqual(target);
+    expect(harness.coordinator.getState()).toMatchObject({
+      dirty: false,
+      failureKind: null,
+    });
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    harness.coordinator.stop();
+  });
+
+  it('혼합 gesture의 재시도 가능 실패는 editor만 따로 재시도하지 않는다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    const transientError = ioError();
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-mixed',
+        () => Promise.reject(transientError),
+        { reconcileRetryableEditorIntent: () => false },
+      ),
+    ).rejects.toBe(transientError);
+
+    expect(harness.getLocal()).toEqual(base);
+    expect(harness.coordinator.getState()).toMatchObject({
+      dirty: false,
+      pendingLocal: null,
+      failureKind: 'transient',
+    });
+    await expect(harness.coordinator.retryPending()).resolves.toEqual(base);
+    harness.coordinator.stop();
+  });
+
+  it('editor 전용 gesture가 다른 필드의 외부 변경과 안전하게 합쳐진다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const remote = withGroups(base, 'remote');
+    const expected = withGroups(target, 'remote');
+    const harness = createHarness(base);
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 2,
+      changedFields: ['keys'],
+    });
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-unrelated-rebase',
+        () => Promise.reject(revisionConflict()),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).resolves.toEqual(expected);
+
+    expect(harness.getLocal()).toEqual(expected);
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseRevision: 1,
+        gestureId: 'gesture-unrelated-rebase',
+        gestureIds: ['gesture-unrelated-rebase'],
+      }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('editor 전용 gesture와 같은 필드의 외부 변경은 충돌로 전환한다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const remote = makeDocument('C');
+    remote.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-overlap',
+        () => Promise.reject(revisionConflict()),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'conflict',
+      failureKind: null,
+      conflict: {
+        pendingLocal: target,
+        canonical: remote,
+        localFields: ['keys'],
+        overlappingFields: ['keys'],
+      },
+    });
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
+  it('editor 전용 gesture 충돌에서 내 편집을 유지하면 같은 gesture ID로 저장한다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const remote = makeDocument('C');
+    remote.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: 2,
+      changedFields: ['keys'],
+    });
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-keep-local',
+        () => Promise.reject(revisionConflict()),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    await harness.coordinator.resolveConflict('keepLocal');
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseRevision: 1,
+        gestureId: 'gesture-keep-local',
+        gestureIds: ['gesture-keep-local'],
+      }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('IO 응답 유실 뒤 같은 필드가 더 바뀌면 옛 목표로 덮지 않는다', async () => {
+    const base = makeDocument('A');
+    const target = makeDocument('B');
+    target.keyPositions = structuredClone(base.keyPositions);
+    const remote = makeDocument('C');
+    remote.keyPositions = structuredClone(base.keyPositions);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 2, document: remote };
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: target.keys },
+        'gesture-io-overlap',
+        () => Promise.reject(ioError()),
+        { reconcileRetryableEditorIntent: () => true },
+      ),
+    ).rejects.toBeDefined();
+
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'conflict',
+      failureKind: null,
+    });
+    expect(harness.coordinator.getState().conflict?.canonical).toEqual(remote);
+    harness.coordinator.stop();
+  });
+
   it('gesture 실패가 이후 진행 중인 낙관 편집을 되돌리지 않는다', async () => {
     const base = makeDocument('A');
     const gestureTarget = makeDocument('B');
@@ -1576,6 +1766,34 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('외부 변경 수용은 충돌한 gesture preview를 폐기한다', async () => {
+    const base = makeDocument('A');
+    const local = makeDocument('B');
+    local.keyPositions = structuredClone(base.keyPositions);
+    const remote = makeDocument('C');
+    remote.keyPositions = structuredClone(base.keyPositions);
+    const onGestureIdsDiscarded =
+      vi.fn<(gestureIds: readonly string[]) => void>();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    harness.transport.commitMock.mockRejectedValueOnce(revisionConflict());
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+
+    await expect(
+      harness.coordinator.commitPatch(
+        { schemaVersion: 1, keys: local.keys },
+        { gestureId: 'gesture-accept-external' },
+      ),
+    ).rejects.toMatchObject({ errorCode: 'REVISION_CONFLICT' });
+
+    await harness.coordinator.resolveConflict('acceptCanonical');
+    expect(harness.getLocal()).toEqual(remote);
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith([
+      'gesture-accept-external',
+    ]);
+    harness.coordinator.stop();
+  });
+
   it('can keep the local side of an overlap and recommit it on the canonical revision', async () => {
     const base = makeDocument();
     const local = { ...base, keys: { '4key': ['L'] } };
@@ -1744,6 +1962,54 @@ describe('EditorSaveCoordinator', () => {
       harness.coordinator.stop();
     },
   );
+
+  it('영구 거절은 in-flight gesture preview도 함께 폐기한다', async () => {
+    const base = makeDocument();
+    const target = { ...base, keys: { '4key': ['REJECTED'] } };
+    const error = validationError();
+    const onGestureIdsDiscarded =
+      vi.fn<(gestureIds: readonly string[]) => void>();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    harness.transport.commitMock.mockRejectedValueOnce(error);
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitPatch(
+        { schemaVersion: 1, keys: target.keys },
+        { gestureId: 'gesture-rejected-preview' },
+      ),
+    ).rejects.toBe(error);
+
+    expect(harness.getLocal()).toEqual(base);
+    expect(onGestureIdsDiscarded).toHaveBeenCalledOnce();
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith([
+      'gesture-rejected-preview',
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('혼합 gesture의 영구 거절도 editor preview를 폐기한다', async () => {
+    const base = makeDocument();
+    const error = validationError();
+    const onGestureIdsDiscarded =
+      vi.fn<(gestureIds: readonly string[]) => void>();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    await harness.coordinator.start();
+
+    await expect(
+      harness.coordinator.commitGesture(
+        { schemaVersion: 1, keys: { '4key': ['REJECTED'] } },
+        'gesture-mixed-rejected',
+        () => Promise.reject(error),
+      ),
+    ).rejects.toBe(error);
+
+    expect(harness.getLocal()).toEqual(base);
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith([
+      'gesture-mixed-rejected',
+    ]);
+    harness.coordinator.stop();
+  });
 
   it('uses commitPatch as an optimistic compatibility adapter and skips full-state no-ops', async () => {
     const base = makeDocument();

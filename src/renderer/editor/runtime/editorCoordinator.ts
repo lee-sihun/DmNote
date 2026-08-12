@@ -639,7 +639,11 @@ export class EditorSaveCoordinator {
     commit: (
       context: EditorGestureCommitContext,
     ) => Promise<EditorCommitResult>,
-    meta?: { onEnrolled?: () => void; prepare?: () => Promise<void> },
+    meta?: {
+      onEnrolled?: () => void;
+      prepare?: () => Promise<void>;
+      reconcileRetryableEditorIntent?: () => boolean;
+    },
   ): Promise<EditorDocumentV1> {
     this.assertWritable();
     const previous = this.gestureCommitTail;
@@ -699,10 +703,14 @@ export class EditorSaveCoordinator {
     this.lastAck = clone(conflict.canonical);
 
     if (resolution === 'acceptCanonical') {
+      const discardedGestureIds = [...this.pendingGestureIds];
       this.pendingLocal = null;
       this.pendingFields = [];
       this.pendingRequestFields = [];
       this.pendingGestureIds = [];
+      if (discardedGestureIds.length > 0) {
+        this.onGestureIdsDiscarded?.(discardedGestureIds);
+      }
       this.phase = 'idle';
       this.applyDocument(clone(conflict.canonical), 'acceptCanonical');
       this.notify();
@@ -900,6 +908,7 @@ export class EditorSaveCoordinator {
           isEditorCommitError(error) &&
           error.errorCode === 'REVISION_CONFLICT'
         ) {
+          this.restorePendingGestureIds(inFlight.gestureIds);
           let didRebase: boolean;
           try {
             didRebase = await this.handleRevisionConflict(
@@ -913,7 +922,6 @@ export class EditorSaveCoordinator {
               inFlight.localFields,
               inFlight.requestFields,
             );
-            this.restorePendingGestureIds(inFlight.gestureIds);
             this.phase = 'error';
             this.error = syncError;
             this.failureKind = 'transient';
@@ -922,7 +930,6 @@ export class EditorSaveCoordinator {
           }
           if (didRebase) {
             rebaseAttempts += 1;
-            this.restorePendingGestureIds(inFlight.gestureIds);
             continue;
           }
         } else if (isEditorCommitError(error) && error.retryable) {
@@ -937,7 +944,7 @@ export class EditorSaveCoordinator {
           this.failureKind = 'transient';
           this.notify();
         } else {
-          this.discardRejectedPending(error, mutationId);
+          this.discardRejectedPending(error, mutationId, inFlight.gestureIds);
         }
         throw error;
       } finally {
@@ -952,7 +959,11 @@ export class EditorSaveCoordinator {
     commit: (
       context: EditorGestureCommitContext,
     ) => Promise<EditorCommitResult>,
-    meta?: { onEnrolled?: () => void; prepare?: () => Promise<void> },
+    meta?: {
+      onEnrolled?: () => void;
+      prepare?: () => Promise<void>;
+      reconcileRetryableEditorIntent?: () => boolean;
+    },
   ): Promise<EditorDocumentV1> {
     await this.start();
     await this.drainUntilSettled();
@@ -1050,7 +1061,36 @@ export class EditorSaveCoordinator {
       return clone(this.requireLastAck());
     } catch (error) {
       this.ownMutations.delete(mutationId);
-      if (isEditorCommitError(error) && error.retryable) {
+      const retryable = isEditorCommitError(error) && error.retryable;
+      const reconcileEditorIntent =
+        retryable && meta?.reconcileRetryableEditorIntent?.() === true;
+      if (reconcileEditorIntent) {
+        this.restorePendingGestureIds(inFlight.gestureIds);
+        let didRebase: boolean;
+        try {
+          didRebase = await this.handleRevisionConflict(inFlight, error, 0);
+        } catch (syncError) {
+          this.preservePending(
+            inFlight.target,
+            inFlight.localFields,
+            inFlight.requestFields,
+          );
+          this.phase = 'error';
+          this.error = syncError;
+          this.failureKind = 'transient';
+          this.notify();
+          throw syncError;
+        }
+        if (!didRebase) throw error;
+
+        await this.drainUntilSettled();
+        this.error = null;
+        this.failureKind = null;
+        this.phase = 'idle';
+        this.notify();
+        return clone(this.requireLastAck());
+      }
+      if (retryable) {
         try {
           const canonical = await this.transport.get();
           assertEditorGetResult(canonical);
@@ -1062,13 +1102,13 @@ export class EditorSaveCoordinator {
           // 원래 transaction 오류를 유지
         }
       }
-      this.error = error;
-      this.failureKind =
-        isEditorCommitError(error) && error.retryable
-          ? 'transient'
-          : 'permanent';
-      this.phase = 'error';
+      if (!retryable && inFlight.gestureIds.length > 0) {
+        this.onGestureIdsDiscarded?.(inFlight.gestureIds);
+      }
       this.applyRejectedGestureProjection(inFlight);
+      this.error = error;
+      this.failureKind = retryable ? 'transient' : 'permanent';
+      this.phase = 'error';
       this.notify();
       throw error;
     } finally {
@@ -1441,12 +1481,22 @@ export class EditorSaveCoordinator {
     }
   }
 
-  private discardRejectedPending(error: unknown, mutationId: string): void {
+  private discardRejectedPending(
+    error: unknown,
+    mutationId: string,
+    rejectedGestureIds: readonly string[] = [],
+  ): void {
     this.ownMutations.delete(mutationId);
+    const discardedGestureIds = [
+      ...new Set([...rejectedGestureIds, ...this.pendingGestureIds]),
+    ];
     this.pendingLocal = null;
     this.pendingFields = [];
     this.pendingRequestFields = [];
     this.pendingGestureIds = [];
+    if (discardedGestureIds.length > 0) {
+      this.onGestureIdsDiscarded?.(discardedGestureIds);
+    }
     this.phase = 'error';
     this.error = error;
     this.failureKind = 'permanent';
