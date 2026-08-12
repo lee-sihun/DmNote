@@ -29,7 +29,9 @@ pub(crate) fn validate_gesture_commit_request(
         multi_key: false,
         gesture_id: Some(request.gesture_id.clone()),
         gesture_ids: Vec::new(),
-        changes: request.editor_changes.clone().unwrap_or_default(),
+        changes: Some(request.editor_changes.clone().unwrap_or_default()),
+        ops_version: None,
+        ops: None,
     };
     validate_request_envelope(&editor_envelope)?;
     request_payload_size(&editor_envelope)?;

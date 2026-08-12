@@ -26,7 +26,7 @@ export const editorCommitRaw = async (
   const result = await invoke<EditorCommitResult>('editor_commit', {
     request,
   });
-  assertEditorCommitResult(result);
+  assertEditorCommitResult(result, request.ops?.length);
   return result;
 };
 

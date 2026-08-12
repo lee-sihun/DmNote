@@ -4,6 +4,7 @@ import {
   EDITOR_COMMIT_SCHEMA_VERSION,
   EDITOR_FIELDS,
   EDITOR_SCHEMA_VERSION,
+  EditorProtocolError,
   assertEditorCommitResult,
   assertEditorCommittedEvent,
   assertEditorDocument,
@@ -19,9 +20,12 @@ import type {
   EditorCommitResult,
   EditorCommittedV1,
   EditorDocumentV1,
+  EditorElementTypeV1,
   EditorField,
   EditorGetResult,
   EditorGestureCommitContext,
+  EditorOpResultV1,
+  EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
 
@@ -111,6 +115,16 @@ export interface EditorSyncOptions {
   reapply?: boolean;
 }
 
+export interface EditorSemanticCommitOutcome {
+  document: EditorDocumentV1;
+  opResults: EditorOpResultV1[];
+}
+
+export interface EditorSemanticCommitMeta {
+  gestureId?: string;
+  onEnrolled?: () => void;
+}
+
 export class EditorReadOnlyError extends Error {
   constructor() {
     super('editor coordinator is read-only');
@@ -129,6 +143,7 @@ interface InFlightCommit {
   // 낙관 적용 없이 전송되는 격리 플러그인 커밋. 승인 전 target을
   // 로컬 pending이나 커밋 base로 세면 안 된다
   isolated?: boolean;
+  semanticOps?: boolean;
 }
 
 const MAX_AUTO_REBASE_ATTEMPTS = 2;
@@ -169,6 +184,40 @@ const patchForFields = (
     Object.assign(patch, { [field]: clone(document[field]) });
   });
   return patch;
+};
+
+const SEMANTIC_POSITION_FIELDS: Record<EditorElementTypeV1, EditorField> = {
+  key: 'keyPositions',
+  stat: 'statPositions',
+  graph: 'graphPositions',
+  knob: 'knobPositions',
+};
+
+const applySemanticBounds = (
+  base: EditorDocumentV1,
+  ops: readonly EditorOpV1[],
+  results?: readonly EditorOpResultV1[],
+): EditorDocumentV1 => {
+  const next = clone(base);
+  ops.forEach((op, opIndex) => {
+    const result = results?.[opIndex];
+    if (result?.status === 'targetMissing') return;
+    const bounds = result?.bounds ?? op.bounds;
+    const field = SEMANTIC_POSITION_FIELDS[op.elementType];
+    const positionsByMode = next[field] as Record<
+      string,
+      Array<Record<string, unknown>>
+    >;
+    for (const [mode, positions] of Object.entries(positionsByMode)) {
+      const index = positions.findIndex((position) => position.id === op.id);
+      if (index < 0) continue;
+      positionsByMode[mode] = positions.map((position, positionIndex) =>
+        positionIndex === index ? { ...position, ...bounds } : position,
+      );
+      break;
+    }
+  });
+  return next;
 };
 
 export function getChangedEditorFields(
@@ -479,6 +528,239 @@ export class EditorSaveCoordinator {
         meta?.gestureId,
         meta?.onEnrolled,
       );
+    });
+  }
+
+  commitSemanticOpsInternal(
+    ops: readonly EditorOpV1[],
+    meta: EditorSemanticCommitMeta = {},
+  ): Promise<EditorSemanticCommitOutcome> {
+    this.assertWritable();
+    return this.enqueueSerialized(() =>
+      this.commitSemanticOpsInSlot(ops, meta),
+    );
+  }
+
+  discardSemanticGesture(gestureId: string): void {
+    this.onGestureIdsDiscarded?.([gestureId]);
+  }
+
+  private async commitSemanticOpsInSlot(
+    inputOps: readonly EditorOpV1[],
+    meta: EditorSemanticCommitMeta,
+  ): Promise<EditorSemanticCommitOutcome> {
+    await this.start();
+    await this.drainUntilSettled();
+    await this.eventQueue;
+    if (this.conflict) {
+      throw this.error ?? new Error('editor conflict pending');
+    }
+
+    const ops = clone([...inputOps]);
+    let baseDocument = clone(this.requireLastAck());
+    let baseRevision = this.requireRevision();
+    let mutationId = this.createMutationId();
+    let conflictRetryCount = 0;
+    let totalRetryCount = 0;
+    let enrolled = false;
+
+    while (true) {
+      const request: EditorCommitRequest = {
+        baseRevision,
+        mutationId,
+        opsVersion: 1,
+        ops,
+        ...(meta.gestureId ? { gestureId: meta.gestureId } : {}),
+      };
+      const target = applySemanticBounds(baseDocument, ops);
+      const currentDocument = this.readDocument();
+      assertEditorDocument(currentDocument);
+      const optimisticDocument = applySemanticBounds(currentDocument, ops);
+      if (
+        getChangedEditorFields(currentDocument, optimisticDocument).length > 0
+      ) {
+        this.applyDocument(clone(optimisticDocument), 'localPatch');
+      }
+      const requestFields = [
+        ...new Set(ops.map((op) => SEMANTIC_POSITION_FIELDS[op.elementType])),
+      ];
+      const inFlight: InFlightCommit = {
+        mutationId,
+        baseRevision,
+        baseDocument: clone(baseDocument),
+        target,
+        localFields: getChangedEditorFields(baseDocument, target),
+        requestFields,
+        gestureIds: meta.gestureId ? [meta.gestureId] : [],
+        semanticOps: true,
+      };
+      this.inFlight = inFlight;
+      this.rememberOwnMutation(inFlight);
+      this.phase = 'saving';
+      this.error = null;
+      this.failureKind = null;
+      this.notify();
+      if (!enrolled) {
+        enrolled = true;
+        try {
+          meta.onEnrolled?.();
+        } catch (error) {
+          console.error('onEnrolled callback failed', error);
+        }
+      }
+
+      let ioRetryCount = 0;
+      try {
+        let result: EditorCommitResult;
+        while (true) {
+          try {
+            result = await this.transport.commit(request);
+            break;
+          } catch (error) {
+            const outcomeUnknown =
+              (!isEditorCommitError(error) &&
+                !(error instanceof EditorProtocolError)) ||
+              (isEditorCommitError(error) && error.errorCode === 'IO_ERROR');
+            if (!outcomeUnknown || ioRetryCount >= 1) throw error;
+            ioRetryCount += 1;
+            totalRetryCount += 1;
+          }
+        }
+
+        assertEditorCommitResult(result, ops.length);
+        const opResults = clone(result.opResults!);
+        const appliedFields = new Set(
+          ops.flatMap((op, index) =>
+            opResults[index].status === 'applied'
+              ? [SEMANTIC_POSITION_FIELDS[op.elementType]]
+              : [],
+          ),
+        );
+        if (
+          result.changedFields.length !== appliedFields.size ||
+          result.changedFields.some((field) => !appliedFields.has(field))
+        ) {
+          throw new EditorProtocolError(
+            'editor_commit ops changedFields does not match opResults',
+          );
+        }
+        const hasMissing = opResults.some(
+          (opResult) => opResult.status === 'targetMissing',
+        );
+        const currentRevision = this.requireRevision();
+        if (hasMissing || result.revision > currentRevision + 1) {
+          await this.syncSemanticCanonical();
+        } else if (result.revision >= currentRevision) {
+          const acknowledged = applySemanticBounds(
+            baseDocument,
+            ops,
+            opResults,
+          );
+          this.revision = result.revision;
+          this.lastAck = clone(acknowledged);
+        }
+        this.error = null;
+        this.failureKind = null;
+        this.phase = 'idle';
+        this.notify();
+        this.logSemanticCommit(result, opResults, totalRetryCount);
+        return {
+          document: clone(this.requireLastAck()),
+          opResults,
+        };
+      } catch (error) {
+        if (this.inFlight?.mutationId === mutationId) this.inFlight = null;
+
+        if (
+          isEditorCommitError(error) &&
+          error.errorCode === 'REVISION_CONFLICT' &&
+          conflictRetryCount < MAX_AUTO_REBASE_ATTEMPTS
+        ) {
+          this.ownMutations.delete(mutationId);
+          try {
+            const canonical = await this.syncSemanticCanonical();
+            baseDocument = canonical.document;
+            baseRevision = canonical.revision;
+            mutationId = this.createMutationId();
+            conflictRetryCount += 1;
+            totalRetryCount += 1;
+            continue;
+          } catch (syncError) {
+            this.applyDocument(clone(this.requireLastAck()), 'rejected');
+            if (inFlight.gestureIds.length > 0) {
+              this.onGestureIdsDiscarded?.(inFlight.gestureIds);
+            }
+            this.error = syncError;
+            this.failureKind = 'transient';
+            this.phase = 'error';
+            this.notify();
+            throw syncError;
+          }
+        }
+
+        if (!isEditorCommitError(error) || error.errorCode !== 'IO_ERROR') {
+          this.ownMutations.delete(mutationId);
+        }
+        try {
+          await this.syncSemanticCanonical();
+        } catch {
+          // 원래 커밋 오류를 유지
+          this.applyDocument(clone(this.requireLastAck()), 'rejected');
+        }
+        const retryable =
+          !(error instanceof EditorProtocolError) &&
+          (!isEditorCommitError(error) || error.retryable === true);
+        if (inFlight.gestureIds.length > 0) {
+          this.onGestureIdsDiscarded?.(inFlight.gestureIds);
+        }
+        this.error = error;
+        this.failureKind = retryable ? 'transient' : 'permanent';
+        this.phase = 'error';
+        this.notify();
+        throw error;
+      } finally {
+        if (this.inFlight?.mutationId === mutationId) this.inFlight = null;
+      }
+    }
+  }
+
+  private async syncSemanticCanonical(): Promise<EditorGetResult> {
+    const result = await this.transport.get();
+    assertEditorGetResult(result);
+    if (result.revision >= this.requireRevision()) {
+      this.revision = result.revision;
+      this.lastAck = clone(result.document);
+      this.applyDocument(clone(result.document), 'resync');
+      this.notify();
+      return clone(result);
+    }
+    return {
+      revision: this.requireRevision(),
+      document: clone(this.requireLastAck()),
+    };
+  }
+
+  private logSemanticCommit(
+    result: EditorCommitResult,
+    opResults: readonly EditorOpResultV1[],
+    retryCount: number,
+  ): void {
+    const statusCounts = {
+      applied: 0,
+      noChange: 0,
+      targetMissing: 0,
+    };
+    opResults.forEach(({ status }) => {
+      statusCounts[status] += 1;
+    });
+    // semantic op 진단 지표
+    // eslint-disable-next-line no-console
+    console.info('[Editor] Commit completed', {
+      mutationKind: 'ops',
+      opCount: opResults.length,
+      retryCount,
+      revision: result.revision,
+      ...statusCounts,
     });
   }
 
@@ -1401,11 +1683,13 @@ export class EditorSaveCoordinator {
     this.notify();
   }
 
-  // 격리 커밋의 target은 낙관 적용된 로컬 편집이 아니다. pending·base로
-  // 세면 외부 이벤트 병합이 미승인 플러그인 값(무ID)을 되얹거나, flush가
-  // 플러그인 필드를 사용자 의도로 오인한다
+  // 격리 커밋은 낙관 편집이 아니고 semantic op는 자체 재시도 의도를 가진다.
+  // 둘의 full-record target을 일반 pending으로 세면 외부 이벤트와 겹칠 때
+  // 이미 별도로 재시도할 op가 conflict 문서로도 한 번 더 남는다
   private optimisticInFlight(): InFlightCommit | null {
-    if (!this.inFlight || this.inFlight.isolated) return null;
+    if (!this.inFlight || this.inFlight.isolated || this.inFlight.semanticOps) {
+      return null;
+    }
     return this.inFlight;
   }
 

@@ -21,7 +21,10 @@ import { runMixedElementIntent } from '@src/renderer/editor/runtime/mixedElement
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { applyEditorPatch } from '@src/renderer/editor/runtime/editorCoordinator';
-import { commitElementBoundsById } from '@src/renderer/editor/runtime/elementOps';
+import {
+  commitElementBoundsById,
+  commitSingleElementBoundsById,
+} from '@src/renderer/editor/runtime/elementOps';
 import { useEffect, useRef, useState } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -1032,23 +1035,15 @@ export function useGridResize({
       ) {
         // 시작 시 동결한 안정 id에 최종 bounds를 하나의 의도로 커밋 -
         // eager·wire·receipt를 같은 의도가 소유한다 (live 선택 재조회 금지)
-        void commitElementBoundsById(
-          new Map([
-            [
-              element.type,
-              new Map([
-                [
-                  element.id,
-                  {
-                    dx: finalBounds.x,
-                    dy: finalBounds.y,
-                    width: finalBounds.width,
-                    height: finalBounds.height,
-                  },
-                ],
-              ]),
-            ],
-          ]),
+        void commitSingleElementBoundsById(
+          element.type,
+          element.id,
+          {
+            dx: finalBounds.x,
+            dy: finalBounds.y,
+            width: finalBounds.width,
+            height: finalBounds.height,
+          },
           resizeGestureIdRef.current ?? undefined,
         ).catch(reportElementOpError);
       } else if (element.type !== 'plugin' && element.index !== undefined) {

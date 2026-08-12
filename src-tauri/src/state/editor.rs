@@ -9,9 +9,9 @@ use crate::{
     defaults::default_keys,
     errors::EditorCommitError,
     models::{
-        AppStoreData, CustomTab, EditorCommitRequest, EditorDocumentV1, EditorField,
-        ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition, KeySlot,
-        EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_SCHEMA_VERSION,
+        AppStoreData, CustomTab, EditorBoundsV1, EditorCommitRequest, EditorDocumentV1,
+        EditorElementTypeV1, EditorField, ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition,
+        KeySlot, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
     },
 };
 
@@ -28,6 +28,7 @@ const MAX_MODE_ID_BYTES: usize = 128;
 const MAX_MODES: usize = 64;
 const MAX_ITEMS_PER_MODE: usize = 512;
 const MAX_RENDER_ITEMS: usize = 4_096;
+pub(crate) const MAX_EDITOR_OPS: usize = 4_096;
 const MAX_LAYER_GROUPS: usize = 4_096;
 const MAX_KEY_LABEL_BYTES: usize = 1_024;
 const MAX_GROUP_ID_BYTES: usize = 256;
@@ -43,6 +44,17 @@ const MAX_REQUEST_BYTES: usize = 8 * 1_024 * 1_024;
 
 pub(crate) type RequestFingerprint = [u8; 32];
 
+const EDITOR_COMMIT_REQUEST_KEYS: &[&str] = &[
+    "baseRevision",
+    "mutationId",
+    "multiKey",
+    "gestureId",
+    "gestureIds",
+    "changes",
+    "opsVersion",
+    "ops",
+];
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct FingerprintPayload<'a> {
@@ -50,7 +62,9 @@ struct FingerprintPayload<'a> {
     multi_key: bool,
     gesture_id: Option<&'a str>,
     gesture_ids: &'a [String],
-    changes: &'a crate::models::EditorPatchV1,
+    changes: &'a Option<crate::models::EditorPatchV1>,
+    ops_version: &'a Option<u16>,
+    ops: &'a Option<Vec<crate::models::EditorOpV1>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -151,22 +165,118 @@ impl Ord for ValidationViolation {
     }
 }
 
+pub(crate) fn decode_editor_commit_request(
+    value: Value,
+) -> Result<EditorCommitRequest, EditorCommitError> {
+    let Some(object) = value.as_object() else {
+        return Err(EditorCommitError::validation(
+            "INVALID_REQUEST_PAYLOAD",
+            "editor request must be an object",
+        ));
+    };
+
+    if let Some(key) = object
+        .keys()
+        .find(|key| !EDITOR_COMMIT_REQUEST_KEYS.contains(&key.as_str()))
+    {
+        return Err(EditorCommitError::validation(
+            "INVALID_REQUEST_PAYLOAD",
+            format!("editor request contains unknown key '{key}'"),
+        ));
+    }
+
+    if ["changes", "opsVersion", "ops"]
+        .into_iter()
+        .any(|key| object.get(key).is_some_and(Value::is_null))
+    {
+        return Err(EditorCommitError::validation(
+            "INVALID_EDITOR_MUTATION",
+            "editor mutation fields cannot be null",
+        ));
+    }
+
+    let has_changes = object.contains_key("changes");
+    let has_ops_version = object.contains_key("opsVersion");
+    let has_ops = object.contains_key("ops");
+    let has_patch_mutation = has_changes && !has_ops_version && !has_ops;
+    let has_ops_mutation = !has_changes && has_ops_version && has_ops;
+    if !has_patch_mutation && !has_ops_mutation {
+        return Err(EditorCommitError::validation(
+            "INVALID_EDITOR_MUTATION",
+            "editor request must contain changes or the opsVersion and ops pair",
+        ));
+    }
+
+    serde_json::from_value(value).map_err(|error| {
+        EditorCommitError::validation(
+            "INVALID_REQUEST_PAYLOAD",
+            format!("invalid editor request: {error}"),
+        )
+    })
+}
+
 pub(crate) fn validate_request_envelope(
     request: &EditorCommitRequest,
 ) -> Result<(), EditorCommitError> {
     validate_revision(request.base_revision)?;
 
-    if !matches!(
-        request.changes.schema_version,
-        EDITOR_SCHEMA_VERSION | EDITOR_COMMIT_SCHEMA_VERSION_V2
-    ) {
-        return Err(EditorCommitError::validation(
-            "UNSUPPORTED_SCHEMA_VERSION",
-            format!(
-                "unsupported editor schema version {}",
-                request.changes.schema_version
-            ),
-        ));
+    match (&request.changes, request.ops_version, &request.ops) {
+        (Some(changes), None, None) => {
+            if !matches!(
+                changes.schema_version,
+                EDITOR_SCHEMA_VERSION | EDITOR_COMMIT_SCHEMA_VERSION_V2
+            ) {
+                return Err(EditorCommitError::validation(
+                    "UNSUPPORTED_SCHEMA_VERSION",
+                    format!(
+                        "unsupported editor schema version {}",
+                        changes.schema_version
+                    ),
+                ));
+            }
+        }
+        (None, Some(version), Some(ops)) => {
+            if version != EDITOR_OPS_VERSION {
+                return Err(EditorCommitError::validation(
+                    "UNSUPPORTED_OPS_VERSION",
+                    format!("unsupported editor ops version {version}"),
+                ));
+            }
+            if ops.is_empty() {
+                return Err(EditorCommitError::validation(
+                    "EMPTY_EDITOR_OPS",
+                    "editor ops must contain at least one operation",
+                ));
+            }
+            if ops.len() > MAX_EDITOR_OPS {
+                return Err(EditorCommitError::validation(
+                    "TOO_MANY_EDITOR_OPS",
+                    format!("editor op count exceeds {MAX_EDITOR_OPS}"),
+                ));
+            }
+
+            let mut ids = HashSet::with_capacity(ops.len());
+            for op in ops {
+                if !crate::state::native_element_id::is_valid_element_id(op.id()) {
+                    return Err(EditorCommitError::validation(
+                        crate::state::native_element_id::INVALID_ELEMENT_ID,
+                        format!("editor op target '{}' has an invalid ID", op.id()),
+                    ));
+                }
+                if !ids.insert(op.id()) {
+                    return Err(EditorCommitError::validation(
+                        "DUPLICATE_EDITOR_OP_TARGET",
+                        format!("editor op target '{}' appears more than once", op.id()),
+                    ));
+                }
+            }
+        }
+        _ => {
+            return Err(EditorCommitError::validation(
+                "INVALID_EDITOR_MUTATION",
+                "editor request must contain exactly one of changes or ops",
+            ));
+        }
     }
 
     if request.mutation_id.len() > MAX_MUTATION_ID_BYTES
@@ -307,6 +417,8 @@ pub(crate) fn request_fingerprint(
         gesture_id: request.gesture_id.as_deref(),
         gesture_ids: &request.gesture_ids,
         changes: &request.changes,
+        ops_version: &request.ops_version,
+        ops: &request.ops,
     })
 }
 
@@ -1187,9 +1299,56 @@ fn validate_position_metrics(
     current: Option<&KeyPosition>,
     candidate: &KeyPosition,
 ) -> Result<(), EditorCommitError> {
+    validate_bounds_metrics(
+        &format!("{field} {mode}[{index}]"),
+        current.map(position_bounds),
+        position_bounds(candidate),
+    )
+}
+
+fn position_bounds(position: &KeyPosition) -> EditorBoundsV1 {
+    EditorBoundsV1 {
+        dx: position.dx,
+        dy: position.dy,
+        width: position.width,
+        height: position.height,
+    }
+}
+
+pub(crate) fn validate_editor_op_bounds(
+    op_index: usize,
+    current: Option<&KeyPosition>,
+    bounds: EditorBoundsV1,
+) -> Result<(), EditorCommitError> {
+    validate_bounds_metrics(
+        &format!("editor op {op_index}.bounds"),
+        current.map(position_bounds),
+        bounds,
+    )
+}
+
+pub(crate) fn validate_editor_op_target_type(
+    op_index: usize,
+    requested: EditorElementTypeV1,
+    actual: EditorElementTypeV1,
+) -> Result<(), EditorCommitError> {
+    if requested == actual {
+        return Ok(());
+    }
+    Err(EditorCommitError::validation(
+        "ELEMENT_TYPE_MISMATCH",
+        format!("editor op {op_index} targets a {actual:?} element as {requested:?}"),
+    ))
+}
+
+fn validate_bounds_metrics(
+    label: &str,
+    current: Option<EditorBoundsV1>,
+    candidate: EditorBoundsV1,
+) -> Result<(), EditorCommitError> {
     for (name, current, candidate) in [
-        ("dx", current.map(|position| position.dx), candidate.dx),
-        ("dy", current.map(|position| position.dy), candidate.dy),
+        ("dx", current.map(|bounds| bounds.dx), candidate.dx),
+        ("dy", current.map(|bounds| bounds.dy), candidate.dy),
     ] {
         if coordinate_within_limit(candidate)
             || current.is_some_and(|value| {
@@ -1201,19 +1360,15 @@ fn validate_position_metrics(
         }
         return Err(EditorCommitError::validation(
             "COORDINATE_OUT_OF_RANGE",
-            format!("{field} {mode}[{index}].{name} exceeds ±{MAX_ABS_COORDINATE}"),
+            format!("{label}.{name} exceeds ±{MAX_ABS_COORDINATE}"),
         ));
     }
 
     for (name, current, candidate) in [
-        (
-            "width",
-            current.map(|position| position.width),
-            candidate.width,
-        ),
+        ("width", current.map(|bounds| bounds.width), candidate.width),
         (
             "height",
-            current.map(|position| position.height),
+            current.map(|bounds| bounds.height),
             candidate.height,
         ),
     ] {
@@ -1227,7 +1382,7 @@ fn validate_position_metrics(
         }
         return Err(EditorCommitError::validation(
             "DIMENSION_OUT_OF_RANGE",
-            format!("{field} {mode}[{index}].{name} must satisfy 0 < value <= {MAX_DIMENSION}"),
+            format!("{label}.{name} must satisfy 0 < value <= {MAX_DIMENSION}"),
         ));
     }
     Ok(())
@@ -1429,7 +1584,8 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::models::{
-        CustomTab, EditorCommitRequest, EditorDocumentV1, EditorPatchV1, ElementShadowSpec,
+        CustomTab, EditorBoundsV1, EditorCommitRequest, EditorDocumentV1, EditorElementTypeV1,
+        EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1, ElementShadowSpec,
         GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
         StatPosition, StatType,
     };
@@ -1443,11 +1599,46 @@ mod tests {
             multi_key: false,
             gesture_id: None,
             gesture_ids: Vec::new(),
-            changes: EditorPatchV1 {
+            changes: Some(EditorPatchV1 {
                 keys: Some(keys),
                 ..EditorPatchV1::default()
+            }),
+            ops_version: None,
+            ops: None,
+        }
+    }
+
+    fn ops_request(ops: Vec<EditorOpV1>) -> EditorCommitRequest {
+        EditorCommitRequest {
+            base_revision: 0,
+            mutation_id: Uuid::new_v4().to_string(),
+            multi_key: false,
+            gesture_id: None,
+            gesture_ids: Vec::new(),
+            changes: None,
+            ops_version: Some(EDITOR_OPS_VERSION),
+            ops: Some(ops),
+        }
+    }
+
+    fn set_bounds_op(id: impl Into<String>, element_type: EditorElementTypeV1) -> EditorOpV1 {
+        EditorOpV1::SetBounds {
+            element_type,
+            id: id.into(),
+            bounds: EditorBoundsV1 {
+                dx: 10.0,
+                dy: 20.0,
+                width: 100.0,
+                height: 50.0,
             },
         }
+    }
+
+    fn validation_code(error: &EditorCommitError) -> Option<&str> {
+        error
+            .details
+            .as_ref()
+            .and_then(|details| details.validation_code.as_deref())
     }
 
     fn default_editor_store() -> AppStoreData {
@@ -1572,7 +1763,274 @@ mod tests {
         assert!(!decoded.multi_key);
         let mut capable = decoded;
         capable.multi_key = true;
-        assert_eq!(serde_json::to_value(capable).unwrap()["multiKey"], true);
+        let encoded = serde_json::to_value(capable).unwrap();
+        assert_eq!(encoded["multiKey"], true);
+        assert!(encoded.get("opsVersion").is_none());
+        assert!(encoded.get("ops").is_none());
+    }
+
+    #[test]
+    fn editor_commit_wire_requires_exactly_one_mutation_shape() {
+        let base = serde_json::json!({
+            "baseRevision": 0,
+            "mutationId": Uuid::new_v4().to_string(),
+        });
+        let changes = serde_json::json!({ "schemaVersion": EDITOR_SCHEMA_VERSION });
+        let op = serde_json::json!({
+            "kind": "setBounds",
+            "elementType": "key",
+            "id": Uuid::new_v4().to_string(),
+            "bounds": { "dx": 0.0, "dy": 0.0, "width": 1.0, "height": 1.0 },
+        });
+
+        let mut patch_wire = base.clone();
+        patch_wire["changes"] = changes.clone();
+        let patch = decode_editor_commit_request(patch_wire).unwrap();
+        assert!(patch.changes.is_some());
+        assert!(patch.ops.is_none());
+
+        let mut ops_wire = base.clone();
+        ops_wire["opsVersion"] = serde_json::json!(EDITOR_OPS_VERSION);
+        ops_wire["ops"] = serde_json::json!([op.clone()]);
+        let ops = decode_editor_commit_request(ops_wire).unwrap();
+        assert!(ops.changes.is_none());
+        assert_eq!(ops.ops.unwrap().len(), 1);
+
+        let encoded = serde_json::to_value(ops_request(vec![set_bounds_op(
+            Uuid::new_v4().to_string(),
+            EditorElementTypeV1::Key,
+        )]))
+        .unwrap();
+        assert_eq!(encoded["ops"][0]["kind"], "setBounds");
+        assert_eq!(encoded["ops"][0]["elementType"], "key");
+        assert!(encoded.get("changes").is_none());
+
+        let mut both = base.clone();
+        both["changes"] = changes;
+        both["opsVersion"] = serde_json::json!(EDITOR_OPS_VERSION);
+        both["ops"] = serde_json::json!([op.clone()]);
+        let error = decode_editor_commit_request(both).unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_EDITOR_MUTATION"));
+
+        for wire in [
+            base.clone(),
+            serde_json::json!({
+                "baseRevision": 0,
+                "mutationId": Uuid::new_v4().to_string(),
+                "opsVersion": EDITOR_OPS_VERSION,
+            }),
+            serde_json::json!({
+                "baseRevision": 0,
+                "mutationId": Uuid::new_v4().to_string(),
+                "opsVersion": EDITOR_OPS_VERSION,
+                "ops": null,
+            }),
+            serde_json::json!({
+                "baseRevision": 0,
+                "mutationId": Uuid::new_v4().to_string(),
+                "changes": null,
+                "opsVersion": EDITOR_OPS_VERSION,
+                "ops": [op],
+            }),
+        ] {
+            let error = decode_editor_commit_request(wire).unwrap_err();
+            assert_eq!(validation_code(&error), Some("INVALID_EDITOR_MUTATION"));
+        }
+    }
+
+    #[test]
+    fn editor_commit_wire_rejects_unknown_keys_at_each_new_boundary() {
+        let valid_id = Uuid::new_v4().to_string();
+        let valid = serde_json::json!({
+            "baseRevision": 0,
+            "mutationId": Uuid::new_v4().to_string(),
+            "opsVersion": EDITOR_OPS_VERSION,
+            "ops": [{
+                "kind": "setBounds",
+                "elementType": "key",
+                "id": valid_id,
+                "bounds": { "dx": 0.0, "dy": 0.0, "width": 1.0, "height": 1.0 },
+            }],
+        });
+
+        let mut unknown_top_level = valid.clone();
+        unknown_top_level["mode"] = serde_json::json!("4key");
+        let mut unknown_op_key = valid.clone();
+        unknown_op_key["ops"][0]["mode"] = serde_json::json!("4key");
+        let mut unknown_bounds_key = valid.clone();
+        unknown_bounds_key["ops"][0]["bounds"]["x"] = serde_json::json!(0);
+
+        for wire in [unknown_top_level, unknown_op_key, unknown_bounds_key] {
+            let error = decode_editor_commit_request(wire).unwrap_err();
+            assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+        }
+
+        for (field, value) in [
+            ("kind", serde_json::json!("move")),
+            ("elementType", serde_json::json!("Key")),
+        ] {
+            let mut wire = valid.clone();
+            wire["ops"][0][field] = value;
+            let error = decode_editor_commit_request(wire).unwrap_err();
+            assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+        }
+    }
+
+    #[test]
+    fn editor_ops_enforce_version_count_ids_and_global_target_uniqueness() {
+        let id = Uuid::new_v4().to_string();
+        let mut unsupported = ops_request(vec![set_bounds_op(&id, EditorElementTypeV1::Key)]);
+        unsupported.ops_version = Some(2);
+        assert_eq!(
+            validation_code(&validate_request_envelope(&unsupported).unwrap_err()),
+            Some("UNSUPPORTED_OPS_VERSION")
+        );
+
+        let empty = ops_request(Vec::new());
+        assert_eq!(
+            validation_code(&validate_request_envelope(&empty).unwrap_err()),
+            Some("EMPTY_EDITOR_OPS")
+        );
+
+        let at_limit = ops_request(
+            (0..MAX_EDITOR_OPS)
+                .map(|index| {
+                    set_bounds_op(
+                        Uuid::from_u128(index as u128 + 1).to_string(),
+                        EditorElementTypeV1::Key,
+                    )
+                })
+                .collect(),
+        );
+        validate_request_envelope(&at_limit).unwrap();
+
+        let mut too_many = at_limit;
+        too_many.ops.as_mut().unwrap().push(set_bounds_op(
+            Uuid::from_u128(MAX_EDITOR_OPS as u128 + 1).to_string(),
+            EditorElementTypeV1::Key,
+        ));
+        assert_eq!(
+            validation_code(&validate_request_envelope(&too_many).unwrap_err()),
+            Some("TOO_MANY_EDITOR_OPS")
+        );
+
+        let duplicate = ops_request(vec![
+            set_bounds_op(&id, EditorElementTypeV1::Key),
+            set_bounds_op(&id, EditorElementTypeV1::Graph),
+        ]);
+        assert_eq!(
+            validation_code(&validate_request_envelope(&duplicate).unwrap_err()),
+            Some("DUPLICATE_EDITOR_OP_TARGET")
+        );
+
+        let nil = ops_request(vec![set_bounds_op(
+            Uuid::nil().to_string(),
+            EditorElementTypeV1::Key,
+        )]);
+        assert_eq!(
+            validation_code(&validate_request_envelope(&nil).unwrap_err()),
+            Some(crate::state::native_element_id::INVALID_ELEMENT_ID)
+        );
+    }
+
+    #[test]
+    fn editor_op_bounds_reuse_position_numeric_limits() {
+        let valid = EditorBoundsV1 {
+            dx: MAX_ABS_COORDINATE,
+            dy: -MAX_ABS_COORDINATE,
+            width: MAX_DIMENSION,
+            height: 1.0,
+        };
+        validate_editor_op_bounds(0, None, valid).unwrap();
+
+        for invalid in [
+            EditorBoundsV1 {
+                dx: f64::NAN,
+                ..valid
+            },
+            EditorBoundsV1 {
+                dy: MAX_ABS_COORDINATE + 1.0,
+                ..valid
+            },
+            EditorBoundsV1 {
+                width: 0.0,
+                ..valid
+            },
+            EditorBoundsV1 {
+                height: MAX_DIMENSION + 1.0,
+                ..valid
+            },
+        ] {
+            assert!(validate_editor_op_bounds(0, None, invalid).is_err());
+        }
+
+        let grandfathered = KeyPosition {
+            width: MAX_DIMENSION + 2.0,
+            ..KeyPosition::default()
+        };
+        validate_editor_op_bounds(
+            0,
+            Some(&grandfathered),
+            EditorBoundsV1 {
+                width: MAX_DIMENSION + 1.0,
+                ..position_bounds(&grandfathered)
+            },
+        )
+        .unwrap();
+
+        let mismatch =
+            validate_editor_op_target_type(0, EditorElementTypeV1::Graph, EditorElementTypeV1::Key)
+                .unwrap_err();
+        assert_eq!(validation_code(&mismatch), Some("ELEMENT_TYPE_MISMATCH"));
+        assert!(!mismatch.retryable);
+    }
+
+    #[test]
+    fn canonical_fingerprint_includes_editor_op_payload() {
+        let id = Uuid::new_v4().to_string();
+        let left = ops_request(vec![set_bounds_op(&id, EditorElementTypeV1::Key)]);
+        let mut right = left.clone();
+        let Some(EditorOpV1::SetBounds { bounds, .. }) =
+            right.ops.as_mut().and_then(|ops| ops.first_mut())
+        else {
+            unreachable!();
+        };
+        bounds.width += 1.0;
+
+        assert_ne!(
+            request_fingerprint(&left).unwrap(),
+            request_fingerprint(&right).unwrap()
+        );
+    }
+
+    #[test]
+    fn editor_op_results_use_the_exact_camel_case_wire_values() {
+        let canonical = EditorBoundsV1 {
+            dx: 1.0,
+            dy: 2.0,
+            width: 3.0,
+            height: 4.0,
+        };
+        let wire = serde_json::to_value([
+            EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: Some(canonical),
+            },
+            EditorOpResultV1 {
+                status: EditorOpResultStatusV1::NoChange,
+                bounds: Some(canonical),
+            },
+            EditorOpResultV1 {
+                status: EditorOpResultStatusV1::TargetMissing,
+                bounds: None,
+            },
+        ])
+        .unwrap();
+
+        assert_eq!(wire[0]["status"], "applied");
+        assert_eq!(wire[1]["status"], "noChange");
+        assert_eq!(wire[2]["status"], "targetMissing");
+        assert!(wire[2].get("bounds").is_none());
     }
 
     #[test]
@@ -2602,7 +3060,9 @@ mod tests {
             multi_key: false,
             gesture_id: None,
             gesture_ids: Vec::new(),
-            changes: EditorPatchV1::default(),
+            changes: Some(EditorPatchV1::default()),
+            ops_version: None,
+            ops: None,
         };
         assert!(validate_request_envelope(&invalid).is_err());
 

@@ -16,8 +16,13 @@ import {
   type ElementIntentReceipt,
   type PropertyIntents,
 } from './elementIntent';
+import { commitSemanticOps } from './editorSemanticOps';
 
-import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+import type {
+  EditorBoundsV1,
+  EditorDocumentV1,
+  EditorPatchV1,
+} from '@src/types/editor';
 
 import type { NativeElementType } from '../model/elementIdMap';
 import type { KeyPosition } from '@src/types/key/keys';
@@ -593,4 +598,32 @@ export const commitElementBoundsById = (
     generate: (base) => intentPatch(generatePropertyIntentPatch(base, intents)),
     ...(gestureId ? { gestureId } : {}),
   }).then((result) => result.committed);
+};
+
+export const commitSingleElementBoundsById = (
+  type: NativeElementType,
+  id: string,
+  bounds: EditorBoundsV1,
+  gestureId?: string,
+): Promise<boolean> => {
+  const intents: PropertyIntents = new Map([
+    [type, new Map([[id, { ...bounds }]])],
+  ]);
+  const receipt = applyPropertyIntentsEagerly(intents);
+  let enrolled = false;
+
+  return commitSemanticOps(
+    [{ kind: 'setBounds', elementType: type, id, bounds }],
+    {
+      ...(gestureId ? { gestureId } : {}),
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then(({ opResults }) => opResults[0]?.status !== 'targetMissing')
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
 };

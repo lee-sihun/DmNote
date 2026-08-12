@@ -19,7 +19,8 @@ const mocks = vi.hoisted(() => ({
   commitMixedGesture: vi.fn(() => Promise.resolve()),
   cancelMixedGesture: vi.fn(),
   sendBridge: vi.fn(),
-  commitBounds: vi.fn(() => Promise.resolve(true)),
+  commitGroupBounds: vi.fn(() => Promise.resolve(true)),
+  commitSingleBounds: vi.fn(() => Promise.resolve(true)),
   elements: [] as Array<{ fullId: string; pluginId: string }>,
   keyPositions: [{ dx: 0, dy: 0, width: 40, height: 40 }] as Array<{
     id?: string;
@@ -52,7 +53,8 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
-  commitElementBoundsById: mocks.commitBounds,
+  commitElementBoundsById: mocks.commitGroupBounds,
+  commitSingleElementBoundsById: mocks.commitSingleBounds,
 }));
 
 vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
@@ -214,7 +216,8 @@ describe('useGridResize plugin gesture lifecycle', () => {
     mocks.setDraggingOrResizing.mockReset();
     mocks.clearGuides.mockReset();
     mocks.commitPatch.mockClear();
-    mocks.commitBounds.mockClear();
+    mocks.commitGroupBounds.mockClear();
+    mocks.commitSingleBounds.mockClear();
     mocks.commitMixedGesture.mockClear();
     mocks.sendBridge.mockClear();
     mocks.beginMixedGesture.mockClear();
@@ -412,7 +415,8 @@ describe('useGridResize plugin gesture lifecycle', () => {
       height: 80,
       noteWidth: 111,
     });
-    expect(mocks.commitBounds).not.toHaveBeenCalled();
+    expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
+    expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
@@ -446,8 +450,8 @@ describe('useGridResize plugin gesture lifecycle', () => {
       api.handleGroupResizeComplete();
     });
 
-    expect(mocks.commitBounds).toHaveBeenCalledTimes(1);
-    const [intents] = mocks.commitBounds.mock.calls[0] as unknown as [
+    expect(mocks.commitGroupBounds).toHaveBeenCalledTimes(1);
+    const [intents] = mocks.commitGroupBounds.mock.calls[0] as unknown as [
       Map<string, Map<string, Record<string, number>>>,
     ];
     const byId = intents.get('key')!;
@@ -481,13 +485,13 @@ describe('useGridResize plugin gesture lifecycle', () => {
       api.handleResizeComplete();
     });
 
-    expect(mocks.commitBounds).toHaveBeenCalledTimes(1);
-    const [intents] = mocks.commitBounds.mock.calls[0] as unknown as [
-      Map<string, Map<string, Record<string, number>>>,
-    ];
-    const byId = intents.get('key')!;
-    expect([...byId.keys()]).toEqual([STABLE_A]);
-    expect(byId.get(STABLE_A)).toMatchObject({ width: 120, height: 80 });
+    expect(mocks.commitSingleBounds).toHaveBeenCalledWith(
+      'key',
+      STABLE_A,
+      { dx: 10, dy: 20, width: 120, height: 80 },
+      expect.any(String),
+    );
+    expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
   });
 
   it('리사이즈 중 재정렬돼도 프리뷰 가이드는 시작 요소를 제외한다', async () => {
@@ -533,7 +537,8 @@ describe('useGridResize plugin gesture lifecycle', () => {
       api.handleResizeComplete();
     });
 
-    expect(mocks.commitBounds).not.toHaveBeenCalled();
+    expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
+    expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
     expect(mocks.commitMixedGesture).not.toHaveBeenCalled();
   });

@@ -3,10 +3,15 @@ import { createDefaultKeyPosition } from '../model/keys';
 
 const api = vi.hoisted(() => ({
   commitGeneratedPatch: vi.fn(),
+  commitSemanticOps: vi.fn(),
 }));
 
 vi.mock('./editorStateCoordinator', () => ({
   editorCoordinator: { commitGeneratedPatch: api.commitGeneratedPatch },
+}));
+
+vi.mock('./editorSemanticOps', () => ({
+  commitSemanticOps: api.commitSemanticOps,
 }));
 
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -17,6 +22,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
   applyZOrderByIds,
   commitElementBoundsById,
+  commitSingleElementBoundsById,
   commitSelectedGeometryByIds,
   deleteElementById,
   placeDuplicatedKey,
@@ -64,6 +70,13 @@ describe('elementOps', () => {
         return base;
       },
     );
+    api.commitSemanticOps.mockImplementation(async (_ops, meta) => {
+      meta?.onEnrolled?.();
+      return {
+        document: documentFromStores(),
+        opResults: [{ status: 'applied', bounds: _ops[0].bounds }],
+      };
+    });
     useKeyStore.setState({
       selectedKeyType: '4key',
       keyMappings: { '4key': ['A', 'B'] },
@@ -310,18 +323,19 @@ describe('elementOps', () => {
     expect(generatedPatches).toEqual([null]);
   });
 
-  it('bounds 의도의 편입 전 실패는 4필드를 CAS 복원한다', async () => {
-    api.commitGeneratedPatch.mockRejectedValue(new Error('start failed'));
+  it('단일 bounds op의 편입 전 실패는 4필드를 CAS 복원한다', async () => {
+    api.commitSemanticOps.mockRejectedValue(new Error('start failed'));
     const before = structuredClone(
       useKeyStore.getState().canonicalPositions['4key'][0],
     );
 
     await expect(
-      commitElementBoundsById(
-        new Map([
-          ['key', new Map([[ID_A, { dx: 50, dy: 60, width: 90, height: 80 }]])],
-        ]),
-      ),
+      commitSingleElementBoundsById('key', ID_A, {
+        dx: 50,
+        dy: 60,
+        width: 90,
+        height: 80,
+      }),
     ).rejects.toThrow('start failed');
 
     expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
@@ -332,26 +346,77 @@ describe('elementOps', () => {
     });
   });
 
-  it('bounds 의도의 대상 소실은 eager를 복원하고 미커밋한다', async () => {
-    const pre = documentFromStores();
-    pre.keyPositions = { '4key': [keyAt(ID_B)] } as never;
-    slotBase = () => pre;
-    const before = structuredClone(
-      useKeyStore.getState().canonicalPositions['4key'][0],
+  it('단일 bounds op는 wire에 안정 id와 gesture를 싣는다', async () => {
+    const committed = await commitSingleElementBoundsById(
+      'key',
+      ID_A,
+      { dx: 50, dy: 60, width: 90, height: 80 },
+      'resize-gesture',
     );
 
+    expect(committed).toBe(true);
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [
+        {
+          kind: 'setBounds',
+          elementType: 'key',
+          id: ID_A,
+          bounds: { dx: 50, dy: 60, width: 90, height: 80 },
+        },
+      ],
+      expect.objectContaining({ gestureId: 'resize-gesture' }),
+    );
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      dx: 50,
+      dy: 60,
+      width: 90,
+      height: 80,
+    });
+  });
+
+  it('단일 bounds op의 targetMissing은 canonical 동기화 결과를 유지한다', async () => {
+    api.commitSemanticOps.mockImplementationOnce(async (_ops, meta) => {
+      meta?.onEnrolled?.();
+      useKeyStore.setState({
+        canonicalPositions: { '4key': [keyAt(ID_B)] },
+        positions: { '4key': [keyAt(ID_B)] },
+      });
+      return {
+        document: documentFromStores(),
+        opResults: [{ status: 'targetMissing' }],
+      };
+    });
+
+    await expect(
+      commitSingleElementBoundsById('key', ID_A, {
+        dx: 50,
+        dy: 60,
+        width: 90,
+        height: 80,
+      }),
+    ).resolves.toBe(false);
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([
+      keyAt(ID_B),
+    ]);
+  });
+
+  it('그룹 bounds는 Stage 2 전까지 기존 generator 경로를 유지한다', async () => {
     const committed = await commitElementBoundsById(
       new Map([
-        ['key', new Map([[ID_A, { dx: 50, dy: 60, width: 90, height: 80 }]])],
+        [
+          'key',
+          new Map([
+            [ID_A, { dx: 50, dy: 60, width: 90, height: 80 }],
+            [ID_B, { dx: 70, dy: 80, width: 100, height: 110 }],
+          ]),
+        ],
       ]),
     );
 
-    expect(committed).toBe(false);
-    expect(generatedPatches).toEqual([null]);
-    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
-      dx: before.dx,
-      width: before.width,
-    });
+    expect(committed).toBe(true);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+    expect(api.commitGeneratedPatch).toHaveBeenCalledOnce();
   });
 
   it('삭제의 편입 전 실패는 로컬 pair를 복원한다', async () => {

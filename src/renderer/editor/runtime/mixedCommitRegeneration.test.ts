@@ -39,6 +39,9 @@ class FakeTransport implements EditorCoordinatorTransport {
   constructor(document: EditorDocumentV1) {
     this.canonical = { revision: 0, document: structuredClone(document) };
     this.commitMock.mockImplementation(async (request) => {
+      if (!request.changes) {
+        throw new Error('mixed commit harness accepts patch requests only');
+      }
       const before = this.canonical.document;
       const next = applyEditorPatch(before, request.changes);
       const changedFields = getChangedEditorFields(before, next);
@@ -129,7 +132,7 @@ describe('mixed commit in-slot regeneration', () => {
       harness.transport.commit({
         baseRevision: 0,
         mutationId: 'm-plugin-only',
-        changes: { schemaVersion: 1 },
+        changes: { schemaVersion: 1 as const },
         ...(context.editorChanges ? {} : {}),
       }),
     );

@@ -19,6 +19,7 @@ export const EDITOR_SCHEMA_VERSION = 1 as const;
 // 유지하고 id를 additive로 싣는다. v2 커밋은 포함된 모든 위치 항목에 유효 ID가
 // 필수라 백엔드가 형식·전역 유일성을 강제한다. 구형 플러그인 gateway만 v1로 남는다
 export const EDITOR_COMMIT_SCHEMA_VERSION = 2 as const;
+export const EDITOR_OPS_VERSION = 1 as const;
 
 export const EDITOR_FIELDS = [
   'keys',
@@ -53,10 +54,9 @@ export type EditorLegacyPatchV1 = {
   schemaVersion: typeof EDITOR_SCHEMA_VERSION;
 } & Partial<Pick<EditorDocumentV1, EditorField>>;
 
-export interface EditorCommitRequest {
+interface EditorCommitRequestBase {
   baseRevision: number;
   mutationId: string;
-  changes: EditorPatchV1;
   // 프리뷰 게스처 커밋 연동용, 성공 시 committed 이벤트로 echo
   gestureId?: string;
   // 한 요청으로 합쳐진 프리뷰 세션 전체
@@ -66,16 +66,66 @@ export interface EditorCommitRequest {
   multiKey?: boolean;
 }
 
-// 플러그인 dmn.editor.commit 요청. changes만 v1으로 좁힌다
-export interface PluginEditorCommitRequest
-  extends Omit<EditorCommitRequest, 'changes'> {
-  changes: EditorLegacyPatchV1;
+export interface EditorPatchCommitRequest extends EditorCommitRequestBase {
+  changes: EditorPatchV1;
+  opsVersion?: never;
+  ops?: never;
 }
+
+export type EditorElementTypeV1 = 'key' | 'stat' | 'graph' | 'knob';
+
+export interface EditorBoundsV1 {
+  dx: number;
+  dy: number;
+  width: number;
+  height: number;
+}
+
+export interface EditorSetBoundsOpV1 {
+  kind: 'setBounds';
+  elementType: EditorElementTypeV1;
+  id: string;
+  bounds: EditorBoundsV1;
+}
+
+export type EditorOpV1 = EditorSetBoundsOpV1;
+
+export interface EditorOpsCommitRequest extends EditorCommitRequestBase {
+  changes?: never;
+  opsVersion: typeof EDITOR_OPS_VERSION;
+  ops: EditorOpV1[];
+}
+
+export type EditorCommitRequest =
+  | EditorPatchCommitRequest
+  | EditorOpsCommitRequest;
+
+// 플러그인 dmn.editor.commit 요청. changes만 v1으로 좁힌다
+export interface PluginEditorCommitRequest extends EditorCommitRequestBase {
+  changes: EditorLegacyPatchV1;
+  opsVersion?: never;
+  ops?: never;
+}
+
+export type EditorOpResultStatusV1 = 'applied' | 'noChange' | 'targetMissing';
+
+export type EditorOpResultV1 =
+  | {
+      status: 'applied' | 'noChange';
+      bounds: EditorBoundsV1;
+    }
+  | {
+      status: 'targetMissing';
+      bounds?: never;
+    };
 
 export interface EditorCommitResult {
   revision: number;
   changedFields: EditorField[];
+  opResults?: EditorOpResultV1[];
 }
+
+export type EditorPluginCommitResult = Omit<EditorCommitResult, 'opResults'>;
 
 export interface EditorGestureCommitContext {
   editorBaseRevision: number;
@@ -531,12 +581,77 @@ export function assertEditorGetResult(value: EditorGetResult): void {
   assertEditorDocument(value.document, 'editor_get document');
 }
 
-export function assertEditorCommitResult(value: EditorCommitResult): void {
+function assertEditorBounds(
+  value: unknown,
+  label: string,
+): asserts value is EditorBoundsV1 {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new EditorProtocolError(`${label} is invalid`);
+  }
+  const bounds = value as Record<string, unknown>;
+  if (
+    Object.keys(bounds).length !== 4 ||
+    !['dx', 'dy', 'width', 'height'].every((key) => key in bounds) ||
+    !Number.isFinite(bounds.dx) ||
+    !Number.isFinite(bounds.dy) ||
+    !Number.isFinite(bounds.width) ||
+    !Number.isFinite(bounds.height) ||
+    (bounds.width as number) <= 0 ||
+    (bounds.height as number) <= 0
+  ) {
+    throw new EditorProtocolError(`${label} is invalid`);
+  }
+}
+
+export function assertEditorCommitResult(
+  value: EditorCommitResult,
+  expectedOpCount?: number,
+): void {
   if (!value) {
     throw new EditorProtocolError('editor_commit returned an empty result');
   }
   assertSafeEditorRevision(value.revision, 'editor_commit revision');
   assertEditorFields(value.changedFields, 'editor_commit changedFields');
+  if (expectedOpCount === undefined) {
+    if (value.opResults !== undefined) {
+      throw new EditorProtocolError(
+        'editor_commit patch result contains opResults',
+      );
+    }
+    return;
+  }
+  if (
+    !Array.isArray(value.opResults) ||
+    value.opResults.length !== expectedOpCount
+  ) {
+    throw new EditorProtocolError(
+      'editor_commit opResults does not match requested ops',
+    );
+  }
+  value.opResults.forEach((result, index) => {
+    if (!result || typeof result !== 'object') {
+      throw new EditorProtocolError(
+        `editor_commit opResults[${index}] is invalid`,
+      );
+    }
+    if (result.status === 'targetMissing') {
+      if ('bounds' in result && result.bounds !== undefined) {
+        throw new EditorProtocolError(
+          `editor_commit opResults[${index}] targetMissing contains bounds`,
+        );
+      }
+      return;
+    }
+    if (result.status !== 'applied' && result.status !== 'noChange') {
+      throw new EditorProtocolError(
+        `editor_commit opResults[${index}] has an unknown status`,
+      );
+    }
+    assertEditorBounds(
+      result.bounds,
+      `editor_commit opResults[${index}].bounds`,
+    );
+  });
 }
 
 export function assertEditorCommittedEvent(value: EditorCommittedV1): void {

@@ -7,6 +7,7 @@ use super::{
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
 pub const EDITOR_COMMIT_SCHEMA_VERSION_V2: u16 = 2;
+pub const EDITOR_OPS_VERSION: u16 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -182,8 +183,45 @@ impl EditorPatchV1 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum EditorElementTypeV1 {
+    Key,
+    Stat,
+    Graph,
+    Knob,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorBoundsV1 {
+    pub dx: f64,
+    pub dy: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum EditorOpV1 {
+    SetBounds {
+        #[serde(rename = "elementType")]
+        element_type: EditorElementTypeV1,
+        id: String,
+        bounds: EditorBoundsV1,
+    },
+}
+
+impl EditorOpV1 {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::SetBounds { id, .. } => id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorCommitRequest {
     pub base_revision: u64,
     pub mutation_id: String,
@@ -193,7 +231,12 @@ pub struct EditorCommitRequest {
     pub gesture_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gesture_ids: Vec<String>,
-    pub changes: EditorPatchV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes: Option<EditorPatchV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ops_version: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ops: Option<Vec<EditorOpV1>>,
 }
 
 impl EditorCommitRequest {
@@ -215,11 +258,29 @@ impl EditorCommitRequest {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EditorOpResultStatusV1 {
+    Applied,
+    NoChange,
+    TargetMissing,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorOpResultV1 {
+    pub status: EditorOpResultStatusV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bounds: Option<EditorBoundsV1>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorCommitResult {
     pub revision: u64,
     pub changed_fields: Vec<EditorField>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub op_results: Option<Vec<EditorOpResultV1>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

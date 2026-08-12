@@ -1,13 +1,11 @@
+use serde_json::Value;
 use tauri::{AppHandle, Emitter, State, WebviewWindow};
 
 use crate::{
     errors::CmdResult,
-    models::{
-        CommittedEditorChange, EditorCommitRequest, EditorCommitResult, EditorField,
-        EditorGetResult,
-    },
+    models::{CommittedEditorChange, EditorCommitResult, EditorField, EditorGetResult},
     services::preview_broker::PreviewBroker,
-    state::AppState,
+    state::{editor::decode_editor_commit_request, AppState},
 };
 
 pub(crate) fn emit_best_effort<T: serde::Serialize>(app: &AppHandle, event: &str, payload: &T) {
@@ -41,6 +39,18 @@ fn projected_legacy_fields(
         changed_fields
     } else {
         &[]
+    }
+}
+
+fn commit_legacy_fields<'a>(
+    is_ops: bool,
+    requested_fields: &'a [EditorField],
+    changed_fields: &'a [EditorField],
+) -> &'a [EditorField] {
+    if is_ops {
+        changed_fields
+    } else {
+        requested_fields
     }
 }
 
@@ -195,13 +205,28 @@ pub fn editor_commit(
     broker: State<'_, PreviewBroker>,
     app: AppHandle,
     window: WebviewWindow,
-    request: EditorCommitRequest,
+    request: Value,
 ) -> CmdResult<EditorCommitResult> {
+    let request = decode_editor_commit_request(request).inspect_err(|error| {
+        let validation_code = error
+            .details
+            .as_ref()
+            .and_then(|details| details.validation_code.as_deref())
+            .unwrap_or("UNKNOWN");
+        log::info!(
+            target: "editor_commit",
+            "command=editor_commit outcome=validation_rejected validationCode={validation_code}"
+        );
+    })?;
     let admission = state
         .admit_frontend_history_mutation(window.label())
         .map_err(|_| crate::errors::EditorCommitError::history_in_progress())?;
     let gesture_ids = request.echoed_gesture_ids();
-    let requested_fields = request.changes.included_fields();
+    let is_ops = request.ops.is_some();
+    let requested_fields = request
+        .changes
+        .as_ref()
+        .map_or_else(Vec::new, |changes| changes.included_fields());
     let previous_mode = requested_fields
         .contains(&EditorField::Keys)
         .then(|| state.keyboard.current_mode());
@@ -219,7 +244,9 @@ pub fn editor_commit(
         publish_editor_change(state.inner(), &app, &change, false);
     }
     if !change.replayed {
-        publish_legacy_editor_fields(state.inner(), &app, &change, &requested_fields);
+        let legacy_fields =
+            commit_legacy_fields(is_ops, &requested_fields, &change.result.changed_fields);
+        publish_legacy_editor_fields(state.inner(), &app, &change, legacy_fields);
         if previous_mode.is_some_and(|mode| mode != change.selected_key_type) {
             emit_best_effort(
                 &app,
@@ -261,5 +288,43 @@ mod tests {
                 "layerGroups:changed",
             ]
         );
+    }
+
+    #[test]
+    fn semantic_ops_publish_their_actual_legacy_position_fields() {
+        let changed_fields = [EditorField::KeyPositions];
+        let selected = commit_legacy_fields(true, &[], &changed_fields);
+
+        assert_eq!(selected, &changed_fields);
+        assert_eq!(
+            selected
+                .iter()
+                .copied()
+                .map(legacy_event_name)
+                .collect::<Vec<_>>(),
+            ["positions:changed"]
+        );
+
+        let requested_fields = [EditorField::KeyPositions];
+        assert_eq!(
+            commit_legacy_fields(false, &requested_fields, &[]),
+            &requested_fields
+        );
+    }
+
+    #[test]
+    fn invalid_raw_editor_envelope_returns_a_typed_validation_error() {
+        let error = decode_editor_commit_request(serde_json::json!({
+            "baseRevision": 0,
+            "mutationId": uuid::Uuid::new_v4().to_string(),
+            "changes": { "schemaVersion": 1 },
+            "unknown": true,
+        }))
+        .unwrap_err();
+        let wire = serde_json::to_value(crate::errors::CommandError::from(error)).unwrap();
+
+        assert_eq!(wire["errorCode"], "VALIDATION_FAILED");
+        assert_eq!(wire["details"]["validationCode"], "INVALID_REQUEST_PAYLOAD");
+        assert_eq!(wire["retryable"], false);
     }
 }
