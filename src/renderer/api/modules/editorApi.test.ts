@@ -261,6 +261,26 @@ describe('editorCommitRaw semantic op protocol', () => {
     ).toThrow(EditorProtocolError);
     expect(() =>
       assertEditorOpsV1([
+        {
+          kind: 'patchElement',
+          elementType: 'graph',
+          id,
+          patch: { layerName: null },
+        },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'patchElement',
+          elementType: 'graph',
+          id,
+          patch: { hidden: true, layerName: 'both' },
+        } as never,
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
         { kind: 'setKeySlot', id, slot: { keys: ['A'], match: 'any' } },
       ]),
     ).toThrow(EditorProtocolError);

@@ -15,11 +15,11 @@ const mocks = vi.hoisted(() => ({
   flushPanelModel: vi.fn(),
   deleteFrozenSelection: vi.fn(() => Promise.resolve()),
   commitLayerDropIntent: vi.fn(() => Promise.resolve()),
-  patchElementHidden: vi.fn(
+  patchElementProperty: vi.fn(
     (
       _type?: unknown,
       _id?: unknown,
-      _hidden?: unknown,
+      _patch?: unknown,
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
@@ -93,7 +93,7 @@ vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
-  patchElementHiddenById: mocks.patchElementHidden,
+  patchElementPropertyById: mocks.patchElementProperty,
 }));
 
 vi.mock(
@@ -155,8 +155,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.deleteFrozenSelection.mockResolvedValue(undefined);
     mocks.commitLayerDropIntent.mockReset();
     mocks.commitLayerDropIntent.mockResolvedValue(undefined);
-    mocks.patchElementHidden.mockReset();
-    mocks.patchElementHidden.mockResolvedValue(true);
+    mocks.patchElementProperty.mockReset();
+    mocks.patchElementProperty.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
     mocks.elements = [
       {
@@ -408,59 +408,124 @@ describe('plugin panel persisted element mutations', () => {
     });
   });
 
-  it('native 가시성은 exact literal을 main semantic executor에 전달한다', async () => {
-    mocks.requestListener?.(
-      envelope('layers:setHidden', {
-        target: {
-          elementType: 'graph',
-          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          hidden: true,
-        },
-      }),
-    );
+  it.each([
+    ['가시성', { hidden: true }],
+    ['이름', { layerName: 'renamed' }],
+    ['이름 clear', { layerName: null }],
+  ])(
+    'native %s exact literal을 main semantic executor에 전달한다',
+    async (_label, patch) => {
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', {
+          target: {
+            elementType: 'graph',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            patch,
+          },
+        }),
+      );
 
-    await vi.waitFor(() =>
-      expect(mocks.patchElementHidden).toHaveBeenCalledOnce(),
-    );
-    expect(mocks.patchElementHidden).toHaveBeenCalledWith(
-      'graph',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      true,
-      { preflight: expect.any(Function) },
-    );
-    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
-    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
-  });
+      await vi.waitFor(() =>
+        expect(mocks.patchElementProperty).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.patchElementProperty).toHaveBeenCalledWith(
+        'graph',
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        patch,
+        { preflight: expect.any(Function) },
+      );
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
 
   it.each([
     [
       'top-level extra',
-      { target: { elementType: 'key', id: 'stable', hidden: true }, extra: 1 },
+      {
+        target: { elementType: 'key', id: 'stable', patch: { hidden: true } },
+        extra: 1,
+      },
     ],
     [
       'target extra',
-      { target: { elementType: 'key', id: 'stable', hidden: true, index: 0 } },
+      {
+        target: {
+          elementType: 'key',
+          id: 'stable',
+          patch: { hidden: true },
+          index: 0,
+        },
+      },
     ],
     [
       'plugin type',
-      { target: { elementType: 'plugin', id: 'plugin-a:one', hidden: true } },
+      {
+        target: {
+          elementType: 'plugin',
+          id: 'plugin-a:one',
+          patch: { hidden: true },
+        },
+      },
     ],
     [
       'synthetic native',
-      { target: { elementType: 'key', id: 'key-0', hidden: true } },
+      {
+        target: {
+          elementType: 'key',
+          id: 'key-0',
+          patch: { hidden: true },
+        },
+      },
     ],
-    ['empty id', { target: { elementType: 'stat', id: ' ', hidden: true } }],
     [
-      'non-boolean',
-      { target: { elementType: 'knob', id: 'stable', hidden: 1 } },
+      'empty id',
+      {
+        target: {
+          elementType: 'stat',
+          id: ' ',
+          patch: { hidden: true },
+        },
+      },
+    ],
+    ['missing patch', { target: { elementType: 'knob', id: 'stable' } }],
+    [
+      'both leaves',
+      {
+        target: {
+          elementType: 'knob',
+          id: 'stable',
+          patch: { hidden: true, layerName: 'name' },
+        },
+      },
+    ],
+    [
+      'patch extra',
+      {
+        target: {
+          elementType: 'knob',
+          id: 'stable',
+          patch: { layerName: null, extra: true },
+        },
+      },
+    ],
+    [
+      'invalid leaf',
+      {
+        target: {
+          elementType: 'knob',
+          id: 'stable',
+          patch: { hidden: 1 },
+        },
+      },
     ],
   ])(
-    '%s native 가시성 payload를 실행 전에 거절한다',
+    '%s native property payload를 실행 전에 거절한다',
     async (_label, payload) => {
-      mocks.requestListener?.(envelope('layers:setHidden', payload));
+      mocks.requestListener?.(envelope('layers:patchProperty', payload));
 
       await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
-      expect(mocks.patchElementHidden).not.toHaveBeenCalled();
+      expect(mocks.patchElementProperty).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
         error: { code: 'INVALID_PAYLOAD' },
@@ -468,24 +533,24 @@ describe('plugin panel persisted element mutations', () => {
     },
   );
 
-  it('native 가시성 완료 전에 generation이 바뀌면 성공으로 응답하지 않는다', async () => {
+  it('native property 완료 전에 generation이 바뀌면 성공으로 응답하지 않는다', async () => {
     let finish!: () => void;
-    mocks.patchElementHidden.mockReturnValueOnce(
+    mocks.patchElementProperty.mockReturnValueOnce(
       new Promise<boolean>((resolve) => {
         finish = () => resolve(true);
       }),
     );
     mocks.requestListener?.(
-      envelope('layers:setHidden', {
+      envelope('layers:patchProperty', {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          hidden: false,
+          patch: { layerName: null },
         },
       }),
     );
     await vi.waitFor(() =>
-      expect(mocks.patchElementHidden).toHaveBeenCalledOnce(),
+      expect(mocks.patchElementProperty).toHaveBeenCalledOnce(),
     );
 
     mocks.authorityGeneration = 8;
@@ -498,20 +563,20 @@ describe('plugin panel persisted element mutations', () => {
     });
   });
 
-  it('native 가시성은 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
-    mocks.patchElementHidden.mockImplementationOnce(
-      async (_type, _id, _hidden, options) => {
+  it('native property는 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchElementProperty.mockImplementationOnce(
+      async (_type, _id, _patch, options) => {
         mocks.authorityGeneration = 8;
         options?.preflight?.();
         return true;
       },
     );
     mocks.requestListener?.(
-      envelope('layers:setHidden', {
+      envelope('layers:patchProperty', {
         target: {
           elementType: 'key',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          hidden: true,
+          patch: { hidden: true },
         },
       }),
     );

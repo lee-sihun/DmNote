@@ -138,11 +138,15 @@ export interface EditorReorderElementsOpV1 {
   completeModeOrder: boolean;
 }
 
+export type EditorElementPropertyPatchV1 =
+  | { hidden: boolean; layerName?: never }
+  | { hidden?: never; layerName: string | null };
+
 export interface EditorPatchElementOpV1 {
   kind: 'patchElement';
   elementType: EditorElementTypeV1;
   id: string;
-  patch: { hidden: boolean };
+  patch: EditorElementPropertyPatchV1;
 }
 
 export interface EditorSetKeySlotOpV1 {
@@ -884,8 +888,16 @@ export function assertEditorOpsV1(
         throw new EditorProtocolError(`${opLabel} target is invalid`);
       }
       assertUniqueDirectTarget(op.id, opLabel);
-      assertExactKeys(op.patch, ['hidden'], `${opLabel}.patch`);
-      if (typeof op.patch.hidden !== 'boolean') {
+      const patchKeys = Object.keys(op.patch);
+      const patchIsValid =
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'hidden' &&
+          typeof op.patch.hidden === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'layerName' &&
+          (typeof op.patch.layerName === 'string' ||
+            op.patch.layerName === null));
+      if (!patchIsValid) {
         throw new EditorProtocolError(`${opLabel}.patch is invalid`);
       }
       return;

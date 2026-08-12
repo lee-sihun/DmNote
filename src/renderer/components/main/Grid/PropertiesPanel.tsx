@@ -32,7 +32,10 @@ import {
   omitLayoutSettingValues,
   type SettingsNormalizationErrorKind,
 } from '@plugins/runtime/settingsSections';
-import { updatePluginElement } from '@plugins/rpc/pluginElementActions';
+import {
+  patchNativeLayerPropertyViaAuthority,
+  updatePluginElement,
+} from '@plugins/rpc/pluginElementActions';
 import {
   toRgbHexColor,
   parseAlphaPercent,
@@ -61,6 +64,8 @@ import {
   getPreviewOverlayVersion,
   subscribePreviewOverlay,
 } from '@src/renderer/editor/runtime/previewOverlay';
+import { patchElementLayerNameById } from '@src/renderer/editor/runtime/elementOps';
+import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
 // 분리된 컴포넌트들 및 훅
 import {
@@ -714,12 +719,41 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const trimmed = value.trim();
     const defaultTitle = getCurrentDefaultTitle();
     const newLayerName =
-      trimmed === defaultTitle || trimmed === '' ? undefined : trimmed;
+      trimmed === defaultTitle || trimmed === '' ? null : trimmed;
+
+    const selectedElement =
+      selectedElements.length === 1 ? selectedElements[0] : null;
+    const stableTarget =
+      selectedElement && selectedElement.type !== 'plugin'
+        ? { elementType: selectedElement.type, id: selectedElement.id }
+        : null;
+    if (stableTarget && !isSyntheticElementId(stableTarget.id)) {
+      const target = {
+        ...stableTarget,
+        patch: { layerName: newLayerName },
+      } as const;
+      try {
+        if (window.__dmn_window_type === 'panel') {
+          await patchNativeLayerPropertyViaAuthority(target);
+        } else {
+          await patchElementLayerNameById(
+            target.elementType,
+            target.id,
+            target.patch.layerName,
+          );
+        }
+      } catch (error) {
+        console.error('Failed to rename layer', error);
+      }
+      return;
+    }
+
+    const legacyLayerName = newLayerName ?? undefined;
 
     if (singleKeyIndex !== null && singleKeyPosition) {
       onKeyUpdate({
         index: singleKeyIndex,
-        layerName: newLayerName,
+        layerName: legacyLayerName,
       } as Partial<KeyPosition> & { index: number });
     } else if (singleStatIndex !== null && singleStatPosition) {
       const mode = selectedKeyType;
@@ -727,7 +761,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const list = current[mode] || [];
       if (list[singleStatIndex]) {
         const nextList = list.map((pos, i) =>
-          i === singleStatIndex ? { ...pos, layerName: newLayerName } : pos,
+          i === singleStatIndex ? { ...pos, layerName: legacyLayerName } : pos,
         );
         const nextPositions = { ...current, [mode]: nextList };
         useStatItemStore.getState().setLocalUpdateInProgress(true);
@@ -744,7 +778,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const list = current[mode] || [];
       if (list[singleGraphIndex]) {
         const nextList = list.map((pos, i) =>
-          i === singleGraphIndex ? { ...pos, layerName: newLayerName } : pos,
+          i === singleGraphIndex ? { ...pos, layerName: legacyLayerName } : pos,
         );
         const nextPositions = { ...current, [mode]: nextList };
         useGraphItemStore.getState().setLocalUpdateInProgress(true);
@@ -761,7 +795,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const list = current[mode] || [];
       if (list[singleKnobIndex]) {
         const nextList = list.map((pos, i) =>
-          i === singleKnobIndex ? { ...pos, layerName: newLayerName } : pos,
+          i === singleKnobIndex ? { ...pos, layerName: legacyLayerName } : pos,
         );
         const nextPositions = { ...current, [mode]: nextList };
         useKnobItemStore.getState().setLocalUpdateInProgress(true);

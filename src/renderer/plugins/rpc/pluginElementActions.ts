@@ -13,6 +13,7 @@ import {
 } from '@utils/plugin/panelModelSync';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
+import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 
 import { getPluginAuthorityGeneration, sendPluginRpc } from './pluginRpcClient';
 
@@ -23,7 +24,7 @@ export const PLUGIN_RPC_OPERATIONS = {
   update: 'elements:update',
   deleteLayerSelection: 'layers:deleteSelection',
   reorderLayerSelection: 'layers:reorderSelection',
-  setLayerHidden: 'layers:setHidden',
+  patchLayerProperty: 'layers:patchProperty',
 } as const;
 
 export type LayerDeleteTarget = {
@@ -31,10 +32,10 @@ export type LayerDeleteTarget = {
   id: string;
 };
 
-export interface NativeLayerHiddenTarget {
+export interface NativeLayerPropertyTarget {
   elementType: NativeElementType;
   id: string;
-  hidden: boolean;
+  patch: EditorElementPropertyPatchV1;
 }
 
 export interface LayerReorderAnchorsWire {
@@ -334,14 +335,14 @@ export const reorderLayerSelectionViaAuthority = (
   });
 };
 
-export const setNativeLayerHiddenViaAuthority = (
-  target: NativeLayerHiddenTarget,
+export const patchNativeLayerPropertyViaAuthority = (
+  target: NativeLayerPropertyTarget,
 ): Promise<boolean> => {
   const authorityGeneration = getPluginAuthorityGeneration();
   return new Promise((resolve) => {
     outboundQueue.push({
-      operation: PLUGIN_RPC_OPERATIONS.setLayerHidden,
-      payload: { target: { ...target } },
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: { target: structuredClone(target) },
       authorityGeneration,
       retryPolicy: 'default',
       resolve,

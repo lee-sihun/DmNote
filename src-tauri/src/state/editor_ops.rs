@@ -3,9 +3,10 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     errors::EditorCommitError,
     models::{
-        AppStoreData, EditorBoundsV1, EditorDocumentV1, EditorElementTypeV1, EditorField,
-        EditorFrozenElementV1, EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1,
-        EditorOpV1, EditorZUpdateV1, KeyPosition, LayerGroupDef,
+        AppStoreData, EditorBoundsV1, EditorDocumentV1, EditorElementPropertyPatchV1,
+        EditorElementTypeV1, EditorField, EditorFrozenElementV1, EditorGroupUpdateV1,
+        EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorZUpdateV1, KeyPosition,
+        LayerGroupDef,
     },
 };
 
@@ -702,14 +703,30 @@ pub(crate) fn prepare_editor_ops_transition(
                     continue;
                 };
                 let position = position_at_mut(&mut candidate, location)?;
-                let status = if position.hidden == patch.hidden {
-                    EditorOpResultStatusV1::NoChange
-                } else {
-                    position.hidden = patch.hidden;
-                    EditorOpResultStatusV1::Applied
+                let changed = match patch {
+                    EditorElementPropertyPatchV1::Hidden(patch) => {
+                        if position.hidden == patch.hidden {
+                            false
+                        } else {
+                            position.hidden = patch.hidden;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::LayerName(patch) => {
+                        if position.layer_name == patch.layer_name {
+                            false
+                        } else {
+                            position.layer_name.clone_from(&patch.layer_name);
+                            true
+                        }
+                    }
                 };
                 op_results.push(EditorOpResultV1 {
-                    status,
+                    status: if changed {
+                        EditorOpResultStatusV1::Applied
+                    } else {
+                        EditorOpResultStatusV1::NoChange
+                    },
                     bounds: None,
                 });
             }
@@ -941,7 +958,25 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1 { hidden },
+            patch: EditorElementPropertyPatchV1::Hidden(
+                crate::models::EditorHiddenPropertyPatchV1 { hidden },
+            ),
+        }
+    }
+
+    fn patch_layer_name_op(
+        element_type: EditorElementTypeV1,
+        id: impl Into<String>,
+        layer_name: Option<&str>,
+    ) -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type,
+            id: id.into(),
+            patch: EditorElementPropertyPatchV1::LayerName(
+                crate::models::EditorLayerNamePropertyPatchV1 {
+                    layer_name: layer_name.map(str::to_string),
+                },
+            ),
         }
     }
 
@@ -1457,6 +1492,104 @@ mod tests {
     }
 
     #[test]
+    fn layer_name_patches_apply_exact_values_and_clear_without_touching_other_fields() {
+        let store = store_with_every_reorder_type();
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let graph_id = store.graph_positions["4key"][0].position.id.clone();
+        let knob_id = store.knob_positions["4key"][0].position.id.clone();
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        let already_clear = prepare_editor_ops_transition(
+            &store,
+            &[patch_layer_name_op(EditorElementTypeV1::Key, &key_id, None)],
+        )
+        .unwrap();
+        assert_eq!(
+            already_clear.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert!(already_clear.changed_fields.is_empty());
+
+        let ops = vec![
+            patch_layer_name_op(EditorElementTypeV1::Key, &key_id, Some("Key layer")),
+            patch_layer_name_op(EditorElementTypeV1::Stat, stat_id, Some("Stat layer")),
+            patch_layer_name_op(EditorElementTypeV1::Graph, graph_id, Some("Graph layer")),
+            patch_layer_name_op(EditorElementTypeV1::Knob, knob_id, Some("Knob layer")),
+            patch_layer_name_op(EditorElementTypeV1::Key, missing_id, None),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(
+            transition.candidate.key_positions["4key"][0]
+                .layer_name
+                .as_deref(),
+            Some("Key layer")
+        );
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .layer_name
+                .as_deref(),
+            Some("Stat layer")
+        );
+        assert_eq!(
+            transition.candidate.graph_positions["4key"][0]
+                .position
+                .layer_name
+                .as_deref(),
+            Some("Graph layer")
+        );
+        assert_eq!(
+            transition.candidate.knob_positions["4key"][0]
+                .position
+                .layer_name
+                .as_deref(),
+            Some("Knob layer")
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+
+        let cleared = prepare_editor_ops_transition(
+            &transition.scratch,
+            &[patch_layer_name_op(EditorElementTypeV1::Key, key_id, None)],
+        )
+        .unwrap();
+        assert_eq!(cleared.candidate.key_positions["4key"][0].layer_name, None);
+        assert_eq!(
+            cleared.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+    }
+
+    #[test]
     fn set_key_slot_follows_position_id_and_preserves_the_pair() {
         let mut store = base_store();
         store.keys.get_mut("4key").unwrap().swap(0, 1);
@@ -1504,7 +1637,11 @@ mod tests {
             &store,
             &[
                 patch_hidden_op(EditorElementTypeV1::Key, key_id, true),
-                patch_hidden_op(EditorElementTypeV1::Graph, stat_id.clone(), true),
+                patch_layer_name_op(
+                    EditorElementTypeV1::Graph,
+                    stat_id.clone(),
+                    Some("Wrong type"),
+                ),
             ],
         )
         .unwrap_err();

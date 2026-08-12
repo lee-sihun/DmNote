@@ -329,9 +329,16 @@ const applyOpsForTest = (
           positionIndex === index ? { ...position, ...op.bounds } : position,
         );
       } else if (op.kind === 'patchElement') {
-        record[mode] = positions.map((position, positionIndex) =>
-          positionIndex === index ? { ...position, ...op.patch } : position,
-        );
+        record[mode] = positions.map((position, positionIndex) => {
+          if (positionIndex !== index) return position;
+          if ('layerName' in op.patch) {
+            const updated = { ...position };
+            if (op.patch.layerName === null) delete updated.layerName;
+            else updated.layerName = op.patch.layerName;
+            return updated;
+          }
+          return { ...position, hidden: op.patch.hidden };
+        });
       } else {
         record[mode] = positions.filter(
           (_, positionIndex) => positionIndex !== index,
@@ -2884,6 +2891,41 @@ describe('commitSemanticOpsInternal', () => {
     expect(harness.transport.commitMock).toHaveBeenCalledWith(
       expect.objectContaining({ ops: [patchHiddenOp(id, true)] }),
     );
+    harness.coordinator.stop();
+  });
+
+  it('layerName patch는 literal을 쓰고 null이면 leaf만 제거한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000008c';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].layerName = 'Before';
+    base.keyPositions['4key'][0].noteWidth = 333;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { layerName: 'After' },
+      },
+    ]);
+    expect(
+      harness.coordinator.getState().lastAck?.keyPositions['4key'][0],
+    ).toMatchObject({ layerName: 'After', noteWidth: 333 });
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { layerName: null },
+      },
+    ]);
+    expect(outcome.document.keyPositions['4key'][0]).not.toHaveProperty(
+      'layerName',
+    );
+    expect(outcome.document.keyPositions['4key'][0].noteWidth).toBe(333);
     harness.coordinator.stop();
   });
 

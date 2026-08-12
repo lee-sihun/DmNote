@@ -446,9 +446,16 @@ const applySemanticOps = (
         if (index < 0) continue;
         next[field] = {
           ...record,
-          [mode]: positions.map((position, positionIndex) =>
-            positionIndex === index ? { ...position, ...op.patch } : position,
-          ),
+          [mode]: positions.map((position, positionIndex) => {
+            if (positionIndex !== index) return position;
+            if ('layerName' in op.patch) {
+              const updated = { ...position };
+              if (op.patch.layerName === null) delete updated.layerName;
+              else updated.layerName = op.patch.layerName;
+              return updated;
+            }
+            return { ...position, hidden: op.patch.hidden };
+          }),
         } as never;
         break;
       }

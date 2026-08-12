@@ -4,7 +4,7 @@
  */
 
 import {
-  setNativeLayerHiddenViaAuthority,
+  patchNativeLayerPropertyViaAuthority,
   setPluginElementsHidden,
 } from '@plugins/rpc/pluginElementActions';
 import { keysApi } from '@api/modules/keysApi';
@@ -36,7 +36,10 @@ import type { ListItem } from '@components/main/Modal/ListPopup';
 import type { LayerItem, DisplayItem } from '../types';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
-import { patchElementHiddenById } from '@src/renderer/editor/runtime/elementOps';
+import {
+  patchElementHiddenById,
+  patchElementLayerNameById,
+} from '@src/renderer/editor/runtime/elementOps';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
 // ============================================================================
@@ -119,7 +122,11 @@ export function useLayerActions({
           hidden: !item.hidden,
         };
         if (window.__dmn_window_type === 'panel') {
-          await setNativeLayerHiddenViaAuthority(target);
+          await patchNativeLayerPropertyViaAuthority({
+            elementType: target.elementType,
+            id: target.id,
+            patch: { hidden: target.hidden },
+          });
         } else {
           await patchElementHiddenById(
             target.elementType,
@@ -417,7 +424,35 @@ export function useLayerActions({
   const handleLayerRenameCommit = async (item: LayerItem, value: string) => {
     setRenamingItemId(null);
     const trimmed = value.trim();
-    const newLayerName = trimmed === '' ? undefined : trimmed;
+    const newLayerName = trimmed === '' ? null : trimmed;
+
+    if (
+      item.type !== 'plugin' &&
+      item.id.length > 0 &&
+      !isSyntheticElementId(item.id)
+    ) {
+      try {
+        const target = {
+          elementType: item.type,
+          id: item.id,
+          patch: { layerName: newLayerName },
+        } as const;
+        if (window.__dmn_window_type === 'panel') {
+          await patchNativeLayerPropertyViaAuthority(target);
+        } else {
+          await patchElementLayerNameById(
+            target.elementType,
+            target.id,
+            target.patch.layerName,
+          );
+        }
+      } catch (error) {
+        console.error(`Failed to rename ${item.type} layer`, error);
+      }
+      return;
+    }
+
+    const legacyLayerName = newLayerName ?? undefined;
 
     if (item.type === 'key' && item.index !== undefined) {
       const { canonicalPositions: pos } = useKeyStore.getState();
@@ -429,7 +464,7 @@ export function useLayerActions({
       const updatedModePositions = [...currentPositions];
       updatedModePositions[item.index] = {
         ...current,
-        layerName: newLayerName,
+        layerName: legacyLayerName,
       };
       updatedPositions[selectedKeyType] = updatedModePositions;
 
@@ -455,7 +490,7 @@ export function useLayerActions({
       const updatedModePositions = [...currentPositions];
       updatedModePositions[item.index] = {
         ...target,
-        layerName: newLayerName,
+        layerName: legacyLayerName,
       };
       updatedPositions[selectedKeyType] = updatedModePositions;
 
@@ -481,7 +516,7 @@ export function useLayerActions({
       const updatedModePositions = [...currentPositions];
       updatedModePositions[item.index] = {
         ...target,
-        layerName: newLayerName,
+        layerName: legacyLayerName,
       };
       updatedPositions[selectedKeyType] = updatedModePositions;
 
@@ -507,7 +542,7 @@ export function useLayerActions({
       const updatedModePositions = [...currentPositions];
       updatedModePositions[item.index] = {
         ...target,
-        layerName: newLayerName,
+        layerName: legacyLayerName,
       };
       updatedPositions[selectedKeyType] = updatedModePositions;
 

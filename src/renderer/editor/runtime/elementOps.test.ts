@@ -32,6 +32,7 @@ import {
   deleteElementById,
   placeDuplicatedKey,
   patchElementHiddenById,
+  patchElementLayerNameById,
   rebindKeySlotById,
 } from './elementOps';
 
@@ -858,6 +859,54 @@ describe('elementOps', () => {
     );
     expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
       true,
+    );
+  });
+
+  it('layerName literal과 clear는 좁은 patchElement op로 전송한다', async () => {
+    await expect(
+      patchElementLayerNameById('key', ID_A, 'Layer A'),
+    ).resolves.toBe(true);
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].layerName).toBe(
+      'Layer A',
+    );
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { layerName: 'Layer A' },
+        },
+      ],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+
+    await patchElementLayerNameById('key', ID_A, null);
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].layerName,
+    ).toBeUndefined();
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [expect.objectContaining({ patch: { layerName: null } })],
+      expect.anything(),
+    );
+  });
+
+  it('layerName 편입 전 실패는 자기 leaf만 CAS 복원한다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), layerName: 'Before' }, keyAt(ID_B)],
+      },
+      positions: {
+        '4key': [{ ...keyAt(ID_A), layerName: 'Before' }, keyAt(ID_B)],
+      },
+    });
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+
+    await expect(
+      patchElementLayerNameById('key', ID_A, 'After'),
+    ).rejects.toThrow('start failed');
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].layerName).toBe(
+      'Before',
     );
   });
 });

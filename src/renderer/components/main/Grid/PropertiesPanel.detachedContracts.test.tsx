@@ -16,12 +16,18 @@ const {
   batchKeyLikePropsMock,
   batchPropsMock,
   previewMock,
+  patchLayerNameMock,
+  patchPropertyViaAuthorityMock,
+  statUpdatePositionsMock,
   settleCommitMock,
   singleKeyStatPropsMock,
 } = vi.hoisted(() => ({
   batchKeyLikePropsMock: vi.fn(),
   batchPropsMock: vi.fn(),
   previewMock: vi.fn(),
+  patchLayerNameMock: vi.fn(() => Promise.resolve(true)),
+  patchPropertyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  statUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   settleCommitMock: vi.fn(),
   singleKeyStatPropsMock: vi.fn(),
 }));
@@ -36,7 +42,17 @@ vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: vi.fn() }),
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
+  patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   updatePluginElement: vi.fn(),
+}));
+vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  patchElementLayerNameById: patchLayerNameMock,
+}));
+vi.mock('@api/modules/itemsApi', () => ({
+  graphItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
+  knobItemsApi: { updatePositions: vi.fn(() => Promise.resolve()) },
+  layerGroupsApi: { update: vi.fn(() => Promise.resolve()) },
+  statItemsApi: { updatePositions: statUpdatePositionsMock },
 }));
 vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
   editGestureController: {
@@ -138,6 +154,9 @@ const resetStores = () => {
   singleKeyStatPropsMock.mockClear();
   batchPropsMock.mockClear();
   batchKeyLikePropsMock.mockClear();
+  patchLayerNameMock.mockClear();
+  patchPropertyViaAuthorityMock.mockClear();
+  statUpdatePositionsMock.mockClear();
   useKeyStore.setState({
     selectedKeyType: '4key',
     keyMappings: { '4key': [] },
@@ -204,14 +223,100 @@ const resetStores = () => {
 
 describe('PropertiesPanel detached preview contract', () => {
   let mounted: MountedPanel;
+  let originalWindowType: typeof window.__dmn_window_type;
 
   beforeEach(() => {
+    originalWindowType = window.__dmn_window_type;
+    window.__dmn_window_type = 'main';
     resetStores();
   });
 
   afterEach(() => {
     act(() => mounted.root.unmount());
     mounted.container.remove();
+    window.__dmn_window_type = originalWindowType;
+  });
+
+  it('header stable native rename은 현재 index 대신 ID semantic leaf를 쓴다', async () => {
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const otherId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const basePosition = useStatItemStore.getState().positions['4key'][0];
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...basePosition,
+            id,
+          },
+          { ...basePosition, id: otherId },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'stat', id, index: 1 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+      handleRenameCommit: (value: string) => Promise<void>;
+    };
+
+    await act(async () => props.handleRenameCommit('  Custom  '));
+
+    expect(patchLayerNameMock).toHaveBeenCalledWith('stat', id, 'Custom');
+    expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+    expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it('panel header stable native rename은 exact authority RPC만 호출한다', async () => {
+    window.__dmn_window_type = 'panel';
+    const id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...useStatItemStore.getState().positions['4key'][0],
+            id,
+            layerName: 'Before',
+          },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'stat', id, index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+      handleRenameCommit: (value: string) => Promise<void>;
+    };
+
+    await act(async () => props.handleRenameCommit('   '));
+
+    expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+      elementType: 'stat',
+      id,
+      patch: { layerName: null },
+    });
+    expect(patchLayerNameMock).not.toHaveBeenCalled();
+    expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it('header synthetic native rename은 기존 index writer를 유지한다', async () => {
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'stat', id: 'stat-0', index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+      handleRenameCommit: (value: string) => Promise<void>;
+    };
+
+    await act(async () => props.handleRenameCommit('Legacy'));
+
+    expect(patchLayerNameMock).not.toHaveBeenCalled();
+    expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+    expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
   });
 
   it('single stat preview는 canonical 변경 없이 stat 도메인으로 전달', () => {

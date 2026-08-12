@@ -202,10 +202,24 @@ pub struct EditorBoundsV1 {
     pub height: f64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EditorElementPropertyPatchV1 {
+    Hidden(EditorHiddenPropertyPatchV1),
+    LayerName(EditorLayerNamePropertyPatchV1),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EditorElementPropertyPatchV1 {
+pub struct EditorHiddenPropertyPatchV1 {
     pub hidden: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorLayerNamePropertyPatchV1 {
+    #[serde(deserialize_with = "deserialize_required_nullable_string")]
+    pub layer_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

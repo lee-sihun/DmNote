@@ -50,7 +50,8 @@ import {
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
-import { patchElementHiddenById } from '@src/renderer/editor/runtime/elementOps';
+import { patchElementPropertyById } from '@src/renderer/editor/runtime/elementOps';
+import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
 import type {
   LayerReorderAnchorsWire,
   LayerReorderIntentWire,
@@ -147,15 +148,15 @@ const parseLayerDeleteTargets = (
   return targets;
 };
 
-interface NativeLayerHiddenTarget {
+interface NativeLayerPropertyTarget {
   elementType: NativeElementType;
   id: string;
-  hidden: boolean;
+  patch: EditorElementPropertyPatchV1;
 }
 
-const parseNativeLayerHiddenTarget = (
+const parseNativeLayerPropertyTarget = (
   payload: Record<string, unknown>,
-): NativeLayerHiddenTarget | null => {
+): NativeLayerPropertyTarget | null => {
   if (!hasExactKeys(payload, ['target'])) return null;
   const value = payload.target;
   if (
@@ -165,7 +166,7 @@ const parseNativeLayerHiddenTarget = (
     !hasExactKeys(value as Record<string, unknown>, [
       'elementType',
       'id',
-      'hidden',
+      'patch',
     ])
   ) {
     return null;
@@ -177,11 +178,19 @@ const parseNativeLayerHiddenTarget = (
     typeof target.id !== 'string' ||
     target.id.trim().length === 0 ||
     isSyntheticElementId(target.id) ||
-    typeof target.hidden !== 'boolean'
+    target.patch === null ||
+    typeof target.patch !== 'object' ||
+    Array.isArray(target.patch)
   ) {
     return null;
   }
-  return target as unknown as NativeLayerHiddenTarget;
+  const patch = target.patch as Record<string, unknown>;
+  const patchValid =
+    (hasExactKeys(patch, ['hidden']) && typeof patch.hidden === 'boolean') ||
+    (hasExactKeys(patch, ['layerName']) &&
+      (typeof patch.layerName === 'string' || patch.layerName === null));
+  if (!patchValid) return null;
+  return target as unknown as NativeLayerPropertyTarget;
 };
 
 const MAX_LAYER_REORDER_IDS = 4096;
@@ -814,8 +823,8 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
     return;
   }
 
-  if (envelope.operation === PLUGIN_RPC_OPERATIONS.setLayerHidden) {
-    const target = parseNativeLayerHiddenTarget(envelope.payload);
+  if (envelope.operation === PLUGIN_RPC_OPERATIONS.patchLayerProperty) {
+    const target = parseNativeLayerPropertyTarget(envelope.payload);
     if (!target) {
       respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
       return;
@@ -827,7 +836,7 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
       return;
     }
-    void patchElementHiddenById(target.elementType, target.id, target.hidden, {
+    void patchElementPropertyById(target.elementType, target.id, target.patch, {
       preflight: () => {
         if (!generationLive()) {
           throw new Error('plugin authority generation changed');
@@ -846,8 +855,8 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
           return;
         }
-        console.error('Failed to set panel native layer visibility', error);
-        respond(failure(envelope.requestId, 'SET_LAYER_HIDDEN_FAILED'));
+        console.error('Failed to patch panel native layer property', error);
+        respond(failure(envelope.requestId, 'PATCH_LAYER_PROPERTY_FAILED'));
       });
     return;
   }

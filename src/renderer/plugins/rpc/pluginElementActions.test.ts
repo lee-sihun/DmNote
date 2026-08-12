@@ -147,33 +147,39 @@ describe('plugin element panel queue', () => {
     );
   });
 
-  it('native 가시성은 literal과 enqueue 시점 generation을 고정한다', async () => {
-    mocks.sendPluginRpc.mockResolvedValue({
-      kind: 'ok',
-      response: { modelRevision: 1 },
-    });
+  it.each([
+    ['가시성', { hidden: true }],
+    ['이름 clear', { layerName: null }],
+  ])(
+    '%s literal과 enqueue 시점 generation을 고정한다',
+    async (_label, patch) => {
+      mocks.sendPluginRpc.mockResolvedValue({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
 
-    await expect(
-      actions.setNativeLayerHiddenViaAuthority({
-        elementType: 'stat',
-        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        hidden: true,
-      }),
-    ).resolves.toBe(true);
-
-    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
-      'layers:setHidden',
-      {
-        target: {
+      await expect(
+        actions.patchNativeLayerPropertyViaAuthority({
           elementType: 'stat',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          hidden: true,
+          patch,
+        }),
+      ).resolves.toBe(true);
+
+      expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+        'layers:patchProperty',
+        {
+          target: {
+            elementType: 'stat',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            patch,
+          },
         },
-      },
-      0,
-      7,
-    );
-  });
+        0,
+        7,
+      );
+    },
+  );
 
   it.each([
     { kind: 'unknown' },
@@ -185,10 +191,10 @@ describe('plugin element panel queue', () => {
         kind: 'ok',
         response: { modelRevision: 2 },
       });
-      const changed = actions.setNativeLayerHiddenViaAuthority({
+      const changed = actions.patchNativeLayerPropertyViaAuthority({
         elementType: 'key',
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        hidden: true,
+        patch: { layerName: 'renamed' },
       });
       await vi.waitFor(() =>
         expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),

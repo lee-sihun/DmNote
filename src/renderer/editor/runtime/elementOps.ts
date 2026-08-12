@@ -23,6 +23,7 @@ import { editorCoordinator } from './editorStateCoordinator';
 import type {
   EditorBoundsV1,
   EditorDocumentV1,
+  EditorElementPropertyPatchV1,
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
@@ -539,20 +540,24 @@ export const rebindKeySlotById = (
     });
 };
 
-export const patchElementHiddenById = (
+export const patchElementPropertyById = (
   type: NativeElementType,
   id: string,
-  hidden: boolean,
+  patch: EditorElementPropertyPatchV1,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id) return Promise.resolve(false);
+  const eagerPatch =
+    'layerName' in patch
+      ? { layerName: patch.layerName ?? undefined }
+      : { hidden: patch.hidden };
   const intents: PropertyIntents = new Map([
-    [type, new Map([[id, { hidden }]])],
+    [type, new Map([[id, eagerPatch]])],
   ]);
   const receipt = applyPropertyIntentsEagerly(intents);
   let enrolled = false;
   return commitSemanticOps(
-    [{ kind: 'patchElement', elementType: type, id, patch: { hidden } }],
+    [{ kind: 'patchElement', elementType: type, id, patch }],
     {
       preflight: options.preflight,
       onEnrolled: () => {
@@ -565,6 +570,22 @@ export const patchElementHiddenById = (
       if (!enrolled) receipt?.rollback();
       throw error;
     });
+};
+
+export const patchElementHiddenById = (
+  type: NativeElementType,
+  id: string,
+  hidden: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => patchElementPropertyById(type, id, { hidden }, options);
+
+export const patchElementLayerNameById = (
+  type: NativeElementType,
+  id: string,
+  layerName: string | null,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById(type, id, { layerName }, options);
 };
 
 // 다중 선택 정산: 대상 id들의 현재 canonical 기하(dx·dy)를 의도로 캡처해

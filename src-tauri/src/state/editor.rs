@@ -2007,7 +2007,9 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1 { hidden: true },
+            patch: EditorElementPropertyPatchV1::Hidden(
+                crate::models::EditorHiddenPropertyPatchV1 { hidden: true },
+            ),
         }
     }
 
@@ -2333,11 +2335,34 @@ mod tests {
         );
         decode_editor_commit_request(property.clone()).unwrap();
 
+        let layer_name = serde_json::to_value(ops_request(vec![EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Knob,
+            id: Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1::LayerName(
+                crate::models::EditorLayerNamePropertyPatchV1 { layer_name: None },
+            ),
+        }]))
+        .unwrap();
+        assert_eq!(
+            layer_name["ops"][0]["patch"],
+            serde_json::json!({ "layerName": null })
+        );
+        decode_editor_commit_request(layer_name.clone()).unwrap();
+
         let mut unknown_property = property.clone();
         unknown_property["ops"][0]["patch"]["zIndex"] = serde_json::json!(3);
         let mut unknown_op = property;
         unknown_op["ops"][0]["mode"] = serde_json::json!("4key");
-        for wire in [unknown_property, unknown_op] {
+        let mut missing_property = layer_name.clone();
+        missing_property["ops"][0]["patch"] = serde_json::json!({});
+        let mut multiple_properties = layer_name;
+        multiple_properties["ops"][0]["patch"]["hidden"] = serde_json::json!(true);
+        for wire in [
+            unknown_property,
+            unknown_op,
+            missing_property,
+            multiple_properties,
+        ] {
             let error = decode_editor_commit_request(wire).unwrap_err();
             assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
         }

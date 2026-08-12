@@ -4296,7 +4296,25 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type,
             id: id.into(),
-            patch: EditorElementPropertyPatchV1 { hidden },
+            patch: EditorElementPropertyPatchV1::Hidden(
+                crate::models::EditorHiddenPropertyPatchV1 { hidden },
+            ),
+        }
+    }
+
+    fn patch_layer_name_op(
+        element_type: EditorElementTypeV1,
+        id: impl Into<String>,
+        layer_name: Option<&str>,
+    ) -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type,
+            id: id.into(),
+            patch: EditorElementPropertyPatchV1::LayerName(
+                crate::models::EditorLayerNamePropertyPatchV1 {
+                    layer_name: layer_name.map(str::to_string),
+                },
+            ),
         }
     }
 
@@ -7269,8 +7287,10 @@ mod tests {
         let initial = store.editor_get();
         let property_id = initial.document.key_positions["4key"][0].id.clone();
         let slot_id = initial.document.key_positions["4key"][1].id.clone();
+        let layer_name_id = initial.document.key_positions["4key"][2].id.clone();
         let initial_hidden = initial.document.key_positions["4key"][0].hidden;
         let initial_slot = initial.document.keys["4key"][1].clone();
+        let initial_layer_name = initial.document.key_positions["4key"][2].layer_name.clone();
         let initial_slot_canonical = initial_slot.canonical();
         let missing_id = uuid::Uuid::new_v4().to_string();
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -7286,6 +7306,11 @@ mod tests {
                         match_mode: SlotMatch::All,
                     }),
                 },
+                patch_layer_name_op(
+                    EditorElementTypeV1::Key,
+                    &layer_name_id,
+                    Some("Named layer"),
+                ),
                 patch_hidden_op(EditorElementTypeV1::Graph, missing_id, true),
             ],
         );
@@ -7305,6 +7330,7 @@ mod tests {
                 .map(|result| result.status)
                 .collect::<Vec<_>>(),
             [
+                EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::TargetMissing,
@@ -7348,6 +7374,10 @@ mod tests {
         let after_undo = store.editor_get().document;
         assert_eq!(after_undo.key_positions["4key"][0].hidden, initial_hidden);
         assert_eq!(after_undo.keys["4key"][1], initial_slot);
+        assert_eq!(
+            after_undo.key_positions["4key"][2].layer_name,
+            initial_layer_name
+        );
 
         let redo_id = uuid::Uuid::new_v4().to_string();
         let barrier = gate.close(&redo_id).unwrap();
@@ -7362,6 +7392,10 @@ mod tests {
         drop(barrier);
         let after_redo = store.editor_get().document;
         assert_eq!(after_redo.key_positions["4key"][0].hidden, !initial_hidden);
+        assert_eq!(
+            after_redo.key_positions["4key"][2].layer_name.as_deref(),
+            Some("Named layer")
+        );
         assert_eq!(
             after_redo.keys["4key"][1],
             KeySlot::Multi {
@@ -7385,6 +7419,11 @@ mod tests {
                             },
                         ),
                     },
+                    patch_layer_name_op(
+                        EditorElementTypeV1::Key,
+                        layer_name_id,
+                        Some("Named layer"),
+                    ),
                 ],
             ))
             .unwrap();
@@ -7400,8 +7439,90 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange
             ]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn layer_name_null_clear_replays_and_round_trips_history() {
+        let dir = test_directory("editor-layer-name-clear-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get();
+        let id = initial.document.key_positions["4key"][0].id.clone();
+
+        store
+            .commit_editor_document(editor_ops_request(
+                initial.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![patch_layer_name_op(
+                    EditorElementTypeV1::Key,
+                    &id,
+                    Some("Named layer"),
+                )],
+            ))
+            .unwrap();
+
+        let clear_mutation_id = uuid::Uuid::new_v4().to_string();
+        let clear_request = editor_ops_request(
+            store.editor_get().revision,
+            &clear_mutation_id,
+            vec![patch_layer_name_op(EditorElementTypeV1::Key, &id, None)],
+        );
+        let cleared = store.commit_editor_document(clear_request.clone()).unwrap();
+        assert_eq!(
+            cleared.result.op_results.as_ref().unwrap()[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].layer_name,
+            None
+        );
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let replay = store.commit_editor_document(clear_request).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, cleared.result);
+        assert_eq!(store.history_status().history_revision, 2);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0]
+                .layer_name
+                .as_deref(),
+            Some("Named layer")
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].layer_name,
+            None
         );
 
         store.flush_and_shutdown().unwrap();

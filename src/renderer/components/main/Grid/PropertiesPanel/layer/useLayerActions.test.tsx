@@ -8,18 +8,20 @@ import type { LayerItem } from '../types';
 
 const mocks = vi.hoisted(() => ({
   patchHidden: vi.fn(() => Promise.resolve(true)),
-  setHiddenViaAuthority: vi.fn(() => Promise.resolve(true)),
+  patchLayerName: vi.fn(() => Promise.resolve(true)),
+  patchPropertyViaAuthority: vi.fn(() => Promise.resolve(true)),
   updateKeyPositions: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementHiddenById: mocks.patchHidden,
+  patchElementLayerNameById: mocks.patchLayerName,
 }));
 vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
   deleteFrozenSelection: vi.fn(),
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
-  setNativeLayerHiddenViaAuthority: mocks.setHiddenViaAuthority,
+  patchNativeLayerPropertyViaAuthority: mocks.patchPropertyViaAuthority,
   setPluginElementsHidden: vi.fn(),
 }));
 vi.mock('@api/modules/keysApi', () => ({
@@ -58,7 +60,8 @@ describe('useLayerActions visibility routing', () => {
     originalWindowType = window.__dmn_window_type;
     window.__dmn_window_type = 'main';
     mocks.patchHidden.mockClear();
-    mocks.setHiddenViaAuthority.mockClear();
+    mocks.patchLayerName.mockClear();
+    mocks.patchPropertyViaAuthority.mockClear();
     mocks.updateKeyPositions.mockClear();
     useKeyStore.setState({
       canonicalPositions: {
@@ -106,7 +109,7 @@ describe('useLayerActions visibility routing', () => {
     await act(async () => actions.handleToggleVisibility(click, item));
 
     expect(mocks.patchHidden).toHaveBeenCalledWith('key', STABLE_ID, true);
-    expect(mocks.setHiddenViaAuthority).not.toHaveBeenCalled();
+    expect(mocks.patchPropertyViaAuthority).not.toHaveBeenCalled();
     expect(mocks.updateKeyPositions).not.toHaveBeenCalled();
   });
 
@@ -122,10 +125,10 @@ describe('useLayerActions visibility routing', () => {
     };
     await act(async () => actions.handleToggleVisibility(click, item));
 
-    expect(mocks.setHiddenViaAuthority).toHaveBeenCalledWith({
+    expect(mocks.patchPropertyViaAuthority).toHaveBeenCalledWith({
       elementType: 'stat',
       id: STABLE_ID,
-      hidden: false,
+      patch: { hidden: false },
     });
     expect(mocks.patchHidden).not.toHaveBeenCalled();
     expect(mocks.updateKeyPositions).not.toHaveBeenCalled();
@@ -143,6 +146,65 @@ describe('useLayerActions visibility routing', () => {
     await act(async () => actions.handleToggleVisibility(click, item));
 
     expect(mocks.patchHidden).not.toHaveBeenCalled();
+    expect(mocks.updateKeyPositions).toHaveBeenCalledOnce();
+  });
+
+  it.each(['key', 'stat', 'graph', 'knob'] as const)(
+    'stable %s rename은 index 대신 ID와 trimmed literal을 쓴다',
+    async (type) => {
+      const item: LayerItem = {
+        type,
+        id: STABLE_ID,
+        index: 99,
+        name: 'Before',
+        zIndex: 0,
+        hidden: false,
+      };
+      await act(async () => actions.handleLayerRenameCommit(item, '  After  '));
+
+      expect(mocks.patchLayerName).toHaveBeenCalledWith(
+        type,
+        STABLE_ID,
+        'After',
+      );
+      expect(mocks.patchPropertyViaAuthority).not.toHaveBeenCalled();
+    },
+  );
+
+  it('panel stable native rename은 null clear를 main authority RPC에만 위임한다', async () => {
+    window.__dmn_window_type = 'panel';
+    const item: LayerItem = {
+      type: 'graph',
+      id: STABLE_ID,
+      index: 0,
+      name: 'Before',
+      zIndex: 0,
+      hidden: false,
+    };
+    await act(async () => actions.handleLayerRenameCommit(item, '   '));
+
+    expect(mocks.patchPropertyViaAuthority).toHaveBeenCalledWith({
+      elementType: 'graph',
+      id: STABLE_ID,
+      patch: { layerName: null },
+    });
+    expect(mocks.patchLayerName).not.toHaveBeenCalled();
+    expect(mocks.updateKeyPositions).not.toHaveBeenCalled();
+  });
+
+  it('synthetic native rename은 기존 index writer를 유지한다', async () => {
+    const item: LayerItem = {
+      type: 'key',
+      id: 'key-0',
+      index: 0,
+      name: 'legacy',
+      zIndex: 0,
+      hidden: false,
+    };
+    await act(async () => actions.handleLayerRenameCommit(item, 'Legacy'));
+
+    expect(mocks.patchLayerName).not.toHaveBeenCalled();
+    expect(mocks.patchPropertyViaAuthority).not.toHaveBeenCalled();
     expect(mocks.updateKeyPositions).toHaveBeenCalledOnce();
   });
 });

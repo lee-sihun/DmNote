@@ -234,7 +234,9 @@ mod tests {
         EditorOpV1::PatchElement {
             element_type: EditorElementTypeV1::Key,
             id: uuid::Uuid::new_v4().to_string(),
-            patch: EditorElementPropertyPatchV1 { hidden: true },
+            patch: EditorElementPropertyPatchV1::Hidden(
+                crate::models::EditorHiddenPropertyPatchV1 { hidden: true },
+            ),
         }
     }
 
@@ -344,6 +346,30 @@ mod tests {
         let mut property_wire = serde_json::to_value(property).unwrap();
         property_wire["editorOps"][0]["patch"]["width"] = serde_json::json!(1);
         let error = decode_gesture_commit_request(property_wire).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
+        );
+
+        let mut layer_name = gesture_request(&["plugin-a".to_string()]);
+        layer_name.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        layer_name.editor_ops = Some(vec![EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Graph,
+            id: uuid::Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1::LayerName(
+                crate::models::EditorLayerNamePropertyPatchV1 { layer_name: None },
+            ),
+        }]);
+        let layer_name_wire = serde_json::to_value(layer_name).unwrap();
+        assert_eq!(
+            layer_name_wire["editorOps"][0]["patch"],
+            serde_json::json!({ "layerName": null })
+        );
+        decode_gesture_commit_request(layer_name_wire.clone()).unwrap();
+
+        let mut multiple_properties = layer_name_wire;
+        multiple_properties["editorOps"][0]["patch"]["hidden"] = serde_json::json!(true);
+        let error = decode_gesture_commit_request(multiple_properties).unwrap_err();
         assert_eq!(
             validation_code(error).as_deref(),
             Some("INVALID_REQUEST_PAYLOAD")
