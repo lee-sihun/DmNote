@@ -35,6 +35,8 @@ import {
   patchElementLayerNameById,
   patchFontStyleById,
   patchFontStyleByTargets,
+  patchFontFamilyById,
+  patchFontFamilyByTargets,
   patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -1325,6 +1327,95 @@ describe('elementOps', () => {
     expect(
       useKeyStore.getState().canonicalPositions['4key'][0].fontItalic,
     ).toBe(false);
+  });
+
+  it('fontFamily는 raw string을 single과 혼합 4타입 한 commit으로 보낸다', async () => {
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: ID_B },
+      {
+        elementType: 'graph' as const,
+        id: '00000000-0000-4000-8000-0000000000c3',
+      },
+      {
+        elementType: 'knob' as const,
+        id: '00000000-0000-4000-8000-0000000000c4',
+      },
+    ];
+
+    await patchFontFamilyById('key', ID_A, '  Raw Family  ');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { fontFamily: '  Raw Family  ' },
+        },
+      ],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+
+    api.commitSemanticOps.mockClear();
+    await patchFontFamilyByTargets(targets, { fontFamily: 'Family One' });
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { fontFamily: 'Family One' },
+      })),
+    );
+  });
+
+  it('fontFamily batch는 duplicate와 empty ID를 wire 전에 거절한다', async () => {
+    await expect(
+      patchFontFamilyByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'stat', id: ID_A },
+        ],
+        { fontFamily: 'Family One' },
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchFontFamilyByTargets([{ elementType: 'graph', id: '' }], {
+        fontFamily: 'Family One',
+      }),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('fontFamily 편입 전 실패는 top-level eager leaf만 복원한다', async () => {
+    useKeyStore.setState((state) => ({
+      canonicalPositions: {
+        ...state.canonicalPositions,
+        '4key': state.canonicalPositions['4key'].map((position) => ({
+          ...position,
+          fontFamily: 'Before',
+          counter: { ...position.counter, fontFamily: 'Counter Family' },
+        })),
+      },
+      positions: {
+        ...state.positions,
+        '4key': state.positions['4key'].map((position) => ({
+          ...position,
+          fontFamily: 'Before',
+          counter: { ...position.counter, fontFamily: 'Counter Family' },
+        })),
+      },
+    }));
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+
+    await expect(patchFontFamilyById('key', ID_A, 'After')).rejects.toThrow(
+      'start failed',
+    );
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      fontFamily: 'Before',
+      counter: { fontFamily: 'Counter Family' },
+    });
   });
 
   it('note literal은 single과 key batch를 exact leaf 한 commit으로 보낸다', async () => {

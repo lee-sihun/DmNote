@@ -21,6 +21,11 @@ const api = vi.hoisted(() => ({
   updateMappingsAndPositionsWithGesture: vi.fn(async () => ({})),
   commitGeneratedPatch: vi.fn(),
 }));
+const captured = vi.hoisted(() => ({
+  font: null as null | {
+    onFontSelect: (fontName: string | null) => void;
+  },
+}));
 
 vi.mock('@api/modules/resourceApi', () => ({
   imageApi: { load: api.imageLoad },
@@ -62,6 +67,12 @@ vi.mock('@components/main/common/Dropdown', () => ({ default: () => null }));
 vi.mock('@components/main/common/TabSwitch', () => ({ default: () => null }));
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   default: () => null,
+}));
+vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
+  default: (props: (typeof captured)['font']) => {
+    captured.font = props;
+    return null;
+  },
 }));
 vi.mock('@components/main/Grid/PropertiesPanel/ShadowControls', () => ({
   default: () => null,
@@ -113,6 +124,7 @@ describe('단일 스타일 패널 비동기 이미지 완료', () => {
         }),
     );
     generatedPatches.length = 0;
+    captured.font = null;
     // 슬롯 시점 base는 호출 시점 스토어 상태 - 대기 중 재정렬·삭제가 이미
     // 스토어에 반영된 뒤 생성됨을 재현
     api.commitGeneratedPatch.mockImplementation(
@@ -225,5 +237,47 @@ describe('단일 스타일 패널 비동기 이미지 완료', () => {
     expect(generatedPatches).toEqual([null]);
     expect(api.updatePositionsWithGesture).not.toHaveBeenCalled();
     expect(onKeyUpdate).not.toHaveBeenCalled();
+  });
+
+  it('StyleTab FontPicker 선택은 raw top-level fontFamily로 전달한다', () => {
+    const pageHost = document.createElement('div');
+    document.body.appendChild(pageHost);
+    const target = useKeyStore.getState().canonicalPositions['4key'][1];
+    act(() => {
+      root.render(
+        <EditSessionScope>
+          <PanelNavProvider
+            value={{
+              activePageKey: 'single-style:font',
+              renderPageKey: 'single-style:font',
+              openPage: vi.fn(),
+              closePage: vi.fn(),
+              pageHost,
+            }}
+          >
+            <StyleTabContent
+              keyIndex={1}
+              keyPosition={target}
+              keyCode={null}
+              keyInfo={null}
+              onPositionChange={vi.fn()}
+              onKeyUpdate={onKeyUpdate}
+              shadowActiveState={false}
+              showSoundControls={false}
+              panelElement={null}
+              t={(key) => key}
+            />
+          </PanelNavProvider>
+        </EditSessionScope>,
+      );
+    });
+
+    act(() => captured.font!.onFontSelect('  Raw Family  '));
+
+    expect(onKeyUpdate).toHaveBeenCalledWith({
+      index: 1,
+      fontFamily: '  Raw Family  ',
+    });
+    pageHost.remove();
   });
 });

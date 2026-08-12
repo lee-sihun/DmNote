@@ -485,6 +485,15 @@ mod tests {
                 serde_json::json!({ "fontStrikethrough": false }),
             ),
             (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::FontFamily(
+                    crate::models::EditorFontFamilyPropertyPatchV1 {
+                        font_family: " raw-font ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "fontFamily": " raw-font " }),
+            ),
+            (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteEffectEnabled(
                     crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
@@ -546,6 +555,14 @@ mod tests {
         let mut invalid_graph_color = graph_color_wire;
         invalid_graph_color["editorOps"][0]["patch"]["graphColor"] = serde_json::json!(false);
         let error = decode_gesture_commit_request(invalid_graph_color).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
+        );
+
+        let mut invalid_font_family = layer_name_wire.clone();
+        invalid_font_family["editorOps"][0]["patch"] = serde_json::json!({ "fontFamily": null });
+        let error = decode_gesture_commit_request(invalid_font_family).unwrap_err();
         assert_eq!(
             validation_code(error).as_deref(),
             Some("INVALID_REQUEST_PAYLOAD")

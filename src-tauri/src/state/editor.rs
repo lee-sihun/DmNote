@@ -2467,6 +2467,15 @@ mod tests {
                 serde_json::json!({ "fontStrikethrough": false }),
             ),
             (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::FontFamily(
+                    crate::models::EditorFontFamilyPropertyPatchV1 {
+                        font_family: " raw-font ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "fontFamily": " raw-font " }),
+            ),
+            (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteEffectEnabled(
                     crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
@@ -2548,6 +2557,7 @@ mod tests {
             serde_json::json!({ "fontItalic": null }),
             serde_json::json!({ "fontUnderline": 1 }),
             serde_json::json!({ "fontStrikethrough": "false" }),
+            serde_json::json!({ "fontFamily": null }),
             serde_json::json!({ "noteEffectEnabled": 1 }),
             serde_json::json!({ "noteGlowEnabled": null }),
             serde_json::json!({ "noteAutoYCorrection": "false" }),

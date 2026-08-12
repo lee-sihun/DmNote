@@ -124,6 +124,36 @@ describe('editorCommitRaw semantic op protocol', () => {
       assertEditorOpsV1([
         {
           kind: 'patchElement',
+          elementType: 'stat',
+          id: '00000000-0000-4000-8000-00000000000f',
+          patch: { fontFamily: '  Raw Family  ' },
+        },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'patchElement',
+          elementType: 'stat',
+          id: '00000000-0000-4000-8000-000000000010',
+          patch: { fontFamily: null },
+        } as never,
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'patchElement',
+          elementType: 'stat',
+          id: '00000000-0000-4000-8000-000000000011',
+          patch: { fontFamily: 'Family', fontItalic: true },
+        } as never,
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'patchElement',
           elementType: 'graph',
           id: '00000000-0000-4000-8000-00000000000d',
           patch: { graphColor: 'raw color' },

@@ -36,6 +36,7 @@ import {
   patchGraphColorsViaAuthority,
   patchGraphPropertiesViaAuthority,
   patchGraphTypesViaAuthority,
+  patchFontFamilyViaAuthority,
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
@@ -54,6 +55,7 @@ import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type {
   EditorFontStylePropertyPatchV1,
+  EditorFontFamilyPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -80,6 +82,8 @@ import {
 } from '@src/renderer/editor/runtime/previewOverlay';
 import {
   patchElementLayerNameById,
+  patchFontFamilyById,
+  patchFontFamilyByTargets,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -252,6 +256,24 @@ const getFontStylePatchFromProperty = (
   value: KeyPosition[keyof KeyPosition],
 ): EditorFontStylePropertyPatchV1 | null => {
   return getFontStylePatch({ [property]: value });
+};
+
+const getFontFamilyPatch = (
+  updates: Partial<KeyPosition>,
+): EditorFontFamilyPropertyPatchV1 | null => {
+  const keys = Object.keys(updates);
+  return keys.length === 1 &&
+    keys[0] === 'fontFamily' &&
+    typeof updates.fontFamily === 'string'
+    ? { fontFamily: updates.fontFamily }
+    : null;
+};
+
+const getFontFamilyPatchFromProperty = (
+  property: keyof KeyPosition,
+  value: KeyPosition[keyof KeyPosition],
+): EditorFontFamilyPropertyPatchV1 | null => {
+  return getFontFamilyPatch({ [property]: value });
 };
 
 const getNotePropertyPatch = (
@@ -1417,6 +1439,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) => {
     const { index, ...updates } = data;
     const fontStylePatch = getFontStylePatch(updates);
+    const fontFamilyPatch = getFontFamilyPatch(updates);
     const useInlineStyles = getUseInlineStylesPatch(updates);
     const selectedStat =
       selectedStatElements.length === 1 ? selectedStatElements[0] : null;
@@ -1436,6 +1459,29 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           : patchFontStyleById('stat', selectedStat.id, fontStylePatch);
       void commit.catch((error) => {
         console.error('Failed to update stat font style', error);
+      });
+      return;
+    }
+    if (
+      fontFamilyPatch &&
+      selectedStat &&
+      selectedStat.id.length > 0 &&
+      !isSyntheticElementId(selectedStat.id)
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'stat',
+              id: selectedStat.id,
+              patch: fontFamilyPatch,
+            })
+          : patchFontFamilyById(
+              'stat',
+              selectedStat.id,
+              fontFamilyPatch.fontFamily,
+            );
+      void commit.catch((error) => {
+        console.error('Failed to update stat font family', error);
       });
       return;
     }
@@ -2163,11 +2209,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     value: KeyPosition[keyof KeyPosition],
   ) => {
     const fontStylePatch = getFontStylePatchFromProperty(property, value);
+    const fontFamilyPatch = getFontFamilyPatchFromProperty(property, value);
     const useInlineStyles =
       property === 'useInlineStyles' && typeof value === 'boolean'
         ? value
         : null;
-    if (!fontStylePatch && useInlineStyles === null) {
+    if (!fontStylePatch && !fontFamilyPatch && useInlineStyles === null) {
       handleLegacyBatchStyleChangeComplete(property, value);
       return;
     }
@@ -2189,6 +2236,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         ? window.__dmn_window_type === 'panel'
           ? patchFontStyleViaAuthority(targets, fontStylePatch)
           : patchFontStyleByTargets(targets, fontStylePatch)
+        : fontFamilyPatch !== null
+        ? window.__dmn_window_type === 'panel'
+          ? patchFontFamilyViaAuthority(targets, fontFamilyPatch)
+          : patchFontFamilyByTargets(targets, fontFamilyPatch)
         : window.__dmn_window_type === 'panel'
         ? patchUseInlineStylesViaAuthority(targets, useInlineStyles!)
         : patchUseInlineStylesByTargets(targets, useInlineStyles!);
@@ -2202,12 +2253,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) => {
     const { index: _index, ...updates } = data;
     const fontStylePatch = getFontStylePatch(updates);
+    const fontFamilyPatch = getFontFamilyPatch(updates);
     const notePropertyPatch = getNotePropertyPatch(updates);
     const useInlineStyles = getUseInlineStylesPatch(updates);
     const selectedKey =
       selectedKeyElements.length === 1 ? selectedKeyElements[0] : null;
     if (
-      (!fontStylePatch && !notePropertyPatch && useInlineStyles === null) ||
+      (!fontStylePatch &&
+        !fontFamilyPatch &&
+        !notePropertyPatch &&
+        useInlineStyles === null) ||
       !selectedKey ||
       selectedKey.id.length === 0 ||
       isSyntheticElementId(selectedKey.id)
@@ -2232,6 +2287,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               patch: fontStylePatch,
             })
           : patchFontStyleById('key', selectedKey.id, fontStylePatch)
+        : fontFamilyPatch !== null
+        ? window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'key',
+              id: selectedKey.id,
+              patch: fontFamilyPatch,
+            })
+          : patchFontFamilyById(
+              'key',
+              selectedKey.id,
+              fontFamilyPatch.fontFamily,
+            )
         : window.__dmn_window_type === 'panel'
         ? patchNativeLayerPropertyViaAuthority({
             elementType: 'key',

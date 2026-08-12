@@ -52,6 +52,7 @@ import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import {
   patchElementPropertyById,
+  patchFontFamilyByTargets,
   patchFontStyleByTargets,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -63,6 +64,7 @@ import {
 import type {
   EditorElementPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
+  EditorFontFamilyPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -232,6 +234,8 @@ const parseNativeLayerPropertyTarget = (
       typeof patch.fontUnderline === 'boolean') ||
     (hasExactKeys(patch, ['fontStrikethrough']) &&
       typeof patch.fontStrikethrough === 'boolean') ||
+    (hasExactKeys(patch, ['fontFamily']) &&
+      typeof patch.fontFamily === 'string') ||
     (hasExactKeys(patch, ['noteEffectEnabled']) &&
       target.elementType === 'key' &&
       typeof patch.noteEffectEnabled === 'boolean') ||
@@ -278,6 +282,11 @@ type NativeLayerPropertyRequest =
       kind: 'fontStyleBatch';
       targets: Array<{ elementType: NativeElementType; id: string }>;
       patch: EditorFontStylePropertyPatchV1;
+    }
+  | {
+      kind: 'fontFamilyBatch';
+      targets: Array<{ elementType: NativeElementType; id: string }>;
+      patch: EditorFontFamilyPropertyPatchV1;
     }
   | {
       kind: 'notePropertyBatch';
@@ -369,6 +378,10 @@ const parseNativeLayerPropertyRequest = (
         typeof patch.fontStrikethrough === 'boolean'
       ? { fontStrikethrough: patch.fontStrikethrough }
       : null;
+  const fontFamilyPatch: EditorFontFamilyPropertyPatchV1 | null =
+    hasExactKeys(patch, ['fontFamily']) && typeof patch.fontFamily === 'string'
+      ? { fontFamily: patch.fontFamily }
+      : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
     typeof patch.noteEffectEnabled === 'boolean'
@@ -402,12 +415,15 @@ const parseNativeLayerPropertyRequest = (
     knobRuntimePatch === null &&
     useInlineStyles === null &&
     fontStylePatch === null &&
+    fontFamilyPatch === null &&
     notePropertyPatch === null
   ) {
     return null;
   }
   const elementType =
-    useInlineStyles !== null || fontStylePatch !== null
+    useInlineStyles !== null ||
+    fontStylePatch !== null ||
+    fontFamilyPatch !== null
       ? null
       : notePropertyPatch !== null
       ? 'key'
@@ -450,6 +466,9 @@ const parseNativeLayerPropertyRequest = (
   }
   if (fontStylePatch !== null) {
     return { kind: 'fontStyleBatch', targets, patch: fontStylePatch };
+  }
+  if (fontFamilyPatch !== null) {
+    return { kind: 'fontFamilyBatch', targets, patch: fontFamilyPatch };
   }
   if (notePropertyPatch !== null) {
     return { kind: 'notePropertyBatch', ids, patch: notePropertyPatch };
@@ -1141,6 +1160,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       }
       if (request.kind === 'fontStyleBatch') {
         return patchFontStyleByTargets(request.targets, request.patch, options);
+      }
+      if (request.kind === 'fontFamilyBatch') {
+        return patchFontFamilyByTargets(
+          request.targets,
+          request.patch,
+          options,
+        );
       }
       if (request.kind === 'notePropertyBatch') {
         return patchNotePropertiesByIds(request.ids, request.patch, options);

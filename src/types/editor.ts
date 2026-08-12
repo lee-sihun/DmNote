@@ -153,6 +153,7 @@ interface EditorElementPropertyValuesV1 {
   fontItalic: boolean;
   fontUnderline: boolean;
   fontStrikethrough: boolean;
+  fontFamily: string;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
@@ -178,6 +179,9 @@ export type EditorKnobRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'fontWeight' | 'fontItalic' | 'fontUnderline' | 'fontStrikethrough'
 >;
+
+export type EditorFontFamilyPropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'fontFamily'>;
 
 export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteEffectEnabled'
@@ -994,6 +998,9 @@ export function assertEditorOpsV1(
         (patchKeys.length === 1 &&
           patchKeys[0] === 'fontStrikethrough' &&
           typeof op.patch.fontStrikethrough === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'fontFamily' &&
+          typeof op.patch.fontFamily === 'string') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'noteEffectEnabled' &&
           op.elementType === 'key' &&

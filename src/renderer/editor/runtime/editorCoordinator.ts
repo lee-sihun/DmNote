@@ -499,6 +499,9 @@ const applySemanticOps = (
                 fontStrikethrough: op.patch.fontStrikethrough,
               };
             }
+            if ('fontFamily' in op.patch) {
+              return { ...position, fontFamily: op.patch.fontFamily };
+            }
             if ('noteEffectEnabled' in op.patch) {
               return {
                 ...position,

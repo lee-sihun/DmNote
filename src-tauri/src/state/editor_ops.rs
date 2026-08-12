@@ -931,6 +931,15 @@ pub(crate) fn prepare_editor_ops_transition(
                             true
                         }
                     }
+                    EditorElementPropertyPatchV1::FontFamily(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.font_family.as_deref() == Some(patch.font_family.as_str()) {
+                            false
+                        } else {
+                            position.font_family = Some(patch.font_family.clone());
+                            true
+                        }
+                    }
                     EditorElementPropertyPatchV1::NoteEffectEnabled(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
                         if position.note_effect_enabled == patch.note_effect_enabled {
@@ -2484,6 +2493,190 @@ mod tests {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].font_weight, None);
+    }
+
+    #[test]
+    fn font_family_patch_preserves_nested_counter_and_raw_strings_across_native_types() {
+        let mut store = store_with_every_reorder_type();
+        store.key_positions.get_mut("4key").unwrap()[0]
+            .counter
+            .font_family = Some("counter-key".to_string());
+        store.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .counter
+            .font_family = Some("counter-stat".to_string());
+        store.graph_positions.get_mut("4key").unwrap()[0]
+            .position
+            .counter
+            .font_family = Some("counter-graph".to_string());
+        store.knob_positions.get_mut("4key").unwrap()[0]
+            .position
+            .counter
+            .font_family = Some("counter-knob".to_string());
+        let targets = [
+            (
+                EditorElementTypeV1::Key,
+                store.key_positions["4key"][0].id.clone(),
+                " raw-key ",
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                store.stat_positions["4key"][0].position.id.clone(),
+                "raw-stat",
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                store.graph_positions["4key"][0].position.id.clone(),
+                "raw-graph",
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                store.knob_positions["4key"][0].position.id.clone(),
+                "raw-knob",
+            ),
+        ];
+        let ops = targets
+            .iter()
+            .map(|(element_type, id, font_family)| {
+                patch_property_op(
+                    *element_type,
+                    id,
+                    EditorElementPropertyPatchV1::FontFamily(
+                        crate::models::EditorFontFamilyPropertyPatchV1 {
+                            font_family: (*font_family).to_string(),
+                        },
+                    ),
+                )
+            })
+            .chain(std::iter::once(patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::FontFamily(
+                    crate::models::EditorFontFamilyPropertyPatchV1 {
+                        font_family: "missing".to_string(),
+                    },
+                ),
+            )))
+            .collect::<Vec<_>>();
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(
+            transition.candidate.key_positions["4key"][0]
+                .font_family
+                .as_deref(),
+            Some(" raw-key ")
+        );
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .font_family
+                .as_deref(),
+            Some("raw-stat")
+        );
+        assert_eq!(
+            transition.candidate.graph_positions["4key"][0]
+                .position
+                .font_family
+                .as_deref(),
+            Some("raw-graph")
+        );
+        assert_eq!(
+            transition.candidate.knob_positions["4key"][0]
+                .position
+                .font_family
+                .as_deref(),
+            Some("raw-knob")
+        );
+        assert_eq!(
+            transition.candidate.key_positions["4key"][0]
+                .counter
+                .font_family
+                .as_deref(),
+            Some("counter-key")
+        );
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .counter
+                .font_family
+                .as_deref(),
+            Some("counter-stat")
+        );
+        assert_eq!(
+            transition.candidate.graph_positions["4key"][0]
+                .position
+                .counter
+                .font_family
+                .as_deref(),
+            Some("counter-graph")
+        );
+        assert_eq!(
+            transition.candidate.knob_positions["4key"][0]
+                .position
+                .counter
+                .font_family
+                .as_deref(),
+            Some("counter-knob")
+        );
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                ops[0].clone(),
+                patch_property_op(
+                    EditorElementTypeV1::Stat,
+                    &targets[2].1,
+                    EditorElementPropertyPatchV1::FontFamily(
+                        crate::models::EditorFontFamilyPropertyPatchV1 {
+                            font_family: "wrong-type".to_string(),
+                        },
+                    ),
+                ),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        assert_eq!(store.key_positions["4key"][0].font_family, None);
     }
 
     #[test]

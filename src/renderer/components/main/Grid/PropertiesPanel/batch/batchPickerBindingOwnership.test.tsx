@@ -13,6 +13,9 @@ const captured = vi.hoisted(() => ({
     completionBinding?: CompletionBinding;
     onSoundSelect: (soundPath: string | null) => void;
   },
+  font: null as null | {
+    onFontSelect: (fontName: string | null) => void;
+  },
 }));
 
 const patches = vi.hoisted(() => ({
@@ -46,7 +49,10 @@ vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   default: () => null,
 }));
 vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
-  default: () => null,
+  default: (props: (typeof captured)['font']) => {
+    captured.font = props;
+    return null;
+  },
 }));
 vi.mock('@components/main/Grid/PropertiesPanel/ShadowControls', () => ({
   default: () => null,
@@ -64,6 +70,8 @@ vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
 import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNavContext';
 import { BatchKeyLikePanel } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
+
+const BATCH_STYLE_FONT_PAGE_KEY = 'batch-style:font';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -216,6 +224,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     captured.sound = null;
+    captured.font = null;
     selectKey(ID_A);
     host = document.createElement('div');
     pageHost = document.createElement('div');
@@ -254,6 +263,34 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(patches.applyElementPatchesById).toHaveBeenLastCalledWith(
       { key: [ID_A] },
       expect.any(Function),
+    );
+  });
+
+  it('BatchStyle FontPicker 선택은 raw top-level fontFamily로 전달한다', () => {
+    const handleBatchStyleChangeComplete = vi.fn();
+    const props = panelProps();
+    props.handleBatchStyleChangeComplete = handleBatchStyleChangeComplete;
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: BATCH_STYLE_FONT_PAGE_KEY,
+            renderPageKey: BATCH_STYLE_FONT_PAGE_KEY,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...props} />
+        </PanelNavProvider>,
+      );
+    });
+
+    act(() => captured.font!.onFontSelect('  Raw Family  '));
+
+    expect(handleBatchStyleChangeComplete).toHaveBeenCalledWith(
+      'fontFamily',
+      '  Raw Family  ',
     );
   });
 

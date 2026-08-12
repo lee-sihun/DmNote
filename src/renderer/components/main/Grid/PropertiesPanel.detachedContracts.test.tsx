@@ -32,6 +32,9 @@ const {
   patchFontStyleMock,
   patchFontStyleTargetsMock,
   patchFontStyleViaAuthorityMock,
+  patchFontFamilyMock,
+  patchFontFamilyTargetsMock,
+  patchFontFamilyViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -69,6 +72,9 @@ const {
   patchFontStyleMock: vi.fn(() => Promise.resolve(true)),
   patchFontStyleTargetsMock: vi.fn(() => Promise.resolve(true)),
   patchFontStyleViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchFontFamilyMock: vi.fn(() => Promise.resolve(true)),
+  patchFontFamilyTargetsMock: vi.fn(() => Promise.resolve(true)),
+  patchFontFamilyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -102,6 +108,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchGraphPropertiesViaAuthority: patchGraphPropertiesViaAuthorityMock,
   patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
   patchFontStyleViaAuthority: patchFontStyleViaAuthorityMock,
+  patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNotePropertiesViaAuthority: patchNotePropertiesViaAuthorityMock,
@@ -112,6 +119,8 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementLayerNameById: patchLayerNameMock,
   patchFontStyleById: patchFontStyleMock,
   patchFontStyleByTargets: patchFontStyleTargetsMock,
+  patchFontFamilyById: patchFontFamilyMock,
+  patchFontFamilyByTargets: patchFontFamilyTargetsMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -262,6 +271,9 @@ const resetStores = () => {
   patchFontStyleMock.mockClear();
   patchFontStyleTargetsMock.mockClear();
   patchFontStyleViaAuthorityMock.mockClear();
+  patchFontFamilyMock.mockClear();
+  patchFontFamilyTargetsMock.mockClear();
+  patchFontFamilyViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -1424,6 +1436,46 @@ describe('PropertiesPanel detached preview contract', () => {
   );
 
   it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat synthetic', 'stat', 'stat-0'],
+    ['stat empty', 'stat', ''],
+  ] as const)(
+    'panel single %s fontFamily는 기존 writer로 폴백한다',
+    (_label, type, id) => {
+      window.__dmn_window_type = 'panel';
+      if (type === 'key') {
+        const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] as never },
+          canonicalPositions: { '4key': [position] as never },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onKeyUpdate: (update: Record<string, unknown>) => void;
+        handleStatUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => {
+        const handler =
+          type === 'key' ? props.onKeyUpdate : props.handleStatUpdate;
+        handler({ index: 0, fontFamily: 'Legacy Family' });
+      });
+
+      expect(patchFontFamilyMock).not.toHaveBeenCalled();
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      else expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
     ['synthetic', 'graph-0'],
     ['empty', ''],
   ] as const)(
@@ -1456,6 +1508,170 @@ describe('PropertiesPanel detached preview contract', () => {
       expect(legacyBatchStyleCommitMock).toHaveBeenCalledWith(
         'useInlineStyles',
         true,
+      );
+    },
+  );
+
+  it.each([
+    ['main', 'key'],
+    ['main', 'stat'],
+    ['panel', 'key'],
+    ['panel', 'stat'],
+  ] as const)(
+    '%s single stable %s fontFamily는 선택 ID의 top-level leaf만 쓴다',
+    (windowType, type) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'f5555555-5555-4555-8555-555555555551'
+          : 'f5555555-5555-4555-8555-555555555552';
+      if (type === 'key') {
+        const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] as never },
+          canonicalPositions: { '4key': [position] as never },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useStatItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onKeyUpdate: (update: Record<string, unknown>) => void;
+        handleStatUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => {
+        const handler =
+          type === 'key' ? props.onKeyUpdate : props.handleStatUpdate;
+        handler({ index: 0, fontFamily: '  Raw Family  ' });
+      });
+
+      if (windowType === 'panel') {
+        expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+          elementType: type,
+          id,
+          patch: { fontFamily: '  Raw Family  ' },
+        });
+        expect(patchFontFamilyMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchFontFamilyMock).toHaveBeenCalledWith(
+          type,
+          id,
+          '  Raw Family  ',
+        );
+        expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main', 'main'],
+    ['panel', 'panel'],
+  ] as const)(
+    '%s mixed 4-type fontFamily는 stable ID target 한 commit만 쓴다',
+    (_label, windowType) => {
+      window.__dmn_window_type = windowType;
+      const targets = [
+        {
+          elementType: 'key' as const,
+          id: 'f5666666-6666-4666-8666-666666666661',
+        },
+        {
+          elementType: 'stat' as const,
+          id: 'f5666666-6666-4666-8666-666666666662',
+        },
+        {
+          elementType: 'graph' as const,
+          id: 'f5666666-6666-4666-8666-666666666663',
+        },
+        {
+          elementType: 'knob' as const,
+          id: 'f5666666-6666-4666-8666-666666666664',
+        },
+      ];
+      useGridSelectionStore.setState({
+        selectedElements: targets.map(({ elementType: type, id }, index) => ({
+          type,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        handleBatchStyleChangeComplete: (
+          property: string,
+          value: unknown,
+        ) => void;
+      };
+
+      act(() =>
+        props.handleBatchStyleChangeComplete('fontFamily', 'Family One'),
+      );
+
+      if (windowType === 'panel') {
+        expect(patchFontFamilyViaAuthorityMock).toHaveBeenCalledWith(targets, {
+          fontFamily: 'Family One',
+        });
+        expect(patchFontFamilyTargetsMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchFontFamilyTargetsMock).toHaveBeenCalledWith(targets, {
+          fontFamily: 'Family One',
+        });
+        expect(patchFontFamilyViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(legacyBatchStyleCommitMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['synthetic', 'graph-0'],
+    ['empty', ''],
+  ] as const)(
+    'panel mixed fontFamily batch에 %s ID가 있으면 전체 legacy로 폴백한다',
+    (_label, legacyId) => {
+      window.__dmn_window_type = 'panel';
+      useGridSelectionStore.setState({
+        selectedElements: [
+          {
+            type: 'key',
+            id: 'f5777777-7777-4777-8777-777777777771',
+            index: 0,
+          },
+          { type: 'graph', id: legacyId, index: 0 },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        handleBatchStyleChangeComplete: (
+          property: string,
+          value: unknown,
+        ) => void;
+      };
+
+      act(() =>
+        props.handleBatchStyleChangeComplete('fontFamily', 'Legacy Family'),
+      );
+
+      expect(patchFontFamilyTargetsMock).not.toHaveBeenCalled();
+      expect(patchFontFamilyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(legacyBatchStyleCommitMock).toHaveBeenCalledWith(
+        'fontFamily',
+        'Legacy Family',
       );
     },
   );

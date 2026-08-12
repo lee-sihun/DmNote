@@ -59,6 +59,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchFontFamily: vi.fn(
+    (
+      _targets?: unknown,
+      _patch?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   patchNoteProperties: vi.fn(
     (_ids?: unknown, _patch?: unknown, _options?: { preflight?: () => void }) =>
       Promise.resolve(true),
@@ -136,6 +143,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementPropertyById: mocks.patchElementProperty,
   patchGraphColorsByIds: mocks.patchGraphColors,
   patchFontStyleByTargets: mocks.patchFontStyle,
+  patchFontFamilyByTargets: mocks.patchFontFamily,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -216,6 +224,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchUseInlineStyles.mockResolvedValue(true);
     mocks.patchFontStyle.mockReset();
     mocks.patchFontStyle.mockResolvedValue(true);
+    mocks.patchFontFamily.mockReset();
+    mocks.patchFontFamily.mockResolvedValue(true);
     mocks.patchNoteProperties.mockReset();
     mocks.patchNoteProperties.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
@@ -483,6 +493,7 @@ describe('plugin panel persisted element mutations', () => {
     ['글꼴 기울임', { fontItalic: true }],
     ['글꼴 밑줄', { fontUnderline: false }],
     ['글꼴 취소선', { fontStrikethrough: true }],
+    ['글꼴 패밀리', { fontFamily: '  Raw Family  ' }],
     ['노트 효과', { noteEffectEnabled: false }, 'key'],
     ['노트 Y 보정', { noteAutoYCorrection: true }, 'key'],
     ['노트 글로우', { noteGlowEnabled: false }, 'key'],
@@ -591,6 +602,40 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
     },
   );
+
+  it('fontFamily batch는 혼합 native 대상을 ordered semantic commit 하나로 전달한다', async () => {
+    const targets = [
+      {
+        elementType: 'key',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat',
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+      {
+        elementType: 'graph',
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      },
+      {
+        elementType: 'knob',
+        id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      },
+    ] as const;
+    const patch = { fontFamily: '  Raw Family  ' } as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', { targets, patch }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchFontFamily).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchFontFamily).toHaveBeenCalledWith(targets, patch, {
+      preflight: expect.any(Function),
+    });
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
 
   it.each([
     [{ noteEffectEnabled: false }],
@@ -1028,6 +1073,20 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'fontFamily null',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { fontFamily: null },
+      },
+    ],
+    [
+      'fontFamily combined',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { fontFamily: 'Family', fontItalic: true },
+      },
+    ],
+    [
       'fontWeight fractional',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
@@ -1207,6 +1266,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchKnobProperties).not.toHaveBeenCalled();
       expect(mocks.patchUseInlineStyles).not.toHaveBeenCalled();
       expect(mocks.patchFontStyle).not.toHaveBeenCalled();
+      expect(mocks.patchFontFamily).not.toHaveBeenCalled();
       expect(mocks.patchNoteProperties).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
@@ -1354,6 +1414,31 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'graph', id: 'stable-graph' },
         ],
         patch: { fontWeight: 700 },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('fontFamily 혼합 batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchFontFamily.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          { elementType: 'key', id: 'stable-key' },
+          { elementType: 'graph', id: 'stable-graph' },
+        ],
+        patch: { fontFamily: '  Raw Family  ' },
       }),
     );
 

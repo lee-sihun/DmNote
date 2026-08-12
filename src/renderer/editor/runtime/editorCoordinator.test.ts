@@ -380,6 +380,9 @@ const applyOpsForTest = (
               fontStrikethrough: op.patch.fontStrikethrough,
             };
           }
+          if ('fontFamily' in op.patch) {
+            return { ...position, fontFamily: op.patch.fontFamily };
+          }
           if ('noteEffectEnabled' in op.patch) {
             return {
               ...position,
@@ -3341,6 +3344,47 @@ describe('commitSemanticOpsInternal', () => {
         fontStrikethrough: true,
       });
     }
+    harness.coordinator.stop();
+  });
+
+  it('fontFamily는 top-level raw leaf만 적용하고 nested counter를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000c5';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      fontFamily: 'Before',
+      counter: {
+        ...base.keyPositions['4key'][0].counter,
+        fontFamily: 'Counter Family',
+      },
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { fontFamily: '  Raw Family  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.opResults).toEqual([{ status: 'applied' }]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      fontFamily: '  Raw Family  ',
+      counter: { fontFamily: 'Counter Family' },
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document.keyPositions['4key'][0]).toMatchObject({
+      fontFamily: '  Raw Family  ',
+      counter: { fontFamily: 'Counter Family' },
+    });
     harness.coordinator.stop();
   });
 

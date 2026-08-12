@@ -8084,6 +8084,10 @@ mod tests {
         template.counter.font_italic = true;
         template.counter.font_underline = true;
         template.counter.font_strikethrough = true;
+        template.counter.font_family = Some("counter-font".to_string());
+        document.key_positions.get_mut("4key").unwrap()[0]
+            .counter
+            .font_family = Some("counter-font".to_string());
         let key_id = template.id.clone();
         let stat_id = uuid::Uuid::new_v4().to_string();
         let graph_id = uuid::Uuid::new_v4().to_string();
@@ -8130,6 +8134,8 @@ mod tests {
                 uuid::Uuid::new_v4().to_string(),
                 EditorPatchV1 {
                     schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    keys: Some(document.keys),
+                    key_positions: Some(document.key_positions),
                     stat_positions: Some(document.stat_positions),
                     graph_positions: Some(document.graph_positions),
                     knob_positions: Some(document.knob_positions),
@@ -8558,6 +8564,195 @@ mod tests {
                 .counter
                 .font_strikethrough
         );
+
+        let family_patch = EditorElementPropertyPatchV1::FontFamily(
+            crate::models::EditorFontFamilyPropertyPatchV1 {
+                font_family: " raw-family ".to_string(),
+            },
+        );
+        let family_ops = [
+            (
+                EditorElementTypeV1::Key,
+                font_redone.key_positions["4key"][0].id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                font_redone.stat_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                font_redone.graph_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                font_redone.knob_positions["4key"][0].position.id.clone(),
+            ),
+        ]
+        .map(|(element_type, id)| patch_property_op(element_type, id, family_patch.clone()))
+        .into_iter()
+        .chain(std::iter::once(patch_property_op(
+            EditorElementTypeV1::Key,
+            uuid::Uuid::new_v4().to_string(),
+            family_patch.clone(),
+        )))
+        .collect::<Vec<_>>();
+        let family_mutation_id = uuid::Uuid::new_v4().to_string();
+        let family_request = editor_ops_request(
+            store.editor_get().revision,
+            &family_mutation_id,
+            family_ops.clone(),
+        );
+        let family_changed = store
+            .commit_editor_document(family_request.clone())
+            .unwrap();
+        assert_eq!(
+            family_changed.result.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            family_changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert_eq!(
+            family_changed.document.key_positions["4key"][0]
+                .font_family
+                .as_deref(),
+            Some(" raw-family ")
+        );
+        assert_eq!(
+            family_changed.document.stat_positions["4key"][0]
+                .position
+                .font_family
+                .as_deref(),
+            Some(" raw-family ")
+        );
+        assert_eq!(
+            family_changed.document.graph_positions["4key"][0]
+                .position
+                .font_family
+                .as_deref(),
+            Some(" raw-family ")
+        );
+        assert_eq!(
+            family_changed.document.knob_positions["4key"][0]
+                .position
+                .font_family
+                .as_deref(),
+            Some(" raw-family ")
+        );
+        for position in [
+            &family_changed.document.key_positions["4key"][0],
+            &family_changed.document.stat_positions["4key"][0].position,
+            &family_changed.document.graph_positions["4key"][0].position,
+            &family_changed.document.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(
+                position.counter.font_family.as_deref(),
+                Some("counter-font")
+            );
+        }
+
+        let family_replay = store
+            .commit_editor_document(family_request.clone())
+            .unwrap();
+        assert!(family_replay.replayed);
+        assert_eq!(family_replay.result, family_changed.result);
+
+        let mut family_reused = family_request;
+        family_reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &family_changed.document.key_positions["4key"][0].id,
+            EditorElementPropertyPatchV1::FontFamily(
+                crate::models::EditorFontFamilyPropertyPatchV1 {
+                    font_family: "different".to_string(),
+                },
+            ),
+        )]);
+        assert_eq!(
+            store
+                .commit_editor_document(family_reused)
+                .unwrap_err()
+                .error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let family_no_change = store
+            .commit_editor_document(editor_ops_request(
+                family_changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                family_ops[..4].to_vec(),
+            ))
+            .unwrap();
+        assert!(family_no_change.result.changed_fields.is_empty());
+        assert!(family_no_change.event.is_none());
+
+        let family_undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&family_undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &family_undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let family_undone = store.editor_get().document;
+        for position in [
+            &family_undone.key_positions["4key"][0],
+            &family_undone.stat_positions["4key"][0].position,
+            &family_undone.graph_positions["4key"][0].position,
+            &family_undone.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.font_family, None);
+            assert_eq!(
+                position.counter.font_family.as_deref(),
+                Some("counter-font")
+            );
+        }
+
+        let family_redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&family_redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &family_redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let family_redone = store.editor_get().document;
+        for position in [
+            &family_redone.key_positions["4key"][0],
+            &family_redone.stat_positions["4key"][0].position,
+            &family_redone.graph_positions["4key"][0].position,
+            &family_redone.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.font_family.as_deref(), Some(" raw-family "));
+            assert_eq!(
+                position.counter.font_family.as_deref(),
+                Some("counter-font")
+            );
+        }
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
