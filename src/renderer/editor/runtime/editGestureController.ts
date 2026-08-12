@@ -14,6 +14,7 @@ import type { EditorPatchV1 } from '@src/types/editor';
 import { PREVIEW_SCHEMA_VERSION, type PreviewDomain } from '@src/types/preview';
 
 import { previewOverlay } from './previewOverlay';
+import { enqueueEditorCompatibilityOperation } from './editorCompatibilityQueue';
 import { editorCoordinator } from './editorStateCoordinator';
 import { drainEditorWrites, trackEditorWrite } from './editorWriteBarrier';
 import { getEditSessionTarget } from './editSessionTarget';
@@ -37,9 +38,12 @@ interface ActiveGesture {
   lifecycle: GestureSessionLifecycle;
   mode: string;
   seq: number;
-  // 도메인 → target index → 게스처 동안 누적된 전체 patch
-  appliedPatches: Map<PreviewDomain, Map<number, Record<string, unknown>>>;
-  // 도메인 → target index → 다음 flush에 실릴 patch.
+  // 도메인 → 요소 id → 게스처 동안 누적된 전체 patch.
+  // 정산 의도는 index가 아니라 id로 보존한다 - index로 두면 정산이 큐를
+  // 기다리는 동안 재정렬된 다른 요소에 적용된다. id가 없는 구형 요소만
+  // index sentinel로 남긴다
+  appliedPatches: Map<PreviewDomain, Map<string, Record<string, unknown>>>;
+  // 도메인 → target index → 다음 flush에 실릴 patch (프리뷰 wire는 index 표현 유지).
   // 대상별로 모아야 같은 대상의 옛 값이 덮어써진다. patch 내용으로 묶으면
   // 값이 연속으로 바뀌는 편집(드래그, 방향키 꾹 누르기)에서 중간값마다 그룹이 하나씩 생기고,
   // in-flight 하나가 도는 동안 쌓인 그룹이 전부 순차 발행돼 이미 무의미해진 값까지 IPC를 탄다
@@ -47,6 +51,77 @@ interface ActiveGesture {
   flushScheduled: boolean;
   publishInFlight: boolean;
 }
+
+type PositionsRecordLike = Record<
+  string,
+  Array<{ id?: string } & Record<string, unknown>>
+>;
+
+const DOMAIN_FIELDS: Record<
+  PreviewDomain,
+  'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
+> = {
+  keyPosition: 'keyPositions',
+  statPosition: 'statPositions',
+  graphPosition: 'graphPositions',
+  knobPosition: 'knobPositions',
+};
+
+const authorityRecordFor = (domain: PreviewDomain): PositionsRecordLike =>
+  (domain === 'keyPosition'
+    ? useKeyStore.getState().canonicalPositions
+    : domain === 'statPosition'
+    ? useStatItemStore.getState().positions
+    : domain === 'graphPosition'
+    ? useGraphItemStore.getState().positions
+    : useKnobItemStore.getState().positions) as PositionsRecordLike;
+
+const writeAuthorityRecord = (
+  domain: PreviewDomain,
+  next: PositionsRecordLike,
+): void => {
+  if (domain === 'keyPosition') {
+    useKeyStore.getState().setPositions(next as never);
+  } else if (domain === 'statPosition') {
+    useStatItemStore.getState().setPositions(next as never);
+  } else if (domain === 'graphPosition') {
+    useGraphItemStore.getState().setPositions(next as never);
+  } else {
+    useKnobItemStore.getState().setPositions(next as never);
+  }
+};
+
+const INDEX_SENTINEL = 'index:';
+
+// 프리뷰 시점 index가 아직 뜨거울 때 id로 승격
+const intentKeyFor = (
+  domain: PreviewDomain,
+  mode: string,
+  index: number,
+): string => {
+  const id = authorityRecordFor(domain)[mode]?.[index]?.id;
+  return typeof id === 'string' && id.length > 0
+    ? id
+    : `${INDEX_SENTINEL}${index}`;
+};
+
+// resolved id 집합을 record 전 모드에서 찾아 patch 병합 (id 불변)
+const mergeIntentRecord = (
+  record: PositionsRecordLike,
+  resolved: ReadonlyMap<string, Record<string, unknown>>,
+): { next: PositionsRecordLike; touched: number } => {
+  let touched = 0;
+  const next: PositionsRecordLike = {};
+  for (const [mode, list] of Object.entries(record)) {
+    next[mode] = list.map((position) => {
+      const id = position.id;
+      if (typeof id !== 'string' || !resolved.has(id)) return position;
+      touched += 1;
+      return { ...position, ...resolved.get(id), id };
+    });
+  }
+  return { next, touched };
+};
 
 let active: ActiveGesture | null = null;
 
@@ -163,9 +238,10 @@ export const editGestureController = {
       active.appliedPatches.set(domain, domainPatches);
     }
     for (const entry of entries) {
-      const applied = domainPatches.get(entry.index);
+      const intentKey = intentKeyFor(domain, mode, entry.index);
+      const applied = domainPatches.get(intentKey);
       domainPatches.set(
-        entry.index,
+        intentKey,
         applied ? { ...applied, ...entry.patch } : { ...entry.patch },
       );
       previewOverlay.applyLocalPatch(
@@ -261,78 +337,66 @@ export const editGestureController = {
       if (gesture) this.cancel();
       return drainEditorWrites();
     }
-    const changes: EditorPatchV1 = { schemaVersion: 1 };
-    let hasChanges = false;
 
-    const applyPatches = <T extends object>(
-      positions: Record<string, T[]>,
-      patches: Map<number, Record<string, unknown>>,
-    ): Record<string, T[]> | null => {
-      const current = positions[gesture.mode];
-      if (!current) return null;
-      return {
-        ...positions,
-        [gesture.mode]: current.map((position, index) => {
-          const patch = patches.get(index);
-          return patch ? { ...position, ...patch } : position;
-        }),
-      };
-    };
-
+    // 의도 확정: sentinel(구형 무ID)은 현재 canonical에서 한 번 더 id 승격을
+    // 시도하고, 여전히 없으면 대상 소실로 보고 버린다 (fail-closed)
+    const intents = new Map<
+      PreviewDomain,
+      Map<string, Record<string, unknown>>
+    >();
     for (const [domain, patches] of gesture.appliedPatches) {
       if (patches.size === 0) continue;
-      if (domain === 'keyPosition') {
-        const updated = applyPatches(
-          useKeyStore.getState().canonicalPositions,
-          patches,
-        );
-        if (!updated) {
-          this.cancel();
-          return drainEditorWrites();
+      const resolved = new Map<string, Record<string, unknown>>();
+      for (const [key, patch] of patches) {
+        if (!key.startsWith(INDEX_SENTINEL)) {
+          resolved.set(key, { ...(resolved.get(key) ?? {}), ...patch });
+          continue;
         }
-        changes.keyPositions = updated;
-      } else if (domain === 'statPosition') {
-        const updated = applyPatches(
-          useStatItemStore.getState().positions,
-          patches,
-        );
-        if (!updated) {
-          this.cancel();
-          return drainEditorWrites();
+        const index = Number(key.slice(INDEX_SENTINEL.length));
+        const id = authorityRecordFor(domain)[gesture.mode]?.[index]?.id;
+        if (typeof id === 'string' && id.length > 0) {
+          resolved.set(id, { ...(resolved.get(id) ?? {}), ...patch });
         }
-        changes.statPositions = updated;
-      } else if (domain === 'graphPosition') {
-        const updated = applyPatches(
-          useGraphItemStore.getState().positions,
-          patches,
-        );
-        if (!updated) {
-          this.cancel();
-          return drainEditorWrites();
-        }
-        changes.graphPositions = updated;
-      } else {
-        const updated = applyPatches(
-          useKnobItemStore.getState().positions,
-          patches,
-        );
-        if (!updated) {
-          this.cancel();
-          return drainEditorWrites();
-        }
-        changes.knobPositions = updated;
       }
-      hasChanges = true;
+      if (resolved.size > 0) intents.set(domain, resolved);
     }
 
-    if (!hasChanges) {
+    if (intents.size === 0) {
       this.cancel();
       return drainEditorWrites();
     }
 
-    const persisted = editorCoordinator.commitPatch(changes, {
-      gestureId: gesture.sessionId,
-    });
+    // eager 반영 - 이후의 full-record 캡처가 이 값을 포함해 자가 치유
+    for (const [domain, resolved] of intents) {
+      const merged = mergeIntentRecord(authorityRecordFor(domain), resolved);
+      if (merged.touched > 0) writeAuthorityRecord(domain, merged.next);
+    }
+
+    // wire는 직렬 슬롯 안에서 최신 base로 재생성한다. 호출 시점 full-record는
+    // 대기 중 정산된 다른 커밋(격리 플러그인 등)의 값을 통째로 되돌린다.
+    // elementPatch applier는 rejection을 소비하므로 재사용 금지 - 정산은
+    // 거절되는 원 promise가 필요하다
+    const persisted = enqueueEditorCompatibilityOperation(() =>
+      editorCoordinator.commitGeneratedPatch(
+        (base) => {
+          const changes: EditorPatchV1 = { schemaVersion: 1 };
+          let hasChanges = false;
+          for (const [domain, resolved] of intents) {
+            const field = DOMAIN_FIELDS[domain];
+            const merged = mergeIntentRecord(
+              base[field] as PositionsRecordLike,
+              resolved,
+            );
+            if (merged.touched > 0) {
+              changes[field] = merged.next as never;
+              hasChanges = true;
+            }
+          }
+          return hasChanges ? changes : null;
+        },
+        { gestureId: gesture.sessionId },
+      ),
+    );
     this.settleCommit(persisted);
     const own = await persisted.then(
       () => true,

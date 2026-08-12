@@ -10,6 +10,7 @@ import {
   previewOverlay,
 } from '@src/renderer/editor/runtime/previewOverlay';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
 import { previewApi } from '@api/modules/previewApi';
 
 import type { KeyPositions } from '@src/types/key/keys';
@@ -18,9 +19,12 @@ import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { PreviewEnvelope } from '@src/types/preview';
 
-const { commitPatchMock } = vi.hoisted(() => ({
-  commitPatchMock: vi.fn().mockResolvedValue(undefined),
-}));
+const { commitPatchMock, commitGeneratedPatchMock, generatedPatches } =
+  vi.hoisted(() => ({
+    commitPatchMock: vi.fn().mockResolvedValue(undefined),
+    commitGeneratedPatchMock: vi.fn(),
+    generatedPatches: [] as Array<unknown>,
+  }));
 
 vi.mock('@api/modules/previewApi', () => ({
   previewApi: {
@@ -33,11 +37,16 @@ vi.mock('@api/modules/previewApi', () => ({
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   editorCoordinator: {
     commitPatch: commitPatchMock,
+    commitGeneratedPatch: commitGeneratedPatchMock,
+    runExclusiveLegacyMutation: vi.fn(
+      async (mutation: () => Promise<unknown>) => mutation(),
+    ),
     getState: () => ({ revision: null }),
   },
 }));
 
-const basePosition = (dx: number) => ({
+const basePosition = (dx: number, id?: string) => ({
+  ...(id ? { id } : {}),
   dx,
   dy: 0,
   width: 60,
@@ -48,19 +57,19 @@ const basePosition = (dx: number) => ({
 
 const canonicalFixture = (): KeyPositions =>
   ({
-    '4key': [basePosition(0), basePosition(70)],
+    '4key': [basePosition(0, 'key-id-a'), basePosition(70, 'key-id-b')],
   } as unknown as KeyPositions);
 
 const statFixture = (): StatItemPositions =>
   ({
-    '4key': [{ ...basePosition(0), statType: 'kps' }],
+    '4key': [{ ...basePosition(0, 'stat-id-a'), statType: 'kps' }],
   } as unknown as StatItemPositions);
 
 const graphFixture = (): GraphItemPositions =>
   ({
     '4key': [
       {
-        ...basePosition(0),
+        ...basePosition(0, 'graph-id-a'),
         statType: 'kps',
         graphType: 'line',
         graphSpeed: 1,
@@ -73,7 +82,7 @@ const knobFixture = (): KnobItemPositions =>
   ({
     '4key': [
       {
-        ...basePosition(0),
+        ...basePosition(0, 'knob-id-a'),
         axisId: 'HIDA:test',
         sensitivity: 1,
         reverse: false,
@@ -263,6 +272,28 @@ describe('previewOverlay', () => {
 describe('editGestureController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    generatedPatches.length = 0;
+    // 슬롯 시점 base = 호출 시점 스토어 상태. 대기 중 재정렬·삭제 시뮬레이션은
+    // 테스트가 commitPendingAsync 호출 전에 스토어를 바꿔 재현한다
+    commitGeneratedPatchMock.mockImplementation(
+      async (generate: (base: unknown) => unknown) => {
+        const base = {
+          schemaVersion: 1,
+          keys: {},
+          keyPositions: structuredClone(
+            useKeyStore.getState().canonicalPositions,
+          ),
+          statPositions: structuredClone(useStatItemStore.getState().positions),
+          graphPositions: structuredClone(
+            useGraphItemStore.getState().positions,
+          ),
+          knobPositions: structuredClone(useKnobItemStore.getState().positions),
+          layerGroups: {},
+        };
+        generatedPatches.push(generate(base));
+        return base;
+      },
+    );
     editGestureController.cancel();
     previewOverlay.clearAll();
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
@@ -504,20 +535,107 @@ describe('editGestureController', () => {
       true,
     );
 
-    expect(commitPatchMock).toHaveBeenCalledOnce();
-    expect(commitPatchMock).toHaveBeenCalledWith(
-      {
-        schemaVersion: 1,
-        keyPositions: {
-          '4key': [expect.objectContaining({ width: 90 }), expect.any(Object)],
-        },
-        statPositions: { '4key': [expect.objectContaining({ width: 100 })] },
-        graphPositions: { '4key': [expect.objectContaining({ width: 110 })] },
-        knobPositions: { '4key': [expect.objectContaining({ width: 120 })] },
-      },
-      { gestureId: sessionId },
-    );
+    // wire는 슬롯 안에서 최신 base로 재생성 - 호출 시점 full-record 금지
+    expect(commitPatchMock).not.toHaveBeenCalled();
+    expect(commitGeneratedPatchMock).toHaveBeenCalledOnce();
+    expect(commitGeneratedPatchMock.mock.calls[0][1]).toEqual({
+      gestureId: sessionId,
+    });
+    const patch = generatedPatches[0] as {
+      keyPositions?: Record<string, Array<Record<string, unknown>>>;
+      statPositions?: Record<string, Array<Record<string, unknown>>>;
+      graphPositions?: Record<string, Array<Record<string, unknown>>>;
+      knobPositions?: Record<string, Array<Record<string, unknown>>>;
+    };
+    expect(patch.keyPositions?.['4key'][0]).toMatchObject({
+      id: 'key-id-a',
+      width: 90,
+    });
+    expect(patch.statPositions?.['4key'][0]).toMatchObject({ width: 100 });
+    expect(patch.graphPositions?.['4key'][0]).toMatchObject({ width: 110 });
+    expect(patch.knobPositions?.['4key'][0]).toMatchObject({ width: 120 });
     expect(editGestureController.hasActiveGesture()).toBe(false);
+  });
+
+  it('정산은 스토어에 즉시 반영된다 - 후행 full-record 캡처 자가 치유', () => {
+    editGestureController.preview('4key', [{ index: 0, patch: { width: 90 } }]);
+
+    void editGestureController.commitPendingAsync();
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].width).toBe(90);
+  });
+
+  it('정산 대기 중 재정렬돼도 생성 patch가 같은 id를 따라간다', async () => {
+    editGestureController.preview('4key', [{ index: 0, patch: { width: 90 } }]);
+
+    // 슬롯 진입 전 재정렬 시뮬레이션: base가 뒤집힌 상태로 생성됨
+    const [a, b] = useKeyStore.getState().canonicalPositions['4key'];
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [b, a] } as never,
+      positions: { '4key': [b, a] } as never,
+    });
+
+    await expect(editGestureController.commitPendingAsync()).resolves.toBe(
+      true,
+    );
+
+    const patch = generatedPatches[0] as {
+      keyPositions?: Record<string, Array<Record<string, unknown>>>;
+    };
+    // 시작 시점 index 0 = key-id-a, 재정렬 후에는 index 1
+    expect(patch.keyPositions?.['4key'][1]).toMatchObject({
+      id: 'key-id-a',
+      width: 90,
+    });
+    expect(patch.keyPositions?.['4key'][0].width).toBe(60);
+  });
+
+  it('정산 대기 중 대상이 삭제되면 커밋하지 않는다', async () => {
+    editGestureController.preview('4key', [{ index: 1, patch: { width: 90 } }]);
+
+    const [a] = useKeyStore.getState().canonicalPositions['4key'];
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [a] } as never,
+      positions: { '4key': [a] } as never,
+    });
+
+    await expect(editGestureController.commitPendingAsync()).resolves.toBe(
+      true,
+    );
+
+    // generator가 null을 반환해 무커밋 (mock이 null patch를 기록)
+    expect(generatedPatches[0]).toBeNull();
+  });
+
+  it('배타 mutation은 정산 실패한 A만 폐기하고 대기 중 시작된 B는 유지한다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // A의 정산 커밋을 지연시켜 실패 예약
+    let rejectSettle!: (reason: Error) => void;
+    commitGeneratedPatchMock.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectSettle = reject;
+        }),
+    );
+
+    editGestureController.preview('4key', [{ index: 0, patch: { width: 90 } }]);
+    const gestureA = editGestureController.activeGestureId();
+
+    const run = runExclusiveLegacyMutation(async () => 'done');
+    // 정산 enqueue가 A를 비운 뒤 사용자가 새 게스처 B 시작
+    await Promise.resolve();
+    await Promise.resolve();
+    editGestureController.preview('4key', [
+      { index: 1, patch: { width: 120 } },
+    ]);
+    const gestureB = editGestureController.activeGestureId();
+    expect(gestureB).not.toBe(gestureA);
+
+    rejectSettle(new Error('settle failed'));
+    await run;
+
+    // A는 복원되지 않고(B가 활성), B는 폐기되지 않는다
+    expect(editGestureController.activeGestureId()).toBe(gestureB);
   });
 
   it('모드가 바뀌면 이전 게스처를 취소하고 새로 시작', () => {
