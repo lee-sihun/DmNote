@@ -499,6 +499,30 @@ const applySemanticOps = (
                 fontStrikethrough: op.patch.fontStrikethrough,
               };
             }
+            if ('noteEffectEnabled' in op.patch) {
+              return {
+                ...position,
+                noteEffectEnabled: op.patch.noteEffectEnabled,
+              };
+            }
+            if ('noteAutoYCorrection' in op.patch) {
+              return {
+                ...position,
+                noteAutoYCorrection: op.patch.noteAutoYCorrection,
+              };
+            }
+            if ('noteGlowEnabled' in op.patch) {
+              return {
+                ...position,
+                noteGlowEnabled: op.patch.noteGlowEnabled,
+              };
+            }
+            if ('noteAlignment' in op.patch) {
+              return { ...position, noteAlignment: op.patch.noteAlignment };
+            }
+            if ('noteBorderSide' in op.patch) {
+              return { ...position, noteBorderSide: op.patch.noteBorderSide };
+            }
             return { ...position, hidden: op.patch.hidden };
           }),
         } as never;

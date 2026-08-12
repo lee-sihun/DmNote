@@ -59,6 +59,10 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchNoteProperties: vi.fn(
+    (_ids?: unknown, _patch?: unknown, _options?: { preflight?: () => void }) =>
+      Promise.resolve(true),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -135,6 +139,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
+  patchNotePropertiesByIds: mocks.patchNoteProperties,
   patchUseInlineStylesByTargets: mocks.patchUseInlineStyles,
 }));
 
@@ -211,6 +216,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchUseInlineStyles.mockResolvedValue(true);
     mocks.patchFontStyle.mockReset();
     mocks.patchFontStyle.mockResolvedValue(true);
+    mocks.patchNoteProperties.mockReset();
+    mocks.patchNoteProperties.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
     mocks.elements = [
       {
@@ -463,7 +470,7 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
-    ['가시성', { hidden: true }],
+    ['가시성', { hidden: true }, 'graph'],
     ['이름', { layerName: 'renamed' }],
     ['이름 clear', { layerName: null }],
     ['그래프 타입', { graphType: 'bar' }],
@@ -476,13 +483,18 @@ describe('plugin panel persisted element mutations', () => {
     ['글꼴 기울임', { fontItalic: true }],
     ['글꼴 밑줄', { fontUnderline: false }],
     ['글꼴 취소선', { fontStrikethrough: true }],
+    ['노트 효과', { noteEffectEnabled: false }, 'key'],
+    ['노트 Y 보정', { noteAutoYCorrection: true }, 'key'],
+    ['노트 글로우', { noteGlowEnabled: false }, 'key'],
+    ['노트 정렬', { noteAlignment: 'right' }, 'key'],
+    ['노트 테두리 방향', { noteBorderSide: 'horizontal' }, 'key'],
   ])(
     'native %s exact literal을 main semantic executor에 전달한다',
-    async (_label, patch) => {
+    async (_label, patch, elementType = 'graph') => {
       mocks.requestListener?.(
         envelope('layers:patchProperty', {
           target: {
-            elementType: 'graph',
+            elementType,
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
             patch,
           },
@@ -493,7 +505,7 @@ describe('plugin panel persisted element mutations', () => {
         expect(mocks.patchElementProperty).toHaveBeenCalledOnce(),
       );
       expect(mocks.patchElementProperty).toHaveBeenCalledWith(
-        'graph',
+        elementType,
         'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         patch,
         { preflight: expect.any(Function) },
@@ -573,6 +585,37 @@ describe('plugin panel persisted element mutations', () => {
         expect(mocks.patchFontStyle).toHaveBeenCalledOnce(),
       );
       expect(mocks.patchFontStyle).toHaveBeenCalledWith(targets, patch, {
+        preflight: expect.any(Function),
+      });
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
+
+  it.each([
+    [{ noteEffectEnabled: false }],
+    [{ noteAutoYCorrection: true }],
+    [{ noteGlowEnabled: false }],
+    [{ noteAlignment: 'right' }],
+    [{ noteBorderSide: 'horizontal' }],
+  ] as const)(
+    'note batch %j는 key ID를 ordered semantic commit 하나로 전달한다',
+    async (patch) => {
+      const ids = [
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      ];
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', {
+          targets: ids.map((id) => ({ elementType: 'key', id })),
+          patch,
+        }),
+      );
+
+      await vi.waitFor(() =>
+        expect(mocks.patchNoteProperties).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.patchNoteProperties).toHaveBeenCalledWith(ids, patch, {
         preflight: expect.any(Function),
       });
       await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
@@ -1047,6 +1090,75 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'note leaf wrong native type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { noteEffectEnabled: true },
+      },
+    ],
+    [
+      'note enum invalid',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteAlignment: 'top' },
+      },
+    ],
+    [
+      'note border enum invalid',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteBorderSide: 'left' },
+      },
+    ],
+    [
+      'note bool invalid',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteGlowEnabled: 1 },
+      },
+    ],
+    [
+      'note leaves combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteEffectEnabled: true, noteGlowEnabled: true },
+      },
+    ],
+    [
+      'note batch duplicate id',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable' },
+          { elementType: 'key', id: 'stable' },
+        ],
+        patch: { noteAutoYCorrection: false },
+      },
+    ],
+    [
+      'note batch synthetic id',
+      {
+        targets: [{ elementType: 'key', id: 'key-0' }],
+        patch: { noteAlignment: 'center' },
+      },
+    ],
+    [
+      'note batch empty id',
+      {
+        targets: [{ elementType: 'key', id: ' ' }],
+        patch: { noteBorderSide: 'all' },
+      },
+    ],
+    [
+      'note batch oversized',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'key',
+          id: `stable-note-${index}`,
+        })),
+        patch: { noteEffectEnabled: true },
+      },
+    ],
+    [
       'batch non-graph leaf',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
@@ -1095,6 +1207,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchKnobProperties).not.toHaveBeenCalled();
       expect(mocks.patchUseInlineStyles).not.toHaveBeenCalled();
       expect(mocks.patchFontStyle).not.toHaveBeenCalled();
+      expect(mocks.patchNoteProperties).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
         error: { code: 'INVALID_PAYLOAD' },
@@ -1241,6 +1354,28 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'graph', id: 'stable-graph' },
         ],
         patch: { fontWeight: 700 },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('note batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchNoteProperties.mockImplementationOnce(
+      async (_ids, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [{ elementType: 'key', id: 'stable-key' }],
+        patch: { noteAlignment: 'right' },
       }),
     );
 

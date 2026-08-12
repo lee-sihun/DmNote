@@ -23,6 +23,7 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';
 
@@ -409,6 +410,14 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   ) => {
     onKeyPreview?.(keyIndex, { [property]: value });
   };
+  const noteLiteralHandlers = createNoteLiteralHandlers(
+    {
+      noteEffectEnabled: keyPosition.noteEffectEnabled ?? true,
+      noteAutoYCorrection: keyPosition.noteAutoYCorrection ?? true,
+      noteGlowEnabled: keyPosition.noteGlowEnabled ?? false,
+    },
+    handleStyleChangeComplete,
+  );
 
   return (
     <>
@@ -421,12 +430,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={keyPosition.noteEffectEnabled ?? true}
-            onChange={() =>
-              handleStyleChangeComplete(
-                'noteEffectEnabled',
-                !(keyPosition.noteEffectEnabled ?? true),
-              )
-            }
+            onChange={noteLiteralHandlers.toggleEffect}
           />
         </div>
 
@@ -438,12 +442,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={keyPosition.noteAutoYCorrection ?? true}
-            onChange={() =>
-              handleStyleChangeComplete(
-                'noteAutoYCorrection',
-                !(keyPosition.noteAutoYCorrection ?? true),
-              )
-            }
+            onChange={noteLiteralHandlers.toggleAutoYCorrection}
           />
         </div>
       </PropertySection>
@@ -520,8 +519,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             ]}
             value={keyPosition.noteAlignment ?? 'center'}
             onChange={(value) =>
-              handleStyleChangeComplete(
-                'noteAlignment',
+              noteLiteralHandlers.setAlignment(
                 value as 'left' | 'center' | 'right',
               )
             }
@@ -649,8 +647,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               ]}
               value={keyPosition.noteBorderSide ?? 'all'}
               onChange={(value) =>
-                handleStyleChangeComplete(
-                  'noteBorderSide',
+                noteLiteralHandlers.setBorderSide(
                   value as 'all' | 'vertical' | 'horizontal',
                 )
               }
@@ -708,12 +705,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={keyPosition.noteGlowEnabled ?? false}
-            onChange={() =>
-              handleStyleChangeComplete(
-                'noteGlowEnabled',
-                !(keyPosition.noteGlowEnabled ?? false),
-              )
-            }
+            onChange={noteLiteralHandlers.toggleGlow}
           />
         </div>
 

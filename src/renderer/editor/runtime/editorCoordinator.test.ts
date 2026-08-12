@@ -27,6 +27,7 @@ import type {
   EditorCommittedV1,
   EditorDocumentV1,
   EditorGetResult,
+  EditorNotePropertyPatchV1,
   EditorOpResultV1,
   EditorOpV1,
   EditorSetBoundsOpV1,
@@ -378,6 +379,30 @@ const applyOpsForTest = (
               ...position,
               fontStrikethrough: op.patch.fontStrikethrough,
             };
+          }
+          if ('noteEffectEnabled' in op.patch) {
+            return {
+              ...position,
+              noteEffectEnabled: op.patch.noteEffectEnabled,
+            };
+          }
+          if ('noteAutoYCorrection' in op.patch) {
+            return {
+              ...position,
+              noteAutoYCorrection: op.patch.noteAutoYCorrection,
+            };
+          }
+          if ('noteGlowEnabled' in op.patch) {
+            return {
+              ...position,
+              noteGlowEnabled: op.patch.noteGlowEnabled,
+            };
+          }
+          if ('noteAlignment' in op.patch) {
+            return { ...position, noteAlignment: op.patch.noteAlignment };
+          }
+          if ('noteBorderSide' in op.patch) {
+            return { ...position, noteBorderSide: op.patch.noteBorderSide };
           }
           return { ...position, hidden: op.patch.hidden };
         });
@@ -3316,6 +3341,53 @@ describe('commitSemanticOpsInternal', () => {
         fontStrikethrough: true,
       });
     }
+    harness.coordinator.stop();
+  });
+
+  it('note 5 leaf를 한 commit으로 적용하고 무관 note 필드를 보존한다', async () => {
+    const ids = [
+      '00000000-0000-4000-8000-0000000000d1',
+      '00000000-0000-4000-8000-0000000000d2',
+      '00000000-0000-4000-8000-0000000000d3',
+      '00000000-0000-4000-8000-0000000000d4',
+      '00000000-0000-4000-8000-0000000000d5',
+    ];
+    const base = makeDocument();
+    base.keyPositions = {
+      '4key': ids.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        noteColor: '#sentinel',
+        noteGlowSize: 27,
+      })),
+    };
+    base.keys = { '4key': ['A', 'B', 'C', 'D', 'E'] };
+    const patches: EditorNotePropertyPatchV1[] = [
+      { noteEffectEnabled: false },
+      { noteAutoYCorrection: false },
+      { noteGlowEnabled: true },
+      { noteAlignment: 'right' as const },
+      { noteBorderSide: 'horizontal' as const },
+    ];
+    const ops: EditorOpV1[] = patches.map((patch, index) => ({
+      kind: 'patchElement',
+      elementType: 'key',
+      id: ids[index],
+      patch,
+    }));
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
+
+    expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    outcome.document.keyPositions['4key'].forEach((position, index) => {
+      expect(position).toMatchObject({
+        ...patches[index],
+        noteColor: '#sentinel',
+        noteGlowSize: 27,
+      });
+    });
     harness.coordinator.stop();
   });
 

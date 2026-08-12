@@ -153,6 +153,11 @@ interface EditorElementPropertyValuesV1 {
   fontItalic: boolean;
   fontUnderline: boolean;
   fontStrikethrough: boolean;
+  noteEffectEnabled: boolean;
+  noteAutoYCorrection: boolean;
+  noteGlowEnabled: boolean;
+  noteAlignment: 'left' | 'center' | 'right';
+  noteBorderSide: 'all' | 'vertical' | 'horizontal';
 }
 
 type ExactEditorPropertyPatchV1<K extends keyof EditorElementPropertyValuesV1> =
@@ -172,6 +177,14 @@ export type EditorKnobRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'fontWeight' | 'fontItalic' | 'fontUnderline' | 'fontStrikethrough'
+>;
+
+export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
+  | 'noteEffectEnabled'
+  | 'noteAutoYCorrection'
+  | 'noteGlowEnabled'
+  | 'noteAlignment'
+  | 'noteBorderSide'
 >;
 
 export type EditorElementPropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -980,7 +993,31 @@ export function assertEditorOpsV1(
           typeof op.patch.fontUnderline === 'boolean') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'fontStrikethrough' &&
-          typeof op.patch.fontStrikethrough === 'boolean');
+          typeof op.patch.fontStrikethrough === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteEffectEnabled' &&
+          op.elementType === 'key' &&
+          typeof op.patch.noteEffectEnabled === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteAutoYCorrection' &&
+          op.elementType === 'key' &&
+          typeof op.patch.noteAutoYCorrection === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteGlowEnabled' &&
+          op.elementType === 'key' &&
+          typeof op.patch.noteGlowEnabled === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteAlignment' &&
+          op.elementType === 'key' &&
+          ['left', 'center', 'right'].includes(
+            op.patch.noteAlignment as string,
+          )) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteBorderSide' &&
+          op.elementType === 'key' &&
+          ['all', 'vertical', 'horizontal'].includes(
+            op.patch.noteBorderSide as string,
+          ));
       if (!patchIsValid) {
         throw new EditorProtocolError(`${opLabel}.patch is invalid`);
       }

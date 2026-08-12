@@ -484,6 +484,51 @@ mod tests {
                 ),
                 serde_json::json!({ "fontStrikethrough": false }),
             ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteEffectEnabled(
+                    crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
+                        note_effect_enabled: false,
+                    },
+                ),
+                serde_json::json!({ "noteEffectEnabled": false }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteGlowEnabled(
+                    crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
+                        note_glow_enabled: true,
+                    },
+                ),
+                serde_json::json!({ "noteGlowEnabled": true }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteAutoYCorrection(
+                    crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
+                        note_auto_y_correction: false,
+                    },
+                ),
+                serde_json::json!({ "noteAutoYCorrection": false }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteAlignment(
+                    crate::models::EditorNoteAlignmentPropertyPatchV1 {
+                        note_alignment: crate::models::NoteAlignment::Left,
+                    },
+                ),
+                serde_json::json!({ "noteAlignment": "left" }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteBorderSide(
+                    crate::models::EditorNoteBorderSidePropertyPatchV1 {
+                        note_border_side: crate::models::EditorNoteBorderSideV1::Horizontal,
+                    },
+                ),
+                serde_json::json!({ "noteBorderSide": "horizontal" }),
+            ),
         ];
         for (element_type, patch, expected) in literal_properties {
             let mut request = gesture_request(&["plugin-a".to_string()]);

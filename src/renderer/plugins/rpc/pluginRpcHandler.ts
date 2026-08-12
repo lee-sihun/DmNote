@@ -57,6 +57,7 @@ import {
   patchGraphPropertiesByIds,
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
+  patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
 } from '@src/renderer/editor/runtime/elementOps';
 import type {
@@ -64,6 +65,7 @@ import type {
   EditorFontStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
+  EditorNotePropertyPatchV1,
 } from '@src/types/editor';
 import type {
   LayerReorderAnchorsWire,
@@ -229,7 +231,24 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['fontUnderline']) &&
       typeof patch.fontUnderline === 'boolean') ||
     (hasExactKeys(patch, ['fontStrikethrough']) &&
-      typeof patch.fontStrikethrough === 'boolean');
+      typeof patch.fontStrikethrough === 'boolean') ||
+    (hasExactKeys(patch, ['noteEffectEnabled']) &&
+      target.elementType === 'key' &&
+      typeof patch.noteEffectEnabled === 'boolean') ||
+    (hasExactKeys(patch, ['noteAutoYCorrection']) &&
+      target.elementType === 'key' &&
+      typeof patch.noteAutoYCorrection === 'boolean') ||
+    (hasExactKeys(patch, ['noteGlowEnabled']) &&
+      target.elementType === 'key' &&
+      typeof patch.noteGlowEnabled === 'boolean') ||
+    (hasExactKeys(patch, ['noteAlignment']) &&
+      target.elementType === 'key' &&
+      ['left', 'center', 'right'].includes(patch.noteAlignment as string)) ||
+    (hasExactKeys(patch, ['noteBorderSide']) &&
+      target.elementType === 'key' &&
+      ['all', 'vertical', 'horizontal'].includes(
+        patch.noteBorderSide as string,
+      ));
   const graphOnlyPatch =
     hasExactKeys(patch, ['graphType']) ||
     hasExactKeys(patch, ['graphColor']) ||
@@ -259,6 +278,11 @@ type NativeLayerPropertyRequest =
       kind: 'fontStyleBatch';
       targets: Array<{ elementType: NativeElementType; id: string }>;
       patch: EditorFontStylePropertyPatchV1;
+    }
+  | {
+      kind: 'notePropertyBatch';
+      ids: string[];
+      patch: EditorNotePropertyPatchV1;
     }
   | { kind: 'graphTypeBatch'; ids: string[]; graphType: 'line' | 'bar' }
   | { kind: 'graphColorBatch'; ids: string[]; graphColor: string }
@@ -345,19 +369,48 @@ const parseNativeLayerPropertyRequest = (
         typeof patch.fontStrikethrough === 'boolean'
       ? { fontStrikethrough: patch.fontStrikethrough }
       : null;
+  const notePropertyPatch: EditorNotePropertyPatchV1 | null =
+    hasExactKeys(patch, ['noteEffectEnabled']) &&
+    typeof patch.noteEffectEnabled === 'boolean'
+      ? { noteEffectEnabled: patch.noteEffectEnabled }
+      : hasExactKeys(patch, ['noteAutoYCorrection']) &&
+        typeof patch.noteAutoYCorrection === 'boolean'
+      ? { noteAutoYCorrection: patch.noteAutoYCorrection }
+      : hasExactKeys(patch, ['noteGlowEnabled']) &&
+        typeof patch.noteGlowEnabled === 'boolean'
+      ? { noteGlowEnabled: patch.noteGlowEnabled }
+      : hasExactKeys(patch, ['noteAlignment']) &&
+        ['left', 'center', 'right'].includes(patch.noteAlignment as string)
+      ? {
+          noteAlignment: patch.noteAlignment as 'left' | 'center' | 'right',
+        }
+      : hasExactKeys(patch, ['noteBorderSide']) &&
+        ['all', 'vertical', 'horizontal'].includes(
+          patch.noteBorderSide as string,
+        )
+      ? {
+          noteBorderSide: patch.noteBorderSide as
+            | 'all'
+            | 'vertical'
+            | 'horizontal',
+        }
+      : null;
   if (
     graphType === null &&
     graphColor === null &&
     graphRuntimePatch === null &&
     knobRuntimePatch === null &&
     useInlineStyles === null &&
-    fontStylePatch === null
+    fontStylePatch === null &&
+    notePropertyPatch === null
   ) {
     return null;
   }
   const elementType =
     useInlineStyles !== null || fontStylePatch !== null
       ? null
+      : notePropertyPatch !== null
+      ? 'key'
       : knobRuntimePatch === null
       ? 'graph'
       : 'knob';
@@ -397,6 +450,9 @@ const parseNativeLayerPropertyRequest = (
   }
   if (fontStylePatch !== null) {
     return { kind: 'fontStyleBatch', targets, patch: fontStylePatch };
+  }
+  if (notePropertyPatch !== null) {
+    return { kind: 'notePropertyBatch', ids, patch: notePropertyPatch };
   }
   if (graphType !== null) return { kind: 'graphTypeBatch', ids, graphType };
   if (graphColor !== null) {
@@ -1085,6 +1141,9 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       }
       if (request.kind === 'fontStyleBatch') {
         return patchFontStyleByTargets(request.targets, request.patch, options);
+      }
+      if (request.kind === 'notePropertyBatch') {
+        return patchNotePropertiesByIds(request.ids, request.patch, options);
       }
       return patchKnobPropertiesByIds(request.ids, request.patch, options);
     })();

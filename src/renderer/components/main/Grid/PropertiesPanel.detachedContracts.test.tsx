@@ -35,6 +35,9 @@ const {
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
+  patchNotePropertyMock,
+  patchNotePropertiesMock,
+  patchNotePropertiesViaAuthorityMock,
   patchUseInlineStylesMock,
   patchUseInlineStylesTargetsMock,
   patchUseInlineStylesViaAuthorityMock,
@@ -69,6 +72,9 @@ const {
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePropertyMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePropertiesMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchUseInlineStylesMock: vi.fn(() => Promise.resolve(true)),
   patchUseInlineStylesTargetsMock: vi.fn(() => Promise.resolve(true)),
   patchUseInlineStylesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
@@ -98,6 +104,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchFontStyleViaAuthority: patchFontStyleViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
+  patchNotePropertiesViaAuthority: patchNotePropertiesViaAuthorityMock,
   patchUseInlineStylesViaAuthority: patchUseInlineStylesViaAuthorityMock,
   updatePluginElement: vi.fn(),
 }));
@@ -113,6 +120,8 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchGraphTypesByIds: patchGraphTypesMock,
   patchKnobPropertiesByIds: patchKnobPropertiesMock,
   patchKnobPropertyById: patchKnobPropertyMock,
+  patchNotePropertiesByIds: patchNotePropertiesMock,
+  patchNotePropertyById: patchNotePropertyMock,
   patchUseInlineStylesById: patchUseInlineStylesMock,
   patchUseInlineStylesByTargets: patchUseInlineStylesTargetsMock,
 }));
@@ -256,6 +265,9 @@ const resetStores = () => {
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
+  patchNotePropertyMock.mockClear();
+  patchNotePropertiesMock.mockClear();
+  patchNotePropertiesViaAuthorityMock.mockClear();
   patchUseInlineStylesMock.mockClear();
   patchUseInlineStylesTargetsMock.mockClear();
   patchUseInlineStylesViaAuthorityMock.mockClear();
@@ -1662,6 +1674,191 @@ describe('PropertiesPanel detached preview contract', () => {
         'fontUnderline',
         true,
       );
+    },
+  );
+
+  it.each([
+    ['main', { noteEffectEnabled: false }],
+    ['main', { noteAutoYCorrection: true }],
+    ['main', { noteGlowEnabled: false }],
+    ['main', { noteAlignment: 'right' }],
+    ['main', { noteBorderSide: 'horizontal' }],
+    ['panel', { noteEffectEnabled: true }],
+    ['panel', { noteAutoYCorrection: false }],
+    ['panel', { noteGlowEnabled: true }],
+    ['panel', { noteAlignment: 'left' }],
+    ['panel', { noteBorderSide: 'vertical' }],
+  ] as const)(
+    '%s single stable key note %j는 선택 ID exact leaf만 쓴다',
+    (windowType, patch) => {
+      window.__dmn_window_type = windowType;
+      const id = 'f6111111-1111-4111-8111-111111111111';
+      const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [position] as never },
+        canonicalPositions: { '4key': [position] as never },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onKeyUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.onKeyUpdate({ index: 0, ...patch }));
+
+      if (windowType === 'panel') {
+        expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+          elementType: 'key',
+          id,
+          patch,
+        });
+        expect(patchNotePropertyMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchNotePropertyMock).toHaveBeenCalledWith(id, patch);
+        expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', ''],
+  ] as const)(
+    'panel single %s key note는 기존 writer로 폴백한다',
+    (_label, id) => {
+      window.__dmn_window_type = 'panel';
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: {
+          '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+        },
+        canonicalPositions: {
+          '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id }] as never,
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onKeyUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.onKeyUpdate({ index: 0, noteGlowEnabled: true }));
+
+      expect(patchNotePropertyMock).not.toHaveBeenCalled();
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['main', { noteEffectEnabled: false }],
+    ['main', { noteAutoYCorrection: false }],
+    ['main', { noteGlowEnabled: true }],
+    ['main', { noteAlignment: 'right' }],
+    ['main', { noteBorderSide: 'horizontal' }],
+    ['panel', { noteEffectEnabled: true }],
+    ['panel', { noteAutoYCorrection: true }],
+    ['panel', { noteGlowEnabled: false }],
+    ['panel', { noteAlignment: 'left' }],
+    ['panel', { noteBorderSide: 'vertical' }],
+  ] as const)(
+    '%s key-only note batch %j는 ID target 한 commit만 쓴다',
+    (windowType, patch) => {
+      window.__dmn_window_type = windowType;
+      const ids = [
+        'f6222222-2222-4222-8222-222222222221',
+        'f6222222-2222-4222-8222-222222222222',
+      ];
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: ids[0], index: 0 },
+          { type: 'key', id: ids[1], index: 1 },
+          { type: 'graph', id: 'graph-unrelated', index: 0 },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        handleBatchKeyOnlyStyleChangeComplete: (
+          property: string,
+          value: unknown,
+        ) => void;
+      };
+      const [property, value] = Object.entries(patch)[0];
+
+      act(() => props.handleBatchKeyOnlyStyleChangeComplete(property, value));
+
+      if (windowType === 'panel') {
+        expect(patchNotePropertiesViaAuthorityMock).toHaveBeenCalledWith(
+          ids,
+          patch,
+        );
+        expect(patchNotePropertiesMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchNotePropertiesMock).toHaveBeenCalledWith(ids, patch);
+        expect(patchNotePropertiesViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', ''],
+  ] as const)(
+    'panel key-only note batch에 %s ID가 있으면 전체 legacy로 폴백한다',
+    (_label, legacyId) => {
+      window.__dmn_window_type = 'panel';
+      const stableId = 'f6333333-3333-4333-8333-333333333331';
+      const positions = [stableId, legacyId].map((id) => ({
+        dx: 0,
+        dy: 0,
+        width: 60,
+        height: 60,
+        id,
+      }));
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A', 'B'] },
+        positions: { '4key': positions } as never,
+        canonicalPositions: { '4key': positions } as never,
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          {
+            type: 'key',
+            id: stableId,
+            index: 0,
+          },
+          { type: 'key', id: legacyId, index: 1 },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        handleBatchKeyOnlyStyleChangeComplete: (
+          property: string,
+          value: unknown,
+        ) => void;
+      };
+
+      act(() =>
+        props.handleBatchKeyOnlyStyleChangeComplete(
+          'noteAutoYCorrection',
+          false,
+        ),
+      );
+
+      expect(patchNotePropertiesMock).not.toHaveBeenCalled();
+      expect(patchNotePropertiesViaAuthorityMock).not.toHaveBeenCalled();
+      expect(keyLegacyUpdateMock).toHaveBeenCalledTimes(2);
     },
   );
 

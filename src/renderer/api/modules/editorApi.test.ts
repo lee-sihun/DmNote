@@ -367,6 +367,11 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['stat', { fontItalic: false }],
     ['graph', { fontUnderline: true }],
     ['knob', { fontStrikethrough: false }],
+    ['key', { noteEffectEnabled: false }],
+    ['key', { noteAutoYCorrection: true }],
+    ['key', { noteGlowEnabled: false }],
+    ['key', { noteAlignment: 'right' }],
+    ['key', { noteBorderSide: 'horizontal' }],
   ] as const)(
     'patchElement %s runtime leaf %j의 exact wire를 수용한다',
     (elementType, patch) => {
@@ -399,6 +404,12 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['graph', { fontItalic: 1 }],
     ['knob', { fontUnderline: 'yes' }],
     ['key', { fontStrikethrough: true, fontItalic: false }],
+    ['stat', { noteEffectEnabled: true }],
+    ['key', { noteAutoYCorrection: 1 }],
+    ['key', { noteGlowEnabled: 'yes' }],
+    ['key', { noteAlignment: 'top' }],
+    ['key', { noteBorderSide: 'left' }],
+    ['key', { noteEffectEnabled: true, noteGlowEnabled: true }],
   ] as const)(
     'patchElement %s runtime leaf %j의 잘못된 wire를 거절한다',
     (elementType, patch) => {

@@ -670,6 +670,15 @@ pub(crate) fn prepare_editor_ops_transition(
                     | EditorElementPropertyPatchV1::Sensitivity(_)
             ) {
                 validate_editor_op_target_type(op_index, EditorElementTypeV1::Knob, *element_type)?;
+            } else if matches!(
+                patch,
+                EditorElementPropertyPatchV1::NoteEffectEnabled(_)
+                    | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
+                    | EditorElementPropertyPatchV1::NoteAutoYCorrection(_)
+                    | EditorElementPropertyPatchV1::NoteAlignment(_)
+                    | EditorElementPropertyPatchV1::NoteBorderSide(_)
+            ) {
+                validate_editor_op_target_type(op_index, EditorElementTypeV1::Key, *element_type)?;
             }
         }
     }
@@ -919,6 +928,52 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.font_strikethrough = Some(patch.font_strikethrough);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteEffectEnabled(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_effect_enabled == patch.note_effect_enabled {
+                            false
+                        } else {
+                            position.note_effect_enabled = patch.note_effect_enabled;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteGlowEnabled(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_glow_enabled == patch.note_glow_enabled {
+                            false
+                        } else {
+                            position.note_glow_enabled = patch.note_glow_enabled;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteAutoYCorrection(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_auto_y_correction == patch.note_auto_y_correction {
+                            false
+                        } else {
+                            position.note_auto_y_correction = patch.note_auto_y_correction;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteAlignment(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_alignment == patch.note_alignment {
+                            false
+                        } else {
+                            position.note_alignment = patch.note_alignment.clone();
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteBorderSide(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        let note_border_side = patch.note_border_side.as_str();
+                        if position.note_border_side.as_deref() == Some(note_border_side) {
+                            false
+                        } else {
+                            position.note_border_side = Some(note_border_side.to_string());
                             true
                         }
                     }
@@ -2429,6 +2484,171 @@ mod tests {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].font_weight, None);
+    }
+
+    #[test]
+    fn note_literal_patches_are_key_only_and_preserve_border_side_raw_state() {
+        let mut store = base_store();
+        let ids = store
+            .key_positions
+            .values()
+            .flat_map(|positions| positions.iter().map(|position| position.id.clone()))
+            .take(5)
+            .collect::<Vec<_>>();
+        assert_eq!(ids.len(), 5);
+        let legacy_id = store
+            .key_positions
+            .values_mut()
+            .flat_map(|positions| positions.iter_mut())
+            .find(|position| !ids.contains(&position.id))
+            .map(|position| {
+                position.note_border_side = Some("diagonal".to_string());
+                position.id.clone()
+            })
+            .expect("default modes contain an untargeted key");
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[0],
+                EditorElementPropertyPatchV1::NoteEffectEnabled(
+                    crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
+                        note_effect_enabled: false,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[1],
+                EditorElementPropertyPatchV1::NoteGlowEnabled(
+                    crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
+                        note_glow_enabled: true,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[2],
+                EditorElementPropertyPatchV1::NoteAutoYCorrection(
+                    crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
+                        note_auto_y_correction: false,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[3],
+                EditorElementPropertyPatchV1::NoteAlignment(
+                    crate::models::EditorNoteAlignmentPropertyPatchV1 {
+                        note_alignment: crate::models::NoteAlignment::Right,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[4],
+                EditorElementPropertyPatchV1::NoteBorderSide(
+                    crate::models::EditorNoteBorderSidePropertyPatchV1 {
+                        note_border_side: crate::models::EditorNoteBorderSideV1::All,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::NoteGlowEnabled(
+                    crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
+                        note_glow_enabled: true,
+                    },
+                ),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let changed = transition
+            .candidate
+            .key_positions
+            .values()
+            .flat_map(|positions| positions.iter())
+            .map(|position| (position.id.as_str(), position))
+            .collect::<HashMap<_, _>>();
+        assert!(!changed[ids[0].as_str()].note_effect_enabled);
+        assert!(changed[ids[1].as_str()].note_glow_enabled);
+        assert!(!changed[ids[2].as_str()].note_auto_y_correction);
+        assert_eq!(
+            changed[ids[3].as_str()].note_alignment,
+            crate::models::NoteAlignment::Right
+        );
+        assert_eq!(
+            changed[ids[4].as_str()].note_border_side.as_deref(),
+            Some("all")
+        );
+        assert_eq!(
+            changed[legacy_id.as_str()].note_border_side.as_deref(),
+            Some("diagonal")
+        );
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        for (element_type, id) in [
+            (EditorElementTypeV1::Stat, ids[1].clone()),
+            (EditorElementTypeV1::Graph, uuid::Uuid::new_v4().to_string()),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        id,
+                        EditorElementPropertyPatchV1::NoteGlowEnabled(
+                            crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
+                                note_glow_enabled: true,
+                            },
+                        ),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        }
+        assert!(store.key_positions.values().flatten().all(|position| {
+            position.note_effect_enabled
+                && !position.note_glow_enabled
+                && position.note_auto_y_correction
+                && (position.id == legacy_id || position.note_border_side.is_none())
+        }));
     }
 
     #[test]

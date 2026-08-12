@@ -245,6 +245,40 @@ describe('plugin element panel queue', () => {
     },
   );
 
+  it.each([
+    [{ noteEffectEnabled: false }],
+    [{ noteAutoYCorrection: true }],
+    [{ noteGlowEnabled: false }],
+    [{ noteAlignment: 'right' }],
+    [{ noteBorderSide: 'horizontal' }],
+  ] as const)(
+    'note batch %j는 key ID와 absolute literal을 한 요청으로 고정한다',
+    async (patch) => {
+      mocks.sendPluginRpc.mockResolvedValue({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+      const ids = [
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      ];
+
+      await expect(
+        actions.patchNotePropertiesViaAuthority(ids, patch),
+      ).resolves.toBe(true);
+
+      expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+        'layers:patchProperty',
+        {
+          targets: ids.map((id) => ({ elementType: 'key', id })),
+          patch,
+        },
+        0,
+        7,
+      );
+    },
+  );
+
   it('인라인 스타일 batch 재시도는 같은 generation과 absolute literal을 보존한다', async () => {
     mocks.sendPluginRpc
       .mockResolvedValueOnce({ kind: 'unknown' })
@@ -293,6 +327,30 @@ describe('plugin element panel queue', () => {
         },
       ],
       { fontWeight: 700 },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
+  it('note batch outcome-unknown 재시도는 같은 generation과 absolute literal을 한 번만 재전송한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchNotePropertiesViaAuthority(
+      ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+      { noteBorderSide: 'all' },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),

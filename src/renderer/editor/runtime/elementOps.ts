@@ -27,6 +27,7 @@ import type {
   EditorFontStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
+  EditorNotePropertyPatchV1,
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
@@ -812,6 +813,32 @@ export const patchFontStyleByTargets = (
       id,
       patch,
     })),
+    options,
+  );
+};
+
+export const patchNotePropertyById = (
+  id: string,
+  patch: EditorNotePropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById('key', id, patch, options);
+};
+
+export const patchNotePropertiesByIds = (
+  ids: readonly string[],
+  patch: EditorNotePropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    ids.map((id) => ({ type: 'key', id, patch })),
     options,
   );
 };

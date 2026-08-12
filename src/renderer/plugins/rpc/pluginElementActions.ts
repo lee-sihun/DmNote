@@ -18,6 +18,7 @@ import type {
   EditorFontStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
+  EditorNotePropertyPatchV1,
 } from '@src/types/editor';
 
 import { getPluginAuthorityGeneration, sendPluginRpc } from './pluginRpcClient';
@@ -431,6 +432,26 @@ export const patchFontStyleViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: structuredClone(patch),
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchNotePropertiesViaAuthority = (
+  ids: readonly string[],
+  patch: EditorNotePropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'key', id })),
         patch: structuredClone(patch),
       },
       authorityGeneration,

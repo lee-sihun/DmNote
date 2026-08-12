@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     AppStoreData, GraphPosition, GraphPositions, GraphType, KeyCounters, KeyMappings, KeyPosition,
-    KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroups, SlotMatch, StatPosition,
-    StatPositions,
+    KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroups, NoteAlignment, SlotMatch,
+    StatPosition, StatPositions,
 };
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
@@ -219,6 +219,11 @@ pub enum EditorElementPropertyPatchV1 {
     FontItalic(EditorFontItalicPropertyPatchV1),
     FontUnderline(EditorFontUnderlinePropertyPatchV1),
     FontStrikethrough(EditorFontStrikethroughPropertyPatchV1),
+    NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
+    NoteGlowEnabled(EditorNoteGlowEnabledPropertyPatchV1),
+    NoteAutoYCorrection(EditorNoteAutoYCorrectionPropertyPatchV1),
+    NoteAlignment(EditorNoteAlignmentPropertyPatchV1),
+    NoteBorderSide(EditorNoteBorderSidePropertyPatchV1),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -304,6 +309,54 @@ pub struct EditorFontUnderlinePropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorFontStrikethroughPropertyPatchV1 {
     pub font_strikethrough: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteEffectEnabledPropertyPatchV1 {
+    pub note_effect_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteGlowEnabledPropertyPatchV1 {
+    pub note_glow_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteAutoYCorrectionPropertyPatchV1 {
+    pub note_auto_y_correction: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteAlignmentPropertyPatchV1 {
+    pub note_alignment: NoteAlignment,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteBorderSidePropertyPatchV1 {
+    pub note_border_side: EditorNoteBorderSideV1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EditorNoteBorderSideV1 {
+    All,
+    Vertical,
+    Horizontal,
+}
+
+impl EditorNoteBorderSideV1 {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Vertical => "vertical",
+            Self::Horizontal => "horizontal",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -2466,6 +2466,51 @@ mod tests {
                 ),
                 serde_json::json!({ "fontStrikethrough": false }),
             ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteEffectEnabled(
+                    crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
+                        note_effect_enabled: false,
+                    },
+                ),
+                serde_json::json!({ "noteEffectEnabled": false }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteGlowEnabled(
+                    crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
+                        note_glow_enabled: true,
+                    },
+                ),
+                serde_json::json!({ "noteGlowEnabled": true }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteAutoYCorrection(
+                    crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
+                        note_auto_y_correction: false,
+                    },
+                ),
+                serde_json::json!({ "noteAutoYCorrection": false }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteAlignment(
+                    crate::models::EditorNoteAlignmentPropertyPatchV1 {
+                        note_alignment: crate::models::NoteAlignment::Right,
+                    },
+                ),
+                serde_json::json!({ "noteAlignment": "right" }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteBorderSide(
+                    crate::models::EditorNoteBorderSidePropertyPatchV1 {
+                        note_border_side: crate::models::EditorNoteBorderSideV1::All,
+                    },
+                ),
+                serde_json::json!({ "noteBorderSide": "all" }),
+            ),
         ];
         for (element_type, patch, expected) in literal_properties {
             let wire = serde_json::to_value(ops_request(vec![EditorOpV1::PatchElement {
@@ -2503,6 +2548,11 @@ mod tests {
             serde_json::json!({ "fontItalic": null }),
             serde_json::json!({ "fontUnderline": 1 }),
             serde_json::json!({ "fontStrikethrough": "false" }),
+            serde_json::json!({ "noteEffectEnabled": 1 }),
+            serde_json::json!({ "noteGlowEnabled": null }),
+            serde_json::json!({ "noteAutoYCorrection": "false" }),
+            serde_json::json!({ "noteAlignment": "bottom" }),
+            serde_json::json!({ "noteBorderSide": "diagonal" }),
         ]
         .map(|patch| {
             let mut wire = graph_color.clone();

@@ -39,6 +39,7 @@ import {
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
+  patchNotePropertiesViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -55,6 +56,7 @@ import type {
   EditorFontStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
+  EditorNotePropertyPatchV1,
   EditorElementTypeV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
@@ -88,6 +90,8 @@ import {
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
   patchKnobPropertyById,
+  patchNotePropertiesByIds,
+  patchNotePropertyById,
   patchUseInlineStylesById,
   patchUseInlineStylesByTargets,
 } from '@src/renderer/editor/runtime/elementOps';
@@ -248,6 +252,51 @@ const getFontStylePatchFromProperty = (
   value: KeyPosition[keyof KeyPosition],
 ): EditorFontStylePropertyPatchV1 | null => {
   return getFontStylePatch({ [property]: value });
+};
+
+const getNotePropertyPatch = (
+  updates: Partial<KeyPosition>,
+): EditorNotePropertyPatchV1 | null => {
+  const keys = Object.keys(updates);
+  if (keys.length !== 1) return null;
+  if (
+    keys[0] === 'noteEffectEnabled' &&
+    typeof updates.noteEffectEnabled === 'boolean'
+  ) {
+    return { noteEffectEnabled: updates.noteEffectEnabled };
+  }
+  if (
+    keys[0] === 'noteAutoYCorrection' &&
+    typeof updates.noteAutoYCorrection === 'boolean'
+  ) {
+    return { noteAutoYCorrection: updates.noteAutoYCorrection };
+  }
+  if (
+    keys[0] === 'noteGlowEnabled' &&
+    typeof updates.noteGlowEnabled === 'boolean'
+  ) {
+    return { noteGlowEnabled: updates.noteGlowEnabled };
+  }
+  if (
+    keys[0] === 'noteAlignment' &&
+    ['left', 'center', 'right'].includes(updates.noteAlignment as string)
+  ) {
+    return { noteAlignment: updates.noteAlignment! };
+  }
+  if (
+    keys[0] === 'noteBorderSide' &&
+    ['all', 'vertical', 'horizontal'].includes(updates.noteBorderSide as string)
+  ) {
+    return { noteBorderSide: updates.noteBorderSide! };
+  }
+  return null;
+};
+
+const getNotePropertyPatchFromProperty = (
+  property: keyof KeyPosition,
+  value: KeyPosition[keyof KeyPosition],
+): EditorNotePropertyPatchV1 | null => {
+  return getNotePropertyPatch({ [property]: value });
 };
 
 // ============================================================================
@@ -2153,11 +2202,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) => {
     const { index: _index, ...updates } = data;
     const fontStylePatch = getFontStylePatch(updates);
+    const notePropertyPatch = getNotePropertyPatch(updates);
     const useInlineStyles = getUseInlineStylesPatch(updates);
     const selectedKey =
       selectedKeyElements.length === 1 ? selectedKeyElements[0] : null;
     if (
-      (!fontStylePatch && useInlineStyles === null) ||
+      (!fontStylePatch && !notePropertyPatch && useInlineStyles === null) ||
       !selectedKey ||
       selectedKey.id.length === 0 ||
       isSyntheticElementId(selectedKey.id)
@@ -2166,7 +2216,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       return;
     }
     const commit =
-      fontStylePatch !== null
+      notePropertyPatch !== null
+        ? window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'key',
+              id: selectedKey.id,
+              patch: notePropertyPatch,
+            })
+          : patchNotePropertyById(selectedKey.id, notePropertyPatch)
+        : fontStylePatch !== null
         ? window.__dmn_window_type === 'panel'
           ? patchNativeLayerPropertyViaAuthority({
               elementType: 'key',
@@ -2274,6 +2332,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => {
+    const notePropertyPatch = getNotePropertyPatchFromProperty(property, value);
+    const targets = selectedKeyElements.map((element) => element.id);
+    if (
+      notePropertyPatch &&
+      targets.length > 0 &&
+      targets.every((id) => id.length > 0 && !isSyntheticElementId(id))
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNotePropertiesViaAuthority(targets, notePropertyPatch)
+          : patchNotePropertiesByIds(targets, notePropertyPatch);
+      void commit.catch((error) => {
+        console.error('Failed to batch update note property', error);
+      });
+      return;
+    }
     const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
       index,
       [property]: value,

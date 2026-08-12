@@ -43,6 +43,8 @@ import {
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
   patchKnobPropertyById,
+  patchNotePropertiesByIds,
+  patchNotePropertyById,
   patchUseInlineStylesById,
   patchUseInlineStylesByTargets,
   rebindKeySlotById,
@@ -1323,5 +1325,71 @@ describe('elementOps', () => {
     expect(
       useKeyStore.getState().canonicalPositions['4key'][0].fontItalic,
     ).toBe(false);
+  });
+
+  it('note literal은 single과 key batch를 exact leaf 한 commit으로 보낸다', async () => {
+    await patchNotePropertyById(ID_A, { noteEffectEnabled: false });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { noteEffectEnabled: false },
+        },
+      ],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+
+    api.commitSemanticOps.mockClear();
+    await patchNotePropertiesByIds([ID_A, ID_B], {
+      noteBorderSide: 'vertical',
+    });
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ID_A,
+        patch: { noteBorderSide: 'vertical' },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ID_B,
+        patch: { noteBorderSide: 'vertical' },
+      },
+    ]);
+  });
+
+  it('note batch는 duplicate와 empty ID를 wire 전에 거절한다', async () => {
+    await expect(
+      patchNotePropertiesByIds([ID_A, ID_A], { noteAlignment: 'center' }),
+    ).resolves.toBe(false);
+    await expect(
+      patchNotePropertiesByIds([''], { noteGlowEnabled: true }),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('note 편입 전 실패는 자기 eager leaf만 복원한다', async () => {
+    useKeyStore.setState((state) => ({
+      canonicalPositions: {
+        ...state.canonicalPositions,
+        '4key': state.canonicalPositions['4key'].map((position) => ({
+          ...position,
+          noteAlignment: 'left' as const,
+        })),
+      },
+    }));
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+
+    await expect(
+      patchNotePropertyById(ID_A, { noteAlignment: 'right' }),
+    ).rejects.toThrow('start failed');
+
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].noteAlignment,
+    ).toBe('left');
   });
 });
