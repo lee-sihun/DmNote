@@ -70,6 +70,12 @@ export interface EditorCoordinatorState {
 
 export type EditorReadyUnsubscribe = (() => void) & { ready: Promise<void> };
 
+// 직렬 슬롯 안에서 최신 base로 patch를 재생성하는 게스처 커밋 입력.
+// null = editorChanges 없음 (plugin transaction은 실행)
+export type EditorPatchGenerator = (
+  base: EditorDocumentV1,
+) => EditorPatchV1 | null;
+
 export interface EditorCoordinatorTransport {
   get(): Promise<EditorGetResult>;
   commit(request: EditorCommitRequest): Promise<EditorCommitResult>;
@@ -628,16 +634,18 @@ export class EditorSaveCoordinator {
   }
 
   commitGesture(
-    changes: EditorPatchV1 | undefined,
+    changes: EditorPatchV1 | EditorPatchGenerator | undefined,
     gestureId: string,
     commit: (
       context: EditorGestureCommitContext,
     ) => Promise<EditorCommitResult>,
+    meta?: { onEnrolled?: () => void; prepare?: () => Promise<void> },
   ): Promise<EditorDocumentV1> {
     this.assertWritable();
     const previous = this.gestureCommitTail;
     // 앞선 gesture 실패가 다음 gesture로 전파되지 않게 양쪽 경로 모두 실행
-    const runInner = () => this.commitGestureInner(changes, gestureId, commit);
+    const runInner = () =>
+      this.commitGestureInner(changes, gestureId, commit, meta);
     const run = previous.then(runInner, runInner);
     this.gestureCommitTail = run;
     void run.then(
@@ -939,11 +947,12 @@ export class EditorSaveCoordinator {
   }
 
   private async commitGestureInner(
-    changes: EditorPatchV1 | undefined,
+    changes: EditorPatchV1 | EditorPatchGenerator | undefined,
     gestureId: string,
     commit: (
       context: EditorGestureCommitContext,
     ) => Promise<EditorCommitResult>,
+    meta?: { onEnrolled?: () => void; prepare?: () => Promise<void> },
   ): Promise<EditorDocumentV1> {
     await this.start();
     await this.drainUntilSettled();
@@ -951,12 +960,27 @@ export class EditorSaveCoordinator {
     if (this.conflict) {
       throw this.error ?? new Error('editor conflict pending');
     }
+    if (meta?.prepare) {
+      // 슬롯 안 준비 단계(plugin 큐 drain·projection 봉인 등) - 대기 중
+      // 들어온 이벤트를 반영한 뒤 base를 동결해야 projection과 정렬된다
+      await meta.prepare();
+      await this.eventQueue;
+      if (this.conflict) {
+        throw this.error ?? new Error('editor conflict pending');
+      }
+    }
 
-    const canonicalChanges = changes
-      ? canonicalizeEditorGradients(changes)
+    const baseDocument = clone(this.requireLastAck());
+    // generator는 직렬 슬롯 안에서 최신 base로 평가한다 - 호출 시점 캡처
+    // full-record는 대기 중 정산된 다른 커밋의 컬렉션 값을 되돌린다.
+    // null 반환은 editorChanges 없음일 뿐 transaction callback은 실행된다
+    // (plugin 변경만 커밋하는 혼합 게스처)
+    const resolvedChanges =
+      typeof changes === 'function' ? changes(clone(baseDocument)) : changes;
+    const canonicalChanges = resolvedChanges
+      ? canonicalizeEditorGradients(resolvedChanges)
       : undefined;
     if (canonicalChanges) assertEditorPatch(canonicalChanges);
-    const baseDocument = clone(this.requireLastAck());
     const target = canonicalChanges
       ? applyEditorPatch(baseDocument, canonicalChanges)
       : baseDocument;
@@ -964,6 +988,22 @@ export class EditorSaveCoordinator {
       ? EDITOR_FIELDS.filter((field) => canonicalChanges[field] !== undefined)
       : [];
     const localFields = getChangedEditorFields(baseDocument, target);
+    // 슬롯 내 로컬 낙관 재적용 - 선행 커밋(격리 plugin 쓰기 등)이 호출
+    // 시점의 eager 값을 canonical 적용으로 지웠을 수 있다. wire만 고치면
+    // 백엔드는 맞고 UI 스토어는 옛 값에 남는다
+    if (canonicalChanges) {
+      const currentDocument = this.readDocument();
+      assertEditorDocument(currentDocument);
+      const optimisticDocument = applyEditorPatch(
+        currentDocument,
+        canonicalChanges,
+      );
+      if (
+        getChangedEditorFields(currentDocument, optimisticDocument).length > 0
+      ) {
+        this.applyDocument(clone(optimisticDocument), 'localPatch');
+      }
+    }
     const mutationId = this.createMutationId();
     const inFlight: InFlightCommit = {
       mutationId,
@@ -978,6 +1018,13 @@ export class EditorSaveCoordinator {
     this.rememberOwnMutation(inFlight);
     this.phase = 'saving';
     this.notify();
+    try {
+      // 편입 관측점 - 이후 실패는 gesture 실패 경로(pending·conflict)가
+      // 소유한다. no-throw 계약이지만 방어적으로 격리
+      meta?.onEnrolled?.();
+    } catch (error) {
+      console.error('onEnrolled callback failed', error);
+    }
 
     try {
       const result = await commit({
