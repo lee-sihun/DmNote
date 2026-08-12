@@ -31,6 +31,7 @@ import {
   commitSelectedGeometryByIds,
   deleteElementById,
   placeDuplicatedKey,
+  patchElementHiddenById,
   rebindKeySlotById,
 } from './elementOps';
 
@@ -244,23 +245,17 @@ describe('elementOps', () => {
     expect(record?.[0].zIndex).toBe(5);
   });
 
-  it('슬롯 재바인딩은 same-shape 재정렬에도 위치 id의 paired index를 따라간다', async () => {
-    slotBase = () => {
-      const base = documentFromStores();
-      base.keys = { '4key': ['B', 'A'] };
-      base.keyPositions = { '4key': [keyAt(ID_B), keyAt(ID_A)] } as never;
-      return base;
-    };
-
+  it('슬롯 재바인딩은 위치 id와 새 slot만 semantic op로 보낸다', async () => {
     const applied = await rebindKeySlotById(ID_A, 'Z');
 
     expect(applied).toBe(true);
     // eager: 호출 시점 스토어 기준 index 0 (ID_A 위치)
     expect(useKeyStore.getState().keyMappings['4key']).toEqual(['Z', 'B']);
-    // wire: 재정렬된 base에서 ID_A는 index 1 - 그 자리의 슬롯이 바뀐다
-    const patch = generatedPatches[0];
-    expect(patch?.keys?.['4key']).toEqual(['B', 'Z']);
-    expect(patch?.keyPositions).toBeUndefined();
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [{ kind: 'setKeySlot', id: ID_A, slot: 'Z' }],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+    expect(api.commitGeneratedPatch).not.toHaveBeenCalled();
   });
 
   it('다중 정산은 기하만 실어 base의 무관 필드 재작성을 보존한다', async () => {
@@ -730,7 +725,7 @@ describe('elementOps', () => {
   });
 
   it('재바인딩의 편입 전 실패는 슬롯을 복원한다', async () => {
-    api.commitGeneratedPatch.mockRejectedValue(new Error('start failed'));
+    api.commitSemanticOps.mockRejectedValue(new Error('start failed'));
 
     await expect(rebindKeySlotById(ID_A, 'Z')).rejects.toThrow('start failed');
 
@@ -765,15 +760,104 @@ describe('elementOps', () => {
   });
 
   it('재바인딩 대상이 사라졌으면 커밋하지 않는다', async () => {
-    slotBase = () => {
-      const base = documentFromStores();
-      base.keys = { '4key': ['B'] };
-      base.keyPositions = { '4key': [keyAt(ID_B)] } as never;
-      return base;
-    };
+    api.commitSemanticOps.mockResolvedValueOnce({
+      document: documentFromStores(),
+      opResults: [{ status: 'targetMissing' }],
+    });
 
-    await rebindKeySlotById(ID_A, 'Z');
+    await expect(rebindKeySlotById(ID_A, 'Z')).resolves.toBe(false);
 
-    expect(generatedPatches).toEqual([null]);
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [{ kind: 'setKeySlot', id: ID_A, slot: 'Z' }],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+  });
+
+  it('stable hidden literal은 patchElement op로만 전송한다', async () => {
+    await expect(patchElementHiddenById('key', ID_A, true)).resolves.toBe(true);
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
+      true,
+    );
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { hidden: true },
+        },
+      ],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+    expect(api.commitGeneratedPatch).not.toHaveBeenCalled();
+  });
+
+  it('hidden noChange는 성공으로, targetMissing은 미적용으로 반환한다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), hidden: true }, keyAt(ID_B)],
+      },
+      positions: {
+        '4key': [{ ...keyAt(ID_A), hidden: true }, keyAt(ID_B)],
+      },
+    });
+    api.commitSemanticOps
+      .mockResolvedValueOnce({
+        document: documentFromStores(),
+        opResults: [{ status: 'noChange' }],
+      })
+      .mockResolvedValueOnce({
+        document: documentFromStores(),
+        opResults: [{ status: 'targetMissing' }],
+      });
+
+    await expect(patchElementHiddenById('key', ID_A, true)).resolves.toBe(true);
+    await expect(patchElementHiddenById('key', ID_A, false)).resolves.toBe(
+      false,
+    );
+  });
+
+  it('hidden patch 편입 전 실패는 자기 eager만 복원한다', async () => {
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+    await expect(patchElementHiddenById('key', ID_A, true)).rejects.toThrow(
+      'start failed',
+    );
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].hidden ?? false,
+    ).toBe(false);
+  });
+
+  it('hidden patch preflight 실패는 wire 편입 전 eager를 복원한다', async () => {
+    const preflight = vi.fn(() => {
+      throw new Error('authority changed');
+    });
+    api.commitSemanticOps.mockImplementationOnce(async (_ops, meta) => {
+      meta?.preflight?.();
+      throw new Error('wire must not run');
+    });
+
+    await expect(
+      patchElementHiddenById('key', ID_A, true, { preflight }),
+    ).rejects.toThrow('authority changed');
+
+    expect(preflight).toHaveBeenCalledOnce();
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].hidden ?? false,
+    ).toBe(false);
+  });
+
+  it('hidden patch 편입 후 실패는 caller receipt로 이중 복원하지 않는다', async () => {
+    api.commitSemanticOps.mockImplementationOnce(async (_ops, meta) => {
+      meta?.onEnrolled?.();
+      throw new Error('terminal failure');
+    });
+
+    await expect(patchElementHiddenById('key', ID_A, true)).rejects.toThrow(
+      'terminal failure',
+    );
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
+      true,
+    );
   });
 });

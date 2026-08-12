@@ -34,7 +34,7 @@ import {
 import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
 
 type Generate = (base: EditorDocumentV1) => EditorPatchV1 | null;
-type Meta = { onEnrolled?: () => void };
+type Meta = { onEnrolled?: () => void; preflight?: () => void };
 
 const baseOptions = (rollback: () => void, generate: Generate) => ({
   gestureId: 'gesture-1',
@@ -391,5 +391,27 @@ describe('runMixedElementIntent receipt 소유권', () => {
       }),
     ).rejects.toThrow('plugin authority generation changed');
     expect(rollback).not.toHaveBeenCalled();
+  });
+
+  it('editor-only 삭제는 직렬 슬롯 진입 전 바뀐 generation에서 중단한다', async () => {
+    const rollback = vi.fn();
+    mocks.commitSemantic.mockImplementationOnce(async (_ops, meta) => {
+      mocks.authorityGeneration = 8;
+      meta.preflight?.();
+      meta.onEnrolled?.();
+      return { document: {}, opResults: [{ status: 'applied' }] };
+    });
+
+    await expect(
+      runMixedElementDeleteIntent({
+        gestureId: 'gesture-panel-delete',
+        pluginIds: [],
+        deletedPluginFullIds: [],
+        ops: [],
+        receipt: { rollback },
+        expectedAuthorityGeneration: 7,
+      }),
+    ).rejects.toThrow('plugin authority generation changed');
+    expect(rollback).toHaveBeenCalledOnce();
   });
 });

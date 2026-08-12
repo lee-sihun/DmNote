@@ -306,6 +306,17 @@ const applyOpsForTest = (
       });
       return;
     }
+    if (op.kind === 'setKeySlot') {
+      Object.entries(next.keyPositions).some(([mode, positions]) => {
+        const index = positions.findIndex((position) => position.id === op.id);
+        if (index < 0) return false;
+        next.keys[mode] = (next.keys[mode] ?? []).map((slot, slotIndex) =>
+          slotIndex === index ? structuredClone(op.slot) : slot,
+        );
+        return true;
+      });
+      return;
+    }
     const record = next[fields[op.elementType]] as Record<
       string,
       Array<Record<string, unknown>>
@@ -316,6 +327,10 @@ const applyOpsForTest = (
       if (op.kind === 'setBounds') {
         record[mode] = positions.map((position, positionIndex) =>
           positionIndex === index ? { ...position, ...op.bounds } : position,
+        );
+      } else if (op.kind === 'patchElement') {
+        record[mode] = positions.map((position, positionIndex) =>
+          positionIndex === index ? { ...position, ...op.patch } : position,
         );
       } else {
         record[mode] = positions.filter(
@@ -2843,6 +2858,58 @@ describe('commitSemanticOpsInternal', () => {
     groupUpdates: [],
   });
 
+  const patchHiddenOp = (id: string, hidden: boolean): EditorOpV1 => ({
+    kind: 'patchElement',
+    elementType: 'key',
+    id,
+    patch: { hidden },
+  });
+
+  it('patchElement는 대상 leaf만 바꾸고 무관 필드를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000088';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].noteWidth = 222;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      patchHiddenOp(id, true),
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      id,
+      hidden: true,
+      noteWidth: 222,
+    });
+    expect(harness.transport.commitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ ops: [patchHiddenOp(id, true)] }),
+    );
+    harness.coordinator.stop();
+  });
+
+  it('setKeySlot은 최신 paired ID index의 slot만 바꾼다', async () => {
+    const id = '00000000-0000-4000-8000-000000000087';
+    const otherId = '00000000-0000-4000-8000-000000000086';
+    const base = withStableId(otherId);
+    base.keys['4key'].push('B');
+    base.keyPositions['4key'].push({
+      ...base.keyPositions['4key'][0],
+      id,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      { kind: 'setKeySlot', id, slot: 'Z' },
+    ]);
+
+    expect(outcome.document.keys['4key']).toEqual(['A', 'Z']);
+    expect(
+      outcome.document.keyPositions['4key'].map((position) => position.id),
+    ).toEqual([otherId, id]);
+    harness.coordinator.stop();
+  });
+
   it('reorder op는 projected changedFields와 lastAck를 exact하게 맞춘다', async () => {
     const id = '00000000-0000-4000-8000-000000000090';
     const base = withStableId(id);
@@ -3285,6 +3352,71 @@ describe('commitSemanticOpsInternal', () => {
       dirty: false,
     });
     expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['conflict-preview']);
+    harness.coordinator.stop();
+  });
+
+  it('semantic preflight 실패는 편입과 wire 전송 전에 중단한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010a';
+    const base = withStableId(id);
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const onEnrolled = vi.fn();
+    const preflightError = new Error('authority changed');
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        preflight: () => {
+          throw preflightError;
+        },
+        onEnrolled,
+      }),
+    ).rejects.toBe(preflightError);
+
+    expect(onEnrolled).not.toHaveBeenCalled();
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      dirty: false,
+      lastAck: base,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('conflict 뒤 preflight 실패는 canonical을 유지하고 편입된 preview를 폐기한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010b';
+    const base = withStableId(id);
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(base, { onGestureIdsDiscarded });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockRejectedValueOnce(revisionConflict());
+    const canonical = structuredClone(base);
+    canonical.keys['4key'][0] = 'canonical';
+    harness.transport.canonical = { revision: 1, document: canonical };
+    const preflight = vi
+      .fn<() => void>()
+      .mockImplementationOnce(() => undefined)
+      .mockImplementationOnce(() => {
+        throw new Error('authority changed');
+      });
+    const onEnrolled = vi.fn();
+
+    await expect(
+      harness.coordinator.commitSemanticOpsInternal([setBoundsOp(id)], {
+        gestureId: 'authority-preview',
+        preflight,
+        onEnrolled,
+      }),
+    ).rejects.toThrow('authority changed');
+
+    expect(preflight).toHaveBeenCalledTimes(2);
+    expect(onEnrolled).toHaveBeenCalledOnce();
+    expect(harness.transport.commitMock).toHaveBeenCalledOnce();
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['authority-preview']);
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      dirty: false,
+      lastAck: canonical,
+    });
     harness.coordinator.stop();
   });
 

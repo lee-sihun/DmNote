@@ -356,6 +356,9 @@ pub(crate) fn validate_request_envelope(
                     }
                     continue;
                 };
+                if let crate::models::EditorOpV1::SetKeySlot { slot, .. } = op {
+                    validate_key_slot(slot, "INVALID_KEY_SLOT", "setKeySlot")?;
+                }
                 if !crate::state::native_element_id::is_valid_element_id(id) {
                     return Err(EditorCommitError::validation(
                         crate::state::native_element_id::INVALID_ELEMENT_ID,
@@ -644,6 +647,14 @@ fn validate_reorder_envelope(op: &crate::models::EditorOpV1) -> Result<(), Edito
 fn validate_frozen_key_slot(
     slot: &crate::models::EditorFrozenKeySlotV1,
 ) -> Result<(), EditorCommitError> {
+    validate_key_slot(slot, "INVALID_FROZEN_KEY_SLOT", "insertFrozenElements")
+}
+
+fn validate_key_slot(
+    slot: &crate::models::EditorFrozenKeySlotV1,
+    code: &'static str,
+    operation: &'static str,
+) -> Result<(), EditorCommitError> {
     let crate::models::EditorFrozenKeySlotV1::Multi(slot) = slot else {
         return Ok(());
     };
@@ -657,8 +668,8 @@ fn validate_frozen_key_slot(
         })
     {
         return Err(EditorCommitError::validation(
-            "INVALID_FROZEN_KEY_SLOT",
-            "insertFrozenElements key slot is not canonical",
+            code,
+            format!("{operation} key slot is not canonical"),
         ));
     }
     Ok(())
@@ -1934,7 +1945,8 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::models::{
-        CustomTab, EditorBoundsV1, EditorCommitRequest, EditorDocumentV1, EditorElementTypeV1,
+        CustomTab, EditorBoundsV1, EditorCommitRequest, EditorDocumentV1,
+        EditorElementPropertyPatchV1, EditorElementTypeV1, EditorFrozenKeySlotV1,
         EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1,
         EditorZUpdateV1, ElementShadowSpec, GraphPosition, GraphStatType, GraphType, KeyPosition,
         KnobPosition, LayerGroupDef, StatPosition, StatType,
@@ -1988,6 +2000,14 @@ mod tests {
         EditorOpV1::DeleteElement {
             element_type,
             id: id.into(),
+        }
+    }
+
+    fn patch_hidden_op(id: impl Into<String>, element_type: EditorElementTypeV1) -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type,
+            id: id.into(),
+            patch: EditorElementPropertyPatchV1 { hidden: true },
         }
     }
 
@@ -2297,6 +2317,59 @@ mod tests {
         });
         let error = decode_editor_commit_request(delete_with_bounds).unwrap_err();
         assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+    }
+
+    #[test]
+    fn property_and_key_slot_wires_are_exact_and_canonical() {
+        let property = serde_json::to_value(ops_request(vec![patch_hidden_op(
+            Uuid::new_v4().to_string(),
+            EditorElementTypeV1::Graph,
+        )]))
+        .unwrap();
+        assert_eq!(property["ops"][0]["kind"], "patchElement");
+        assert_eq!(
+            property["ops"][0]["patch"],
+            serde_json::json!({ "hidden": true })
+        );
+        decode_editor_commit_request(property.clone()).unwrap();
+
+        let mut unknown_property = property.clone();
+        unknown_property["ops"][0]["patch"]["zIndex"] = serde_json::json!(3);
+        let mut unknown_op = property;
+        unknown_op["ops"][0]["mode"] = serde_json::json!("4key");
+        for wire in [unknown_property, unknown_op] {
+            let error = decode_editor_commit_request(wire).unwrap_err();
+            assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+        }
+
+        let slot = EditorOpV1::SetKeySlot {
+            id: Uuid::new_v4().to_string(),
+            slot: EditorFrozenKeySlotV1::Multi(crate::models::EditorFrozenMultiKeySlotV1 {
+                keys: vec!["A".to_string(), "B".to_string()],
+                match_mode: crate::models::SlotMatch::Any,
+            }),
+        };
+        let slot_wire = serde_json::to_value(ops_request(vec![slot])).unwrap();
+        assert_eq!(slot_wire["ops"][0]["kind"], "setKeySlot");
+        assert_eq!(slot_wire["ops"][0]["slot"]["match"], "any");
+        decode_editor_commit_request(slot_wire.clone()).unwrap();
+
+        let mut unknown_slot = slot_wire;
+        unknown_slot["ops"][0]["slot"]["unexpected"] = serde_json::json!(true);
+        let error = decode_editor_commit_request(unknown_slot).unwrap_err();
+        assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+
+        let invalid_slot = ops_request(vec![EditorOpV1::SetKeySlot {
+            id: Uuid::new_v4().to_string(),
+            slot: EditorFrozenKeySlotV1::Multi(crate::models::EditorFrozenMultiKeySlotV1 {
+                keys: vec!["A".to_string(), "A".to_string()],
+                match_mode: crate::models::SlotMatch::All,
+            }),
+        }]);
+        assert_eq!(
+            validation_code(&validate_request_envelope(&invalid_slot).unwrap_err()),
+            Some("INVALID_KEY_SLOT")
+        );
     }
 
     #[test]

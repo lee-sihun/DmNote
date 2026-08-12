@@ -147,6 +147,64 @@ describe('plugin element panel queue', () => {
     );
   });
 
+  it('native 가시성은 literal과 enqueue 시점 generation을 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+
+    await expect(
+      actions.setNativeLayerHiddenViaAuthority({
+        elementType: 'stat',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        hidden: true,
+      }),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:setHidden',
+      {
+        target: {
+          elementType: 'stat',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          hidden: true,
+        },
+      },
+      0,
+      7,
+    );
+  });
+
+  it.each([
+    { kind: 'unknown' },
+    { kind: 'error', errorCode: 'MODEL_REVISION_STALE' },
+  ])(
+    '같은 generation의 가시성 $kind은 snapshot 뒤 한 번 재시도한다',
+    async (first) => {
+      mocks.sendPluginRpc.mockResolvedValueOnce(first).mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+      const changed = actions.setNativeLayerHiddenViaAuthority({
+        elementType: 'key',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        hidden: true,
+      });
+      await vi.waitFor(() =>
+        expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+      );
+      actions.notePluginMirrorRevision(2);
+
+      await expect(changed).resolves.toBe(true);
+      expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+        mocks.sendPluginRpc.mock.calls[0]?.[1],
+      );
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[2]).toBe(2);
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+    },
+  );
+
   it.each([
     { kind: 'unknown' },
     {

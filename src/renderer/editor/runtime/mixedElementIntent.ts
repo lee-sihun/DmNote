@@ -127,6 +127,7 @@ export const runMixedElementDeleteIntent = async (options: {
     if (options.pluginIds.length === 0) {
       await commitSemanticOps(options.ops, {
         gestureId: options.gestureId,
+        preflight: assertAuthorityGeneration,
         onEnrolled,
       });
       assertAuthorityGeneration();

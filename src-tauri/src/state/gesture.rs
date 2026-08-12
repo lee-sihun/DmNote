@@ -154,8 +154,9 @@ pub(crate) fn validate_gesture_commit_request(
 mod tests {
     use super::*;
     use crate::models::{
-        EditorBoundsV1, EditorElementTypeV1, EditorGroupUpdateV1, EditorOpV1, EditorPatchV1,
-        EditorZUpdateV1, GesturePluginInstancesChange, EDITOR_OPS_VERSION,
+        EditorBoundsV1, EditorElementPropertyPatchV1, EditorElementTypeV1, EditorFrozenKeySlotV1,
+        EditorGroupUpdateV1, EditorOpV1, EditorPatchV1, EditorZUpdateV1,
+        GesturePluginInstancesChange, EDITOR_OPS_VERSION,
     };
 
     fn gesture_request(plugin_ids: &[String]) -> GestureCommitRequest {
@@ -226,6 +227,14 @@ mod tests {
                 id,
                 group_id: None,
             }],
+        }
+    }
+
+    fn property_op() -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Key,
+            id: uuid::Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1 { hidden: true },
         }
     }
 
@@ -325,6 +334,37 @@ mod tests {
                 Some("INVALID_REQUEST_PAYLOAD")
             );
         }
+    }
+
+    #[test]
+    fn gesture_property_and_key_slot_wires_reject_unknown_nested_keys() {
+        let mut property = gesture_request(&["plugin-a".to_string()]);
+        property.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        property.editor_ops = Some(vec![property_op()]);
+        let mut property_wire = serde_json::to_value(property).unwrap();
+        property_wire["editorOps"][0]["patch"]["width"] = serde_json::json!(1);
+        let error = decode_gesture_commit_request(property_wire).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
+        );
+
+        let mut slot = gesture_request(&["plugin-a".to_string()]);
+        slot.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        slot.editor_ops = Some(vec![EditorOpV1::SetKeySlot {
+            id: uuid::Uuid::new_v4().to_string(),
+            slot: EditorFrozenKeySlotV1::Multi(crate::models::EditorFrozenMultiKeySlotV1 {
+                keys: vec!["A".to_string(), "B".to_string()],
+                match_mode: crate::models::SlotMatch::All,
+            }),
+        }]);
+        let mut slot_wire = serde_json::to_value(slot).unwrap();
+        slot_wire["editorOps"][0]["slot"]["unexpected"] = serde_json::json!(true);
+        let error = decode_gesture_commit_request(slot_wire).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
+        );
     }
 
     #[test]

@@ -623,7 +623,20 @@ pub(crate) fn prepare_editor_ops_transition(
             EditorOpV1::SetBounds {
                 element_type, id, ..
             }
-            | EditorOpV1::DeleteElement { element_type, id } => Some((*element_type, id)),
+            | EditorOpV1::DeleteElement { element_type, id }
+            | EditorOpV1::PatchElement {
+                element_type, id, ..
+            } => Some((*element_type, id)),
+            EditorOpV1::SetKeySlot { id, .. } => {
+                if let Some(location) = locations.get(id) {
+                    validate_editor_op_target_type(
+                        op_index,
+                        EditorElementTypeV1::Key,
+                        location.element_type,
+                    )?;
+                }
+                None
+            }
             EditorOpV1::InsertFrozenElements { .. } | EditorOpV1::ReorderElements { .. } => None,
         }) else {
             continue;
@@ -677,6 +690,58 @@ pub(crate) fn prepare_editor_ops_transition(
                 delete_modes.insert(location.mode.clone());
                 op_results.push(EditorOpResultV1 {
                     status: EditorOpResultStatusV1::Applied,
+                    bounds: None,
+                });
+            }
+            EditorOpV1::PatchElement { id, patch, .. } => {
+                let Some(location) = locations.get(id) else {
+                    op_results.push(EditorOpResultV1 {
+                        status: EditorOpResultStatusV1::TargetMissing,
+                        bounds: None,
+                    });
+                    continue;
+                };
+                let position = position_at_mut(&mut candidate, location)?;
+                let status = if position.hidden == patch.hidden {
+                    EditorOpResultStatusV1::NoChange
+                } else {
+                    position.hidden = patch.hidden;
+                    EditorOpResultStatusV1::Applied
+                };
+                op_results.push(EditorOpResultV1 {
+                    status,
+                    bounds: None,
+                });
+            }
+            EditorOpV1::SetKeySlot { id, slot } => {
+                let Some(location) = locations.get(id) else {
+                    op_results.push(EditorOpResultV1 {
+                        status: EditorOpResultStatusV1::TargetMissing,
+                        bounds: None,
+                    });
+                    continue;
+                };
+                let slots = candidate.keys.get_mut(&location.mode).ok_or_else(|| {
+                    EditorCommitError::validation(
+                        "ELEMENT_LOCATOR_INVALID",
+                        "key slot mode no longer matches the paired position",
+                    )
+                })?;
+                let current_slot = slots.get_mut(location.index).ok_or_else(|| {
+                    EditorCommitError::validation(
+                        "ELEMENT_LOCATOR_INVALID",
+                        "key slot index no longer matches the paired position",
+                    )
+                })?;
+                let next_slot = slot.to_key_slot();
+                let status = if *current_slot == next_slot {
+                    EditorOpResultStatusV1::NoChange
+                } else {
+                    *current_slot = next_slot;
+                    EditorOpResultStatusV1::Applied
+                };
+                op_results.push(EditorOpResultV1 {
+                    status,
                     bounds: None,
                 });
             }
@@ -739,10 +804,10 @@ mod tests {
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
-            AppStoreData, EditorFrozenElementV1, EditorFrozenGroupV1, EditorFrozenKeySlotV1,
-            EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpV1, EditorZUpdateV1,
-            GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, StatPosition,
-            StatType,
+            AppStoreData, EditorElementPropertyPatchV1, EditorFrozenElementV1, EditorFrozenGroupV1,
+            EditorFrozenKeySlotV1, EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpV1,
+            EditorZUpdateV1, GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition,
+            StatPosition, StatType,
         },
         state::native_element_id::backfill_store_element_ids,
     };
@@ -865,6 +930,18 @@ mod tests {
             complete_mode_order: true,
             z_updates,
             group_updates: Vec::new(),
+        }
+    }
+
+    fn patch_hidden_op(
+        element_type: EditorElementTypeV1,
+        id: impl Into<String>,
+        hidden: bool,
+    ) -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type,
+            id: id.into(),
+            patch: EditorElementPropertyPatchV1 { hidden },
         }
     }
 
@@ -1301,6 +1378,150 @@ mod tests {
             validation_code(&error),
             Some("KEY_POSITION_MODE_MISMATCH" | "KEY_POSITION_LENGTH_MISMATCH")
         ));
+        assert_eq!(store, before);
+    }
+
+    #[test]
+    fn property_patches_apply_all_native_types_in_order_and_skip_missing_targets() {
+        let store = store_with_every_reorder_type();
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let graph_id = store.graph_positions["4key"][0].position.id.clone();
+        let knob_id = store.knob_positions["4key"][0].position.id.clone();
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        let ops = vec![
+            patch_hidden_op(EditorElementTypeV1::Key, key_id, true),
+            patch_hidden_op(EditorElementTypeV1::Stat, stat_id, true),
+            patch_hidden_op(EditorElementTypeV1::Graph, graph_id, true),
+            patch_hidden_op(EditorElementTypeV1::Knob, knob_id, true),
+            patch_hidden_op(EditorElementTypeV1::Key, missing_id, true),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert!(transition.candidate.key_positions["4key"][0].hidden);
+        assert!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .hidden
+        );
+        assert!(
+            transition.candidate.graph_positions["4key"][0]
+                .position
+                .hidden
+        );
+        assert!(
+            transition.candidate.knob_positions["4key"][0]
+                .position
+                .hidden
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+    }
+
+    #[test]
+    fn set_key_slot_follows_position_id_and_preserves_the_pair() {
+        let mut store = base_store();
+        store.keys.get_mut("4key").unwrap().swap(0, 1);
+        store.key_positions.get_mut("4key").unwrap().swap(0, 1);
+        let id = store.key_positions["4key"][1].id.clone();
+        let op = EditorOpV1::SetKeySlot {
+            id,
+            slot: EditorFrozenKeySlotV1::Multi(crate::models::EditorFrozenMultiKeySlotV1 {
+                keys: vec!["A".to_string(), "B".to_string()],
+                match_mode: crate::models::SlotMatch::All,
+            }),
+        };
+
+        let transition = prepare_editor_ops_transition(&store, std::slice::from_ref(&op)).unwrap();
+        assert_eq!(
+            transition.candidate.keys["4key"][1],
+            crate::models::KeySlot::Multi {
+                keys: vec!["A".to_string(), "B".to_string()],
+                match_mode: crate::models::SlotMatch::All,
+            }
+        );
+        assert_eq!(transition.candidate.key_positions, store.key_positions);
+        assert_eq!(transition.changed_fields, [EditorField::Keys]);
+        assert_eq!(
+            transition.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &[op]).unwrap();
+        assert_eq!(
+            replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert!(replay.changed_fields.is_empty());
+    }
+
+    #[test]
+    fn property_and_slot_type_mismatches_reject_the_whole_request() {
+        let store = store_with_every_reorder_type();
+        let before = store.clone();
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+
+        let property_error = prepare_editor_ops_transition(
+            &store,
+            &[
+                patch_hidden_op(EditorElementTypeV1::Key, key_id, true),
+                patch_hidden_op(EditorElementTypeV1::Graph, stat_id.clone(), true),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(
+            validation_code(&property_error),
+            Some("ELEMENT_TYPE_MISMATCH")
+        );
+
+        let slot_error = prepare_editor_ops_transition(
+            &store,
+            &[EditorOpV1::SetKeySlot {
+                id: stat_id,
+                slot: EditorFrozenKeySlotV1::Single("A".to_string()),
+            }],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&slot_error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store, before);
     }
 }

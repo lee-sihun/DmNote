@@ -3,7 +3,10 @@
  * 가시성 토글, 이름 변경, 컨텍스트 메뉴, 삭제, 그룹 연산 등
  */
 
-import { setPluginElementsHidden } from '@plugins/rpc/pluginElementActions';
+import {
+  setNativeLayerHiddenViaAuthority,
+  setPluginElementsHidden,
+} from '@plugins/rpc/pluginElementActions';
 import { keysApi } from '@api/modules/keysApi';
 import {
   graphItemsApi,
@@ -33,6 +36,8 @@ import type { ListItem } from '@components/main/Modal/ListPopup';
 import type { LayerItem, DisplayItem } from '../types';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
+import { patchElementHiddenById } from '@src/renderer/editor/runtime/elementOps';
+import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
 // ============================================================================
 // 파라미터 / 반환 타입
@@ -101,6 +106,32 @@ export function useLayerActions({
 
     clearPendingDeselect();
     onSelectionFromPanel?.();
+
+    if (
+      item.type !== 'plugin' &&
+      item.id.length > 0 &&
+      !isSyntheticElementId(item.id)
+    ) {
+      try {
+        const target = {
+          elementType: item.type,
+          id: item.id,
+          hidden: !item.hidden,
+        };
+        if (window.__dmn_window_type === 'panel') {
+          await setNativeLayerHiddenViaAuthority(target);
+        } else {
+          await patchElementHiddenById(
+            target.elementType,
+            target.id,
+            target.hidden,
+          );
+        }
+      } catch (error) {
+        console.error(`Failed to toggle ${item.type} visibility`, error);
+      }
+      return;
+    }
 
     if (item.type === 'key' && item.index !== undefined) {
       // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음

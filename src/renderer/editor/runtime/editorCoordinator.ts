@@ -146,6 +146,7 @@ export interface EditorSemanticCommitOutcome {
 export interface EditorSemanticCommitMeta {
   gestureId?: string;
   onEnrolled?: () => void;
+  preflight?: () => void;
 }
 
 export class EditorReadOnlyError extends Error {
@@ -240,6 +241,10 @@ const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
     if (op.completeModeOrder) fields.add('layerGroups');
     return [...fields];
   }
+  if (op.kind === 'patchElement') {
+    return [SEMANTIC_POSITION_FIELDS[op.elementType]];
+  }
+  if (op.kind === 'setKeySlot') return ['keys'];
   const positionField = SEMANTIC_POSITION_FIELDS[op.elementType];
   if (op.kind === 'setBounds') return [positionField];
   return op.elementType === 'key' ? ['keys', 'keyPositions'] : [positionField];
@@ -426,6 +431,41 @@ const applySemanticOps = (
         next.graphPositions = normalized.graphPositions;
         next.knobPositions = normalized.knobPositions;
         next.layerGroups = normalized.layerGroups;
+      }
+      return;
+    }
+    if (op.kind === 'patchElement') {
+      if (result?.status === 'noChange') return;
+      const field = SEMANTIC_POSITION_FIELDS[op.elementType];
+      const record = next[field] as Record<
+        string,
+        Array<Record<string, unknown> & { id?: string }>
+      >;
+      for (const [mode, positions] of Object.entries(record)) {
+        const index = positions.findIndex((position) => position.id === op.id);
+        if (index < 0) continue;
+        next[field] = {
+          ...record,
+          [mode]: positions.map((position, positionIndex) =>
+            positionIndex === index ? { ...position, ...op.patch } : position,
+          ),
+        } as never;
+        break;
+      }
+      return;
+    }
+    if (op.kind === 'setKeySlot') {
+      if (result?.status === 'noChange') return;
+      for (const [mode, positions] of Object.entries(next.keyPositions)) {
+        const index = positions.findIndex((position) => position.id === op.id);
+        if (index < 0) continue;
+        next.keys = {
+          ...next.keys,
+          [mode]: (next.keys[mode] ?? []).map((slot, slotIndex) =>
+            slotIndex === index ? clone(op.slot) : slot,
+          ),
+        };
+        break;
       }
       return;
     }
@@ -820,6 +860,21 @@ export class EditorSaveCoordinator {
     let enrolled = false;
 
     while (true) {
+      try {
+        meta.preflight?.();
+      } catch (error) {
+        if (enrolled) {
+          this.applyDocument(clone(this.requireLastAck()), 'rejected');
+          if (meta.gestureId) {
+            this.onGestureIdsDiscarded?.([meta.gestureId]);
+          }
+          this.error = null;
+          this.failureKind = null;
+          this.phase = 'idle';
+          this.notify();
+        }
+        throw error;
+      }
       const request: EditorCommitRequest = {
         baseRevision,
         mutationId,

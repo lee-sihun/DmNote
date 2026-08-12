@@ -15,6 +15,14 @@ const mocks = vi.hoisted(() => ({
   flushPanelModel: vi.fn(),
   deleteFrozenSelection: vi.fn(() => Promise.resolve()),
   commitLayerDropIntent: vi.fn(() => Promise.resolve()),
+  patchElementHidden: vi.fn(
+    (
+      _type?: unknown,
+      _id?: unknown,
+      _hidden?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -84,6 +92,10 @@ vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
   deleteFrozenSelection: mocks.deleteFrozenSelection,
 }));
 
+vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  patchElementHiddenById: mocks.patchElementHidden,
+}));
+
 vi.mock(
   '@components/main/Grid/PropertiesPanel/layer/layerReorderIntent',
   () => ({
@@ -143,6 +155,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.deleteFrozenSelection.mockResolvedValue(undefined);
     mocks.commitLayerDropIntent.mockReset();
     mocks.commitLayerDropIntent.mockResolvedValue(undefined);
+    mocks.patchElementHidden.mockReset();
+    mocks.patchElementHidden.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
     mocks.elements = [
       {
@@ -388,6 +402,121 @@ describe('plugin panel persisted element mutations', () => {
 
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.deleteFrozenSelection).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('native 가시성은 exact literal을 main semantic executor에 전달한다', async () => {
+    mocks.requestListener?.(
+      envelope('layers:setHidden', {
+        target: {
+          elementType: 'graph',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          hidden: true,
+        },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchElementHidden).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchElementHidden).toHaveBeenCalledWith(
+      'graph',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      true,
+      { preflight: expect.any(Function) },
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    [
+      'top-level extra',
+      { target: { elementType: 'key', id: 'stable', hidden: true }, extra: 1 },
+    ],
+    [
+      'target extra',
+      { target: { elementType: 'key', id: 'stable', hidden: true, index: 0 } },
+    ],
+    [
+      'plugin type',
+      { target: { elementType: 'plugin', id: 'plugin-a:one', hidden: true } },
+    ],
+    [
+      'synthetic native',
+      { target: { elementType: 'key', id: 'key-0', hidden: true } },
+    ],
+    ['empty id', { target: { elementType: 'stat', id: ' ', hidden: true } }],
+    [
+      'non-boolean',
+      { target: { elementType: 'knob', id: 'stable', hidden: 1 } },
+    ],
+  ])(
+    '%s native 가시성 payload를 실행 전에 거절한다',
+    async (_label, payload) => {
+      mocks.requestListener?.(envelope('layers:setHidden', payload));
+
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.patchElementHidden).not.toHaveBeenCalled();
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+    },
+  );
+
+  it('native 가시성 완료 전에 generation이 바뀌면 성공으로 응답하지 않는다', async () => {
+    let finish!: () => void;
+    mocks.patchElementHidden.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        finish = () => resolve(true);
+      }),
+    );
+    mocks.requestListener?.(
+      envelope('layers:setHidden', {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          hidden: false,
+        },
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.patchElementHidden).toHaveBeenCalledOnce(),
+    );
+
+    mocks.authorityGeneration = 8;
+    finish();
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('native 가시성은 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchElementHidden.mockImplementationOnce(
+      async (_type, _id, _hidden, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:setHidden', {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          hidden: true,
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
       ok: false,
       error: { code: 'AUTHORITY_GENERATION_STALE' },

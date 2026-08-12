@@ -49,6 +49,8 @@ import {
 
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
+import { patchElementHiddenById } from '@src/renderer/editor/runtime/elementOps';
 import type {
   LayerReorderAnchorsWire,
   LayerReorderIntentWire,
@@ -143,6 +145,43 @@ const parseLayerDeleteTargets = (
     });
   }
   return targets;
+};
+
+interface NativeLayerHiddenTarget {
+  elementType: NativeElementType;
+  id: string;
+  hidden: boolean;
+}
+
+const parseNativeLayerHiddenTarget = (
+  payload: Record<string, unknown>,
+): NativeLayerHiddenTarget | null => {
+  if (!hasExactKeys(payload, ['target'])) return null;
+  const value = payload.target;
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    !hasExactKeys(value as Record<string, unknown>, [
+      'elementType',
+      'id',
+      'hidden',
+    ])
+  ) {
+    return null;
+  }
+  const target = value as Record<string, unknown>;
+  if (
+    typeof target.elementType !== 'string' ||
+    !['key', 'stat', 'graph', 'knob'].includes(target.elementType) ||
+    typeof target.id !== 'string' ||
+    target.id.trim().length === 0 ||
+    isSyntheticElementId(target.id) ||
+    typeof target.hidden !== 'boolean'
+  ) {
+    return null;
+  }
+  return target as unknown as NativeLayerHiddenTarget;
 };
 
 const MAX_LAYER_REORDER_IDS = 4096;
@@ -771,6 +810,44 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
         }
         console.error('Failed to reorder panel layer selection', error);
         respond(failure(envelope.requestId, 'REORDER_SELECTION_FAILED'));
+      });
+    return;
+  }
+
+  if (envelope.operation === PLUGIN_RPC_OPERATIONS.setLayerHidden) {
+    const target = parseNativeLayerHiddenTarget(envelope.payload);
+    if (!target) {
+      respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
+      return;
+    }
+    const requestGeneration = envelope.authorityGeneration;
+    const generationLive = () =>
+      requestGeneration === getPluginAuthorityGeneration();
+    if (!generationLive()) {
+      respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+      return;
+    }
+    void patchElementHiddenById(target.elementType, target.id, target.hidden, {
+      preflight: () => {
+        if (!generationLive()) {
+          throw new Error('plugin authority generation changed');
+        }
+      },
+    })
+      .then(() => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        respond(success(envelope.requestId));
+      })
+      .catch((error) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        console.error('Failed to set panel native layer visibility', error);
+        respond(failure(envelope.requestId, 'SET_LAYER_HIDDEN_FAILED'));
       });
     return;
   }

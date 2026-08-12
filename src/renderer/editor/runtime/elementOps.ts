@@ -28,7 +28,7 @@ import type {
 } from '@src/types/editor';
 
 import type { NativeElementType } from '../model/elementIdMap';
-import type { KeyPosition } from '@src/types/key/keys';
+import type { KeyPosition, KeySlot } from '@src/types/key/keys';
 
 // 메뉴·확인 모달처럼 대상 확정과 실행 사이가 긴 파괴적 액션의 semantic op.
 // 대상은 {type, id}로 받고, eager 반영과 wire 생성 각각이 실행 시점의
@@ -485,7 +485,7 @@ export const applyZOrderByIds = (
 // 잘못 결합된다
 export const rebindKeySlotById = (
   positionId: string,
-  newSlot: unknown,
+  newSlot: KeySlot,
 ): Promise<boolean> => {
   if (!positionId) return Promise.resolve(false);
 
@@ -522,27 +522,49 @@ export const rebindKeySlotById = (
     };
   };
 
-  let found = false;
-  return runElementIntent({
-    applyEager,
-    generate: (base) => {
-      const located = findInRecord(
-        base.keyPositions as unknown as LooseRecord,
-        positionId,
-      );
-      if (!located) return { kind: 'targetLost' };
-      found = true;
-      return intentPatch({
-        schemaVersion: 1,
-        keys: {
-          ...base.keys,
-          [located.mode]: (base.keys[located.mode] ?? []).map((slot, i) =>
-            i === located.index ? newSlot : slot,
-          ),
-        } as never,
-      });
+  const receipt = applyEager();
+  let enrolled = false;
+  return commitSemanticOps(
+    [{ kind: 'setKeySlot', id: positionId, slot: newSlot }],
+    {
+      onEnrolled: () => {
+        enrolled = true;
+      },
     },
-  }).then((result) => result.committed && found);
+  )
+    .then((outcome) => outcome.opResults[0]?.status !== 'targetMissing')
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchElementHiddenById = (
+  type: NativeElementType,
+  id: string,
+  hidden: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id) return Promise.resolve(false);
+  const intents: PropertyIntents = new Map([
+    [type, new Map([[id, { hidden }]])],
+  ]);
+  const receipt = applyPropertyIntentsEagerly(intents);
+  let enrolled = false;
+  return commitSemanticOps(
+    [{ kind: 'patchElement', elementType: type, id, patch: { hidden } }],
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) => outcome.opResults[0]?.status !== 'targetMissing')
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
 };
 
 // 다중 선택 정산: 대상 id들의 현재 canonical 기하(dx·dy)를 의도로 캡처해

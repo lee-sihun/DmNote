@@ -235,6 +235,64 @@ describe('editorCommitRaw semantic op protocol', () => {
     ).toThrow(EditorProtocolError);
   });
 
+  it('patchElement와 setKeySlot은 좁은 exact payload만 수용한다', () => {
+    const id = '00000000-0000-4000-8000-000000000041';
+    const slotId = '00000000-0000-4000-8000-000000000042';
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id,
+          patch: { hidden: true },
+        },
+        { kind: 'setKeySlot', id: slotId, slot: 'KeyA' },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id,
+          patch: { hidden: true, zIndex: 9 },
+        } as never,
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        { kind: 'setKeySlot', id, slot: { keys: ['A'], match: 'any' } },
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'setKeySlot',
+          id,
+          slot: { keys: ['A', 'B'], match: 'any', index: 0 },
+        } as never,
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'setKeySlot',
+          id,
+          slot: { keys: ['A', 'A'], match: 'all' },
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'setKeySlot',
+          id,
+          slot: { keys: ['A+B', 'C'], match: 'all' },
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+  });
+
   it('insertFrozenElements는 sole op이며 groups-only 요청을 거절한다', () => {
     const groupsOnly = {
       kind: 'insertFrozenElements' as const,

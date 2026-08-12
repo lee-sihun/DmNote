@@ -4117,12 +4117,13 @@ mod tests {
         keyboard::KeyboardManager,
         models::{
             AppStoreData, CommittedEditorChange, CustomCss, CustomFont, CustomTab, EditorBoundsV1,
-            EditorCommitOrigin, EditorCommitRequest, EditorDocumentV1, EditorElementTypeV1,
-            EditorField, EditorFrozenElementV1, EditorFrozenKeySlotV1, EditorOpResultStatusV1,
-            EditorOpResultV1, EditorOpV1, EditorPatchV1, EditorZUpdateV1, FontSettings, FontType,
-            GestureCommitRequest, GesturePluginInstancesChange, GraphPosition, GraphStatType,
-            GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot, KnobPosition, OverlayBounds,
-            PanelBounds, PendingProcessedWavReplacement, PluginInstancesCommitRequest,
+            EditorCommitOrigin, EditorCommitRequest, EditorDocumentV1,
+            EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
+            EditorFrozenKeySlotV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1,
+            EditorPatchV1, EditorZUpdateV1, FontSettings, FontType, GestureCommitRequest,
+            GesturePluginInstancesChange, GraphPosition, GraphStatType, GraphType, JsPlugin,
+            KeyCounters, KeyPosition, KeySlot, KnobPosition, OverlayBounds, PanelBounds,
+            PendingProcessedWavReplacement, PluginInstancesCommitRequest,
             PluginInstancesReconcileRequest, PluginPoint, SavedPluginInstance, SettingsPatchInput,
             SlotMatch, SoundLibraryEntry, SoundSource, StatPosition, StatType, TabCss,
             TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION,
@@ -4284,6 +4285,18 @@ mod tests {
         EditorOpV1::DeleteElement {
             element_type,
             id: id.into(),
+        }
+    }
+
+    fn patch_hidden_op(
+        element_type: EditorElementTypeV1,
+        id: impl Into<String>,
+        hidden: bool,
+    ) -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type,
+            id: id.into(),
+            patch: EditorElementPropertyPatchV1 { hidden },
         }
     }
 
@@ -7243,6 +7256,153 @@ mod tests {
         let after_redo = store.editor_get().document;
         assert_eq!(after_redo.key_positions["4key"][1].id, target.id);
         assert_eq!(bounds(&after_redo.key_positions["4key"][1]), changed_bounds);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn property_and_key_slot_ops_replay_exact_results_and_round_trip_history() {
+        let dir = test_directory("editor-property-slot-ops-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get();
+        let property_id = initial.document.key_positions["4key"][0].id.clone();
+        let slot_id = initial.document.key_positions["4key"][1].id.clone();
+        let initial_hidden = initial.document.key_positions["4key"][0].hidden;
+        let initial_slot = initial.document.keys["4key"][1].clone();
+        let initial_slot_canonical = initial_slot.canonical();
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(
+            initial.revision,
+            &mutation_id,
+            vec![
+                patch_hidden_op(EditorElementTypeV1::Key, &property_id, !initial_hidden),
+                EditorOpV1::SetKeySlot {
+                    id: slot_id.clone(),
+                    slot: EditorFrozenKeySlotV1::Multi(crate::models::EditorFrozenMultiKeySlotV1 {
+                        keys: vec!["A".to_string(), "B".to_string()],
+                        match_mode: SlotMatch::All,
+                    }),
+                },
+                patch_hidden_op(EditorElementTypeV1::Graph, missing_id, true),
+            ],
+        );
+
+        let committed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            committed.result.changed_fields,
+            [EditorField::Keys, EditorField::KeyPositions]
+        );
+        assert_eq!(
+            committed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert_eq!(store.history_status().history_revision, 1);
+        let committed_store = store.snapshot();
+        assert!(committed_store.key_counters["4key"].contains_key("A+B"));
+        assert!(!committed_store.key_counters["4key"].contains_key(&initial_slot_canonical));
+
+        let replay = store.commit_editor_document(request).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, committed.result);
+        assert_eq!(store.history_status().history_revision, 1);
+
+        let reused = store
+            .commit_editor_document(editor_ops_request(
+                initial.revision,
+                mutation_id,
+                vec![patch_hidden_op(
+                    EditorElementTypeV1::Key,
+                    &property_id,
+                    initial_hidden,
+                )],
+            ))
+            .unwrap_err();
+        assert_eq!(reused.error_code, EditorCommitErrorCode::MutationIdReused);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let after_undo = store.editor_get().document;
+        assert_eq!(after_undo.key_positions["4key"][0].hidden, initial_hidden);
+        assert_eq!(after_undo.keys["4key"][1], initial_slot);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let after_redo = store.editor_get().document;
+        assert_eq!(after_redo.key_positions["4key"][0].hidden, !initial_hidden);
+        assert_eq!(
+            after_redo.keys["4key"][1],
+            KeySlot::Multi {
+                keys: vec!["A".to_string(), "B".to_string()],
+                match_mode: SlotMatch::All,
+            }
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![
+                    patch_hidden_op(EditorElementTypeV1::Key, property_id, !initial_hidden),
+                    EditorOpV1::SetKeySlot {
+                        id: slot_id,
+                        slot: EditorFrozenKeySlotV1::Multi(
+                            crate::models::EditorFrozenMultiKeySlotV1 {
+                                keys: vec!["A".to_string(), "B".to_string()],
+                                match_mode: SlotMatch::All,
+                            },
+                        ),
+                    },
+                ],
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(
+            no_change
+                .result
+                .op_results
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange
+            ]
+        );
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

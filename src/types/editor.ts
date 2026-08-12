@@ -138,11 +138,26 @@ export interface EditorReorderElementsOpV1 {
   completeModeOrder: boolean;
 }
 
+export interface EditorPatchElementOpV1 {
+  kind: 'patchElement';
+  elementType: EditorElementTypeV1;
+  id: string;
+  patch: { hidden: boolean };
+}
+
+export interface EditorSetKeySlotOpV1 {
+  kind: 'setKeySlot';
+  id: string;
+  slot: KeySlot;
+}
+
 export type EditorOpV1 =
   | EditorSetBoundsOpV1
   | EditorDeleteElementOpV1
   | EditorInsertFrozenElementsOpV1
-  | EditorReorderElementsOpV1;
+  | EditorReorderElementsOpV1
+  | EditorPatchElementOpV1
+  | EditorSetKeySlotOpV1;
 
 export interface EditorOpsCommitRequest extends EditorCommitRequestBase {
   changes?: never;
@@ -823,6 +838,13 @@ export function assertEditorOpsV1(
       `${label} batch operation must be the sole operation`,
     );
   }
+  const directTargetIds = new Set<string>();
+  const assertUniqueDirectTarget = (id: string, opLabel: string) => {
+    if (directTargetIds.has(id)) {
+      throw new EditorProtocolError(`${opLabel} target ID is duplicated`);
+    }
+    directTargetIds.add(id);
+  };
   value.forEach((op, index) => {
     const opLabel = `${label}[${index}]`;
     if (!isRecord(op)) throw new EditorProtocolError(`${opLabel} is invalid`);
@@ -835,6 +857,7 @@ export function assertEditorOpsV1(
       ) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);
       }
+      assertUniqueDirectTarget(op.id, opLabel);
       assertEditorBounds(op.bounds, `${opLabel}.bounds`);
       return;
     }
@@ -847,6 +870,54 @@ export function assertEditorOpsV1(
       ) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);
       }
+      assertUniqueDirectTarget(op.id, opLabel);
+      return;
+    }
+    if (op.kind === 'patchElement') {
+      assertExactKeys(op, ['kind', 'elementType', 'id', 'patch'], opLabel);
+      if (
+        !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
+        typeof op.id !== 'string' ||
+        op.id.length === 0 ||
+        !isRecord(op.patch)
+      ) {
+        throw new EditorProtocolError(`${opLabel} target is invalid`);
+      }
+      assertUniqueDirectTarget(op.id, opLabel);
+      assertExactKeys(op.patch, ['hidden'], `${opLabel}.patch`);
+      if (typeof op.patch.hidden !== 'boolean') {
+        throw new EditorProtocolError(`${opLabel}.patch is invalid`);
+      }
+      return;
+    }
+    if (op.kind === 'setKeySlot') {
+      assertExactKeys(op, ['kind', 'id', 'slot'], opLabel);
+      if (typeof op.slot !== 'string') {
+        if (!isRecord(op.slot)) {
+          throw new EditorProtocolError(`${opLabel}.slot is invalid`);
+        }
+        assertExactKeys(op.slot, ['keys', 'match'], `${opLabel}.slot`);
+      }
+      const parsedSlot = keySlotSchema.safeParse(op.slot);
+      if (
+        typeof op.id !== 'string' ||
+        op.id.length === 0 ||
+        !parsedSlot.success
+      ) {
+        throw new EditorProtocolError(`${opLabel} is invalid`);
+      }
+      if (typeof parsedSlot.data !== 'string') {
+        const uniqueMembers = new Set(parsedSlot.data.keys);
+        if (
+          uniqueMembers.size !== parsedSlot.data.keys.length ||
+          parsedSlot.data.keys.some(
+            (member) => member.includes('+') || member.includes('|'),
+          )
+        ) {
+          throw new EditorProtocolError(`${opLabel}.slot is not canonical`);
+        }
+      }
+      assertUniqueDirectTarget(op.id, opLabel);
       return;
     }
     if (op.kind === 'reorderElements') {
@@ -1102,6 +1173,20 @@ export function assertEditorOpCommitResult(
       if (op.elementType === 'key') {
         requiredFields.add('keys');
         allowedFields.add('keys');
+      }
+      return;
+    }
+    if (op.kind === 'patchElement' || op.kind === 'setKeySlot') {
+      if ('bounds' in result && result.bounds !== undefined) {
+        throw new EditorProtocolError(
+          `editor_commit opResults[${index}] is invalid for ${op.kind}`,
+        );
+      }
+      if (result.status === 'applied') {
+        const field =
+          op.kind === 'setKeySlot' ? 'keys' : positionFields[op.elementType];
+        requiredFields.add(field);
+        allowedFields.add(field);
       }
       return;
     }

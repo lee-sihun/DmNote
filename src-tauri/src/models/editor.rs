@@ -202,6 +202,12 @@ pub struct EditorBoundsV1 {
     pub height: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorElementPropertyPatchV1 {
+    pub hidden: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum EditorOpV1 {
@@ -215,6 +221,16 @@ pub enum EditorOpV1 {
         #[serde(rename = "elementType")]
         element_type: EditorElementTypeV1,
         id: String,
+    },
+    PatchElement {
+        #[serde(rename = "elementType")]
+        element_type: EditorElementTypeV1,
+        id: String,
+        patch: EditorElementPropertyPatchV1,
+    },
+    SetKeySlot {
+        id: String,
+        slot: EditorFrozenKeySlotV1,
     },
     InsertFrozenElements {
         mode: String,
@@ -237,7 +253,10 @@ pub enum EditorOpV1 {
 impl EditorOpV1 {
     pub fn target_id(&self) -> Option<&str> {
         match self {
-            Self::SetBounds { id, .. } | Self::DeleteElement { id, .. } => Some(id),
+            Self::SetBounds { id, .. }
+            | Self::DeleteElement { id, .. }
+            | Self::PatchElement { id, .. }
+            | Self::SetKeySlot { id, .. } => Some(id),
             Self::InsertFrozenElements { .. } | Self::ReorderElements { .. } => None,
         }
     }
