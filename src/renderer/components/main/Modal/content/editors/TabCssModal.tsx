@@ -21,6 +21,7 @@ import { pathBaseName } from '@utils/core/pathDisplay';
 import { cssHistoryStatusLabel } from '@utils/cssHistoryStatus';
 import type { CustomCssHistoryItem } from '@src/types/plugin/api';
 import type { TabCss } from '@src/types/plugin/css';
+import { cssApi } from '@api/modules/cssApi';
 
 interface TabCssModalProps {
   isOpen: boolean;
@@ -131,7 +132,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     setIsLoading(true);
     try {
       const result = await invokeTracked(() =>
-        window.api.css.tab.load(selectedKeyType),
+        cssApi.tab.load(selectedKeyType),
       );
       if (result.success && result.css) {
         setTabCss(result.css);
@@ -151,7 +152,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     clearRef.current = true;
     try {
       const result = await invokeTracked(() =>
-        window.api.css.tab.clear(selectedKeyType),
+        cssApi.tab.clear(selectedKeyType),
       );
       if (result.success) {
         setTabCss(null);
@@ -165,7 +166,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
 
   const commitCssEnabled = async (enabled: boolean) => {
     const result = await invokeTracked(() =>
-      window.api.css.tab.toggle(selectedKeyType, enabled),
+      cssApi.tab.toggle(selectedKeyType, enabled),
     );
     if (!result.success) {
       throw new Error('Failed to toggle tab CSS');
@@ -199,7 +200,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     setPendingHistoryPath(item.path);
     try {
       const result = await invokeTracked(() =>
-        window.api.css.tab.activateHistory(selectedKeyType, item.path),
+        cssApi.tab.activateHistory(selectedKeyType, item.path),
       );
       if (result.success && result.css) {
         setTabCss(result.css);
@@ -224,7 +225,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
     exportRef.current = true;
     setIsExporting(true);
     try {
-      const result = await window.api.css.tab.export(selectedKeyType);
+      const result = await cssApi.tab.export(selectedKeyType);
       if (result.success) {
         showAlert?.(t('tabCss.exported'));
       } else if (result.code) {
@@ -276,7 +277,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
 
       if (statesAreDifferent) {
         // css.tab.set을 사용하여 원본 상태로 직접 복원
-        await window.api.css.tab.set(selectedKeyType, original);
+        await cssApi.tab.set(selectedKeyType, original);
       }
     } catch (error) {
       console.error('Failed to restore original state:', error);

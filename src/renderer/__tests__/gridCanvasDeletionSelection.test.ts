@@ -11,6 +11,19 @@ import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 
+const { updateStatPositions, updateGraphPositions, updateKnobPositions } =
+  vi.hoisted(() => ({
+    updateStatPositions: vi.fn(),
+    updateGraphPositions: vi.fn(),
+    updateKnobPositions: vi.fn(),
+  }));
+
+vi.mock('@api/modules/itemsApi', () => ({
+  statItemsApi: { updatePositions: updateStatPositions },
+  graphItemsApi: { updatePositions: updateGraphPositions },
+  knobItemsApi: { updatePositions: updateKnobPositions },
+}));
+
 const makeStat = (): StatItemPosition => ({
   ...createDefaultKeyPosition(),
   statType: 'kps',
@@ -32,20 +45,13 @@ const makeKnob = (): KnobItemPosition => ({
 });
 
 describe('캔버스 요소 삭제 선택 정리', () => {
-  const originalApi = window.api;
-  const updateStatPositions = vi.fn();
-  const updateGraphPositions = vi.fn();
-  const updateKnobPositions = vi.fn();
-
   beforeEach(() => {
+    updateStatPositions.mockReset();
+    updateGraphPositions.mockReset();
+    updateKnobPositions.mockReset();
     updateStatPositions.mockResolvedValue(undefined);
     updateGraphPositions.mockResolvedValue(undefined);
     updateKnobPositions.mockResolvedValue(undefined);
-    window.api = {
-      statItems: { updatePositions: updateStatPositions },
-      graphItems: { updatePositions: updateGraphPositions },
-      knobItems: { updatePositions: updateKnobPositions },
-    } as unknown as Window['api'];
     useKeyStore.setState({
       selectedKeyType: '4key',
       keyMappings: { '4key': [] },
@@ -69,7 +75,6 @@ describe('캔버스 요소 삭제 선택 정리', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    window.api = originalApi;
     useGridSelectionStore.getState().clearSelection();
   });
 

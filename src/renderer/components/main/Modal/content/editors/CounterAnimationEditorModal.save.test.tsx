@@ -25,6 +25,15 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   submit: null as null | (() => void),
+  create: vi.fn(),
+  update: vi.fn(),
+}));
+
+vi.mock('@api/modules/resourceApi', () => ({
+  counterAnimationApi: {
+    create: (...args: unknown[]) => mocks.create(...args),
+    update: (...args: unknown[]) => mocks.update(...args),
+  },
 }));
 
 // 저장 버튼은 레이아웃이 들고 있다. 콜백을 밖으로 꺼내 눌러본다
@@ -118,8 +127,10 @@ describe('CounterAnimationEditorModal 저장 순서', () => {
 
   beforeEach(() => {
     onSaved = vi.fn();
-    create = deferred();
-    update = deferred();
+    create = mocks.create;
+    update = mocks.update;
+    create.mockReset().mockImplementation(deferred());
+    update.mockReset().mockImplementation(deferred());
     mocks.submit = null;
     vi.stubGlobal('requestAnimationFrame', () => 1);
     vi.stubGlobal('cancelAnimationFrame', () => undefined);

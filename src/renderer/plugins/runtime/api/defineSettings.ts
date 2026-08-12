@@ -28,11 +28,13 @@ import type { NamespacedStorage } from '../context';
 import type {
   PluginSettingsDefinition,
   PluginSettingsInstance,
+  DMNoteAPI,
   Unsubscribe,
 } from '@src/types/plugin/api';
 
 interface DefineSettingsDependencies {
   pluginId: string;
+  api: DMNoteAPI;
   namespacedStorage: NamespacedStorage;
   registerCleanup: (cleanup: () => void) => void;
 }
@@ -41,7 +43,7 @@ interface DefineSettingsDependencies {
  * defineSettings 함수를 생성합니다.
  */
 export const createDefineSettings = (deps: DefineSettingsDependencies) => {
-  const { pluginId, namespacedStorage, registerCleanup } = deps;
+  const { pluginId, api, namespacedStorage, registerCleanup } = deps;
   const visibilityErrorKeys = new Set<string>();
 
   return (definition: PluginSettingsDefinition): PluginSettingsInstance => {
@@ -285,7 +287,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
             };
 
             if (schema.type === 'boolean') {
-              componentHtml = window.api.ui.components.checkbox({
+              componentHtml = api.ui.components.checkbox({
                 checked: !!value,
                 onChange: handleChange as (
                   checked: boolean,
@@ -314,7 +316,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
 
                 target.classList.add('shadow-focus-ring');
 
-                window.api.ui.pickColor({
+                api.ui.pickColor({
                   initialColor: String(dialogSettings[key] ?? ''),
                   id: pickerId,
                   referenceElement: target as HTMLElement,
@@ -364,7 +366,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
                 else inputWidth = 200;
               }
 
-              componentHtml = window.api.ui.components.input({
+              componentHtml = api.ui.components.input({
                 type:
                   schema.type === 'string' ? 'text' : (schema.type as 'number'),
                 value: value as string | number,
@@ -384,7 +386,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
                   label: translate(option.label, undefined, option.label),
                 }),
               );
-              componentHtml = window.api.ui.components.dropdown({
+              componentHtml = api.ui.components.dropdown({
                 options: translatedOptions,
                 selected: value as string,
                 onChange: handleChange as (
@@ -404,7 +406,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
         htmlContent += '</div></div>';
       }
 
-      const noSettingsText = await window.api.settings
+      const noSettingsText = await api.settings
         .get()
         .then((s) => {
           const locale = s.language || 'ko';
@@ -421,7 +423,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
 
       htmlContent += '</div>';
 
-      const [saveText, cancelText] = await window.api.settings
+      const [saveText, cancelText] = await api.settings
         .get()
         .then((s) => {
           const locale = s.language || 'ko';
@@ -429,7 +431,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
         })
         .catch(() => ['저장', '취소']);
 
-      const confirmed = await window.api.ui.dialog.custom(htmlContent, {
+      const confirmed = await api.ui.dialog.custom(htmlContent, {
         showCancel: true,
         confirmText: saveText,
         cancelText: cancelText,
@@ -543,7 +545,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
 
     // 오버레이에서 설정 변경 메시지 수신 리스너
     if (window.__dmn_window_type === 'overlay') {
-      const bridgeCleanup = window.api?.bridge?.on(
+      const bridgeCleanup = api.bridge?.on(
         'plugin:settings:changed',
         (data: { pluginId: string; settings: Record<string, unknown> }) => {
           if (data.pluginId === pluginId) {

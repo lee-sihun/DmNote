@@ -18,6 +18,14 @@ import ImagePicker from './ImagePicker';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const apiMocks = vi.hoisted(() => ({ imageLoad: vi.fn() }));
+
+vi.mock('@api/modules/resourceApi', () => ({
+  imageApi: {
+    load: (...args: unknown[]) => apiMocks.imageLoad(...args),
+  },
+}));
+
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -81,16 +89,12 @@ describe('ImagePicker 비동기 완료와 대상 전환', () => {
   beforeEach(() => {
     onIdleImageChange = vi.fn();
     useKeyStore.setState({ selectedKeyType: '4key' });
-    window.api = {
-      image: {
-        load: vi.fn(
-          () =>
-            new Promise((resolve) => {
-              resolveLoad = resolve;
-            }),
-        ),
-      },
-    } as never;
+    apiMocks.imageLoad.mockReset().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
   });
 
   afterEach(() => {

@@ -19,10 +19,12 @@ import {
 } from '@stores/signals/keyCounterCache';
 import { getUndoRedoInProgress } from '@api/pluginDisplayElements';
 import { obsApi } from '@api/modules/obsApi';
+import { overlayApi } from '@api/modules/overlayApi';
 import { notifyLocaleChanged, subscribe } from '@api/modules/shared';
 import {
   acknowledgeLifecycleAfterEditorFlush,
   cancelLifecycleEditorFlush,
+  windowApi,
 } from '@api/modules/appApi';
 import { stableStringify } from '@utils/core/stableStringify';
 import { useTranslation } from '@contexts/useTranslation';
@@ -936,9 +938,9 @@ export function useAppBootstrap() {
             );
             if (action === 'history') return;
             const overlay = await window.api.overlay.get().catch(() => null);
-            await window.api.window.showMain();
+            await windowApi.showMain();
             if (overlay?.visible) {
-              await window.api.overlay.setVisible(true);
+              await overlayApi.setVisible(true);
             }
           })().catch((showError) => {
             console.error('종료 취소 후 창 복원 실패', showError);

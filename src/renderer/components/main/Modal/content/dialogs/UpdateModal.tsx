@@ -3,6 +3,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
 import { useModalPresence } from '@hooks/ui/usePopupPresence';
+import { appApi } from '@api/modules/appApi';
 
 interface UpdateInfo {
   currentVersion: string;
@@ -44,7 +45,7 @@ const UpdateModal = ({
           await onPrimaryAction();
           return;
         }
-        await window.api.app.openExternal(updateInfo.releaseUrl);
+        await appApi.openExternal(updateInfo.releaseUrl);
       } catch (error) {
         console.error('Failed to run update primary action:', error);
       }
@@ -64,7 +65,7 @@ const UpdateModal = ({
 
   const handleGoToRelease = async () => {
     try {
-      await window.api.app.openExternal(updateInfo.releaseUrl);
+      await appApi.openExternal(updateInfo.releaseUrl);
     } catch (e) {
       console.error('Failed to open release URL:', e);
     }

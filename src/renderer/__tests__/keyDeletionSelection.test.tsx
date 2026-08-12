@@ -7,6 +7,18 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
+const apiMocks = vi.hoisted(() => ({
+  resetMode: vi.fn(),
+  update: vi.fn(),
+}));
+
+vi.mock('@api/modules/keysApi', () => ({
+  keysApi: {
+    resetMode: (...args: unknown[]) => apiMocks.resetMode(...args),
+    update: (...args: unknown[]) => apiMocks.update(...args),
+  },
+}));
+
 vi.mock('@src/renderer/editor/runtime/persistState', () => ({
   persistPositionsWithSync: vi.fn(),
   persistMappingsAndPositions: vi.fn(),
@@ -38,7 +50,7 @@ type KeyManager = ReturnType<typeof useKeyManager>;
 
 describe('키 삭제 선택 정리', () => {
   const originalApi = window.api;
-  const resetMode = vi.fn();
+  const resetMode = apiMocks.resetMode;
   let root: Root;
   let host: HTMLDivElement;
   let manager: KeyManager | null;

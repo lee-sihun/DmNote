@@ -16,9 +16,11 @@ import {
   pluginKeysUpdateWithPositions,
   pluginPositionsUpdate,
 } from './pluginWriteGateway';
+import type { DMNoteAPI } from '@src/types/plugin/api';
 
 interface CreatePluginApiProxyOptions {
   pluginId: string;
+  sourceApi: DMNoteAPI;
   registerCleanup: (cleanup: () => void) => void;
   isReloading: () => boolean;
   waitForReloadEnd: () => Promise<void>;
@@ -29,13 +31,19 @@ interface CreatePluginApiProxyOptions {
  */
 export const createPluginApiProxy = (
   options: CreatePluginApiProxyOptions,
-): typeof window.api => {
-  const { pluginId, registerCleanup, isReloading, waitForReloadEnd } = options;
+): DMNoteAPI => {
+  const {
+    pluginId,
+    sourceApi,
+    registerCleanup,
+    isReloading,
+    waitForReloadEnd,
+  } = options;
 
-  const originalStorage = window.api.plugin.storage;
+  const originalStorage = sourceApi.plugin.storage;
   const namespacedStorage = createNamespacedStorage(pluginId, originalStorage);
 
-  const wrappedApi = wrapApiValue(window.api, pluginId) as Record<
+  const wrappedApi = wrapApiValue(sourceApi, pluginId) as Record<
     string,
     unknown
   > & {
@@ -48,6 +56,7 @@ export const createPluginApiProxy = (
 
   const defineElement = createDefineElement({
     pluginId,
+    api: sourceApi,
     namespacedStorage,
     registerCleanup,
     wrapFunctionWithContext: wrapWithContext,
@@ -57,6 +66,7 @@ export const createPluginApiProxy = (
 
   const defineSettings = createDefineSettings({
     pluginId,
+    api: sourceApi,
     namespacedStorage,
     registerCleanup,
   });
@@ -133,7 +143,7 @@ export const createPluginApiProxy = (
       defineElement,
       defineSettings,
     },
-  } as typeof window.api;
+  } as DMNoteAPI;
 
   return proxiedApi;
 };
@@ -141,17 +151,41 @@ export const createPluginApiProxy = (
 /**
  * 플러그인용 Window 프록시를 생성합니다.
  */
-export const createPluginWindowProxy = (
-  proxiedApi: typeof window.api,
-): Window => {
+export const createPluginWindowProxy = (proxiedApi: DMNoteAPI): Window => {
+  const isApiProperty = (prop: string | symbol) =>
+    prop === 'api' || prop === 'dmn';
+
   return new Proxy(window, {
     get(target, prop: string | symbol, receiver) {
-      if (prop === 'api') return proxiedApi;
-      if (prop === 'dmn') return proxiedApi; // dmn 별칭도 프록시된 API 반환
+      if (isApiProperty(prop)) return proxiedApi;
       return Reflect.get(target, prop, receiver);
     },
+    has(target, prop: string | symbol) {
+      if (isApiProperty(prop)) return true;
+      return Reflect.has(target, prop);
+    },
+    getOwnPropertyDescriptor(target, prop: string | symbol) {
+      if (isApiProperty(prop)) {
+        return {
+          configurable: true,
+          enumerable: true,
+          writable: false,
+          value: proxiedApi,
+        };
+      }
+      return Reflect.getOwnPropertyDescriptor(target, prop);
+    },
     set(target, prop: string | symbol, value, receiver) {
+      if (isApiProperty(prop)) return false;
       return Reflect.set(target, prop, value, receiver);
+    },
+    defineProperty(target, prop: string | symbol, attributes) {
+      if (isApiProperty(prop)) return false;
+      return Reflect.defineProperty(target, prop, attributes);
+    },
+    deleteProperty(target, prop: string | symbol) {
+      if (isApiProperty(prop)) return false;
+      return Reflect.deleteProperty(target, prop);
     },
   });
 };

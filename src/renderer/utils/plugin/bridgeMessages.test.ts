@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { emitTo } = vi.hoisted(() => ({ emitTo: vi.fn() }));
+const { emitTo, sendTo } = vi.hoisted(() => ({
+  emitTo: vi.fn(),
+  sendTo: vi.fn(),
+}));
 
 vi.mock('@tauri-apps/api/event', () => ({ emitTo }));
+vi.mock('@api/modules/bridgeApi', () => ({ bridgeApi: { sendTo } }));
 
 import { sendBridgeMessageBestEffort } from './bridgeMessages';
 
@@ -10,15 +14,10 @@ const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('sendBridgeMessageBestEffort', () => {
   const originalApi = window.api;
-  const sendTo = vi.fn();
-
   beforeEach(() => {
     sendTo.mockReset();
     emitTo.mockReset().mockResolvedValue(undefined);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    window.api = {
-      bridge: { sendTo },
-    } as unknown as Window['api'];
   });
 
   afterEach(() => {

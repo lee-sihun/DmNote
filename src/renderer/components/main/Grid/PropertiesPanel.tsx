@@ -5,6 +5,12 @@ import React, {
   useRef,
   useSyncExternalStore,
 } from 'react';
+import {
+  graphItemsApi,
+  knobItemsApi,
+  layerGroupsApi,
+  statItemsApi,
+} from '@api/modules/itemsApi';
 import { useTranslation } from '@contexts/useTranslation';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -675,7 +681,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     useLayerGroupStore.getState().setLayerGroups(updated);
     try {
-      await window.api.layerGroups.update(updated);
+      await layerGroupsApi.update(updated);
     } catch (error) {
       console.error('Failed to rename group', error);
     }
@@ -727,7 +733,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         useStatItemStore.getState().setLocalUpdateInProgress(true);
         useStatItemStore.getState().setPositions(nextPositions);
         try {
-          await window.api.statItems.updatePositions(nextPositions);
+          await statItemsApi.updatePositions(nextPositions);
         } finally {
           useStatItemStore.getState().setLocalUpdateInProgress(false);
         }
@@ -744,7 +750,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         useGraphItemStore.getState().setLocalUpdateInProgress(true);
         useGraphItemStore.getState().setPositions(nextPositions);
         try {
-          await window.api.graphItems.updatePositions(nextPositions);
+          await graphItemsApi.updatePositions(nextPositions);
         } finally {
           useGraphItemStore.getState().setLocalUpdateInProgress(false);
         }
@@ -761,7 +767,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         useKnobItemStore.getState().setLocalUpdateInProgress(true);
         useKnobItemStore.getState().setPositions(nextPositions);
         try {
-          await window.api.knobItems.updatePositions(nextPositions);
+          await knobItemsApi.updatePositions(nextPositions);
         } finally {
           useKnobItemStore.getState().setLocalUpdateInProgress(false);
         }
@@ -1221,7 +1227,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setPositions(nextPositions);
-    const persisted = window.api.statItems.updatePositions(nextPositions);
+    const persisted = statItemsApi.updatePositions(nextPositions);
     editGestureController.settleCommit(persisted);
     void persisted
       .catch((error) => {
@@ -1296,7 +1302,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setPositions(nextPositions);
-    window.api.statItems
+    statItemsApi
       .updatePositions(nextPositions)
       .catch((error) => {
         console.error('Failed to batch update stat items', error);
@@ -1322,7 +1328,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setPositions(nextPositions);
-    window.api.graphItems
+    graphItemsApi
       .updatePositions(nextPositions)
       .catch((error) => {
         console.error('Failed to update graph item', error);
@@ -1348,7 +1354,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     useKnobItemStore.getState().setLocalUpdateInProgress(true);
     useKnobItemStore.getState().setPositions(nextPositions);
-    window.api.knobItems
+    knobItemsApi
       .updatePositions(nextPositions)
       .catch((error) => {
         console.error('Failed to update knob item', error);
@@ -1422,7 +1428,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     useKnobItemStore.getState().setLocalUpdateInProgress(true);
     useKnobItemStore.getState().setPositions(nextPositions);
-    window.api.knobItems
+    knobItemsApi
       .updatePositions(nextPositions)
       .catch((error) => {
         console.error('Failed to batch update knob items', error);
@@ -1496,7 +1502,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setPositions(nextPositions);
-    window.api.graphItems
+    graphItemsApi
       .updatePositions(nextPositions)
       .catch((error) => {
         console.error('Failed to batch update graph items', error);

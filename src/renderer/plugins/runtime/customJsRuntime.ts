@@ -13,6 +13,7 @@
  */
 
 import { pluginRpcApi } from '@api/modules/pluginRpcApi';
+import { internalApi } from '@api/internalApi';
 import { setPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 import { noteBackendPluginRevision } from '@plugins/rpc/pluginModelRevision';
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
@@ -168,6 +169,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
       // 플러그인용 API 프록시 생성
       const proxiedApi = createPluginApiProxy({
         pluginId,
+        sourceApi: internalApi,
         registerCleanup: (cleanup) => registerCleanup(pluginId, cleanup),
         isReloading: getIsReloading,
         waitForReloadEnd,
@@ -182,11 +184,8 @@ export function createCustomJsRuntime(): CustomJsRuntime {
   'use strict';
   const __PLUGIN_ID__ = "${pluginId}";
   
-  // dmn을 전역 변수로 추가 (window. 없이 바로 접근 가능)
+  // 플러그인 스코프에 dmn 별칭 추가 (window. 없이 바로 접근 가능)
   const dmn = window.api;
-  if (typeof globalThis !== 'undefined') {
-    globalThis.dmn = window.api;
-  }
   
   const __autoWrapAsync__ = () => {
     const globalWindow = typeof window !== 'undefined' ? window : globalThis;
@@ -339,7 +338,7 @@ ${plugin.content}
   };
 
   const fetchInitialState = () => {
-    window.api.js
+    internalApi.js
       .get()
       .then((data) => {
         if (disposed) return;
@@ -349,7 +348,7 @@ ${plugin.content}
         console.error('Failed to fetch JS plugins', error);
       });
 
-    window.api.js
+    internalApi.js
       .getUse()
       .then((value) => {
         if (disposed) return;
@@ -367,7 +366,7 @@ ${plugin.content}
   };
 
   const setupListeners = () => {
-    const unsubUse = window.api.js.onUse(({ enabled: next }) => {
+    const unsubUse = internalApi.js.onUse(({ enabled: next }) => {
       enabled = next;
       if (enabled) {
         injectAll();
@@ -377,7 +376,7 @@ ${plugin.content}
       }
     });
 
-    const unsubState = window.api.js.onState((payload) => {
+    const unsubState = internalApi.js.onState((payload) => {
       syncPlugins(Array.isArray(payload.plugins) ? payload.plugins : []);
     });
 

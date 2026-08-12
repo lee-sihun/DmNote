@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { SettingsDiff, SettingsState } from '@src/types/settings/settings';
 import { I18nContext } from './I18nContextDef';
 import type { SupportedLocale, I18nContextValue } from './I18nContextDef';
+import { settingsApi } from '@api/modules/settingsApi';
 
 export type { SupportedLocale } from './I18nContextDef';
 
@@ -173,11 +174,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           ) {
             setLocaleState(detected);
             safeLocalStorageSet(STORAGE_KEY, detected);
-            window.api.settings
-              .update({ language: detected })
-              .catch((error) => {
-                console.error('Failed to update initial language', error);
-              });
+            settingsApi.update({ language: detected }).catch((error) => {
+              console.error('Failed to update initial language', error);
+            });
             return;
           }
         }
@@ -217,7 +216,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const changeLocale = (next: SupportedLocale) => {
     setLocaleState(next);
     safeLocalStorageSet(STORAGE_KEY, next);
-    window.api.settings.update({ language: next }).catch((error) => {
+    settingsApi.update({ language: next }).catch((error) => {
       console.error('Failed to update language', error);
     });
   };

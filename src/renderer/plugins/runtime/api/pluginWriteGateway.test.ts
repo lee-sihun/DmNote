@@ -86,22 +86,161 @@ describe('pluginWriteGateway', () => {
     );
   });
 
-  // 자사 wire가 v2로 옮겨가도 raw plugin envelope는 재직렬화 없이
-  // 선언된 버전 그대로 백엔드에 도달해야 한다
-  it('forwards a raw editor commit envelope without reserialization', async () => {
+  // 자사 wire가 v2로 옮겨가도 plugin envelope는 선언된 v1만 백엔드에
+  // 도달해야 한다
+  it('forwards an allowed editor commit envelope as a plain wire snapshot', async () => {
     editorCommitRaw.mockReset();
     editorCommitRaw.mockResolvedValue({ revision: 2, changedFields: [] });
     const request = {
       baseRevision: 1,
       mutationId: '00000000-0000-4000-8000-000000000001',
       changes: { schemaVersion: 1, statPositions: {} },
+      gestureId: '00000000-0000-4000-8000-000000000011',
+      gestureIds: ['00000000-0000-4000-8000-000000000012'],
+      multiKey: false,
     } as unknown as PluginEditorCommitRequest;
 
     await pluginEditorCommit(request);
 
     expect(editorCommitRaw).toHaveBeenCalledTimes(1);
-    // 같은 참조가 무가공 전달된다 (버전 재작성 지점 자체가 없음)
-    expect(editorCommitRaw.mock.calls[0][0]).toBe(request);
+    expect(editorCommitRaw.mock.calls[0][0]).not.toBe(request);
+    expect(editorCommitRaw.mock.calls[0][0]).toEqual(request);
+  });
+
+  it.each(['ops', 'unexpected'])(
+    "rejects an own '%s' key even when its value is undefined",
+    async (key) => {
+      editorCommitRaw.mockReset();
+      const request = {
+        baseRevision: 1,
+        mutationId: '00000000-0000-4000-8000-000000000021',
+        changes: { schemaVersion: 1, statPositions: {} },
+        [key]: undefined,
+      } as unknown as PluginEditorCommitRequest;
+
+      await expect(pluginEditorCommit(request)).rejects.toThrow(
+        `unsupported key '${key}'`,
+      );
+      expect(editorCommitRaw).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['date', new Date(0)],
+  ])('rejects a %s request container', async (_label, request) => {
+    editorCommitRaw.mockReset();
+
+    await expect(
+      pluginEditorCommit(request as unknown as PluginEditorCommitRequest),
+    ).rejects.toThrow(TypeError);
+    expect(editorCommitRaw).not.toHaveBeenCalled();
+  });
+
+  it('rejects a cyclic request before transport', async () => {
+    editorCommitRaw.mockReset();
+    const changes = {
+      schemaVersion: 1,
+      statPositions: {},
+    } as Record<string, unknown>;
+    changes.cycle = changes;
+    const request = {
+      baseRevision: 1,
+      mutationId: '00000000-0000-4000-8000-000000000022',
+      changes,
+    };
+
+    await expect(
+      pluginEditorCommit(request as unknown as PluginEditorCommitRequest),
+    ).rejects.toThrow(TypeError);
+    expect(editorCommitRaw).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-enumerable toJSON that adds a private wire key', async () => {
+    editorCommitRaw.mockReset();
+    const request = {
+      baseRevision: 1,
+      mutationId: '00000000-0000-4000-8000-000000000023',
+      changes: { schemaVersion: 1, statPositions: {} },
+    } as Record<string, unknown>;
+    Object.defineProperty(request, 'toJSON', {
+      enumerable: false,
+      value: () => ({ ...request, ops: [] }),
+    });
+
+    await expect(
+      pluginEditorCommit(request as unknown as PluginEditorCommitRequest),
+    ).rejects.toThrow("unsupported key 'ops'");
+    expect(editorCommitRaw).not.toHaveBeenCalled();
+  });
+
+  it('rejects a prototype toJSON that adds a private wire key', async () => {
+    editorCommitRaw.mockReset();
+    const prototype = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(prototype, 'toJSON', {
+      enumerable: false,
+      value(this: Record<string, unknown>) {
+        return { ...this, opsVersion: 1 };
+      },
+    });
+    const request = Object.assign(Object.create(prototype), {
+      baseRevision: 1,
+      mutationId: '00000000-0000-4000-8000-000000000024',
+      changes: { schemaVersion: 1, statPositions: {} },
+    });
+
+    await expect(
+      pluginEditorCommit(request as PluginEditorCommitRequest),
+    ).rejects.toThrow("unsupported key 'opsVersion'");
+    expect(editorCommitRaw).not.toHaveBeenCalled();
+  });
+
+  it('checks the serialized key set after an alternating proxy trap', async () => {
+    editorCommitRaw.mockReset();
+    const target = {
+      baseRevision: 1,
+      mutationId: '00000000-0000-4000-8000-000000000025',
+      changes: { schemaVersion: 1, statPositions: {} },
+      ops: [],
+    };
+    let ownKeysCalls = 0;
+    const request = new Proxy(target, {
+      ownKeys() {
+        ownKeysCalls += 1;
+        return ownKeysCalls === 1
+          ? ['baseRevision', 'mutationId', 'changes']
+          : Reflect.ownKeys(target);
+      },
+    });
+
+    await expect(
+      pluginEditorCommit(request as unknown as PluginEditorCommitRequest),
+    ).rejects.toThrow("unsupported key 'ops'");
+    expect(editorCommitRaw).not.toHaveBeenCalled();
+  });
+
+  it('reads an accessor once and transports only its wire snapshot', async () => {
+    editorCommitRaw.mockReset();
+    editorCommitRaw.mockResolvedValue({ revision: 2, changedFields: [] });
+    let reads = 0;
+    const request = {
+      baseRevision: 1,
+      mutationId: '00000000-0000-4000-8000-000000000026',
+      get changes() {
+        reads += 1;
+        return { schemaVersion: 1 as const, statPositions: {} };
+      },
+    };
+
+    await pluginEditorCommit(request);
+
+    expect(reads).toBe(1);
+    expect(editorCommitRaw).toHaveBeenCalledWith({
+      baseRevision: 1,
+      mutationId: '00000000-0000-4000-8000-000000000026',
+      changes: { schemaVersion: 1, statPositions: {} },
+    });
   });
 
   // commit wire v2는 자사 내부 전용 - 플러그인 경계는 v1만 통과해야 한다
@@ -117,7 +256,7 @@ describe('pluginWriteGateway', () => {
     expect(editorCommitRaw).not.toHaveBeenCalled();
   });
 
-  it('serializes keys-bearing raw commits but keeps the envelope untouched', async () => {
+  it('serializes keys-bearing raw commits with the validated snapshot', async () => {
     editorCommitRaw.mockReset();
     editorCommitRaw.mockResolvedValue({ revision: 2, changedFields: [] });
     runSerializedPluginCommit.mockReset();
@@ -133,7 +272,8 @@ describe('pluginWriteGateway', () => {
     await pluginEditorCommit(request);
 
     expect(runSerializedPluginCommit).toHaveBeenCalledTimes(1);
-    expect(editorCommitRaw.mock.calls[0][0]).toBe(request);
+    expect(editorCommitRaw.mock.calls[0][0]).not.toBe(request);
+    expect(editorCommitRaw.mock.calls[0][0]).toEqual(request);
   });
 
   it.each([

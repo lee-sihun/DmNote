@@ -8,6 +8,21 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 const popup = vi.hoisted(() => ({
   onSelect: null as null | ((id: string) => Promise<void>),
 }));
+const apiMocks = vi.hoisted(() => ({
+  load: vi.fn(),
+  loadTab: vi.fn(),
+  save: vi.fn(),
+  saveTab: vi.fn(),
+}));
+
+vi.mock('@api/modules/presetsApi', () => ({
+  presetsApi: {
+    load: (...args: unknown[]) => apiMocks.load(...args),
+    loadTab: (...args: unknown[]) => apiMocks.loadTab(...args),
+    save: (...args: unknown[]) => apiMocks.save(...args),
+    saveTab: (...args: unknown[]) => apiMocks.saveTab(...args),
+  },
+}));
 
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -42,8 +57,8 @@ vi.mock('@assets/svgs/turn_arrow.svg', () => ({ default: () => null }));
 
 describe('프리셋 로드 선택 수명', () => {
   const originalApi = window.api;
-  const load = vi.fn();
-  const loadTab = vi.fn();
+  const load = apiMocks.load;
+  const loadTab = apiMocks.loadTab;
   let root: Root;
   let host: HTMLDivElement;
 

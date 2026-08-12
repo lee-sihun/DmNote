@@ -59,6 +59,7 @@ import type {
   PluginDisplayElementInternal,
   PluginDisplayElementActionContext,
   PluginDisplayElementConfig,
+  DMNoteAPI,
 } from '@src/types/plugin/api';
 import type { SettingsState } from '@src/types/settings/settings';
 import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
@@ -89,6 +90,7 @@ export const buildSavedPluginInstances = (
 
 interface DefineElementDependencies {
   pluginId: string;
+  api: DMNoteAPI;
   namespacedStorage: NamespacedStorage;
   registerCleanup: (cleanup: () => void) => void;
   wrapFunctionWithContext: (
@@ -104,6 +106,7 @@ interface DefineElementDependencies {
 export const createDefineElement = (deps: DefineElementDependencies) => {
   const {
     pluginId,
+    api,
     namespacedStorage,
     registerCleanup,
     wrapFunctionWithContext,
@@ -420,21 +423,21 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       }
     };
 
-    if (window.api?.i18n?.getLocale) {
-      window.api.i18n
+    if (api.i18n?.getLocale) {
+      api.i18n
         .getLocale()
         .then(applyLocale)
         .catch(() => undefined);
-    } else if (window.api?.settings?.get) {
-      window.api.settings
+    } else if (api.settings?.get) {
+      api.settings
         .get()
         .then((settings) => applyLocale((settings as SettingsState)?.language))
         .catch(() => undefined);
     }
 
     let localeCleanup: (() => void) | null = null;
-    if (window.api?.i18n?.onLocaleChange) {
-      localeCleanup = window.api.i18n.onLocaleChange(applyLocale);
+    if (api.i18n?.onLocaleChange) {
+      localeCleanup = api.i18n.onLocaleChange(applyLocale);
       if (localeCleanup) {
         registerCleanup(() => {
           try {
@@ -593,7 +596,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         newValue: string | number | boolean,
       ) => {
         currentSettings[key] = newValue;
-        window.api.ui.displayElement.update(instanceId, {
+        api.ui.displayElement.update(instanceId, {
           settings: { ...currentSettings },
         });
         updateVisibility();
@@ -643,7 +646,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             });
 
             if (schema.type === 'boolean') {
-              componentHtml = window.api.ui.components.checkbox({
+              componentHtml = api.ui.components.checkbox({
                 checked: !!value,
                 onChange: wrappedChange as unknown as (
                   checked: boolean,
@@ -672,7 +675,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
                 target.classList.add('shadow-focus-ring');
 
-                window.api.ui.pickColor({
+                api.ui.pickColor({
                   initialColor: String(currentSettings[key] ?? ''),
                   id: pickerId,
                   referenceElement: target as HTMLElement,
@@ -722,7 +725,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                 else inputWidth = 200;
               }
 
-              componentHtml = window.api.ui.components.input({
+              componentHtml = api.ui.components.input({
                 type:
                   schema.type === 'string' ? 'text' : (schema.type as 'number'),
                 value: value as string | number,
@@ -742,7 +745,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                   label: translate(option.label, undefined, option.label),
                 }),
               );
-              componentHtml = window.api.ui.components.dropdown({
+              componentHtml = api.ui.components.dropdown({
                 options: translatedOptions,
                 selected: value as string,
                 onChange: wrappedChange as unknown as (
@@ -762,7 +765,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         htmlContent += '</div></div>';
       }
 
-      const noSettingsText = await window.api.settings
+      const noSettingsText = await api.settings
         .get()
         .then((s) => {
           const locale = s.language || 'ko';
@@ -779,7 +782,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
       htmlContent += '</div>';
 
-      const [saveText, cancelText] = await window.api.settings
+      const [saveText, cancelText] = await api.settings
         .get()
         .then((s) => {
           const locale = s.language || 'ko';
@@ -787,14 +790,14 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         })
         .catch(() => ['저장', '취소']);
 
-      const confirmed = await window.api.ui.dialog.custom(htmlContent, {
+      const confirmed = await api.ui.dialog.custom(htmlContent, {
         showCancel: true,
         confirmText: saveText,
         cancelText: cancelText,
       });
 
       if (!confirmed) {
-        window.api.ui.displayElement.update(instanceId, {
+        api.ui.displayElement.update(instanceId, {
           settings: originalSettings,
         });
       }
@@ -822,7 +825,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           ).length;
       };
 
-      const menuId = window.api.ui.contextMenu.addGridMenuItem({
+      const menuId = api.ui.contextMenu.addGridMenuItem({
         id: `create-${defId}`,
         label: createLabel,
         // maxInstances 제한 도달 시 메뉴 비활성화 (현재 탭 기준)
@@ -845,7 +848,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             }
           }
 
-          window.api.ui.displayElement.add({
+          api.ui.displayElement.add({
             html: '<!-- plugin-element -->',
             position: {
               x: context.position.dx,
@@ -866,7 +869,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       });
 
       registerCleanup(() => {
-        window.api.ui.contextMenu.removeMenuItem(menuId);
+        api.ui.contextMenu.removeMenuItem(menuId);
       });
     }
 

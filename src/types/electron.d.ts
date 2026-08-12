@@ -1,3 +1,4 @@
+import type { HostGlobalApi } from '@src/renderer/api/hostGlobalApi';
 import type {
   DMNoteAPI,
   PluginDisplayElementInternal,
@@ -5,7 +6,7 @@ import type {
 
 declare global {
   interface Window {
-    api: DMNoteAPI;
+    api: HostGlobalApi;
     __dmn_isKeyListening?: boolean;
     __dmn_window_type?: 'main' | 'overlay' | 'panel';
     __dmn_runtime?: 'tauri' | 'obs';

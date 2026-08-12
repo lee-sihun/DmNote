@@ -31,6 +31,7 @@ import type {
   CssLoadResult,
   CustomCssHistoryItem,
 } from '@src/types/plugin/api';
+import { cssApi } from '@api/modules/cssApi';
 
 const CSS_HISTORY_ERROR_CODES: ReadonlySet<string> = new Set([
   'PATH_NOT_AUTHORIZED',
@@ -118,7 +119,7 @@ const CssPanelContent = ({
     pendingPathRef.current = item.path;
     setPendingPath(item.path);
     try {
-      const result = await window.api.css.historyActivate(item.path);
+      const result = await cssApi.historyActivate(item.path);
       if (!result.success) {
         showAlert(
           result.code
@@ -141,7 +142,7 @@ const CssPanelContent = ({
     removingPathsRef.current.add(path);
     const seq = ++historyRequestSeqRef.current;
     try {
-      applyHistoryResult(seq, await window.api.css.historyRemove(path));
+      applyHistoryResult(seq, await cssApi.historyRemove(path));
     } catch (error) {
       console.error('Failed to remove CSS history entry', error);
       showAlert(t('settings.cssHistoryRemoveFailed'));
@@ -155,7 +156,7 @@ const CssPanelContent = ({
     loadingNewRef.current = true;
     setIsLoadingNew(true);
     try {
-      const result: CssLoadResult = await window.api.css.load();
+      const result: CssLoadResult = await cssApi.load();
       if (result.success) {
         showAlert(t('settings.cssLoaded'));
       } else if (result.error) {

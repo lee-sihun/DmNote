@@ -48,6 +48,6 @@
         "main"
       ]
     },
-    "withGlobalTauri": true
+    "withGlobalTauri": false
   }
 }

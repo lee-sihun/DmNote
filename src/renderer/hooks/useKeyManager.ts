@@ -27,6 +27,7 @@ import type {
 } from '@src/types/key/keys';
 import { normalizeCounterSettings } from '@src/types/key/keys';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
+import { keysApi } from '@api/modules/keysApi';
 
 // editor/model — 순수 상태 변환 함수
 import {
@@ -542,7 +543,7 @@ export function useKeyManager() {
     setKeyMappings(updatedMappings);
     // 실패 투영은 coordinator 소유: retryable은 pending 재시도로 수렴,
     // 비재시도 거절은 discardRejectedPending이 권위 문서를 동기 복원
-    window.api.keys.update(updatedMappings).catch((error) => {
+    keysApi.update(updatedMappings).catch((error) => {
       console.error('Failed to update key mapping', error);
     });
   };
@@ -606,7 +607,7 @@ export function useKeyManager() {
 
   const handleResetCurrentMode = async () => {
     try {
-      const res = await window.api.keys.resetMode(selectedKeyType);
+      const res = await keysApi.resetMode(selectedKeyType);
       // 백엔드가 초기화를 수행한 경우에만 후속 정리 — 커스텀 탭도 이제 지원됨
       if (!res.success) return;
       // 이 탭에 놓인 플러그인 표시 요소도 함께 제거 (백엔드 저장소와 별개)

@@ -21,6 +21,13 @@ const mocks = vi.hoisted(() => ({
   openMenu: null as null | ((key: string) => void),
   selectMenuItem: null as null | ((id: string) => void),
 }));
+const apiMocks = vi.hoisted(() => ({ remove: vi.fn() }));
+
+vi.mock('@api/modules/resourceApi', () => ({
+  soundApi: {
+    remove: (...args: unknown[]) => apiMocks.remove(...args),
+  },
+}));
 
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -94,7 +101,8 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
 
   beforeEach(async () => {
     onSoundSelect = vi.fn();
-    remove = vi.fn(async () => {});
+    remove = apiMocks.remove;
+    remove.mockReset().mockResolvedValue(undefined);
     mocks.saveTrim = null;
     mocks.openMenu = null;
     mocks.selectMenuItem = null;

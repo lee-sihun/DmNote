@@ -26,6 +26,7 @@ import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPrev
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
+import { counterAnimationApi } from '@api/modules/resourceApi';
 
 interface CounterAnimationPickerProps {
   open: boolean;
@@ -210,7 +211,7 @@ const CounterAnimationPicker = ({
         counterAnimationLibraryCache = next;
         return next;
       });
-      await window.api.counterAnimation.remove(preset.id);
+      await counterAnimationApi.remove(preset.id);
       await loadLibrary();
     } catch (error) {
       console.error('Failed to delete counter animation preset', error);

@@ -15,6 +15,7 @@ import SoundTrimModal from '../managers/SoundTrimModal';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
+import { soundApi } from '@api/modules/resourceApi';
 
 interface SoundPickerProps {
   open: boolean;
@@ -215,7 +216,7 @@ const SoundPicker = ({
         soundListCache = next;
         return next;
       });
-      await window.api.sound.remove(item.soundPath);
+      await soundApi.remove(item.soundPath);
       // 백엔드가 이미 모든 요소에서 이 사운드를 해제했다. 대상이 갈렸으면
       // 여기서 한 번 더 비우는 건 새 모드의 다른 사운드를 지우는 일이 된다
       // (element-id 결합이면 ID applier가 원 요소에만 해제를 적용한다)
@@ -250,7 +251,7 @@ const SoundPicker = ({
         soundListCache = next;
         return next;
       });
-      await window.api.sound.rename(item.soundPath, trimmed);
+      await soundApi.rename(item.soundPath, trimmed);
       await loadSounds();
     } catch (error) {
       console.error('Failed to rename sound', error);
@@ -277,7 +278,7 @@ const SoundPicker = ({
         soundListCache = next;
         return next;
       });
-      await window.api.sound.setHidden(item.soundPath, nextHidden);
+      await soundApi.setHidden(item.soundPath, nextHidden);
       await loadSounds();
     } catch (error) {
       console.error('Failed to toggle sound hidden', error);

@@ -4,14 +4,15 @@ import Minimize from '@assets/svgs/minimize.svg';
 import Logo from '@assets/svgs/logo.svg';
 import { isMac } from '@utils/core/platform';
 import { useSingleFlightAction } from '@hooks/useSingleFlightAction';
+import { windowApi } from '@api/modules/appApi';
 
 const TitleBar = (): React.ReactElement => {
   const isMacOS: boolean = isMac();
   const { run: minimize, pending: minimizing } = useSingleFlightAction(() =>
-    window.api.window.minimize(),
+    windowApi.minimize(),
   );
   const { run: close, pending: closing } = useSingleFlightAction(() =>
-    window.api.window.close(),
+    windowApi.close(),
   );
   const handleMinimize = () => {
     void minimize().catch((error) =>

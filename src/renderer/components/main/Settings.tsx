@@ -39,6 +39,13 @@ import type {
 } from '@src/types/plugin/api';
 import type { JsPlugin } from '@src/types/plugin/js';
 import type { KeyCounters } from '@src/types/key/keys';
+import { settingsApi } from '@api/modules/settingsApi';
+import { overlayApi } from '@api/modules/overlayApi';
+import { cssApi } from '@api/modules/cssApi';
+import { jsApi } from '@api/modules/jsApi';
+import { pluginApi } from '@api/modules/pluginApi';
+import { keysApi } from '@api/modules/keysApi';
+import { appApi, windowApi } from '@api/modules/appApi';
 import { obsApi } from '@api/modules/obsApi';
 import { keySoundOutputApi } from '@api/modules/resourceApi';
 import type {
@@ -383,8 +390,8 @@ const Settings = ({
     const apply = async (): Promise<void> => {
       setHardwareAcceleration(next);
       try {
-        await window.api.settings.update({ hardwareAcceleration: next });
-        await window.api.app.restart();
+        await settingsApi.update({ hardwareAcceleration: next });
+        await appApi.restart();
       } catch (error) {
         console.error('Failed to toggle hardware acceleration', error);
       }
@@ -401,7 +408,7 @@ const Settings = ({
     const next: boolean = !alwaysOnTop;
     setAlwaysOnTop(next);
     try {
-      await window.api.settings.update({ alwaysOnTop: next });
+      await settingsApi.update({ alwaysOnTop: next });
     } catch (error) {
       setAlwaysOnTop(!next);
       console.error('Failed to toggle always-on-top', error);
@@ -412,7 +419,7 @@ const Settings = ({
     const next: boolean = !overlayLocked;
     setOverlayLocked(next);
     try {
-      await window.api.overlay.setLock(next);
+      await overlayApi.setLock(next);
     } catch (error) {
       setOverlayLocked(!next);
       console.error('Failed to toggle overlay lock', error);
@@ -423,7 +430,7 @@ const Settings = ({
     const next: boolean = !useCustomCSS;
     setUseCustomCSS(next);
     try {
-      await window.api.css.toggle(next);
+      await cssApi.toggle(next);
     } catch (error) {
       setUseCustomCSS(!next);
       console.error('Failed to toggle custom CSS', error);
@@ -434,7 +441,7 @@ const Settings = ({
     const next: boolean = !useCustomJS;
     setUseCustomJS(next);
     try {
-      await window.api.js.toggle(next);
+      await jsApi.toggle(next);
     } catch (error) {
       setUseCustomJS(!next);
       console.error('Failed to toggle custom JS', error);
@@ -458,7 +465,7 @@ const Settings = ({
     reloadingPluginsRef.current = true;
     setIsReloadingPlugins(true);
     try {
-      const result: JsReloadResult = await window.api.js.reload();
+      const result: JsReloadResult = await jsApi.reload();
       const updated: JsPlugin[] = result.updated ?? [];
       const errors: PluginError[] = result.errors ?? [];
 
@@ -500,7 +507,7 @@ const Settings = ({
     addingPluginsRef.current = true;
     setIsAddingPlugins(true);
     try {
-      const result: JsLoadResult = await window.api.js.load();
+      const result: JsLoadResult = await jsApi.load();
       if (!result) return;
       const added: JsPlugin[] = result.added ?? [];
       const errors: PluginError[] = result.errors ?? [];
@@ -535,7 +542,7 @@ const Settings = ({
     pendingPluginRef.current = pluginId;
     setPendingPluginId(pluginId);
     try {
-      const result: JsPluginUpdateResult = await window.api.js.setPluginEnabled(
+      const result: JsPluginUpdateResult = await jsApi.setPluginEnabled(
         pluginId,
         nextState,
       );
@@ -569,9 +576,7 @@ const Settings = ({
 
       // 네임스페이스를 prefix로 사용하는 데이터가 있는지 확인
       // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
-      const hasData: boolean = await window.api.plugin.storage.hasData(
-        pluginNamespace,
-      );
+      const hasData: boolean = await pluginApi.storage.hasData(pluginNamespace);
       console.warn(
         '[PluginRemove] namespace=',
         pluginNamespace,
@@ -605,7 +610,7 @@ const Settings = ({
     removingPluginRef.current = pluginId;
     setPendingPluginId(pluginId);
     try {
-      const result: JsRemoveResult = await window.api.js.remove(pluginId);
+      const result: JsRemoveResult = await jsApi.remove(pluginId);
       if (!result.success) {
         showAlert?.(t('settings.jsPluginRemoveFailed'));
       }
@@ -639,13 +644,13 @@ const Settings = ({
       );
 
       // 1) 먼저 플러그인 제거 → 클린업이 실행되며 일부 플러그인은 저장을 시도할 수 있음
-      const result: JsRemoveResult = await window.api.js.remove(pluginId);
+      const result: JsRemoveResult = await jsApi.remove(pluginId);
       if (!result.success) {
         showAlert?.(t('settings.jsPluginRemoveFailed'));
       }
 
       // 2) 그 다음 스토리지 정리 → 클린업 중 재생성된 값까지 함께 제거
-      await window.api.plugin.storage.clearByPrefix(pluginNamespace);
+      await pluginApi.storage.clearByPrefix(pluginNamespace);
     } catch (error) {
       console.error('Failed to remove JS plugin with data', error);
       showAlert?.(t('settings.jsPluginRemoveFailed'));
@@ -671,7 +676,7 @@ const Settings = ({
     const next: boolean = !noteEffect;
     setNoteEffect(next);
     try {
-      await window.api.settings.update({ noteEffect: next });
+      await settingsApi.update({ noteEffect: next });
     } catch (error) {
       setNoteEffect(!next);
       console.error('Failed to toggle note effect', error);
@@ -681,7 +686,7 @@ const Settings = ({
   const handleApplyShortcuts = async (next: ShortcutsState): Promise<void> => {
     setShortcuts(next);
     try {
-      await window.api.settings.update({ shortcuts: next });
+      await settingsApi.update({ shortcuts: next });
     } catch (error) {
       console.error('Failed to update shortcuts', error);
       showAlert?.(t('shortcutSetting.saveFailed'));
@@ -701,8 +706,8 @@ const Settings = ({
     const apply = async (): Promise<void> => {
       setAngleMode(val);
       try {
-        await window.api.settings.update({ angleMode: val });
-        await window.api.app.restart();
+        await settingsApi.update({ angleMode: val });
+        await appApi.restart();
       } catch (error) {
         console.error('Failed to change angle mode', error);
       } finally {
@@ -732,7 +737,7 @@ const Settings = ({
         const requested = pendingResizeAnchorRef.current;
         pendingResizeAnchorRef.current = null;
         try {
-          await window.api.overlay.setAnchor(requested);
+          await overlayApi.setAnchor(requested);
           confirmedResizeAnchorRef.current = requested;
         } catch (error) {
           console.error('Failed to set overlay anchor', error);
@@ -749,7 +754,7 @@ const Settings = ({
     const next: boolean = !trayEnabled;
     setTrayEnabled(next);
     try {
-      await window.api.settings.update({ trayEnabled: next });
+      await settingsApi.update({ trayEnabled: next });
     } catch (error) {
       setTrayEnabled(!next);
       console.error('Failed to toggle tray mode', error);
@@ -760,7 +765,7 @@ const Settings = ({
     const next: boolean = !autoUpdateEnabled;
     setAutoUpdateEnabled(next);
     try {
-      await window.api.settings.update({ autoUpdateEnabled: next });
+      await settingsApi.update({ autoUpdateEnabled: next });
     } catch (error) {
       setAutoUpdateEnabled(!next);
       console.error('Failed to toggle auto update', error);
@@ -775,7 +780,7 @@ const Settings = ({
     try {
       const status = next ? await obsApi.start() : await obsApi.stop();
       setObsStatus(status);
-      await window.api.settings.update({ obsModeEnabled: next });
+      await settingsApi.update({ obsModeEnabled: next });
     } catch (error) {
       console.error('Failed to toggle OBS mode', error);
       setObsStatus((prev) => ({ ...prev, running: !next }));
@@ -827,11 +832,11 @@ const Settings = ({
     const next: boolean = !developerModeEnabled;
     setDeveloperModeEnabled(next);
     try {
-      await window.api.settings.update({ developerModeEnabled: next });
+      await settingsApi.update({ developerModeEnabled: next });
       // 개발자 모드가 활성화되면 즉시 DevTools 오픈 (메인 & 오버레이)
       if (next) {
         try {
-          await window.api.window.openDevtoolsAll?.();
+          await windowApi.openDevtoolsAll?.();
         } catch {}
       }
     } catch (error) {
@@ -844,7 +849,7 @@ const Settings = ({
     const next: boolean = !keyCounterEnabled;
     setKeyCounterEnabled(next);
     try {
-      await window.api.settings.update({ keyCounterEnabled: next });
+      await settingsApi.update({ keyCounterEnabled: next });
     } catch (error) {
       setKeyCounterEnabled(!next);
       console.error('Failed to toggle key counter', error);
@@ -856,7 +861,7 @@ const Settings = ({
   ): Promise<void> => {
     event.stopPropagation();
     try {
-      const snapshot: KeyCounters = await window.api.keys.resetCounters();
+      const snapshot: KeyCounters = await keysApi.resetCounters();
       applyCounterSnapshot(snapshot);
       showAlert?.(t('settings.counterReset'));
     } catch (error) {
@@ -870,7 +875,7 @@ const Settings = ({
     resetAllRef.current = true;
     const reset = async (): Promise<void> => {
       try {
-        const result: KeysResetAllResponse = await window.api.keys.resetAll();
+        const result: KeysResetAllResponse = await keysApi.resetAll();
         if (result) {
           // 리셋 직후 메모리 상태도 바로 초기값으로 변경
           useKeyStore.setState({

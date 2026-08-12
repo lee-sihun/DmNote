@@ -21,7 +21,7 @@ export async function persistPositionsWithSync(
   setPositions(updatedPositions);
 
   try {
-    await window.api.keys.updatePositions(updatedPositions);
+    await updatePositionsWithGesture(updatedPositions);
   } catch (error) {
     console.error('Failed to persist positions', error);
   } finally {

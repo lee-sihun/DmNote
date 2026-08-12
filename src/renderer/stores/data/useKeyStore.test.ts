@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const apiMocks = vi.hoisted(() => ({ setMode: vi.fn() }));
+
+vi.mock('@api/modules/keyModeApi', () => ({
+  setKeyMode: (...args: unknown[]) => apiMocks.setMode(...args),
+}));
+
 import { useKeyStore } from './useKeyStore';
 
 interface Deferred<T> {
@@ -20,7 +27,7 @@ const deferred = <T>(): Deferred<T> => {
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('useKeyStore mode synchronization', () => {
-  const setMode = vi.fn();
+  const setMode = apiMocks.setMode;
   const bootstrap = vi.fn();
   const originalApi = window.api;
   const originalRuntime = window.__dmn_runtime;

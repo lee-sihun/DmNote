@@ -14,6 +14,7 @@ import type { KeyPosition, KeyPositions } from '@src/types/key/keys';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
 const api = vi.hoisted(() => ({
+  imageLoad: vi.fn(),
   updatePositionsWithGesture: vi.fn(
     async (_positions: KeyPositions, _gestureId?: string) => ({}),
   ),
@@ -21,6 +22,9 @@ const api = vi.hoisted(() => ({
   commitGeneratedPatch: vi.fn(),
 }));
 
+vi.mock('@api/modules/resourceApi', () => ({
+  imageApi: { load: api.imageLoad },
+}));
 vi.mock('@api/modules/keysApi', () => ({
   updatePositionsWithGesture: api.updatePositionsWithGesture,
   updateMappingsAndPositionsWithGesture:
@@ -102,6 +106,12 @@ describe('단일 스타일 패널 비동기 이미지 완료', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    api.imageLoad.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
     generatedPatches.length = 0;
     // 슬롯 시점 base는 호출 시점 스토어 상태 - 대기 중 재정렬·삭제가 이미
     // 스토어에 반영된 뒤 생성됨을 재현
@@ -128,16 +138,6 @@ describe('단일 스타일 패널 비동기 이미지 완료', () => {
       canonicalPositions: { '4key': [keyAt(ID_OTHER), keyAt(ID_TARGET)] },
       positions: { '4key': [keyAt(ID_OTHER), keyAt(ID_TARGET)] },
     });
-    window.api = {
-      image: {
-        load: vi.fn(
-          () =>
-            new Promise((resolve) => {
-              resolveLoad = resolve;
-            }),
-        ),
-      },
-    } as never;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);

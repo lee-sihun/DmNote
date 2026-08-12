@@ -4,6 +4,11 @@
  */
 
 import { newElementId } from '@src/renderer/editor/model/elementId';
+import {
+  graphItemsApi,
+  knobItemsApi,
+  statItemsApi,
+} from '@api/modules/itemsApi';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -107,7 +112,7 @@ async function persistStatPositions(
   store.setLocalUpdateInProgress(true);
   store.setPositions(nextPositions);
   try {
-    await window.api.statItems.updatePositions(nextPositions);
+    await statItemsApi.updatePositions(nextPositions);
   } catch (error) {
     console.error(errorMessage || 'Failed to update stat items', error);
   } finally {
@@ -124,7 +129,7 @@ async function persistGraphPositions(
   store.setLocalUpdateInProgress(true);
   store.setPositions(nextPositions);
   try {
-    await window.api.graphItems.updatePositions(nextPositions);
+    await graphItemsApi.updatePositions(nextPositions);
   } catch (error) {
     console.error(errorMessage || 'Failed to update graph items', error);
   } finally {
@@ -141,7 +146,7 @@ async function persistKnobPositions(
   store.setLocalUpdateInProgress(true);
   store.setPositions(nextPositions);
   try {
-    await window.api.knobItems.updatePositions(nextPositions);
+    await knobItemsApi.updatePositions(nextPositions);
   } catch (error) {
     console.error(errorMessage || 'Failed to update knob items', error);
   } finally {

@@ -31,6 +31,7 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
+import { counterAnimationApi } from '@api/modules/resourceApi';
 
 type EditorMode = 'create' | 'edit';
 
@@ -869,11 +870,11 @@ const CounterAnimationEditorModal = ({
     try {
       const response =
         mode === 'edit' && initialPreset
-          ? await window.api.counterAnimation.update({
+          ? await counterAnimationApi.update({
               id: initialPreset.id,
               ...requestBase,
             })
-          : await window.api.counterAnimation.create(requestBase);
+          : await counterAnimationApi.create(requestBase);
 
       onSaved({
         preset: response.preset,

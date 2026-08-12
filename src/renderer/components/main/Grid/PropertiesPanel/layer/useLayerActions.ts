@@ -7,6 +7,13 @@ import {
   setPluginElementsHidden,
   deletePluginElements,
 } from '@plugins/rpc/pluginElementActions';
+import { keysApi } from '@api/modules/keysApi';
+import {
+  graphItemsApi,
+  knobItemsApi,
+  layerGroupsApi,
+  statItemsApi,
+} from '@api/modules/itemsApi';
 import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
@@ -115,7 +122,7 @@ export function useLayerActions({
       useKeyStore.getState().setLocalUpdateInProgress(true);
       useKeyStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.keys.updatePositions(updatedPositions);
+        await keysApi.updatePositions(updatedPositions);
       } catch (error) {
         if (useKeyStore.getState().canonicalPositions === updatedPositions) {
           useKeyStore.getState().setPositions(pos);
@@ -144,7 +151,7 @@ export function useLayerActions({
       useStatItemStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.statItems.updatePositions(updatedPositions);
+        await statItemsApi.updatePositions(updatedPositions);
       } catch (error) {
         if (useStatItemStore.getState().positions === updatedPositions) {
           useStatItemStore.getState().setPositions(current);
@@ -173,7 +180,7 @@ export function useLayerActions({
       useGraphItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.graphItems.updatePositions(updatedPositions);
+        await graphItemsApi.updatePositions(updatedPositions);
       } catch (error) {
         if (useGraphItemStore.getState().positions === updatedPositions) {
           useGraphItemStore.getState().setPositions(current);
@@ -202,7 +209,7 @@ export function useLayerActions({
       useKnobItemStore.getState().setLocalUpdateInProgress(true);
       useKnobItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.knobItems.updatePositions(updatedPositions);
+        await knobItemsApi.updatePositions(updatedPositions);
       } catch (error) {
         if (useKnobItemStore.getState().positions === updatedPositions) {
           useKnobItemStore.getState().setPositions(current);
@@ -400,7 +407,7 @@ export function useLayerActions({
       useKeyStore.getState().setLocalUpdateInProgress(true);
       useKeyStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.keys.updatePositions(updatedPositions);
+        await keysApi.updatePositions(updatedPositions);
       } catch (error) {
         if (useKeyStore.getState().canonicalPositions === updatedPositions) {
           useKeyStore.getState().setPositions(pos);
@@ -426,7 +433,7 @@ export function useLayerActions({
       useStatItemStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.statItems.updatePositions(updatedPositions);
+        await statItemsApi.updatePositions(updatedPositions);
       } catch (error) {
         if (useStatItemStore.getState().positions === updatedPositions) {
           useStatItemStore.getState().setPositions(current);
@@ -452,7 +459,7 @@ export function useLayerActions({
       useGraphItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.graphItems.updatePositions(updatedPositions);
+        await graphItemsApi.updatePositions(updatedPositions);
       } catch (error) {
         if (useGraphItemStore.getState().positions === updatedPositions) {
           useGraphItemStore.getState().setPositions(current);
@@ -478,7 +485,7 @@ export function useLayerActions({
       useKnobItemStore.getState().setLocalUpdateInProgress(true);
       useKnobItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.knobItems.updatePositions(updatedPositions);
+        await knobItemsApi.updatePositions(updatedPositions);
       } catch (error) {
         if (useKnobItemStore.getState().positions === updatedPositions) {
           useKnobItemStore.getState().setPositions(current);
@@ -515,7 +522,7 @@ export function useLayerActions({
 
     useLayerGroupStore.getState().setLayerGroups(updated);
     try {
-      await window.api.layerGroups.update(updated);
+      await layerGroupsApi.update(updated);
     } catch (error) {
       if (useLayerGroupStore.getState().layerGroups === updated) {
         useLayerGroupStore.getState().setLayerGroups(currentGroups);

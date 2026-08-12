@@ -5,6 +5,12 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
+import { keysApi } from '@api/modules/keysApi';
+import {
+  graphItemsApi,
+  knobItemsApi,
+  statItemsApi,
+} from '@api/modules/itemsApi';
 
 declare global {
   interface Window {
@@ -1343,7 +1349,7 @@ const Grid = ({
         };
 
         useStatItemStore.getState().setPositions(nextPositions);
-        window.api.statItems.updatePositions(nextPositions).catch((error) => {
+        statItemsApi.updatePositions(nextPositions).catch((error) => {
           console.error('Failed to update stat item positions', error);
         });
       }
@@ -1469,7 +1475,7 @@ const Grid = ({
         };
 
         useGraphItemStore.getState().setPositions(nextPositions);
-        window.api.graphItems.updatePositions(nextPositions).catch((error) => {
+        graphItemsApi.updatePositions(nextPositions).catch((error) => {
           console.error('Failed to update graph item positions', error);
         });
       }
@@ -1585,7 +1591,7 @@ const Grid = ({
         };
 
         useKnobItemStore.getState().setPositions(nextPositions);
-        window.api.knobItems.updatePositions(nextPositions).catch((error) => {
+        knobItemsApi.updatePositions(nextPositions).catch((error) => {
           console.error('Failed to update knob item positions', error);
         });
       }
@@ -2570,7 +2576,7 @@ const Grid = ({
                     ] ?? '',
                   );
                   try {
-                    await window.api.keys.resetSingleCounter(
+                    await keysApi.resetSingleCounter(
                       selectedKeyType,
                       globalKey,
                     );

@@ -13,6 +13,13 @@ const testState = vi.hoisted(() => ({
   noteEffect: true,
   noteSettings: null as unknown,
 }));
+const apiMocks = vi.hoisted(() => ({ noteTabSet: vi.fn() }));
+
+vi.mock('@api/modules/noteTabApi', () => ({
+  noteTabApi: {
+    set: (...args: unknown[]) => apiMocks.noteTabSet(...args),
+  },
+}));
 
 vi.mock('@stores/data/useKeyStore', () => ({
   useKeyStore: (selector: (state: { selectedKeyType: string }) => unknown) =>
@@ -87,7 +94,8 @@ describe('TabNoteSettingModal 로드 세대', () => {
     testState.noteEffect = true;
     testState.noteSettings = getDefaultNoteSettings();
     noteTabGet = vi.fn();
-    noteTabSet = vi.fn().mockResolvedValue({ success: true, tabId: 'tab-b' });
+    noteTabSet = apiMocks.noteTabSet;
+    noteTabSet.mockReset().mockResolvedValue({ success: true, tabId: 'tab-b' });
 
     window.api = {
       noteTab: {

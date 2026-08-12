@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { CustomTab, KeyMappings, KeyPositions } from '@src/types/key/keys';
+import { setKeyMode } from '@api/modules/keyModeApi';
 
 interface KeyStoreState {
   selectedKeyType: string;
@@ -58,8 +59,7 @@ export const useKeyStore = create<KeyStoreState>((set, get) => ({
     }
 
     const generation = ++modeRequestGeneration;
-    void window.api.keys
-      .setMode(mode)
+    void setKeyMode(mode)
       .then((response) => {
         if (
           generation !== modeRequestGeneration ||

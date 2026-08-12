@@ -4,6 +4,7 @@ import { rawKeyEventBus } from '@utils/core/rawKeyEventBus';
 import { enqueueEditorCompatibilityWrite } from '@src/renderer/editor/runtime/editorCompatibilityQueue';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
+import { setKeyMode } from './keyModeApi';
 
 import type {
   KeyCounterUpdate,
@@ -96,8 +97,7 @@ export const keysApi = {
   getPositions: () => invoke<KeyPositions>('positions_get'),
   updatePositions: (positions: KeyPositions) =>
     updatePositionsWithGesture(positions),
-  setMode: (mode: string) =>
-    invoke<KeysModeResponse>('keys_set_mode', { mode }),
+  setMode: setKeyMode,
   resetAll: () =>
     runExclusiveLegacyMutation(() =>
       invoke<KeysResetAllResponse>('keys_reset_all'),

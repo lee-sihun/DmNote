@@ -38,6 +38,9 @@ import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { isHistoryEditorFlushLocked } from '@src/renderer/editor/runtime/historyEditorFlushLock';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
+import { keysApi } from '@api/modules/keysApi';
+import { settingsApi } from '@api/modules/settingsApi';
+import { appApi } from '@api/modules/appApi';
 
 import { useUIStore } from '@stores/useUIStore';
 
@@ -399,7 +402,7 @@ export default function App() {
 
     if (!autoUpdateEnabled) {
       try {
-        await window.api.app.openExternal(updateInfo.releaseUrl);
+        await appApi.openExternal(updateInfo.releaseUrl);
       } catch (error) {
         console.error('Failed to open release URL', error);
       }
@@ -774,7 +777,7 @@ export default function App() {
           showConfirm(
             t('confirm.resetCountersCurrentTab'),
             async () => {
-              await window.api.keys.resetCountersMode(selectedKeyType);
+              await keysApi.resetCountersMode(selectedKeyType);
             },
             { confirmText: t('confirm.reset') },
           )
@@ -810,7 +813,7 @@ export default function App() {
           onClose={() => setIsNoteSettingOpen(false)}
           onSave={async (normalized) => {
             try {
-              await window.api.settings.update({ noteSettings: normalized });
+              await settingsApi.update({ noteSettings: normalized });
               setNoteSettings(normalized);
             } catch (error) {
               console.error('Failed to update note settings', error);

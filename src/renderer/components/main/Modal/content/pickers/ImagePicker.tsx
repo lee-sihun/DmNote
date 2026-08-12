@@ -9,6 +9,7 @@ import { resolveImageSource } from '@utils/core/imageSource';
 import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessionScope';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
+import { imageApi } from '@api/modules/resourceApi';
 
 interface ImagePickerProps {
   open: boolean;
@@ -82,7 +83,7 @@ const ImagePicker = ({
     loadingImageRef.current = true;
     setIsLoadingImage(true);
     try {
-      const result = await window.api.image.load();
+      const result = await imageApi.load();
       if (!result?.success || !result.imagePath) {
         return;
       }
