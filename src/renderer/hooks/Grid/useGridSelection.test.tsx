@@ -15,6 +15,21 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import { useGridSelection } from './useGridSelection';
 
 const mocks = vi.hoisted(() => ({
+  commitGeometry: vi.fn(() => Promise.resolve(1)),
+  runMixedIntent: vi.fn(() => Promise.resolve()),
+  pluginAdditionThrows: false,
+  commitGeneratedPatch: vi.fn(
+    (
+      _generate: (base: unknown) => unknown,
+      meta?: { onEnrolled?: () => void },
+    ) => {
+      meta?.onEnrolled?.();
+      return Promise.resolve({});
+    },
+  ),
+  runMixedGestureIntent: vi.fn(() =>
+    Promise.resolve({ committed: true, satisfied: true }),
+  ),
   commitPatch: vi.fn((_patch: unknown, _options?: { gestureId?: string }) =>
     Promise.resolve(),
   ),
@@ -27,7 +42,42 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitPatch: mocks.commitPatch },
+  editorCoordinator: {
+    commitPatch: mocks.commitPatch,
+    commitGeneratedPatch: mocks.commitGeneratedPatch,
+    getState: () => ({ lastAck: null }),
+  },
+}));
+
+vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  commitSelectedGeometryByIds: mocks.commitGeometry,
+}));
+
+vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
+  applyPluginRemovalEagerly: (
+    _fullIds: readonly string[],
+    mutate: () => void,
+  ) => {
+    mutate();
+    return null;
+  },
+  applyPluginAdditionEagerly: (
+    _added: readonly string[],
+    _z: unknown[],
+    mutate: () => void,
+  ) => {
+    if (mocks.pluginAdditionThrows) {
+      throw new Error('plugin eager failed');
+    }
+    mutate();
+    return null;
+  },
+  applySealedMixedMutation: (options: { mutate: () => void }) => {
+    options.mutate();
+    return { rollback: vi.fn() };
+  },
+  runMixedElementIntent: mocks.runMixedIntent,
+  runMixedGestureElementIntent: mocks.runMixedGestureIntent,
 }));
 
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
@@ -49,7 +99,9 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
 }));
 
 const gestureId = '00000000-0000-4000-8000-0000000000f4';
+const STABLE_KEY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const keyPosition = {
+  id: STABLE_KEY_ID,
   dx: 10,
   dy: 20,
   width: 60,
@@ -97,6 +149,11 @@ describe('useGridSelection compound history gesture', () => {
   beforeEach(async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     mocks.commitPatch.mockClear();
+    mocks.commitGeometry.mockClear();
+    mocks.runMixedIntent.mockClear();
+    mocks.commitGeneratedPatch.mockClear();
+    mocks.pluginAdditionThrows = false;
+    mocks.runMixedGestureIntent.mockClear();
     mocks.deletePluginElements.mockClear();
     mocks.rotateSession.mockClear();
     mocks.beginMixedGesture.mockClear();
@@ -142,7 +199,7 @@ describe('useGridSelection compound history gesture', () => {
   it('혼합 삭제는 editor와 plugin에 같은 gestureId를 전달한다', async () => {
     await act(async () => {
       useGridSelectionStore.getState().setSelectedElements([
-        { type: 'key', id: 'key-0', index: 0 },
+        { type: 'key', id: STABLE_KEY_ID, index: 0 },
         { type: 'plugin', id: 'plugin-a:element' },
       ]);
     });
@@ -153,25 +210,29 @@ describe('useGridSelection compound history gesture', () => {
       ['plugin-a:element'],
       gestureId,
     );
-    expect(mocks.beginMixedGesture).toHaveBeenCalledWith(gestureId, [
-      'plugin-a',
-    ]);
-    expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
-      gestureId,
-      expect.objectContaining({ schemaVersion: 1 }),
-      ['plugin-a'],
-    );
+    // wire는 슬롯 정합 mixed intent - full-record 커밋 금지
+    expect(mocks.runMixedGestureIntent).toHaveBeenCalledTimes(1);
+    const intentOptions = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      gestureId: string;
+      initialPluginIds: readonly string[];
+    };
+    expect(intentOptions.gestureId).toBe(gestureId);
+    expect(intentOptions.initialPluginIds).toEqual(['plugin-a']);
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
-  it('혼합 삭제 중 동기 예외가 나도 staged transaction을 정산한다', async () => {
+  it('혼합 삭제 중 동기 예외가 나도 staged를 정산하고 editor eager를 복원한다', async () => {
     const error = new Error('delete projection failed');
+    const mappingsBefore = useKeyStore.getState().keyMappings;
+    const positionsBefore = useKeyStore.getState().canonicalPositions;
     mocks.deletePluginElements.mockImplementationOnce(() => {
       throw error;
     });
     await act(async () => {
       useGridSelectionStore.getState().setSelectedElements([
-        { type: 'key', id: 'key-0', index: 0 },
+        { type: 'key', id: STABLE_KEY_ID, index: 0 },
         { type: 'plugin', id: 'plugin-a:element' },
       ]);
     });
@@ -187,6 +248,9 @@ describe('useGridSelection compound history gesture', () => {
 
     expect(caught).toBe(error);
     expect(mocks.cancelUncommittedMixedGesture).toHaveBeenCalledWith(gestureId);
+    // plugin eager 실패 시 editor eager(삭제)도 복원 - key가 부활한다
+    expect(useKeyStore.getState().keyMappings).toEqual(mappingsBefore);
+    expect(useKeyStore.getState().canonicalPositions).toEqual(positionsBefore);
   });
 
   it('혼합 붙여넣기는 editor와 plugin에 같은 gestureId를 전달한다', async () => {
@@ -203,14 +267,16 @@ describe('useGridSelection compound history gesture', () => {
     await act(async () => api.pasteElements());
 
     expect(mocks.rotateSession).toHaveBeenCalledWith('plugin-a', gestureId);
-    expect(mocks.beginMixedGesture).toHaveBeenCalledWith(gestureId, [
-      'plugin-a',
-    ]);
-    expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
-      gestureId,
-      expect.objectContaining({ schemaVersion: 1 }),
-      ['plugin-a'],
-    );
+    // paste는 항상 mixed-capable 슬롯 정합 러너 - full-record 커밋 금지
+    expect(mocks.runMixedGestureIntent).toHaveBeenCalledTimes(1);
+    const pasteOptions = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      gestureId: string;
+      initialPluginIds: readonly string[];
+    };
+    expect(pasteOptions.gestureId).toBe(gestureId);
+    expect(pasteOptions.initialPluginIds).toEqual(['plugin-a']);
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
@@ -246,10 +312,262 @@ describe('useGridSelection compound history gesture', () => {
     expect(mocks.cancelUncommittedMixedGesture).toHaveBeenCalledWith(gestureId);
   });
 
-  it('resize 종료 callback은 전달받은 gestureId로 editor를 저장한다', () => {
+  it('안정 id 이동 정산은 기하 의도 커밋에 gestureId를 전달한다', async () => {
+    await act(async () => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+    });
     api.syncSelectedElementsToOverlay(gestureId);
 
-    expect(mocks.commitPatch).toHaveBeenCalledTimes(1);
-    expect(mocks.commitPatch.mock.calls[0]?.[1]).toEqual({ gestureId });
+    expect(mocks.commitGeometry).toHaveBeenCalledTimes(1);
+    expect(mocks.commitGeometry).toHaveBeenCalledWith(
+      [{ type: 'key', id: STABLE_KEY_ID }],
+      gestureId,
+    );
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('빈 선택 정산은 editor를 커밋하지 않는다', () => {
+    api.syncSelectedElementsToOverlay(gestureId);
+
+    expect(mocks.commitGeometry).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  const deletionBase = () => ({
+    schemaVersion: 1,
+    keys: { '4key': ['KeyA', 'KeyB'] },
+    keyPositions: {
+      '4key': [
+        { ...keyPosition, id: STABLE_KEY_ID },
+        {
+          ...keyPosition,
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          noteWidth: 111,
+        },
+      ],
+    },
+    statPositions: {},
+    graphPositions: {},
+    knobPositions: {},
+    layerGroups: {},
+  });
+
+  it('editor 전용 삭제는 슬롯 base에서 id 재해석으로 pair mask 재생성한다', async () => {
+    await act(async () => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+    });
+    await act(async () => api.deleteSelectedElements());
+
+    expect(mocks.commitGeneratedPatch).toHaveBeenCalledTimes(1);
+    const generate = (
+      mocks.commitGeneratedPatch.mock.calls[0] as unknown[]
+    )[0] as (base: unknown) => {
+      keys?: Record<string, string[]>;
+      keyPositions?: Record<string, Array<Record<string, unknown>>>;
+    } | null;
+    const patch = generate(deletionBase());
+    // 대상만 제거되고 pair가 같은 mask로 - 대기 중 정산된 noteWidth는 생존
+    expect(patch?.keys?.['4key']).toEqual(['KeyB']);
+    expect(patch?.keyPositions?.['4key']).toHaveLength(1);
+    expect(patch?.keyPositions?.['4key'][0]).toMatchObject({ noteWidth: 111 });
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('삭제 대상이 base에서 이미 사라졌으면 무패치(satisfied)다', async () => {
+    await act(async () => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([
+          { type: 'key', id: '99999999-9999-4999-8999-999999999999', index: 0 },
+        ]);
+    });
+    await act(async () => api.deleteSelectedElements());
+
+    const generate = (
+      mocks.commitGeneratedPatch.mock.calls[0] as unknown[]
+    )[0] as (base: unknown) => unknown;
+    expect(generate(deletionBase())).toBeNull();
+  });
+
+  it('paste generator는 슬롯 base에 동결 payload를 재적용하고 멱등·충돌을 판별한다', async () => {
+    act(() => {
+      useGridSelectionStore
+        .getState()
+        .setClipboard([
+          { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        ]);
+    });
+    await act(async () => api.pasteElements());
+
+    expect(mocks.runMixedGestureIntent).toHaveBeenCalledTimes(1);
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        kind: string;
+        patch?: {
+          keys?: Record<string, unknown[]>;
+          keyPositions?: Record<string, Array<Record<string, unknown>>>;
+        };
+      };
+    };
+    const emptyBase = {
+      schemaVersion: 1,
+      keys: { '4key': [] },
+      keyPositions: {
+        '4key': [],
+      },
+      statPositions: {},
+      graphPositions: {},
+      knobPositions: {},
+      layerGroups: {},
+    };
+    const result = options.generate({ base: emptyBase, pluginProjection: [] });
+    expect(result.kind).toBe('patch');
+    expect(result.patch?.keys?.['4key']).toEqual(['KeyB']);
+    expect(result.patch?.keyPositions?.['4key']).toHaveLength(1);
+    const pastedId = result.patch?.keyPositions?.['4key'][0].id as string;
+
+    // 멱등 재시도: 같은 payload가 이미 base에 있으면 satisfied
+    const appliedBase = {
+      ...emptyBase,
+      keys: { '4key': ['KeyB'] },
+      keyPositions: {
+        '4key': [result.patch!.keyPositions!['4key'][0]],
+      },
+    };
+    expect(
+      options.generate({ base: appliedBase, pluginProjection: [] }).kind,
+    ).toBe('satisfied');
+
+    // 충돌: 같은 id에 다른 payload면 전체 중단 sentinel
+    const conflictedBase = {
+      ...appliedBase,
+      keyPositions: {
+        '4key': [
+          { ...result.patch!.keyPositions!['4key'][0], dx: 987, id: pastedId },
+        ],
+      },
+    };
+    expect(() =>
+      options.generate({ base: conflictedBase, pluginProjection: [] }),
+    ).toThrowError(/paste id collision/);
+  });
+
+  it('그룹 앵커는 당시 자식이 사라져도 살아있는 그룹 경계로 재해석한다', async () => {
+    // 그룹 g1의 최상단 자식과 함께 그룹 선택 상태에서 paste
+    const memberId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    await act(async () => {
+      useKeyStore.setState({
+        canonicalPositions: {
+          '4key': [
+            keyPosition,
+            { ...keyPosition, id: memberId, groupId: 'g1', zIndex: 5 },
+          ],
+        } as never,
+        keyMappings: { '4key': ['KeyA', 'KeyB'] } as never,
+      });
+      // 실사용 그룹 클릭 상태: 자식 전체 + groupId 동시 선택 (tie에서
+      // 그룹 앵커가 이겨야 한다)
+      useGridSelectionStore
+        .getState()
+        .setFullSelection([{ type: 'key', id: memberId, index: 1 }], ['g1']);
+      useGridSelectionStore
+        .getState()
+        .setClipboard([
+          { type: 'key', keyCode: 'KeyC', position: keyPosition },
+        ]);
+    });
+    await act(async () => api.pasteElements());
+
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: { base: unknown; pluginProjection: unknown[] }) => {
+        patch?: {
+          keyPositions?: Record<string, Array<Record<string, unknown>>>;
+        };
+      };
+    };
+    // 슬롯 base: 당시 자식(memberId)은 삭제됐지만 g1에 새 자식이 존재
+    const survivorId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const topId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const base = {
+      schemaVersion: 1,
+      keys: { '4key': ['KeyA', 'KeyZ', 'KeyT'] },
+      keyPositions: {
+        '4key': [
+          { ...keyPosition, id: STABLE_KEY_ID, zIndex: 1 },
+          { ...keyPosition, id: survivorId, groupId: 'g1', zIndex: 9 },
+          { ...keyPosition, id: topId, zIndex: 20 },
+        ],
+      },
+      statPositions: {},
+      graphPositions: {},
+      knobPositions: {},
+      layerGroups: { '4key': [{ id: 'g1', name: 'g1' }] },
+    };
+    const result = options.generate({ base, pluginProjection: [] });
+    const positions = result.patch?.keyPositions?.['4key'] ?? [];
+    const pasted = positions.find(
+      (position) =>
+        position.id !== STABLE_KEY_ID &&
+        position.id !== survivorId &&
+        position.id !== topId,
+    );
+    const survivor = positions.find((position) => position.id === survivorId);
+    const top = positions.find((position) => position.id === topId);
+    // 그룹 경계 위에 삽입 - 살아있는 g1 자식보다 위지만 그룹 밖 최상단
+    // 요소보다는 아래 (element 앵커 소실의 전역 최상단 폴백과 구별)
+    expect(pasted).toBeDefined();
+    expect((pasted!.zIndex as number) > (survivor!.zIndex as number)).toBe(
+      true,
+    );
+    expect((pasted!.zIndex as number) < (top!.zIndex as number)).toBe(true);
+  });
+
+  it('plugin eager가 실패하면 editor eager도 함께 복원한다', async () => {
+    mocks.pluginAdditionThrows = true;
+    const mappingsBefore = useKeyStore.getState().keyMappings;
+    const positionsBefore = useKeyStore.getState().canonicalPositions;
+    act(() => {
+      useGridSelectionStore
+        .getState()
+        .setClipboard([
+          { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        ]);
+    });
+    let caught: unknown;
+    await act(async () => {
+      try {
+        await api.pasteElements();
+      } catch (error) {
+        caught = error;
+      }
+    });
+
+    expect((caught as Error).message).toBe('plugin eager failed');
+    expect(useKeyStore.getState().keyMappings).toEqual(mappingsBefore);
+    expect(useKeyStore.getState().canonicalPositions).toEqual(positionsBefore);
+  });
+
+  it('plugin scope staging은 eager 스토어 변이보다 앞선다', async () => {
+    await act(async () => {
+      useGridSelectionStore.getState().setSelectedElements([
+        { type: 'key', id: STABLE_KEY_ID, index: 0 },
+        { type: 'plugin', id: 'plugin-a:element' },
+      ]);
+    });
+    await act(async () => api.deleteSelectedElements());
+
+    const beginOrder =
+      mocks.beginMixedGesture.mock.invocationCallOrder[0] ?? Infinity;
+    const deleteOrder =
+      mocks.deletePluginElements.mock.invocationCallOrder[0] ?? -1;
+    expect(beginOrder).toBeLessThan(deleteOrder);
   });
 });

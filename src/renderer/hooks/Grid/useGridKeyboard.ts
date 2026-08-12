@@ -12,6 +12,7 @@ import {
   useGridSelectionStore,
   type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { ARROW_KEY_HISTORY_DELAY } from './constants';
 import { isMac } from '@utils/core/platform';
@@ -165,7 +166,7 @@ export function useGridKeyboard({
         const currentClipboard = useGridSelectionStore.getState().clipboard;
         if (currentClipboard.length > 0) {
           e.preventDefault();
-          pasteElements();
+          void Promise.resolve(pasteElements()).catch(reportElementOpError);
         }
         return;
       }
@@ -215,7 +216,9 @@ export function useGridKeyboard({
       // Delete 키로 선택 요소 삭제
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
-        deleteSelectedElements();
+        void Promise.resolve(deleteSelectedElements()).catch(
+          reportElementOpError,
+        );
         return;
       }
 

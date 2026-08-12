@@ -695,7 +695,7 @@ const Grid = ({
 
   const duplicateSelectedFromContextMenu = async () => {
     copySelectedElements();
-    await pasteElements();
+    await pasteElements().catch(reportElementOpError);
   };
 
   // 합성 id(`${type}-${index}`)가 아닌 안정 id를 가진 native 선택 판별
@@ -2225,7 +2225,7 @@ const Grid = ({
           onSelect={async (id: string) => {
             if (contextType === 'mixed') {
               if (id === 'delete') {
-                await deleteSelectedElements();
+                await deleteSelectedElements().catch(reportElementOpError);
               } else if (id === 'duplicate') {
                 await duplicateSelectedFromContextMenu();
               } else if (id === 'bringToFront') {

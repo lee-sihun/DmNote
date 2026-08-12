@@ -7,6 +7,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 import { useGridKeyboard } from './useGridKeyboard';
 import { useGridSelection } from './useGridSelection';
@@ -21,7 +22,41 @@ const { commitPatchMock, rotateSessionMock, sendBridgeMessageMock } =
   }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
-  editorCoordinator: { commitPatch: commitPatchMock },
+  editorCoordinator: {
+    commitPatch: commitPatchMock,
+    // 안정 id 기하 정산은 generator 경로 - gestureId 기록만 동일 recorder로
+    commitGeneratedPatch: vi.fn(
+      (
+        _generate: unknown,
+        meta?: { gestureId?: string; onEnrolled?: () => void },
+      ) => {
+        meta?.onEnrolled?.();
+        commitPatchMock({ schemaVersion: 1 }, { gestureId: meta?.gestureId });
+        return Promise.resolve({});
+      },
+    ),
+    getState: () => ({ lastAck: null }),
+  },
+}));
+
+vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  // 게스처 버스트 검증 대상은 gestureId 운반 - 동기 recorder로 기록
+  commitSelectedGeometryByIds: vi.fn(
+    (targets: unknown[], gestureId?: string) => {
+      commitPatchMock({ schemaVersion: 1 }, { gestureId });
+      return Promise.resolve(targets.length);
+    },
+  ),
+}));
+
+vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
+  runMixedElementIntent: vi.fn(
+    (options: { gestureId: string; applyEager: () => unknown }) => {
+      options.applyEager();
+      commitPatchMock({ schemaVersion: 1 }, { gestureId: options.gestureId });
+      return Promise.resolve();
+    },
+  ),
 }));
 
 vi.mock('@utils/plugin/bridgeMessages', () => ({
@@ -37,8 +72,19 @@ vi.mock('@utils/core/platform', () => ({ isMac: () => false }));
 const firstGestureId = '00000000-0000-4000-8000-000000000001';
 const secondGestureId = '00000000-0000-4000-8000-000000000002';
 
-const position = (): KeyPosition =>
-  ({ dx: 0, dy: 0, width: 40, height: 40 } as KeyPosition);
+const STABLE_IDS = [
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+];
+
+const position = (index = 0): KeyPosition =>
+  ({
+    id: STABLE_IDS[index],
+    dx: 0,
+    dy: 0,
+    width: 40,
+    height: 40,
+  } as KeyPosition);
 
 interface HarnessProps {
   includePlugin?: boolean;
@@ -52,16 +98,22 @@ const Harness = ({
   continuousInputStrategy = 'sync',
 }: HarnessProps) => {
   const selectedElements = [
-    { type: 'key' as const, id: `key-${selectedIndex}`, index: selectedIndex },
+    {
+      type: 'key' as const,
+      id: STABLE_IDS[selectedIndex],
+      index: selectedIndex,
+    },
     ...(includePlugin
       ? [{ type: 'plugin' as const, id: 'plugin-a:element' }]
       : []),
   ];
+  // 정산 라우팅은 선택 스토어를 읽는다 - 하네스 선택과 동기화
+  useGridSelectionStore.setState({ selectedElements });
   const { moveSelectedElements } = useGridSelection({
     selectedElements,
     selectedKeyType: '4key',
     keyMappings: { '4key': ['KeyA', 'KeyB'] },
-    positions: { '4key': [position(), position()] },
+    positions: { '4key': [position(0), position(1)] },
   });
 
   useGridKeyboard({
@@ -97,8 +149,8 @@ describe('useGridKeyboard arrow history burst', () => {
     useKeyStore.setState({
       selectedKeyType: '4key',
       keyMappings: { '4key': ['KeyA', 'KeyB'] },
-      positions: { '4key': [position(), position()] },
-      canonicalPositions: { '4key': [position(), position()] },
+      positions: { '4key': [position(0), position(1)] },
+      canonicalPositions: { '4key': [position(0), position(1)] },
     });
     useStatItemStore.setState({ positions: {} });
     useGraphItemStore.setState({ positions: {} });
