@@ -139,9 +139,30 @@ export interface EditorReorderElementsOpV1 {
 }
 
 export type EditorElementPropertyPatchV1 =
-  | { hidden: boolean; layerName?: never; graphType?: never }
-  | { hidden?: never; layerName: string | null; graphType?: never }
-  | { hidden?: never; layerName?: never; graphType: 'line' | 'bar' };
+  | {
+      hidden: boolean;
+      layerName?: never;
+      graphType?: never;
+      graphColor?: never;
+    }
+  | {
+      hidden?: never;
+      layerName: string | null;
+      graphType?: never;
+      graphColor?: never;
+    }
+  | {
+      hidden?: never;
+      layerName?: never;
+      graphType: 'line' | 'bar';
+      graphColor?: never;
+    }
+  | {
+      hidden?: never;
+      layerName?: never;
+      graphType?: never;
+      graphColor: string;
+    };
 
 export interface EditorPatchElementOpV1 {
   kind: 'patchElement';
@@ -901,7 +922,11 @@ export function assertEditorOpsV1(
         (patchKeys.length === 1 &&
           patchKeys[0] === 'graphType' &&
           op.elementType === 'graph' &&
-          (op.patch.graphType === 'line' || op.patch.graphType === 'bar'));
+          (op.patch.graphType === 'line' || op.patch.graphType === 'bar')) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'graphColor' &&
+          op.elementType === 'graph' &&
+          typeof op.patch.graphColor === 'string');
       if (!patchIsValid) {
         throw new EditorProtocolError(`${opLabel}.patch is invalid`);
       }

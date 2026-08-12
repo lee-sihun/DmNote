@@ -125,6 +125,26 @@ describe('editorCommitRaw semantic op protocol', () => {
         {
           kind: 'patchElement',
           elementType: 'graph',
+          id: '00000000-0000-4000-8000-00000000000d',
+          patch: { graphColor: 'raw color' },
+        },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'patchElement',
+          elementType: 'knob',
+          id: '00000000-0000-4000-8000-00000000000e',
+          patch: { graphColor: '#fff' },
+        } as never,
+      ]),
+    ).toThrow(EditorProtocolError);
+    expect(() =>
+      assertEditorOpsV1([
+        {
+          kind: 'patchElement',
+          elementType: 'graph',
           id: '00000000-0000-4000-8000-00000000000b',
           patch: { graphType: 'bar' },
         },

@@ -647,11 +647,21 @@ pub(crate) fn prepare_editor_ops_transition(
         }
         if let EditorOpV1::PatchElement {
             element_type,
-            patch: EditorElementPropertyPatchV1::GraphType(_),
+            patch,
             ..
         } = op
         {
-            validate_editor_op_target_type(op_index, EditorElementTypeV1::Graph, *element_type)?;
+            if matches!(
+                patch,
+                EditorElementPropertyPatchV1::GraphType(_)
+                    | EditorElementPropertyPatchV1::GraphColor(_)
+            ) {
+                validate_editor_op_target_type(
+                    op_index,
+                    EditorElementTypeV1::Graph,
+                    *element_type,
+                )?;
+            }
         }
     }
 
@@ -744,6 +754,24 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             graph.graph_type = patch.graph_type.clone();
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::GraphColor(patch) => {
+                        let graph = candidate
+                            .graph_positions
+                            .get_mut(&location.mode)
+                            .and_then(|positions| positions.get_mut(location.index))
+                            .ok_or_else(|| {
+                                EditorCommitError::validation(
+                                    "ELEMENT_LOCATOR_INVALID",
+                                    "graph property target no longer matches its stable ID",
+                                )
+                            })?;
+                        if graph.graph_color == patch.graph_color {
+                            false
+                        } else {
+                            graph.graph_color.clone_from(&patch.graph_color);
                             true
                         }
                     }
@@ -1017,6 +1045,22 @@ mod tests {
             id: id.into(),
             patch: EditorElementPropertyPatchV1::GraphType(
                 crate::models::EditorGraphTypePropertyPatchV1 { graph_type },
+            ),
+        }
+    }
+
+    fn patch_graph_color_op(
+        element_type: EditorElementTypeV1,
+        id: impl Into<String>,
+        graph_color: impl Into<String>,
+    ) -> EditorOpV1 {
+        EditorOpV1::PatchElement {
+            element_type,
+            id: id.into(),
+            patch: EditorElementPropertyPatchV1::GraphColor(
+                crate::models::EditorGraphColorPropertyPatchV1 {
+                    graph_color: graph_color.into(),
+                },
             ),
         }
     }
@@ -1675,6 +1719,61 @@ mod tests {
             &[
                 patch_hidden_op(EditorElementTypeV1::Key, &key_id, true),
                 patch_graph_type_op(EditorElementTypeV1::Key, key_id, GraphType::Bar),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+    }
+
+    #[test]
+    fn graph_color_patch_preserves_raw_string_and_other_graph_fields() {
+        let store = store_with_every_reorder_type();
+        let graph = &store.graph_positions["4key"][0];
+        let graph_id = graph.position.id.clone();
+        let raw_color = "color(display-p3 1 0 0 / 0.5)";
+        let ops = [
+            patch_graph_color_op(EditorElementTypeV1::Graph, &graph_id, raw_color),
+            patch_graph_color_op(
+                EditorElementTypeV1::Graph,
+                uuid::Uuid::new_v4().to_string(),
+                "",
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let changed = &transition.candidate.graph_positions["4key"][0];
+        assert_eq!(changed.graph_color, raw_color);
+        assert_eq!(changed.stat_type, graph.stat_type);
+        assert_eq!(changed.graph_type, graph.graph_type);
+        assert_eq!(changed.graph_speed, graph.graph_speed);
+        assert_eq!(changed.show_avg_line, graph.show_avg_line);
+        assert_eq!(changed.position, graph.position);
+        assert_eq!(transition.changed_fields, [EditorField::GraphPositions]);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                patch_hidden_op(EditorElementTypeV1::Key, &key_id, true),
+                patch_graph_color_op(EditorElementTypeV1::Key, key_id, "#FFFFFF"),
             ],
         )
         .unwrap_err();

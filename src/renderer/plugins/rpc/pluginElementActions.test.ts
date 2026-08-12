@@ -241,6 +241,42 @@ describe('plugin element panel queue', () => {
     expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
   });
 
+  it('graphColor batch는 공통 literal과 안정 ID 배열을 한 요청으로 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+
+    await expect(
+      actions.patchGraphColorsViaAuthority(
+        [
+          'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        ],
+        '#12abEF',
+      ),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      {
+        targets: [
+          {
+            elementType: 'graph',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+          {
+            elementType: 'graph',
+            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          },
+        ],
+        patch: { graphColor: '#12abEF' },
+      },
+      0,
+      7,
+    );
+  });
+
   it.each([
     { kind: 'unknown' },
     { kind: 'error', errorCode: 'MODEL_REVISION_STALE' },

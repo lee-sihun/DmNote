@@ -340,6 +340,9 @@ const applyOpsForTest = (
           if ('graphType' in op.patch) {
             return { ...position, graphType: op.patch.graphType };
           }
+          if ('graphColor' in op.patch) {
+            return { ...position, graphColor: op.patch.graphColor };
+          }
           return { ...position, hidden: op.patch.hidden };
         });
       } else {
@@ -2964,6 +2967,42 @@ describe('commitSemanticOpsInternal', () => {
       graphType: 'bar',
       id,
       noteWidth: 321,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('graphColor patch는 raw literal을 쓰고 다른 graph leaf를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000091';
+    const base = makeDocument();
+    base.graphPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id,
+          statType: 'kps',
+          graphType: 'line',
+          graphSpeed: 1234,
+          graphColor: '#before',
+        },
+      ],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id,
+        patch: { graphColor: '  custom  ' },
+      },
+    ]);
+
+    expect(outcome.document.graphPositions['4key'][0]).toMatchObject({
+      id,
+      graphColor: '  custom  ',
+      graphType: 'line',
+      graphSpeed: 1234,
     });
     harness.coordinator.stop();
   });

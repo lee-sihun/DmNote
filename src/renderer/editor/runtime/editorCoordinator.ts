@@ -457,6 +457,9 @@ const applySemanticOps = (
             if ('graphType' in op.patch) {
               return { ...position, graphType: op.patch.graphType };
             }
+            if ('graphColor' in op.patch) {
+              return { ...position, graphColor: op.patch.graphColor };
+            }
             return { ...position, hidden: op.patch.hidden };
           }),
         } as never;

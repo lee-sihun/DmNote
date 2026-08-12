@@ -208,6 +208,7 @@ pub enum EditorElementPropertyPatchV1 {
     Hidden(EditorHiddenPropertyPatchV1),
     LayerName(EditorLayerNamePropertyPatchV1),
     GraphType(EditorGraphTypePropertyPatchV1),
+    GraphColor(EditorGraphColorPropertyPatchV1),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -227,6 +228,12 @@ pub struct EditorLayerNamePropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorGraphTypePropertyPatchV1 {
     pub graph_type: GraphType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorGraphColorPropertyPatchV1 {
+    pub graph_color: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

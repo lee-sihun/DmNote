@@ -17,6 +17,9 @@ const {
   batchGraphPropsMock,
   batchPropsMock,
   graphUpdatePositionsMock,
+  patchGraphColorMock,
+  patchGraphColorsMock,
+  patchGraphColorsViaAuthorityMock,
   patchGraphTypeMock,
   patchGraphTypesMock,
   patchGraphTypesViaAuthorityMock,
@@ -32,6 +35,9 @@ const {
   batchGraphPropsMock: vi.fn(),
   batchPropsMock: vi.fn(),
   graphUpdatePositionsMock: vi.fn(() => Promise.resolve()),
+  patchGraphColorMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphColorsMock: vi.fn(() => Promise.resolve(true)),
+  patchGraphColorsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchGraphTypeMock: vi.fn(() => Promise.resolve(true)),
   patchGraphTypesMock: vi.fn(() => Promise.resolve(true)),
   patchGraphTypesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
@@ -54,12 +60,15 @@ vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: vi.fn() }),
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
+  patchGraphColorsViaAuthority: patchGraphColorsViaAuthorityMock,
   patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   updatePluginElement: vi.fn(),
 }));
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementLayerNameById: patchLayerNameMock,
+  patchGraphColorById: patchGraphColorMock,
+  patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphTypeById: patchGraphTypeMock,
   patchGraphTypesByIds: patchGraphTypesMock,
 }));
@@ -180,6 +189,9 @@ const resetStores = () => {
   batchKeyLikePropsMock.mockClear();
   patchLayerNameMock.mockClear();
   patchGraphTypeMock.mockClear();
+  patchGraphColorMock.mockClear();
+  patchGraphColorsMock.mockClear();
+  patchGraphColorsViaAuthorityMock.mockClear();
   patchGraphTypesMock.mockClear();
   patchGraphTypesViaAuthorityMock.mockClear();
   patchPropertyViaAuthorityMock.mockClear();
@@ -526,6 +538,178 @@ describe('PropertiesPanel detached preview contract', () => {
 
       expect(patchGraphTypesMock).not.toHaveBeenCalled();
       expect(patchGraphTypesViaAuthorityMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('single stable graphColor는 stale index 대신 선택 ID semantic leaf를 쓴다', () => {
+    const id = '77777777-7777-4777-8777-777777777777';
+    const otherId = '88888888-8888-4888-8888-888888888888';
+    const base = useGraphItemStore.getState().positions['4key'][0];
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          { ...base, id },
+          { ...base, id: otherId },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'graph', id, index: 1 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+      handleGraphUpdate: (update: Record<string, unknown>) => void;
+    };
+
+    act(() => props.handleGraphUpdate({ index: 1, graphColor: ' raw ' }));
+
+    expect(patchGraphColorMock).toHaveBeenCalledWith(id, ' raw ');
+    expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+    expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it('panel single stable graphColor는 exact authority RPC만 쓴다', () => {
+    window.__dmn_window_type = 'panel';
+    const id = '99999999-9999-4999-8999-999999999999';
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [{ ...useGraphItemStore.getState().positions['4key'][0], id }],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'graph', id, index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+      handleGraphUpdate: (update: Record<string, unknown>) => void;
+    };
+
+    act(() => props.handleGraphUpdate({ index: 0, graphColor: '#123456' }));
+
+    expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+      elementType: 'graph',
+      id,
+      patch: { graphColor: '#123456' },
+    });
+    expect(patchGraphColorMock).not.toHaveBeenCalled();
+    expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['main synthetic', 'main', 'graph-0'],
+    ['main empty', 'main', ''],
+    ['panel synthetic', 'panel', 'graph-0'],
+    ['panel empty', 'panel', ''],
+  ] as const)(
+    'single legacy graphColor $label은 기존 writer를 유지한다',
+    (_label, windowType, id) => {
+      window.__dmn_window_type = windowType;
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'graph', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+        handleGraphUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.handleGraphUpdate({ index: 0, graphColor: '#abcdef' }));
+
+      expect(patchGraphColorMock).not.toHaveBeenCalled();
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['main', 'main'],
+    ['panel', 'panel'],
+  ] as const)(
+    '$label stable graphColor batch는 ID batch 커밋 하나만 쓴다',
+    (_label, windowType) => {
+      window.__dmn_window_type = windowType;
+      const ids = [
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
+      ];
+      const base = useGraphItemStore.getState().positions['4key'][0];
+      useGraphItemStore.setState({
+        positions: { '4key': ids.map((id) => ({ ...base, id })) },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: ids.map((id, index) => ({
+          type: 'graph' as const,
+          id,
+          index: 1 - index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchGraphPropsMock.mock.lastCall?.[0] as {
+        handleGraphBatchSharedSetting: (
+          update: Record<string, unknown>,
+        ) => void;
+      };
+
+      act(() =>
+        props.handleGraphBatchSharedSetting({ graphColor: ' custom ' }),
+      );
+
+      if (windowType === 'panel') {
+        expect(patchGraphColorsViaAuthorityMock).toHaveBeenCalledWith(
+          ids,
+          ' custom ',
+        );
+        expect(patchGraphColorsMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchGraphColorsMock).toHaveBeenCalledWith(ids, ' custom ');
+        expect(patchGraphColorsViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main synthetic', 'main', 'graph-0'],
+    ['main empty', 'main', ''],
+    ['panel synthetic', 'panel', 'graph-0'],
+    ['panel empty', 'panel', ''],
+  ] as const)(
+    '$label id가 섞인 graphColor batch는 전체 기존 writer로 폴백한다',
+    (_label, windowType, legacyId) => {
+      window.__dmn_window_type = windowType;
+      const stableId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const base = useGraphItemStore.getState().positions['4key'][0];
+      useGraphItemStore.setState({
+        positions: {
+          '4key': [
+            { ...base, id: stableId },
+            { ...base, id: legacyId },
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [stableId, legacyId].map((id, index) => ({
+          type: 'graph' as const,
+          id,
+          index,
+        })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = batchGraphPropsMock.mock.lastCall?.[0] as {
+        handleGraphBatchSharedSetting: (
+          update: Record<string, unknown>,
+        ) => void;
+      };
+
+      act(() => props.handleGraphBatchSharedSetting({ graphColor: '#fedcba' }));
+
+      expect(patchGraphColorsMock).not.toHaveBeenCalled();
+      expect(patchGraphColorsViaAuthorityMock).not.toHaveBeenCalled();
       expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
     },
   );

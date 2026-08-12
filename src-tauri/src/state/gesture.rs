@@ -385,6 +385,32 @@ mod tests {
         );
         decode_gesture_commit_request(graph_type_wire.clone()).unwrap();
 
+        let mut graph_color = gesture_request(&["plugin-a".to_string()]);
+        graph_color.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        graph_color.editor_ops = Some(vec![EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Graph,
+            id: uuid::Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1::GraphColor(
+                crate::models::EditorGraphColorPropertyPatchV1 {
+                    graph_color: "not-normalized".to_string(),
+                },
+            ),
+        }]);
+        let graph_color_wire = serde_json::to_value(graph_color).unwrap();
+        assert_eq!(
+            graph_color_wire["editorOps"][0]["patch"],
+            serde_json::json!({ "graphColor": "not-normalized" })
+        );
+        decode_gesture_commit_request(graph_color_wire.clone()).unwrap();
+
+        let mut invalid_graph_color = graph_color_wire;
+        invalid_graph_color["editorOps"][0]["patch"]["graphColor"] = serde_json::json!(false);
+        let error = decode_gesture_commit_request(invalid_graph_color).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
+        );
+
         let mut invalid_graph_type = graph_type_wire;
         invalid_graph_type["editorOps"][0]["patch"]["graphType"] = serde_json::json!("area");
         let error = decode_gesture_commit_request(invalid_graph_type).unwrap_err();

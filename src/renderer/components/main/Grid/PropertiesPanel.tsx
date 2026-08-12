@@ -33,6 +33,7 @@ import {
   type SettingsNormalizationErrorKind,
 } from '@plugins/runtime/settingsSections';
 import {
+  patchGraphColorsViaAuthority,
   patchGraphTypesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
   updatePluginElement,
@@ -67,6 +68,8 @@ import {
 } from '@src/renderer/editor/runtime/previewOverlay';
 import {
   patchElementLayerNameById,
+  patchGraphColorById,
+  patchGraphColorsByIds,
   patchGraphTypeById,
   patchGraphTypesByIds,
 } from '@src/renderer/editor/runtime/elementOps';
@@ -1357,6 +1360,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const { index, ...updates } = data;
     const updateKeys = Object.keys(updates);
     const graphType = updates.graphType;
+    const graphColor = updates.graphColor;
     const selectedGraph =
       selectedGraphElements.length === 1 ? selectedGraphElements[0] : null;
     if (
@@ -1377,6 +1381,27 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           : patchGraphTypeById(selectedGraph.id, graphType);
       void commit.catch((error) => {
         console.error('Failed to update graph type', error);
+      });
+      return;
+    }
+    if (
+      updateKeys.length === 1 &&
+      updateKeys[0] === 'graphColor' &&
+      typeof graphColor === 'string' &&
+      selectedGraph &&
+      selectedGraph.id.length > 0 &&
+      !isSyntheticElementId(selectedGraph.id)
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'graph',
+              id: selectedGraph.id,
+              patch: { graphColor },
+            })
+          : patchGraphColorById(selectedGraph.id, graphColor);
+      void commit.catch((error) => {
+        console.error('Failed to update graph color', error);
       });
       return;
     }
@@ -1989,6 +2014,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) => {
     const updateKeys = Object.keys(updates);
     const graphType = updates.graphType;
+    const graphColor = updates.graphColor;
     const stableGraphIds = selectedGraphElements.map((element) => element.id);
     if (
       updateKeys.length === 1 &&
@@ -2003,6 +2029,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           : patchGraphTypesByIds(stableGraphIds, graphType);
       void commit.catch((error) => {
         console.error('Failed to batch update graph type', error);
+      });
+      return;
+    }
+    if (
+      updateKeys.length === 1 &&
+      updateKeys[0] === 'graphColor' &&
+      typeof graphColor === 'string' &&
+      stableGraphIds.length > 0 &&
+      stableGraphIds.every((id) => id.length > 0 && !isSyntheticElementId(id))
+    ) {
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchGraphColorsViaAuthority(stableGraphIds, graphColor)
+          : patchGraphColorsByIds(stableGraphIds, graphColor);
+      void commit.catch((error) => {
+        console.error('Failed to batch update graph color', error);
       });
       return;
     }

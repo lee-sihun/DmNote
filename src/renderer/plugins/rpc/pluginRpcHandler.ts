@@ -52,6 +52,7 @@ import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import {
   patchElementPropertyById,
+  patchGraphColorsByIds,
   patchGraphTypesByIds,
 } from '@src/renderer/editor/runtime/elementOps';
 import type { EditorElementPropertyPatchV1 } from '@src/types/editor';
@@ -191,11 +192,12 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['layerName']) &&
       (typeof patch.layerName === 'string' || patch.layerName === null)) ||
     (hasExactKeys(patch, ['graphType']) &&
-      (patch.graphType === 'line' || patch.graphType === 'bar'));
-  if (
-    !patchValid ||
-    (hasExactKeys(patch, ['graphType']) && target.elementType !== 'graph')
-  ) {
+      (patch.graphType === 'line' || patch.graphType === 'bar')) ||
+    (hasExactKeys(patch, ['graphColor']) &&
+      typeof patch.graphColor === 'string');
+  const graphOnlyPatch =
+    hasExactKeys(patch, ['graphType']) || hasExactKeys(patch, ['graphColor']);
+  if (!patchValid || (graphOnlyPatch && target.elementType !== 'graph')) {
     return null;
   }
   return target as unknown as NativeLayerPropertyTarget;
@@ -203,7 +205,8 @@ const parseNativeLayerPropertyTarget = (
 
 type NativeLayerPropertyRequest =
   | { kind: 'single'; target: NativeLayerPropertyTarget }
-  | { kind: 'graphBatch'; ids: string[]; graphType: 'line' | 'bar' };
+  | { kind: 'graphTypeBatch'; ids: string[]; graphType: 'line' | 'bar' }
+  | { kind: 'graphColorBatch'; ids: string[]; graphColor: string };
 
 const parseNativeLayerPropertyRequest = (
   payload: Record<string, unknown>,
@@ -224,10 +227,16 @@ const parseNativeLayerPropertyRequest = (
     return null;
   }
   const patch = payload.patch as Record<string, unknown>;
-  if (
-    !hasExactKeys(patch, ['graphType']) ||
-    (patch.graphType !== 'line' && patch.graphType !== 'bar')
-  ) {
+  const graphType =
+    hasExactKeys(patch, ['graphType']) &&
+    (patch.graphType === 'line' || patch.graphType === 'bar')
+      ? patch.graphType
+      : null;
+  const graphColor =
+    hasExactKeys(patch, ['graphColor']) && typeof patch.graphColor === 'string'
+      ? patch.graphColor
+      : null;
+  if (graphType === null && graphColor === null) {
     return null;
   }
   const ids: string[] = [];
@@ -254,11 +263,9 @@ const parseNativeLayerPropertyRequest = (
     seen.add(target.id);
     ids.push(target.id);
   }
-  return {
-    kind: 'graphBatch',
-    ids,
-    graphType: patch.graphType,
-  };
+  return graphType !== null
+    ? { kind: 'graphTypeBatch', ids, graphType }
+    : { kind: 'graphColorBatch', ids, graphColor: graphColor! };
 };
 
 const MAX_LAYER_REORDER_IDS = 4096;
@@ -911,15 +918,20 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
         }
       },
     };
-    const persisted =
-      request.kind === 'single'
-        ? patchElementPropertyById(
-            request.target.elementType,
-            request.target.id,
-            request.target.patch,
-            options,
-          )
-        : patchGraphTypesByIds(request.ids, request.graphType, options);
+    const persisted = (() => {
+      if (request.kind === 'single') {
+        return patchElementPropertyById(
+          request.target.elementType,
+          request.target.id,
+          request.target.patch,
+          options,
+        );
+      }
+      if (request.kind === 'graphTypeBatch') {
+        return patchGraphTypesByIds(request.ids, request.graphType, options);
+      }
+      return patchGraphColorsByIds(request.ids, request.graphColor, options);
+    })();
     void persisted
       .then(() => {
         if (!generationLive()) {

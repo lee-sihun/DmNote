@@ -552,6 +552,8 @@ export const patchElementPropertyById = (
       ? { layerName: patch.layerName ?? undefined }
       : 'graphType' in patch
       ? { graphType: patch.graphType }
+      : 'graphColor' in patch
+      ? { graphColor: patch.graphColor }
       : { hidden: patch.hidden };
   const intents: PropertyIntents = new Map([
     [type, new Map([[id, eagerPatch]])],
@@ -597,6 +599,8 @@ const patchElementPropertiesByIds = (
         ? { layerName: target.patch.layerName ?? undefined }
         : 'graphType' in target.patch
         ? { graphType: target.patch.graphType }
+        : 'graphColor' in target.patch
+        ? { graphColor: target.patch.graphColor }
         : { hidden: target.patch.hidden };
     const byId = mutableIntents.get(target.type) ?? new Map();
     byId.set(target.id, eagerPatch);
@@ -665,6 +669,32 @@ export const patchGraphTypesByIds = (
   }
   return patchElementPropertiesByIds(
     ids.map((id) => ({ type: 'graph', id, patch: { graphType } })),
+    options,
+  );
+};
+
+export const patchGraphColorById = (
+  id: string,
+  graphColor: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById('graph', id, { graphColor }, options);
+};
+
+export const patchGraphColorsByIds = (
+  ids: readonly string[],
+  graphColor: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    ids.map((id) => ({ type: 'graph', id, patch: { graphColor } })),
     options,
   );
 };

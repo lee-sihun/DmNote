@@ -33,6 +33,8 @@ import {
   placeDuplicatedKey,
   patchElementHiddenById,
   patchElementLayerNameById,
+  patchGraphColorById,
+  patchGraphColorsByIds,
   patchGraphTypeById,
   patchGraphTypesByIds,
   rebindKeySlotById,
@@ -1003,5 +1005,56 @@ describe('elementOps', () => {
     );
 
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('graphColor single과 batch는 raw literal을 좁은 op 한 커밋으로 보낸다', async () => {
+    const graphB = '00000000-0000-4000-8000-000000000092';
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [graphAt(ID_A), graphAt(graphB)],
+      },
+    });
+
+    await patchGraphColorById(ID_A, '  custom  ');
+    expect(useGraphItemStore.getState().positions['4key'][0].graphColor).toBe(
+      '  custom  ',
+    );
+
+    api.commitSemanticOps.mockClear();
+    await patchGraphColorsByIds([ID_A, graphB], '#123456');
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual([
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: ID_A,
+        patch: { graphColor: '#123456' },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'graph',
+        id: graphB,
+        patch: { graphColor: '#123456' },
+      },
+    ]);
+  });
+
+  it('graphColor batch 편입 전 실패는 모든 eager leaf를 복원한다', async () => {
+    const graphB = '00000000-0000-4000-8000-000000000093';
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [graphAt(ID_A), graphAt(graphB)],
+      },
+    });
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+
+    await expect(
+      patchGraphColorsByIds([ID_A, graphB], '#abcdef'),
+    ).rejects.toThrow('start failed');
+    expect(
+      useGraphItemStore
+        .getState()
+        .positions['4key'].map((position) => position.graphColor),
+    ).toEqual(['#86EFAC', '#86EFAC']);
   });
 });

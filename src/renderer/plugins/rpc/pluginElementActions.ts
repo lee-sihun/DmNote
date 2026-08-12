@@ -371,6 +371,26 @@ export const patchGraphTypesViaAuthority = (
   });
 };
 
+export const patchGraphColorsViaAuthority = (
+  ids: readonly string[],
+  graphColor: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'graph', id })),
+        patch: { graphColor },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
 export const drainPendingPluginElementWrites = async (): Promise<boolean> => {
   let succeeded = true;
   while (drainPromise || outboundQueue.length > 0) {

@@ -2365,6 +2365,22 @@ mod tests {
         );
         decode_editor_commit_request(graph_type.clone()).unwrap();
 
+        let graph_color = serde_json::to_value(ops_request(vec![EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Graph,
+            id: Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1::GraphColor(
+                crate::models::EditorGraphColorPropertyPatchV1 {
+                    graph_color: "not-normalized".to_string(),
+                },
+            ),
+        }]))
+        .unwrap();
+        assert_eq!(
+            graph_color["ops"][0]["patch"],
+            serde_json::json!({ "graphColor": "not-normalized" })
+        );
+        decode_editor_commit_request(graph_color.clone()).unwrap();
+
         let mut unknown_property = property.clone();
         unknown_property["ops"][0]["patch"]["zIndex"] = serde_json::json!(3);
         let mut unknown_op = property;
@@ -2375,12 +2391,15 @@ mod tests {
         multiple_properties["ops"][0]["patch"]["hidden"] = serde_json::json!(true);
         let mut invalid_graph_type = graph_type;
         invalid_graph_type["ops"][0]["patch"]["graphType"] = serde_json::json!("area");
+        let mut invalid_graph_color = graph_color;
+        invalid_graph_color["ops"][0]["patch"]["graphColor"] = serde_json::json!(42);
         for wire in [
             unknown_property,
             unknown_op,
             missing_property,
             multiple_properties,
             invalid_graph_type,
+            invalid_graph_color,
         ] {
             let error = decode_editor_commit_request(wire).unwrap_err();
             assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));

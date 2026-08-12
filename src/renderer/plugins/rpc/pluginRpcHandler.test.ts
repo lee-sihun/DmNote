@@ -30,6 +30,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchGraphColors: vi.fn(
+    (
+      _ids?: unknown,
+      _graphColor?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -101,6 +108,7 @@ vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementPropertyById: mocks.patchElementProperty,
+  patchGraphColorsByIds: mocks.patchGraphColors,
   patchGraphTypesByIds: mocks.patchGraphTypes,
 }));
 
@@ -167,6 +175,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchElementProperty.mockResolvedValue(true);
     mocks.patchGraphTypes.mockReset();
     mocks.patchGraphTypes.mockResolvedValue(true);
+    mocks.patchGraphColors.mockReset();
+    mocks.patchGraphColors.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
     mocks.elements = [
       {
@@ -423,6 +433,7 @@ describe('plugin panel persisted element mutations', () => {
     ['이름', { layerName: 'renamed' }],
     ['이름 clear', { layerName: null }],
     ['그래프 타입', { graphType: 'bar' }],
+    ['그래프 색상', { graphColor: '#12abEF' }],
   ])(
     'native %s exact literal을 main semantic executor에 전달한다',
     async (_label, patch) => {
@@ -479,6 +490,40 @@ describe('plugin panel persisted element mutations', () => {
       { preflight: expect.any(Function) },
     );
     expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('graphColor batch는 ordered stable IDs를 semantic batch executor에 한 번 전달한다', async () => {
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          {
+            elementType: 'graph',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+          {
+            elementType: 'graph',
+            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          },
+        ],
+        patch: { graphColor: '#12abEF' },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchGraphColors).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchGraphColors).toHaveBeenCalledWith(
+      [
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      ],
+      '#12abEF',
+      { preflight: expect.any(Function) },
+    );
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+    expect(mocks.patchGraphTypes).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
@@ -585,6 +630,35 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'batch empty id',
+      {
+        targets: [{ elementType: 'graph', id: ' ' }],
+        patch: { graphColor: '#ffffff' },
+      },
+    ],
+    [
+      'batch synthetic id',
+      {
+        targets: [{ elementType: 'graph', id: 'graph-0' }],
+        patch: { graphColor: '#ffffff' },
+      },
+    ],
+    [
+      'batch target extra',
+      {
+        targets: [{ elementType: 'graph', id: 'stable', index: 0 }],
+        patch: { graphColor: '#ffffff' },
+      },
+    ],
+    [
+      'batch top-level extra',
+      {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { graphColor: '#ffffff' },
+        extra: true,
+      },
+    ],
+    [
       'batch wrong type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
@@ -599,6 +673,40 @@ describe('plugin panel persisted element mutations', () => {
           id: 'stable',
           patch: { graphType: 'bar' },
         },
+      },
+    ],
+    [
+      'single graph color wrong type',
+      {
+        target: {
+          elementType: 'stat',
+          id: 'stable',
+          patch: { graphColor: '#ffffff' },
+        },
+      },
+    ],
+    [
+      'single graph color invalid value',
+      {
+        target: {
+          elementType: 'graph',
+          id: 'stable',
+          patch: { graphColor: 42 },
+        },
+      },
+    ],
+    [
+      'batch graph color invalid value',
+      {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { graphColor: false },
+      },
+    ],
+    [
+      'batch graph leaves combined',
+      {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { graphType: 'bar', graphColor: '#ffffff' },
       },
     ],
     [
@@ -628,6 +736,7 @@ describe('plugin panel persisted element mutations', () => {
       await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
       expect(mocks.patchElementProperty).not.toHaveBeenCalled();
       expect(mocks.patchGraphTypes).not.toHaveBeenCalled();
+      expect(mocks.patchGraphColors).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
         error: { code: 'INVALID_PAYLOAD' },
@@ -680,6 +789,28 @@ describe('plugin panel persisted element mutations', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           patch: { hidden: true },
         },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('graphColor batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchGraphColors.mockImplementationOnce(
+      async (_ids, _graphColor, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { graphColor: '#ffffff' },
       }),
     );
 
