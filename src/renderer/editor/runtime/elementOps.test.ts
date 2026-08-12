@@ -74,7 +74,10 @@ describe('elementOps', () => {
       meta?.onEnrolled?.();
       return {
         document: documentFromStores(),
-        opResults: [{ status: 'applied', bounds: _ops[0].bounds }],
+        opResults: _ops.map((op) => ({
+          status: 'applied',
+          bounds: op.bounds,
+        })),
       };
     });
     useKeyStore.setState({
@@ -401,7 +404,7 @@ describe('elementOps', () => {
     ]);
   });
 
-  it('그룹 bounds는 Stage 2 전까지 기존 generator 경로를 유지한다', async () => {
+  it('그룹 bounds는 다중 semantic op 한 요청으로 정산한다', async () => {
     const committed = await commitElementBoundsById(
       new Map([
         [
@@ -415,8 +418,143 @@ describe('elementOps', () => {
     );
 
     expect(committed).toBe(true);
-    expect(api.commitSemanticOps).not.toHaveBeenCalled();
-    expect(api.commitGeneratedPatch).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0][0]).toEqual([
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: ID_A,
+        bounds: { dx: 50, dy: 60, width: 90, height: 80 },
+      },
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: ID_B,
+        bounds: { dx: 70, dy: 80, width: 100, height: 110 },
+      },
+    ]);
+    expect(api.commitGeneratedPatch).not.toHaveBeenCalled();
+  });
+
+  it('그룹 bounds는 두 대상을 한 gesture 의도로 함께 정산한다', async () => {
+    const committed = await commitElementBoundsById(
+      new Map([
+        [
+          'key',
+          new Map([
+            [ID_A, { dx: 50, dy: 60, width: 90, height: 80 }],
+            [ID_B, { dx: 70, dy: 80, width: 100, height: 110 }],
+          ]),
+        ],
+      ]),
+      'group-resize-gesture',
+    );
+
+    expect(committed).toBe(true);
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0][1]).toMatchObject({
+      gestureId: 'group-resize-gesture',
+    });
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([
+      expect.objectContaining({ id: ID_A, dx: 50, width: 90 }),
+      expect.objectContaining({ id: ID_B, dx: 70, width: 100 }),
+    ]);
+  });
+
+  it('그룹 bounds의 편입 전 실패는 모든 eager 필드를 CAS 복원한다', async () => {
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+    const before = structuredClone(
+      useKeyStore.getState().canonicalPositions['4key'],
+    );
+
+    await expect(
+      commitElementBoundsById(
+        new Map([
+          [
+            'key',
+            new Map([
+              [ID_A, { dx: 50, dy: 60, width: 90, height: 80 }],
+              [ID_B, { dx: 70, dy: 80, width: 100, height: 110 }],
+            ]),
+          ],
+        ]),
+      ),
+    ).rejects.toThrow('start failed');
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toMatchObject(
+      before,
+    );
+  });
+
+  it('그룹 bounds 대기 중 일부 대상이 사라지면 생존 대상만 저장한다', async () => {
+    api.commitSemanticOps.mockImplementationOnce(async (ops, meta) => {
+      meta?.onEnrolled?.();
+      const surviving = { ...keyAt(ID_B), ...ops[1].bounds };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['B'] },
+        canonicalPositions: { '4key': [surviving] },
+        positions: { '4key': [surviving] },
+      });
+      return {
+        document: documentFromStores(),
+        opResults: [
+          { status: 'targetMissing' },
+          { status: 'applied', bounds: ops[1].bounds },
+        ],
+      };
+    });
+
+    const committed = await commitElementBoundsById(
+      new Map([
+        [
+          'key',
+          new Map([
+            [ID_A, { dx: 50, dy: 60, width: 90, height: 80 }],
+            [ID_B, { dx: 70, dy: 80, width: 100, height: 110 }],
+          ]),
+        ],
+      ]),
+    );
+
+    expect(committed).toBe(true);
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([
+      expect.objectContaining({ id: ID_B, dx: 70 }),
+    ]);
+    expect(
+      useKeyStore
+        .getState()
+        .canonicalPositions['4key'].some(({ id }) => id === ID_A),
+    ).toBe(false);
+  });
+
+  it('그룹 bounds 대상이 전부 사라지면 false로 정산하고 부활시키지 않는다', async () => {
+    api.commitSemanticOps.mockImplementationOnce(async (_ops, meta) => {
+      meta?.onEnrolled?.();
+      useKeyStore.setState({
+        keyMappings: { '4key': [] },
+        canonicalPositions: { '4key': [] },
+        positions: { '4key': [] },
+      });
+      return {
+        document: documentFromStores(),
+        opResults: [{ status: 'targetMissing' }, { status: 'targetMissing' }],
+      };
+    });
+
+    const committed = await commitElementBoundsById(
+      new Map([
+        [
+          'key',
+          new Map([
+            [ID_A, { dx: 50, dy: 60, width: 90, height: 80 }],
+            [ID_B, { dx: 70, dy: 80, width: 100, height: 110 }],
+          ]),
+        ],
+      ]),
+    );
+
+    expect(committed).toBe(false);
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([]);
   });
 
   it('삭제의 편입 전 실패는 로컬 pair를 복원한다', async () => {

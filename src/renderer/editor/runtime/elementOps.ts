@@ -9,7 +9,6 @@ import { cloneKeyPositionForDuplicate } from '../model/keys';
 import { cloneSlot } from '@utils/keySlot';
 import {
   applyPropertyIntentsEagerly,
-  generatePropertyIntentPatch,
   intentPatch,
   runElementIntent,
   type ElementIntentGeneration,
@@ -21,6 +20,7 @@ import { commitSemanticOps } from './editorSemanticOps';
 import type {
   EditorBoundsV1,
   EditorDocumentV1,
+  EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
 
@@ -588,16 +588,51 @@ export const commitElementBoundsById = (
   intents: PropertyIntents,
   gestureId?: string,
 ): Promise<boolean> => {
-  let hasIntent = false;
-  for (const byId of intents.values()) {
-    if (byId.size > 0) hasIntent = true;
+  const ops: EditorOpV1[] = [];
+  const boundsKeys = new Set(['dx', 'dy', 'width', 'height']);
+  for (const [elementType, byId] of intents) {
+    for (const [id, patch] of byId) {
+      if (
+        Object.keys(patch).some((key) => !boundsKeys.has(key)) ||
+        typeof patch.dx !== 'number' ||
+        typeof patch.dy !== 'number' ||
+        typeof patch.width !== 'number' ||
+        typeof patch.height !== 'number'
+      ) {
+        return Promise.reject(
+          new TypeError('bounds intent must contain four numeric fields'),
+        );
+      }
+      ops.push({
+        kind: 'setBounds',
+        elementType,
+        id,
+        bounds: {
+          dx: patch.dx,
+          dy: patch.dy,
+          width: patch.width,
+          height: patch.height,
+        },
+      });
+    }
   }
-  if (!hasIntent) return Promise.resolve(false);
-  return runElementIntent({
-    applyEager: () => applyPropertyIntentsEagerly(intents),
-    generate: (base) => intentPatch(generatePropertyIntentPatch(base, intents)),
+  if (ops.length === 0) return Promise.resolve(false);
+
+  const receipt = applyPropertyIntentsEagerly(intents);
+  let enrolled = false;
+  return commitSemanticOps(ops, {
     ...(gestureId ? { gestureId } : {}),
-  }).then((result) => result.committed);
+    onEnrolled: () => {
+      enrolled = true;
+    },
+  })
+    .then(({ opResults }) =>
+      opResults.some(({ status }) => status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
 };
 
 export const commitSingleElementBoundsById = (
