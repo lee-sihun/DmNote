@@ -645,6 +645,25 @@ const applySemanticOps = (
                 },
               };
             }
+            if (
+              'counterStrokeIdle' in op.patch ||
+              'counterStrokeActive' in op.patch
+            ) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              const stroke = (counter?.stroke ?? {}) as Record<string, unknown>;
+              return {
+                ...position,
+                counter: {
+                  ...counter,
+                  stroke:
+                    'counterStrokeIdle' in op.patch
+                      ? { ...stroke, idle: op.patch.counterStrokeIdle }
+                      : { ...stroke, active: op.patch.counterStrokeActive },
+                },
+              };
+            }
             if ('counterAnimationPreset' in op.patch) {
               const counter = position.counter as
                 | Record<string, unknown>

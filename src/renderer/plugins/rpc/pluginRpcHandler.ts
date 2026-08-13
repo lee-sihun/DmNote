@@ -59,6 +59,7 @@ import {
   patchCounterAnimationPresetByTargets,
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
+  patchCounterStrokeByTargets,
   patchCounterTypographyByTargets,
   patchStylePropertyByTargets,
   patchElementPropertyById,
@@ -86,6 +87,7 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
+  EditorCounterStrokePropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
@@ -463,6 +465,12 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['counterFontFamily']) &&
       (target.elementType === 'key' || target.elementType === 'stat') &&
       typeof patch.counterFontFamily === 'string') ||
+    (hasExactKeys(patch, ['counterStrokeIdle']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      typeof patch.counterStrokeIdle === 'string') ||
+    (hasExactKeys(patch, ['counterStrokeActive']) &&
+      target.elementType === 'key' &&
+      typeof patch.counterStrokeActive === 'string') ||
     (hasExactKeys(patch, ['counterAnimationPreset']) &&
       (target.elementType === 'key' || target.elementType === 'stat') &&
       counterAnimationPreset !== null) ||
@@ -745,6 +753,11 @@ type NativeLayerPropertyRequest =
       patch: EditorCounterTypographyPropertyPatchV1;
     }
   | {
+      kind: 'counterStrokeBatch';
+      targets: Array<{ elementType: 'key' | 'stat'; id: string }>;
+      patch: EditorCounterStrokePropertyPatchV1;
+    }
+  | {
       kind: 'notePropertyBatch';
       ids: string[];
       patch: EditorNotePropertyPatchV1;
@@ -968,6 +981,14 @@ const parseNativeLayerPropertyRequest = (
         typeof patch.counterFontFamily === 'string'
       ? { counterFontFamily: patch.counterFontFamily }
       : null;
+  const counterStrokePatch: EditorCounterStrokePropertyPatchV1 | null =
+    hasExactKeys(patch, ['counterStrokeIdle']) &&
+    typeof patch.counterStrokeIdle === 'string'
+      ? { counterStrokeIdle: patch.counterStrokeIdle }
+      : hasExactKeys(patch, ['counterStrokeActive']) &&
+        typeof patch.counterStrokeActive === 'string'
+      ? { counterStrokeActive: patch.counterStrokeActive }
+      : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
     typeof patch.noteEffectEnabled === 'boolean'
@@ -1013,6 +1034,7 @@ const parseNativeLayerPropertyRequest = (
     counterBooleanPatch === null &&
     counterLayoutPatch === null &&
     counterTypographyPatch === null &&
+    counterStrokePatch === null &&
     counterAnimationPreset === null &&
     notePropertyPatch === null
   ) {
@@ -1050,6 +1072,8 @@ const parseNativeLayerPropertyRequest = (
       ? 'counter-capable'
       : counterTypographyPatch !== null
       ? 'counter-capable'
+      : counterStrokePatch !== null
+      ? 'counter-capable'
       : counterAnimationPreset !== null
       ? 'counter-capable'
       : notePropertyPatch !== null
@@ -1079,6 +1103,9 @@ const parseNativeLayerPropertyRequest = (
       (elementType === 'counter-capable' &&
         target.elementType !== 'key' &&
         target.elementType !== 'stat') ||
+      (counterStrokePatch !== null &&
+        'counterStrokeActive' in counterStrokePatch &&
+        target.elementType !== 'key') ||
       (stylePropertyPatch !== null &&
         'borderRadius' in stylePropertyPatch &&
         stylePropertyPatch.borderRadius > 100 &&
@@ -1194,6 +1221,16 @@ const parseNativeLayerPropertyRequest = (
         id: string;
       }>,
       patch: counterTypographyPatch,
+    };
+  }
+  if (counterStrokePatch !== null) {
+    return {
+      kind: 'counterStrokeBatch',
+      targets: targets as Array<{
+        elementType: 'key' | 'stat';
+        id: string;
+      }>,
+      patch: counterStrokePatch,
     };
   }
   if (notePropertyPatch !== null) {
@@ -1971,6 +2008,21 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
             options,
           );
         }
+        if (
+          'counterStrokeIdle' in request.target.patch ||
+          'counterStrokeActive' in request.target.patch
+        ) {
+          return patchCounterStrokeByTargets(
+            [
+              {
+                elementType: request.target.elementType as 'key' | 'stat',
+                id: request.target.id,
+              },
+            ],
+            request.target.patch as EditorCounterStrokePropertyPatchV1,
+            options,
+          );
+        }
         if ('soundEnabled' in request.target.patch) {
           return patchSoundEnabledByIds(
             [request.target.id],
@@ -2126,6 +2178,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       }
       if (request.kind === 'counterTypographyBatch') {
         return patchCounterTypographyByTargets(
+          request.targets,
+          request.patch,
+          options,
+        );
+      }
+      if (request.kind === 'counterStrokeBatch') {
+        return patchCounterStrokeByTargets(
           request.targets,
           request.patch,
           options,

@@ -181,6 +181,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchCounterStroke: vi.fn(
+    (
+      _targets?: unknown,
+      _patch?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   updateCounterAnimation: vi.fn(
     (_request?: unknown, _options?: unknown): Promise<unknown> =>
       Promise.resolve(null),
@@ -278,6 +285,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterAnimationEnabledByTargets: mocks.patchCounterAnimationEnabled,
   patchCounterLayoutByTargets: mocks.patchCounterLayout,
   patchCounterTypographyByTargets: mocks.patchCounterTypography,
+  patchCounterStrokeByTargets: mocks.patchCounterStroke,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -400,6 +408,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchCounterLayout.mockResolvedValue(true);
     mocks.patchCounterTypography.mockReset();
     mocks.patchCounterTypography.mockResolvedValue(true);
+    mocks.patchCounterStroke.mockReset();
+    mocks.patchCounterStroke.mockResolvedValue(true);
     mocks.updateCounterAnimation.mockReset();
     mocks.updateCounterAnimation.mockResolvedValue({
       preset: { id: 'preset-a' },
@@ -647,6 +657,7 @@ describe('plugin panel persisted element mutations', () => {
       ok: false,
       error: { code: 'AUTHORITY_GENERATION_STALE' },
     });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
   });
 
   it('낡은 generation의 레이어 삭제는 main 실행기를 시작하지 않는다', async () => {
@@ -1327,6 +1338,59 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
+    [
+      { counterStrokeIdle: '  raw idle  ' },
+      [
+        { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      ],
+    ],
+    [
+      { counterStrokeActive: '' },
+      [{ elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
+    ],
+  ] as const)(
+    'counter stroke batch $0는 exact key/stat target을 전용 helper에 전달한다',
+    async (patch, targets) => {
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', { targets, patch }),
+      );
+      await vi.waitFor(() =>
+        expect(mocks.patchCounterStroke).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.patchCounterStroke).toHaveBeenCalledWith(targets, patch, {
+        preflight: expect.any(Function),
+      });
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
+
+  it('counter stroke single은 slot 직전 generation 변경을 거절한다', async () => {
+    mocks.patchCounterStroke.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { counterStrokeActive: '#ffffff' },
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
+  it.each([
     {
       targets: [{ elementType: 'graph', id: 'a' }],
       patch: { counterAnimationPreset: { presetId: 'a' } },
@@ -1436,6 +1500,40 @@ describe('plugin panel persisted element mutations', () => {
       patch: { counterFontFamily: 'Counter', counterFontItalic: true },
     },
     {
+      targets: [{ elementType: 'graph', id: 'a' }],
+      patch: { counterStrokeIdle: '#fff' },
+    },
+    {
+      targets: [{ elementType: 'stat', id: 'a' }],
+      patch: { counterStrokeActive: '#fff' },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterStrokeIdle: null },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterStrokeIdle: '#fff', counterStrokeActive: '#000' },
+    },
+    {
+      targets: [
+        { elementType: 'key', id: 'a' },
+        { elementType: 'stat', id: 'a' },
+      ],
+      patch: { counterStrokeIdle: '#fff' },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'key-0' }],
+      patch: { counterStrokeActive: '#fff' },
+    },
+    {
+      targets: Array.from({ length: 4097 }, (_, index) => ({
+        elementType: 'key',
+        id: `counter-stroke-${index}`,
+      })),
+      patch: { counterStrokeActive: '#fff' },
+    },
+    {
       targets: [
         { elementType: 'key', id: 'a' },
         { elementType: 'stat', id: 'a' },
@@ -1467,6 +1565,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchCounterAnimationEnabled).not.toHaveBeenCalled();
       expect(mocks.patchCounterLayout).not.toHaveBeenCalled();
       expect(mocks.patchCounterTypography).not.toHaveBeenCalled();
+      expect(mocks.patchCounterStroke).not.toHaveBeenCalled();
     },
   );
 

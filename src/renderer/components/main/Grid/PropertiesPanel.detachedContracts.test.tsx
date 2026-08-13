@@ -22,6 +22,7 @@ const {
   knobUpdatePositionsMock,
   keyLegacyUpdateMock,
   legacyBatchStyleCommitMock,
+  legacyBatchCounterUpdateMock,
   patchGraphColorMock,
   patchGraphColorsMock,
   patchGraphColorsViaAuthorityMock,
@@ -59,6 +60,9 @@ const {
   patchCounterLayoutViaAuthorityMock,
   patchCounterTypographyMock,
   patchCounterTypographyViaAuthorityMock,
+  patchCounterStrokeMock,
+  patchCounterStrokeTargetsMock,
+  patchCounterStrokeViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -91,6 +95,7 @@ const {
   knobUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   keyLegacyUpdateMock: vi.fn(),
   legacyBatchStyleCommitMock: vi.fn(),
+  legacyBatchCounterUpdateMock: vi.fn(),
   patchGraphColorMock: vi.fn(() => Promise.resolve(true)),
   patchGraphColorsMock: vi.fn(() => Promise.resolve(true)),
   patchGraphColorsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
@@ -130,6 +135,9 @@ const {
   patchCounterLayoutViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchCounterTypographyMock: vi.fn(() => Promise.resolve(true)),
   patchCounterTypographyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterStrokeMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterStrokeTargetsMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterStrokeViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -180,6 +188,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
     patchCounterAnimationEnabledViaAuthorityMock,
   patchCounterLayoutViaAuthority: patchCounterLayoutViaAuthorityMock,
   patchCounterTypographyViaAuthority: patchCounterTypographyViaAuthorityMock,
+  patchCounterStrokeViaAuthority: patchCounterStrokeViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
@@ -210,6 +219,8 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterAnimationEnabledById: patchCounterAnimationEnabledMock,
   patchCounterLayoutById: patchCounterLayoutMock,
   patchCounterTypographyById: patchCounterTypographyMock,
+  patchCounterStrokeById: patchCounterStrokeMock,
+  patchCounterStrokeByTargets: patchCounterStrokeTargetsMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -282,6 +293,7 @@ vi.mock('./PropertiesPanel/index', () => {
       batchPropsMock(props);
       return {
         handleBatchStyleChangeComplete: legacyBatchStyleCommitMock,
+        handleBatchCounterUpdate: legacyBatchCounterUpdateMock,
       };
     },
     usePanelScroll: () => ({
@@ -390,6 +402,9 @@ const resetStores = () => {
   patchCounterLayoutViaAuthorityMock.mockClear();
   patchCounterTypographyMock.mockClear();
   patchCounterTypographyViaAuthorityMock.mockClear();
+  patchCounterStrokeMock.mockClear();
+  patchCounterStrokeTargetsMock.mockClear();
+  patchCounterStrokeViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -409,6 +424,7 @@ const resetStores = () => {
   knobUpdatePositionsMock.mockClear();
   keyLegacyUpdateMock.mockClear();
   legacyBatchStyleCommitMock.mockClear();
+  legacyBatchCounterUpdateMock.mockClear();
   singleKnobPropsMock.mockClear();
   statUpdatePositionsMock.mockClear();
   useKeyStore.setState({
@@ -1575,6 +1591,255 @@ describe('PropertiesPanel detached preview contract', () => {
       expect(patchCounterTypographyViaAuthorityMock).not.toHaveBeenCalled();
       if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
       else expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['main key idle', 'main', 'key', { counterStrokeIdle: '  raw idle  ' }],
+    ['panel key active', 'panel', 'key', { counterStrokeActive: '' }],
+    ['main stat idle', 'main', 'stat', { counterStrokeIdle: '#123456' }],
+    ['panel stat idle', 'panel', 'stat', { counterStrokeIdle: '#abcdef' }],
+  ] as const)(
+    '%s counter stroke는 stable ID exact writer만 쓴다',
+    (_label, windowType, type, patch) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'a3511111-1111-4111-8111-111111111111'
+          : 'a3522222-2222-4222-8222-222222222222';
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onCounterStrokeCommit: (value: typeof patch) => void;
+        }
+      ).onCounterStrokeCommit;
+
+      act(() => commit(patch));
+      if (windowType === 'panel') {
+        expect(patchCounterStrokeViaAuthorityMock).toHaveBeenCalledWith(
+          [{ elementType: type, id }],
+          patch,
+        );
+        expect(patchCounterStrokeMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchCounterStrokeMock).toHaveBeenCalledWith(type, id, patch);
+        expect(patchCounterStrokeViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat synthetic', 'stat', 'stat-0'],
+    ['stat empty', 'stat', ''],
+  ] as const)(
+    'single %s counter stroke는 exact callback 없이 legacy다',
+    (_label, type, id) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onCounterStrokeCommit?: (patch: Record<string, unknown>) => void;
+      };
+      expect(props.onCounterStrokeCommit).toBeUndefined();
+      expect(patchCounterStrokeMock).not.toHaveBeenCalled();
+      expect(patchCounterStrokeViaAuthorityMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main idle', 'main', 'idle'],
+    ['panel active', 'panel', 'active'],
+  ] as const)(
+    '%s batch counter stroke는 최신 key/stat selection exact target만 쓴다',
+    (_label, windowType, state) => {
+      window.__dmn_window_type = windowType;
+      const keyIds = [
+        'a3600000-0000-4000-8000-000000000001',
+        'a3600000-0000-4000-8000-000000000002',
+      ];
+      const statIds = [
+        'a3600000-0000-4000-8000-000000000003',
+        'a3600000-0000-4000-8000-000000000004',
+      ];
+      const positions = keyIds.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+      }));
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A', 'B'] },
+        positions: { '4key': positions },
+        canonicalPositions: { '4key': positions },
+      });
+      useStatItemStore.setState({
+        positions: {
+          '4key': statIds.map((id) => ({
+            ...createDefaultKeyPosition(),
+            id,
+            statType: 'kps' as const,
+          })),
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: keyIds[0], index: 0 },
+          { type: 'stat', id: statIds[0], index: 0 },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+
+      act(() => {
+        useGridSelectionStore.setState({
+          selectedElements: [
+            { type: 'key', id: keyIds[1], index: 1 },
+            { type: 'stat', id: statIds[1], index: 1 },
+          ],
+          selectedGroupIds: [],
+        });
+      });
+      let props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        setBatchPickerFor: (value: 'stroke') => void;
+        setBatchCounterColorState: (value: 'idle' | 'active') => void;
+        handleBatchPickerColorChange: (value: string) => void;
+        handleBatchPickerColorChangeComplete: (value: string) => void;
+      };
+      act(() => {
+        props.setBatchCounterColorState(state);
+        props.setBatchPickerFor('stroke');
+      });
+      props = batchKeyLikePropsMock.mock.lastCall?.[0] as typeof props;
+      act(() => props.handleBatchPickerColorChange('  local only  '));
+      expect(patchCounterStrokeTargetsMock).not.toHaveBeenCalled();
+      expect(patchCounterStrokeViaAuthorityMock).not.toHaveBeenCalled();
+      act(() => props.handleBatchPickerColorChangeComplete('  final raw  '));
+
+      const targets = [
+        { elementType: 'key' as const, id: keyIds[1] },
+        ...(state === 'idle'
+          ? [{ elementType: 'stat' as const, id: statIds[1] }]
+          : []),
+      ];
+      const patch =
+        state === 'idle'
+          ? { counterStrokeIdle: '  final raw  ' }
+          : { counterStrokeActive: '  final raw  ' };
+      if (windowType === 'panel') {
+        expect(patchCounterStrokeViaAuthorityMock).toHaveBeenCalledWith(
+          targets,
+          patch,
+        );
+        expect(patchCounterStrokeTargetsMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchCounterStrokeTargetsMock).toHaveBeenCalledWith(
+          targets,
+          patch,
+        );
+        expect(patchCounterStrokeViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(legacyBatchCounterUpdateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['active ignores synthetic stat', 'active', 'stat', true],
+    ['active rejects synthetic key', 'active', 'key', false],
+    ['idle rejects synthetic stat', 'idle', 'stat', false],
+    ['idle rejects empty key', 'idle', 'key-empty', false],
+  ] as const)(
+    'batch counter stroke %s',
+    (_label, state, syntheticType, exact) => {
+      const stableKeyId = 'a3700000-0000-4000-8000-000000000001';
+      const other =
+        syntheticType === 'stat'
+          ? { type: 'stat' as const, id: 'stat-0', index: 0 }
+          : {
+              type: 'key' as const,
+              id: syntheticType === 'key-empty' ? '' : 'key-0',
+              index: 1,
+            };
+      const keyPositions = [
+        { ...createDefaultKeyPosition(), id: stableKeyId },
+        {
+          ...createDefaultKeyPosition(),
+          id: other.type === 'key' ? other.id : 'unused',
+        },
+      ];
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A', 'B'] },
+        positions: { '4key': keyPositions },
+        canonicalPositions: { '4key': keyPositions },
+      });
+      if (other.type === 'stat') {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              { ...createDefaultKeyPosition(), id: other.id, statType: 'kps' },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id: stableKeyId, index: 0 }, other],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      let props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        setBatchPickerFor: (value: 'stroke') => void;
+        setBatchCounterColorState: (value: 'idle' | 'active') => void;
+        handleBatchPickerColorChangeComplete: (value: string) => void;
+      };
+      act(() => {
+        props.setBatchCounterColorState(state);
+        props.setBatchPickerFor('stroke');
+      });
+      props = batchKeyLikePropsMock.mock.lastCall?.[0] as typeof props;
+      act(() => props.handleBatchPickerColorChangeComplete('#112233'));
+
+      if (exact) {
+        expect(patchCounterStrokeTargetsMock).toHaveBeenCalledWith(
+          [{ elementType: 'key', id: stableKeyId }],
+          { counterStrokeActive: '#112233' },
+        );
+        expect(legacyBatchCounterUpdateMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchCounterStrokeTargetsMock).not.toHaveBeenCalled();
+        expect(patchCounterStrokeViaAuthorityMock).not.toHaveBeenCalled();
+        expect(legacyBatchCounterUpdateMock).toHaveBeenCalledOnce();
+      }
     },
   );
 

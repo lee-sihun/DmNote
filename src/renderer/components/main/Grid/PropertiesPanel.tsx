@@ -52,6 +52,7 @@ import {
   patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority,
+  patchCounterStrokeViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -75,6 +76,7 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
+  EditorCounterStrokePropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
@@ -117,6 +119,8 @@ import {
   patchCounterEnabledById,
   patchCounterLayoutById,
   patchCounterTypographyById,
+  patchCounterStrokeById,
+  patchCounterStrokeByTargets,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -2384,6 +2388,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableCounterStrokeHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (patch: EditorCounterStrokePropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterStrokeViaAuthority([{ elementType, id }], patch)
+              : patchCounterStrokeById(elementType, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter stroke', error);
+          });
+        }
+      : undefined;
+
   // ============================================================================
   // 다중 선택 헬퍼 함수들
   // ============================================================================
@@ -3536,7 +3556,34 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     } else if (batchPickerFor === 'stroke') {
       const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      if (effectiveBatchCounterColorState === 'active') {
+      const active = effectiveBatchCounterColorState === 'active';
+      const targets = [
+        ...selectedKeyElements.map(({ id }) => ({
+          elementType: 'key' as const,
+          id,
+        })),
+        ...(active
+          ? []
+          : selectedStatElements.map(({ id }) => ({
+              elementType: 'stat' as const,
+              id,
+            }))),
+      ];
+      const stableTargets =
+        targets.length > 0 &&
+        targets.every(({ id }) => id.length > 0 && !isSyntheticElementId(id));
+      if (stableTargets) {
+        const patch: EditorCounterStrokePropertyPatchV1 = active
+          ? { counterStrokeActive: strokeColor }
+          : { counterStrokeIdle: strokeColor };
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterStrokeViaAuthority(targets, patch)
+            : patchCounterStrokeByTargets(targets, patch);
+        void persisted.catch((error) => {
+          console.error('Failed to update batch counter stroke', error);
+        });
+      } else if (active) {
         handleBatchCounterUpdate(
           {
             stroke: { ...firstCounter.stroke, active: strokeColor },
@@ -4045,6 +4092,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             : selectedKeyElements[0]?.id,
         )}
         onCounterTypographyCommit={stableCounterTypographyHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterStrokeCommit={stableCounterStrokeHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

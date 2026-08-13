@@ -4094,6 +4094,45 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it.each([
+    [{ counterStrokeIdle: '  raw idle  ' }, { idle: '  raw idle  ' }],
+    [{ counterStrokeActive: '' }, { active: '' }],
+  ] as const)(
+    'counter stroke projection은 한 nested leaf만 바꾸고 raw siblings를 보존한다',
+    async (patch, expected) => {
+      const id = '00000000-0000-4000-8000-0000000000ce';
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        counter: {
+          ...base.keyPositions['4key'][0].counter,
+          stroke: { idle: 'old-idle', active: 'old-active', custom: 'keep' },
+          fill: { idle: 'fill-idle', active: 'fill-active' },
+          fillIdleGradient: { type: 'linear', angle: 0, stops: [] },
+          customSentinel: 'keep-raw',
+        },
+      } as never;
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      await harness.coordinator.commitSemanticOpsInternal([
+        { kind: 'patchElement', elementType: 'key', id, patch },
+      ]);
+      expect(
+        harness.coordinator.getState().lastAck?.keyPositions['4key'][0].counter,
+      ).toMatchObject({
+        stroke: {
+          idle: 'old-idle',
+          active: 'old-active',
+          custom: 'keep',
+          ...expected,
+        },
+        fill: { idle: 'fill-idle', active: 'fill-active' },
+        customSentinel: 'keep-raw',
+      });
+      harness.coordinator.stop();
+    },
+  );
+
   it('note 5 leaf를 한 commit으로 적용하고 무관 note 필드를 보존한다', async () => {
     const ids = [
       '00000000-0000-4000-8000-0000000000d1',

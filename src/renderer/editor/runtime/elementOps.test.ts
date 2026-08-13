@@ -78,6 +78,7 @@ import {
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
+  patchCounterStrokeByTargets,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -3215,6 +3216,67 @@ describe('elementOps', () => {
       }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('counter stroke는 raw nested sibling을 보존하고 active stat을 wire 전에 거절한다', async () => {
+    const statId = '33333333-3333-4333-8333-333333333333';
+    const rawCounter = {
+      ...createDefaultKeyPosition().counter,
+      stroke: { idle: 'old-idle', active: 'old-active', custom: 'keep' },
+      customSentinel: 'keep-raw',
+    };
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), counter: rawCounter }],
+      },
+      positions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...keyAt(statId),
+            statType: 'kps',
+            counter: structuredClone(rawCounter),
+          },
+        ],
+      },
+    });
+    const idleTargets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: statId },
+    ];
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+
+    await patchCounterStrokeByTargets(idleTargets, {
+      counterStrokeIdle: '  raw idle  ',
+    });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      idleTargets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { counterStrokeIdle: '  raw idle  ' },
+      })),
+      expect.anything(),
+    );
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter,
+    ).toMatchObject({
+      stroke: { idle: '  raw idle  ', active: 'old-active', custom: 'keep' },
+      customSentinel: 'keep-raw',
+    });
+    expect(
+      useStatItemStore.getState().positions['4key'][0].counter,
+    ).toMatchObject({
+      stroke: { idle: '  raw idle  ', active: 'old-active', custom: 'keep' },
+      customSentinel: 'keep-raw',
+    });
+    await expect(
+      patchCounterStrokeByTargets([{ elementType: 'stat', id: statId }], {
+        counterStrokeActive: 'wrong',
+      }),
+    ).resolves.toBe(false);
   });
 
   it('counter fontFamily raw string은 siblings를 보존해 key/stat N ops 한 commit으로 보낸다', async () => {

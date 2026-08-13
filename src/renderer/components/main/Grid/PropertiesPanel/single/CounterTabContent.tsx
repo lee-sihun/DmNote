@@ -48,6 +48,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   onCounterAnimationEnabledCommit,
   onCounterLayoutCommit,
   onCounterTypographyCommit,
+  onCounterStrokeCommit,
   onCounterAnimationPresetCommit,
   panelElement,
   t,
@@ -191,7 +192,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       return;
     }
 
-    if (effectiveColorState === 'active') {
+    if (onCounterStrokeCommit) {
+      onCounterStrokeCommit(
+        effectiveColorState === 'active'
+          ? { counterStrokeActive: color }
+          : { counterStrokeIdle: color },
+      );
+    } else if (effectiveColorState === 'active') {
       handleCounterUpdate({
         stroke: { ...counterSettings.stroke, active: color },
       });

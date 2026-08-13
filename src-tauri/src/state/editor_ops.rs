@@ -797,6 +797,7 @@ pub(crate) fn prepare_editor_ops_transition(
                     | EditorElementPropertyPatchV1::CounterFontUnderline(_)
                     | EditorElementPropertyPatchV1::CounterFontStrikethrough(_)
                     | EditorElementPropertyPatchV1::CounterFontFamily(_)
+                    | EditorElementPropertyPatchV1::CounterStrokeIdle(_)
             ) {
                 if !matches!(
                     element_type,
@@ -827,6 +828,8 @@ pub(crate) fn prepare_editor_ops_transition(
                         ));
                     }
                 }
+            } else if matches!(patch, EditorElementPropertyPatchV1::CounterStrokeActive(_)) {
+                validate_editor_op_target_type(op_index, EditorElementTypeV1::Key, *element_type)?;
             } else if matches!(
                 patch,
                 EditorElementPropertyPatchV1::SoundPath(_)
@@ -1401,6 +1404,24 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.counter.font_family = Some(patch.counter_font_family.clone());
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterStrokeIdle(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.stroke.idle == patch.counter_stroke_idle {
+                            false
+                        } else {
+                            position.counter.stroke.idle = patch.counter_stroke_idle.clone();
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterStrokeActive(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.stroke.active == patch.counter_stroke_active {
+                            false
+                        } else {
+                            position.counter.stroke.active = patch.counter_stroke_active.clone();
                             true
                         }
                     }
@@ -5313,6 +5334,167 @@ mod tests {
                 .font_weight,
             100
         );
+    }
+
+    #[test]
+    fn counter_stroke_patches_preserve_every_other_counter_leaf() {
+        let mut store = store_with_every_reorder_type();
+        let key_ids = store.key_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        for counter in store.key_positions.get_mut("4key").unwrap()[..2]
+            .iter_mut()
+            .map(|position| &mut position.counter)
+            .chain(std::iter::once(
+                &mut store.stat_positions.get_mut("4key").unwrap()[0]
+                    .position
+                    .counter,
+            ))
+        {
+            counter.stroke.idle = "idle-before".to_string();
+            counter.stroke.active = "active-before".to_string();
+            counter.fill.idle = "fill-sibling".to_string();
+            counter.fill_idle_gradient = Some(
+                serde_json::from_value(serde_json::json!({
+                    "angle": 45,
+                    "stops": [
+                        { "color": "#111111", "pos": 0 },
+                        { "color": "#eeeeee", "pos": 1 }
+                    ]
+                }))
+                .unwrap(),
+            );
+            counter.font_family = Some("font-sibling".to_string());
+            counter.animation.preset_id = Some("builtin-linear".to_string());
+        }
+        let originals = [
+            store.key_positions["4key"][0].counter.clone(),
+            store.key_positions["4key"][1].counter.clone(),
+            store.stat_positions["4key"][0].position.counter.clone(),
+        ];
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[0],
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
+                        counter_stroke_idle: String::new(),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[1],
+                EditorElementPropertyPatchV1::CounterStrokeActive(
+                    crate::models::EditorCounterStrokeActivePropertyPatchV1 {
+                        counter_stroke_active: "  raw active stroke  ".to_string(),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
+                        counter_stroke_idle: "raw stat stroke".to_string(),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
+                        counter_stroke_idle: "missing".to_string(),
+                    },
+                ),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let actual = [
+            transition.candidate.key_positions["4key"][0]
+                .counter
+                .clone(),
+            transition.candidate.key_positions["4key"][1]
+                .counter
+                .clone(),
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .counter
+                .clone(),
+        ];
+        let mut expected = originals.clone();
+        expected[0].stroke.idle.clear();
+        expected[1].stroke.active = "  raw active stroke  ".to_string();
+        expected[2].stroke.idle = "raw stat stroke".to_string();
+        assert_eq!(actual, expected);
+        assert_eq!(
+            transition.changed_fields,
+            [EditorField::KeyPositions, EditorField::StatPositions]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        for (element_type, patch) in [
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
+                        counter_stroke_idle: "wrong".to_string(),
+                    },
+                ),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterStrokeActive(
+                    crate::models::EditorCounterStrokeActivePropertyPatchV1 {
+                        counter_stroke_active: "wrong".to_string(),
+                    },
+                ),
+            ),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(element_type, uuid::Uuid::new_v4().to_string(), patch),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store.key_positions["4key"][0].counter, originals[0]);
+        }
     }
 
     #[test]

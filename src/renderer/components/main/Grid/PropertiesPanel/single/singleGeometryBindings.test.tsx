@@ -71,6 +71,13 @@ const captured = vi.hoisted(() => ({
       >['counter']['animation'],
     ) => void;
   },
+  color: null as null | {
+    stateMode?: string;
+    onStateModeChange?: (mode: string) => void;
+    onColorChange: (color: string) => void;
+    onColorChangeComplete: (color: string) => void;
+  },
+  swatches: [] as Array<{ onClick: () => void }>,
   nav: {
     activePageKey: null as string | null,
     renderPageKey: null as string | null,
@@ -134,7 +141,10 @@ vi.mock('@components/main/common/Checkbox', () => ({
   },
 }));
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
-  default: () => null,
+  default: (props: NonNullable<(typeof captured)['color']>) => {
+    captured.color = props;
+    return null;
+  },
 }));
 vi.mock('@components/main/Modal/content/pickers/ImagePicker', () => ({
   default: (props: NonNullable<(typeof captured)['image']>) => {
@@ -164,7 +174,10 @@ vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
   },
 }));
 vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
-  ColorSwatchButton: () => null,
+  ColorSwatchButton: (props: { onClick: () => void }) => {
+    captured.swatches.push(props);
+    return null;
+  },
 }));
 vi.mock('@components/main/Modal/PopupExit', () => ({
   default: ({ children }: { children?: React.ReactNode }) => children,
@@ -236,6 +249,8 @@ describe('single geometry input bindings', () => {
     captured.image = null;
     captured.sound = null;
     captured.animation = null;
+    captured.color = null;
+    captured.swatches.length = 0;
     captured.nav.activePageKey = null;
     captured.nav.renderPageKey = null;
     captured.nav.pageHost = null;
@@ -688,6 +703,77 @@ describe('single geometry input bindings', () => {
         [{ counterFontStrikethrough: true }],
       ]);
       expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key', 'idle', { counterStrokeIdle: '  idle stroke  ' }],
+    ['key', 'active', { counterStrokeActive: '  active stroke  ' }],
+    ['stat', 'idle', { counterStrokeIdle: '' }],
+  ] as const)(
+    '%s counter stroke %s picker는 drag local-only 뒤 final exact commit한다',
+    (type, state, expected) => {
+      const stroke = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            isStat={type === 'stat'}
+            onKeyUpdate={legacy}
+            onCounterStrokeCommit={stroke}
+            t={(key) => key}
+          />,
+        );
+      });
+      act(() => captured.swatches.at(-1)?.onClick());
+      if (state === 'active') {
+        act(() => captured.color?.onStateModeChange?.('active'));
+      }
+      const value = Object.values(expected)[0];
+      act(() => captured.color?.onColorChange(value));
+      expect(stroke).not.toHaveBeenCalled();
+      act(() => captured.color?.onColorChangeComplete(value));
+
+      expect(stroke).toHaveBeenCalledWith(expected);
+      expect(legacy).not.toHaveBeenCalled();
+      if (type === 'stat') {
+        expect(captured.color?.onStateModeChange).toBeUndefined();
+      }
+    },
+  );
+
+  it.each([
+    ['key synthetic', false],
+    ['stat empty', true],
+  ] as const)(
+    '%s counter stroke actual picker는 whole-counter legacy로 폴백한다',
+    (_label, isStat) => {
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={{
+              ...createDefaultKeyPosition(),
+              id: isStat ? '' : 'key-0',
+            }}
+            isStat={isStat}
+            onKeyUpdate={legacy}
+            t={(key) => key}
+          />,
+        );
+      });
+      act(() => captured.swatches.at(-1)?.onClick());
+      act(() => captured.color?.onColorChangeComplete('legacy-stroke'));
+
+      expect(legacy).toHaveBeenCalledWith({
+        index: 0,
+        counter: expect.objectContaining({
+          stroke: expect.objectContaining({ idle: 'legacy-stroke' }),
+        }),
+      });
     },
   );
 

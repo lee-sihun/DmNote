@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   EditorCounterLayoutPropertyPatchV1,
+  EditorCounterStrokePropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
 } from '@src/types/editor';
 
@@ -920,6 +921,75 @@ describe('plugin element panel queue', () => {
     expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
       mocks.sendPluginRpc.mock.calls[0]?.[1],
     );
+  });
+
+  it('counter stroke 2 batch는 exact target과 default envelope를 보낸다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const idleTargets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat' as const,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ];
+    const cases: Array<{
+      targets: typeof idleTargets;
+      patch: EditorCounterStrokePropertyPatchV1;
+    }> = [
+      { targets: idleTargets, patch: { counterStrokeIdle: '  raw idle  ' } },
+      {
+        targets: [idleTargets[0]],
+        patch: { counterStrokeActive: '' },
+      },
+    ];
+
+    for (const { targets, patch } of cases) {
+      await expect(
+        actions.patchCounterStrokeViaAuthority(targets, patch),
+      ).resolves.toBe(true);
+    }
+    expect(
+      mocks.sendPluginRpc.mock.calls.map((call) => call.slice(0, 2)),
+    ).toEqual(
+      cases.map(({ targets, patch }) => [
+        'layers:patchProperty',
+        { targets, patch },
+      ]),
+    );
+  });
+
+  it('counter stroke outcome-unknown은 same raw literal default retry를 한 번만 한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+    const pending = actions.patchCounterStrokeViaAuthority(
+      [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      { counterStrokeActive: '  raw active  ' },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(1);
+    await expect(pending).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
   });
 
   it('counter animation update/delete는 exact descriptor와 성공 payload를 반환한다', async () => {

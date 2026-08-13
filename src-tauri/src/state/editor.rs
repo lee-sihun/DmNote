@@ -2714,6 +2714,24 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterStrokeIdle(
+                    crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
+                        counter_stroke_idle: "  raw-idle-stroke  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "counterStrokeIdle": "  raw-idle-stroke  " }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::CounterStrokeActive(
+                    crate::models::EditorCounterStrokeActivePropertyPatchV1 {
+                        counter_stroke_active: String::new(),
+                    },
+                ),
+                serde_json::json!({ "counterStrokeActive": "" }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterAnimationPreset(
                     crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
                         counter_animation_preset:
@@ -2898,6 +2916,13 @@ mod tests {
             serde_json::json!({ "counterFontFamily": 1 }),
             serde_json::json!({ "counterFontFamily": "font", "counterFontItalic": true }),
             serde_json::json!({ "counterFontFamily": "font", "unexpected": true }),
+            serde_json::json!({ "counterStrokeIdle": null }),
+            serde_json::json!({ "counterStrokeIdle": 1 }),
+            serde_json::json!({ "counterStrokeIdle": "idle", "counterStrokeActive": "active" }),
+            serde_json::json!({ "counterStrokeIdle": "idle", "unexpected": true }),
+            serde_json::json!({ "counterStrokeActive": null }),
+            serde_json::json!({ "counterStrokeActive": 1 }),
+            serde_json::json!({ "counterStrokeActive": "active", "hidden": true }),
             serde_json::json!({ "counterAnimationPreset": null }),
             serde_json::json!({ "counterAnimationPreset": {} }),
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "enabled": true } }),

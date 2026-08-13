@@ -170,6 +170,8 @@ interface EditorElementPropertyValuesV1 {
   counterFontUnderline: boolean;
   counterFontStrikethrough: boolean;
   counterFontFamily: string;
+  counterStrokeIdle: string;
+  counterStrokeActive: string;
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
   useInlineStyles: boolean;
   fontWeight: number;
@@ -257,6 +259,10 @@ export type EditorCounterTypographyPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'counterFontUnderline'
   | 'counterFontStrikethrough'
   | 'counterFontFamily'
+>;
+
+export type EditorCounterStrokePropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'counterStrokeIdle' | 'counterStrokeActive'
 >;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -1264,6 +1270,14 @@ export function assertEditorOpsV1(
           patchKeys[0] === 'counterFontFamily' &&
           (op.elementType === 'key' || op.elementType === 'stat') &&
           typeof op.patch.counterFontFamily === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterStrokeIdle' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          typeof op.patch.counterStrokeIdle === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterStrokeActive' &&
+          op.elementType === 'key' &&
+          typeof op.patch.counterStrokeActive === 'string') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'counterAnimationPreset' &&
           (op.elementType === 'key' || op.elementType === 'stat') &&
