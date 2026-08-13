@@ -283,6 +283,99 @@ fn validate_supplied_patch_ids(
     Ok(seen)
 }
 
+// v1은 id를 모르는 입력을 계속 받는 계약이라, 형식이 유효한데 소유가 어긋나거나
+// (다른 컬렉션·삭제된 신원) 패치 안에서 중복된 id는 거부 대신 비워서 뒤의 승계·
+// 신규 발급 경로로 넘긴다. 중복은 canonical 자리를 원본으로 보고 사본만 비운다
+fn sanitize_v1_supplied_collection_ids<T: NativeElement>(
+    candidate: &mut HashMap<String, Vec<T>>,
+    current: &HashMap<String, Vec<T>>,
+) -> Result<(), EditorCommitError> {
+    let mut owned = HashMap::new();
+    for mode in sorted_modes(current) {
+        let Some(elements) = current.get(&mode) else {
+            continue;
+        };
+        for (index, element) in elements.iter().enumerate() {
+            let id = &element.position().id;
+            if !id.is_empty() {
+                owned.insert(id.clone(), (mode.clone(), index));
+            }
+        }
+    }
+
+    let mut occurrences: HashMap<String, Vec<(String, usize)>> = HashMap::new();
+    for mode in sorted_modes(candidate) {
+        let Some(elements) = candidate.get(&mode) else {
+            continue;
+        };
+        for (index, element) in elements.iter().enumerate() {
+            let id = &element.position().id;
+            if id.is_empty() {
+                continue;
+            }
+            if !is_valid_element_id(id) {
+                return Err(EditorCommitError::validation(
+                    INVALID_ELEMENT_ID,
+                    format!("native element {mode}[{index}] has an invalid ID"),
+                ));
+            }
+            occurrences
+                .entry(id.clone())
+                .or_default()
+                .push((mode.clone(), index));
+        }
+    }
+
+    let mut cleared = HashSet::new();
+    for (id, slots) in &occurrences {
+        let Some(canonical_slot) = owned.get(id) else {
+            cleared.extend(slots.iter().cloned());
+            continue;
+        };
+        if slots.len() == 1 {
+            continue;
+        }
+        let keeper = slots
+            .iter()
+            .find(|slot| *slot == canonical_slot)
+            .unwrap_or(&slots[0]);
+        for slot in slots {
+            if slot != keeper {
+                cleared.insert(slot.clone());
+            }
+        }
+    }
+
+    for (mode, index) in cleared {
+        if let Some(element) = candidate
+            .get_mut(&mode)
+            .and_then(|elements| elements.get_mut(index))
+        {
+            element.position_mut().id.clear();
+        }
+    }
+    Ok(())
+}
+
+fn sanitize_v1_supplied_patch_ids(
+    store: &AppStoreData,
+    patch: &mut EditorPatchV1,
+) -> Result<(), EditorCommitError> {
+    if let Some(collection) = patch.key_positions.as_mut() {
+        sanitize_v1_supplied_collection_ids(collection, &store.key_positions)?;
+    }
+    if let Some(collection) = patch.stat_positions.as_mut() {
+        sanitize_v1_supplied_collection_ids(collection, &store.stat_positions)?;
+    }
+    if let Some(collection) = patch.graph_positions.as_mut() {
+        sanitize_v1_supplied_collection_ids(collection, &store.graph_positions)?;
+    }
+    if let Some(collection) = patch.knob_positions.as_mut() {
+        sanitize_v1_supplied_collection_ids(collection, &store.knob_positions)?;
+    }
+    Ok(())
+}
+
 fn same_value_without_id<T: NativeElement>(left: &T, right: &T) -> bool {
     let mut left = left.clone();
     let mut right = right.clone();
@@ -596,6 +689,9 @@ fn adapt_v1_patch_ids(
     store: &AppStoreData,
     patch: &mut EditorPatchV1,
 ) -> Result<(), EditorCommitError> {
+    sanitize_v1_supplied_patch_ids(store, patch)?;
+    // 정화 후에는 남은 id가 모두 자기 컬렉션 소유이자 유일 - 이 호출은 수집과
+    // 불변식 확인을 겸한다
     let supplied_ids = validate_supplied_patch_ids(patch, false)?;
     let canonical_ids = collect_store_ids(store);
     let mut consumed_current_ids = supplied_ids
@@ -1324,7 +1420,7 @@ mod tests {
     }
 
     #[test]
-    fn v1_rejects_nil_non_uuid_and_duplicate_supplied_ids() {
+    fn v1_rejects_nil_and_non_uuid_supplied_ids() {
         let store = store_with_all_collections();
         for invalid_id in [Uuid::nil().to_string(), "not-a-uuid".to_string()] {
             let mut positions = store.key_positions.clone();
@@ -1338,17 +1434,46 @@ mod tests {
                 INVALID_ELEMENT_ID
             );
         }
+    }
 
+    #[test]
+    fn v1_duplicating_a_read_element_rekeys_the_copy_instead_of_failing() {
+        let store = store_with_all_collections();
+        let original = store.key_positions["mode"][0].id.clone();
+        // 플러그인의 관용 패턴: 읽어온 위치 객체를 펼쳐 복사해 배열에 덧붙인다
         let mut positions = store.key_positions.clone();
-        let duplicate = positions["mode"][0].id.clone();
-        positions.get_mut("mode").unwrap()[1].id = duplicate;
+        let mut copy = positions["mode"][0].clone();
+        copy.dx = 300.0;
+        positions.get_mut("mode").unwrap().push(copy);
         let mut patch = EditorPatchV1 {
             key_positions: Some(positions),
             ..EditorPatchV1::default()
         };
-        assert_eq!(
-            validation_code(prepare_commit_patch_element_ids(&store, &mut patch).unwrap_err()),
-            DUPLICATE_ELEMENT_ID
-        );
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_eq!(positions[0].id, original);
+        assert_ne!(positions[2].id, original);
+        assert!(is_valid_element_id(&positions[2].id));
+    }
+
+    #[test]
+    fn v1_supplied_id_from_another_collection_is_rekeyed() {
+        let store = store_with_all_collections();
+        let stat_id = store.stat_positions["mode"][0].position.id.clone();
+        let mut positions = store.key_positions.clone();
+        positions.get_mut("mode").unwrap()[0].id = stat_id.clone();
+        let mut patch = EditorPatchV1 {
+            key_positions: Some(positions),
+            ..EditorPatchV1::default()
+        };
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 다른 컬렉션의 신원을 키 위치로 이식할 수 없다
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_ne!(positions[0].id, stat_id);
+        assert!(is_valid_element_id(&positions[0].id));
     }
 }
