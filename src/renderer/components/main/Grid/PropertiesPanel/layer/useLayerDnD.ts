@@ -17,6 +17,10 @@ import {
 } from '@src/renderer/editor/runtime/elementIntent';
 import { applyEditorPatch } from '@src/renderer/editor/runtime/editorCoordinator';
 import { setPluginElementZIndexes } from '@plugins/rpc/pluginElementActions';
+import {
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
 import { useState, useRef } from 'react';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
@@ -479,6 +483,10 @@ export function useLayerDnD({
   // plugin-only는 editor 무커밋, wire patch는 슬롯 base에서 재생성한다 -
   // 호출 시점 full-record는 대기 중 정산된 격리 plugin 쓰기를 되돌린다.
   // plugin z-index는 별도 authority 쓰기로 editor 커밋과 비원자(기존 의미론)
+  // 렌더 목록과 같은 창 인지 selector - 분리 패널은 panelElements만 채운다
+  const pluginElementsForZ = () =>
+    selectPropertyPanelPluginElements(usePluginDisplayElementStore.getState());
+
   const commitDropIntents = (sets: DropIntentSets, skipContext: string) => {
     const hasPluginZ = sets.pluginZIndexUpdates.length > 0;
     const hasNativeIntent =
@@ -503,21 +511,29 @@ export function useLayerDnD({
       return;
     }
     // plugin z는 별도 authority 쓰기라 editor 커밋과 비원자다(기존 의미론).
-    // 편입 후 실패는 되돌려 반쪽 순서가 남지 않게 한다
+    // native receipt가 실제로 되돌아간 경우에만 함께 되돌린다 - 편입 후
+    // transient 실패는 pendingLocal 재시도가 소유하므로 복원하면 안 된다
     if (hasPluginZ) {
       setPluginElementZIndexes(sets.pluginZIndexUpdates);
     }
     const restorePluginZ = () => {
       if (!hasPluginZ) return;
-      setPluginElementZIndexes(
-        sets.pluginZIndexUpdates.map((update) => ({
+      // 우리가 쓴 값이 그대로일 때만 되돌린다 - 그 사이 다른 writer가 바꿨으면
+      // 그쪽 소유다 (native 속성 receipt의 CAS와 같은 규칙)
+      const current = new Map(
+        pluginElementsForZ().map((element) => [element.fullId, element.zIndex]),
+      );
+      const reverts = sets.pluginZIndexUpdates
+        .filter((update) => current.get(update.fullId) === update.zIndex)
+        .map((update) => ({
           fullId: update.fullId,
           zIndex: update.beforeZIndex,
-        })),
-      );
+        }));
+      if (reverts.length > 0) setPluginElementZIndexes(reverts);
     };
     void runElementIntent({
       applyEager: () => eager.receipt,
+      onRolledBack: restorePluginZ,
       generate: (base) => {
         if (
           hasSynthetic &&
@@ -572,14 +588,10 @@ export function useLayerDnD({
     })
       .then((result) => {
         if (!result.committed && !result.satisfied) {
-          restorePluginZ();
           reportElementOpSkipped(skipContext);
         }
       })
-      .catch((error) => {
-        restorePluginZ();
-        reportElementOpError(error);
-      });
+      .catch(reportElementOpError);
   };
 
   const performMultiDrop = async (
@@ -1000,15 +1012,19 @@ export function useLayerDnD({
             liveModel.displayItems,
           );
           if (resolvedIndex != null) {
-            // 그룹도 live 모델로 재유도 - 캡처 시점 값을 그대로 쓰면 앵커가
-            // 그 사이 그룹을 떠났을 때 사용자가 넣지 않은 그룹에 편입된다
-            const dropTarget = resolveItemDropTarget(
-              resolvedIndex,
-              new Set(draggedIds),
-              liveModel,
-            );
+            // 접힌 그룹 헤더 하단 드롭은 그룹 편입이 사용자의 명시적 의도이고
+            // 헤더 생존은 앵커 해석이 이미 확인했다. 그 외에는 live 모델로
+            // 재유도 - 캡처 값을 그대로 쓰면 앵커가 그 사이 그룹을 떠났을 때
+            // 사용자가 넣지 않은 그룹에 편입된다
+            const targetGroupId = target.anchorHeaderGroupId
+              ? target.anchorHeaderGroupId
+              : resolveItemDropTarget(
+                  resolvedIndex,
+                  new Set(draggedIds),
+                  liveModel,
+                ).targetGroupId;
             performMultiDrop(draggedIds, resolvedIndex, {
-              targetGroupId: dropTarget.targetGroupId,
+              targetGroupId,
               liveModel,
             });
           }

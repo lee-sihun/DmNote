@@ -70,10 +70,17 @@ export const runElementIntent = async (options: {
   applyEager: () => ElementIntentReceipt | null;
   generate: (base: EditorDocumentV1) => ElementIntentGeneration;
   gestureId?: string;
+  // eager receipt를 실제로 되돌린 시점에만 불린다. editor 밖 authority 쓰기를
+  // 같이 되돌려야 하는 호출부가 편입 전/후 정책을 러너와 일치시키는 용도
+  onRolledBack?: () => void;
 }): Promise<ElementIntentResult> => {
   const receipt = options.applyEager();
   let enrolled = false;
   let lastKind: ElementIntentGeneration['kind'] | null = null;
+  const rollback = () => {
+    receipt?.rollback();
+    options.onRolledBack?.();
+  };
   try {
     const document = await enqueueEditorCompatibilityOperation(() =>
       editorCoordinator.commitGeneratedPatch(
@@ -91,7 +98,7 @@ export const runElementIntent = async (options: {
       ),
     );
     if (lastKind === 'targetLost') {
-      receipt?.rollback();
+      rollback();
       return { committed: false, satisfied: false, document: null };
     }
     if (lastKind === 'satisfied') {
@@ -99,7 +106,7 @@ export const runElementIntent = async (options: {
     }
     return { committed: true, satisfied: true, document };
   } catch (error) {
-    if (!enrolled) receipt?.rollback();
+    if (!enrolled) rollback();
     if (isElementIntentAbort(error) && !enrolled) {
       // 전체 중단은 오류가 아니라 fail-closed 무커밋
       return { committed: false, satisfied: false, document: null };

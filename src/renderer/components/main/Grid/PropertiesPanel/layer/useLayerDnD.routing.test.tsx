@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   setLayerGroups: vi.fn(),
   selectedElements: [] as Array<{ id: string }>,
   selectedGroupIds: [] as string[],
+  pluginElements: [] as Array<{ fullId: string; zIndex: number }>,
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
@@ -47,6 +48,15 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
     commitPatch: mocks.commitPatch,
     getState: () => ({ lastAck: null }),
   },
+}));
+
+vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
+  usePluginDisplayElementStore: {
+    getState: () => ({ elements: mocks.pluginElements }),
+  },
+  selectPropertyPanelPluginElements: (state: {
+    elements: Array<{ fullId: string; zIndex: number }>;
+  }) => state.elements,
 }));
 
 vi.mock('@stores/data/useKeyStore', () => ({
@@ -218,6 +228,8 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     mocks.setLayerGroups.mockClear();
     mocks.selectedElements = [];
     mocks.selectedGroupIds = [];
+    mocks.pluginElements = [];
+    mocks.reportElementOpSkipped.mockClear();
   });
 
   afterEach(async () => {
@@ -304,10 +316,47 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     expect(mocks.reportElementOpSkipped).toHaveBeenCalledTimes(1);
   });
 
-  it('편입 후 실패는 plugin z를 이전 값으로 되돌린다', async () => {
+  it('native receipt가 되돌아가면 plugin z도 이전 값으로 되돌린다', async () => {
+    // 러너 계약: 편입 전 실패는 receipt를 되돌리고 onRolledBack을 부른다
+    mocks.runElementIntent.mockImplementation((options: unknown) => {
+      const runner = options as {
+        applyEager: () => unknown;
+        onRolledBack?: () => void;
+      };
+      runner.applyEager();
+      runner.onRolledBack?.();
+      return Promise.reject(new Error('start failed'));
+    });
+    const startItems = [nativeItem(ID_A, 0, 2), nativeItem(ID_B, 1, 1)];
+    const liveItems = [...startItems, pluginItem('plugin-x:one', 0)];
+    // 우리가 쓴 값이 그대로 남아 있는 상태 (CAS 통과)
+    mocks.pluginElements = [{ fullId: 'plugin-x:one', zIndex: 0 }];
+    mocks.setPluginZIndexes.mockImplementation(
+      (updates: Array<{ fullId: string; zIndex: number }>) => {
+        mocks.pluginElements = updates.map((update) => ({ ...update }));
+      },
+    );
+    await dragItemToEnd(startItems, {
+      layerItems: liveItems,
+      displayItems: toDisplay(liveItems),
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    mocks.setPluginZIndexes.mockImplementation(() => {});
+
+    expect(mocks.setPluginZIndexes).toHaveBeenCalledTimes(2);
+    expect(mocks.setPluginZIndexes.mock.calls[1][0]).toEqual([
+      { fullId: 'plugin-x:one', zIndex: 0 },
+    ]);
+  });
+
+  it('편입 후 실패는 plugin z를 되돌리지 않는다', async () => {
+    // 편입 후 transient 실패는 pendingLocal 재시도가 소유한다 - 러너도
+    // native receipt를 되돌리지 않으므로 plugin도 그대로 둔다
     mocks.runElementIntent.mockImplementation((options: unknown) => {
       (options as { applyEager: () => unknown }).applyEager();
-      return Promise.reject(new Error('start failed'));
+      return Promise.reject(new Error('transient after enrollment'));
     });
     const startItems = [nativeItem(ID_A, 0, 2), nativeItem(ID_B, 1, 1)];
     const liveItems = [...startItems, pluginItem('plugin-x:one', 0)];
@@ -319,11 +368,32 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       await Promise.resolve();
     });
 
-    // 쓰기 1회 + 복원 1회, 복원은 드래그 전 z로 되돌린다
-    expect(mocks.setPluginZIndexes).toHaveBeenCalledTimes(2);
-    expect(mocks.setPluginZIndexes.mock.calls[1][0]).toEqual([
-      { fullId: 'plugin-x:one', zIndex: 0 },
-    ]);
+    expect(mocks.setPluginZIndexes).toHaveBeenCalledTimes(1);
+  });
+
+  it('다른 writer가 z를 바꿨으면 복원하지 않는다', async () => {
+    mocks.runElementIntent.mockImplementation((options: unknown) => {
+      const runner = options as {
+        applyEager: () => unknown;
+        onRolledBack?: () => void;
+      };
+      runner.applyEager();
+      runner.onRolledBack?.();
+      return Promise.reject(new Error('start failed'));
+    });
+    const startItems = [nativeItem(ID_A, 0, 2), nativeItem(ID_B, 1, 1)];
+    const liveItems = [...startItems, pluginItem('plugin-x:one', 0)];
+    // 복원 시점에 우리가 쓴 값이 아니다 - 그쪽 소유이므로 건드리지 않는다
+    mocks.pluginElements = [{ fullId: 'plugin-x:one', zIndex: 99 }];
+    await dragItemToEnd(startItems, {
+      layerItems: liveItems,
+      displayItems: toDisplay(liveItems),
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.setPluginZIndexes).toHaveBeenCalledTimes(1);
   });
 
   it('native 전용 편입 전 실패는 runner가 소유하고 layerGroups는 eager를 건드리지 않는다', async () => {
@@ -463,6 +533,46 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     expect(byId.get(ID_C)).toMatchObject({ zIndex: 2 });
     expect(byId.get(ID_A)).toMatchObject({ zIndex: 1 });
     expect(byId.get(ID_B)).toMatchObject({ zIndex: 0 });
+  });
+
+  it('접힌 그룹 헤더 하단 드롭은 그룹 편입 의도를 유지한다', async () => {
+    const child = nativeItem(ID_M1, 0, 3, 'G');
+    const outsider = nativeItem(ID_X, 1, 2);
+    // 드롭 자리 다음에 그룹 밖 행이 있어야 재유도가 undefined를 낸다 -
+    // 드래그 항목이 마지막이면 두 경로가 우연히 같은 값을 낸다
+    const tail = nativeItem(ID_Y, 2, 1);
+    const collapsedHeader: DisplayItem = {
+      displayType: 'group-header',
+      groupId: 'G',
+      groupName: 'G',
+      isCollapsed: true,
+      childCount: 1,
+      allHidden: false,
+    };
+    // 접힌 그룹은 자식 행을 렌더하지 않는다 - 헤더 다음은 무그룹 레이어다
+    const display: DisplayItem[] = [
+      collapsedHeader,
+      { displayType: 'layer', item: outsider, groupDepth: 0, flatIndex: 1 },
+      { displayType: 'layer', item: tail, groupDepth: 0, flatIndex: 2 },
+    ];
+    await renderDnD({
+      layerItems: [child, outsider, tail],
+      displayItems: display,
+      liveModel: {
+        layerItems: [child, outsider, tail],
+        displayItems: display,
+      },
+    });
+
+    // 헤더 행(높이 24)의 하단 절반에 드롭
+    await finishDrag(
+      () => api.handleMouseDown(mouseDownEvent(), outsider, 1),
+      18,
+    );
+
+    expect(mocks.applyGestureEagerly).toHaveBeenCalledTimes(1);
+    // 재유도가 헤더의 명시 의도를 덮으면 groupId가 undefined로 커밋된다
+    expect(eagerIntents().get(ID_X)).toMatchObject({ groupId: 'G' });
   });
 
   it('그룹+추가 선택 드래그는 mouseup 시점 live 구성원 전체를 함께 옮긴다', async () => {
