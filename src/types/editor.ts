@@ -179,6 +179,9 @@ interface EditorElementPropertyValuesV1 {
   fontFamily: string;
   displayText: string;
   className: string;
+  borderWidth: number;
+  borderRadius: number;
+  fontSize: number;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
@@ -266,6 +269,14 @@ export type EditorFontFamilyPropertyPatchV1 =
 export type EditorTextPropertyPatchV1 = EditorPropertyPatchUnionV1<
   'displayText' | 'className'
 >;
+
+export type EditorNumericStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'borderWidth' | 'borderRadius' | 'fontSize'
+>;
+
+export type EditorPreviewStylePropertyPatchV1 =
+  | EditorTextPropertyPatchV1
+  | EditorNumericStylePropertyPatchV1;
 
 export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteEffectEnabled'
@@ -1137,6 +1148,24 @@ export function assertEditorOpsV1(
         (patchKeys.length === 1 &&
           patchKeys[0] === 'className' &&
           typeof op.patch.className === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'borderWidth' &&
+          typeof op.patch.borderWidth === 'number' &&
+          Number.isFinite(op.patch.borderWidth) &&
+          op.patch.borderWidth >= 0 &&
+          op.patch.borderWidth <= 20) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'borderRadius' &&
+          typeof op.patch.borderRadius === 'number' &&
+          Number.isFinite(op.patch.borderRadius) &&
+          op.patch.borderRadius >= 0 &&
+          op.patch.borderRadius <= (op.elementType === 'knob' ? 999 : 100)) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'fontSize' &&
+          typeof op.patch.fontSize === 'number' &&
+          Number.isFinite(op.patch.fontSize) &&
+          op.patch.fontSize >= 8 &&
+          op.patch.fontSize <= 72) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'soundEnabled' &&
           op.elementType === 'key' &&

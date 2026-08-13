@@ -129,8 +129,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onSoundPathCommit,
   onSoundEnabledCommit,
   onSoundVolumeCommit,
-  onTextPropertyPreview,
-  onTextPropertyCommit,
+  onStylePropertyPreview,
+  onStylePropertyCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -599,6 +599,22 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => {
+    if (
+      onStylePropertyPreview &&
+      (property === 'borderWidth' ||
+        property === 'borderRadius' ||
+        property === 'fontSize') &&
+      typeof value === 'number'
+    ) {
+      onStylePropertyPreview(
+        property === 'borderWidth'
+          ? { borderWidth: value }
+          : property === 'borderRadius'
+          ? { borderRadius: value }
+          : { fontSize: value },
+      );
+      return;
+    }
     onKeyPreview?.(keyIndex, { [property]: value });
   };
 
@@ -606,6 +622,22 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => {
+    if (
+      onStylePropertyCommit &&
+      (property === 'borderWidth' ||
+        property === 'borderRadius' ||
+        property === 'fontSize') &&
+      typeof value === 'number'
+    ) {
+      onStylePropertyCommit(
+        property === 'borderWidth'
+          ? { borderWidth: value }
+          : property === 'borderRadius'
+          ? { borderRadius: value }
+          : { fontSize: value },
+      );
+      return;
+    }
     onKeyUpdate({ index: keyIndex, [property]: value });
   };
 
@@ -706,16 +738,16 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
-    if (onTextPropertyPreview) {
-      onTextPropertyPreview({ displayText: value });
+    if (onStylePropertyPreview) {
+      onStylePropertyPreview({ displayText: value });
       return;
     }
     onKeyPreview?.(keyIndex, { displayText: value });
   };
 
   const handleDisplayTextBlur = (value: string) => {
-    if (onTextPropertyCommit) {
-      onTextPropertyCommit({ displayText: value });
+    if (onStylePropertyCommit) {
+      onStylePropertyCommit({ displayText: value });
       return;
     }
     onKeyUpdate({
@@ -726,16 +758,16 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 클래스명 핸들러
   const handleClassNameChange = (value: string) => {
-    if (onTextPropertyPreview) {
-      onTextPropertyPreview({ className: value });
+    if (onStylePropertyPreview) {
+      onStylePropertyPreview({ className: value });
       return;
     }
     onKeyPreview?.(keyIndex, { className: value });
   };
 
   const handleClassNameBlur = (value: string) => {
-    if (onTextPropertyCommit) {
-      onTextPropertyCommit({ className: value });
+    if (onStylePropertyCommit) {
+      onStylePropertyCommit({ className: value });
       return;
     }
     onKeyUpdate({ index: keyIndex, className: value });

@@ -3578,6 +3578,48 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it.each([
+    ['borderWidth', 12.5],
+    ['borderRadius', 88.5],
+    ['fontSize', 31.5],
+  ] as const)(
+    '%s numeric style은 한 leaf만 투영하고 나머지 style siblings를 보존한다',
+    async (property, value) => {
+      const id = '00000000-0000-4000-8000-0000000000e5';
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        borderWidth: 2.5,
+        borderRadius: 9.5,
+        fontSize: 16.5,
+        className: 'sibling-class',
+      };
+      const op: EditorOpV1 = {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch:
+          property === 'borderWidth'
+            ? { borderWidth: value }
+            : property === 'borderRadius'
+            ? { borderRadius: value }
+            : { fontSize: value },
+      };
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+
+      const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+      expect(applied.opResults).toEqual([{ status: 'applied' }]);
+      expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+        borderWidth: property === 'borderWidth' ? value : 2.5,
+        borderRadius: property === 'borderRadius' ? value : 9.5,
+        fontSize: property === 'fontSize' ? value : 16.5,
+        className: 'sibling-class',
+      });
+      harness.coordinator.stop();
+    },
+  );
+
   it('inactiveImage는 raw top-level leaf만 적용하고 이미지 형제를 보존한다', async () => {
     const id = '00000000-0000-4000-8000-0000000000b7';
     const base = withStableId(id);

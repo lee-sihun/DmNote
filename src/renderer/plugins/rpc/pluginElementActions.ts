@@ -21,7 +21,7 @@ import type {
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
-  EditorTextPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
 } from '@src/types/editor';
 
 import { getPluginAuthorityGeneration, sendPluginRpc } from './pluginRpcClient';
@@ -556,9 +556,9 @@ export const patchFontFamilyViaAuthority = (
   });
 };
 
-export const patchTextPropertyViaAuthority = (
+export const patchStylePropertyViaAuthority = (
   targets: readonly { elementType: NativeElementType; id: string }[],
-  patch: EditorTextPropertyPatchV1,
+  patch: EditorPreviewStylePropertyPatchV1,
   gestureId?: string,
 ): Promise<boolean> => {
   const authorityGeneration = getPluginAuthorityGeneration();

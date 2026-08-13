@@ -224,6 +224,9 @@ pub enum EditorElementPropertyPatchV1 {
     FontFamily(EditorFontFamilyPropertyPatchV1),
     DisplayText(EditorDisplayTextPropertyPatchV1),
     ClassName(EditorClassNamePropertyPatchV1),
+    BorderWidth(EditorBorderWidthPropertyPatchV1),
+    BorderRadius(EditorBorderRadiusPropertyPatchV1),
+    FontSize(EditorFontSizePropertyPatchV1),
     InactiveImage(EditorInactiveImagePropertyPatchV1),
     ActiveImage(EditorActiveImagePropertyPatchV1),
     IdleTransparent(EditorIdleTransparentPropertyPatchV1),
@@ -361,6 +364,24 @@ pub struct EditorDisplayTextPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorClassNamePropertyPatchV1 {
     pub class_name: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorBorderWidthPropertyPatchV1 {
+    pub border_width: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorBorderRadiusPropertyPatchV1 {
+    pub border_radius: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorFontSizePropertyPatchV1 {
+    pub font_size: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

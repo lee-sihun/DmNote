@@ -704,6 +704,15 @@ const applySemanticOps = (
             if ('className' in op.patch) {
               return { ...position, className: op.patch.className };
             }
+            if ('borderWidth' in op.patch) {
+              return { ...position, borderWidth: op.patch.borderWidth };
+            }
+            if ('borderRadius' in op.patch) {
+              return { ...position, borderRadius: op.patch.borderRadius };
+            }
+            if ('fontSize' in op.patch) {
+              return { ...position, fontSize: op.patch.fontSize };
+            }
             if ('noteEffectEnabled' in op.patch) {
               return {
                 ...position,

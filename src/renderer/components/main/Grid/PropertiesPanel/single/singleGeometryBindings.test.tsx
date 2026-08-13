@@ -13,6 +13,13 @@ const captured = vi.hoisted(() => ({
       max?: number;
     }
   >(),
+  numberList: [] as Array<{
+    value?: number;
+    onChange: (value: number) => void;
+    onPreview?: (value: number) => void;
+    min?: number;
+    max?: number;
+  }>,
   dropdowns: [] as Array<{
     value: string;
     onChange: (value: string) => void;
@@ -93,6 +100,7 @@ vi.mock('../PropertyInputs', async (importOriginal) => {
       onBlur?: (value?: number) => void;
       onPreview?: (value: number) => void;
     }) => {
+      captured.numberList.push(props);
       captured.numbers.set(
         !props.prefix && props.suffix === 'px' && props.max === 9999
           ? 'counter-gap'
@@ -219,6 +227,7 @@ describe('single geometry input bindings', () => {
       window.clearTimeout(id),
     );
     captured.numbers.clear();
+    captured.numberList.length = 0;
     captured.dropdowns.length = 0;
     captured.checkboxes.length = 0;
     captured.fontStyle = null;
@@ -272,6 +281,88 @@ describe('single geometry input bindings', () => {
     },
   );
 
+  it.each([
+    ['borderWidth', 0, 20, 12.5],
+    ['borderRadius', 0, 100, 88.5],
+    ['fontSize', 8, 72, 31.5],
+  ] as const)(
+    'key/stat StyleTab %s는 preview와 final을 공용 style callbacks로 분리한다',
+    (property, min, max, value) => {
+      const preview = vi.fn();
+      const commit = vi.fn();
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={3}
+            keyPosition={createDefaultKeyPosition()}
+            keyCode="A"
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacyCommit}
+            onKeyPreview={legacyPreview}
+            onStylePropertyPreview={preview}
+            onStylePropertyCommit={commit}
+            showSoundControls={false}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+      const input = captured.numberList.find(
+        (candidate) => candidate.min === min && candidate.max === max,
+      );
+      act(() => input?.onPreview?.(value));
+      act(() => input?.onChange(value));
+
+      expect(preview).toHaveBeenCalledWith({ [property]: value });
+      expect(commit).toHaveBeenCalledWith({ [property]: value });
+      expect(legacyPreview).not.toHaveBeenCalled();
+      expect(legacyCommit).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key', 'stat'] as const)(
+    '%s synthetic numeric style actual input은 preview와 final 모두 기존 writer를 쓴다',
+    (type) => {
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      const captureStart = captured.numberList.length;
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={3}
+            keyPosition={{
+              ...createDefaultKeyPosition(),
+              id: `${type}-3`,
+            }}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacyCommit}
+            onKeyPreview={legacyPreview}
+            showSoundControls={false}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+      const input = captured.numberList
+        .slice(captureStart)
+        .find(({ min, max }) => min === 0 && max === 20);
+
+      act(() => input?.onPreview?.(15));
+      act(() => input?.onChange(15));
+
+      expect(legacyPreview).toHaveBeenCalledWith(3, { borderWidth: 15 });
+      expect(legacyCommit).toHaveBeenCalledWith({
+        index: 3,
+        borderWidth: 15,
+      });
+    },
+  );
+
   it.each(['key', 'stat'] as const)(
     '%s StyleTab displayText는 preview와 blur를 exact callbacks로 분리한다',
     (type) => {
@@ -292,8 +383,8 @@ describe('single geometry input bindings', () => {
             onPositionChange={vi.fn()}
             onKeyUpdate={legacyCommit}
             onKeyPreview={legacyPreview}
-            onTextPropertyPreview={preview}
-            onTextPropertyCommit={commit}
+            onStylePropertyPreview={preview}
+            onStylePropertyCommit={commit}
             showSoundControls={false}
             panelElement={null}
             t={(key) => key}
@@ -333,8 +424,8 @@ describe('single geometry input bindings', () => {
             onPositionChange={vi.fn()}
             onKeyUpdate={legacyCommit}
             onKeyPreview={legacyPreview}
-            onTextPropertyPreview={preview}
-            onTextPropertyCommit={commit}
+            onStylePropertyPreview={preview}
+            onStylePropertyCommit={commit}
             showSoundControls={false}
             useCustomCSS
             panelElement={null}
@@ -412,8 +503,8 @@ describe('single geometry input bindings', () => {
           keyInfo={null}
           onPositionChange={vi.fn()}
           onKeyUpdate={vi.fn()}
-          onTextPropertyPreview={vi.fn()}
-          onTextPropertyCommit={vi.fn()}
+          onStylePropertyPreview={vi.fn()}
+          onStylePropertyCommit={vi.fn()}
           showSoundControls={false}
           useCustomCSS={false}
           panelElement={null}
@@ -442,8 +533,8 @@ describe('single geometry input bindings', () => {
           keyInfo={null}
           onPositionChange={vi.fn()}
           onKeyUpdate={vi.fn()}
-          onTextPropertyPreview={preview}
-          onTextPropertyCommit={commit}
+          onStylePropertyPreview={preview}
+          onStylePropertyCommit={commit}
           showSoundControls={false}
           panelElement={null}
           t={(key) => key}
@@ -1832,7 +1923,7 @@ describe('single geometry input bindings', () => {
         handleRenameCommit: vi.fn(),
         handleRenameCancel: vi.fn(),
         handleRenameStart: vi.fn(),
-        onTextPropertyCommit: commit,
+        onStylePropertyCommit: commit,
         singleScrollRefFor: () => vi.fn(),
         panelElement: null,
         useCustomCSS: true,
@@ -1888,6 +1979,151 @@ describe('single geometry input bindings', () => {
       expect(commit).toHaveBeenCalledOnce();
       expect(commit).toHaveBeenCalledWith({ className: '  Final class  ' });
       expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['graph', 'borderWidth', 0, 20, 20],
+    ['graph', 'borderRadius', 0, 100, 100],
+    ['knob', 'borderWidth', 0, 20, 20],
+    ['knob', 'borderRadius', 0, 999, 999],
+  ] as const)(
+    '%s %s direct NumberInput은 preview 없이 stable exact commit한다',
+    (type, property, min, max, value) => {
+      const commit = vi.fn();
+      const legacy = vi.fn();
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        onStylePropertyCommit: commit,
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: false,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...createDefaultKeyPosition(),
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              }}
+              singleGraphIndex={0}
+              handleGraphUpdate={legacy}
+              showGraphImagePicker={false}
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={createRef<HTMLButtonElement>()}
+              graphClassNameDraft=""
+              setGraphClassNameDraft={vi.fn()}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={0}
+              handleKnobUpdate={legacy}
+            />
+          ),
+        );
+      });
+      const input = [...captured.numberList]
+        .reverse()
+        .find((candidate) => candidate.min === min && candidate.max === max);
+      expect(input?.onPreview).toBeUndefined();
+      act(() => input?.onChange(value));
+
+      expect(commit).toHaveBeenCalledWith({ [property]: value });
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['graph', 'borderWidth', 0, 20, 20],
+    ['knob', 'borderRadius', 0, 999, 999],
+  ] as const)(
+    '%s synthetic %s actual input은 preview 없이 기존 direct writer를 쓴다',
+    (type, property, min, max, value) => {
+      const legacy = vi.fn();
+      const captureStart = captured.numberList.length;
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: false,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...createDefaultKeyPosition(),
+                id: 'graph-0',
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              }}
+              singleGraphIndex={0}
+              handleGraphUpdate={legacy}
+              showGraphImagePicker={false}
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={createRef<HTMLButtonElement>()}
+              graphClassNameDraft=""
+              setGraphClassNameDraft={vi.fn()}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                id: 'knob-0',
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={0}
+              handleKnobUpdate={legacy}
+            />
+          ),
+        );
+      });
+      const input = captured.numberList
+        .slice(captureStart)
+        .reverse()
+        .find((candidate) => candidate.min === min && candidate.max === max);
+      expect(input?.onPreview).toBeUndefined();
+      act(() => input?.onChange(value));
+
+      expect(legacy).toHaveBeenCalledWith({ index: 0, [property]: value });
     },
   );
 

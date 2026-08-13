@@ -56,8 +56,8 @@ import {
   patchFontStyleByTargets,
   patchFontFamilyById,
   patchFontFamilyByTargets,
-  patchTextPropertyById,
-  patchTextPropertyByTargets,
+  patchStylePropertyById,
+  patchStylePropertyByTargets,
   patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -2404,7 +2404,7 @@ describe('elementOps', () => {
       { elementType: 'knob' as const, id: knobId },
     ];
 
-    await patchTextPropertyByTargets(
+    await patchStylePropertyByTargets(
       targets,
       { displayText: '  Raw label  ' },
       {
@@ -2435,7 +2435,7 @@ describe('elementOps', () => {
       { elementType: 'stat' as const, id: ID_B },
     ];
 
-    await patchTextPropertyByTargets(
+    await patchStylePropertyByTargets(
       targets,
       { className: '  Raw class  ' },
       {
@@ -2460,9 +2460,39 @@ describe('elementOps', () => {
     );
   });
 
+  it.each([
+    [{ borderWidth: 12.5 }, 'gesture-border-width'],
+    [{ borderRadius: 88.5 }, 'gesture-border-radius'],
+    [{ fontSize: 31.5 }, 'gesture-font-size'],
+  ] as const)(
+    '%j numeric style은 exact leaf와 gesture를 한 commit으로 보낸다',
+    async (patch, gestureId) => {
+      await patchStylePropertyByTargets(
+        [{ elementType: 'key', id: ID_A }],
+        patch,
+        { gestureId },
+      );
+
+      expect(api.commitSemanticOps).toHaveBeenCalledWith(
+        [
+          {
+            kind: 'patchElement',
+            elementType: 'key',
+            id: ID_A,
+            patch,
+          },
+        ],
+        expect.objectContaining({
+          gestureId,
+          onEnrolled: expect.any(Function),
+        }),
+      );
+    },
+  );
+
   it('displayText는 invalid target을 wire 전에 거절하고 편입 전 실패를 복원한다', async () => {
     await expect(
-      patchTextPropertyByTargets(
+      patchStylePropertyByTargets(
         [
           { elementType: 'key', id: ID_A },
           { elementType: 'graph', id: ID_A },
@@ -2471,7 +2501,7 @@ describe('elementOps', () => {
       ),
     ).resolves.toBe(false);
     await expect(
-      patchTextPropertyByTargets([{ elementType: 'knob', id: 'knob-0' }], {
+      patchStylePropertyByTargets([{ elementType: 'knob', id: 'knob-0' }], {
         displayText: '',
       }),
     ).resolves.toBe(false);
@@ -2479,7 +2509,7 @@ describe('elementOps', () => {
 
     api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
     await expect(
-      patchTextPropertyById('key', ID_A, { displayText: 'After' }),
+      patchStylePropertyById('key', ID_A, { displayText: 'After' }),
     ).rejects.toThrow('start failed');
     expect(
       useKeyStore.getState().canonicalPositions['4key'][0].displayText,

@@ -49,7 +49,7 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
-  EditorTextPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -1963,19 +1963,19 @@ export const patchFontFamilyByTargets = (
   );
 };
 
-export const patchTextPropertyById = (
+export const patchStylePropertyById = (
   type: NativeElementType,
   id: string,
-  patch: EditorTextPropertyPatchV1,
+  patch: EditorPreviewStylePropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
   return patchElementPropertyById(type, id, patch, options);
 };
 
-export const patchTextPropertyByTargets = (
+export const patchStylePropertyByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
-  patch: EditorTextPropertyPatchV1,
+  patch: EditorPreviewStylePropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (

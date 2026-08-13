@@ -265,7 +265,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchGraphColorsByIds: mocks.patchGraphColors,
   patchFontStyleByTargets: mocks.patchFontStyle,
   patchFontFamilyByTargets: mocks.patchFontFamily,
-  patchTextPropertyByTargets: mocks.patchDisplayText,
+  patchStylePropertyByTargets: mocks.patchDisplayText,
   patchInactiveImageByTargets: mocks.patchInactiveImage,
   patchActiveImageByTargets: mocks.patchActiveImage,
   patchIdleTransparentByTargets: mocks.patchIdleTransparent,
@@ -896,6 +896,36 @@ describe('plugin panel persisted element mutations', () => {
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
+
+  it.each([
+    ['borderWidth', 'key', { borderWidth: 12.5 }],
+    ['borderRadius', 'knob', { borderRadius: 999 }],
+    ['fontSize', 'graph', { fontSize: 31.5 }],
+  ] as const)(
+    '%s batch는 common targets와 gesture를 공용 style commit으로 전달한다',
+    async (_label, elementType, patch) => {
+      const targets = [
+        {
+          elementType,
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        },
+      ] as const;
+      const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', { targets, patch, gestureId }),
+      );
+
+      await vi.waitFor(() =>
+        expect(mocks.patchDisplayText).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.patchDisplayText).toHaveBeenCalledWith(targets, patch, {
+        gestureId,
+        preflight: expect.any(Function),
+      });
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
 
   it('inactiveImage batch는 혼합 native 대상과 raw string을 한 semantic commit으로 전달한다', async () => {
     const targets = [
@@ -2141,6 +2171,89 @@ describe('plugin panel persisted element mutations', () => {
         ],
         patch: { className: '' },
         gestureId: 'not-a-uuid',
+      },
+    ],
+    [
+      'borderWidth below range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { borderWidth: -0.1 },
+      },
+    ],
+    [
+      'borderWidth nonfinite',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { borderWidth: Number.POSITIVE_INFINITY },
+      },
+    ],
+    [
+      'borderRadius non-knob above range',
+      {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { borderRadius: 100.1 },
+      },
+    ],
+    [
+      'borderRadius knob above range',
+      {
+        targets: [{ elementType: 'knob', id: 'stable' }],
+        patch: { borderRadius: 999.1 },
+      },
+    ],
+    [
+      'fontSize below range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { fontSize: 7.9 },
+      },
+    ],
+    [
+      'numeric style non-number',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { fontSize: '12' },
+      },
+    ],
+    [
+      'numeric style combined',
+      {
+        targets: [{ elementType: 'knob', id: 'stable' }],
+        patch: { borderWidth: 1, borderRadius: 2 },
+      },
+    ],
+    [
+      'numeric style extra',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { fontSize: 12, extra: true },
+      },
+    ],
+    [
+      'numeric style duplicate target',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable' },
+          { elementType: 'key', id: 'stable' },
+        ],
+        patch: { borderWidth: 10 },
+      },
+    ],
+    [
+      'numeric style synthetic target',
+      {
+        targets: [{ elementType: 'graph', id: 'graph-0' }],
+        patch: { borderRadius: 10 },
+      },
+    ],
+    [
+      'numeric style oversized batch',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'stat',
+          id: `stable-numeric-style-${index}`,
+        })),
+        patch: { fontSize: 12 },
       },
     ],
     [

@@ -519,6 +519,29 @@ mod tests {
                 serde_json::json!({ "className": "  raw class  " }),
             ),
             (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::BorderWidth(
+                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 0.5 },
+                ),
+                serde_json::json!({ "borderWidth": 0.5 }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::BorderRadius(
+                    crate::models::EditorBorderRadiusPropertyPatchV1 {
+                        border_radius: 999.0,
+                    },
+                ),
+                serde_json::json!({ "borderRadius": 999.0 }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::FontSize(
+                    crate::models::EditorFontSizePropertyPatchV1 { font_size: 8.5 },
+                ),
+                serde_json::json!({ "fontSize": 8.5 }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::InactiveImage(
                     crate::models::EditorInactiveImagePropertyPatchV1 {
@@ -853,6 +876,27 @@ mod tests {
             let mut invalid_class_name = layer_name_wire.clone();
             invalid_class_name["editorOps"][0]["patch"] = patch;
             let error = decode_gesture_commit_request(invalid_class_name).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
+
+        for patch in [
+            serde_json::json!({ "borderWidth": null }),
+            serde_json::json!({ "borderWidth": "1" }),
+            serde_json::json!({ "borderWidth": 1, "fontSize": 14 }),
+            serde_json::json!({ "borderWidth": 1, "unexpected": true }),
+            serde_json::json!({ "borderRadius": null }),
+            serde_json::json!({ "borderRadius": "1" }),
+            serde_json::json!({ "borderRadius": 1, "hidden": false }),
+            serde_json::json!({ "fontSize": null }),
+            serde_json::json!({ "fontSize": "14" }),
+            serde_json::json!({ "fontSize": 14, "unexpected": true }),
+        ] {
+            let mut invalid_numeric_style = layer_name_wire.clone();
+            invalid_numeric_style["editorOps"][0]["patch"] = patch;
+            let error = decode_gesture_commit_request(invalid_numeric_style).unwrap_err();
             assert_eq!(
                 validation_code(error).as_deref(),
                 Some("INVALID_REQUEST_PAYLOAD")

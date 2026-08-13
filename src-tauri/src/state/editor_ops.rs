@@ -852,6 +852,43 @@ pub(crate) fn prepare_editor_ops_transition(
                     }
                 }
             }
+            if let EditorElementPropertyPatchV1::BorderWidth(patch) = patch {
+                if !patch.border_width.is_finite() || !(0.0..=20.0).contains(&patch.border_width) {
+                    return Err(EditorCommitError::validation(
+                        "BORDER_WIDTH_OUT_OF_RANGE",
+                        format!(
+                            "editor op {op_index} border width must be finite and between 0 and 20"
+                        ),
+                    ));
+                }
+            }
+            if let EditorElementPropertyPatchV1::BorderRadius(patch) = patch {
+                let maximum = if matches!(element_type, EditorElementTypeV1::Knob) {
+                    999.0
+                } else {
+                    100.0
+                };
+                if !patch.border_radius.is_finite()
+                    || !(0.0..=maximum).contains(&patch.border_radius)
+                {
+                    return Err(EditorCommitError::validation(
+                        "BORDER_RADIUS_OUT_OF_RANGE",
+                        format!(
+                            "editor op {op_index} border radius must be finite and between 0 and {maximum}"
+                        ),
+                    ));
+                }
+            }
+            if let EditorElementPropertyPatchV1::FontSize(patch) = patch {
+                if !patch.font_size.is_finite() || !(8.0..=72.0).contains(&patch.font_size) {
+                    return Err(EditorCommitError::validation(
+                        "FONT_SIZE_OUT_OF_RANGE",
+                        format!(
+                            "editor op {op_index} font size must be finite and between 8 and 72"
+                        ),
+                    ));
+                }
+            }
         }
     }
 
@@ -1145,6 +1182,33 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.class_name = Some(patch.class_name.clone());
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::BorderWidth(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.border_width == Some(patch.border_width) {
+                            false
+                        } else {
+                            position.border_width = Some(patch.border_width);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::BorderRadius(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.border_radius == Some(patch.border_radius) {
+                            false
+                        } else {
+                            position.border_radius = Some(patch.border_radius);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::FontSize(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.font_size == Some(patch.font_size) {
+                            false
+                        } else {
+                            position.font_size = Some(patch.font_size);
                             true
                         }
                     }
@@ -3426,6 +3490,273 @@ mod tests {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].class_name, None);
+    }
+
+    #[test]
+    fn numeric_style_patches_preserve_raw_f64_ranges_and_siblings() {
+        let mut store = store_with_every_reorder_type();
+        for position in [
+            &mut store.key_positions.get_mut("4key").unwrap()[0],
+            &mut store.stat_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.graph_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.knob_positions.get_mut("4key").unwrap()[0].position,
+        ] {
+            position.border_width = None;
+            position.border_radius = None;
+            position.font_size = None;
+            position.class_name = Some("class-sibling".to_string());
+            position.display_text = Some("display-sibling".to_string());
+            position.counter.font_size = 33;
+        }
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let graph_id = store.graph_positions["4key"][0].position.id.clone();
+        let knob_id = store.knob_positions["4key"][0].position.id.clone();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::BorderWidth(
+                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 0.0 },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::BorderRadius(
+                    crate::models::EditorBorderRadiusPropertyPatchV1 {
+                        border_radius: 100.0,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_id,
+                EditorElementPropertyPatchV1::FontSize(
+                    crate::models::EditorFontSizePropertyPatchV1 { font_size: 8.0 },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_id,
+                EditorElementPropertyPatchV1::BorderRadius(
+                    crate::models::EditorBorderRadiusPropertyPatchV1 {
+                        border_radius: 999.0,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::BorderWidth(
+                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 1.0 },
+                ),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let actual = [
+            &transition.candidate.key_positions["4key"][0],
+            &transition.candidate.stat_positions["4key"][0].position,
+            &transition.candidate.graph_positions["4key"][0].position,
+            &transition.candidate.knob_positions["4key"][0].position,
+        ];
+        for position in actual {
+            assert_eq!(position.class_name.as_deref(), Some("class-sibling"));
+            assert_eq!(position.display_text.as_deref(), Some("display-sibling"));
+            assert_eq!(position.counter.font_size, 33);
+        }
+        assert_eq!(
+            transition.candidate.key_positions["4key"][0].border_width,
+            Some(0.0)
+        );
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .border_radius,
+            Some(100.0)
+        );
+        assert_eq!(
+            transition.candidate.graph_positions["4key"][0]
+                .position
+                .font_size,
+            Some(8.0)
+        );
+        assert_eq!(
+            transition.candidate.knob_positions["4key"][0]
+                .position
+                .border_radius,
+            Some(999.0)
+        );
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let upper_boundaries = prepare_editor_ops_transition(
+            &store,
+            &[
+                patch_property_op(
+                    EditorElementTypeV1::Stat,
+                    &stat_id,
+                    EditorElementPropertyPatchV1::BorderWidth(
+                        crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 20.0 },
+                    ),
+                ),
+                patch_property_op(
+                    EditorElementTypeV1::Graph,
+                    &graph_id,
+                    EditorElementPropertyPatchV1::FontSize(
+                        crate::models::EditorFontSizePropertyPatchV1 { font_size: 72.0 },
+                    ),
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            upper_boundaries.candidate.stat_positions["4key"][0]
+                .position
+                .border_width,
+            Some(20.0)
+        );
+        assert_eq!(
+            upper_boundaries.candidate.graph_positions["4key"][0]
+                .position
+                .font_size,
+            Some(72.0)
+        );
+
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                ops[0].clone(),
+                patch_property_op(
+                    EditorElementTypeV1::Stat,
+                    &graph_id,
+                    EditorElementPropertyPatchV1::FontSize(
+                        crate::models::EditorFontSizePropertyPatchV1 { font_size: 16.0 },
+                    ),
+                ),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        assert_eq!(store.key_positions["4key"][0].border_width, None);
+
+        let invalid = [
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::BorderWidth(
+                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: -0.1 },
+                ),
+                "BORDER_WIDTH_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::BorderWidth(
+                    crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 20.1 },
+                ),
+                "BORDER_WIDTH_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::BorderRadius(
+                    crate::models::EditorBorderRadiusPropertyPatchV1 {
+                        border_radius: 100.1,
+                    },
+                ),
+                "BORDER_RADIUS_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::BorderRadius(
+                    crate::models::EditorBorderRadiusPropertyPatchV1 {
+                        border_radius: 999.1,
+                    },
+                ),
+                "BORDER_RADIUS_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::FontSize(
+                    crate::models::EditorFontSizePropertyPatchV1 { font_size: 7.9 },
+                ),
+                "FONT_SIZE_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::FontSize(
+                    crate::models::EditorFontSizePropertyPatchV1 { font_size: 72.1 },
+                ),
+                "FONT_SIZE_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::BorderWidth(
+                    crate::models::EditorBorderWidthPropertyPatchV1 {
+                        border_width: f64::NAN,
+                    },
+                ),
+                "BORDER_WIDTH_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::FontSize(
+                    crate::models::EditorFontSizePropertyPatchV1 {
+                        font_size: f64::INFINITY,
+                    },
+                ),
+                "FONT_SIZE_OUT_OF_RANGE",
+            ),
+        ];
+        for (element_type, patch, expected_code) in invalid {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(element_type, uuid::Uuid::new_v4().to_string(), patch),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(expected_code));
+            assert_eq!(store.key_positions["4key"][0].border_width, None);
+        }
     }
 
     #[test]

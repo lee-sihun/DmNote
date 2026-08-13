@@ -73,7 +73,7 @@ import ShadowControls from '../ShadowControls';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import EditSessionBoundary from '../EditSessionBoundary';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
-import type { EditorTextPropertyPatchV1 } from '@src/types/editor';
+import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -324,7 +324,7 @@ interface SingleGraphPanelProps {
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
-  onTextPropertyCommit?: (patch: EditorTextPropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
@@ -354,7 +354,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   onInactiveImageCommit,
   onIdleTransparentCommit,
   onIdleImageFitCommit,
-  onTextPropertyCommit,
+  onStylePropertyCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   showGraphImagePicker,
@@ -660,10 +660,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <NumberInput
                   value={Math.round(singleGraphPosition.borderWidth ?? 1)}
                   onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      borderWidth: Math.max(0, Math.min(20, value)),
-                    })
+                    onStylePropertyCommit
+                      ? onStylePropertyCommit({
+                          borderWidth: Math.max(0, Math.min(20, value)),
+                        })
+                      : handleGraphUpdate({
+                          index: singleGraphIndex,
+                          borderWidth: Math.max(0, Math.min(20, value)),
+                        })
                   }
                   min={0}
                   max={20}
@@ -679,10 +683,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     singleGraphPosition.borderRadius ?? DEFAULT_ELEMENT_RADIUS,
                   )}
                   onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      borderRadius: Math.max(0, Math.min(100, value)),
-                    })
+                    onStylePropertyCommit
+                      ? onStylePropertyCommit({
+                          borderRadius: Math.max(0, Math.min(100, value)),
+                        })
+                      : handleGraphUpdate({
+                          index: singleGraphIndex,
+                          borderRadius: Math.max(0, Math.min(100, value)),
+                        })
                   }
                   min={0}
                   max={100}
@@ -732,8 +740,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     value={graphClassNameDraft}
                     onChange={setGraphClassNameDraft}
                     onBlur={(value) => {
-                      if (onTextPropertyCommit) {
-                        onTextPropertyCommit({ className: value });
+                      if (onStylePropertyCommit) {
+                        onStylePropertyCommit({ className: value });
                         return;
                       }
                       handleGraphUpdate({
@@ -842,7 +850,7 @@ interface SingleKnobPanelProps {
   onActiveTransparentCommit?: (activeTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
-  onTextPropertyCommit?: (patch: EditorTextPropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
@@ -870,7 +878,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   onActiveTransparentCommit,
   onIdleImageFitCommit,
   onActiveImageFitCommit,
-  onTextPropertyCommit,
+  onStylePropertyCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   panelElement,
@@ -1420,10 +1428,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={singleKnobPosition.borderWidth ?? 0}
                   onChange={(value) =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      borderWidth: value,
-                    })
+                    onStylePropertyCommit
+                      ? onStylePropertyCommit({ borderWidth: value })
+                      : handleKnobUpdate({
+                          index: singleKnobIndex,
+                          borderWidth: value,
+                        })
                   }
                   suffix="px"
                   min={0}
@@ -1438,10 +1448,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 <NumberInput
                   value={effectiveBorderRadius}
                   onChange={(value) =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      borderRadius: value,
-                    })
+                    onStylePropertyCommit
+                      ? onStylePropertyCommit({ borderRadius: value })
+                      : handleKnobUpdate({
+                          index: singleKnobIndex,
+                          borderRadius: value,
+                        })
                   }
                   suffix="px"
                   min={0}
@@ -1492,8 +1504,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                       value={classNameDraft}
                       onChange={setClassNameDraft}
                       onBlur={(value) => {
-                        if (onTextPropertyCommit) {
-                          onTextPropertyCommit({ className: value });
+                        if (onStylePropertyCommit) {
+                          onStylePropertyCommit({ className: value });
                           return;
                         }
                         handleKnobUpdate({
@@ -1706,8 +1718,8 @@ interface SingleKeyStatPanelProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onTextPropertyPreview?: (patch: EditorTextPropertyPatchV1) => void;
-  onTextPropertyCommit?: (patch: EditorTextPropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
   onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
@@ -1763,8 +1775,8 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onSoundPathCommit,
   onSoundEnabledCommit,
   onSoundVolumeCommit,
-  onTextPropertyPreview,
-  onTextPropertyCommit,
+  onStylePropertyPreview,
+  onStylePropertyCommit,
   onCounterAnimationPresetCommit,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
@@ -1964,8 +1976,8 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onSoundPathCommit={onSoundPathCommit}
               onSoundEnabledCommit={onSoundEnabledCommit}
               onSoundVolumeCommit={onSoundVolumeCommit}
-              onTextPropertyPreview={onTextPropertyPreview}
-              onTextPropertyCommit={onTextPropertyCommit}
+              onStylePropertyPreview={onStylePropertyPreview}
+              onStylePropertyCommit={onStylePropertyCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}

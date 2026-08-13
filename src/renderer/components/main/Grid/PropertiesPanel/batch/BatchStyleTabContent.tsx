@@ -41,7 +41,7 @@ import {
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
-import type { EditorTextPropertyPatchV1 } from '@src/types/editor';
+import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
@@ -68,8 +68,8 @@ interface BatchStyleTabContentProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onTextPropertyPreview?: (patch: EditorTextPropertyPatchV1) => void;
-  onTextPropertyCommit?: (patch: EditorTextPropertyPatchV1) => void;
+  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -152,8 +152,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   onSoundPathCommit,
   onSoundEnabledCommit,
   onSoundVolumeCommit,
-  onTextPropertyPreview,
-  onTextPropertyCommit,
+  onStylePropertyPreview,
+  onStylePropertyCommit,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -920,9 +920,15 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ).value
             }
             onChange={(value) =>
-              handleBatchStyleChangeComplete('borderWidth', value)
+              onStylePropertyCommit
+                ? onStylePropertyCommit({ borderWidth: value })
+                : handleBatchStyleChangeComplete('borderWidth', value)
             }
-            onPreview={(value) => handleBatchStyleChange('borderWidth', value)}
+            onPreview={(value) =>
+              onStylePropertyPreview
+                ? onStylePropertyPreview({ borderWidth: value })
+                : handleBatchStyleChange('borderWidth', value)
+            }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
@@ -944,9 +950,15 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 .value
             }
             onChange={(value) =>
-              handleBatchStyleChangeComplete('borderRadius', value)
+              onStylePropertyCommit
+                ? onStylePropertyCommit({ borderRadius: value })
+                : handleBatchStyleChangeComplete('borderRadius', value)
             }
-            onPreview={(value) => handleBatchStyleChange('borderRadius', value)}
+            onPreview={(value) =>
+              onStylePropertyPreview
+                ? onStylePropertyPreview({ borderRadius: value })
+                : handleBatchStyleChange('borderRadius', value)
+            }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}
@@ -1009,13 +1021,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   <TextInput
                     value={isMixed ? '' : displayTextValue}
                     onChange={(v) => {
-                      if (onTextPropertyCommit)
-                        onTextPropertyCommit({ displayText: v });
+                      if (onStylePropertyCommit)
+                        onStylePropertyCommit({ displayText: v });
                       else handleBatchStyleChangeComplete('displayText', v);
                     }}
                     onPreview={(v) => {
-                      if (onTextPropertyPreview)
-                        onTextPropertyPreview({ displayText: v });
+                      if (onStylePropertyPreview)
+                        onStylePropertyPreview({ displayText: v });
                       else handleBatchStyleChange('displayText', v);
                     }}
                     onCancel={() => editGestureController.cancel()}
@@ -1057,10 +1069,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 <NumberInput
                   value={getMixedValue((pos) => pos.fontSize, 14).value}
                   onChange={(value) =>
-                    handleBatchStyleChangeComplete('fontSize', value)
+                    onStylePropertyCommit
+                      ? onStylePropertyCommit({ fontSize: value })
+                      : handleBatchStyleChangeComplete('fontSize', value)
                   }
                   onPreview={(value) =>
-                    handleBatchStyleChange('fontSize', value)
+                    onStylePropertyPreview
+                      ? onStylePropertyPreview({ fontSize: value })
+                      : handleBatchStyleChange('fontSize', value)
                   }
                   onCancel={() => editGestureController.cancel()}
                   suffix="px"
@@ -1179,13 +1195,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   : getMixedValue((pos) => pos.className, '').value
               }
               onChange={(value) => {
-                if (onTextPropertyCommit)
-                  onTextPropertyCommit({ className: value });
+                if (onStylePropertyCommit)
+                  onStylePropertyCommit({ className: value });
                 else handleBatchStyleChangeComplete('className', value);
               }}
               onPreview={(value) => {
-                if (onTextPropertyPreview)
-                  onTextPropertyPreview({ className: value });
+                if (onStylePropertyPreview)
+                  onStylePropertyPreview({ className: value });
                 else handleBatchStyleChange('className', value);
               }}
               onCancel={() => editGestureController.cancel()}

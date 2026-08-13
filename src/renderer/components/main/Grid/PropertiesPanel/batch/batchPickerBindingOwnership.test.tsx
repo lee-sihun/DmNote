@@ -44,6 +44,7 @@ const captured = vi.hoisted(() => ({
   numbers: [] as Array<{
     min?: number;
     max?: number;
+    onPreview?: (value: number) => void;
     onChange: (value: number) => void;
   }>,
   fontStyles: [] as Array<{
@@ -108,7 +109,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
     patches.patchCounterAnimationEnabledByTargets,
   patchCounterLayoutByTargets: patches.patchCounterLayoutByTargets,
   patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
-  patchTextPropertyByTargets: patches.patchDisplayTextByTargets,
+  patchStylePropertyByTargets: patches.patchDisplayTextByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
@@ -127,7 +128,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterLayoutViaAuthority: patches.patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority:
     patches.patchCounterTypographyViaAuthority,
-  patchTextPropertyViaAuthority: patches.patchDisplayTextViaAuthority,
+  patchStylePropertyViaAuthority: patches.patchDisplayTextViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
@@ -182,6 +183,7 @@ vi.mock(
       NumberInput: (props: {
         min?: number;
         max?: number;
+        onPreview?: (value: number) => void;
         onChange: (value: number) => void;
       }) => {
         captured.numbers.push(props);
@@ -936,6 +938,103 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(legacyCommit).toHaveBeenCalledWith('className', 'LegacyClass');
       expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
       expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main', 'mixed', 'borderWidth', 0, 20, 12.5],
+    ['panel', 'mixed', 'borderRadius', 0, 100, 88.5],
+    ['main', 'mixed', 'fontSize', 8, 72, 31.5],
+    ['panel', 'graph', 'borderWidth', 0, 20, 14.5],
+    ['main', 'graph', 'borderRadius', 0, 100, 77.5],
+    ['panel', 'knob', 'borderWidth', 0, 20, 18.5],
+    ['main', 'knob', 'borderRadius', 0, 100, 99.5],
+  ] as const)(
+    '%s %s batch %s actual input은 current stable targets를 preview하고 commit한다',
+    (windowType, kind, property, min, max, value) => {
+      window.__dmn_window_type = windowType;
+      const ids =
+        kind === 'mixed'
+          ? [
+              'b1111111-1111-4111-8111-111111111111',
+              'b2222222-2222-4222-8222-222222222222',
+              'b3333333-3333-4333-8333-333333333333',
+              'b4444444-4444-4444-8444-444444444444',
+            ]
+          : kind === 'graph'
+          ? ['b5555555-5555-4555-8555-555555555555']
+          : ['b6666666-6666-4666-8666-666666666666'];
+      const targets = setClassNameTargets(kind, ids);
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      const captureStart = captured.numbers.length;
+      renderClassNamePanel(kind, legacyPreview, legacyCommit);
+      const input = captured.numbers
+        .slice(captureStart)
+        .find(
+          (candidate) =>
+            candidate.min === min &&
+            candidate.max === max &&
+            candidate.onPreview !== undefined,
+        );
+      expect(input).toBeDefined();
+      expect(input?.onPreview).toBeTypeOf('function');
+
+      act(() => input?.onPreview?.(value));
+      expect(
+        gestures.preview.mock.calls.flatMap((call) =>
+          (call[1] as Array<{ patch: unknown }>).map(({ patch }) => patch),
+        ),
+      ).toContainEqual({ [property]: value });
+      act(() => input?.onChange(value));
+
+      const writer =
+        windowType === 'panel'
+          ? patches.patchDisplayTextViaAuthority
+          : patches.patchDisplayTextByTargets;
+      expect(writer).toHaveBeenCalledWith(
+        targets,
+        { [property]: value },
+        windowType === 'panel'
+          ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+          : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+      );
+      expect(gestures.settleCommit).toHaveBeenCalledWith(
+        writer.mock.results[0]?.value,
+      );
+      expect(legacyPreview).not.toHaveBeenCalled();
+      expect(legacyCommit).not.toHaveBeenCalled();
+      if (kind === 'knob' && property === 'borderRadius') {
+        expect(input).toMatchObject({ min: 0, max: 100 });
+      }
+    },
+  );
+
+  it.each([
+    ['mixed', [ID_A, ID_B, 'graph-0', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc']],
+    ['graph', ['']],
+    ['knob', ['knob-0']],
+  ] as const)(
+    '%s batch numeric style relevant synthetic/empty는 whole legacy다',
+    (kind, ids) => {
+      setClassNameTargets(kind, ids);
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      const captureStart = captured.numbers.length;
+      renderClassNamePanel(kind, legacyPreview, legacyCommit);
+      const input = captured.numbers
+        .slice(captureStart)
+        .find(({ min, max }) => min === 0 && max === 20);
+
+      act(() => input?.onPreview?.(15));
+      act(() => input?.onChange(15));
+
+      expect(legacyPreview).toHaveBeenCalledWith('borderWidth', 15);
+      expect(legacyCommit).toHaveBeenCalledWith('borderWidth', 15);
+      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
+      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
+      expect(gestures.preview).not.toHaveBeenCalled();
+      expect(gestures.settleCommit).not.toHaveBeenCalled();
     },
   );
 

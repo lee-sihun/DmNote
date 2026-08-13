@@ -60,7 +60,7 @@ import {
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
-  patchTextPropertyByTargets,
+  patchStylePropertyByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
@@ -88,7 +88,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
-  EditorTextPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -371,6 +371,21 @@ const parseNativeLayerPropertyTarget = (
       typeof patch.displayText === 'string') ||
     (hasExactKeys(patch, ['className']) &&
       typeof patch.className === 'string') ||
+    (hasExactKeys(patch, ['borderWidth']) &&
+      typeof patch.borderWidth === 'number' &&
+      Number.isFinite(patch.borderWidth) &&
+      patch.borderWidth >= 0 &&
+      patch.borderWidth <= 20) ||
+    (hasExactKeys(patch, ['borderRadius']) &&
+      typeof patch.borderRadius === 'number' &&
+      Number.isFinite(patch.borderRadius) &&
+      patch.borderRadius >= 0 &&
+      patch.borderRadius <= (target.elementType === 'knob' ? 999 : 100)) ||
+    (hasExactKeys(patch, ['fontSize']) &&
+      typeof patch.fontSize === 'number' &&
+      Number.isFinite(patch.fontSize) &&
+      patch.fontSize >= 8 &&
+      patch.fontSize <= 72) ||
     (hasExactKeys(patch, ['soundEnabled']) &&
       target.elementType === 'key' &&
       typeof patch.soundEnabled === 'boolean') ||
@@ -668,9 +683,9 @@ type NativeLayerPropertyRequest =
       patch: EditorFontFamilyPropertyPatchV1;
     }
   | {
-      kind: 'textPropertyBatch';
+      kind: 'stylePropertyBatch';
       targets: Array<{ elementType: NativeElementType; id: string }>;
-      patch: EditorTextPropertyPatchV1;
+      patch: EditorPreviewStylePropertyPatchV1;
       gestureId?: string;
     }
   | {
@@ -829,13 +844,31 @@ const parseNativeLayerPropertyRequest = (
     hasExactKeys(patch, ['fontFamily']) && typeof patch.fontFamily === 'string'
       ? { fontFamily: patch.fontFamily }
       : null;
-  const textPropertyPatch: EditorTextPropertyPatchV1 | null =
+  const stylePropertyPatch: EditorPreviewStylePropertyPatchV1 | null =
     hasExactKeys(patch, ['displayText']) &&
     typeof patch.displayText === 'string'
       ? { displayText: patch.displayText }
       : hasExactKeys(patch, ['className']) &&
         typeof patch.className === 'string'
       ? { className: patch.className }
+      : hasExactKeys(patch, ['borderWidth']) &&
+        typeof patch.borderWidth === 'number' &&
+        Number.isFinite(patch.borderWidth) &&
+        patch.borderWidth >= 0 &&
+        patch.borderWidth <= 20
+      ? { borderWidth: patch.borderWidth }
+      : hasExactKeys(patch, ['borderRadius']) &&
+        typeof patch.borderRadius === 'number' &&
+        Number.isFinite(patch.borderRadius) &&
+        patch.borderRadius >= 0 &&
+        patch.borderRadius <= 999
+      ? { borderRadius: patch.borderRadius }
+      : hasExactKeys(patch, ['fontSize']) &&
+        typeof patch.fontSize === 'number' &&
+        Number.isFinite(patch.fontSize) &&
+        patch.fontSize >= 8 &&
+        patch.fontSize <= 72
+      ? { fontSize: patch.fontSize }
       : null;
   const inactiveImage =
     hasExactKeys(patch, ['inactiveImage']) &&
@@ -969,7 +1002,7 @@ const parseNativeLayerPropertyRequest = (
     useInlineStyles === null &&
     fontStylePatch === null &&
     fontFamilyPatch === null &&
-    textPropertyPatch === null &&
+    stylePropertyPatch === null &&
     inactiveImage === null &&
     soundEnabled === null &&
     soundPath === null &&
@@ -988,7 +1021,7 @@ const parseNativeLayerPropertyRequest = (
   if (
     'gestureId' in payload &&
     soundVolume === null &&
-    textPropertyPatch === null
+    stylePropertyPatch === null
   ) {
     return null;
   }
@@ -996,7 +1029,7 @@ const parseNativeLayerPropertyRequest = (
     useInlineStyles !== null ||
     fontStylePatch !== null ||
     fontFamilyPatch !== null ||
-    textPropertyPatch !== null ||
+    stylePropertyPatch !== null ||
     inactiveImage !== null
       ? null
       : idleTransparent !== null
@@ -1046,6 +1079,10 @@ const parseNativeLayerPropertyRequest = (
       (elementType === 'counter-capable' &&
         target.elementType !== 'key' &&
         target.elementType !== 'stat') ||
+      (stylePropertyPatch !== null &&
+        'borderRadius' in stylePropertyPatch &&
+        stylePropertyPatch.borderRadius > 100 &&
+        target.elementType !== 'knob') ||
       (elementType !== null &&
         elementType !== 'active-capable' &&
         elementType !== 'counter-capable' &&
@@ -1073,11 +1110,11 @@ const parseNativeLayerPropertyRequest = (
   if (fontFamilyPatch !== null) {
     return { kind: 'fontFamilyBatch', targets, patch: fontFamilyPatch };
   }
-  if (textPropertyPatch !== null) {
+  if (stylePropertyPatch !== null) {
     return {
-      kind: 'textPropertyBatch',
+      kind: 'stylePropertyBatch',
       targets,
-      patch: textPropertyPatch,
+      patch: stylePropertyPatch,
       ...(typeof payload.gestureId === 'string'
         ? { gestureId: payload.gestureId }
         : {}),
@@ -2010,8 +2047,8 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           options,
         );
       }
-      if (request.kind === 'textPropertyBatch') {
-        return patchTextPropertyByTargets(request.targets, request.patch, {
+      if (request.kind === 'stylePropertyBatch') {
+        return patchStylePropertyByTargets(request.targets, request.patch, {
           ...options,
           ...(request.gestureId ? { gestureId: request.gestureId } : {}),
         });

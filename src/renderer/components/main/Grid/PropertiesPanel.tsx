@@ -38,7 +38,7 @@ import {
   patchGraphPropertiesViaAuthority,
   patchGraphTypesViaAuthority,
   patchFontFamilyViaAuthority,
-  patchTextPropertyViaAuthority,
+  patchStylePropertyViaAuthority,
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
@@ -75,7 +75,7 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
-  EditorTextPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
@@ -105,7 +105,7 @@ import {
   patchActiveTransparentById,
   patchFontFamilyById,
   patchFontFamilyByTargets,
-  patchTextPropertyById,
+  patchStylePropertyById,
   patchInactiveImageById,
   patchIdleImageFitById,
   patchIdleTransparentById,
@@ -2246,12 +2246,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
-  const stableTextPropertyPreviewHandler = (
+  const stableStylePropertyPreviewHandler = (
     type: EditorElementTypeV1,
     id: string | undefined,
   ) =>
     id && !isSyntheticElementId(id)
-      ? (patch: EditorTextPropertyPatchV1) => {
+      ? (patch: EditorPreviewStylePropertyPatchV1) => {
           const locator = resolveElementById(type, id);
           if (!locator) return;
           editGestureController.preview(
@@ -2271,29 +2271,29 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
-  const stableTextPropertyCommitHandler = (
+  const stableStylePropertyCommitHandler = (
     type: EditorElementTypeV1,
     id: string | undefined,
     options: { settleGesture?: boolean } = {},
   ) =>
     id && !isSyntheticElementId(id)
-      ? (patch: EditorTextPropertyPatchV1) => {
+      ? (patch: EditorPreviewStylePropertyPatchV1) => {
           const gestureId = options.settleGesture
             ? editGestureController.activeGestureId() ?? undefined
             : undefined;
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchTextPropertyViaAuthority(
+              ? patchStylePropertyViaAuthority(
                   [{ elementType: type, id }],
                   patch,
                   gestureId,
                 )
-              : patchTextPropertyById(type, id, patch, { gestureId });
+              : patchStylePropertyById(type, id, patch, { gestureId });
           if (options.settleGesture) {
             editGestureController.settleCommit(persisted);
           }
           void persisted.catch((error) => {
-            console.error('Failed to update text property', error);
+            console.error('Failed to update style property', error);
           });
         }
       : undefined;
@@ -3853,7 +3853,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
-          onTextPropertyCommit={stableTextPropertyCommitHandler(
+          onStylePropertyCommit={stableStylePropertyCommitHandler(
             'knob',
             selectedKnobElements[0]?.id,
           )}
@@ -3903,7 +3903,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'graph',
             selectedGraphElements[0]?.id,
           )}
-          onTextPropertyCommit={stableTextPropertyCommitHandler(
+          onStylePropertyCommit={stableStylePropertyCommitHandler(
             'graph',
             selectedGraphElements[0]?.id,
           )}
@@ -4007,13 +4007,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? stableSoundVolumeHandler(selectedKeyElements[0]?.id)
             : undefined
         }
-        onTextPropertyPreview={stableTextPropertyPreviewHandler(
+        onStylePropertyPreview={stableStylePropertyPreviewHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id
             : selectedKeyElements[0]?.id,
         )}
-        onTextPropertyCommit={stableTextPropertyCommitHandler(
+        onStylePropertyCommit={stableStylePropertyCommitHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

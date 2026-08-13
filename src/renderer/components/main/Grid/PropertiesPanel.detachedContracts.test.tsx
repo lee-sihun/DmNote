@@ -170,7 +170,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
   patchFontStyleViaAuthority: patchFontStyleViaAuthorityMock,
   patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
-  patchTextPropertyViaAuthority: patchDisplayTextViaAuthorityMock,
+  patchStylePropertyViaAuthority: patchDisplayTextViaAuthorityMock,
   patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
   patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
   patchSoundEnabledViaAuthority: patchSoundEnabledViaAuthorityMock,
@@ -196,7 +196,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontStyleByTargets: patchFontStyleTargetsMock,
   patchFontFamilyById: patchFontFamilyMock,
   patchFontFamilyByTargets: patchFontFamilyTargetsMock,
-  patchTextPropertyById: patchDisplayTextMock,
+  patchStylePropertyById: patchDisplayTextMock,
   patchInactiveImageById: patchInactiveImageMock,
   patchActiveImageById: patchActiveImageMock,
   patchIdleTransparentById: patchIdleTransparentMock,
@@ -845,19 +845,19 @@ describe('PropertiesPanel detached preview contract', () => {
       });
       mounted = mountPanel(true);
       const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
-        onTextPropertyPreview: (patch: { className: string }) => void;
-        onTextPropertyCommit: (patch: { className: string }) => void;
+        onStylePropertyPreview: (patch: { className: string }) => void;
+        onStylePropertyCommit: (patch: { className: string }) => void;
       };
 
       act(() =>
-        props.onTextPropertyPreview({ className: '  Preview class  ' }),
+        props.onStylePropertyPreview({ className: '  Preview class  ' }),
       );
       expect(previewMock).toHaveBeenCalledWith(
         '4key',
         [{ index: 1, patch: { className: '  Preview class  ' } }],
         { domain: type === 'key' ? 'keyPosition' : 'statPosition' },
       );
-      act(() => props.onTextPropertyCommit({ className: '  Final class  ' }));
+      act(() => props.onStylePropertyCommit({ className: '  Final class  ' }));
 
       const writer =
         windowType === 'panel'
@@ -927,10 +927,10 @@ describe('PropertiesPanel detached preview contract', () => {
       const props = (
         type === 'graph' ? singleGraphPropsMock : singleKnobPropsMock
       ).mock.lastCall?.[0] as {
-        onTextPropertyCommit: (patch: { className: string }) => void;
+        onStylePropertyCommit: (patch: { className: string }) => void;
       };
 
-      act(() => props.onTextPropertyCommit({ className: '  Final class  ' }));
+      act(() => props.onStylePropertyCommit({ className: '  Final class  ' }));
       const writer =
         windowType === 'panel'
           ? patchDisplayTextViaAuthorityMock
@@ -950,6 +950,166 @@ describe('PropertiesPanel detached preview contract', () => {
           },
           { gestureId: undefined },
         );
+      }
+      expect(previewMock).not.toHaveBeenCalled();
+      expect(settleCommitMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main', 'key', { borderWidth: 12.5 }, true],
+    ['panel', 'stat', { borderRadius: 88.5 }, false],
+    ['main', 'stat', { fontSize: 31.5 }, 'reject'],
+    ['panel', 'key', { borderRadius: 77.5 }, true],
+  ] as const)(
+    '%s single stable %s numeric style은 stale index를 무시하고 writer Promise를 정산한다',
+    async (windowType, type, patch, result) => {
+      window.__dmn_window_type = windowType;
+      const selectedId =
+        type === 'key'
+          ? 'c9aaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+          : 'c9cccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const indexedId = 'c9bbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const position = createDefaultKeyPosition();
+      const failure = new Error('numeric style failed');
+      const writer =
+        windowType === 'panel'
+          ? patchDisplayTextViaAuthorityMock
+          : patchDisplayTextMock;
+      writer.mockReturnValueOnce(
+        result === 'reject' ? Promise.reject(failure) : Promise.resolve(result),
+      );
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      activeGestureIdMock.mockReturnValue(
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      );
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['B', 'A'] },
+          positions: {
+            '4key': [
+              { ...position, id: indexedId },
+              { ...position, id: selectedId },
+            ],
+          },
+          canonicalPositions: {
+            '4key': [
+              { ...position, id: indexedId },
+              { ...position, id: selectedId },
+            ],
+          },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              { ...position, id: indexedId, statType: 'kps' },
+              { ...position, id: selectedId, statType: 'kps' },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id: selectedId, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onStylePropertyPreview: (patch: Record<string, number>) => void;
+        onStylePropertyCommit: (patch: Record<string, number>) => void;
+      };
+
+      act(() => props.onStylePropertyPreview(patch));
+      expect(previewMock).toHaveBeenCalledWith('4key', [{ index: 1, patch }], {
+        domain: type === 'key' ? 'keyPosition' : 'statPosition',
+      });
+      act(() => props.onStylePropertyCommit(patch));
+
+      if (windowType === 'panel') {
+        expect(writer).toHaveBeenCalledWith(
+          [{ elementType: type, id: selectedId }],
+          patch,
+          'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        );
+      } else {
+        expect(writer).toHaveBeenCalledWith(type, selectedId, patch, {
+          gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        });
+      }
+      const persisted = writer.mock.results[0]?.value as Promise<boolean>;
+      expect(settleCommitMock).toHaveBeenCalledWith(persisted);
+      if (result === 'reject') await expect(persisted).rejects.toBe(failure);
+      else await expect(persisted).resolves.toBe(result);
+      errorSpy.mockRestore();
+    },
+  );
+
+  it.each([
+    ['main', 'graph', { borderWidth: 14.5 }],
+    ['panel', 'graph', { borderRadius: 99.5 }],
+    ['main', 'knob', { borderWidth: 18.5 }],
+    ['panel', 'knob', { borderRadius: 999 }],
+  ] as const)(
+    '%s single stable %s numeric style은 preview와 gesture 정산 없이 ID commit한다',
+    (windowType, type, patch) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'graph'
+          ? 'd9aaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+          : 'd9bbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const position = createDefaultKeyPosition();
+      if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...position,
+                id,
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1,
+                graphColor: '#fff',
+              } as never,
+            ],
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [
+              { ...position, id, axisId: 'HIDA:test', sensitivity: 1 } as never,
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = (
+        type === 'graph' ? singleGraphPropsMock : singleKnobPropsMock
+      ).mock.lastCall?.[0] as {
+        onStylePropertyPreview?: (patch: Record<string, number>) => void;
+        onStylePropertyCommit: (patch: Record<string, number>) => void;
+      };
+
+      expect(props.onStylePropertyPreview).toBeUndefined();
+      act(() => props.onStylePropertyCommit(patch));
+      const writer =
+        windowType === 'panel'
+          ? patchDisplayTextViaAuthorityMock
+          : patchDisplayTextMock;
+      if (windowType === 'panel') {
+        expect(writer).toHaveBeenCalledWith(
+          [{ elementType: type, id }],
+          patch,
+          undefined,
+        );
+      } else {
+        expect(writer).toHaveBeenCalledWith(type, id, patch, {
+          gestureId: undefined,
+        });
       }
       expect(previewMock).not.toHaveBeenCalled();
       expect(settleCommitMock).not.toHaveBeenCalled();
@@ -1153,19 +1313,21 @@ describe('PropertiesPanel detached preview contract', () => {
       });
       mounted = mountPanel(true);
       const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
-        onTextPropertyPreview: (patch: { displayText: string }) => void;
-        onTextPropertyCommit: (patch: { displayText: string }) => void;
+        onStylePropertyPreview: (patch: { displayText: string }) => void;
+        onStylePropertyCommit: (patch: { displayText: string }) => void;
       };
 
       act(() =>
-        props.onTextPropertyPreview({ displayText: '  Preview label  ' }),
+        props.onStylePropertyPreview({ displayText: '  Preview label  ' }),
       );
       expect(previewMock).toHaveBeenCalledWith(
         '4key',
         [{ index: 1, patch: { displayText: '  Preview label  ' } }],
         { domain: type === 'key' ? 'keyPosition' : 'statPosition' },
       );
-      act(() => props.onTextPropertyCommit({ displayText: '  Final label  ' }));
+      act(() =>
+        props.onStylePropertyCommit({ displayText: '  Final label  ' }),
+      );
 
       if (windowType === 'panel') {
         expect(patchDisplayTextViaAuthorityMock).toHaveBeenCalledWith(
@@ -1219,8 +1381,8 @@ describe('PropertiesPanel detached preview contract', () => {
       });
       mounted = mountPanel(true);
       const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
-        onTextPropertyPreview?: (patch: { displayText: string }) => void;
-        onTextPropertyCommit?: (patch: { displayText: string }) => void;
+        onStylePropertyPreview?: (patch: { displayText: string }) => void;
+        onStylePropertyCommit?: (patch: { displayText: string }) => void;
         onKeyPreview?: (index: number, patch: Record<string, unknown>) => void;
         onKeyUpdate?: (patch: Record<string, unknown>) => void;
         handleStatPreview?: (
@@ -1230,8 +1392,8 @@ describe('PropertiesPanel detached preview contract', () => {
         handleStatUpdate?: (patch: Record<string, unknown>) => void;
       };
 
-      expect(props.onTextPropertyPreview).toBeUndefined();
-      expect(props.onTextPropertyCommit).toBeUndefined();
+      expect(props.onStylePropertyPreview).toBeUndefined();
+      expect(props.onStylePropertyCommit).toBeUndefined();
       act(() => {
         if (type === 'key') {
           props.onKeyPreview?.(0, { displayText: 'Preview' });
