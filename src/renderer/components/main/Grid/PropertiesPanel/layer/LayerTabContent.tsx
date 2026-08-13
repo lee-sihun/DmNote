@@ -239,7 +239,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       statPositions: useStatItemStore.getState().positions,
       graphPositions: useGraphItemStore.getState().positions,
       knobPositions: useKnobItemStore.getState().positions,
-      pluginElements: usePluginDisplayElementStore.getState().elements,
+      // 렌더 목록과 같은 창 인지 selector - 분리 패널은 elements가 비어 있어
+      // raw로 읽으면 드롭 모델에서 plugin 행이 통째로 빠진다
+      pluginElements: selectPropertyPanelPluginElements(
+        usePluginDisplayElementStore.getState(),
+      ),
     });
     const groupState = useLayerGroupStore.getState();
     const liveDisplayItems = buildDisplayItems({

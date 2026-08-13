@@ -710,6 +710,7 @@ const Grid = ({
     el.id.length > 0 &&
     !isSyntheticElementId(el.id);
 
+  // Grid는 분리 패널 창에 마운트되지 않으므로 elements를 그대로 읽는다
   const pluginZIndexesForMode = (): number[] =>
     usePluginDisplayElementStore
       .getState()

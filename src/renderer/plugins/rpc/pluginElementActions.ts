@@ -24,6 +24,8 @@ export const PLUGIN_RPC_OPERATIONS = {
 
 const isPanelWindow = () => window.__dmn_window_type === 'panel';
 
+// 호출부가 모두 isPanelWindow() 조기 위임 뒤에만 도달하므로 elements를 그대로
+// 읽는다 (패널에서는 panelElements만 채워진다)
 const rotateTargetPluginSessions = (
   fullIds: string[],
   gestureId?: string,
