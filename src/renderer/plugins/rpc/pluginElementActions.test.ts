@@ -756,6 +756,65 @@ describe('plugin element panel queue', () => {
     );
   });
 
+  it('counter fontFamily batch는 raw exact key/stat target과 default envelope를 보낸다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat' as const,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ];
+
+    await expect(
+      actions.patchCounterTypographyViaAuthority(targets, {
+        counterFontFamily: '  Raw Counter Family  ',
+      }),
+    ).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      {
+        targets,
+        patch: { counterFontFamily: '  Raw Counter Family  ' },
+      },
+      0,
+      7,
+    );
+  });
+
+  it('counter fontFamily outcome-unknown은 same raw literal default retry를 한 번만 한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+    const pending = actions.patchCounterTypographyViaAuthority(
+      [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      { counterFontFamily: '' },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(1);
+    await expect(pending).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+  });
+
   it('counter animation update/delete는 exact descriptor와 성공 payload를 반환한다', async () => {
     const updateResponse = {
       preset: { id: 'preset-a' },

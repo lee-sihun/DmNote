@@ -588,6 +588,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             open
             selectedFont={counterSettings.fontFamily || null}
             onFontSelect={(fontName) => {
+              if (fontName !== null && onCounterTypographyCommit) {
+                onCounterTypographyCommit({ counterFontFamily: fontName });
+                return;
+              }
               handleCounterUpdate({ fontFamily: fontName });
             }}
             pageTitle={t('counterSetting.font') || '폰트'}

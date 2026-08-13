@@ -1174,6 +1174,52 @@ describe('plugin panel persisted element mutations', () => {
     });
   });
 
+  it('counter fontFamily batch는 raw exact key/stat leaf를 전용 helper에 전달한다', async () => {
+    const targets = [
+      { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    ] as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { counterFontFamily: '  Raw Counter Family  ' },
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.patchCounterTypography).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchCounterTypography).toHaveBeenCalledWith(
+      targets,
+      { counterFontFamily: '  Raw Counter Family  ' },
+      { preflight: expect.any(Function) },
+    );
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('counter fontFamily single은 slot 직전 generation 변경을 거절한다', async () => {
+    mocks.patchCounterTypography.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'stat',
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          patch: { counterFontFamily: '' },
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
   it.each([
     {
       targets: [{ elementType: 'graph', id: 'a' }],
@@ -1266,6 +1312,22 @@ describe('plugin panel persisted element mutations', () => {
     {
       targets: [{ elementType: 'key', id: 'a' }],
       patch: { counterFontUnderline: true, counterFontStrikethrough: false },
+    },
+    {
+      targets: [{ elementType: 'graph', id: 'a' }],
+      patch: { counterFontFamily: 'Counter' },
+    },
+    {
+      targets: [{ elementType: 'knob', id: 'a' }],
+      patch: { counterFontFamily: '' },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterFontFamily: null },
+    },
+    {
+      targets: [{ elementType: 'stat', id: 'a' }],
+      patch: { counterFontFamily: 'Counter', counterFontItalic: true },
     },
     {
       targets: [

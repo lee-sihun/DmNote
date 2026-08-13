@@ -2902,8 +2902,24 @@ describe('elementOps', () => {
       customSentinel: 'keep-raw',
     };
     useKeyStore.setState({
-      canonicalPositions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
-      positions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
+      canonicalPositions: {
+        '4key': [
+          {
+            ...keyAt(ID_A),
+            fontFamily: 'Top Level Family',
+            counter: rawCounter,
+          },
+        ],
+      },
+      positions: {
+        '4key': [
+          {
+            ...keyAt(ID_A),
+            fontFamily: 'Top Level Family',
+            counter: rawCounter,
+          },
+        ],
+      },
     });
     useStatItemStore.setState({
       positions: {
@@ -2979,8 +2995,24 @@ describe('elementOps', () => {
       customSentinel: 'keep-raw',
     };
     useKeyStore.setState({
-      canonicalPositions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
-      positions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
+      canonicalPositions: {
+        '4key': [
+          {
+            ...keyAt(ID_A),
+            fontFamily: 'Top Level Family',
+            counter: rawCounter,
+          },
+        ],
+      },
+      positions: {
+        '4key': [
+          {
+            ...keyAt(ID_A),
+            fontFamily: 'Top Level Family',
+            counter: rawCounter,
+          },
+        ],
+      },
     });
     useStatItemStore.setState({
       positions: {
@@ -3056,6 +3088,93 @@ describe('elementOps', () => {
     await expect(
       patchCounterTypographyByTargets([{ elementType: 'key', id: ID_A }], {
         counterFontWeight: 400.5,
+      }),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('counter fontFamily raw string은 siblings를 보존해 key/stat N ops 한 commit으로 보낸다', async () => {
+    const statId = '33333333-3333-4333-8333-333333333333';
+    const rawCounter = {
+      ...createDefaultKeyPosition().counter,
+      fontFamily: 'Before',
+      customSentinel: 'keep-raw',
+    };
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [
+          {
+            ...keyAt(ID_A),
+            fontFamily: 'Top Level Family',
+            counter: rawCounter,
+          },
+        ],
+      },
+      positions: {
+        '4key': [
+          {
+            ...keyAt(ID_A),
+            fontFamily: 'Top Level Family',
+            counter: rawCounter,
+          },
+        ],
+      },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...keyAt(statId),
+            statType: 'kps',
+            counter: structuredClone(rawCounter),
+          },
+        ],
+      },
+    });
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: statId },
+    ];
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+
+    await patchCounterTypographyByTargets(targets, {
+      counterFontFamily: '  Raw Counter Family  ',
+    });
+
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { counterFontFamily: '  Raw Counter Family  ' },
+      })),
+      expect.anything(),
+    );
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      fontFamily: 'Top Level Family',
+      counter: {
+        fontFamily: '  Raw Counter Family  ',
+        customSentinel: 'keep-raw',
+      },
+    });
+  });
+
+  it('counter fontFamily는 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
+    await expect(
+      patchCounterTypographyByTargets([], { counterFontFamily: '' }),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterTypographyByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'stat', id: ID_A },
+        ],
+        { counterFontFamily: 'Counter' },
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterTypographyByTargets([{ elementType: 'key', id: 'key-0' }], {
+        counterFontFamily: 'Counter',
       }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();

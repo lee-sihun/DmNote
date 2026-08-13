@@ -1465,7 +1465,9 @@ const counterTypographyPropertyIntents = (
         ? { ...counter, fontItalic: patch.counterFontItalic }
         : 'counterFontUnderline' in patch
         ? { ...counter, fontUnderline: patch.counterFontUnderline }
-        : { ...counter, fontStrikethrough: patch.counterFontStrikethrough };
+        : 'counterFontStrikethrough' in patch
+        ? { ...counter, fontStrikethrough: patch.counterFontStrikethrough }
+        : { ...counter, fontFamily: patch.counterFontFamily };
     const byId = propertyIntents.get(elementType) ?? new Map();
     byId.set(id, { counter: nextCounter });
     propertyIntents.set(elementType, byId);
@@ -1497,9 +1499,11 @@ const isCounterTypographyPatch = (
   if ('counterFontUnderline' in patch) {
     return typeof patch.counterFontUnderline === 'boolean';
   }
+  if ('counterFontStrikethrough' in patch) {
+    return typeof patch.counterFontStrikethrough === 'boolean';
+  }
   return (
-    'counterFontStrikethrough' in patch &&
-    typeof patch.counterFontStrikethrough === 'boolean'
+    'counterFontFamily' in patch && typeof patch.counterFontFamily === 'string'
   );
 };
 

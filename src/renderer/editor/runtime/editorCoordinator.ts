@@ -633,6 +633,18 @@ const applySemanticOps = (
                 },
               };
             }
+            if ('counterFontFamily' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: {
+                  ...counter,
+                  fontFamily: op.patch.counterFontFamily,
+                },
+              };
+            }
             if ('counterAnimationPreset' in op.patch) {
               const counter = position.counter as
                 | Record<string, unknown>

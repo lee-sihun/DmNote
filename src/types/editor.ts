@@ -169,6 +169,7 @@ interface EditorElementPropertyValuesV1 {
   counterFontItalic: boolean;
   counterFontUnderline: boolean;
   counterFontStrikethrough: boolean;
+  counterFontFamily: string;
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
   useInlineStyles: boolean;
   fontWeight: number;
@@ -250,6 +251,7 @@ export type EditorCounterTypographyPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'counterFontItalic'
   | 'counterFontUnderline'
   | 'counterFontStrikethrough'
+  | 'counterFontFamily'
 >;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -1217,6 +1219,10 @@ export function assertEditorOpsV1(
           patchKeys[0] === 'counterFontStrikethrough' &&
           (op.elementType === 'key' || op.elementType === 'stat') &&
           typeof op.patch.counterFontStrikethrough === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterFontFamily' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          typeof op.patch.counterFontFamily === 'string') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'counterAnimationPreset' &&
           (op.elementType === 'key' || op.elementType === 'stat') &&

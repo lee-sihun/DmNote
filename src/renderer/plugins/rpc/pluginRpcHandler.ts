@@ -439,6 +439,9 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['counterFontStrikethrough']) &&
       (target.elementType === 'key' || target.elementType === 'stat') &&
       typeof patch.counterFontStrikethrough === 'boolean') ||
+    (hasExactKeys(patch, ['counterFontFamily']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      typeof patch.counterFontFamily === 'string') ||
     (hasExactKeys(patch, ['counterAnimationPreset']) &&
       (target.elementType === 'key' || target.elementType === 'stat') &&
       counterAnimationPreset !== null) ||
@@ -908,6 +911,9 @@ const parseNativeLayerPropertyRequest = (
       : hasExactKeys(patch, ['counterFontStrikethrough']) &&
         typeof patch.counterFontStrikethrough === 'boolean'
       ? { counterFontStrikethrough: patch.counterFontStrikethrough }
+      : hasExactKeys(patch, ['counterFontFamily']) &&
+        typeof patch.counterFontFamily === 'string'
+      ? { counterFontFamily: patch.counterFontFamily }
       : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
@@ -1876,7 +1882,8 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           'counterFontWeight' in request.target.patch ||
           'counterFontItalic' in request.target.patch ||
           'counterFontUnderline' in request.target.patch ||
-          'counterFontStrikethrough' in request.target.patch
+          'counterFontStrikethrough' in request.target.patch ||
+          'counterFontFamily' in request.target.patch
         ) {
           return patchCounterTypographyByTargets(
             [

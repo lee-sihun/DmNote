@@ -796,6 +796,7 @@ pub(crate) fn prepare_editor_ops_transition(
                     | EditorElementPropertyPatchV1::CounterFontItalic(_)
                     | EditorElementPropertyPatchV1::CounterFontUnderline(_)
                     | EditorElementPropertyPatchV1::CounterFontStrikethrough(_)
+                    | EditorElementPropertyPatchV1::CounterFontFamily(_)
             ) {
                 if !matches!(
                     element_type,
@@ -1307,6 +1308,17 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.counter.font_strikethrough = patch.counter_font_strikethrough;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterFontFamily(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.font_family.as_deref()
+                            == Some(patch.counter_font_family.as_str())
+                        {
+                            false
+                        } else {
+                            position.counter.font_family = Some(patch.counter_font_family.clone());
                             true
                         }
                     }
@@ -4394,21 +4406,21 @@ mod tests {
             .map(|position| position.id.clone())
             .collect::<Vec<_>>();
         let first_stat = store.stat_positions["4key"][0].clone();
-        for _ in 0..2 {
+        for _ in 0..3 {
             let mut stat = first_stat.clone();
             stat.position.id = uuid::Uuid::new_v4().to_string();
             store.stat_positions.get_mut("4key").unwrap().push(stat);
         }
         let stat_ids = store.stat_positions["4key"]
             .iter()
-            .take(3)
+            .take(4)
             .map(|position| position.position.id.clone())
             .collect::<Vec<_>>();
         for counter in store.key_positions.get_mut("4key").unwrap()[..2]
             .iter_mut()
             .map(|position| &mut position.counter)
             .chain(
-                store.stat_positions.get_mut("4key").unwrap()[..3]
+                store.stat_positions.get_mut("4key").unwrap()[..4]
                     .iter_mut()
                     .map(|position| &mut position.position.counter),
             )
@@ -4424,12 +4436,20 @@ mod tests {
             counter.placement = crate::models::KeyCounterPlacement::Outside;
             counter.animation.preset_id = Some("builtin-linear".to_string());
         }
+        store.stat_positions.get_mut("4key").unwrap()[3]
+            .position
+            .counter
+            .font_family = None;
+        store.stat_positions.get_mut("4key").unwrap()[3]
+            .position
+            .font_family = Some("top-level-font-sibling".to_string());
         let originals = [
             store.key_positions["4key"][0].counter.clone(),
             store.key_positions["4key"][1].counter.clone(),
             store.stat_positions["4key"][0].position.counter.clone(),
             store.stat_positions["4key"][1].position.counter.clone(),
             store.stat_positions["4key"][2].position.counter.clone(),
+            store.stat_positions["4key"][3].position.counter.clone(),
         ];
         let patches = [
             EditorElementPropertyPatchV1::CounterFontSize(
@@ -4457,6 +4477,11 @@ mod tests {
                     counter_font_strikethrough: true,
                 },
             ),
+            EditorElementPropertyPatchV1::CounterFontFamily(
+                crate::models::EditorCounterFontFamilyPropertyPatchV1 {
+                    counter_font_family: "  raw-counter-font  ".to_string(),
+                },
+            ),
         ];
         let ops = vec![
             patch_property_op(EditorElementTypeV1::Key, &key_ids[0], patches[0].clone()),
@@ -4464,6 +4489,7 @@ mod tests {
             patch_property_op(EditorElementTypeV1::Stat, &stat_ids[0], patches[2].clone()),
             patch_property_op(EditorElementTypeV1::Stat, &stat_ids[1], patches[3].clone()),
             patch_property_op(EditorElementTypeV1::Stat, &stat_ids[2], patches[4].clone()),
+            patch_property_op(EditorElementTypeV1::Stat, &stat_ids[3], patches[5].clone()),
             patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
@@ -4491,6 +4517,10 @@ mod tests {
                 .position
                 .counter
                 .clone(),
+            transition.candidate.stat_positions["4key"][3]
+                .position
+                .counter
+                .clone(),
         ];
         let mut expected = originals.clone();
         expected[0].font_size = 72;
@@ -4498,7 +4528,15 @@ mod tests {
         expected[2].font_italic = true;
         expected[3].font_underline = true;
         expected[4].font_strikethrough = true;
+        expected[5].font_family = Some("  raw-counter-font  ".to_string());
         assert_eq!(actual, expected);
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][3]
+                .position
+                .font_family
+                .as_deref(),
+            Some("top-level-font-sibling")
+        );
         assert_eq!(
             transition.changed_fields,
             [EditorField::KeyPositions, EditorField::StatPositions]
@@ -4510,6 +4548,7 @@ mod tests {
                 .map(|result| result.status)
                 .collect::<Vec<_>>(),
             [
+                EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
@@ -4533,6 +4572,7 @@ mod tests {
                 EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::TargetMissing,
             ]
         );
@@ -4543,6 +4583,7 @@ mod tests {
             (EditorElementTypeV1::Graph, patches[2].clone()),
             (EditorElementTypeV1::Knob, patches[3].clone()),
             (EditorElementTypeV1::Graph, patches[4].clone()),
+            (EditorElementTypeV1::Knob, patches[5].clone()),
         ] {
             let error = prepare_editor_ops_transition(
                 &store,

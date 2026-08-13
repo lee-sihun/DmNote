@@ -10514,7 +10514,7 @@ mod tests {
         let dir = test_directory("editor-counter-typography-history-test");
         std::fs::create_dir_all(&dir).unwrap();
         let store = AppStore::initialize_in_dir(&dir).unwrap();
-        let stat_ids = (0..3)
+        let stat_ids = (0..4)
             .map(|_| uuid::Uuid::new_v4().to_string())
             .collect::<Vec<_>>();
         let setup = legacy_editor_commit(
@@ -10550,6 +10550,13 @@ mod tests {
                     .collect();
                 data.stat_positions
                     .insert("4key".to_string(), stat_positions);
+                data.stat_positions.get_mut("4key").unwrap()[3]
+                    .position
+                    .counter
+                    .font_family = None;
+                data.stat_positions.get_mut("4key").unwrap()[3]
+                    .position
+                    .font_family = Some("top-level-font-sibling".to_string());
             },
         )
         .unwrap();
@@ -10565,6 +10572,7 @@ mod tests {
             before.stat_positions["4key"][0].position.counter.clone(),
             before.stat_positions["4key"][1].position.counter.clone(),
             before.stat_positions["4key"][2].position.counter.clone(),
+            before.stat_positions["4key"][3].position.counter.clone(),
         ];
         let ops = vec![
             patch_property_op(
@@ -10613,6 +10621,15 @@ mod tests {
                 ),
             ),
             patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_ids[3],
+                EditorElementPropertyPatchV1::CounterFontFamily(
+                    crate::models::EditorCounterFontFamilyPropertyPatchV1 {
+                        counter_font_family: "  raw-counter-font  ".to_string(),
+                    },
+                ),
+            ),
+            patch_property_op(
                 EditorElementTypeV1::Key,
                 uuid::Uuid::new_v4().to_string(),
                 EditorElementPropertyPatchV1::CounterFontSize(
@@ -10645,6 +10662,7 @@ mod tests {
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::TargetMissing,
             ]
         );
@@ -10663,6 +10681,10 @@ mod tests {
                 .position
                 .counter
                 .clone(),
+            changed.document.stat_positions["4key"][3]
+                .position
+                .counter
+                .clone(),
         ];
         let mut expected_counters = original_counters.clone();
         expected_counters[0].font_size = 72;
@@ -10670,7 +10692,15 @@ mod tests {
         expected_counters[2].font_italic = true;
         expected_counters[3].font_underline = true;
         expected_counters[4].font_strikethrough = true;
+        expected_counters[5].font_family = Some("  raw-counter-font  ".to_string());
         assert_eq!(changed_counters, expected_counters);
+        assert_eq!(
+            changed.document.stat_positions["4key"][3]
+                .position
+                .font_family
+                .as_deref(),
+            Some("top-level-font-sibling")
+        );
         let history_revision = store.history_status().history_revision;
 
         let replay = store.commit_editor_document(request.clone()).unwrap();
@@ -10697,7 +10727,7 @@ mod tests {
             .commit_editor_document(editor_ops_request(
                 changed.result.revision,
                 uuid::Uuid::new_v4().to_string(),
-                ops[..5].to_vec(),
+                ops[..6].to_vec(),
             ))
             .unwrap();
         assert!(no_change.result.changed_fields.is_empty());
@@ -10724,6 +10754,7 @@ mod tests {
                 undone.stat_positions["4key"][0].position.counter.clone(),
                 undone.stat_positions["4key"][1].position.counter.clone(),
                 undone.stat_positions["4key"][2].position.counter.clone(),
+                undone.stat_positions["4key"][3].position.counter.clone(),
             ],
             original_counters
         );
@@ -10747,6 +10778,7 @@ mod tests {
                 redone.stat_positions["4key"][0].position.counter.clone(),
                 redone.stat_positions["4key"][1].position.counter.clone(),
                 redone.stat_positions["4key"][2].position.counter.clone(),
+                redone.stat_positions["4key"][3].position.counter.clone(),
             ],
             expected_counters
         );

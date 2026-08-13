@@ -3936,6 +3936,44 @@ describe('commitSemanticOpsInternal', () => {
     }
   });
 
+  it('counter fontFamily projection은 nested leaf만 적용하고 top-level과 raw siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000cd';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      fontFamily: 'Top Level Family',
+      counter: {
+        ...base.keyPositions['4key'][0].counter,
+        fontFamily: 'Before Counter Family',
+        fontSize: 18,
+        customSentinel: 'keep-raw',
+      },
+    } as never;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { counterFontFamily: '  Raw Counter Family  ' },
+      },
+    ]);
+
+    expect(
+      harness.coordinator.getState().lastAck?.keyPositions['4key'][0],
+    ).toMatchObject({
+      fontFamily: 'Top Level Family',
+      counter: {
+        fontFamily: '  Raw Counter Family  ',
+        fontSize: 18,
+        customSentinel: 'keep-raw',
+      },
+    });
+    harness.coordinator.stop();
+  });
+
   it('note 5 leaf를 한 commit으로 적용하고 무관 note 필드를 보존한다', async () => {
     const ids = [
       '00000000-0000-4000-8000-0000000000d1',

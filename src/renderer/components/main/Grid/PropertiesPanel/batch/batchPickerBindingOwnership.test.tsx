@@ -455,6 +455,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
   const renderCounterPanel = (
     legacy: PanelProps['handleBatchCounterUpdate'],
+    pageKey: string = BATCH_COUNTER_ANIMATION_PAGE_KEY,
   ) => {
     const props = panelProps();
     props.activeTab = 'counter';
@@ -463,8 +464,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       root.render(
         <PanelNavProvider
           value={{
-            activePageKey: BATCH_COUNTER_ANIMATION_PAGE_KEY,
-            renderPageKey: BATCH_COUNTER_ANIMATION_PAGE_KEY,
+            activePageKey: pageKey,
+            renderPageKey: pageKey,
             openPage: vi.fn(),
             closePage: vi.fn(),
             pageHost,
@@ -820,6 +821,54 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       [{ fontUnderline: true }],
       [{ fontStrikethrough: true }],
     ]);
+    expect(patches.patchCounterTypographyByTargets).not.toHaveBeenCalled();
+    expect(patches.patchCounterTypographyViaAuthority).not.toHaveBeenCalled();
+  });
+
+  it.each(['main', 'panel'] as const)(
+    '%s batch counter FontPicker는 open A가 아니라 최신 B key/stat targets에 적용한다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const statA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const statB = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const legacy = vi.fn();
+      act(() => selectCounterTargets(ID_A, statA));
+      renderCounterPanel(legacy, 'batch-counter:font');
+      act(() => selectCounterTargets(ID_B, statB));
+      renderCounterPanel(legacy, 'batch-counter:font');
+
+      act(() => captured.font?.onFontSelect('  Raw Counter Family  '));
+
+      const targets = [
+        { elementType: 'key', id: ID_B },
+        { elementType: 'stat', id: statB },
+      ];
+      const args = [targets, { counterFontFamily: '  Raw Counter Family  ' }];
+      if (windowType === 'panel') {
+        expect(patches.patchCounterTypographyViaAuthority).toHaveBeenCalledWith(
+          ...args,
+        );
+        expect(patches.patchCounterTypographyByTargets).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchCounterTypographyByTargets).toHaveBeenCalledWith(
+          ...args,
+        );
+        expect(
+          patches.patchCounterTypographyViaAuthority,
+        ).not.toHaveBeenCalled();
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('batch counter FontPicker relevant synthetic는 whole legacy다', () => {
+    const legacy = vi.fn();
+    act(() => selectCounterTargets(ID_A, 'stat-0'));
+    renderCounterPanel(legacy, 'batch-counter:font');
+
+    act(() => captured.font?.onFontSelect('Counter Family'));
+
+    expect(legacy).toHaveBeenCalledWith({ fontFamily: 'Counter Family' });
     expect(patches.patchCounterTypographyByTargets).not.toHaveBeenCalled();
     expect(patches.patchCounterTypographyViaAuthority).not.toHaveBeenCalled();
   });

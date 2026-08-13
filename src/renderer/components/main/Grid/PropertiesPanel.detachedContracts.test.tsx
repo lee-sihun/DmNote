@@ -925,6 +925,62 @@ describe('PropertiesPanel detached preview contract', () => {
     ['panel key', 'panel', 'key'],
     ['panel stat', 'panel', 'stat'],
   ] as const)(
+    '%s counter fontFamily는 공통 typography stable writer만 쓴다',
+    (_label, windowType, type) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'a3411111-1111-4111-8111-111111111111'
+          : 'a3422222-2222-4222-8222-222222222222';
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onCounterTypographyCommit: (patch: {
+            counterFontFamily: string;
+          }) => void;
+        }
+      ).onCounterTypographyCommit;
+
+      act(() => commit({ counterFontFamily: '  Raw Counter Family  ' }));
+      if (windowType === 'panel') {
+        expect(patchCounterTypographyViaAuthorityMock).toHaveBeenCalledWith(
+          [{ elementType: type, id }],
+          { counterFontFamily: '  Raw Counter Family  ' },
+        );
+        expect(patchCounterTypographyMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchCounterTypographyMock).toHaveBeenCalledWith(type, id, {
+          counterFontFamily: '  Raw Counter Family  ',
+        });
+        expect(patchCounterTypographyViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main key', 'main', 'key'],
+    ['main stat', 'main', 'stat'],
+    ['panel key', 'panel', 'key'],
+    ['panel stat', 'panel', 'stat'],
+  ] as const)(
     '%s counter typography callback은 선택 descriptor ID exact writer만 쓴다',
     (_label, windowType, type) => {
       window.__dmn_window_type = windowType;

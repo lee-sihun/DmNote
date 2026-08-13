@@ -242,6 +242,7 @@ pub enum EditorElementPropertyPatchV1 {
     CounterFontItalic(EditorCounterFontItalicPropertyPatchV1),
     CounterFontUnderline(EditorCounterFontUnderlinePropertyPatchV1),
     CounterFontStrikethrough(EditorCounterFontStrikethroughPropertyPatchV1),
+    CounterFontFamily(EditorCounterFontFamilyPropertyPatchV1),
     CounterAnimationPreset(EditorCounterAnimationPresetPropertyPatchV1),
     StatType(EditorStatTypePropertyPatchV1),
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
@@ -466,6 +467,12 @@ pub struct EditorCounterFontUnderlinePropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorCounterFontStrikethroughPropertyPatchV1 {
     pub counter_font_strikethrough: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFontFamilyPropertyPatchV1 {
+    pub counter_font_family: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

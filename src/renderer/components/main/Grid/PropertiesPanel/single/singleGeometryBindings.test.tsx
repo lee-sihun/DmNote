@@ -27,6 +27,9 @@ const captured = vi.hoisted(() => ({
     onUnderlineChange: (value: boolean) => void;
     onStrikethroughChange: (value: boolean) => void;
   },
+  font: null as null | {
+    onFontSelect: (fontName: string | null) => void;
+  },
   image: null as null | {
     completionBinding?: string;
     onIdleImageChange: (value: string) => void;
@@ -134,7 +137,10 @@ vi.mock(
   }),
 );
 vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
-  default: () => null,
+  default: (props: NonNullable<(typeof captured)['font']>) => {
+    captured.font = props;
+    return null;
+  },
 }));
 vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
   ColorSwatchButton: () => null,
@@ -188,6 +194,7 @@ describe('single geometry input bindings', () => {
     captured.dropdowns.length = 0;
     captured.checkboxes.length = 0;
     captured.fontStyle = null;
+    captured.font = null;
     captured.image = null;
     captured.sound = null;
     captured.animation = null;
@@ -233,6 +240,66 @@ describe('single geometry input bindings', () => {
       expect(captured.image?.completionBinding).toBe('element-id');
       expect(commit.mock.calls).toEqual([['  picked.png  '], ['']]);
       expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key', 'stat'] as const)(
+    '%s counter FontPicker는 raw family를 typography callback으로 전달한다',
+    (type) => {
+      const typography = vi.fn();
+      const legacy = vi.fn();
+      captured.nav.activePageKey = 'single-counter:font';
+      captured.nav.renderPageKey = 'single-counter:font';
+      captured.nav.pageHost = document.body;
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            isStat={type === 'stat'}
+            onKeyUpdate={legacy}
+            onCounterTypographyCommit={typography}
+            t={(key) => key}
+          />,
+        );
+      });
+
+      act(() => captured.font?.onFontSelect('  Raw Counter Family  '));
+
+      expect(typography).toHaveBeenCalledWith({
+        counterFontFamily: '  Raw Counter Family  ',
+      });
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key', 'stat'] as const)(
+    '%s counter FontPicker는 exact callback이 없으면 raw family whole legacy를 유지한다',
+    (type) => {
+      const legacy = vi.fn();
+      captured.nav.activePageKey = 'single-counter:font';
+      captured.nav.renderPageKey = 'single-counter:font';
+      captured.nav.pageHost = document.body;
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            isStat={type === 'stat'}
+            onKeyUpdate={legacy}
+            t={(key) => key}
+          />,
+        );
+      });
+
+      act(() => captured.font?.onFontSelect('  Legacy Counter Family  '));
+
+      expect(legacy).toHaveBeenCalledWith({
+        index: 0,
+        counter: expect.objectContaining({
+          fontFamily: '  Legacy Counter Family  ',
+        }),
+      });
     },
   );
 

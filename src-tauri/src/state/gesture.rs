@@ -682,6 +682,15 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterFontFamily(
+                    crate::models::EditorCounterFontFamilyPropertyPatchV1 {
+                        counter_font_family: "  raw-counter-font  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "counterFontFamily": "  raw-counter-font  " }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterAnimationPreset(
                     crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
                         counter_animation_preset:
@@ -847,6 +856,10 @@ mod tests {
             serde_json::json!({ "counterFontStrikethrough": "false" }),
             serde_json::json!({ "counterFontSize": 16, "counterFontWeight": 400 }),
             serde_json::json!({ "counterFontSize": 16, "unexpected": true }),
+            serde_json::json!({ "counterFontFamily": null }),
+            serde_json::json!({ "counterFontFamily": 1 }),
+            serde_json::json!({ "counterFontFamily": "font", "counterFontItalic": true }),
+            serde_json::json!({ "counterFontFamily": "font", "unexpected": true }),
             serde_json::json!({ "counterAnimationPreset": null }),
             serde_json::json!({ "counterAnimationPreset": {} }),
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "enabled": false } }),

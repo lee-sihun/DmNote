@@ -412,6 +412,10 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             open
             selectedFont={batchCounterSettings.fontFamily || null}
             onFontSelect={(fontFamily) => {
+              if (fontFamily !== null && onCounterTypographyCommit) {
+                onCounterTypographyCommit({ counterFontFamily: fontFamily });
+                return;
+              }
               handleBatchCounterUpdate({ fontFamily });
             }}
             pageTitle={t('counterSetting.font') || '폰트'}
