@@ -15,6 +15,10 @@ const captured = vi.hoisted(() => ({
     value: string;
     onChange: (value: string) => void;
   }>,
+  checkboxes: [] as Array<{
+    checked: boolean;
+    onChange: () => void;
+  }>,
   image: null as null | {
     completionBinding?: string;
     onIdleImageChange: (value: string) => void;
@@ -72,7 +76,12 @@ vi.mock('@components/main/common/Dropdown', () => ({
     return null;
   },
 }));
-vi.mock('@components/main/common/Checkbox', () => ({ default: () => null }));
+vi.mock('@components/main/common/Checkbox', () => ({
+  default: (props: { checked: boolean; onChange: () => void }) => {
+    captured.checkboxes.push(props);
+    return null;
+  },
+}));
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   default: () => null,
 }));
@@ -150,6 +159,7 @@ describe('single geometry input bindings', () => {
   beforeEach(() => {
     captured.numbers.clear();
     captured.dropdowns.length = 0;
+    captured.checkboxes.length = 0;
     captured.image = null;
     captured.sound = null;
     captured.animation = null;
@@ -194,6 +204,34 @@ describe('single geometry input bindings', () => {
 
       expect(captured.image?.completionBinding).toBe('element-id');
       expect(commit.mock.calls).toEqual([['  picked.png  '], ['']]);
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key', 'stat'] as const)(
+    '%s counter bool 두 토글은 exact callback만 호출한다',
+    (type) => {
+      const counterEnabled = vi.fn();
+      const animationEnabled = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            isStat={type === 'stat'}
+            onKeyUpdate={legacy}
+            onCounterEnabledCommit={counterEnabled}
+            onCounterAnimationEnabledCommit={animationEnabled}
+            t={(key) => key}
+          />,
+        );
+      });
+
+      act(() => captured.checkboxes[0]?.onChange());
+      act(() => captured.checkboxes[1]?.onChange());
+      expect(counterEnabled).toHaveBeenCalledWith(false);
+      expect(animationEnabled).toHaveBeenCalledWith(true);
       expect(legacy).not.toHaveBeenCalled();
     },
   );

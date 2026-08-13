@@ -460,6 +460,85 @@ describe('plugin element panel queue', () => {
     );
   });
 
+  it('counter bool 두 batch는 exact key/stat target과 default envelope를 보낸다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat' as const,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ];
+
+    await expect(
+      actions.patchCounterEnabledViaAuthority(targets, false),
+    ).resolves.toBe(true);
+    await expect(
+      actions.patchCounterAnimationEnabledViaAuthority(targets, true),
+    ).resolves.toBe(true);
+    expect(mocks.sendPluginRpc.mock.calls[0]?.slice(0, 2)).toEqual([
+      'layers:patchProperty',
+      { targets, patch: { counterEnabled: false } },
+    ]);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.slice(0, 2)).toEqual([
+      'layers:patchProperty',
+      { targets, patch: { counterAnimationEnabled: true } },
+    ]);
+  });
+
+  it('counter bool outcome-unknown은 same literal default retry를 한 번만 한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+    const pending = actions.patchCounterEnabledViaAuthority(
+      [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      false,
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(1);
+    await expect(pending).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+  });
+
+  it('counter bool snapshot 대기 중 generation 변경은 재전송하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+    const pending = actions.patchCounterAnimationEnabledViaAuthority(
+      [
+        {
+          elementType: 'stat',
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        },
+      ],
+      true,
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    mocks.authorityGeneration = 8;
+    actions.notePluginMirrorRevision(1);
+    await expect(pending).resolves.toBe(false);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+  });
+
   it('counter animation update/delete는 exact descriptor와 성공 payload를 반환한다', async () => {
     const updateResponse = {
       preset: { id: 'preset-a' },

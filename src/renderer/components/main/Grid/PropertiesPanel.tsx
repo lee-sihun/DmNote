@@ -44,7 +44,9 @@ import {
   patchNativeLayerBoundsViaAuthority,
   patchNotePropertiesViaAuthority,
   patchSoundPathViaAuthority,
+  patchCounterAnimationEnabledViaAuthority,
   patchCounterAnimationPresetViaAuthority,
+  patchCounterEnabledViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -95,7 +97,9 @@ import {
   patchFontFamilyByTargets,
   patchInactiveImageById,
   patchSoundPathById,
+  patchCounterAnimationEnabledById,
   patchCounterAnimationPresetById,
+  patchCounterEnabledById,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -2135,6 +2139,41 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableCounterEnabledHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (enabled: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterEnabledViaAuthority([{ elementType, id }], enabled)
+              : patchCounterEnabledById(elementType, id, enabled);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter enabled', error);
+          });
+        }
+      : undefined;
+
+  const stableCounterAnimationEnabledHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (enabled: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterAnimationEnabledViaAuthority(
+                  [{ elementType, id }],
+                  enabled,
+                )
+              : patchCounterAnimationEnabledById(elementType, id, enabled);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter animation enabled', error);
+          });
+        }
+      : undefined;
+
   // ============================================================================
   // 다중 선택 헬퍼 함수들
   // ============================================================================
@@ -3695,6 +3734,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             : undefined
         }
         onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterEnabledCommit={stableCounterEnabledHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterAnimationEnabledCommit={stableCounterAnimationEnabledHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

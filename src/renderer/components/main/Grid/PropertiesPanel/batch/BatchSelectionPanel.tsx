@@ -38,11 +38,15 @@ import EditSessionBoundary from '../EditSessionBoundary';
 import type { ElementIdSelection } from '@src/renderer/editor/runtime/elementPatch';
 import {
   patchActiveImageByTargets,
+  patchCounterAnimationEnabledByTargets,
+  patchCounterEnabledByTargets,
   patchInactiveImageByTargets,
   patchSoundPathByIds,
 } from '@src/renderer/editor/runtime/elementOps';
 import {
   patchActiveImageViaAuthority,
+  patchCounterAnimationEnabledViaAuthority,
+  patchCounterEnabledViaAuthority,
   patchInactiveImageViaAuthority,
   patchSoundPathViaAuthority,
 } from '@plugins/rpc/pluginElementActions';
@@ -54,6 +58,7 @@ import {
 import { usePanelNav } from '../PanelNavContext';
 import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
+import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
 
@@ -410,6 +415,45 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         stat: selectedStatElements,
       }),
   );
+  const counterTargets = [
+    ...selectedKeyElements.map(({ id }) => ({
+      elementType: 'key' as const,
+      id,
+    })),
+    ...selectedStatElements.map(({ id }) => ({
+      elementType: 'stat' as const,
+      id,
+    })),
+  ];
+  const stableCounterTargets =
+    counterTargets.length > 0 &&
+    counterTargets.every(({ id }) => id.length > 0 && !isSyntheticElementId(id))
+      ? counterTargets
+      : null;
+  const commitCounterEnabled = stableCounterTargets
+    ? (enabled: boolean) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterEnabledViaAuthority(stableCounterTargets, enabled)
+            : patchCounterEnabledByTargets(stableCounterTargets, enabled);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const commitCounterAnimationEnabled = stableCounterTargets
+    ? (enabled: boolean) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterAnimationEnabledViaAuthority(
+                stableCounterTargets,
+                enabled,
+              )
+            : patchCounterAnimationEnabledByTargets(
+                stableCounterTargets,
+                enabled,
+              );
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
   const soundBinding = useBatchElementBinding(
     activePageKey === BATCH_STYLE_SOUND_PAGE_KEY,
     () => captureBatchElementBinding({ key: selectedKeyElements }),
@@ -991,6 +1035,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 batchCounterSettings={batchCounterSettings}
                 keyVisual={batchKeyVisual}
                 handleBatchCounterUpdate={handleBatchCounterUpdate}
+                onCounterEnabledCommit={commitCounterEnabled}
+                onCounterAnimationEnabledCommit={commitCounterAnimationEnabled}
                 colorState={batchCounterColorState}
                 getCounterColorDisplay={getCounterColorDisplay}
                 onFillPickerToggle={() => handleBatchPickerToggle('fill')}

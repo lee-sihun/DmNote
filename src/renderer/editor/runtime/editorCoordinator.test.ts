@@ -383,6 +383,27 @@ const applyOpsForTest = (
           if ('fontFamily' in op.patch) {
             return { ...position, fontFamily: op.patch.fontFamily };
           }
+          if ('counterEnabled' in op.patch) {
+            const counter = position.counter as Record<string, unknown>;
+            return {
+              ...position,
+              counter: { ...counter, enabled: op.patch.counterEnabled },
+            };
+          }
+          if ('counterAnimationEnabled' in op.patch) {
+            const counter = position.counter as Record<string, unknown>;
+            const animation = counter.animation as Record<string, unknown>;
+            return {
+              ...position,
+              counter: {
+                ...counter,
+                animation: {
+                  ...animation,
+                  enabled: op.patch.counterAnimationEnabled,
+                },
+              },
+            };
+          }
           if ('counterAnimationPreset' in op.patch) {
             const counter = position.counter as Record<string, unknown>;
             const animation = counter.animation as Record<string, unknown>;
@@ -3615,6 +3636,36 @@ describe('commitSemanticOpsInternal', () => {
     const harness = createHarness(base);
     await harness.coordinator.start();
 
+    const counterToggled = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { counterEnabled: false },
+      },
+    ]);
+    const toggled = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { counterAnimationEnabled: true },
+      },
+    ]);
+    expect(
+      counterToggled.document.keyPositions['4key'][0].counter.animation,
+    ).toMatchObject({ enabled: false, presetId: 'preset-c', scale: 2 });
+    expect(toggled.document.keyPositions['4key'][0].counter).toMatchObject({
+      enabled: false,
+      fontFamily: 'Counter Family',
+      animation: {
+        enabled: true,
+        presetId: 'preset-c',
+        scale: 2,
+        durationMs: 300,
+      },
+    });
+
     const preserved = await harness.coordinator.commitSemanticOpsInternal([
       {
         kind: 'patchElement',
@@ -3631,7 +3682,7 @@ describe('commitSemanticOpsInternal', () => {
     expect(preserved.document.keyPositions['4key'][0].counter).toMatchObject({
       fontFamily: 'Counter Family',
       animation: {
-        enabled: false,
+        enabled: true,
         presetId: 'preset-c',
         scale: 1.4,
         durationMs: 300,

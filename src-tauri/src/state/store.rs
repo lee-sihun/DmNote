@@ -9313,6 +9313,194 @@ mod tests {
     }
 
     #[test]
+    fn counter_boolean_batch_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-counter-boolean-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let key_id = store.editor_get().document.key_positions["4key"][0]
+            .id
+            .clone();
+        let stat_id = uuid::Uuid::new_v4().to_string();
+        let setup = legacy_editor_commit(
+            &store,
+            &[EditorField::KeyPositions, EditorField::StatPositions],
+            |data| {
+                let key = &mut data.key_positions.get_mut("4key").unwrap()[0];
+                key.counter.enabled = true;
+                key.counter.placement = crate::models::KeyCounterPlacement::Outside;
+                key.counter.animation.enabled = true;
+                key.counter.animation.preset_id = Some("builtin-linear".to_string());
+                key.counter.animation.scale = 1.75;
+                let mut stat_position = key.clone();
+                stat_position.id = stat_id.clone();
+                data.stat_positions.insert(
+                    "4key".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: stat_position,
+                    }],
+                );
+            },
+        )
+        .unwrap();
+        let counter_enabled = EditorElementPropertyPatchV1::CounterEnabled(
+            crate::models::EditorCounterEnabledPropertyPatchV1 {
+                counter_enabled: false,
+            },
+        );
+        let animation_enabled = EditorElementPropertyPatchV1::CounterAnimationEnabled(
+            crate::models::EditorCounterAnimationEnabledPropertyPatchV1 {
+                counter_animation_enabled: false,
+            },
+        );
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &key_id, counter_enabled.clone()),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                animation_enabled.clone(),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                counter_enabled.clone(),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            changed.result.changed_fields,
+            [EditorField::KeyPositions, EditorField::StatPositions]
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let key_counter = &changed.document.key_positions["4key"][0].counter;
+        assert!(!key_counter.enabled);
+        assert!(key_counter.animation.enabled);
+        assert_eq!(
+            key_counter.animation.preset_id.as_deref(),
+            Some("builtin-linear")
+        );
+        assert_eq!(key_counter.animation.scale, 1.75);
+        let stat_counter = &changed.document.stat_positions["4key"][0].position.counter;
+        assert!(stat_counter.enabled);
+        assert!(!stat_counter.animation.enabled);
+        assert_eq!(
+            stat_counter.animation.preset_id.as_deref(),
+            Some("builtin-linear")
+        );
+        assert_eq!(stat_counter.animation.scale, 1.75);
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &key_id,
+            animation_enabled,
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..2].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert!(undone.key_positions["4key"][0].counter.enabled);
+        assert!(
+            undone.stat_positions["4key"][0]
+                .position
+                .counter
+                .animation
+                .enabled
+        );
+        for counter in [
+            &undone.key_positions["4key"][0].counter,
+            &undone.stat_positions["4key"][0].position.counter,
+        ] {
+            assert_eq!(
+                counter.animation.preset_id.as_deref(),
+                Some("builtin-linear")
+            );
+            assert_eq!(counter.animation.scale, 1.75);
+        }
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert!(!redone.key_positions["4key"][0].counter.enabled);
+        assert!(
+            !redone.stat_positions["4key"][0]
+                .position
+                .counter
+                .animation
+                .enabled
+        );
+        assert_eq!(
+            redone.stat_positions["4key"][0]
+                .position
+                .counter
+                .animation
+                .preset_id
+                .as_deref(),
+            Some("builtin-linear")
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn counter_animation_preset_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-counter-animation-preset-history-test");
         std::fs::create_dir_all(&dir).unwrap();

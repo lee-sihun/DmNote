@@ -255,6 +255,8 @@ export interface CounterTabContentProps {
   keyDisplayName?: string;
   isStat?: boolean;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
+  onCounterEnabledCommit?: (enabled: boolean) => void;
+  onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
   onCounterAnimationPresetCommit?: (
     intent: EditorCounterAnimationPresetIntentV1,
   ) => void;

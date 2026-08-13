@@ -152,6 +152,8 @@ interface EditorElementPropertyValuesV1 {
   soundPath: string;
   inactiveImage: string;
   activeImage: string;
+  counterEnabled: boolean;
+  counterAnimationEnabled: boolean;
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
   useInlineStyles: boolean;
   fontWeight: number;
@@ -204,6 +206,10 @@ export interface EditorCounterAnimationPresetIntentV1 {
 
 export type EditorCounterAnimationPresetPropertyPatchV1 =
   EditorPropertyPatchUnionV1<'counterAnimationPreset'>;
+
+export type EditorCounterBooleanPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'counterEnabled' | 'counterAnimationEnabled'
+>;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'fontWeight' | 'fontItalic' | 'fontUnderline' | 'fontStrikethrough'
@@ -1087,6 +1093,14 @@ export function assertEditorOpsV1(
           patchKeys[0] === 'activeImage' &&
           (op.elementType === 'key' || op.elementType === 'knob') &&
           typeof op.patch.activeImage === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterEnabled' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          typeof op.patch.counterEnabled === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterAnimationEnabled' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          typeof op.patch.counterAnimationEnabled === 'boolean') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'counterAnimationPreset' &&
           (op.elementType === 'key' || op.elementType === 'stat') &&

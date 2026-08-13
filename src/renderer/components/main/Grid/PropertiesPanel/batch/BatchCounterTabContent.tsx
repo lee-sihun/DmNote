@@ -37,6 +37,8 @@ interface BatchCounterTabContentProps {
   keyVisual?: CounterAnimationKeyVisual;
   // 핸들러
   handleBatchCounterUpdate: (updates: Partial<KeyCounterSettings>) => void;
+  onCounterEnabledCommit?: (enabled: boolean) => void;
+  onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
   // 컬러 디스플레이 (현재 상태 기준)
   colorState: 'idle' | 'active';
   getCounterColorDisplay: (target: 'fill' | 'stroke') => string;
@@ -60,6 +62,8 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   batchCounterSettings,
   keyVisual,
   handleBatchCounterUpdate,
+  onCounterEnabledCommit,
+  onCounterAnimationEnabledCommit,
   colorState,
   getCounterColorDisplay,
   onFillPickerToggle,
@@ -122,11 +126,14 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={batchCounterSettings.enabled}
-            onChange={() =>
-              handleBatchCounterUpdate({
-                enabled: !batchCounterSettings.enabled,
-              })
-            }
+            onChange={() => {
+              const enabled = !batchCounterSettings.enabled;
+              if (onCounterEnabledCommit) {
+                onCounterEnabledCommit(enabled);
+                return;
+              }
+              handleBatchCounterUpdate({ enabled });
+            }}
           />
         </div>
       </PropertySection>
@@ -317,14 +324,16 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={batchCounterSettings.animation.enabled}
-            onChange={() =>
+            onChange={() => {
+              const enabled = !batchCounterSettings.animation.enabled;
+              if (onCounterAnimationEnabledCommit) {
+                onCounterAnimationEnabledCommit(enabled);
+                return;
+              }
               handleBatchCounterUpdate({
-                animation: {
-                  ...batchCounterSettings.animation,
-                  enabled: !batchCounterSettings.animation.enabled,
-                },
-              })
-            }
+                animation: { ...batchCounterSettings.animation, enabled },
+              });
+            }}
           />
         </div>
 

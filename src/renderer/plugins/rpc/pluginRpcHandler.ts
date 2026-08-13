@@ -54,7 +54,9 @@ import {
   commitBatchGeometryByIds,
   commitElementGeometryById,
   patchActiveImageByTargets,
+  patchCounterAnimationEnabledByTargets,
   patchCounterAnimationPresetByTargets,
+  patchCounterEnabledByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
@@ -363,6 +365,12 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['activeImage']) &&
       (target.elementType === 'key' || target.elementType === 'knob') &&
       typeof patch.activeImage === 'string') ||
+    (hasExactKeys(patch, ['counterEnabled']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      typeof patch.counterEnabled === 'boolean') ||
+    (hasExactKeys(patch, ['counterAnimationEnabled']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      typeof patch.counterAnimationEnabled === 'boolean') ||
     (hasExactKeys(patch, ['counterAnimationPreset']) &&
       (target.elementType === 'key' || target.elementType === 'stat') &&
       counterAnimationPreset !== null) ||
@@ -603,6 +611,11 @@ type NativeLayerPropertyRequest =
       intent: EditorCounterAnimationPresetIntentV1;
     }
   | {
+      kind: 'counterBooleanBatch';
+      targets: Array<{ elementType: 'key' | 'stat'; id: string }>;
+      patch: { counterEnabled: boolean } | { counterAnimationEnabled: boolean };
+    }
+  | {
       kind: 'notePropertyBatch';
       ids: string[];
       patch: EditorNotePropertyPatchV1;
@@ -713,6 +726,14 @@ const parseNativeLayerPropertyRequest = (
   const counterAnimationPreset = hasExactKeys(patch, ['counterAnimationPreset'])
     ? parseCounterAnimationPresetIntent(patch.counterAnimationPreset)
     : null;
+  const counterBooleanPatch =
+    hasExactKeys(patch, ['counterEnabled']) &&
+    typeof patch.counterEnabled === 'boolean'
+      ? { counterEnabled: patch.counterEnabled }
+      : hasExactKeys(patch, ['counterAnimationEnabled']) &&
+        typeof patch.counterAnimationEnabled === 'boolean'
+      ? { counterAnimationEnabled: patch.counterAnimationEnabled }
+      : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
     typeof patch.noteEffectEnabled === 'boolean'
@@ -750,6 +771,7 @@ const parseNativeLayerPropertyRequest = (
     inactiveImage === null &&
     soundPath === null &&
     activeImage === null &&
+    counterBooleanPatch === null &&
     counterAnimationPreset === null &&
     notePropertyPatch === null
   ) {
@@ -765,6 +787,8 @@ const parseNativeLayerPropertyRequest = (
       ? 'key'
       : activeImage !== null
       ? 'active-capable'
+      : counterBooleanPatch !== null
+      ? 'counter-capable'
       : counterAnimationPreset !== null
       ? 'counter-capable'
       : notePropertyPatch !== null
@@ -842,6 +866,16 @@ const parseNativeLayerPropertyRequest = (
         id: string;
       }>,
       intent: counterAnimationPreset,
+    };
+  }
+  if (counterBooleanPatch !== null) {
+    return {
+      kind: 'counterBooleanBatch',
+      targets: targets as Array<{
+        elementType: 'key' | 'stat';
+        id: string;
+      }>,
+      patch: counterBooleanPatch,
     };
   }
   if (notePropertyPatch !== null) {
@@ -1583,6 +1617,30 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
     };
     const persisted = (() => {
       if (request.kind === 'single') {
+        if ('counterEnabled' in request.target.patch) {
+          return patchCounterEnabledByTargets(
+            [
+              {
+                elementType: request.target.elementType as 'key' | 'stat',
+                id: request.target.id,
+              },
+            ],
+            request.target.patch.counterEnabled,
+            options,
+          );
+        }
+        if ('counterAnimationEnabled' in request.target.patch) {
+          return patchCounterAnimationEnabledByTargets(
+            [
+              {
+                elementType: request.target.elementType as 'key' | 'stat',
+                id: request.target.id,
+              },
+            ],
+            request.target.patch.counterAnimationEnabled,
+            options,
+          );
+        }
         if ('counterAnimationPreset' in request.target.patch) {
           return patchCounterAnimationPresetByTargets(
             [
@@ -1651,6 +1709,19 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           request.intent,
           options,
         );
+      }
+      if (request.kind === 'counterBooleanBatch') {
+        return 'counterEnabled' in request.patch
+          ? patchCounterEnabledByTargets(
+              request.targets,
+              request.patch.counterEnabled,
+              options,
+            )
+          : patchCounterAnimationEnabledByTargets(
+              request.targets,
+              request.patch.counterAnimationEnabled,
+              options,
+            );
       }
       if (request.kind === 'notePropertyBatch') {
         return patchNotePropertiesByIds(request.ids, request.patch, options);

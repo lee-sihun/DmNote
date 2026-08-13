@@ -43,6 +43,7 @@ import type {
   EditorDocumentV1,
   EditorFrozenElementV1,
   EditorElementPropertyPatchV1,
+  EditorCounterBooleanPropertyPatchV1,
   EditorCounterAnimationPresetIntentV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
@@ -1181,6 +1182,132 @@ type CounterAnimationTarget = {
   elementType: 'key' | 'stat';
   id: string;
 };
+
+const counterBooleanPropertyIntents = (
+  targets: readonly CounterAnimationTarget[],
+  patch: EditorCounterBooleanPropertyPatchV1,
+): PropertyIntents => {
+  const document = captureEditorDocument();
+  const propertyIntents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { elementType, id } of targets) {
+    const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
+    const record = document[field] as Record<
+      string,
+      Array<Record<string, unknown> & { id?: string }>
+    >;
+    const current = Object.values(record)
+      .flat()
+      .find((position) => position.id === id);
+    if (
+      !current ||
+      current.counter === null ||
+      typeof current.counter !== 'object' ||
+      Array.isArray(current.counter)
+    ) {
+      continue;
+    }
+    const counter = current.counter as Record<string, unknown>;
+    const nextCounter =
+      'counterEnabled' in patch
+        ? { ...counter, enabled: patch.counterEnabled }
+        : counter.animation !== null &&
+          typeof counter.animation === 'object' &&
+          !Array.isArray(counter.animation)
+        ? {
+            ...counter,
+            animation: {
+              ...(counter.animation as Record<string, unknown>),
+              enabled: patch.counterAnimationEnabled,
+            },
+          }
+        : null;
+    if (!nextCounter) continue;
+    const byId = propertyIntents.get(elementType) ?? new Map();
+    byId.set(id, { counter: nextCounter });
+    propertyIntents.set(elementType, byId);
+  }
+  return propertyIntents;
+};
+
+const patchCounterBooleanByTargets = (
+  targets: readonly CounterAnimationTarget[],
+  patch: EditorCounterBooleanPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some(({ id }) => id.length === 0 || isSyntheticElementId(id)) ||
+    new Set(targets.map(({ id }) => id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  const receipt = applyPropertyIntentsEagerly(
+    counterBooleanPropertyIntents(targets, patch),
+  );
+  let enrolled = false;
+  return commitSemanticOps(
+    targets.map(({ elementType, id }) => ({
+      kind: 'patchElement' as const,
+      elementType,
+      id,
+      patch,
+    })),
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchCounterEnabledByTargets = (
+  targets: readonly CounterAnimationTarget[],
+  enabled: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchCounterBooleanByTargets(targets, { counterEnabled: enabled }, options);
+
+export const patchCounterEnabledById = (
+  elementType: 'key' | 'stat',
+  id: string,
+  enabled: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchCounterEnabledByTargets([{ elementType, id }], enabled, options);
+
+export const patchCounterAnimationEnabledByTargets = (
+  targets: readonly CounterAnimationTarget[],
+  enabled: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchCounterBooleanByTargets(
+    targets,
+    { counterAnimationEnabled: enabled },
+    options,
+  );
+
+export const patchCounterAnimationEnabledById = (
+  elementType: 'key' | 'stat',
+  id: string,
+  enabled: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchCounterAnimationEnabledByTargets(
+    [{ elementType, id }],
+    enabled,
+    options,
+  );
 
 const counterAnimationPropertyIntents = (
   targets: readonly CounterAnimationTarget[],

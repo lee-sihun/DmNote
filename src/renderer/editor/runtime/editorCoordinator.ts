@@ -494,6 +494,34 @@ const applySemanticOps = (
             if ('activeImage' in op.patch) {
               return { ...position, activeImage: op.patch.activeImage };
             }
+            if ('counterEnabled' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, enabled: op.patch.counterEnabled },
+              };
+            }
+            if ('counterAnimationEnabled' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              const animation = (counter?.animation ?? {}) as Record<
+                string,
+                unknown
+              >;
+              return {
+                ...position,
+                counter: {
+                  ...counter,
+                  animation: {
+                    ...animation,
+                    enabled: op.patch.counterAnimationEnabled,
+                  },
+                },
+              };
+            }
             if ('counterAnimationPreset' in op.patch) {
               const counter = position.counter as
                 | Record<string, unknown>

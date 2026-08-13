@@ -32,6 +32,7 @@ const captured = vi.hoisted(() => ({
       >['counter']['animation'],
     ) => void;
   },
+  checkboxes: [] as Array<{ checked: boolean; onChange: () => void }>,
 }));
 
 const patches = vi.hoisted(() => ({
@@ -45,6 +46,10 @@ const patches = vi.hoisted(() => ({
   patchSoundPathViaAuthority: vi.fn(async () => true),
   patchCounterAnimationPresetByTargets: vi.fn(async () => true),
   patchCounterAnimationPresetViaAuthority: vi.fn(async () => true),
+  patchCounterEnabledByTargets: vi.fn(async () => true),
+  patchCounterAnimationEnabledByTargets: vi.fn(async () => true),
+  patchCounterEnabledViaAuthority: vi.fn(async () => true),
+  patchCounterAnimationEnabledViaAuthority: vi.fn(async () => true),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
@@ -54,6 +59,9 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchSoundPathByIds: patches.patchSoundPathByIds,
   patchCounterAnimationPresetByTargets:
     patches.patchCounterAnimationPresetByTargets,
+  patchCounterEnabledByTargets: patches.patchCounterEnabledByTargets,
+  patchCounterAnimationEnabledByTargets:
+    patches.patchCounterAnimationEnabledByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
@@ -61,6 +69,9 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchSoundPathViaAuthority: patches.patchSoundPathViaAuthority,
   patchCounterAnimationPresetViaAuthority:
     patches.patchCounterAnimationPresetViaAuthority,
+  patchCounterEnabledViaAuthority: patches.patchCounterEnabledViaAuthority,
+  patchCounterAnimationEnabledViaAuthority:
+    patches.patchCounterAnimationEnabledViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
@@ -91,6 +102,12 @@ vi.mock('@components/main/Modal/content/pickers/ImagePicker', () => ({
 }));
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   default: () => null,
+}));
+vi.mock('@components/main/common/Checkbox', () => ({
+  default: (props: { checked: boolean; onChange: () => void }) => {
+    captured.checkboxes.push(props);
+    return null;
+  },
 }));
 vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
   default: (props: (typeof captured)['font']) => {
@@ -288,6 +305,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     captured.font = null;
     captured.image = null;
     captured.animation = null;
+    captured.checkboxes.length = 0;
     selectKey(ID_A);
     host = document.createElement('div');
     pageHost = document.createElement('div');
@@ -413,6 +431,70 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(patches.patchCounterAnimationPresetByTargets).not.toHaveBeenCalled();
     expect(
       patches.patchCounterAnimationPresetViaAuthority,
+    ).not.toHaveBeenCalled();
+  });
+
+  it.each(['main', 'panel'] as const)(
+    '%s batch counter bool 토글은 클릭 시점 current key/stat만 쓴다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const statA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const statB = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const legacy = vi.fn();
+      selectCounterTargets(ID_A, statA);
+      renderCounterPanel(legacy);
+      selectCounterTargets(ID_B, statB);
+      renderCounterPanel(legacy);
+
+      const currentCheckboxes = captured.checkboxes.slice(-2);
+      act(() => currentCheckboxes[0]?.onChange());
+      act(() => currentCheckboxes[1]?.onChange());
+      const targets = [
+        { elementType: 'key', id: ID_B },
+        { elementType: 'stat', id: statB },
+      ];
+      if (windowType === 'panel') {
+        expect(patches.patchCounterEnabledViaAuthority).toHaveBeenCalledWith(
+          targets,
+          false,
+        );
+        expect(
+          patches.patchCounterAnimationEnabledViaAuthority,
+        ).toHaveBeenCalledWith(targets, true);
+        expect(patches.patchCounterEnabledByTargets).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchCounterEnabledByTargets).toHaveBeenCalledWith(
+          targets,
+          false,
+        );
+        expect(
+          patches.patchCounterAnimationEnabledByTargets,
+        ).toHaveBeenCalledWith(targets, true);
+        expect(patches.patchCounterEnabledViaAuthority).not.toHaveBeenCalled();
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('batch counter relevant synthetic는 두 bool 모두 whole legacy다', () => {
+    const legacy = vi.fn();
+    selectCounterTargets(ID_A, 'stat-0');
+    renderCounterPanel(legacy);
+
+    const currentCheckboxes = captured.checkboxes.slice(-2);
+    act(() => currentCheckboxes[0]?.onChange());
+    act(() => currentCheckboxes[1]?.onChange());
+    expect(legacy.mock.calls).toEqual([
+      [{ enabled: false }],
+      [
+        {
+          animation: expect.objectContaining({ enabled: true }),
+        },
+      ],
+    ]);
+    expect(patches.patchCounterEnabledByTargets).not.toHaveBeenCalled();
+    expect(
+      patches.patchCounterAnimationEnabledByTargets,
     ).not.toHaveBeenCalled();
   });
 

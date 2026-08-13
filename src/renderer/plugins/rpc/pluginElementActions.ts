@@ -615,6 +615,40 @@ export const patchCounterAnimationPresetViaAuthority = (
   });
 };
 
+const patchCounterBooleanViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  patch: { counterEnabled: boolean } | { counterAnimationEnabled: boolean },
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchCounterEnabledViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  enabled: boolean,
+): Promise<boolean> =>
+  patchCounterBooleanViaAuthority(targets, { counterEnabled: enabled });
+
+export const patchCounterAnimationEnabledViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  enabled: boolean,
+): Promise<boolean> =>
+  patchCounterBooleanViaAuthority(targets, {
+    counterAnimationEnabled: enabled,
+  });
+
 export const updateCounterAnimationPresetViaAuthority = (
   request: import('@src/types/key/counterAnimation').CounterAnimationUpdateRequest,
 ): Promise<

@@ -224,6 +224,8 @@ pub enum EditorElementPropertyPatchV1 {
     InactiveImage(EditorInactiveImagePropertyPatchV1),
     ActiveImage(EditorActiveImagePropertyPatchV1),
     SoundPath(EditorSoundPathPropertyPatchV1),
+    CounterEnabled(EditorCounterEnabledPropertyPatchV1),
+    CounterAnimationEnabled(EditorCounterAnimationEnabledPropertyPatchV1),
     CounterAnimationPreset(EditorCounterAnimationPresetPropertyPatchV1),
     StatType(EditorStatTypePropertyPatchV1),
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
@@ -346,6 +348,18 @@ pub struct EditorActiveImagePropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorSoundPathPropertyPatchV1 {
     pub sound_path: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterEnabledPropertyPatchV1 {
+    pub counter_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterAnimationEnabledPropertyPatchV1 {
+    pub counter_animation_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

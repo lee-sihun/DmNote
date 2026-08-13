@@ -9,6 +9,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
+import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -40,6 +41,10 @@ const {
   patchActiveImageMock,
   patchSoundPathMock,
   patchSoundPathViaAuthorityMock,
+  patchCounterEnabledMock,
+  patchCounterAnimationEnabledMock,
+  patchCounterEnabledViaAuthorityMock,
+  patchCounterAnimationEnabledViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -91,6 +96,12 @@ const {
   patchActiveImageMock: vi.fn(() => Promise.resolve(true)),
   patchSoundPathMock: vi.fn(() => Promise.resolve(true)),
   patchSoundPathViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterEnabledMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterAnimationEnabledMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterEnabledViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterAnimationEnabledViaAuthorityMock: vi.fn(() =>
+    Promise.resolve(true),
+  ),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -133,6 +144,9 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
   patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
   patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
+  patchCounterEnabledViaAuthority: patchCounterEnabledViaAuthorityMock,
+  patchCounterAnimationEnabledViaAuthority:
+    patchCounterAnimationEnabledViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
@@ -152,6 +166,8 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchInactiveImageById: patchInactiveImageMock,
   patchActiveImageById: patchActiveImageMock,
   patchSoundPathById: patchSoundPathMock,
+  patchCounterEnabledById: patchCounterEnabledMock,
+  patchCounterAnimationEnabledById: patchCounterAnimationEnabledMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -314,6 +330,10 @@ const resetStores = () => {
   patchActiveImageMock.mockClear();
   patchSoundPathMock.mockClear();
   patchSoundPathViaAuthorityMock.mockClear();
+  patchCounterEnabledMock.mockClear();
+  patchCounterAnimationEnabledMock.mockClear();
+  patchCounterEnabledViaAuthorityMock.mockClear();
+  patchCounterAnimationEnabledViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -2004,6 +2024,167 @@ describe('PropertiesPanel detached preview contract', () => {
 
       expect(patchUseInlineStylesMock).toHaveBeenCalledWith(type, id, true);
       expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat synthetic', 'stat', 'stat-0'],
+    ['stat empty', 'stat', ''],
+  ] as const)(
+    'panel single %s counter bool은 semantic 없이 whole-counter legacy다',
+    (_label, type, id) => {
+      window.__dmn_window_type = 'panel';
+      const basePosition = createDefaultKeyPosition();
+      const counter = basePosition.counter;
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: {
+            '4key': [
+              {
+                ...basePosition,
+                id,
+                counter,
+              },
+            ],
+          },
+          canonicalPositions: {
+            '4key': [
+              {
+                ...basePosition,
+                id,
+                counter,
+              },
+            ],
+          },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...basePosition,
+                statType: 'kps',
+                id,
+                counter,
+              },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onCounterEnabledCommit?: (enabled: boolean) => void;
+        onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
+        onKeyUpdate?: (update: Record<string, unknown>) => void;
+        handleStatUpdate?: (update: Record<string, unknown>) => void;
+      };
+      expect(props.onCounterEnabledCommit).toBeUndefined();
+      expect(props.onCounterAnimationEnabledCommit).toBeUndefined();
+      const legacy =
+        type === 'key' ? props.onKeyUpdate : props.handleStatUpdate;
+      act(() =>
+        legacy?.({
+          index: 0,
+          counter: {
+            ...counter,
+            enabled: false,
+            animation: { ...counter.animation, enabled: true },
+          },
+        }),
+      );
+
+      expect(patchCounterEnabledMock).not.toHaveBeenCalled();
+      expect(patchCounterAnimationEnabledMock).not.toHaveBeenCalled();
+      expect(patchCounterEnabledViaAuthorityMock).not.toHaveBeenCalled();
+      expect(
+        patchCounterAnimationEnabledViaAuthorityMock,
+      ).not.toHaveBeenCalled();
+      if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      else expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['main key', 'main', 'key'],
+    ['main stat', 'main', 'stat'],
+    ['panel key', 'panel', 'key'],
+    ['panel stat', 'panel', 'stat'],
+  ] as const)(
+    '%s counter bool 두 callback은 선택 descriptor ID exact writer만 쓴다',
+    (_label, windowType, type) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'a1111111-1111-4111-8111-111111111111'
+          : 'a2222222-2222-4222-8222-222222222222';
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: {
+            '4key': [
+              {
+                ...useKeyStore.getState().positions['4key'][0],
+                id,
+              },
+            ],
+          },
+          canonicalPositions: {
+            '4key': [
+              {
+                ...useKeyStore.getState().positions['4key'][0],
+                id,
+              },
+            ],
+          },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useStatItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onCounterEnabledCommit: (enabled: boolean) => void;
+        onCounterAnimationEnabledCommit: (enabled: boolean) => void;
+      };
+
+      act(() => props.onCounterEnabledCommit(true));
+      act(() => props.onCounterAnimationEnabledCommit(false));
+      if (windowType === 'panel') {
+        expect(patchCounterEnabledViaAuthorityMock).toHaveBeenCalledWith(
+          [{ elementType: type, id }],
+          true,
+        );
+        expect(
+          patchCounterAnimationEnabledViaAuthorityMock,
+        ).toHaveBeenCalledWith([{ elementType: type, id }], false);
+        expect(patchCounterEnabledMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchCounterEnabledMock).toHaveBeenCalledWith(type, id, true);
+        expect(patchCounterAnimationEnabledMock).toHaveBeenCalledWith(
+          type,
+          id,
+          false,
+        );
+        expect(patchCounterEnabledViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
     },
   );
 

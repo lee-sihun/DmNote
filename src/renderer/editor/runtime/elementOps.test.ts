@@ -63,7 +63,9 @@ import {
   patchKnobAxisIdById,
   patchSoundPathById,
   patchSoundPathByIds,
+  patchCounterAnimationEnabledByTargets,
   patchCounterAnimationPresetByTargets,
+  patchCounterEnabledByTargets,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -2637,6 +2639,96 @@ describe('elementOps', () => {
         [{ elementType: 'key', id: 'key-0' }],
         intent,
       ),
+    ).resolves.toBe(false);
+  });
+
+  it('counter bool 두 leaf는 raw counter와 preset sibling을 보존해 key/stat 한 commit으로 보낸다', async () => {
+    const statId = '33333333-3333-4333-8333-333333333333';
+    const rawCounter = {
+      ...createDefaultKeyPosition().counter,
+      enabled: false,
+      customSentinel: 'keep-raw',
+      animation: {
+        ...createDefaultKeyPosition().counter.animation,
+        enabled: false,
+        presetId: 'preset-keep',
+        scale: 1.7,
+      },
+    };
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), counter: rawCounter }],
+      },
+      positions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...keyAt(statId),
+            statType: 'kps',
+            counter: structuredClone(rawCounter),
+          },
+        ],
+      },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: statId },
+    ];
+
+    await patchCounterEnabledByTargets(targets, true);
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { counterEnabled: true },
+      })),
+      expect.anything(),
+    );
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter,
+    ).toMatchObject({
+      enabled: true,
+      customSentinel: 'keep-raw',
+      animation: { enabled: false, presetId: 'preset-keep', scale: 1.7 },
+    });
+
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    await patchCounterAnimationEnabledByTargets(targets, true);
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { counterAnimationEnabled: true },
+      })),
+      expect.anything(),
+    );
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter,
+    ).toMatchObject({
+      enabled: true,
+      customSentinel: 'keep-raw',
+      animation: { enabled: true, presetId: 'preset-keep', scale: 1.7 },
+    });
+  });
+
+  it('counter bool batch는 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
+    await expect(patchCounterEnabledByTargets([], true)).resolves.toBe(false);
+    await expect(
+      patchCounterAnimationEnabledByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'stat', id: ID_A },
+        ],
+        true,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterEnabledByTargets([{ elementType: 'key', id: 'key-0' }], true),
     ).resolves.toBe(false);
   });
 

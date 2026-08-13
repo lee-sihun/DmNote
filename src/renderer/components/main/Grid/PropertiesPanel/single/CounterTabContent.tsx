@@ -44,6 +44,8 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   keyDisplayName,
   isStat,
   onKeyUpdate,
+  onCounterEnabledCommit,
+  onCounterAnimationEnabledCommit,
   onCounterAnimationPresetCommit,
   panelElement,
   t,
@@ -258,9 +260,14 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={counterSettings.enabled}
-            onChange={() =>
-              handleCounterUpdate({ enabled: !counterSettings.enabled })
-            }
+            onChange={() => {
+              const enabled = !counterSettings.enabled;
+              if (onCounterEnabledCommit) {
+                onCounterEnabledCommit(enabled);
+                return;
+              }
+              handleCounterUpdate({ enabled });
+            }}
           />
         </div>
       </PropertySection>
@@ -445,14 +452,16 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           <Checkbox
             commitStrategy="after-paint"
             checked={counterSettings.animation.enabled}
-            onChange={() =>
+            onChange={() => {
+              const enabled = !counterSettings.animation.enabled;
+              if (onCounterAnimationEnabledCommit) {
+                onCounterAnimationEnabledCommit(enabled);
+                return;
+              }
               handleCounterUpdate({
-                animation: {
-                  ...counterSettings.animation,
-                  enabled: !counterSettings.animation.enabled,
-                },
-              })
-            }
+                animation: { ...counterSettings.animation, enabled },
+              });
+            }}
           />
         </div>
 

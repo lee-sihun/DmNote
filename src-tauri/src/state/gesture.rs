@@ -528,6 +528,24 @@ mod tests {
                 serde_json::json!({ "soundPath": "" }),
             ),
             (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::CounterEnabled(
+                    crate::models::EditorCounterEnabledPropertyPatchV1 {
+                        counter_enabled: true,
+                    },
+                ),
+                serde_json::json!({ "counterEnabled": true }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterAnimationEnabled(
+                    crate::models::EditorCounterAnimationEnabledPropertyPatchV1 {
+                        counter_animation_enabled: false,
+                    },
+                ),
+                serde_json::json!({ "counterAnimationEnabled": false }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterAnimationPreset(
                     crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
@@ -660,6 +678,9 @@ mod tests {
             serde_json::json!({ "soundPath": 1 }),
             serde_json::json!({ "soundPath": "path", "soundEnabled": true }),
             serde_json::json!({ "soundPath": "path", "unexpected": true }),
+            serde_json::json!({ "counterEnabled": 1 }),
+            serde_json::json!({ "counterAnimationEnabled": null }),
+            serde_json::json!({ "counterAnimationEnabled": true, "hidden": false }),
             serde_json::json!({ "counterAnimationPreset": null }),
             serde_json::json!({ "counterAnimationPreset": {} }),
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "enabled": false } }),

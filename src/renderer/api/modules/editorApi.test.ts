@@ -399,6 +399,8 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['knob', { inactiveImage: 'knob.png' }],
     ['key', { activeImage: '  /tmp/raw active.png  ' }],
     ['knob', { activeImage: '' }],
+    ['key', { counterEnabled: true }],
+    ['stat', { counterAnimationEnabled: false }],
     ['key', { counterAnimationPreset: { presetId: 'builtin-ease-out' } }],
     [
       'stat',
@@ -465,6 +467,11 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['graph', { activeImage: 'active.png' }],
     ['key', { activeImage: 1 }],
     ['knob', { activeImage: 'active.png', inactiveImage: 'idle.png' }],
+    ['graph', { counterEnabled: true }],
+    ['knob', { counterAnimationEnabled: false }],
+    ['key', { counterEnabled: 1 }],
+    ['stat', { counterAnimationEnabled: 'yes' }],
+    ['key', { counterEnabled: true, counterAnimationEnabled: false }],
     ['graph', { counterAnimationPreset: { presetId: 'preset-a' } }],
     ['key', { counterAnimationPreset: { presetId: '' } }],
     [

@@ -118,6 +118,20 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchCounterEnabled: vi.fn(
+    (
+      _targets?: unknown,
+      _enabled?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
+  patchCounterAnimationEnabled: vi.fn(
+    (
+      _targets?: unknown,
+      _enabled?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   updateCounterAnimation: vi.fn(
     (_request?: unknown, _options?: unknown): Promise<unknown> =>
       Promise.resolve(null),
@@ -206,6 +220,8 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchActiveImageByTargets: mocks.patchActiveImage,
   patchSoundPathByIds: mocks.patchSoundPath,
   patchCounterAnimationPresetByTargets: mocks.patchCounterAnimationPreset,
+  patchCounterEnabledByTargets: mocks.patchCounterEnabled,
+  patchCounterAnimationEnabledByTargets: mocks.patchCounterAnimationEnabled,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -310,6 +326,10 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchSoundPath.mockResolvedValue(true);
     mocks.patchCounterAnimationPreset.mockReset();
     mocks.patchCounterAnimationPreset.mockResolvedValue(true);
+    mocks.patchCounterEnabled.mockReset();
+    mocks.patchCounterEnabled.mockResolvedValue(true);
+    mocks.patchCounterAnimationEnabled.mockReset();
+    mocks.patchCounterAnimationEnabled.mockResolvedValue(true);
     mocks.updateCounterAnimation.mockReset();
     mocks.updateCounterAnimation.mockResolvedValue({
       preset: { id: 'preset-a' },
@@ -859,6 +879,58 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
+    ['counterEnabled', true],
+    ['counterAnimationEnabled', false],
+  ] as const)(
+    '%s batch는 key/stat exact bool을 전용 helper에 전달한다',
+    async (field, enabled) => {
+      const targets = [
+        { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      ] as const;
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', {
+          targets,
+          patch: { [field]: enabled },
+        }),
+      );
+      const helper =
+        field === 'counterEnabled'
+          ? mocks.patchCounterEnabled
+          : mocks.patchCounterAnimationEnabled;
+      await vi.waitFor(() => expect(helper).toHaveBeenCalledOnce());
+      expect(helper).toHaveBeenCalledWith(targets, enabled, {
+        preflight: expect.any(Function),
+      });
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
+
+  it('counter bool single은 slot 직전 generation 변경을 거절한다', async () => {
+    mocks.patchCounterEnabled.mockImplementationOnce(
+      async (_targets, _enabled, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { counterEnabled: true },
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it.each([
     {
       targets: [{ elementType: 'graph', id: 'a' }],
       patch: { counterAnimationPreset: { presetId: 'a' } },
@@ -883,6 +955,22 @@ describe('plugin panel persisted element mutations', () => {
       targets: [{ elementType: 'key', id: 'a' }],
       patch: { counterAnimationPreset: { presetId: 'a' }, fontItalic: true },
     },
+    {
+      targets: [{ elementType: 'graph', id: 'a' }],
+      patch: { counterEnabled: true },
+    },
+    {
+      targets: [{ elementType: 'knob', id: 'a' }],
+      patch: { counterAnimationEnabled: true },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterEnabled: 1 },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterEnabled: true, counterAnimationEnabled: false },
+    },
   ])(
     'counter animation invalid exact payload를 executor 전에 거절한다',
     async (payload) => {
@@ -893,6 +981,8 @@ describe('plugin panel persisted element mutations', () => {
         error: { code: 'INVALID_PAYLOAD' },
       });
       expect(mocks.patchCounterAnimationPreset).not.toHaveBeenCalled();
+      expect(mocks.patchCounterEnabled).not.toHaveBeenCalled();
+      expect(mocks.patchCounterAnimationEnabled).not.toHaveBeenCalled();
     },
   );
 
