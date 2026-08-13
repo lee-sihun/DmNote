@@ -35,6 +35,7 @@ export const PLUGIN_RPC_OPERATIONS = {
   patchLayerProperty: 'layers:patchProperty',
   setLayerBounds: 'layers:setBounds',
   setLayerBatchGeometry: 'layers:setBatchGeometry',
+  setLayerGroupVisibility: 'layers:setGroupVisibility',
 } as const;
 
 export type LayerDeleteTarget = {
@@ -402,6 +403,24 @@ export const commitBatchGeometryViaAuthority = (
         descriptor: structuredClone(descriptor),
         ...(gestureId ? { gestureId } : {}),
       },
+      authorityGeneration,
+      retryPolicy: 'none',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const setLayerGroupVisibilityViaAuthority = (
+  mode: string,
+  groupId: string,
+  hidden: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.setLayerGroupVisibility,
+      payload: { mode, groupId, hidden },
       authorityGeneration,
       retryPolicy: 'none',
       resolve,

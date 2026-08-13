@@ -62,6 +62,7 @@ import {
   patchKnobPropertiesByIds,
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
+  setLayerGroupHidden,
 } from '@src/renderer/editor/runtime/elementOps';
 import type {
   BatchGeometryDescriptor,
@@ -657,6 +658,20 @@ const validGroupId = (value: unknown): value is string =>
   validWireId(value) && textBytes(value) <= MAX_LAYER_GROUP_ID_BYTES;
 const validNullableId = (value: unknown): value is string | null =>
   value === null || validWireId(value);
+
+const parseLayerGroupVisibility = (
+  payload: Record<string, unknown>,
+): { mode: string; groupId: string; hidden: boolean } | null => {
+  if (
+    !hasExactKeys(payload, ['mode', 'groupId', 'hidden']) ||
+    !validMode(payload.mode) ||
+    !validGroupId(payload.groupId) ||
+    typeof payload.hidden !== 'boolean'
+  ) {
+    return null;
+  }
+  return payload as { mode: string; groupId: string; hidden: boolean };
+};
 
 const parseLayerReorderAnchors = (
   value: unknown,
@@ -1348,6 +1363,48 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           return;
         }
         console.error('Failed to patch panel native layer property', error);
+        respond(failure(envelope.requestId, 'PATCH_LAYER_PROPERTY_FAILED'));
+      });
+    return;
+  }
+
+  if (envelope.operation === PLUGIN_RPC_OPERATIONS.setLayerGroupVisibility) {
+    const request = parseLayerGroupVisibility(envelope.payload);
+    if (!request) {
+      respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
+      return;
+    }
+    const requestGeneration = envelope.authorityGeneration;
+    const generationLive = () =>
+      requestGeneration === getPluginAuthorityGeneration();
+    if (!generationLive()) {
+      respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+      return;
+    }
+    void setLayerGroupHidden(request.mode, request.groupId, request.hidden, {
+      preflight: () => {
+        if (!generationLive()) {
+          throw new Error('plugin authority generation changed');
+        }
+      },
+    })
+      .then((applied) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        if (!applied) {
+          respond(failure(envelope.requestId, 'PATCH_LAYER_PROPERTY_FAILED'));
+          return;
+        }
+        respond(success(envelope.requestId));
+      })
+      .catch((error) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        console.error('Failed to set panel layer group visibility', error);
         respond(failure(envelope.requestId, 'PATCH_LAYER_PROPERTY_FAILED'));
       });
     return;

@@ -5,12 +5,16 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { reconcileSelectionAfterIndexedElementDeletion } from '@stores/grid/useGridSelectionStore';
 
-import { resolveElementById } from '../model/elementIdMap';
+import {
+  isSyntheticElementId,
+  resolveElementById,
+} from '../model/elementIdMap';
 import { cloneKeyPositionForDuplicate } from '../model/keys';
 import { cloneSlot } from '@utils/keySlot';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
 import {
   applyPropertyIntentsEagerly,
+  createPropertyReceipt,
   intentPatch,
   runElementIntent,
   type ElementIntentGeneration,
@@ -653,6 +657,205 @@ export const patchElementHiddenById = (
   hidden: boolean,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => patchElementPropertyById(type, id, { hidden }, options);
+
+export const setLayerGroupHidden = (
+  mode: string,
+  groupId: string,
+  hidden: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!mode || !groupId) return Promise.resolve(false);
+  const eagerIntents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  const initial = captureEditorDocument();
+  const initialTargets: Array<{ type: NativeElementType; id: string }> = [];
+  for (const type of Object.keys(FIELD_BY_TYPE) as NativeElementType[]) {
+    for (const position of initial[FIELD_BY_TYPE[type]][mode] ?? []) {
+      if (
+        position.groupId !== groupId ||
+        typeof position.id !== 'string' ||
+        position.id.length === 0 ||
+        isSyntheticElementId(position.id)
+      ) {
+        continue;
+      }
+      const byId = eagerIntents.get(type) ?? new Map();
+      byId.set(position.id, { hidden });
+      eagerIntents.set(type, byId);
+      initialTargets.push({ type, id: position.id });
+    }
+  }
+  applyPropertyIntentsEagerly(eagerIntents);
+  const reconcileEager = (
+    base: EditorDocumentV1,
+    currentMemberIds?: ReadonlySet<string>,
+  ) => {
+    createPropertyReceipt(
+      initialTargets.flatMap(({ type, id }) => {
+        if (currentMemberIds?.has(id)) return [];
+        const located = findInRecord(
+          base[FIELD_BY_TYPE[type]] as unknown as LooseRecord,
+          id,
+        );
+        if (!located) return [];
+        return [
+          {
+            type,
+            id,
+            field: 'hidden',
+            before:
+              base[FIELD_BY_TYPE[type]][located.mode]?.[located.index]?.hidden,
+            expected: hidden,
+          },
+        ];
+      }),
+    )?.rollback();
+  };
+  let reconciled = false;
+  let enrolled = false;
+  return commitGeneratedSemanticOps(
+    (latest) => {
+      const targets: ElementPropertyPatchTarget[] = [];
+      let unsupported = false;
+      for (const type of Object.keys(FIELD_BY_TYPE) as NativeElementType[]) {
+        for (const position of latest[FIELD_BY_TYPE[type]][mode] ?? []) {
+          if (position.groupId !== groupId) continue;
+          if (
+            typeof position.id !== 'string' ||
+            position.id.length === 0 ||
+            isSyntheticElementId(position.id)
+          ) {
+            unsupported = true;
+            continue;
+          }
+          targets.push({ type, id: position.id, patch: { hidden } });
+        }
+      }
+      if (unsupported || targets.length === 0) {
+        if (!reconciled) {
+          reconcileEager(latest);
+          reconciled = true;
+        }
+        return null;
+      }
+      if (!reconciled) {
+        reconcileEager(latest, new Set(targets.map(({ id }) => id)));
+        reconciled = true;
+      }
+      return targets.map(({ type, id, patch }) => ({
+        kind: 'patchElement' as const,
+        elementType: type,
+        id,
+        patch,
+      }));
+    },
+    {
+      ...(options.preflight ? { preflight: options.preflight } : {}),
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) => {
+      if (!outcome && !enrolled && !reconciled) {
+        reconcileEager(editorCoordinator.getState().lastAck ?? initial);
+      }
+      return (
+        outcome?.opResults.some(({ status }) => status !== 'targetMissing') ??
+        false
+      );
+    })
+    .catch((error) => {
+      if (!enrolled && !reconciled) {
+        reconcileEager(editorCoordinator.getState().lastAck ?? initial);
+      }
+      throw error;
+    });
+};
+
+export const setLayerGroupHiddenLegacy = (
+  mode: string,
+  groupId: string,
+  hidden: boolean,
+): Promise<boolean> => {
+  const initial = captureEditorDocument();
+  const expectedByType = new Map<NativeElementType, LooseRecord>();
+  const writeTypeRecord = (type: NativeElementType, record: LooseRecord) => {
+    if (type === 'key') useKeyStore.getState().setPositions(record as never);
+    else if (type === 'stat')
+      useStatItemStore.getState().setPositions(record as never);
+    else if (type === 'graph')
+      useGraphItemStore.getState().setPositions(record as never);
+    else useKnobItemStore.getState().setPositions(record as never);
+  };
+  const currentTypeRecord = (type: NativeElementType): LooseRecord =>
+    (type === 'key'
+      ? useKeyStore.getState().canonicalPositions
+      : type === 'stat'
+      ? useStatItemStore.getState().positions
+      : type === 'graph'
+      ? useGraphItemStore.getState().positions
+      : useKnobItemStore.getState().positions) as unknown as LooseRecord;
+  const reconcile = (base: EditorDocumentV1) => {
+    for (const [type, expected] of expectedByType) {
+      if (currentTypeRecord(type) !== expected) continue;
+      writeTypeRecord(
+        type,
+        base[FIELD_BY_TYPE[type]] as unknown as LooseRecord,
+      );
+    }
+  };
+  return runElementIntent({
+    applyEager: () => {
+      for (const type of Object.keys(FIELD_BY_TYPE) as NativeElementType[]) {
+        const record = initial[FIELD_BY_TYPE[type]] as unknown as LooseRecord;
+        if (
+          !(record[mode] ?? []).some((position) => position.groupId === groupId)
+        ) {
+          continue;
+        }
+        const expected = {
+          ...record,
+          [mode]: record[mode].map((position) =>
+            position.groupId === groupId ? { ...position, hidden } : position,
+          ),
+        };
+        expectedByType.set(type, expected);
+        writeTypeRecord(type, expected);
+      }
+      return {
+        rollback: () =>
+          reconcile(editorCoordinator.getState().lastAck ?? initial),
+      };
+    },
+    generate: (latest) => {
+      reconcile(latest);
+      const patch: EditorPatchV1 = { schemaVersion: 1 };
+      let found = false;
+      let changed = false;
+      for (const type of Object.keys(FIELD_BY_TYPE) as NativeElementType[]) {
+        const field = FIELD_BY_TYPE[type];
+        const record = latest[field] as unknown as LooseRecord;
+        const nextMode = (record[mode] ?? []).map((position) => {
+          if (position.groupId !== groupId) return position;
+          found = true;
+          if (position.hidden === hidden) return position;
+          changed = true;
+          return { ...position, hidden };
+        });
+        if (
+          nextMode.some((position, index) => position !== record[mode]?.[index])
+        ) {
+          patch[field] = { ...record, [mode]: nextMode } as never;
+        }
+      }
+      if (!found) return { kind: 'targetLost' };
+      return changed ? intentPatch(patch) : { kind: 'satisfied' };
+    },
+  }).then(({ committed, satisfied }) => committed || satisfied);
+};
 
 export const patchElementLayerNameById = (
   type: NativeElementType,

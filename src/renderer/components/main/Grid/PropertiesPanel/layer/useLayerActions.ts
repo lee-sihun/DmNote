@@ -5,6 +5,7 @@
 
 import {
   patchNativeLayerPropertyViaAuthority,
+  setLayerGroupVisibilityViaAuthority,
   setPluginElementsHidden,
 } from '@plugins/rpc/pluginElementActions';
 import { keysApi } from '@api/modules/keysApi';
@@ -39,6 +40,8 @@ import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozen
 import {
   patchElementHiddenById,
   patchElementLayerNameById,
+  setLayerGroupHidden,
+  setLayerGroupHiddenLegacy,
 } from '@src/renderer/editor/runtime/elementOps';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
@@ -279,142 +282,26 @@ export function useLayerActions({
     const allHidden = children.every((c) => c.hidden);
     const newHidden = !allHidden;
 
-    const changes: EditorPatchV1 = {
-      schemaVersion: 1,
-    };
-    const previousKeyPositions = useKeyStore.getState().canonicalPositions;
-    const previousStatPositions = useStatItemStore.getState().positions;
-    const previousGraphPositions = useGraphItemStore.getState().positions;
-    const previousKnobPositions = useKnobItemStore.getState().positions;
-
-    // 키 positions
-    const keyChildren = children.filter(
-      (c) => c.type === 'key' && c.index !== undefined,
-    );
-    if (keyChildren.length > 0) {
-      const pos = useKeyStore.getState().canonicalPositions;
-      const updatedPositions = { ...pos };
-      const modePositions = [...(pos[selectedKeyType] || [])];
-      keyChildren.forEach((c) => {
-        if (c.index !== undefined && modePositions[c.index]) {
-          modePositions[c.index] = {
-            ...modePositions[c.index],
-            hidden: newHidden,
-          };
-        }
-      });
-      updatedPositions[selectedKeyType] = modePositions;
-      useKeyStore.getState().setPositions(updatedPositions);
-      changes.keyPositions = updatedPositions;
-    }
-
-    // 통계 positions
-    const statChildren = children.filter(
-      (c) => c.type === 'stat' && c.index !== undefined,
-    );
-    if (statChildren.length > 0) {
-      const current = useStatItemStore.getState().positions;
-      const modePositions = [...(current[selectedKeyType] || [])];
-      statChildren.forEach((c) => {
-        if (c.index !== undefined && modePositions[c.index]) {
-          modePositions[c.index] = {
-            ...modePositions[c.index],
-            hidden: newHidden,
-          };
-        }
-      });
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: modePositions,
-      };
-      useStatItemStore.getState().setPositions(updatedPositions);
-      changes.statPositions = updatedPositions;
-    }
-
-    // 그래프 positions
-    const graphChildren = children.filter(
-      (c) => c.type === 'graph' && c.index !== undefined,
-    );
-    if (graphChildren.length > 0) {
-      const current = useGraphItemStore.getState().positions;
-      const modePositions = [...(current[selectedKeyType] || [])];
-      graphChildren.forEach((c) => {
-        if (c.index !== undefined && modePositions[c.index]) {
-          modePositions[c.index] = {
-            ...modePositions[c.index],
-            hidden: newHidden,
-          };
-        }
-      });
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: modePositions,
-      };
-      useGraphItemStore.getState().setPositions(updatedPositions);
-      changes.graphPositions = updatedPositions;
-    }
-
-    // 노브 positions
-    const knobChildren = children.filter(
-      (c) => c.type === 'knob' && c.index !== undefined,
-    );
-    if (knobChildren.length > 0) {
-      const current = useKnobItemStore.getState().positions;
-      const modePositions = [...(current[selectedKeyType] || [])];
-      knobChildren.forEach((c) => {
-        if (c.index !== undefined && modePositions[c.index]) {
-          modePositions[c.index] = {
-            ...modePositions[c.index],
-            hidden: newHidden,
-          };
-        }
-      });
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: modePositions,
-      };
-      useKnobItemStore.getState().setPositions(updatedPositions);
-      changes.knobPositions = updatedPositions;
-    }
-
-    if (Object.keys(changes).length > 1) {
-      try {
-        await editorCoordinator.commitPatch(changes);
-      } catch (error) {
-        if (
-          changes.keyPositions &&
-          useKeyStore.getState().canonicalPositions === changes.keyPositions
-        ) {
-          useKeyStore.getState().setPositions(previousKeyPositions);
-        }
-        if (
-          changes.statPositions &&
-          useStatItemStore.getState().positions === changes.statPositions
-        ) {
-          useStatItemStore.getState().setPositions(previousStatPositions);
-        }
-        if (
-          changes.graphPositions &&
-          useGraphItemStore.getState().positions === changes.graphPositions
-        ) {
-          useGraphItemStore.getState().setPositions(previousGraphPositions);
-        }
-        if (
-          changes.knobPositions &&
-          useKnobItemStore.getState().positions === changes.knobPositions
-        ) {
-          useKnobItemStore.getState().setPositions(previousKnobPositions);
-        }
-        console.error('Failed to toggle group visibility', error);
+    try {
+      if (window.__dmn_window_type === 'panel') {
+        await setLayerGroupVisibilityViaAuthority(
+          selectedKeyType,
+          groupId,
+          newHidden,
+        );
         return;
       }
+      const hasSynthetic = children.some(
+        (child) =>
+          child.type !== 'plugin' &&
+          (child.id.length === 0 || isSyntheticElementId(child.id)),
+      );
+      await (hasSynthetic
+        ? setLayerGroupHiddenLegacy(selectedKeyType, groupId, newHidden)
+        : setLayerGroupHidden(selectedKeyType, groupId, newHidden));
+    } catch (error) {
+      console.error('Failed to toggle group visibility', error);
     }
-
-    // 플러그인
-    const pluginChildren = children.filter((c) => c.type === 'plugin');
-    setPluginElementsHidden(
-      pluginChildren.map((c) => ({ fullId: c.id, hidden: newHidden })),
-    );
   };
 
   // ──────────────────────────────────────────────────────────────────────────

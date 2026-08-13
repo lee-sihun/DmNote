@@ -81,6 +81,44 @@ const LayerGroupDisclosure = ({
   );
 };
 
+interface LayerGroupVisibilityButtonProps {
+  groupId: string;
+  allHidden: boolean;
+  onToggle: (event: React.MouseEvent, groupId: string) => void;
+}
+
+export const LayerGroupVisibilityButton = ({
+  groupId,
+  allHidden,
+  onToggle,
+}: LayerGroupVisibilityButtonProps) => (
+  <button
+    type="button"
+    aria-label="toggle group visibility"
+    onMouseDown={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    }}
+    onDoubleClick={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    }}
+    onClick={(event) => {
+      event.stopPropagation();
+      onToggle(event, groupId);
+    }}
+    className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-md cursor-pointer ${
+      allHidden ? '' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
+    }`}
+  >
+    <IconSwap
+      active={allHidden}
+      activeIcon={<CloseEyeIcon width={14} height={14} fill="currentColor" />}
+      inactiveIcon={<OpenEyeIcon width={14} height={14} fill="currentColor" />}
+    />
+  </button>
+);
+
 // ============================================================================
 // 레이어 탭 콘텐츠 Props
 // ============================================================================
@@ -665,44 +703,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     )}
 
                     {/* 그룹 표시/숨김 토글 */}
-                    <button
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onDoubleClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        actions.handleToggleGroupVisibility(e, gh.groupId);
-                      }}
-                      className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-md cursor-pointer ${
-                        gh.allHidden
-                          ? ''
-                          : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
-                      }`}
-                    >
-                      <IconSwap
-                        active={gh.allHidden}
-                        activeIcon={
-                          <CloseEyeIcon
-                            width={14}
-                            height={14}
-                            fill="currentColor"
-                          />
-                        }
-                        inactiveIcon={
-                          <OpenEyeIcon
-                            width={14}
-                            height={14}
-                            fill="currentColor"
-                          />
-                        }
-                      />
-                    </button>
+                    <LayerGroupVisibilityButton
+                      groupId={gh.groupId}
+                      allHidden={gh.allHidden}
+                      onToggle={actions.handleToggleGroupVisibility}
+                    />
                   </div>
                 );
               }

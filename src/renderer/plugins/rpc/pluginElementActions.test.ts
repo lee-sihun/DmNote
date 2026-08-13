@@ -288,6 +288,35 @@ describe('plugin element panel queue', () => {
     expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
   });
 
+  it('group visibility는 high-level absolute descriptor와 enqueue generation만 보낸다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+
+    await expect(
+      actions.setLayerGroupVisibilityViaAuthority('4key', 'group-a', true),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:setGroupVisibility',
+      { mode: '4key', groupId: 'group-a', hidden: true },
+      0,
+      7,
+    );
+  });
+
+  it('group visibility outcome-unknown은 snapshot만 요청하고 재실행하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+
+    await expect(
+      actions.setLayerGroupVisibilityViaAuthority('4key', 'group-a', false),
+    ).resolves.toBe(false);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
   it('fontFamily batch는 혼합 native 대상과 raw literal을 고정한다', async () => {
     mocks.sendPluginRpc.mockResolvedValue({
       kind: 'ok',

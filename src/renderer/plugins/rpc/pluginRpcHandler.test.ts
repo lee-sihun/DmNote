@@ -35,6 +35,14 @@ const mocks = vi.hoisted(() => ({
     (_descriptor?: unknown, _options?: { preflight?: () => void }) =>
       Promise.resolve(true),
   ),
+  setLayerGroupHidden: vi.fn(
+    (
+      _mode?: unknown,
+      _groupId?: unknown,
+      _hidden?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   patchGraphTypes: vi.fn(
     (
       _ids?: unknown,
@@ -163,6 +171,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
   patchNotePropertiesByIds: mocks.patchNoteProperties,
   patchUseInlineStylesByTargets: mocks.patchUseInlineStyles,
+  setLayerGroupHidden: mocks.setLayerGroupHidden,
 }));
 
 vi.mock(
@@ -230,6 +239,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.commitElementGeometry.mockResolvedValue(true);
     mocks.commitBatchGeometry.mockReset();
     mocks.commitBatchGeometry.mockResolvedValue(true);
+    mocks.setLayerGroupHidden.mockReset();
+    mocks.setLayerGroupHidden.mockResolvedValue(true);
     mocks.patchGraphTypes.mockReset();
     mocks.patchGraphTypes.mockResolvedValue(true);
     mocks.patchGraphColors.mockReset();
@@ -1649,6 +1660,111 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
       ok: false,
       error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('group visibility는 exact descriptor와 slot preflight를 main helper에 전달한다', async () => {
+    mocks.requestListener?.(
+      envelope('layers:setGroupVisibility', {
+        mode: '4key',
+        groupId: 'group-a',
+        hidden: true,
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.setLayerGroupHidden).toHaveBeenCalledWith(
+      '4key',
+      'group-a',
+      true,
+      { preflight: expect.any(Function) },
+    );
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ['missing hidden', { mode: '4key', groupId: 'group-a' }],
+    ['extra', { mode: '4key', groupId: 'group-a', hidden: true, extra: true }],
+    ['bad mode', { mode: '', groupId: 'group-a', hidden: true }],
+    ['long mode', { mode: '가'.repeat(43), groupId: 'group-a', hidden: true }],
+    ['bad group', { mode: '4key', groupId: '', hidden: true }],
+    ['long group', { mode: '4key', groupId: '가'.repeat(86), hidden: true }],
+    ['bad hidden', { mode: '4key', groupId: 'group-a', hidden: 1 }],
+  ])('group visibility %s payload를 거절한다', async (_label, payload) => {
+    mocks.requestListener?.(envelope('layers:setGroupVisibility', payload));
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.setLayerGroupHidden).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_PAYLOAD' },
+    });
+  });
+
+  it('group visibility는 slot 직전 generation 변경을 거절한다', async () => {
+    mocks.setLayerGroupHidden.mockImplementationOnce(
+      async (_mode, _groupId, _hidden, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:setGroupVisibility', {
+        mode: '4key',
+        groupId: 'group-a',
+        hidden: true,
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('group visibility는 완료 전에 generation이 바뀌면 stale로 응답한다', async () => {
+    let resolveGroup!: (value: boolean) => void;
+    mocks.setLayerGroupHidden.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveGroup = resolve;
+      }),
+    );
+    mocks.requestListener?.(
+      envelope('layers:setGroupVisibility', {
+        mode: '4key',
+        groupId: 'group-a',
+        hidden: true,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.setLayerGroupHidden).toHaveBeenCalledOnce(),
+    );
+    mocks.authorityGeneration = 8;
+    resolveGroup(true);
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('group visibility unsupported false는 성공으로 숨기지 않는다', async () => {
+    mocks.setLayerGroupHidden.mockResolvedValueOnce(false);
+    mocks.requestListener?.(
+      envelope('layers:setGroupVisibility', {
+        mode: '4key',
+        groupId: 'group-a',
+        hidden: true,
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'PATCH_LAYER_PROPERTY_FAILED' },
     });
   });
 

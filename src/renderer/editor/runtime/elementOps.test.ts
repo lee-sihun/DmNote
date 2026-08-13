@@ -38,6 +38,8 @@ import {
   deleteElementById,
   placeDuplicatedKey,
   patchElementHiddenById,
+  setLayerGroupHidden,
+  setLayerGroupHiddenLegacy,
   patchElementLayerNameById,
   patchFontStyleById,
   patchFontStyleByTargets,
@@ -818,6 +820,245 @@ describe('elementOps', () => {
     ).rejects.toThrow('preflight failed');
 
     expect(useKeyStore.getState().canonicalPositions['4key']).toEqual(before);
+  });
+
+  it('그룹 visibility는 slot 최신 membership만 적용하고 떠난 대상의 외부 hidden을 보존한다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [
+          { ...keyAt(ID_A), groupId: 'group-a', hidden: false },
+          { ...keyAt(ID_B), hidden: false },
+        ],
+      },
+      positions: {
+        '4key': [
+          { ...keyAt(ID_A), groupId: 'group-a', hidden: false },
+          { ...keyAt(ID_B), hidden: false },
+        ],
+      },
+    });
+    api.commitGeneratedSemanticOps.mockImplementationOnce(async (generate) => {
+      const latest = documentFromStores();
+      latest.keyPositions = {
+        '4key': [
+          { ...keyAt(ID_A), hidden: true },
+          { ...keyAt(ID_B), groupId: 'group-a', hidden: false },
+        ],
+      } as never;
+      useKeyStore.setState({
+        canonicalPositions: structuredClone(latest.keyPositions),
+        positions: structuredClone(latest.keyPositions),
+      });
+
+      const ops = generate(latest);
+      expect(
+        useKeyStore.getState().canonicalPositions['4key'][0],
+      ).toMatchObject({ id: ID_A, hidden: true });
+      expect(ops).toEqual([
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_B,
+          patch: { hidden: true },
+        },
+      ]);
+      return {
+        document: latest,
+        opResults: [{ status: 'applied' }],
+      } as never;
+    });
+
+    await expect(setLayerGroupHidden('4key', 'group-a', true)).resolves.toBe(
+      true,
+    );
+  });
+
+  it('stable 그룹 4타입은 N patchElement를 한 generated commit으로 보낸다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'group-a', hidden: false }],
+      },
+      positions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'group-a', hidden: false }],
+      },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...keyAt('33333333-3333-4333-8333-333333333333'),
+            groupId: 'group-a',
+            hidden: false,
+          } as never,
+        ],
+      },
+    });
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          graphAt('44444444-4444-4444-8444-444444444444', {
+            groupId: 'group-a',
+            hidden: false,
+          }),
+        ],
+      },
+    });
+    useKnobItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...keyAt('55555555-5555-4555-8555-555555555555'),
+            groupId: 'group-a',
+            hidden: false,
+          } as never,
+        ],
+      },
+    });
+
+    await setLayerGroupHidden('4key', 'group-a', true);
+
+    expect(api.commitGeneratedSemanticOps).toHaveBeenCalledOnce();
+    const generate = api.commitGeneratedSemanticOps.mock.calls[0][0];
+    expect(generate(documentFromStores())).toEqual([
+      expect.objectContaining({ elementType: 'key', id: ID_A }),
+      expect.objectContaining({
+        elementType: 'stat',
+        id: '33333333-3333-4333-8333-333333333333',
+      }),
+      expect.objectContaining({
+        elementType: 'graph',
+        id: '44444444-4444-4444-8444-444444444444',
+      }),
+      expect.objectContaining({
+        elementType: 'knob',
+        id: '55555555-5555-4555-8555-555555555555',
+      }),
+    ]);
+  });
+
+  it('stable 그룹 helper는 slot synthetic 멤버를 만나면 whole fail-closed한다', async () => {
+    const stable = { ...keyAt(ID_A), groupId: 'group-a', hidden: false };
+    const synthetic = { ...keyAt(ID_B), groupId: 'group-a', hidden: false };
+    delete (synthetic as { id?: string }).id;
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [stable, synthetic] } as never,
+      positions: { '4key': [stable, synthetic] } as never,
+    });
+    const before = documentFromStores();
+    api.commitGeneratedSemanticOps.mockImplementationOnce(async (generate) => {
+      expect(generate(before)).toBeNull();
+      return null;
+    });
+
+    await expect(setLayerGroupHidden('4key', 'group-a', true)).resolves.toBe(
+      false,
+    );
+
+    expect(api.commitGeneratedSemanticOps).toHaveBeenCalledOnce();
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
+      false,
+    );
+    expect(useKeyStore.getState().canonicalPositions['4key'][1].hidden).toBe(
+      false,
+    );
+  });
+
+  it('그룹 visibility는 호출 시점 empty여도 slot 신규 멤버를 적용한다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [keyAt(ID_A)] },
+      positions: { '4key': [keyAt(ID_A)] },
+    });
+    const latest = documentFromStores();
+    latest.keyPositions = {
+      '4key': [{ ...keyAt(ID_A), groupId: 'group-a', hidden: false }],
+    } as never;
+    slotBase = () => latest;
+
+    await expect(setLayerGroupHidden('4key', 'group-a', true)).resolves.toBe(
+      true,
+    );
+
+    const generate = api.commitGeneratedSemanticOps.mock.calls[0][0];
+    expect(generate(latest)).toEqual([
+      expect.objectContaining({ id: ID_A, patch: { hidden: true } }),
+    ]);
+  });
+
+  it('그룹 visibility preflight 실패는 lastAck hidden을 보존하고 old-before로 되돌리지 않는다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'group-a', hidden: false }],
+      },
+      positions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'group-a', hidden: false }],
+      },
+    });
+    const latest = documentFromStores();
+    latest.keyPositions = {
+      '4key': [{ ...keyAt(ID_A), groupId: 'group-a', hidden: true }],
+    } as never;
+    api.lastAck = latest;
+    api.commitGeneratedSemanticOps.mockRejectedValueOnce(
+      new Error('preflight stale'),
+    );
+
+    await expect(setLayerGroupHidden('4key', 'group-a', true)).rejects.toThrow(
+      'preflight stale',
+    );
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
+      true,
+    );
+  });
+
+  it('synthetic group legacy는 idless 멤버도 즉시 eager 적용한다', async () => {
+    const idless = { ...keyAt(ID_A), groupId: 'group-a', hidden: false };
+    delete (idless as { id?: string }).id;
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [idless] } as never,
+      positions: { '4key': [idless] } as never,
+    });
+    let resolveCommit!: (value: EditorDocumentV1) => void;
+    api.commitGeneratedPatch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCommit = resolve;
+      }),
+    );
+
+    const pending = setLayerGroupHiddenLegacy('4key', 'group-a', true);
+    await vi.waitFor(() =>
+      expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
+        true,
+      ),
+    );
+    resolveCommit(documentFromStores());
+    await pending;
+  });
+
+  it('synthetic group legacy satisfied는 latest desired를 local store에 보존한다', async () => {
+    const idless = { ...keyAt(ID_A), groupId: 'group-a', hidden: false };
+    delete (idless as { id?: string }).id;
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [idless] } as never,
+      positions: { '4key': [idless] } as never,
+    });
+    api.commitGeneratedPatch.mockImplementationOnce(async (generate) => {
+      const latest = documentFromStores();
+      latest.keyPositions = {
+        '4key': [{ ...idless, hidden: true }],
+      } as never;
+      const patch = generate(latest);
+      expect(patch).toBeNull();
+      return latest;
+    });
+
+    await expect(
+      setLayerGroupHiddenLegacy('4key', 'group-a', true),
+    ).resolves.toBe(true);
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
+      true,
+    );
   });
 
   it('다중 정산 대상이 전부 사라졌으면 커밋하지 않는다', async () => {
