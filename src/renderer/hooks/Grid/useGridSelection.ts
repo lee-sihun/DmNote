@@ -34,6 +34,7 @@ import {
   buildNextLayerGroupName,
   buildLayerItemsForMode,
   applyZIndexToLayerOrder,
+  orderPastedItemsByFrozenZ,
 } from '@utils/layerGroupUtils';
 import { commitSelectedGeometryByIds } from '@src/renderer/editor/runtime/elementOps';
 import {
@@ -1295,16 +1296,19 @@ export function useGridSelection({
           .filter((item) => newIdSet.has(item.id))
           .map((item) => [item.id, item]),
       );
-      // 붙여넣기 블록 내부 순서는 동결 payload 순서 유지
-      const pastedOrdered = [
-        ...keysToAdd.map((entry) => entry.position.id!),
-        ...statsToAdd.map((entry) => entry.position.id!),
-        ...graphsToAdd.map((entry) => entry.position.id!),
-        ...knobsToAdd.map((entry) => entry.position.id!),
-        ...frozenPluginElements.map((element) => element.fullId),
-      ]
-        .map((id) => pastedById.get(id))
-        .filter((item): item is NonNullable<typeof item> => Boolean(item));
+      // 블록 내부는 원본의 상대 스택을 따른다 - payload는 타입별로 묶인
+      // 순서라 그대로 쓰면 복사본의 위아래가 뒤집힌다
+      const pastedOrdered = orderPastedItemsByFrozenZ(
+        [
+          ...keysToAdd.map((entry) => entry.position.id!),
+          ...statsToAdd.map((entry) => entry.position.id!),
+          ...graphsToAdd.map((entry) => entry.position.id!),
+          ...knobsToAdd.map((entry) => entry.position.id!),
+          ...frozenPluginElements.map((element) => element.fullId),
+        ]
+          .map((id) => pastedById.get(id))
+          .filter((item): item is NonNullable<typeof item> => Boolean(item)),
+      );
       let anchorIndex = 0;
       if (frozenAnchor?.groupId) {
         const index = existingItems.findIndex(

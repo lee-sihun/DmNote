@@ -413,6 +413,19 @@ export function buildLayerItemsForMode(
   return items;
 }
 
+/**
+ * 붙여넣기 블록의 스택 순서 결정. 배열 위치가 곧 최종 z이므로 원본의 상대
+ * 스택(zIndex 내림차순)을 따르고, 동률은 payload 순서로 안정 정렬한다
+ */
+export function orderPastedItemsByFrozenZ<T extends { zIndex: number }>(
+  items: readonly T[],
+): T[] {
+  return items
+    .map((item, order) => ({ item, order }))
+    .sort((a, b) => b.item.zIndex - a.item.zIndex || a.order - b.order)
+    .map((entry) => entry.item);
+}
+
 /** 선택 상태 기반으로 paste 앵커 위치 결정 (선택된 레이어 바로 위에 삽입) */
 export function findPasteAnchorIndex(
   orderedItems: LayerItemForOrder[],
