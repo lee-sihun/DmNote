@@ -454,10 +454,20 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         <PropertyRow label={t('keySetting.noteOffset') || '오프셋'}>
           <OptionalNumberInput
             value={keyPosition.noteOffsetX || undefined}
-            onChange={(value) =>
-              handleStyleChangeComplete('noteOffsetX', value)
-            }
-            onPreview={(value) => handleStylePreview('noteOffsetX', value)}
+            onChange={(value) => {
+              if (onStylePropertyCommit) {
+                onStylePropertyCommit({ noteOffsetX: value ?? null });
+                return;
+              }
+              handleStyleChangeComplete('noteOffsetX', value);
+            }}
+            onPreview={(value) => {
+              if (onStylePropertyPreview) {
+                onStylePropertyPreview({ noteOffsetX: value ?? null });
+                return;
+              }
+              handleStylePreview('noteOffsetX', value);
+            }}
             onCancel={() => editGestureController.cancel()}
             prefix="X"
             width={AXIS_FIELD_WIDTH}
@@ -470,10 +480,20 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           />
           <OptionalNumberInput
             value={keyPosition.noteOffsetY || undefined}
-            onChange={(value) =>
-              handleStyleChangeComplete('noteOffsetY', value)
-            }
-            onPreview={(value) => handleStylePreview('noteOffsetY', value)}
+            onChange={(value) => {
+              if (onStylePropertyCommit) {
+                onStylePropertyCommit({ noteOffsetY: value ?? null });
+                return;
+              }
+              handleStyleChangeComplete('noteOffsetY', value);
+            }}
+            onPreview={(value) => {
+              if (onStylePropertyPreview) {
+                onStylePropertyPreview({ noteOffsetY: value ?? null });
+                return;
+              }
+              handleStylePreview('noteOffsetY', value);
+            }}
             onCancel={() => editGestureController.cancel()}
             prefix="Y"
             width={AXIS_FIELD_WIDTH}
@@ -490,8 +510,20 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         <PropertyRow label={t('keySetting.noteWidth') || '노트 넓이'}>
           <OptionalNumberInput
             value={keyPosition.noteWidth}
-            onChange={(value) => handleStyleChangeComplete('noteWidth', value)}
-            onPreview={(value) => handleStylePreview('noteWidth', value)}
+            onChange={(value) => {
+              if (onStylePropertyCommit) {
+                onStylePropertyCommit({ noteWidth: value ?? null });
+                return;
+              }
+              handleStyleChangeComplete('noteWidth', value);
+            }}
+            onPreview={(value) => {
+              if (onStylePropertyPreview) {
+                onStylePropertyPreview({ noteWidth: value ?? null });
+                return;
+              }
+              handleStylePreview('noteWidth', value);
+            }}
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={1}
@@ -665,9 +697,15 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.default
             }
             onChange={(value) =>
-              handleStyleChangeComplete('noteBorderWidth', value)
+              onStylePropertyCommit
+                ? onStylePropertyCommit({ noteBorderWidth: value })
+                : handleStyleChangeComplete('noteBorderWidth', value)
             }
-            onPreview={(value) => handleStylePreview('noteBorderWidth', value)}
+            onPreview={(value) =>
+              onStylePropertyPreview
+                ? onStylePropertyPreview({ noteBorderWidth: value })
+                : handleStylePreview('noteBorderWidth', value)
+            }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
@@ -685,9 +723,15 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               NOTE_SETTINGS_CONSTRAINTS.borderRadius.default
             }
             onChange={(value) =>
-              handleStyleChangeComplete('noteBorderRadius', value)
+              onStylePropertyCommit
+                ? onStylePropertyCommit({ noteBorderRadius: value })
+                : handleStyleChangeComplete('noteBorderRadius', value)
             }
-            onPreview={(value) => handleStylePreview('noteBorderRadius', value)}
+            onPreview={(value) =>
+              onStylePropertyPreview
+                ? onStylePropertyPreview({ noteBorderRadius: value })
+                : handleStylePreview('noteBorderRadius', value)
+            }
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}

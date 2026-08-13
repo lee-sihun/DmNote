@@ -2543,6 +2543,69 @@ describe('elementOps', () => {
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
 
+  it('note numeric 5종은 nullable exact leaf와 key sibling을 보존한다', async () => {
+    const before = {
+      ...keyAt(ID_A),
+      noteOffsetX: 7.5,
+      noteOffsetY: -8.5,
+      noteWidth: 42.5,
+      noteBorderWidth: 2.5,
+      noteBorderRadius: 11.5,
+      noteColor: '#sentinel',
+      noteGlowSize: 17.5,
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [before] },
+      positions: { '4key': [before] },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    const patches = [
+      { noteOffsetX: null },
+      { noteOffsetY: 0 },
+      { noteWidth: null },
+      { noteBorderWidth: 3.5 },
+      { noteBorderRadius: 12.5 },
+    ] as const;
+
+    for (const patch of patches) {
+      await patchStylePropertyByTargets(
+        [{ elementType: 'key', id: ID_A }],
+        patch,
+        { gestureId: 'gesture-note-numeric' },
+      );
+    }
+
+    expect(api.commitSemanticOps).toHaveBeenCalledTimes(5);
+    expect(
+      api.commitSemanticOps.mock.calls.map(([ops]) => ops[0]?.patch),
+    ).toEqual(patches);
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      noteOffsetX: undefined,
+      noteOffsetY: 0,
+      noteWidth: undefined,
+      noteBorderWidth: 3.5,
+      noteBorderRadius: 12.5,
+      noteColor: '#sentinel',
+      noteGlowSize: 17.5,
+    });
+  });
+
+  it.each([
+    ['wrong type', 'stat', { noteOffsetX: 0 }],
+    ['offset range', 'key', { noteOffsetY: 500.1 }],
+    ['width zero', 'key', { noteWidth: 0 }],
+    ['border width range', 'key', { noteBorderWidth: 20.1 }],
+    ['border radius range', 'key', { noteBorderRadius: 0.9 }],
+  ] as const)(
+    'note numeric %s는 wire 전에 거절한다',
+    async (_label, elementType, patch) => {
+      await expect(
+        patchStylePropertyByTargets([{ elementType, id: ID_A }], patch),
+      ).resolves.toBe(false);
+      expect(api.commitSemanticOps).not.toHaveBeenCalled();
+    },
+  );
+
   it('displayText는 invalid target을 wire 전에 거절하고 편입 전 실패를 복원한다', async () => {
     await expect(
       patchStylePropertyByTargets(

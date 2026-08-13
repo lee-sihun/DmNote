@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
 import type {
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
@@ -215,6 +216,41 @@ describe('plugin element panel queue', () => {
       7,
     );
   });
+
+  it.each([
+    { noteOffsetX: 0 },
+    { noteOffsetY: null },
+    { noteWidth: null },
+    { noteBorderWidth: 2.5 },
+    { noteBorderRadius: 12.5 },
+  ] satisfies readonly EditorPreviewStylePropertyPatchV1[])(
+    'note numeric %j batch는 key-only exact literal을 공용 envelope로 보낸다',
+    async (patch) => {
+      mocks.sendPluginRpc.mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+      const targets = [
+        {
+          elementType: 'key' as const,
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ];
+
+      await expect(
+        actions.patchStylePropertyViaAuthority(
+          targets,
+          patch as EditorPreviewStylePropertyPatchV1,
+        ),
+      ).resolves.toBe(true);
+      expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+        'layers:patchProperty',
+        { targets, patch },
+        0,
+        7,
+      );
+    },
+  );
 
   it('native bounds는 exact 단일 축과 enqueue generation을 고정한다', async () => {
     const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -1369,6 +1405,36 @@ describe('plugin element panel queue', () => {
         },
       ],
       { noteGlowSize: 20.5 },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
+  it('note numeric outcome-unknown은 같은 nullable literal과 gesture를 한 번만 재전송한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchStylePropertyViaAuthority(
+      [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      { noteWidth: null },
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),

@@ -12048,6 +12048,209 @@ mod tests {
     }
 
     #[test]
+    fn note_numeric_batch_replays_raw_options_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-note-numeric-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get().document;
+        let ids = [
+            initial.key_positions["4key"][0].id.clone(),
+            initial.key_positions["4key"][1].id.clone(),
+            initial.key_positions["4key"][2].id.clone(),
+            initial.key_positions["4key"][3].id.clone(),
+            initial.key_positions["5key"][0].id.clone(),
+        ];
+        let setup = legacy_editor_commit(&store, &[EditorField::KeyPositions], |data| {
+            for position in data.key_positions.values_mut().flatten() {
+                position.note_color = crate::models::NoteColor::Solid("note-sibling".to_string());
+                position.note_glow_size = 17.5;
+            }
+            data.key_positions.get_mut("4key").unwrap()[0].note_offset_x = None;
+            data.key_positions.get_mut("4key").unwrap()[1].note_offset_y = Some(8.5);
+            data.key_positions.get_mut("4key").unwrap()[2].note_width = Some(31.5);
+            data.key_positions.get_mut("4key").unwrap()[3].note_border_width = None;
+            data.key_positions.get_mut("5key").unwrap()[0].note_border_radius = None;
+        })
+        .unwrap();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[0],
+                EditorElementPropertyPatchV1::NoteOffsetX(
+                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
+                        note_offset_x: Some(0.0),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[1],
+                EditorElementPropertyPatchV1::NoteOffsetY(
+                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
+                        note_offset_y: None,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[2],
+                EditorElementPropertyPatchV1::NoteWidth(
+                    crate::models::EditorNoteWidthPropertyPatchV1 { note_width: None },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[3],
+                EditorElementPropertyPatchV1::NoteBorderWidth(
+                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
+                        note_border_width: 0.0,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[4],
+                EditorElementPropertyPatchV1::NoteBorderRadius(
+                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
+                        note_border_radius: 4.0,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::NoteWidth(
+                    crate::models::EditorNoteWidthPropertyPatchV1 {
+                        note_width: Some(20.0),
+                    },
+                ),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(changed.result.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert_eq!(
+            changed.document.key_positions["4key"][0].note_offset_x,
+            Some(0.0)
+        );
+        assert_eq!(
+            changed.document.key_positions["4key"][1].note_offset_y,
+            None
+        );
+        assert_eq!(changed.document.key_positions["4key"][2].note_width, None);
+        assert_eq!(
+            changed.document.key_positions["4key"][3].note_border_width,
+            Some(0.0)
+        );
+        assert_eq!(
+            changed.document.key_positions["5key"][0].note_border_radius,
+            Some(4.0)
+        );
+        for position in changed.document.key_positions.values().flatten() {
+            assert_eq!(
+                position.note_color,
+                crate::models::NoteColor::Solid("note-sibling".to_string())
+            );
+            assert_eq!(position.note_glow_size, 17.5);
+        }
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &ids[0],
+            EditorElementPropertyPatchV1::NoteOffsetX(
+                crate::models::EditorNoteOffsetXPropertyPatchV1 {
+                    note_offset_x: None,
+                },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..5].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert_eq!(undone.key_positions["4key"][0].note_offset_x, None);
+        assert_eq!(undone.key_positions["4key"][1].note_offset_y, Some(8.5));
+        assert_eq!(undone.key_positions["4key"][2].note_width, Some(31.5));
+        assert_eq!(undone.key_positions["4key"][3].note_border_width, None);
+        assert_eq!(undone.key_positions["5key"][0].note_border_radius, None);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert_eq!(redone.key_positions["4key"][0].note_offset_x, Some(0.0));
+        assert_eq!(redone.key_positions["4key"][1].note_offset_y, None);
+        assert_eq!(redone.key_positions["4key"][2].note_width, None);
+        assert_eq!(redone.key_positions["4key"][3].note_border_width, Some(0.0));
+        assert_eq!(
+            redone.key_positions["5key"][0].note_border_radius,
+            Some(4.0)
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn note_literal_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-note-literal-history-test");
         std::fs::create_dir_all(&dir).unwrap();

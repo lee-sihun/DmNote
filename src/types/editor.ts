@@ -185,6 +185,11 @@ interface EditorElementPropertyValuesV1 {
   borderRadius: number;
   fontSize: number;
   noteGlowSize: number;
+  noteOffsetX: number | null;
+  noteOffsetY: number | null;
+  noteWidth: number | null;
+  noteBorderWidth: number;
+  noteBorderRadius: number;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
@@ -284,7 +289,14 @@ export type EditorNumericStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
 export type EditorPreviewStylePropertyPatchV1 =
   | EditorTextPropertyPatchV1
   | EditorNumericStylePropertyPatchV1
-  | EditorPropertyPatchUnionV1<'noteGlowSize'>;
+  | EditorPropertyPatchUnionV1<
+      | 'noteGlowSize'
+      | 'noteOffsetX'
+      | 'noteOffsetY'
+      | 'noteWidth'
+      | 'noteBorderWidth'
+      | 'noteBorderRadius'
+    >;
 
 export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteEffectEnabled'
@@ -1181,6 +1193,43 @@ export function assertEditorOpsV1(
           Number.isFinite(op.patch.noteGlowSize) &&
           op.patch.noteGlowSize >= 0 &&
           op.patch.noteGlowSize <= 50) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteOffsetX' &&
+          op.elementType === 'key' &&
+          (op.patch.noteOffsetX === null ||
+            (typeof op.patch.noteOffsetX === 'number' &&
+              Number.isFinite(op.patch.noteOffsetX) &&
+              op.patch.noteOffsetX >= -500 &&
+              op.patch.noteOffsetX <= 500))) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteOffsetY' &&
+          op.elementType === 'key' &&
+          (op.patch.noteOffsetY === null ||
+            (typeof op.patch.noteOffsetY === 'number' &&
+              Number.isFinite(op.patch.noteOffsetY) &&
+              op.patch.noteOffsetY >= -500 &&
+              op.patch.noteOffsetY <= 500))) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteWidth' &&
+          op.elementType === 'key' &&
+          (op.patch.noteWidth === null ||
+            (typeof op.patch.noteWidth === 'number' &&
+              Number.isFinite(op.patch.noteWidth) &&
+              op.patch.noteWidth > 0))) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteBorderWidth' &&
+          op.elementType === 'key' &&
+          typeof op.patch.noteBorderWidth === 'number' &&
+          Number.isFinite(op.patch.noteBorderWidth) &&
+          op.patch.noteBorderWidth >= 0 &&
+          op.patch.noteBorderWidth <= 20) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteBorderRadius' &&
+          op.elementType === 'key' &&
+          typeof op.patch.noteBorderRadius === 'number' &&
+          Number.isFinite(op.patch.noteBorderRadius) &&
+          op.patch.noteBorderRadius >= 1 &&
+          op.patch.noteBorderRadius <= 100) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'soundEnabled' &&
           op.elementType === 'key' &&

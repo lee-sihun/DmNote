@@ -20,6 +20,15 @@ const captured = vi.hoisted(() => ({
     min?: number;
     max?: number;
   }>,
+  optionalNumbers: [] as Array<{
+    value?: number;
+    prefix?: string;
+    suffix?: string;
+    min?: number;
+    max?: number;
+    onChange: (value?: number) => void;
+    onPreview?: (value?: number) => void;
+  }>,
   dropdowns: [] as Array<{
     value: string;
     onChange: (value: string) => void;
@@ -117,7 +126,10 @@ vi.mock('../PropertyInputs', async (importOriginal) => {
       );
       return null;
     },
-    OptionalNumberInput: () => null,
+    OptionalNumberInput: (props: (typeof captured.optionalNumbers)[number]) => {
+      captured.optionalNumbers.push(props);
+      return null;
+    },
     TextInput: (props: (typeof captured.texts)[number]) => {
       captured.texts.push(props);
       return <actual.TextInput {...props} />;
@@ -244,6 +256,7 @@ describe('single geometry input bindings', () => {
     );
     captured.numbers.clear();
     captured.numberList.length = 0;
+    captured.optionalNumbers.length = 0;
     captured.dropdowns.length = 0;
     captured.checkboxes.length = 0;
     captured.fontStyle = null;
@@ -328,6 +341,93 @@ describe('single geometry input bindings', () => {
     expect(commit).toHaveBeenCalledWith({ noteGlowSize: 21.5 });
     expect(legacyPreview).not.toHaveBeenCalled();
     expect(legacyCommit).not.toHaveBeenCalled();
+  });
+
+  it('single NoteTab note numeric은 0 placeholder와 explicit 0/null wire를 구분한다', () => {
+    const preview = vi.fn();
+    const commit = vi.fn();
+    act(() => {
+      root.render(
+        <NoteTabContent
+          keyIndex={0}
+          keyPosition={{
+            ...createDefaultKeyPosition(),
+            noteOffsetX: 0,
+            noteOffsetY: 0,
+            noteWidth: 40,
+          }}
+          onKeyUpdate={vi.fn()}
+          onKeyPreview={vi.fn()}
+          onStylePropertyPreview={preview}
+          onStylePropertyCommit={commit}
+          t={(key) => key}
+        />,
+      );
+    });
+    const offsetX = captured.optionalNumbers.find(
+      (input) => input.prefix === 'X',
+    );
+    const offsetY = captured.optionalNumbers.find(
+      (input) => input.prefix === 'Y',
+    );
+    const width = captured.optionalNumbers.find(
+      (input) => input.suffix === 'px' && input.min === 1,
+    );
+    expect(offsetX?.value).toBeUndefined();
+    expect(offsetY?.value).toBeUndefined();
+
+    act(() => offsetX?.onPreview?.(0));
+    act(() => offsetX?.onChange(0));
+    act(() => offsetY?.onPreview?.(undefined));
+    act(() => offsetY?.onChange(undefined));
+    act(() => width?.onChange(undefined));
+
+    expect(preview.mock.calls).toEqual([
+      [{ noteOffsetX: 0 }],
+      [{ noteOffsetY: null }],
+    ]);
+    expect(commit.mock.calls).toEqual([
+      [{ noteOffsetX: 0 }],
+      [{ noteOffsetY: null }],
+      [{ noteWidth: null }],
+    ]);
+  });
+
+  it('single NoteTab note border numeric은 exact preview와 commit을 사용한다', () => {
+    const preview = vi.fn();
+    const commit = vi.fn();
+    act(() => {
+      root.render(
+        <NoteTabContent
+          keyIndex={0}
+          keyPosition={createDefaultKeyPosition()}
+          onKeyUpdate={vi.fn()}
+          onKeyPreview={vi.fn()}
+          onStylePropertyPreview={preview}
+          onStylePropertyCommit={commit}
+          t={(key) => key}
+        />,
+      );
+    });
+    const borderWidth = captured.numberList.find(
+      (input) => input.min === 0 && input.max === 20,
+    );
+    const borderRadius = captured.numberList.find(
+      (input) => input.min === 1 && input.max === 100,
+    );
+    act(() => borderWidth?.onPreview?.(2.5));
+    act(() => borderWidth?.onChange(3.5));
+    act(() => borderRadius?.onPreview?.(12.5));
+    act(() => borderRadius?.onChange(13.5));
+
+    expect(preview.mock.calls).toEqual([
+      [{ noteBorderWidth: 2.5 }],
+      [{ noteBorderRadius: 12.5 }],
+    ]);
+    expect(commit.mock.calls).toEqual([
+      [{ noteBorderWidth: 3.5 }],
+      [{ noteBorderRadius: 13.5 }],
+    ]);
   });
 
   it('single NoteTab noteGlowSize callback이 없으면 기존 preview와 whole writer다', () => {
@@ -2055,6 +2155,79 @@ describe('single geometry input bindings', () => {
         index: 0,
         noteGlowSize: 21.5,
       });
+    },
+  );
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', ''],
+  ] as const)(
+    'SingleKeyStatPanel %s note numeric은 actual NoteTab에서 whole legacy를 유지한다',
+    (_label, id) => {
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      act(() => {
+        root.render(
+          <SingleKeyStatPanel
+            setPanelElement={vi.fn()}
+            isSingleStat={false}
+            isSingleKey
+            singleKeyIndex={0}
+            singleStatIndex={null}
+            singleKeyPosition={{ ...createDefaultKeyPosition(), id }}
+            singleStatPosition={null}
+            singleKeyCode="A"
+            singleKeySlot="A"
+            singleKeyInfo={null}
+            selectedKeyType="4key"
+            isRenaming={false}
+            renameInputRef={createRef<HTMLInputElement>()}
+            renameValue=""
+            setRenameValue={vi.fn()}
+            renameCancelledRef={{ current: false }}
+            handleRenameCommit={vi.fn()}
+            handleRenameCancel={vi.fn()}
+            handleRenameStart={vi.fn()}
+            activeTab="note"
+            setActiveTab={vi.fn()}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacyCommit}
+            onKeyPreview={legacyPreview}
+            onKeyMappingChange={vi.fn()}
+            handleStatUpdate={vi.fn()}
+            handleStatPreview={vi.fn()}
+            localState={{}}
+            setLocalState={vi.fn()}
+            handleSizeBlur={vi.fn()}
+            showImagePicker={false}
+            setShowImagePicker={vi.fn()}
+            imageButtonRef={createRef<HTMLButtonElement>()}
+            panelElement={null}
+            useCustomCSS={false}
+            singleScrollRefFor={() => vi.fn()}
+            t={(key) => key}
+          />,
+        );
+      });
+      const offsetX = captured.optionalNumbers.find(
+        (input) => input.prefix === 'X',
+      );
+      const borderRadius = captured.numberList.find(
+        (input) => input.min === 1 && input.max === 100,
+      );
+      act(() => offsetX?.onPreview?.(0));
+      act(() => offsetX?.onChange(undefined));
+      act(() => borderRadius?.onPreview?.(12.5));
+      act(() => borderRadius?.onChange(13.5));
+
+      expect(legacyPreview.mock.calls).toEqual([
+        [0, { noteOffsetX: 0 }],
+        [0, { noteBorderRadius: 12.5 }],
+      ]);
+      expect(legacyCommit.mock.calls).toEqual([
+        [{ index: 0, noteOffsetX: undefined }],
+        [{ index: 0, noteBorderRadius: 13.5 }],
+      ]);
     },
   );
 

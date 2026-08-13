@@ -255,6 +255,11 @@ pub enum EditorElementPropertyPatchV1 {
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
     NoteGlowEnabled(EditorNoteGlowEnabledPropertyPatchV1),
     NoteGlowSize(EditorNoteGlowSizePropertyPatchV1),
+    NoteOffsetX(EditorNoteOffsetXPropertyPatchV1),
+    NoteOffsetY(EditorNoteOffsetYPropertyPatchV1),
+    NoteWidth(EditorNoteWidthPropertyPatchV1),
+    NoteBorderWidth(EditorNoteBorderWidthPropertyPatchV1),
+    NoteBorderRadius(EditorNoteBorderRadiusPropertyPatchV1),
     NoteAutoYCorrection(EditorNoteAutoYCorrectionPropertyPatchV1),
     NoteAlignment(EditorNoteAlignmentPropertyPatchV1),
     NoteBorderSide(EditorNoteBorderSidePropertyPatchV1),
@@ -584,6 +589,39 @@ pub struct EditorNoteGlowSizePropertyPatchV1 {
     pub note_glow_size: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteOffsetXPropertyPatchV1 {
+    #[serde(deserialize_with = "deserialize_required_nullable_f64")]
+    pub note_offset_x: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteOffsetYPropertyPatchV1 {
+    #[serde(deserialize_with = "deserialize_required_nullable_f64")]
+    pub note_offset_y: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteWidthPropertyPatchV1 {
+    #[serde(deserialize_with = "deserialize_required_nullable_f64")]
+    pub note_width: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteBorderWidthPropertyPatchV1 {
+    pub note_border_width: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteBorderRadiusPropertyPatchV1 {
+    pub note_border_radius: f64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorNoteAutoYCorrectionPropertyPatchV1 {
@@ -750,6 +788,13 @@ where
     D: serde::Deserializer<'de>,
 {
     Option::<String>::deserialize(deserializer)
+}
+
+fn deserialize_required_nullable_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<f64>::deserialize(deserializer)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

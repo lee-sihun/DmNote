@@ -53,6 +53,14 @@ const captured = vi.hoisted(() => ({
     onPreview?: (value: number) => void;
     onChange: (value: number) => void;
   }>,
+  optionalNumbers: [] as Array<{
+    value?: number;
+    prefix?: string;
+    suffix?: string;
+    min?: number;
+    max?: number;
+    onChange: (value?: number) => void;
+  }>,
   fontStyles: [] as Array<{
     onBoldChange: (value: boolean) => void;
     onItalicChange: (value: boolean) => void;
@@ -200,6 +208,12 @@ vi.mock(
         onChange: (value: number) => void;
       }) => {
         captured.numbers.push(props);
+        return null;
+      },
+      OptionalNumberInput: (
+        props: (typeof captured.optionalNumbers)[number],
+      ) => {
+        captured.optionalNumbers.push(props);
         return null;
       },
       FontStyleToggle: (props: {
@@ -461,6 +475,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     captured.checkboxes.length = 0;
     captured.dropdowns.length = 0;
     captured.numbers.length = 0;
+    captured.optionalNumbers.length = 0;
     captured.fontStyles.length = 0;
     selectKey(ID_A);
     host = document.createElement('div');
@@ -655,6 +670,78 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     },
   );
 
+  it.each(['main', 'panel'] as const)(
+    '%s batch note numeric은 latest key에 nullable exact leaf를 gesture 없이 commit한다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const keys = [
+        { ...keyAt(ID_A), noteOffsetX: 0, noteOffsetY: 0 },
+        { ...keyAt(ID_B), noteOffsetX: 0, noteOffsetY: 0 },
+      ];
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        canonicalPositions: { '4key': keys },
+        positions: { '4key': keys },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id: ID_A, index: 0 }],
+      });
+      const legacy = vi.fn();
+      renderNotePanel(legacy);
+      act(() => {
+        useGridSelectionStore.setState({
+          selectedElements: [{ type: 'key', id: ID_B, index: 1 }],
+        });
+      });
+      renderNotePanel(legacy);
+      const offsetX = captured.optionalNumbers
+        .filter((input) => input.prefix === 'X')
+        .at(-1);
+      const offsetY = captured.optionalNumbers
+        .filter((input) => input.prefix === 'Y')
+        .at(-1);
+      const width = captured.optionalNumbers
+        .filter((input) => input.suffix === 'px' && input.min === 1)
+        .at(-1);
+      const borderWidth = captured.numbers
+        .filter((input) => input.min === 0 && input.max === 20)
+        .at(-1);
+      const borderRadius = captured.numbers
+        .filter((input) => input.min === 1 && input.max === 100)
+        .at(-1);
+      expect(offsetX?.value).toBeUndefined();
+      act(() => offsetX?.onChange(0));
+      act(() => offsetY?.onChange(undefined));
+      act(() => width?.onChange(55.5));
+      act(() => borderWidth?.onChange(2.5));
+      act(() => borderRadius?.onChange(18.5));
+
+      const writer =
+        windowType === 'panel'
+          ? patches.patchDisplayTextViaAuthority
+          : patches.patchDisplayTextByTargets;
+      const target = [{ elementType: 'key', id: ID_B }];
+      const patchesInOrder = [
+        { noteOffsetX: 0 },
+        { noteOffsetY: null },
+        { noteWidth: 55.5 },
+        { noteBorderWidth: 2.5 },
+        { noteBorderRadius: 18.5 },
+      ];
+      expect(writer).toHaveBeenCalledTimes(5);
+      for (const [index, patch] of patchesInOrder.entries()) {
+        expect(writer.mock.calls[index]).toEqual(
+          windowType === 'panel'
+            ? [target, patch, undefined]
+            : [target, patch, { gestureId: undefined }],
+        );
+      }
+      expect(gestures.preview).not.toHaveBeenCalled();
+      expect(gestures.settleCommit).not.toHaveBeenCalled();
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     ['synthetic', 'key-0'],
     ['empty', ''],
@@ -680,6 +767,43 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       act(() => glow?.onChange(20.5));
 
       expect(legacy).toHaveBeenCalledWith('noteGlowSize', 20.5);
+      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
+      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', ''],
+  ] as const)(
+    'batch note numeric relevant %s key는 whole legacy다',
+    (_label, id) => {
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        canonicalPositions: { '4key': [keyAt(id)] },
+        positions: { '4key': [keyAt(id)] },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id, index: 0 },
+          { type: 'graph', id: 'graph-0', index: 0 },
+        ],
+      });
+      const legacy = vi.fn();
+      renderNotePanel(legacy);
+      const offset = captured.optionalNumbers
+        .filter((input) => input.prefix === 'X')
+        .at(-1);
+      const radius = captured.numbers
+        .filter((input) => input.min === 1 && input.max === 100)
+        .at(-1);
+      act(() => offset?.onChange(undefined));
+      act(() => radius?.onChange(18.5));
+
+      expect(legacy.mock.calls).toEqual([
+        ['noteOffsetX', undefined],
+        ['noteBorderRadius', 18.5],
+      ]);
       expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
       expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
     },

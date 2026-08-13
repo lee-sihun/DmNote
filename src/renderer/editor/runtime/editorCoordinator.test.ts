@@ -4216,6 +4216,55 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('note numeric projection은 nullable clear와 0을 구분하고 siblings를 보존한다', async () => {
+    const ids = Array.from(
+      { length: 5 },
+      (_, index) => `00000000-0000-4000-8000-0000000001${index}`,
+    );
+    const base = makeDocument();
+    base.keyPositions = {
+      '4key': ids.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        noteOffsetX: 7.5,
+        noteOffsetY: -8.5,
+        noteWidth: 42.5,
+        noteBorderWidth: 2.5,
+        noteBorderRadius: 11.5,
+        noteColor: '#sentinel',
+        noteGlowSize: 17.5,
+      })),
+    };
+    base.keys = { '4key': ids.map(() => 'A') };
+    const patches = [
+      { noteOffsetX: null },
+      { noteOffsetY: 0 },
+      { noteWidth: null },
+      { noteBorderWidth: 3.5 },
+      { noteBorderRadius: 12.5 },
+    ] as const;
+    const ops: EditorOpV1[] = patches.map((patch, index) => ({
+      kind: 'patchElement',
+      elementType: 'key',
+      id: ids[index],
+      patch,
+    }));
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
+
+    expect(outcome.opResults).toEqual(ops.map(() => ({ status: 'applied' })));
+    expect(outcome.document.keyPositions['4key']).toMatchObject([
+      { noteOffsetX: undefined, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteOffsetY: 0, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteWidth: undefined, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteBorderWidth: 3.5, noteColor: '#sentinel', noteGlowSize: 17.5 },
+      { noteBorderRadius: 12.5, noteColor: '#sentinel', noteGlowSize: 17.5 },
+    ]);
+    harness.coordinator.stop();
+  });
+
   it('setKeySlot은 최신 paired ID index의 slot만 바꾼다', async () => {
     const id = '00000000-0000-4000-8000-000000000087';
     const otherId = '00000000-0000-4000-8000-000000000086';

@@ -838,6 +838,11 @@ pub(crate) fn prepare_editor_ops_transition(
                     | EditorElementPropertyPatchV1::NoteEffectEnabled(_)
                     | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
                     | EditorElementPropertyPatchV1::NoteGlowSize(_)
+                    | EditorElementPropertyPatchV1::NoteOffsetX(_)
+                    | EditorElementPropertyPatchV1::NoteOffsetY(_)
+                    | EditorElementPropertyPatchV1::NoteWidth(_)
+                    | EditorElementPropertyPatchV1::NoteBorderWidth(_)
+                    | EditorElementPropertyPatchV1::NoteBorderRadius(_)
                     | EditorElementPropertyPatchV1::NoteAutoYCorrection(_)
                     | EditorElementPropertyPatchV1::NoteAlignment(_)
                     | EditorElementPropertyPatchV1::NoteBorderSide(_)
@@ -863,6 +868,67 @@ pub(crate) fn prepare_editor_ops_transition(
                             "NOTE_GLOW_SIZE_OUT_OF_RANGE",
                             format!(
                                 "editor op {op_index} note glow size must be finite and between 0 and 50"
+                            ),
+                        ));
+                    }
+                }
+                if let EditorElementPropertyPatchV1::NoteOffsetX(patch) = patch {
+                    if patch.note_offset_x.is_some_and(|value| {
+                        !value.is_finite() || !(-500.0..=500.0).contains(&value)
+                    }) {
+                        return Err(EditorCommitError::validation(
+                            "NOTE_OFFSET_X_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} note offset X must be null or finite and between -500 and 500"
+                            ),
+                        ));
+                    }
+                }
+                if let EditorElementPropertyPatchV1::NoteOffsetY(patch) = patch {
+                    if patch.note_offset_y.is_some_and(|value| {
+                        !value.is_finite() || !(-500.0..=500.0).contains(&value)
+                    }) {
+                        return Err(EditorCommitError::validation(
+                            "NOTE_OFFSET_Y_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} note offset Y must be null or finite and between -500 and 500"
+                            ),
+                        ));
+                    }
+                }
+                if let EditorElementPropertyPatchV1::NoteWidth(patch) = patch {
+                    if patch
+                        .note_width
+                        .is_some_and(|value| !value.is_finite() || value <= 0.0)
+                    {
+                        return Err(EditorCommitError::validation(
+                            "NOTE_WIDTH_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} note width must be null or a positive finite number"
+                            ),
+                        ));
+                    }
+                }
+                if let EditorElementPropertyPatchV1::NoteBorderWidth(patch) = patch {
+                    if !patch.note_border_width.is_finite()
+                        || !(0.0..=20.0).contains(&patch.note_border_width)
+                    {
+                        return Err(EditorCommitError::validation(
+                            "NOTE_BORDER_WIDTH_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} note border width must be finite and between 0 and 20"
+                            ),
+                        ));
+                    }
+                }
+                if let EditorElementPropertyPatchV1::NoteBorderRadius(patch) = patch {
+                    if !patch.note_border_radius.is_finite()
+                        || !(1.0..=100.0).contains(&patch.note_border_radius)
+                    {
+                        return Err(EditorCommitError::validation(
+                            "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} note border radius must be finite and between 1 and 100"
                             ),
                         ));
                     }
@@ -1511,6 +1577,51 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.note_glow_size = patch.note_glow_size;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteOffsetX(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_offset_x == patch.note_offset_x {
+                            false
+                        } else {
+                            position.note_offset_x = patch.note_offset_x;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteOffsetY(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_offset_y == patch.note_offset_y {
+                            false
+                        } else {
+                            position.note_offset_y = patch.note_offset_y;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteWidth(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_width == patch.note_width {
+                            false
+                        } else {
+                            position.note_width = patch.note_width;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteBorderWidth(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_border_width == Some(patch.note_border_width) {
+                            false
+                        } else {
+                            position.note_border_width = Some(patch.note_border_width);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteBorderRadius(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_border_radius == Some(patch.note_border_radius) {
+                            false
+                        } else {
+                            position.note_border_radius = Some(patch.note_border_radius);
                             true
                         }
                     }
@@ -6135,6 +6246,331 @@ mod tests {
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
             assert_eq!(store.key_positions["4key"][0], original);
+        }
+    }
+
+    #[test]
+    fn note_numeric_patches_preserve_raw_options_bounds_and_siblings() {
+        let mut store = base_store();
+        let ids = [
+            store.key_positions["4key"][0].id.clone(),
+            store.key_positions["4key"][1].id.clone(),
+            store.key_positions["4key"][2].id.clone(),
+            store.key_positions["4key"][3].id.clone(),
+            store.key_positions["5key"][0].id.clone(),
+        ];
+        for position in store.key_positions.values_mut().flatten() {
+            position.note_color = crate::models::NoteColor::Solid("note-sibling".to_string());
+            position.note_glow_size = 17.5;
+            position.note_glow_opacity = 63;
+        }
+        store.key_positions.get_mut("4key").unwrap()[0].note_offset_x = Some(7.5);
+        store.key_positions.get_mut("4key").unwrap()[1].note_offset_y = None;
+        store.key_positions.get_mut("4key").unwrap()[2].note_width = Some(31.5);
+        store.key_positions.get_mut("4key").unwrap()[3].note_border_width = None;
+        store.key_positions.get_mut("5key").unwrap()[0].note_border_radius = None;
+        let original = store.clone();
+
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[0],
+                EditorElementPropertyPatchV1::NoteOffsetX(
+                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
+                        note_offset_x: None,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[1],
+                EditorElementPropertyPatchV1::NoteOffsetY(
+                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
+                        note_offset_y: Some(-12.5),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[2],
+                EditorElementPropertyPatchV1::NoteWidth(
+                    crate::models::EditorNoteWidthPropertyPatchV1 { note_width: None },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[3],
+                EditorElementPropertyPatchV1::NoteBorderWidth(
+                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
+                        note_border_width: 0.0,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[4],
+                EditorElementPropertyPatchV1::NoteBorderRadius(
+                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
+                        note_border_radius: 4.0,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::NoteWidth(
+                    crate::models::EditorNoteWidthPropertyPatchV1 {
+                        note_width: Some(20.0),
+                    },
+                ),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let mut expected = original.clone();
+        expected.key_positions.get_mut("4key").unwrap()[0].note_offset_x = None;
+        expected.key_positions.get_mut("4key").unwrap()[1].note_offset_y = Some(-12.5);
+        expected.key_positions.get_mut("4key").unwrap()[2].note_width = None;
+        expected.key_positions.get_mut("4key").unwrap()[3].note_border_width = Some(0.0);
+        expected.key_positions.get_mut("5key").unwrap()[0].note_border_radius = Some(4.0);
+        assert_eq!(transition.scratch, expected);
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let offset_zero = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[1],
+                EditorElementPropertyPatchV1::NoteOffsetY(
+                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
+                        note_offset_y: Some(0.0),
+                    },
+                ),
+            )],
+        )
+        .unwrap();
+        assert_eq!(
+            offset_zero.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert_eq!(
+            offset_zero.candidate.key_positions["4key"][1].note_offset_y,
+            Some(0.0)
+        );
+
+        let boundary_ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[0],
+                EditorElementPropertyPatchV1::NoteOffsetX(
+                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
+                        note_offset_x: Some(-500.0),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[1],
+                EditorElementPropertyPatchV1::NoteOffsetY(
+                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
+                        note_offset_y: Some(500.0),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[2],
+                EditorElementPropertyPatchV1::NoteWidth(
+                    crate::models::EditorNoteWidthPropertyPatchV1 {
+                        note_width: Some(f64::MIN_POSITIVE),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[3],
+                EditorElementPropertyPatchV1::NoteBorderWidth(
+                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
+                        note_border_width: 20.0,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[4],
+                EditorElementPropertyPatchV1::NoteBorderRadius(
+                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
+                        note_border_radius: 100.0,
+                    },
+                ),
+            ),
+        ];
+        prepare_editor_ops_transition(&store, &boundary_ops).unwrap();
+        let lower_radius = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &ids[4],
+                EditorElementPropertyPatchV1::NoteBorderRadius(
+                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
+                        note_border_radius: 1.0,
+                    },
+                ),
+            )],
+        )
+        .unwrap();
+        assert_eq!(
+            lower_radius.candidate.key_positions["5key"][0].note_border_radius,
+            Some(1.0)
+        );
+
+        let invalid_patches = [
+            (
+                EditorElementPropertyPatchV1::NoteOffsetX(
+                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
+                        note_offset_x: Some(-500.1),
+                    },
+                ),
+                "NOTE_OFFSET_X_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::NoteOffsetY(
+                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
+                        note_offset_y: Some(500.1),
+                    },
+                ),
+                "NOTE_OFFSET_Y_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::NoteOffsetY(
+                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
+                        note_offset_y: Some(f64::INFINITY),
+                    },
+                ),
+                "NOTE_OFFSET_Y_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::NoteWidth(
+                    crate::models::EditorNoteWidthPropertyPatchV1 {
+                        note_width: Some(0.0),
+                    },
+                ),
+                "NOTE_WIDTH_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::NoteWidth(
+                    crate::models::EditorNoteWidthPropertyPatchV1 {
+                        note_width: Some(f64::NAN),
+                    },
+                ),
+                "NOTE_WIDTH_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::NoteBorderWidth(
+                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
+                        note_border_width: -0.1,
+                    },
+                ),
+                "NOTE_BORDER_WIDTH_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::NoteBorderWidth(
+                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
+                        note_border_width: 20.1,
+                    },
+                ),
+                "NOTE_BORDER_WIDTH_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::NoteBorderRadius(
+                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
+                        note_border_radius: 0.9,
+                    },
+                ),
+                "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::NoteBorderRadius(
+                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
+                        note_border_radius: 100.1,
+                    },
+                ),
+                "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
+            ),
+        ];
+        for (patch, code) in invalid_patches {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        EditorElementTypeV1::Key,
+                        uuid::Uuid::new_v4().to_string(),
+                        patch,
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(code));
+            assert_eq!(store, original);
+        }
+
+        for element_type in [
+            EditorElementTypeV1::Stat,
+            EditorElementTypeV1::Graph,
+            EditorElementTypeV1::Knob,
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        EditorElementPropertyPatchV1::NoteWidth(
+                            crate::models::EditorNoteWidthPropertyPatchV1 {
+                                note_width: Some(20.0),
+                            },
+                        ),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store, original);
         }
     }
 

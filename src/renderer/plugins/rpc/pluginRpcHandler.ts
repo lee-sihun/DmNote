@@ -158,6 +158,59 @@ const isCanonicalGestureId = (value: unknown): value is string =>
   new TextEncoder().encode(value).length <= MAX_GESTURE_ID_BYTES &&
   CANONICAL_UUID_PATTERN.test(value);
 
+const parseNoteNumericStylePropertyPatch = (
+  patch: Record<string, unknown>,
+): EditorPreviewStylePropertyPatchV1 | null => {
+  if (
+    hasExactKeys(patch, ['noteOffsetX']) &&
+    (patch.noteOffsetX === null ||
+      (typeof patch.noteOffsetX === 'number' &&
+        Number.isFinite(patch.noteOffsetX) &&
+        patch.noteOffsetX >= -500 &&
+        patch.noteOffsetX <= 500))
+  ) {
+    return { noteOffsetX: patch.noteOffsetX as number | null };
+  }
+  if (
+    hasExactKeys(patch, ['noteOffsetY']) &&
+    (patch.noteOffsetY === null ||
+      (typeof patch.noteOffsetY === 'number' &&
+        Number.isFinite(patch.noteOffsetY) &&
+        patch.noteOffsetY >= -500 &&
+        patch.noteOffsetY <= 500))
+  ) {
+    return { noteOffsetY: patch.noteOffsetY as number | null };
+  }
+  if (
+    hasExactKeys(patch, ['noteWidth']) &&
+    (patch.noteWidth === null ||
+      (typeof patch.noteWidth === 'number' &&
+        Number.isFinite(patch.noteWidth) &&
+        patch.noteWidth > 0))
+  ) {
+    return { noteWidth: patch.noteWidth as number | null };
+  }
+  if (
+    hasExactKeys(patch, ['noteBorderWidth']) &&
+    typeof patch.noteBorderWidth === 'number' &&
+    Number.isFinite(patch.noteBorderWidth) &&
+    patch.noteBorderWidth >= 0 &&
+    patch.noteBorderWidth <= 20
+  ) {
+    return { noteBorderWidth: patch.noteBorderWidth };
+  }
+  if (
+    hasExactKeys(patch, ['noteBorderRadius']) &&
+    typeof patch.noteBorderRadius === 'number' &&
+    Number.isFinite(patch.noteBorderRadius) &&
+    patch.noteBorderRadius >= 1 &&
+    patch.noteBorderRadius <= 100
+  ) {
+    return { noteBorderRadius: patch.noteBorderRadius };
+  }
+  return null;
+};
+
 const parseCounterAnimationPresetIntent = (
   value: unknown,
 ): EditorCounterAnimationPresetIntentV1 | null => {
@@ -347,6 +400,7 @@ const parseNativeLayerPropertyTarget = (
   const counterAnimationPreset = parseCounterAnimationPresetIntent(
     patch.counterAnimationPreset,
   );
+  const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
   const patchValid =
     (hasExactKeys(patch, ['hidden']) && typeof patch.hidden === 'boolean') ||
     (hasExactKeys(patch, ['layerName']) &&
@@ -394,6 +448,7 @@ const parseNativeLayerPropertyTarget = (
       Number.isFinite(patch.noteGlowSize) &&
       patch.noteGlowSize >= 0 &&
       patch.noteGlowSize <= 50) ||
+    (noteNumericStylePatch !== null && target.elementType === 'key') ||
     (hasExactKeys(patch, ['soundEnabled']) &&
       target.elementType === 'key' &&
       typeof patch.soundEnabled === 'boolean') ||
@@ -863,6 +918,7 @@ const parseNativeLayerPropertyRequest = (
     hasExactKeys(patch, ['fontFamily']) && typeof patch.fontFamily === 'string'
       ? { fontFamily: patch.fontFamily }
       : null;
+  const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
   const stylePropertyPatch: EditorPreviewStylePropertyPatchV1 | null =
     hasExactKeys(patch, ['displayText']) &&
     typeof patch.displayText === 'string'
@@ -894,6 +950,8 @@ const parseNativeLayerPropertyRequest = (
         patch.noteGlowSize >= 0 &&
         patch.noteGlowSize <= 50
       ? { noteGlowSize: patch.noteGlowSize }
+      : noteNumericStylePatch !== null
+      ? noteNumericStylePatch
       : null;
   const inactiveImage =
     hasExactKeys(patch, ['inactiveImage']) &&
@@ -1124,6 +1182,13 @@ const parseNativeLayerPropertyRequest = (
         target.elementType !== 'knob') ||
       (stylePropertyPatch !== null &&
         'noteGlowSize' in stylePropertyPatch &&
+        target.elementType !== 'key') ||
+      (stylePropertyPatch !== null &&
+        ('noteOffsetX' in stylePropertyPatch ||
+          'noteOffsetY' in stylePropertyPatch ||
+          'noteWidth' in stylePropertyPatch ||
+          'noteBorderWidth' in stylePropertyPatch ||
+          'noteBorderRadius' in stylePropertyPatch) &&
         target.elementType !== 'key') ||
       (elementType !== null &&
         elementType !== 'active-capable' &&

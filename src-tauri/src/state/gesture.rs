@@ -804,6 +804,51 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteOffsetX(
+                    crate::models::EditorNoteOffsetXPropertyPatchV1 {
+                        note_offset_x: Some(0.0),
+                    },
+                ),
+                serde_json::json!({ "noteOffsetX": 0.0 }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteOffsetY(
+                    crate::models::EditorNoteOffsetYPropertyPatchV1 {
+                        note_offset_y: None,
+                    },
+                ),
+                serde_json::json!({ "noteOffsetY": null }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteWidth(
+                    crate::models::EditorNoteWidthPropertyPatchV1 {
+                        note_width: Some(32.5),
+                    },
+                ),
+                serde_json::json!({ "noteWidth": 32.5 }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteBorderWidth(
+                    crate::models::EditorNoteBorderWidthPropertyPatchV1 {
+                        note_border_width: 2.5,
+                    },
+                ),
+                serde_json::json!({ "noteBorderWidth": 2.5 }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteBorderRadius(
+                    crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
+                        note_border_radius: 4.0,
+                    },
+                ),
+                serde_json::json!({ "noteBorderRadius": 4.0 }),
+            ),
+            (
+                EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteAutoYCorrection(
                     crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
                         note_auto_y_correction: false,
@@ -996,6 +1041,15 @@ mod tests {
             serde_json::json!({ "noteGlowSize": "20" }),
             serde_json::json!({ "noteGlowSize": 20, "noteGlowEnabled": true }),
             serde_json::json!({ "noteGlowSize": 20, "unexpected": true }),
+            serde_json::json!({ "noteOffsetX": "0" }),
+            serde_json::json!({ "noteOffsetX": null, "noteOffsetY": null }),
+            serde_json::json!({ "noteOffsetY": null, "unexpected": true }),
+            serde_json::json!({ "noteWidth": "20" }),
+            serde_json::json!({ "noteWidth": null, "hidden": true }),
+            serde_json::json!({ "noteBorderWidth": null }),
+            serde_json::json!({ "noteBorderWidth": "1" }),
+            serde_json::json!({ "noteBorderRadius": null }),
+            serde_json::json!({ "noteBorderRadius": 4, "unexpected": true }),
         ] {
             let mut invalid_image = layer_name_wire.clone();
             invalid_image["editorOps"][0]["patch"] = patch;

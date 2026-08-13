@@ -964,6 +964,92 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
 
+  it.each([
+    { noteOffsetX: 0 },
+    { noteOffsetY: null },
+    { noteWidth: null },
+    { noteBorderWidth: 2.5 },
+    { noteBorderRadius: 12.5 },
+  ] as const)(
+    'note numeric %j batch는 key-only exact literal과 slot preflight를 전달한다',
+    async (patch) => {
+      const targets = [
+        {
+          elementType: 'key',
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        },
+      ] as const;
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', {
+          targets,
+          patch,
+          gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        }),
+      );
+
+      await vi.waitFor(() =>
+        expect(mocks.patchDisplayText).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.patchDisplayText).toHaveBeenCalledWith(targets, patch, {
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        preflight: expect.any(Function),
+      });
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
+
+  it('note numeric single target은 generic executor에 exact nullable leaf를 전달한다', async () => {
+    const target = {
+      elementType: 'key',
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      patch: { noteOffsetX: null },
+    } as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target,
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchElementProperty).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchElementProperty).toHaveBeenCalledWith(
+      'key',
+      target.id,
+      target.patch,
+      { preflight: expect.any(Function) },
+    );
+  });
+
+  it('note numeric은 slot 직전 generation 변경을 executor에서 거절한다', async () => {
+    mocks.patchDisplayText.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          {
+            elementType: 'key',
+            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          },
+        ],
+        patch: { noteWidth: null },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
   it('noteGlowSize는 slot 직전 generation 변경을 executor에서 거절한다', async () => {
     mocks.patchDisplayText.mockImplementationOnce(
       async (_targets, _patch, options) => {
@@ -2429,6 +2515,62 @@ describe('plugin panel persisted element mutations', () => {
       {
         targets: [{ elementType: 'key', id: 'stable' }],
         patch: { noteGlowSize: 20, extra: true },
+      },
+    ],
+    [
+      'note numeric wrong type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { noteOffsetX: 0 },
+      },
+    ],
+    [
+      'note offset nonfinite',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteOffsetY: Number.POSITIVE_INFINITY },
+      },
+    ],
+    [
+      'note offset range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteOffsetX: -500.1 },
+      },
+    ],
+    [
+      'note width zero',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteWidth: 0 },
+      },
+    ],
+    [
+      'note border width null',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteBorderWidth: null },
+      },
+    ],
+    [
+      'note border radius range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteBorderRadius: 100.1 },
+      },
+    ],
+    [
+      'note numeric combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteOffsetX: 0, noteOffsetY: 0 },
+      },
+    ],
+    [
+      'note numeric extra',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteWidth: null, extra: true },
       },
     ],
     [

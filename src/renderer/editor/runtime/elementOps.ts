@@ -765,6 +765,12 @@ export const patchElementPropertyById = (
   const eagerPatch =
     'layerName' in patch
       ? { layerName: patch.layerName ?? undefined }
+      : 'noteOffsetX' in patch
+      ? { noteOffsetX: patch.noteOffsetX ?? undefined }
+      : 'noteOffsetY' in patch
+      ? { noteOffsetY: patch.noteOffsetY ?? undefined }
+      : 'noteWidth' in patch
+      ? { noteWidth: patch.noteWidth ?? undefined }
       : 'graphType' in patch
       ? { graphType: patch.graphType }
       : 'graphColor' in patch
@@ -813,6 +819,12 @@ const patchElementPropertiesByIds = (
     const eagerPatch =
       'layerName' in target.patch
         ? { layerName: target.patch.layerName ?? undefined }
+        : 'noteOffsetX' in target.patch
+        ? { noteOffsetX: target.patch.noteOffsetX ?? undefined }
+        : 'noteOffsetY' in target.patch
+        ? { noteOffsetY: target.patch.noteOffsetY ?? undefined }
+        : 'noteWidth' in target.patch
+        ? { noteWidth: target.patch.noteWidth ?? undefined }
         : 'graphType' in target.patch
         ? { graphType: target.patch.graphType }
         : 'graphColor' in target.patch
@@ -2071,6 +2083,33 @@ export const patchStylePropertyById = (
   patch: EditorPreviewStylePropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
+  const noteNumericInvalid =
+    ('noteOffsetX' in patch &&
+      (type !== 'key' ||
+        (patch.noteOffsetX !== null &&
+          (!Number.isFinite(patch.noteOffsetX) ||
+            patch.noteOffsetX < -500 ||
+            patch.noteOffsetX > 500)))) ||
+    ('noteOffsetY' in patch &&
+      (type !== 'key' ||
+        (patch.noteOffsetY !== null &&
+          (!Number.isFinite(patch.noteOffsetY) ||
+            patch.noteOffsetY < -500 ||
+            patch.noteOffsetY > 500)))) ||
+    ('noteWidth' in patch &&
+      (type !== 'key' ||
+        (patch.noteWidth !== null &&
+          (!Number.isFinite(patch.noteWidth) || patch.noteWidth <= 0)))) ||
+    ('noteBorderWidth' in patch &&
+      (type !== 'key' ||
+        !Number.isFinite(patch.noteBorderWidth) ||
+        patch.noteBorderWidth < 0 ||
+        patch.noteBorderWidth > 20)) ||
+    ('noteBorderRadius' in patch &&
+      (type !== 'key' ||
+        !Number.isFinite(patch.noteBorderRadius) ||
+        patch.noteBorderRadius < 1 ||
+        patch.noteBorderRadius > 100));
   if (
     !id ||
     isSyntheticElementId(id) ||
@@ -2078,7 +2117,8 @@ export const patchStylePropertyById = (
       (type !== 'key' ||
         !Number.isFinite(patch.noteGlowSize) ||
         patch.noteGlowSize < 0 ||
-        patch.noteGlowSize > 50))
+        patch.noteGlowSize > 50)) ||
+    noteNumericInvalid
   ) {
     return Promise.resolve(false);
   }
@@ -2090,6 +2130,36 @@ export const patchStylePropertyByTargets = (
   patch: EditorPreviewStylePropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
+  const hasNonKeyTarget = targets.some(
+    (target) => target.elementType !== 'key',
+  );
+  const noteNumericInvalid =
+    ('noteOffsetX' in patch &&
+      (hasNonKeyTarget ||
+        (patch.noteOffsetX !== null &&
+          (!Number.isFinite(patch.noteOffsetX) ||
+            patch.noteOffsetX < -500 ||
+            patch.noteOffsetX > 500)))) ||
+    ('noteOffsetY' in patch &&
+      (hasNonKeyTarget ||
+        (patch.noteOffsetY !== null &&
+          (!Number.isFinite(patch.noteOffsetY) ||
+            patch.noteOffsetY < -500 ||
+            patch.noteOffsetY > 500)))) ||
+    ('noteWidth' in patch &&
+      (hasNonKeyTarget ||
+        (patch.noteWidth !== null &&
+          (!Number.isFinite(patch.noteWidth) || patch.noteWidth <= 0)))) ||
+    ('noteBorderWidth' in patch &&
+      (hasNonKeyTarget ||
+        !Number.isFinite(patch.noteBorderWidth) ||
+        patch.noteBorderWidth < 0 ||
+        patch.noteBorderWidth > 20)) ||
+    ('noteBorderRadius' in patch &&
+      (hasNonKeyTarget ||
+        !Number.isFinite(patch.noteBorderRadius) ||
+        patch.noteBorderRadius < 1 ||
+        patch.noteBorderRadius > 100));
   if (
     targets.length === 0 ||
     targets.some(
@@ -2100,7 +2170,8 @@ export const patchStylePropertyByTargets = (
       (targets.some((target) => target.elementType !== 'key') ||
         !Number.isFinite(patch.noteGlowSize) ||
         patch.noteGlowSize < 0 ||
-        patch.noteGlowSize > 50))
+        patch.noteGlowSize > 50)) ||
+    noteNumericInvalid
   ) {
     return Promise.resolve(false);
   }

@@ -735,6 +735,36 @@ const applySemanticOps = (
             if ('noteGlowSize' in op.patch) {
               return { ...position, noteGlowSize: op.patch.noteGlowSize };
             }
+            if ('noteOffsetX' in op.patch) {
+              return {
+                ...position,
+                noteOffsetX: op.patch.noteOffsetX ?? undefined,
+              };
+            }
+            if ('noteOffsetY' in op.patch) {
+              return {
+                ...position,
+                noteOffsetY: op.patch.noteOffsetY ?? undefined,
+              };
+            }
+            if ('noteWidth' in op.patch) {
+              return {
+                ...position,
+                noteWidth: op.patch.noteWidth ?? undefined,
+              };
+            }
+            if ('noteBorderWidth' in op.patch) {
+              return {
+                ...position,
+                noteBorderWidth: op.patch.noteBorderWidth,
+              };
+            }
+            if ('noteBorderRadius' in op.patch) {
+              return {
+                ...position,
+                noteBorderRadius: op.patch.noteBorderRadius,
+              };
+            }
             if ('noteEffectEnabled' in op.patch) {
               return {
                 ...position,

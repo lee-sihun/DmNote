@@ -979,6 +979,9 @@ describe('PropertiesPanel detached preview contract', () => {
     ['panel', 'key', { borderRadius: 77.5 }, true],
     ['main', 'key', { noteGlowSize: 20.5 }, false],
     ['panel', 'key', { noteGlowSize: 21.5 }, 'reject'],
+    ['main', 'key', { noteOffsetX: 0 }, true],
+    ['panel', 'key', { noteWidth: null }, false],
+    ['main', 'key', { noteBorderRadius: 12.5 }, 'reject'],
   ] as const)(
     '%s single stable %s numeric style은 stale index를 무시하고 writer Promise를 정산한다',
     async (windowType, type, patch, result) => {
@@ -1033,8 +1036,8 @@ describe('PropertiesPanel detached preview contract', () => {
       });
       mounted = mountPanel(true);
       const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
-        onStylePropertyPreview: (patch: Record<string, number>) => void;
-        onStylePropertyCommit: (patch: Record<string, number>) => void;
+        onStylePropertyPreview: (patch: Record<string, number | null>) => void;
+        onStylePropertyCommit: (patch: Record<string, number | null>) => void;
       };
 
       act(() => props.onStylePropertyPreview(patch));
