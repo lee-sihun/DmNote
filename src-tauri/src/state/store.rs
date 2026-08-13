@@ -4371,6 +4371,36 @@ mod tests {
         }
     }
 
+    fn counter_fill_solid(color: &str) -> crate::models::EditorCounterFillIntentV1 {
+        crate::models::EditorCounterFillIntentV1::Solid(
+            crate::models::EditorCounterFillSolidIntentV1 {
+                color: color.to_string(),
+            },
+        )
+    }
+
+    fn counter_fill_gradient(
+        color: &str,
+        angle: f64,
+        stops: &[(&str, f64)],
+    ) -> crate::models::EditorCounterFillIntentV1 {
+        crate::models::EditorCounterFillIntentV1::Gradient(
+            crate::models::EditorCounterFillGradientIntentV1 {
+                color: color.to_string(),
+                gradient: crate::models::EditorPaintGradientV1 {
+                    angle,
+                    stops: stops
+                        .iter()
+                        .map(|(color, pos)| crate::models::EditorPaintGradientStopV1 {
+                            color: (*color).to_string(),
+                            pos: *pos,
+                        })
+                        .collect(),
+                },
+            },
+        )
+    }
+
     fn shadow_leaf_blur(blur: f64) -> crate::models::EditorShadowLeafPatchV1 {
         crate::models::EditorShadowLeafPatchV1::Blur(crate::models::EditorShadowBlurLeafPatchV1 {
             blur,
@@ -11399,6 +11429,234 @@ mod tests {
                 redone.stat_positions["4key"][1].position.counter.clone(),
                 redone.stat_positions["4key"][2].position.counter.clone(),
                 redone.stat_positions["4key"][3].position.counter.clone(),
+            ],
+            expected_counters
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn counter_fill_batch_replays_atomic_pairs_and_round_trips_history() {
+        let dir = test_directory("editor-counter-fill-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let stat_id = uuid::Uuid::new_v4().to_string();
+        let setup = legacy_editor_commit(
+            &store,
+            &[EditorField::KeyPositions, EditorField::StatPositions],
+            |data| {
+                let key_positions = data.key_positions.get_mut("4key").unwrap();
+                for position in key_positions.iter_mut().take(2) {
+                    position.counter.fill.idle = "idle-before".to_string();
+                    position.counter.fill.active = "active-before".to_string();
+                    position.counter.fill_idle_gradient = Some(
+                        serde_json::from_value(serde_json::json!({
+                            "angle": 15,
+                            "stops": [
+                                { "color": "old-idle", "pos": 0 },
+                                { "color": "old-idle-end", "pos": 1 }
+                            ]
+                        }))
+                        .unwrap(),
+                    );
+                    position.counter.fill_active_gradient = Some(
+                        serde_json::from_value(serde_json::json!({
+                            "angle": 30,
+                            "stops": [
+                                { "color": "old-active", "pos": 0 },
+                                { "color": "old-active-end", "pos": 1 }
+                            ]
+                        }))
+                        .unwrap(),
+                    );
+                    position.counter.stroke.idle = "stroke-sibling".to_string();
+                    position.counter.font_family = Some("font-sibling".to_string());
+                }
+                let mut stat_position = key_positions[0].clone();
+                stat_position.id = stat_id.clone();
+                data.stat_positions.insert(
+                    "4key".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: stat_position,
+                    }],
+                );
+            },
+        )
+        .unwrap();
+        let before = store.editor_get().document;
+        let key_ids = before.key_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        let original_counters = [
+            before.key_positions["4key"][0].counter.clone(),
+            before.key_positions["4key"][1].counter.clone(),
+            before.stat_positions["4key"][0].position.counter.clone(),
+        ];
+        let idle_gradient = counter_fill_gradient(
+            "rgba(170,187,204,1)",
+            45.0,
+            &[("#ABC", 0.0), ("#112233", 1.0)],
+        );
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[0],
+                EditorElementPropertyPatchV1::CounterFillIdle(
+                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
+                        counter_fill_idle: idle_gradient.clone(),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[1],
+                EditorElementPropertyPatchV1::CounterFillActive(
+                    crate::models::EditorCounterFillActivePropertyPatchV1 {
+                        counter_fill_active: counter_fill_solid(""),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::CounterFillIdle(
+                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
+                        counter_fill_idle: counter_fill_solid("  raw solid  "),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::CounterFillIdle(
+                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
+                        counter_fill_idle: counter_fill_solid("missing"),
+                    },
+                ),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            changed.result.changed_fields,
+            [EditorField::KeyPositions, EditorField::StatPositions]
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let changed_counters = [
+            changed.document.key_positions["4key"][0].counter.clone(),
+            changed.document.key_positions["4key"][1].counter.clone(),
+            changed.document.stat_positions["4key"][0]
+                .position
+                .counter
+                .clone(),
+        ];
+        let mut expected_counters = original_counters.clone();
+        expected_counters[0].fill.idle = "rgba(170,187,204,1)".to_string();
+        expected_counters[0].fill_idle_gradient = match &idle_gradient {
+            crate::models::EditorCounterFillIntentV1::Gradient(intent) => {
+                Some(intent.gradient.to_gradient_spec())
+            }
+            crate::models::EditorCounterFillIntentV1::Solid(_) => unreachable!(),
+        };
+        expected_counters[1].fill.active.clear();
+        expected_counters[1].fill_active_gradient = None;
+        expected_counters[2].fill.idle = "  raw solid  ".to_string();
+        expected_counters[2].fill_idle_gradient = None;
+        assert_eq!(changed_counters, expected_counters);
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &key_ids[0],
+            EditorElementPropertyPatchV1::CounterFillIdle(
+                crate::models::EditorCounterFillIdlePropertyPatchV1 {
+                    counter_fill_idle: counter_fill_solid("different"),
+                },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..3].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert_eq!(
+            [
+                undone.key_positions["4key"][0].counter.clone(),
+                undone.key_positions["4key"][1].counter.clone(),
+                undone.stat_positions["4key"][0].position.counter.clone(),
+            ],
+            original_counters
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert_eq!(
+            [
+                redone.key_positions["4key"][0].counter.clone(),
+                redone.key_positions["4key"][1].counter.clone(),
+                redone.stat_positions["4key"][0].position.counter.clone(),
             ],
             expected_counters
         );

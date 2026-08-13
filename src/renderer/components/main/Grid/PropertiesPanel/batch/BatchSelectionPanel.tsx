@@ -50,6 +50,7 @@ import {
   patchPaintByTargets,
   patchShadowByTargets,
   patchNotePaintByIds,
+  patchCounterFillByTargets,
   patchStylePropertyByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
@@ -67,6 +68,7 @@ import {
   patchPaintViaAuthority,
   patchShadowViaAuthority,
   patchNotePaintViaAuthority,
+  patchCounterFillViaAuthority,
   patchStylePropertyViaAuthority,
   patchInactiveImageViaAuthority,
   patchIdleTransparentViaAuthority,
@@ -92,6 +94,7 @@ import type {
   EditorPreviewStylePropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
+  EditorCounterFillPropertyPatchV1,
 } from '@src/types/editor';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
@@ -536,6 +539,10 @@ interface BatchKeyLikePanelProps {
     newColor: NoteColor,
     onNotePaintCommit: (patch: EditorNotePaintPropertyPatchV1) => void,
   ) => void;
+  handleBatchFillPickerColorChangeComplete: (
+    newColor: string,
+    onCounterFillCommit: (patch: EditorCounterFillPropertyPatchV1) => void,
+  ) => void;
   handleBatchKeyOnlyStyleChange: (
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
@@ -625,6 +632,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchPickerColorChange,
   handleBatchPickerColorChangeComplete,
   handleBatchNotePickerColorChangeComplete,
+  handleBatchFillPickerColorChangeComplete,
   handleBatchKeyOnlyStyleChange,
   getBatchPickerColor,
   getBatchPickerRef,
@@ -739,6 +747,36 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             ? patchNotePaintViaAuthority(stableNotePaintIds, patch, gestureId)
             : patchNotePaintByIds(stableNotePaintIds, patch, { gestureId });
         editGestureController.settleCommit(persisted);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const counterFillTargets = [
+    ...selectedKeyElements.map(({ id }) => ({
+      elementType: 'key' as const,
+      id,
+    })),
+    ...(batchCounterColorState === 'active'
+      ? []
+      : selectedStatElements.map(({ id }) => ({
+          elementType: 'stat' as const,
+          id,
+        }))),
+  ];
+  const stableCounterFillTargets =
+    counterFillTargets.length > 0 &&
+    counterFillTargets.every(
+      ({ id }) => id.length > 0 && !isSyntheticElementId(id),
+    ) &&
+    new Set(counterFillTargets.map(({ id }) => id)).size ===
+      counterFillTargets.length
+      ? counterFillTargets
+      : null;
+  const commitCounterFill = stableCounterFillTargets
+    ? (patch: EditorCounterFillPropertyPatchV1) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterFillViaAuthority(stableCounterFillTargets, patch)
+            : patchCounterFillByTargets(stableCounterFillTargets, patch);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -1439,6 +1477,23 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                     color,
                     commitNotePaint,
                   );
+                  return;
+                }
+                if (
+                  commitCounterFill &&
+                  batchPickerFor === 'fill' &&
+                  typeof color === 'string'
+                ) {
+                  handleBatchFillPickerColorChangeComplete(
+                    color,
+                    commitCounterFill,
+                  );
+                  return;
+                }
+                if (
+                  batchPickerFor === 'fill' &&
+                  counterFillTargets.length === 0
+                ) {
                   return;
                 }
                 handleBatchPickerColorChangeComplete(color);

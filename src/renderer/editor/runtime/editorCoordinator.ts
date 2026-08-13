@@ -10,6 +10,10 @@ import {
   projectNotePaintPatch,
 } from '@src/types/key/notePaint';
 import {
+  isCounterFillPropertyPatchV1,
+  projectCounterFillPatch,
+} from '@src/types/key/counterFill';
+import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
@@ -795,6 +799,12 @@ const applySemanticOps = (
                   defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
                   defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
                 }),
+              };
+            }
+            if (isCounterFillPropertyPatchV1(op.patch)) {
+              return {
+                ...position,
+                ...projectCounterFillPatch(position as never, op.patch),
               };
             }
             if (isNotePaintPropertyPatchV1(op.patch)) {

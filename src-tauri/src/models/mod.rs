@@ -1298,7 +1298,7 @@ fn canonicalize_counter_gradient_pair(
     (changed, pair_repaired)
 }
 
-fn compact_canonical_rgba(color: &str) -> String {
+pub(crate) fn compact_canonical_rgba(color: &str) -> String {
     let trimmed = color.trim();
     if let Some(hex) = trimmed.strip_prefix('#') {
         if matches!(hex.len(), 3 | 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {

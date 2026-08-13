@@ -432,6 +432,22 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['key', { counterStrokeIdle: '  Raw Idle Stroke  ' }],
     ['stat', { counterStrokeIdle: '' }],
     ['key', { counterStrokeActive: '  Raw Active Stroke  ' }],
+    ['stat', { counterFillIdle: { color: ' raw solid ' } }],
+    [
+      'key',
+      {
+        counterFillActive: {
+          color: 'rgba(17,34,51,1)',
+          gradient: {
+            angle: 45,
+            stops: [
+              { color: '#112233', pos: 0 },
+              { color: '#445566', pos: 1 },
+            ],
+          },
+        },
+      },
+    ],
     ['key', { counterAnimationPreset: { presetId: 'builtin-ease-out' } }],
     [
       'stat',
@@ -756,6 +772,34 @@ describe('editorCommitRaw semantic op protocol', () => {
       { counterAnimationPreset: { presetId: 'a', bezier: [0, 2.1, 0, 1] } },
     ],
     ['key', { counterAnimationPreset: { presetId: 'a', scale: Number.NaN } }],
+    ['graph', { counterFillIdle: { color: '#fff' } }],
+    ['stat', { counterFillActive: { color: '#fff' } }],
+    ['key', { counterFillIdle: { color: '#fff', gradient: null } }],
+    [
+      'key',
+      {
+        counterFillIdle: {
+          color: '#112233',
+          gradient: {
+            angle: 45,
+            stops: [
+              { color: '#112233', pos: 0 },
+              { color: '#445566', pos: 1 },
+            ],
+          },
+        },
+      },
+    ],
+    ['key', { counterFillIdle: { color: '#fff', extra: true } }],
+    [
+      'key',
+      {
+        counterFillActive: {
+          color: '#fff',
+          gradient: { angle: -0, stops: [] },
+        },
+      },
+    ],
     ['key', { counterAnimationPreset: { presetId: 'a', durationMs: 0 } }],
     ['key', { counterAnimationPreset: { presetId: 'a', durationMs: 5001 } }],
     [

@@ -63,6 +63,8 @@ const {
   patchCounterStrokeMock,
   patchCounterStrokeTargetsMock,
   patchCounterStrokeViaAuthorityMock,
+  patchCounterFillMock,
+  patchCounterFillViaAuthorityMock,
   patchPaintMock,
   patchPaintViaAuthorityMock,
   patchShadowMock,
@@ -144,6 +146,8 @@ const {
   patchCounterStrokeMock: vi.fn(() => Promise.resolve(true)),
   patchCounterStrokeTargetsMock: vi.fn(() => Promise.resolve(true)),
   patchCounterStrokeViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterFillMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterFillViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchPaintMock: vi.fn(() => Promise.resolve(true)),
   patchPaintViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchShadowMock: vi.fn(() => Promise.resolve(true)),
@@ -204,6 +208,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterLayoutViaAuthority: patchCounterLayoutViaAuthorityMock,
   patchCounterTypographyViaAuthority: patchCounterTypographyViaAuthorityMock,
   patchCounterStrokeViaAuthority: patchCounterStrokeViaAuthorityMock,
+  patchCounterFillViaAuthority: patchCounterFillViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
@@ -239,6 +244,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterTypographyById: patchCounterTypographyMock,
   patchCounterStrokeById: patchCounterStrokeMock,
   patchCounterStrokeByTargets: patchCounterStrokeTargetsMock,
+  patchCounterFillById: patchCounterFillMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -429,6 +435,8 @@ const resetStores = () => {
   patchCounterStrokeMock.mockClear();
   patchCounterStrokeTargetsMock.mockClear();
   patchCounterStrokeViaAuthorityMock.mockClear();
+  patchCounterFillMock.mockClear();
+  patchCounterFillViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -1708,6 +1716,172 @@ describe('PropertiesPanel detached preview contract', () => {
       expect(patchCounterStrokeViaAuthorityMock).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    ['main key idle', 'main', 'key', { counterFillIdle: { color: ' idle ' } }],
+    [
+      'panel key active',
+      'panel',
+      'key',
+      { counterFillActive: { color: ' active ' } },
+    ],
+    [
+      'main stat idle',
+      'main',
+      'stat',
+      { counterFillIdle: { color: '#123456' } },
+    ],
+    [
+      'panel stat idle',
+      'panel',
+      'stat',
+      { counterFillIdle: { color: '#abcdef' } },
+    ],
+  ] as const)(
+    '%s counter fill은 stable ID exact writer만 쓴다',
+    (_label, windowType, type, patch) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'a3811111-1111-4111-8111-111111111111'
+          : 'a3822222-2222-4222-8222-222222222222';
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onCounterFillCommit: (value: typeof patch) => void;
+        }
+      ).onCounterFillCommit;
+
+      act(() => commit(patch));
+      if (windowType === 'panel') {
+        expect(patchCounterFillViaAuthorityMock).toHaveBeenCalledWith(
+          [{ elementType: type, id }],
+          patch,
+        );
+        expect(patchCounterFillMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchCounterFillMock).toHaveBeenCalledWith(type, id, patch);
+        expect(patchCounterFillViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat synthetic', 'stat', 'stat-0'],
+    ['stat empty', 'stat', ''],
+  ] as const)(
+    'single %s counter fill은 exact callback 없이 whole-counter legacy다',
+    (_label, type, id) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onCounterFillCommit?: (patch: Record<string, unknown>) => void;
+        onKeyUpdate?: (patch: Record<string, unknown>) => void;
+        handleStatUpdate?: (patch: Record<string, unknown>) => void;
+      };
+      expect(props.onCounterFillCommit).toBeUndefined();
+      const legacy =
+        type === 'key' ? props.onKeyUpdate : props.handleStatUpdate;
+      act(() =>
+        legacy?.({
+          index: 0,
+          counter: {
+            ...position.counter,
+            fill: { ...position.counter.fill, idle: 'legacy-fill' },
+          },
+        }),
+      );
+      expect(patchCounterFillMock).not.toHaveBeenCalled();
+      expect(patchCounterFillViaAuthorityMock).not.toHaveBeenCalled();
+      if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      else expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('batch counter fill 부모는 idle/active solid completion을 gradient 없는 exact descriptor로 만든다', () => {
+    const keyId = 'a3833333-3333-4333-8333-333333333333';
+    const statId = 'a3844444-4444-4444-8444-444444444444';
+    const position = createDefaultKeyPosition();
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A'] },
+      positions: { '4key': [{ ...position, id: keyId }] },
+      canonicalPositions: { '4key': [{ ...position, id: keyId }] },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [{ ...position, id: statId, statType: 'kps' }],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: keyId, index: 0 },
+        { type: 'stat', id: statId, index: 0 },
+      ],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    let props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+      setBatchCounterColorState: (state: 'idle' | 'active') => void;
+      handleBatchFillPickerColorChangeComplete: (
+        color: string,
+        semantic: (patch: Record<string, unknown>) => void,
+      ) => void;
+    };
+    const semantic = vi.fn();
+
+    act(() =>
+      props.handleBatchFillPickerColorChangeComplete(' idle solid ', semantic),
+    );
+    act(() => props.setBatchCounterColorState('active'));
+    props = batchKeyLikePropsMock.mock.lastCall?.[0] as typeof props;
+    act(() =>
+      props.handleBatchFillPickerColorChangeComplete(
+        ' active solid ',
+        semantic,
+      ),
+    );
+
+    expect(semantic.mock.calls).toEqual([
+      [{ counterFillIdle: { color: ' idle solid ' } }],
+      [{ counterFillActive: { color: ' active solid ' } }],
+    ]);
+    expect(legacyBatchCounterUpdateMock).not.toHaveBeenCalled();
+  });
 
   it.each([
     ['main idle', 'main', 'idle'],

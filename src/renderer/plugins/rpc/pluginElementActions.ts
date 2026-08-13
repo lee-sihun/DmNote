@@ -23,6 +23,7 @@ import type {
   EditorNotePropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
+  EditorCounterFillPropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
@@ -826,6 +827,26 @@ export const patchCounterTypographyViaAuthority = (
 export const patchCounterStrokeViaAuthority = (
   targets: readonly { elementType: 'key' | 'stat'; id: string }[],
   patch: EditorCounterStrokePropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchCounterFillViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  patch: EditorCounterFillPropertyPatchV1,
 ): Promise<boolean> => {
   const authorityGeneration = getPluginAuthorityGeneration();
   return new Promise((resolve) => {

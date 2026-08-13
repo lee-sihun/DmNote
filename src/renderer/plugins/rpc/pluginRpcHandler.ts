@@ -60,6 +60,7 @@ import {
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchCounterStrokeByTargets,
+  patchCounterFillByTargets,
   patchCounterTypographyByTargets,
   patchPaintByTargets,
   patchShadowByTargets,
@@ -91,6 +92,7 @@ import type {
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
+  EditorCounterFillPropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
@@ -106,6 +108,7 @@ import {
   isEditorShadowPropertyPatchV1,
 } from '@src/types/editor';
 import { isNotePaintPropertyPatchV1 } from '@src/types/key/notePaint';
+import { isCounterFillPropertyPatchV1 } from '@src/types/key/counterFill';
 import type {
   LayerReorderAnchorsWire,
   LayerReorderIntentWire,
@@ -414,6 +417,7 @@ const parseNativeLayerPropertyTarget = (
   const paintPatch = isEditorPaintPropertyPatchV1(patch);
   const shadowPatch = isEditorShadowPropertyPatchV1(patch);
   const notePaintPatch = isNotePaintPropertyPatchV1(patch);
+  const counterFillPatch = isCounterFillPropertyPatchV1(patch);
   const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
   const patchValid =
     (shadowPatch &&
@@ -422,6 +426,9 @@ const parseNativeLayerPropertyTarget = (
         target.elementType === 'key' ||
         target.elementType === 'knob')) ||
     (notePaintPatch && target.elementType === 'key') ||
+    (counterFillPatch &&
+      (target.elementType === 'key' ||
+        (!('counterFillActive' in patch) && target.elementType === 'stat'))) ||
     (paintPatch &&
       (!('activeBackgroundPaint' in patch) && !('activeBorderPaint' in patch)
         ? true
@@ -862,6 +869,11 @@ type NativeLayerPropertyRequest =
       patch: EditorCounterStrokePropertyPatchV1;
     }
   | {
+      kind: 'counterFillBatch';
+      targets: Array<{ elementType: 'key' | 'stat'; id: string }>;
+      patch: EditorCounterFillPropertyPatchV1;
+    }
+  | {
       kind: 'notePropertyBatch';
       ids: string[];
       patch: EditorNotePropertyPatchV1;
@@ -1105,6 +1117,8 @@ const parseNativeLayerPropertyRequest = (
         typeof patch.counterStrokeActive === 'string'
       ? { counterStrokeActive: patch.counterStrokeActive }
       : null;
+  const counterFillPatch: EditorCounterFillPropertyPatchV1 | null =
+    isCounterFillPropertyPatchV1(patch) ? patch : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
     typeof patch.noteEffectEnabled === 'boolean'
@@ -1154,6 +1168,7 @@ const parseNativeLayerPropertyRequest = (
     counterLayoutPatch === null &&
     counterTypographyPatch === null &&
     counterStrokePatch === null &&
+    counterFillPatch === null &&
     counterAnimationPreset === null &&
     notePropertyPatch === null
   ) {
@@ -1198,6 +1213,8 @@ const parseNativeLayerPropertyRequest = (
       ? 'counter-capable'
       : counterStrokePatch !== null
       ? 'counter-capable'
+      : counterFillPatch !== null
+      ? 'counter-capable'
       : counterAnimationPreset !== null
       ? 'counter-capable'
       : notePropertyPatch !== null
@@ -1229,6 +1246,9 @@ const parseNativeLayerPropertyRequest = (
         target.elementType !== 'stat') ||
       (counterStrokePatch !== null &&
         'counterStrokeActive' in counterStrokePatch &&
+        target.elementType !== 'key') ||
+      (counterFillPatch !== null &&
+        'counterFillActive' in counterFillPatch &&
         target.elementType !== 'key') ||
       (stylePropertyPatch !== null &&
         'borderRadius' in stylePropertyPatch &&
@@ -1399,6 +1419,16 @@ const parseNativeLayerPropertyRequest = (
         id: string;
       }>,
       patch: counterStrokePatch,
+    };
+  }
+  if (counterFillPatch !== null) {
+    return {
+      kind: 'counterFillBatch',
+      targets: targets as Array<{
+        elementType: 'key' | 'stat';
+        id: string;
+      }>,
+      patch: counterFillPatch,
     };
   }
   if (notePropertyPatch !== null) {
@@ -2174,6 +2204,18 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
             options,
           );
         }
+        if (isCounterFillPropertyPatchV1(request.target.patch)) {
+          return patchCounterFillByTargets(
+            [
+              {
+                elementType: request.target.elementType as 'key' | 'stat',
+                id: request.target.id,
+              },
+            ],
+            request.target.patch,
+            options,
+          );
+        }
         if (
           'counterPlacement' in request.target.patch ||
           'counterAlign' in request.target.patch ||
@@ -2399,6 +2441,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       }
       if (request.kind === 'counterStrokeBatch') {
         return patchCounterStrokeByTargets(
+          request.targets,
+          request.patch,
+          options,
+        );
+      }
+      if (request.kind === 'counterFillBatch') {
+        return patchCounterFillByTargets(
           request.targets,
           request.patch,
           options,

@@ -85,6 +85,10 @@ const captured = vi.hoisted(() => ({
     onStateModeChange?: (mode: string) => void;
     onColorChange: (color: string) => void;
     onColorChangeComplete: (color: string) => void;
+    onGradientSpecSelect?: (spec: {
+      angle: number;
+      stops: Array<{ color: string; pos: number }>;
+    }) => void;
     onOpacityPercentChange?: (
       value: number,
       target: 'solid' | 'top' | 'bottom',
@@ -259,14 +263,38 @@ vi.mock('@hooks/pickers/useGradientColorState', () => ({
     onPreview,
     onCommit,
   }: {
-    onPreview?: (value: { mode: 'solid'; color: string }) => void;
-    onCommit: (value: { mode: 'solid'; color: string }) => void;
+    onPreview?: (
+      value:
+        | { mode: 'solid'; color: string }
+        | {
+            mode: 'gradient';
+            spec: {
+              angle: number;
+              stops: Array<{ color: string; pos: number }>;
+            };
+          },
+    ) => void;
+    onCommit: (
+      value:
+        | { mode: 'solid'; color: string }
+        | {
+            mode: 'gradient';
+            spec: {
+              angle: number;
+              stops: Array<{ color: string; pos: number }>;
+            };
+          },
+    ) => void;
   }) => ({
     pickerColor: '#ffffff',
     handlePickerColorChange: (color: string, commit: boolean) =>
       commit
         ? onCommit({ mode: 'solid', color })
         : onPreview?.({ mode: 'solid', color }),
+    handleGradientSpecSelect: (spec: {
+      angle: number;
+      stops: Array<{ color: string; pos: number }>;
+    }) => onCommit({ mode: 'gradient', spec }),
   }),
 }));
 vi.mock('@utils/core/axisEventBus', () => ({
@@ -1254,6 +1282,77 @@ describe('single geometry input bindings', () => {
       }
     },
   );
+
+  it.each([
+    ['key', 'idle', { counterFillIdle: { color: ' final fill ' } }],
+    ['key', 'active', { counterFillActive: { color: ' final fill ' } }],
+    ['stat', 'idle', { counterFillIdle: { color: ' final fill ' } }],
+  ] as const)(
+    '%s counter fill %s picker는 local drag 뒤 final exact descriptor만 commit한다',
+    (type, state, expected) => {
+      const fill = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            isStat={type === 'stat'}
+            onKeyUpdate={legacy}
+            onCounterFillCommit={fill}
+            t={(key) => key}
+          />,
+        );
+      });
+      act(() => captured.swatches.at(-2)?.onClick());
+      if (state === 'active') {
+        act(() => captured.color?.onStateModeChange?.('active'));
+      }
+      act(() => captured.color?.onColorChange('drag-only'));
+      expect(fill).not.toHaveBeenCalled();
+      act(() => captured.color?.onColorChangeComplete(' final fill '));
+
+      expect(fill).toHaveBeenCalledWith(expected);
+      expect(legacy).not.toHaveBeenCalled();
+      if (type === 'stat') {
+        expect(captured.color?.onStateModeChange).toBeUndefined();
+      }
+    },
+  );
+
+  it('counter fill gradient 선택은 first-stop compact 대표값과 exact spec을 함께 commit한다', () => {
+    const fill = vi.fn();
+    const gradient = {
+      angle: 45,
+      stops: [
+        { color: '#112233', pos: 0 },
+        { color: '#445566', pos: 1 },
+      ],
+    };
+    act(() => {
+      root.render(
+        <CounterTabContent
+          keyIndex={0}
+          keyPosition={createDefaultKeyPosition()}
+          isStat={false}
+          onKeyUpdate={vi.fn()}
+          onCounterFillCommit={fill}
+          t={(key) => key}
+        />,
+      );
+    });
+    act(() => captured.swatches.at(-2)?.onClick());
+    act(() => captured.color?.onColorChange('local-only'));
+    expect(fill).not.toHaveBeenCalled();
+    act(() => captured.color?.onGradientSpecSelect?.(gradient));
+
+    expect(fill).toHaveBeenCalledWith({
+      counterFillIdle: {
+        color: 'rgba(17,34,51,1)',
+        gradient,
+      },
+    });
+  });
 
   it.each([
     ['key synthetic', false],

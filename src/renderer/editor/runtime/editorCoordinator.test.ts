@@ -4433,6 +4433,49 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('counter fill projection은 solid에서 state gradient만 clear하고 raw siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001b0';
+    const gradient = {
+      angle: 45,
+      stops: [
+        { color: '#112233', pos: 0 },
+        { color: '#445566', pos: 1 },
+      ],
+    };
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      counter: {
+        ...base.keyPositions['4key'][0].counter,
+        fill: { idle: 'idle-before', active: 'active-before' },
+        fillIdleGradient: gradient,
+        fillActiveGradient: gradient,
+        customSibling: 'raw-sibling',
+      },
+    } as never;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { counterFillIdle: { color: ' solid final ' } },
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0].counter).toMatchObject({
+      fill: { idle: ' solid final ', active: 'active-before' },
+      fillActiveGradient: gradient,
+      customSibling: 'raw-sibling',
+    });
+    expect(
+      outcome.document.keyPositions['4key'][0].counter.fillIdleGradient,
+    ).toBeUndefined();
+    harness.coordinator.stop();
+  });
+
   it('setKeySlot은 최신 paired ID index의 slot만 바꾼다', async () => {
     const id = '00000000-0000-4000-8000-000000000087';
     const otherId = '00000000-0000-4000-8000-000000000086';

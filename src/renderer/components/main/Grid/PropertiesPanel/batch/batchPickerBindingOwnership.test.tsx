@@ -108,6 +108,8 @@ const patches = vi.hoisted(() => ({
   patchCounterTypographyViaAuthority: vi.fn(async () => true),
   patchCounterStrokeByTargets: vi.fn(async () => true),
   patchCounterStrokeViaAuthority: vi.fn(async () => true),
+  patchCounterFillByTargets: vi.fn(async () => true),
+  patchCounterFillViaAuthority: vi.fn(async () => true),
   patchPaintByTargets: vi.fn(async () => true),
   patchPaintViaAuthority: vi.fn(async () => true),
   patchShadowByTargets: vi.fn(async () => true),
@@ -142,6 +144,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterLayoutByTargets: patches.patchCounterLayoutByTargets,
   patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
   patchCounterStrokeByTargets: patches.patchCounterStrokeByTargets,
+  patchCounterFillByTargets: patches.patchCounterFillByTargets,
   patchPaintByTargets: patches.patchPaintByTargets,
   patchShadowByTargets: patches.patchShadowByTargets,
   patchNotePaintByIds: patches.patchNotePaintByIds,
@@ -165,6 +168,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterTypographyViaAuthority:
     patches.patchCounterTypographyViaAuthority,
   patchCounterStrokeViaAuthority: patches.patchCounterStrokeViaAuthority,
+  patchCounterFillViaAuthority: patches.patchCounterFillViaAuthority,
   patchPaintViaAuthority: patches.patchPaintViaAuthority,
   patchShadowViaAuthority: patches.patchShadowViaAuthority,
   patchNotePaintViaAuthority: patches.patchNotePaintViaAuthority,
@@ -460,6 +464,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       handleBatchPickerColorChange: vi.fn(),
       handleBatchPickerColorChangeComplete: vi.fn(),
       handleBatchNotePickerColorChangeComplete: vi.fn(),
+      handleBatchFillPickerColorChangeComplete: (color, semantic) =>
+        semantic({ counterFillIdle: { color } }),
       getBatchPickerColor: () => '#ffffff',
       getBatchPickerRef: () => createRef<HTMLButtonElement>(),
       batchColorPickerInteractiveRefs: [],
@@ -1762,6 +1768,217 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(commit).toHaveBeenCalledWith('  final raw  ');
     },
   );
+
+  it.each([
+    ['main idle', 'main', 'idle'],
+    ['panel active', 'panel', 'active'],
+  ] as const)(
+    '%s batch counter fill은 open A가 아니라 latest B key/stat targets에 solid descriptor를 보낸다',
+    (_label, windowType, state) => {
+      window.__dmn_window_type = windowType;
+      const statA = 'c7111111-1111-4111-8111-111111111111';
+      const statB = 'c7222222-2222-4222-8222-222222222222';
+      const legacy = vi.fn();
+      const renderFill = (keyId: string, statId: string) => {
+        selectCounterTargets(keyId, statId);
+        const currentKey = keyAt(keyId);
+        const withGradient = {
+          ...currentKey,
+          counter: {
+            ...currentKey.counter,
+            fillIdleGradient: {
+              angle: 45,
+              stops: [
+                { color: '#112233', pos: 0 },
+                { color: '#445566', pos: 1 },
+              ],
+            },
+          },
+        };
+        useKeyStore.setState({
+          selectedKeyType: '4key',
+          canonicalPositions: { '4key': [withGradient] },
+          positions: { '4key': [withGradient] },
+        });
+        const props = panelProps();
+        props.activeTab = 'counter';
+        props.batchPickerFor = 'fill';
+        props.batchCounterColorState = state;
+        props.handleBatchCounterUpdate = legacy;
+        props.handleBatchFillPickerColorChangeComplete = (color, semantic) =>
+          semantic(
+            state === 'active'
+              ? { counterFillActive: { color } }
+              : { counterFillIdle: { color } },
+          );
+        act(() => {
+          root.render(
+            <PanelNavProvider
+              value={{
+                activePageKey: null,
+                renderPageKey: null,
+                openPage: vi.fn(),
+                closePage: vi.fn(),
+                pageHost,
+              }}
+            >
+              <BatchKeyLikePanel {...props} />
+            </PanelNavProvider>,
+          );
+        });
+      };
+
+      renderFill(ID_A, statA);
+      renderFill(ID_B, statB);
+      act(() => captured.color?.onColorChange('drag-only'));
+      expect(patches.patchCounterFillByTargets).not.toHaveBeenCalled();
+      expect(patches.patchCounterFillViaAuthority).not.toHaveBeenCalled();
+      act(() => captured.color?.onColorChangeComplete(' solid final '));
+
+      const targets = [
+        { elementType: 'key' as const, id: ID_B },
+        ...(state === 'idle'
+          ? [{ elementType: 'stat' as const, id: statB }]
+          : []),
+      ];
+      const patch =
+        state === 'active'
+          ? { counterFillActive: { color: ' solid final ' } }
+          : { counterFillIdle: { color: ' solid final ' } };
+      if (windowType === 'panel') {
+        expect(patches.patchCounterFillViaAuthority).toHaveBeenCalledWith(
+          targets,
+          patch,
+        );
+        expect(patches.patchCounterFillByTargets).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchCounterFillByTargets).toHaveBeenCalledWith(
+          targets,
+          patch,
+        );
+        expect(patches.patchCounterFillViaAuthority).not.toHaveBeenCalled();
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['active ignores synthetic stat', 'active', 'stat', true],
+    ['active rejects synthetic key', 'active', 'key', false],
+    ['idle rejects synthetic stat', 'idle', 'stat', false],
+    ['idle rejects empty key', 'idle', 'key-empty', false],
+  ] as const)(
+    'batch counter fill %s',
+    (_label, state, syntheticType, exact) => {
+      const stableKeyId = 'c7333333-3333-4333-8333-333333333333';
+      const other =
+        syntheticType === 'stat'
+          ? { type: 'stat' as const, id: 'stat-0', index: 0 }
+          : {
+              type: 'key' as const,
+              id: syntheticType === 'key-empty' ? '' : 'key-0',
+              index: 1,
+            };
+      const keyPositions = [
+        keyAt(stableKeyId),
+        keyAt(other.type === 'key' ? other.id : 'unused'),
+      ];
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        canonicalPositions: { '4key': keyPositions },
+        positions: { '4key': keyPositions },
+      });
+      if (other.type === 'stat') {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [{ ...keyAt(other.id), statType: 'kps' }],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id: stableKeyId, index: 0 }, other],
+      });
+      const legacy = vi.fn();
+      const props = panelProps();
+      props.activeTab = 'counter';
+      props.batchPickerFor = 'fill';
+      props.batchCounterColorState = state;
+      props.handleBatchCounterUpdate = legacy;
+      props.handleBatchPickerColorChangeComplete = legacy;
+      props.handleBatchFillPickerColorChangeComplete = (color, semantic) =>
+        semantic(
+          state === 'active'
+            ? { counterFillActive: { color } }
+            : { counterFillIdle: { color } },
+        );
+      act(() => {
+        root.render(
+          <PanelNavProvider
+            value={{
+              activePageKey: null,
+              renderPageKey: null,
+              openPage: vi.fn(),
+              closePage: vi.fn(),
+              pageHost,
+            }}
+          >
+            <BatchKeyLikePanel {...props} />
+          </PanelNavProvider>,
+        );
+      });
+      act(() => captured.color?.onColorChangeComplete('#778899'));
+
+      if (exact) {
+        expect(patches.patchCounterFillByTargets).toHaveBeenCalledWith(
+          [{ elementType: 'key', id: stableKeyId }],
+          { counterFillActive: { color: '#778899' } },
+        );
+        expect(legacy).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchCounterFillByTargets).not.toHaveBeenCalled();
+        expect(patches.patchCounterFillViaAuthority).not.toHaveBeenCalled();
+        expect(legacy).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it('batch graph+knob counter fill completion은 빈 legacy commit을 만들지 않는다', () => {
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'graph', id: 'graph-0', index: 0 },
+        { type: 'knob', id: 'knob-0', index: 0 },
+      ],
+    });
+    const legacy = vi.fn();
+    const genericComplete = vi.fn();
+    const props = panelProps();
+    props.activeTab = 'counter';
+    props.batchPickerFor = 'fill';
+    props.handleBatchCounterUpdate = legacy;
+    props.handleBatchPickerColorChangeComplete = genericComplete;
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...props} />
+        </PanelNavProvider>,
+      );
+    });
+
+    act(() => captured.color?.onColorChangeComplete('#aabbcc'));
+
+    expect(patches.patchCounterFillByTargets).not.toHaveBeenCalled();
+    expect(patches.patchCounterFillViaAuthority).not.toHaveBeenCalled();
+    expect(genericComplete).not.toHaveBeenCalled();
+    expect(legacy).not.toHaveBeenCalled();
+  });
 
   it.each(['main', 'panel'] as const)(
     'batch note paint는 latest current key만 %s exact commit하고 non-key synthetic를 무시한다',

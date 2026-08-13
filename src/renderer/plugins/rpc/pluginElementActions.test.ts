@@ -1051,6 +1051,58 @@ describe('plugin element panel queue', () => {
     expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
   });
 
+  it('counter fill은 exact state descriptor와 default envelope를 보낸다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({
+      kind: 'ok',
+      response: { modelRevision: 2 },
+    });
+    const targets = [
+      {
+        elementType: 'stat' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    ];
+    const patch = { counterFillIdle: { color: ' raw solid ' } } as const;
+
+    await expect(
+      actions.patchCounterFillViaAuthority(targets, patch),
+    ).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      { targets, patch },
+      0,
+      7,
+    );
+  });
+
+  it('counter fill outcome-unknown은 same descriptor를 한 번만 재전송한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchCounterFillViaAuthority(
+      [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      { counterFillActive: { color: ' active solid ' } },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+  });
+
   it('counter animation update/delete는 exact descriptor와 성공 payload를 반환한다', async () => {
     const updateResponse = {
       preset: { id: 'preset-a' },

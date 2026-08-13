@@ -188,6 +188,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchCounterFill: vi.fn(
+    (
+      _targets?: unknown,
+      _patch?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   patchPaint: vi.fn(
     (
       _targets?: unknown,
@@ -307,6 +314,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterLayoutByTargets: mocks.patchCounterLayout,
   patchCounterTypographyByTargets: mocks.patchCounterTypography,
   patchCounterStrokeByTargets: mocks.patchCounterStroke,
+  patchCounterFillByTargets: mocks.patchCounterFill,
   patchPaintByTargets: mocks.patchPaint,
   patchShadowByTargets: mocks.patchShadow,
   patchNotePaintByIds: mocks.patchNotePaint,
@@ -434,6 +442,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchCounterTypography.mockResolvedValue(true);
     mocks.patchCounterStroke.mockReset();
     mocks.patchCounterStroke.mockResolvedValue(true);
+    mocks.patchCounterFill.mockReset();
+    mocks.patchCounterFill.mockResolvedValue(true);
     mocks.patchPaint.mockReset();
     mocks.patchPaint.mockResolvedValue(true);
     mocks.patchShadow.mockReset();
@@ -1746,6 +1756,52 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.patchElementProperty).not.toHaveBeenCalled();
   });
 
+  it('counter fill batch는 exact descriptor를 dedicated helper에 전달한다', async () => {
+    const targets = [
+      { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    ];
+    const patch = { counterFillIdle: { color: ' raw solid ' } } as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', { targets, patch }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchCounterFill).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchCounterFill).toHaveBeenCalledWith(targets, patch, {
+      preflight: expect.any(Function),
+    });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
+  it('counter fill single도 generic eager를 우회하고 slot generation을 검사한다', async () => {
+    mocks.patchCounterFill.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { counterFillActive: { color: ' active solid ' } },
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.patchCounterFill).toHaveBeenCalledOnce();
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
   it('paint batch는 exact descriptor와 slot preflight를 전용 helper에 전달한다', async () => {
     const targets = [
       { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
@@ -1995,6 +2051,37 @@ describe('plugin panel persisted element mutations', () => {
         id: `counter-stroke-${index}`,
       })),
       patch: { counterStrokeActive: '#fff' },
+    },
+    {
+      targets: [{ elementType: 'graph', id: 'a' }],
+      patch: { counterFillIdle: { color: '#fff' } },
+    },
+    {
+      targets: [{ elementType: 'stat', id: 'a' }],
+      patch: { counterFillActive: { color: '#fff' } },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterFillIdle: { color: '#fff', gradient: null } },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: {
+        counterFillIdle: {
+          color: '#112233',
+          gradient: {
+            angle: 45,
+            stops: [
+              { color: '#112233', pos: 0 },
+              { color: '#445566', pos: 1 },
+            ],
+          },
+        },
+      },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'key-0' }],
+      patch: { counterFillIdle: { color: '#fff' } },
     },
     {
       targets: [
@@ -3594,6 +3681,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchSoundVolume).not.toHaveBeenCalled();
       expect(mocks.patchNoteProperties).not.toHaveBeenCalled();
       expect(mocks.patchNotePaint).not.toHaveBeenCalled();
+      expect(mocks.patchCounterFill).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
         error: { code: 'INVALID_PAYLOAD' },

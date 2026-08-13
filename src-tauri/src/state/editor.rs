@@ -2787,6 +2787,56 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterFillIdle(
+                    crate::models::EditorCounterFillIdlePropertyPatchV1 {
+                        counter_fill_idle: crate::models::EditorCounterFillIntentV1::Solid(
+                            crate::models::EditorCounterFillSolidIntentV1 {
+                                color: "  raw solid  ".to_string(),
+                            },
+                        ),
+                    },
+                ),
+                serde_json::json!({ "counterFillIdle": { "color": "  raw solid  " } }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::CounterFillActive(
+                    crate::models::EditorCounterFillActivePropertyPatchV1 {
+                        counter_fill_active: crate::models::EditorCounterFillIntentV1::Gradient(
+                            crate::models::EditorCounterFillGradientIntentV1 {
+                                color: "rgba(1,2,3,0.5)".to_string(),
+                                gradient: crate::models::EditorPaintGradientV1 {
+                                    angle: 90.0,
+                                    stops: vec![
+                                        crate::models::EditorPaintGradientStopV1 {
+                                            color: "rgba(1, 2, 3, 0.5)".to_string(),
+                                            pos: 0.0,
+                                        },
+                                        crate::models::EditorPaintGradientStopV1 {
+                                            color: "transparent".to_string(),
+                                            pos: 1.0,
+                                        },
+                                    ],
+                                },
+                            },
+                        ),
+                    },
+                ),
+                serde_json::json!({
+                    "counterFillActive": {
+                        "color": "rgba(1,2,3,0.5)",
+                        "gradient": {
+                            "angle": 90.0,
+                            "stops": [
+                                { "color": "rgba(1, 2, 3, 0.5)", "pos": 0.0 },
+                                { "color": "transparent", "pos": 1.0 }
+                            ]
+                        }
+                    }
+                }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterStrokeIdle(
                     crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
                         counter_stroke_idle: "  raw-idle-stroke  ".to_string(),
@@ -3103,6 +3153,13 @@ mod tests {
             serde_json::json!({ "counterFontFamily": 1 }),
             serde_json::json!({ "counterFontFamily": "font", "counterFontItalic": true }),
             serde_json::json!({ "counterFontFamily": "font", "unexpected": true }),
+            serde_json::json!({ "counterFillIdle": {} }),
+            serde_json::json!({ "counterFillIdle": { "color": null } }),
+            serde_json::json!({ "counterFillIdle": { "color": "solid", "gradient": null } }),
+            serde_json::json!({ "counterFillActive": { "color": "first", "gradient": { "stops": [{ "color": "first", "pos": 0 }, { "color": "last", "pos": 1 }] } } }),
+            serde_json::json!({ "counterFillActive": { "color": "first", "gradient": { "angle": 45, "stops": [{ "color": "first", "pos": 0 }, { "color": "last", "pos": 1 }], "unexpected": true } } }),
+            serde_json::json!({ "counterFillIdle": { "color": "solid", "unexpected": true } }),
+            serde_json::json!({ "counterFillIdle": { "color": "idle" }, "counterFillActive": { "color": "active" } }),
             serde_json::json!({ "counterStrokeIdle": null }),
             serde_json::json!({ "counterStrokeIdle": 1 }),
             serde_json::json!({ "counterStrokeIdle": "idle", "counterStrokeActive": "active" }),

@@ -23,6 +23,11 @@ import {
   type NotePaintValuePatchV1,
 } from '@src/types/key/notePaint';
 import {
+  isCounterFillPropertyPatchV1,
+  type CounterFillDescriptorV1,
+  type CounterFillPropertyPatchV1,
+} from '@src/types/key/counterFill';
+import {
   canonicalizePositionGradients,
   type PaintDescriptorV1,
 } from '@src/types/color';
@@ -182,6 +187,8 @@ interface EditorElementPropertyValuesV1 {
   counterFontFamily: string;
   counterStrokeIdle: string;
   counterStrokeActive: string;
+  counterFillIdle: CounterFillDescriptorV1;
+  counterFillActive: CounterFillDescriptorV1;
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
   useInlineStyles: boolean;
   fontWeight: number;
@@ -290,6 +297,7 @@ export type EditorCounterTypographyPropertyPatchV1 = EditorPropertyPatchUnionV1<
 export type EditorCounterStrokePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'counterStrokeIdle' | 'counterStrokeActive'
 >;
+export type EditorCounterFillPropertyPatchV1 = CounterFillPropertyPatchV1;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'fontWeight' | 'fontItalic' | 'fontUnderline' | 'fontStrikethrough'
@@ -1206,6 +1214,9 @@ export function assertEditorOpsV1(
       const notePaintPatchValid = (
         isNotePaintPropertyPatchV1 as (value: unknown) => boolean
       )(op.patch);
+      const counterFillPatchValid = (
+        isCounterFillPropertyPatchV1 as (value: unknown) => boolean
+      )(op.patch);
       const counterAnimationPreset = op.patch.counterAnimationPreset;
       const counterAnimationPresetValid = (() => {
         if (!isRecord(counterAnimationPreset)) return false;
@@ -1319,6 +1330,10 @@ export function assertEditorOpsV1(
             op.elementType === 'key' ||
             op.elementType === 'knob')) ||
         (notePaintPatchValid && op.elementType === 'key') ||
+        (counterFillPatchValid &&
+          (op.elementType === 'key' ||
+            (!('counterFillActive' in op.patch) &&
+              op.elementType === 'stat'))) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'displayText' &&
           typeof op.patch.displayText === 'string') ||

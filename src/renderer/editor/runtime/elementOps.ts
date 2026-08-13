@@ -47,6 +47,7 @@ import type {
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
+  EditorCounterFillPropertyPatchV1,
   EditorCounterAnimationPresetIntentV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
@@ -81,6 +82,10 @@ import {
   isNotePaintPropertyPatchV1,
   projectNotePaintPatch,
 } from '@src/types/key/notePaint';
+import {
+  isCounterFillPropertyPatchV1,
+  projectCounterFillPatch,
+} from '@src/types/key/counterFill';
 import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
@@ -2223,6 +2228,86 @@ export const patchPaintById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> =>
   patchPaintByTargets([{ elementType, id }], patch, options);
+
+type CounterFillTarget = { elementType: 'key' | 'stat'; id: string };
+
+const counterFillPropertyIntents = (
+  targets: readonly CounterFillTarget[],
+  patch: EditorCounterFillPropertyPatchV1,
+): PropertyIntents => {
+  const document = captureEditorDocument();
+  const intents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { elementType, id } of targets) {
+    const collection =
+      elementType === 'key' ? document.keyPositions : document.statPositions;
+    const current = Object.values(collection)
+      .flat()
+      .find((position) => position.id === id) as KeyPosition | undefined;
+    if (!current) continue;
+    const byId =
+      intents.get(elementType) ?? new Map<string, Record<string, unknown>>();
+    byId.set(id, projectCounterFillPatch(current, patch));
+    intents.set(elementType, byId);
+  }
+  return intents;
+};
+
+export const patchCounterFillByTargets = (
+  targets: readonly CounterFillTarget[],
+  patch: EditorCounterFillPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  const active = 'counterFillActive' in patch;
+  if (
+    !isCounterFillPropertyPatchV1(patch) ||
+    targets.length === 0 ||
+    targets.some(
+      ({ elementType, id }) =>
+        !id ||
+        isSyntheticElementId(id) ||
+        (elementType !== 'key' && elementType !== 'stat') ||
+        (active && elementType !== 'key'),
+    ) ||
+    new Set(targets.map(({ id }) => id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  const receipt = applyPropertyIntentsEagerly(
+    counterFillPropertyIntents(targets, patch),
+  );
+  let enrolled = false;
+  return commitSemanticOps(
+    targets.map(({ elementType, id }) => ({
+      kind: 'patchElement' as const,
+      elementType,
+      id,
+      patch: structuredClone(patch),
+    })),
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchCounterFillById = (
+  elementType: 'key' | 'stat',
+  id: string,
+  patch: EditorCounterFillPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+) => patchCounterFillByTargets([{ elementType, id }], patch, options);
 
 type ShadowTarget = {
   elementType: NativeElementType;

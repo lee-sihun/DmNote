@@ -56,6 +56,7 @@ import {
   patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority,
   patchCounterStrokeViaAuthority,
+  patchCounterFillViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -80,6 +81,7 @@ import type {
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
+  EditorCounterFillPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
@@ -130,6 +132,8 @@ import {
   patchCounterTypographyById,
   patchCounterStrokeById,
   patchCounterStrokeByTargets,
+  patchCounterFillById,
+  patchCounterFillByTargets,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -2461,6 +2465,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableCounterFillHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (patch: EditorCounterFillPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterFillViaAuthority([{ elementType, id }], patch)
+              : patchCounterFillById(elementType, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter fill', error);
+          });
+        }
+      : undefined;
+
   // ============================================================================
   // 다중 선택 헬퍼 함수들
   // ============================================================================
@@ -3654,6 +3674,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     newColor: NoteColor,
     onNotePaintCommit: (patch: EditorNotePaintPropertyPatchV1) => void,
   ) => completeBatchPickerColorChange(newColor, onNotePaintCommit);
+  const handleBatchFillPickerColorChangeComplete = (
+    newColor: string,
+    onCounterFillCommit: (patch: EditorCounterFillPropertyPatchV1) => void,
+  ) => {
+    const key =
+      effectiveBatchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+    setBatchLocalColors((prev) => ({ ...prev, [key]: newColor }));
+    onCounterFillCommit(
+      effectiveBatchCounterColorState === 'active'
+        ? { counterFillActive: { color: newColor } }
+        : { counterFillIdle: { color: newColor } },
+    );
+  };
 
   // ============================================================================
   // 렌더링
@@ -3763,6 +3796,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           }
           handleBatchNotePickerColorChangeComplete={
             handleBatchNotePickerColorChangeComplete
+          }
+          handleBatchFillPickerColorChangeComplete={
+            handleBatchFillPickerColorChangeComplete
           }
           handleBatchKeyOnlyStyleChange={handleBatchKeyOnlyStyleChange}
           getBatchPickerColor={getBatchPickerColor}
@@ -4185,6 +4221,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             : selectedKeyElements[0]?.id,
         )}
         onCounterStrokeCommit={stableCounterStrokeHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterFillCommit={stableCounterFillHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

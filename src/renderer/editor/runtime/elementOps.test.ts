@@ -83,6 +83,7 @@ import {
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
   patchCounterStrokeByTargets,
+  patchCounterFillByTargets,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -2705,6 +2706,83 @@ describe('elementOps', () => {
       useStatItemStore.getState().positions['4key'][0].activeShadow,
     ).toBeUndefined();
   });
+
+  it('counter fill은 state pair만 바꾸고 opposite와 raw counter siblings를 보존한다', async () => {
+    const gradient = {
+      angle: 45,
+      stops: [
+        { color: '#112233', pos: 0 },
+        { color: '#445566', pos: 1 },
+      ],
+    };
+    const key = {
+      ...keyAt(ID_A),
+      counter: {
+        ...keyAt(ID_A).counter,
+        fill: { idle: 'idle-before', active: 'active-before' },
+        fillIdleGradient: gradient,
+        fillActiveGradient: gradient,
+        customSibling: 'raw-sibling',
+      },
+    } as never;
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [key] },
+      positions: { '4key': [key] },
+    });
+
+    await patchCounterFillByTargets([{ elementType: 'key', id: ID_A }], {
+      counterFillIdle: { color: ' solid final ' },
+    });
+
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter,
+    ).toMatchObject({
+      fill: { idle: ' solid final ', active: 'active-before' },
+      fillActiveGradient: gradient,
+      customSibling: 'raw-sibling',
+    });
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter
+        .fillIdleGradient,
+    ).toBeUndefined();
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { counterFillIdle: { color: ' solid final ' } },
+        },
+      ],
+      expect.anything(),
+    );
+  });
+
+  it.each([
+    [
+      'idle graph',
+      [{ elementType: 'graph', id: ID_A }],
+      { counterFillIdle: { color: '#fff' } },
+    ],
+    [
+      'active stat',
+      [{ elementType: 'stat', id: ID_A }],
+      { counterFillActive: { color: '#fff' } },
+    ],
+    [
+      'synthetic',
+      [{ elementType: 'key', id: 'key-0' }],
+      { counterFillIdle: { color: '#fff' } },
+    ],
+  ] as const)(
+    'counter fill %s는 eager/wire 전에 거절한다',
+    async (_label, targets, patch) => {
+      await expect(
+        patchCounterFillByTargets(targets as never, patch as never),
+      ).resolves.toBe(false);
+      expect(api.commitSemanticOps).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     [

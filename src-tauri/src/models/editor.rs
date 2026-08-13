@@ -224,6 +224,8 @@ pub enum EditorElementPropertyPatchV1 {
     FontFamily(EditorFontFamilyPropertyPatchV1),
     DisplayText(EditorDisplayTextPropertyPatchV1),
     ClassName(EditorClassNamePropertyPatchV1),
+    FontColor(EditorFontColorPropertyPatchV1),
+    ActiveFontColor(EditorActiveFontColorPropertyPatchV1),
     Shadow(EditorShadowPropertyPatchV1),
     ActiveShadow(EditorActiveShadowPropertyPatchV1),
     ShadowEnabled(EditorShadowEnabledPropertyPatchV1),
@@ -255,6 +257,8 @@ pub enum EditorElementPropertyPatchV1 {
     CounterFontUnderline(EditorCounterFontUnderlinePropertyPatchV1),
     CounterFontStrikethrough(EditorCounterFontStrikethroughPropertyPatchV1),
     CounterFontFamily(EditorCounterFontFamilyPropertyPatchV1),
+    CounterFillIdle(EditorCounterFillIdlePropertyPatchV1),
+    CounterFillActive(EditorCounterFillActivePropertyPatchV1),
     CounterStrokeIdle(EditorCounterStrokeIdlePropertyPatchV1),
     CounterStrokeActive(EditorCounterStrokeActivePropertyPatchV1),
     CounterAnimationPreset(EditorCounterAnimationPresetPropertyPatchV1),
@@ -382,6 +386,18 @@ pub struct EditorDisplayTextPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorClassNamePropertyPatchV1 {
     pub class_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorFontColorPropertyPatchV1 {
+    pub font_color: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorActiveFontColorPropertyPatchV1 {
+    pub active_font_color: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -647,6 +663,38 @@ pub struct EditorCounterFontStrikethroughPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorCounterFontFamilyPropertyPatchV1 {
     pub counter_font_family: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFillIdlePropertyPatchV1 {
+    pub counter_fill_idle: EditorCounterFillIntentV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFillActivePropertyPatchV1 {
+    pub counter_fill_active: EditorCounterFillIntentV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EditorCounterFillIntentV1 {
+    Solid(EditorCounterFillSolidIntentV1),
+    Gradient(EditorCounterFillGradientIntentV1),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFillSolidIntentV1 {
+    pub color: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFillGradientIntentV1 {
+    pub color: String,
+    pub gradient: EditorPaintGradientV1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

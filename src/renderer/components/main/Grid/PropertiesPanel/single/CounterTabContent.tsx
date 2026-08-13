@@ -49,6 +49,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   onCounterLayoutCommit,
   onCounterTypographyCommit,
   onCounterStrokeCommit,
+  onCounterFillCommit,
   onCounterAnimationPresetCommit,
   panelElement,
   t,
@@ -220,7 +221,21 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     const pair = counterFillPair(value);
     const key = effectiveColorState === 'active' ? 'fillActive' : 'fillIdle';
     setLocalColors((prev) => ({ ...prev, [key]: pair.color }));
-    if (effectiveColorState === 'active') {
+    if (onCounterFillCommit) {
+      onCounterFillCommit(
+        effectiveColorState === 'active'
+          ? {
+              counterFillActive: pair.gradient
+                ? { color: pair.color, gradient: pair.gradient }
+                : { color: pair.color },
+            }
+          : {
+              counterFillIdle: pair.gradient
+                ? { color: pair.color, gradient: pair.gradient }
+                : { color: pair.color },
+            },
+      );
+    } else if (effectiveColorState === 'active') {
       handleCounterUpdate({
         fill: { ...counterSettings.fill, active: pair.color },
         fillActiveGradient: pair.gradient,
