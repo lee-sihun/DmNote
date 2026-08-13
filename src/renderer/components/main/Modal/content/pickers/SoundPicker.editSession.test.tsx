@@ -132,13 +132,14 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
 
   const mountPicker = async (
     completionBinding?: 'session-mode' | 'element-id',
+    selectedSound: string | null = SOUND.soundPath,
   ) => {
     act(() => {
       root.render(
         <EditSessionScope>
           <SoundPicker
             open
-            selectedSound={SOUND.soundPath}
+            selectedSound={selectedSound}
             onSoundSelect={onSoundSelect}
             pageTitle="sound"
             onBack={vi.fn()}
@@ -182,7 +183,7 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
     expect(onSoundSelect).not.toHaveBeenCalled();
   });
 
-  it('삭제 뒤 모드가 그대로면 로컬 선택도 해제한다', async () => {
+  it('삭제 후 참조 해제는 백엔드 canonical 동기화만 소유한다', async () => {
     await runDelete();
 
     await act(async () => {
@@ -191,7 +192,7 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
     });
 
     expect(remove).toHaveBeenCalledWith(SOUND.soundPath);
-    expect(onSoundSelect).toHaveBeenCalledWith(null);
+    expect(onSoundSelect).not.toHaveBeenCalled();
   });
 
   // element-id 결합은 유효성 판정을 ID applier에 위임한다.
@@ -205,7 +206,7 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
     expect(onSoundSelect).toHaveBeenCalledWith('sounds/new.wav');
   });
 
-  it('element-id 결합이면 모드가 바뀌어도 삭제 해제를 원 요소로 보낸다', async () => {
+  it('element-id 결합이어도 삭제 후 중복 해제 콜백을 보내지 않는다', async () => {
     await mountPicker('element-id');
     await runDelete();
     switchMode();
@@ -216,6 +217,32 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
     });
 
     expect(remove).toHaveBeenCalledWith(SOUND.soundPath);
-    expect(onSoundSelect).toHaveBeenCalledWith(null);
+    expect(onSoundSelect).not.toHaveBeenCalled();
+  });
+
+  it('삭제 응답 대기 중 선택한 새 사운드를 지우지 않는다', async () => {
+    let finishRemove: (() => void) | undefined;
+    remove.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishRemove = resolve;
+        }),
+    );
+    await mountPicker('element-id');
+    await runDelete();
+
+    await act(async () => {
+      resolveConfirm(true);
+      await Promise.resolve();
+    });
+    expect(remove).toHaveBeenCalledWith(SOUND.soundPath);
+
+    await mountPicker('element-id', 'sounds/new.wav');
+    await act(async () => {
+      finishRemove?.();
+      await settle();
+    });
+
+    expect(onSoundSelect).not.toHaveBeenCalled();
   });
 });

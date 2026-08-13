@@ -217,12 +217,8 @@ const SoundPicker = ({
         return next;
       });
       await soundApi.remove(item.soundPath);
-      // 백엔드가 이미 모든 요소에서 이 사운드를 해제했다. 대상이 갈렸으면
-      // 여기서 한 번 더 비우는 건 새 모드의 다른 사운드를 지우는 일이 된다
-      // (element-id 결합이면 ID applier가 원 요소에만 해제를 적용한다)
-      if (normalizedSelectedSound === item.soundPath && canBindCompletion()) {
-        onSoundSelect(null);
-      }
+      // 백엔드가 참조 해제와 canonical 동기화를 소유
+      // 응답 대기 중 새로 선택한 사운드를 예전 선택으로 재판단해 지우지 않는다
       await loadSounds();
     } catch (error) {
       console.error('Failed to delete sound', error);
