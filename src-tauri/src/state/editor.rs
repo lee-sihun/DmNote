@@ -10,8 +10,8 @@ use crate::{
     errors::EditorCommitError,
     models::{
         AppStoreData, CustomTab, EditorCommitRequest, EditorDocumentV1, EditorField,
-        ElementShadowSpec, KeyCounters, KeyMappings, KeyPosition, KeySlot,
-        EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_SCHEMA_VERSION,
+        ElementShadowSpec, GraphPosition, KeyCounters, KeyMappings, KeyPosition, KeySlot,
+        KnobPosition, StatPosition, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_SCHEMA_VERSION,
     },
 };
 
@@ -497,9 +497,13 @@ pub(crate) fn validate_document_transition_with_keying(
         .collect::<BTreeSet<_>>();
     validate_metric_limits(current, candidate, keying)?;
 
+    let native_id_alias = match keying {
+        GrandfatherKeying::ById => HashMap::new(),
+        GrandfatherKeying::ByModeIndex => native_id_alias_by_slot(current, candidate),
+    };
     if let Some(violation) = candidate_violations.iter().find(|violation| {
         is_unconditional_structural_violation(violation.code())
-            || !is_grandfathered(&current_violation_keys, violation)
+            || !is_grandfathered(&current_violation_keys, violation, &native_id_alias)
     }) {
         return Err(EditorCommitError::validation(
             violation.code(),
@@ -510,11 +514,129 @@ pub(crate) fn validate_document_transition_with_keying(
     Ok(())
 }
 
+// 후보 요소 id → 같은 (모드, 자리)의 현재 요소 id. 프리셋 트랜잭션은 커밋
+// 직전 id를 재발급하므로 신원으로는 관용 상대를 찾을 수 없다
+fn native_id_alias_by_slot(
+    current: &EditorDocumentV1,
+    candidate: &EditorDocumentV1,
+) -> HashMap<String, String> {
+    let mut alias = HashMap::new();
+    let mut collect = |current_ids: Vec<(&String, Vec<&str>)>,
+                       candidate_ids: Vec<(&String, Vec<&str>)>| {
+        let current_by_mode = current_ids.into_iter().collect::<HashMap<_, _>>();
+        for (mode, ids) in candidate_ids {
+            let Some(current_mode_ids) = current_by_mode.get(mode) else {
+                continue;
+            };
+            for (index, id) in ids.into_iter().enumerate() {
+                if let Some(current_id) = current_mode_ids.get(index) {
+                    alias.insert(id.to_string(), current_id.to_string());
+                }
+            }
+        }
+    };
+
+    collect(
+        key_position_ids(&current.key_positions),
+        key_position_ids(&candidate.key_positions),
+    );
+    collect(
+        nested_position_ids(&current.stat_positions),
+        nested_position_ids(&candidate.stat_positions),
+    );
+    collect(
+        nested_position_ids(&current.graph_positions),
+        nested_position_ids(&candidate.graph_positions),
+    );
+    collect(
+        nested_position_ids(&current.knob_positions),
+        nested_position_ids(&candidate.knob_positions),
+    );
+    alias
+}
+
+fn key_position_ids(collection: &HashMap<String, Vec<KeyPosition>>) -> Vec<(&String, Vec<&str>)> {
+    collection
+        .iter()
+        .map(|(mode, positions)| {
+            (
+                mode,
+                positions
+                    .iter()
+                    .map(|position| position.id.as_str())
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+fn nested_position_ids<T: HasKeyPosition>(
+    collection: &HashMap<String, Vec<T>>,
+) -> Vec<(&String, Vec<&str>)> {
+    collection
+        .iter()
+        .map(|(mode, positions)| {
+            (
+                mode,
+                positions
+                    .iter()
+                    .map(|element| element.key_position().id.as_str())
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+trait HasKeyPosition {
+    fn key_position(&self) -> &KeyPosition;
+}
+
+impl HasKeyPosition for StatPosition {
+    fn key_position(&self) -> &KeyPosition {
+        &self.position
+    }
+}
+
+impl HasKeyPosition for GraphPosition {
+    fn key_position(&self) -> &KeyPosition {
+        &self.position
+    }
+}
+
+impl HasKeyPosition for KnobPosition {
+    fn key_position(&self) -> &KeyPosition {
+        &self.position
+    }
+}
+
 fn is_grandfathered(
     current_violation_keys: &BTreeSet<ViolationKey>,
     candidate: &ValidationViolation,
+    native_id_alias: &HashMap<String, String>,
 ) -> bool {
-    current_violation_keys.contains(&candidate.key)
+    if current_violation_keys.contains(&candidate.key) {
+        return true;
+    }
+    if native_id_alias.is_empty() {
+        return false;
+    }
+    // 재발급된 id는 같은 자리의 이전 신원으로 바꿔 한 번 더 대조한다
+    let ViolationOwner::NativeElement { kind, id } = &candidate.key.owner else {
+        return false;
+    };
+    let Some(current_id) = native_id_alias.get(id) else {
+        return false;
+    };
+    let aliased = ViolationKey {
+        owner: ViolationOwner::NativeElement {
+            kind: *kind,
+            id: current_id.clone(),
+        },
+        code: candidate.key.code,
+        property_path: candidate.key.property_path.clone(),
+        invalid_value: candidate.key.invalid_value.clone(),
+    };
+    current_violation_keys.contains(&aliased)
 }
 
 fn is_unconditional_structural_violation(code: &str) -> bool {
@@ -971,12 +1093,18 @@ fn validate_per_owner_metric_limits(
 
     for (mode, keys) in &candidate.keys {
         for (slot_index, slot) in keys.iter().enumerate() {
-            let current_slot = candidate
-                .key_positions
-                .get(mode)
-                .and_then(|positions| positions.get(slot_index))
-                .and_then(|position| current_key_slots.get(position.id.as_str()))
-                .copied();
+            let current_slot = match keying {
+                GrandfatherKeying::ById => candidate
+                    .key_positions
+                    .get(mode)
+                    .and_then(|positions| positions.get(slot_index))
+                    .and_then(|position| current_key_slots.get(position.id.as_str()))
+                    .copied(),
+                GrandfatherKeying::ByModeIndex => current
+                    .keys
+                    .get(mode)
+                    .and_then(|slots| slots.get(slot_index)),
+            };
             validate_key_slot_label_limits(mode, slot_index, current_slot, slot)?;
         }
     }
@@ -2054,7 +2182,8 @@ mod tests {
 
         assert!(is_grandfathered(
             &current,
-            &ValidationViolation::new(key, "different diagnostic message")
+            &ValidationViolation::new(key, "different diagnostic message"),
+            &HashMap::new()
         ));
     }
 
@@ -2240,6 +2369,37 @@ mod tests {
             Some("COORDINATE_OUT_OF_RANGE")
         );
 
+        validate_document_transition_with_keying(
+            &current,
+            &candidate,
+            &store,
+            &candidate_store,
+            GrandfatherKeying::ByModeIndex,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn preset_keying_grandfathers_structural_and_label_violations_too() {
+        let mut store = default_editor_store();
+        // 그림자 위반과 과길이 라벨을 함께 가진 관용 store
+        store.key_positions.get_mut("4key").unwrap()[0].shadow = Some(ElementShadowSpec {
+            color: String::new(),
+            ..valid_shadow()
+        });
+        store.keys.get_mut("4key").unwrap()[0] = KeySlot::from("x".repeat(MAX_KEY_LABEL_BYTES + 1));
+        let current = EditorDocumentV1::from_store(&store);
+
+        let mut candidate_store = store.clone();
+        crate::state::native_element_id::rekey_store_element_ids(&mut candidate_store);
+        let candidate = EditorDocumentV1::from_store(&candidate_store);
+
+        // ID 기준으로는 관용 상대를 못 찾아 거부된다
+        assert!(
+            validate_document_transition(&current, &candidate, &store, &candidate_store).is_err()
+        );
+
+        // 자리 기준이면 그림자·라벨 관용이 모두 유지된다
         validate_document_transition_with_keying(
             &current,
             &candidate,
