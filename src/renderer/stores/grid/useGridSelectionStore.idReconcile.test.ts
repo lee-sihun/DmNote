@@ -59,6 +59,39 @@ describe('id 기반 선택 재조정', () => {
     expect(selected[0].index).toBe(0);
   });
 
+  it('백엔드가 id를 재발급해도 같은 자리의 선택을 유지한다', () => {
+    useGridSelectionStore
+      .getState()
+      .setSelectedElements([{ type: 'key', id: a.id!, index: 1 }]);
+    // 탭 프리셋 rekey·v1 어댑터 재발급처럼 요소는 그대로인데 신원만 새로
+    // 발급되는 경우 - 길이가 그대로면 자리로 재채택한다
+    const rekeyedA = { ...a, id: 'rekeyed-a' };
+    const rekeyedB = { ...b, id: 'rekeyed-b' };
+
+    invalidateSelectionForChangedIndexedElementArrays(
+      arraysOf([b, a]),
+      arraysOf([rekeyedB, rekeyedA]),
+    );
+
+    const selected = useGridSelectionStore.getState().selectedElements;
+    expect(selected).toHaveLength(1);
+    expect(selected[0].id).toBe('rekeyed-a');
+    expect(selected[0].index).toBe(1);
+  });
+
+  it('길이가 바뀌면 재채택 대신 경계 판정을 따른다', () => {
+    useGridSelectionStore
+      .getState()
+      .setSelectedElements([{ type: 'key', id: a.id!, index: 1 }]);
+
+    invalidateSelectionForChangedIndexedElementArrays(
+      arraysOf([b, a]),
+      arraysOf([b]),
+    );
+
+    expect(useGridSelectionStore.getState().selectedElements).toHaveLength(0);
+  });
+
   it('변화가 없으면 선택 참조를 보존한다', () => {
     useGridSelectionStore
       .getState()

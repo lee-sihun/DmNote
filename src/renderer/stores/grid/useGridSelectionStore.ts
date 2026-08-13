@@ -5,6 +5,7 @@ import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import { stableStringify } from '@utils/core/stableStringify';
+import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
 export type SelectableElementType =
   | 'key'
@@ -402,19 +403,32 @@ export function invalidateSelectionForChangedIndexedElementArrays(
 
     // 신원 id를 가진 선택은 id로 재조정한다: 살아 있으면 index만 갱신,
     // 사라졌으면 제거. 재정렬돼도 선택은 같은 요소를 따라간다
-    if (element.id !== `${element.type}-${element.index}`) {
-      const newIndex = nextPositionsFor(element.type).findIndex(
+    if (!isSyntheticElementId(element.id)) {
+      const nextPositions = nextPositionsFor(element.type);
+      const newIndex = nextPositions.findIndex(
         (position) => position?.id === element.id,
       );
-      if (newIndex === -1) {
-        changed = true;
-        return [];
+      if (newIndex !== -1) {
+        if (newIndex !== element.index) {
+          changed = true;
+          return [{ ...element, index: newIndex }];
+        }
+        return [element];
       }
-      if (newIndex !== element.index) {
+
+      // id가 사라졌어도 그 타입에 구조 경계가 없으면 요소는 그대로이고 신원만
+      // 재발급된 것이다 (탭 프리셋 rekey, v1 어댑터 재발급) - 자리로 재채택한다
+      const rekeyed =
+        boundaries.get(element.type) === undefined &&
+        typeof element.index === 'number'
+          ? nextPositions[element.index]?.id
+          : undefined;
+      if (rekeyed !== undefined) {
         changed = true;
-        return [{ ...element, index: newIndex }];
+        return [{ ...element, id: rekeyed }];
       }
-      return [element];
+      changed = true;
+      return [];
     }
 
     // 합성 id 폴백 (backfill 전 데이터): 기존 경계 휴리스틱 유지
