@@ -1466,6 +1466,64 @@ export function useGridSelection({
         }
       }
 
+      // 선택 이동은 eager 직후 동기 구간에서 - await 뒤로 미루면 라운드트립
+      // 동안 선택이 원본에 남아 Delete 같은 후속 조작이 원본을 지운다.
+      // 실패로 eager가 롤백되면 다음 문서 적용의 선택 재조정이 정리한다
+      const newSelectedElements: SelectedElement[] = [];
+      const collect = (
+        type: 'key' | 'stat' | 'graph' | 'knob',
+        record: Record<string, Array<{ id?: string }>>,
+        ids: readonly string[],
+      ) => {
+        const list = record[selectedKeyType] ?? [];
+        for (const id of ids) {
+          const index = list.findIndex((position) => position.id === id);
+          if (index !== -1) {
+            newSelectedElements.push({ type, id, index });
+          }
+        }
+      };
+      collect(
+        'key',
+        useKeyStore.getState().canonicalPositions as never,
+        keysToAdd.map((entry) => entry.position.id!),
+      );
+      collect(
+        'stat',
+        useStatItemStore.getState().positions as never,
+        statsToAdd.map((entry) => entry.position.id!),
+      );
+      collect(
+        'graph',
+        useGraphItemStore.getState().positions as never,
+        graphsToAdd.map((entry) => entry.position.id!),
+      );
+      collect(
+        'knob',
+        useKnobItemStore.getState().positions as never,
+        knobsToAdd.map((entry) => entry.position.id!),
+      );
+      const presentPluginIds = new Set(
+        usePluginDisplayElementStore
+          .getState()
+          .elements.map((element) => element.fullId),
+      );
+      for (const element of frozenPluginElements) {
+        if (presentPluginIds.has(element.fullId)) {
+          newSelectedElements.push({ type: 'plugin', id: element.fullId });
+        }
+      }
+      if (newSelectedElements.length > 0) {
+        useGridSelectionStore.getState().setSkipPanelModeSwitch(true);
+        if (groupIdMap.size > 0) {
+          useGridSelectionStore
+            .getState()
+            .setFullSelection(newSelectedElements, [...groupIdMap.values()]);
+        } else {
+          setSelectedElements(newSelectedElements);
+        }
+      }
+
       let result: { committed: boolean; satisfied: boolean };
       try {
         result = await runMixedGestureElementIntent({
@@ -1514,64 +1572,6 @@ export function useGridSelection({
         // 호출부 경계에서는 기록만 (삭제 경로와 대칭)
         console.error('Failed to persist pasted elements', error);
         result = { committed: false, satisfied: false };
-      }
-
-      if (result.committed || result.satisfied) {
-        // 선택 이동은 성공 후 - eager 유지 대신 단순화(수렴 결정)
-        const newSelectedElements: SelectedElement[] = [];
-        const collect = (
-          type: 'key' | 'stat' | 'graph' | 'knob',
-          record: Record<string, Array<{ id?: string }>>,
-          ids: readonly string[],
-        ) => {
-          const list = record[selectedKeyType] ?? [];
-          for (const id of ids) {
-            const index = list.findIndex((position) => position.id === id);
-            if (index !== -1) {
-              newSelectedElements.push({ type, id, index });
-            }
-          }
-        };
-        collect(
-          'key',
-          useKeyStore.getState().canonicalPositions as never,
-          keysToAdd.map((entry) => entry.position.id!),
-        );
-        collect(
-          'stat',
-          useStatItemStore.getState().positions as never,
-          statsToAdd.map((entry) => entry.position.id!),
-        );
-        collect(
-          'graph',
-          useGraphItemStore.getState().positions as never,
-          graphsToAdd.map((entry) => entry.position.id!),
-        );
-        collect(
-          'knob',
-          useKnobItemStore.getState().positions as never,
-          knobsToAdd.map((entry) => entry.position.id!),
-        );
-        const presentPluginIds = new Set(
-          usePluginDisplayElementStore
-            .getState()
-            .elements.map((element) => element.fullId),
-        );
-        for (const element of frozenPluginElements) {
-          if (presentPluginIds.has(element.fullId)) {
-            newSelectedElements.push({ type: 'plugin', id: element.fullId });
-          }
-        }
-        if (newSelectedElements.length > 0) {
-          useGridSelectionStore.getState().setSkipPanelModeSwitch(true);
-          if (groupIdMap.size > 0) {
-            useGridSelectionStore
-              .getState()
-              .setFullSelection(newSelectedElements, [...groupIdMap.values()]);
-          } else {
-            setSelectedElements(newSelectedElements);
-          }
-        }
       }
 
       sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {

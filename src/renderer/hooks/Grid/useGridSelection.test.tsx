@@ -280,6 +280,47 @@ describe('useGridSelection compound history gesture', () => {
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
+  it('붙여넣기 선택은 커밋 정산을 기다리지 않고 옮겨간다', async () => {
+    act(() => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
+      useGridSelectionStore
+        .getState()
+        .setClipboard([
+          { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        ]);
+    });
+    // 커밋 정산을 붙잡아 라운드트립 중 상태를 관찰한다
+    let settle: (value: { committed: boolean; satisfied: boolean }) => void =
+      () => {};
+    mocks.runMixedGestureIntent.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          settle = resolve;
+        }),
+    );
+
+    let pasting: Promise<void>;
+    await act(async () => {
+      pasting = api.pasteElements();
+      await Promise.resolve();
+    });
+
+    // 정산 전에 이미 사본을 가리켜야 한다 - 원본에 남아 있으면 라운드트립
+    // 중의 Delete가 원본을 지운다
+    const duringRoundTrip =
+      useGridSelectionStore.getState().selectedElements;
+    expect(duringRoundTrip).toHaveLength(1);
+    expect(duringRoundTrip[0].id).not.toBe(STABLE_KEY_ID);
+    expect(duringRoundTrip[0].index).toBe(1);
+
+    await act(async () => {
+      settle({ committed: true, satisfied: true });
+      await pasting;
+    });
+  });
+
   it('혼합 붙여넣기 중 동기 예외가 나도 staged transaction을 정산한다', async () => {
     act(() => {
       useGridSelectionStore.getState().setClipboard([
