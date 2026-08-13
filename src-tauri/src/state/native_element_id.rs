@@ -114,33 +114,65 @@ fn backfill_collection<T: NativeElement>(
 }
 
 pub(crate) fn backfill_store_element_ids(store: &mut AppStoreData) -> BackfillOutcome {
+    backfill_element_ids_for_collections(store, true, true, true, true)
+}
+
+// 건너뛰는 컬렉션의 id를 seen에 먼저 채워, 대상 컬렉션의 교차 중복도 복구된다
+pub(crate) fn backfill_element_ids_for_collections(
+    store: &mut AppStoreData,
+    key_positions: bool,
+    stat_positions: bool,
+    graph_positions: bool,
+    knob_positions: bool,
+) -> BackfillOutcome {
     let mut seen = HashSet::new();
+    if !key_positions {
+        collect_collection_ids(&store.key_positions, &mut seen);
+    }
+    if !stat_positions {
+        collect_collection_ids(&store.stat_positions, &mut seen);
+    }
+    if !graph_positions {
+        collect_collection_ids(&store.graph_positions, &mut seen);
+    }
+    if !knob_positions {
+        collect_collection_ids(&store.knob_positions, &mut seen);
+    }
+
     let mut reserved = collect_store_ids(store);
     let mut outcome = BackfillOutcome::default();
-    backfill_collection(
-        &mut store.key_positions,
-        &mut seen,
-        &mut reserved,
-        &mut outcome,
-    );
-    backfill_collection(
-        &mut store.stat_positions,
-        &mut seen,
-        &mut reserved,
-        &mut outcome,
-    );
-    backfill_collection(
-        &mut store.graph_positions,
-        &mut seen,
-        &mut reserved,
-        &mut outcome,
-    );
-    backfill_collection(
-        &mut store.knob_positions,
-        &mut seen,
-        &mut reserved,
-        &mut outcome,
-    );
+    if key_positions {
+        backfill_collection(
+            &mut store.key_positions,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if stat_positions {
+        backfill_collection(
+            &mut store.stat_positions,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if graph_positions {
+        backfill_collection(
+            &mut store.graph_positions,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if knob_positions {
+        backfill_collection(
+            &mut store.knob_positions,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
     outcome
 }
 

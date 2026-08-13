@@ -1731,6 +1731,16 @@ impl AppStore {
         }
         let value = updater(&mut scratch)?;
         crate::state::migration::canonicalize_gradient_pairs(&mut scratch);
+        // 레거시 경로는 호출부가 넘긴 전체 레코드를 그대로 대입한다 - 선언된
+        // 컬렉션에 한해 빈·중복·형식 오류 id를 채워 canonical 오염을 막는다
+        // (선언 밖 컬렉션을 건드리면 UNDECLARED_EDITOR_FIELD가 된다)
+        crate::state::native_element_id::backfill_element_ids_for_collections(
+            &mut scratch,
+            touched_fields.contains(&EditorField::KeyPositions),
+            touched_fields.contains(&EditorField::StatPositions),
+            touched_fields.contains(&EditorField::GraphPositions),
+            touched_fields.contains(&EditorField::KnobPositions),
+        );
 
         // editorRevision은 이 트랜잭션만 관리
         scratch.editor_revision = current_store.editor_revision;
@@ -8212,6 +8222,52 @@ mod tests {
     }
 
     #[test]
+    fn legacy_full_record_write_backfills_element_ids_before_they_reach_canonical() {
+        let dir = test_directory("editor-legacy-id-backfill-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mode = store.snapshot().selected_key_type;
+
+        // 레거시 전체 레코드 커맨드는 호출부가 준 요소를 그대로 대입한다 -
+        // id 없는 stat이 canonical에 남으면 이후 v2 커밋이 전부 막힌다
+        store
+            .commit_legacy_editor_transaction(
+                EditorCommitOrigin::LegacyAdapter("stat_positions_update".to_string()),
+                &[EditorField::StatPositions],
+                |data| {
+                    data.stat_positions.insert(
+                        mode.clone(),
+                        vec![StatPosition {
+                            stat_type: StatType::Kps,
+                            position: KeyPosition::default(),
+                        }],
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        let snapshot = store.snapshot();
+        let stored_id = snapshot.stat_positions[&mode][0].position.id.clone();
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &stored_id
+        ));
+
+        // 오염이 없으니 후속 v2 커밋이 통과한다
+        store
+            .commit_editor_document(editor_request(
+                store.snapshot().editor_revision,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, 42.0),
+            ))
+            .unwrap();
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn strict_editor_commit_preserves_existing_ghost_modes_losslessly() {
         let dir = test_directory("editor-grandfather-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -8391,7 +8447,18 @@ mod tests {
         let positions = change.document.key_positions;
         assert_eq!(store.writer.persist_count(), persist_count + 1);
         assert_eq!(keys["4key"].last().unwrap(), &KeySlot::from("F5"));
-        assert_eq!(positions["4key"].last().unwrap(), &KeyPosition::default());
+        // 덧붙은 위치는 기본값 그대로이되 id만 경계에서 채워진다
+        let appended = positions["4key"].last().unwrap();
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &appended.id
+        ));
+        assert_eq!(
+            &KeyPosition {
+                id: String::new(),
+                ..appended.clone()
+            },
+            &KeyPosition::default()
+        );
         assert!(keys["5key"].last().unwrap().is_unassigned());
         assert_eq!(keys["4key"].len(), positions["4key"].len());
         assert_eq!(keys["5key"].len(), positions["5key"].len());
