@@ -230,6 +230,7 @@ export interface StyleTabContentProps {
   shadowActiveState?: boolean;
   showImagePicker?: boolean;
   onToggleImagePicker?: () => void;
+  onInactiveImageCommit?: (inactiveImage: string) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
   panelElement?: HTMLElement | null;
   useCustomCSS?: boolean;

@@ -16,14 +16,27 @@ const captured = vi.hoisted(() => ({
   font: null as null | {
     onFontSelect: (fontName: string | null) => void;
   },
+  image: null as null | {
+    completionBinding?: CompletionBinding;
+    onIdleImageChange: (imageUrl: string) => void;
+    onIdleImageReset: () => void;
+  },
 }));
 
 const patches = vi.hoisted(() => ({
   applyElementPatchesById: vi.fn(async () => 1),
   applyElementPatchById: vi.fn(async () => true),
+  patchInactiveImageByTargets: vi.fn(async () => true),
+  patchInactiveImageViaAuthority: vi.fn(async () => true),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
+vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  patchInactiveImageByTargets: patches.patchInactiveImageByTargets,
+}));
+vi.mock('@plugins/rpc/pluginElementActions', () => ({
+  patchInactiveImageViaAuthority: patches.patchInactiveImageViaAuthority,
+}));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
 }));
@@ -43,7 +56,10 @@ vi.mock(
   }),
 );
 vi.mock('@components/main/Modal/content/pickers/ImagePicker', () => ({
-  default: () => null,
+  default: (props: (typeof captured)['image']) => {
+    captured.image = props;
+    return null;
+  },
 }));
 vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   default: () => null,
@@ -69,6 +85,10 @@ vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
 
 import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNavContext';
 import { BatchKeyLikePanel } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
+import {
+  BatchGraphOnlyPanel,
+  BatchKnobOnlyPanel,
+} from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
 
 const BATCH_STYLE_FONT_PAGE_KEY = 'batch-style:font';
@@ -109,14 +129,19 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
   const panelProps = (): PanelProps => {
     const selected = useGridSelectionStore.getState().selectedElements;
     const keyElements = selected.filter((element) => element.type === 'key');
+    const statElements = selected.filter((element) => element.type === 'stat');
+    const graphElements = selected.filter(
+      (element) => element.type === 'graph',
+    );
+    const knobElements = selected.filter((element) => element.type === 'knob');
     return {
       setPanelElement: vi.fn(),
-      selectedBatchStyleElements: keyElements,
+      selectedBatchStyleElements: selected,
       selectedKeyElements: keyElements,
-      selectedStatElements: [],
-      selectedGraphElements: [],
-      selectedKnobElements: [],
-      selectedKeyLikeElements: keyElements,
+      selectedStatElements: statElements,
+      selectedGraphElements: graphElements,
+      selectedKnobElements: knobElements,
+      selectedKeyLikeElements: [...keyElements, ...statElements],
       selectedGroupInfo: null,
       isRenaming: false,
       renameInputRef: createRef<HTMLInputElement | null>(),
@@ -147,10 +172,13 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       handleBatchGlowColorChange: vi.fn(),
       handleBatchGlowColorChangeComplete: vi.fn(),
       handleGraphBatchSharedSetting: vi.fn(),
+      handleKnobBatchSharedSetting: vi.fn(),
       getMixedValue: mixedValue,
       getMixedValueBatch: mixedValue,
       getMixedValueGraphs: mixedValue,
       getMixedValueGraphsAsKey: mixedValue,
+      getMixedValueKnobs: mixedValue,
+      getMixedValueKnobsAsKey: mixedValue,
       getMixedValueKeysOnly: mixedValue,
       getMixedValueActiveCapable: mixedValue,
       handleActiveCapableStyleChangeComplete: vi.fn(),
@@ -166,7 +194,9 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       batchBorderColorButtonRef: createRef<HTMLButtonElement>(),
       batchCounterFillButtonRef: createRef<HTMLButtonElement>(),
       batchCounterStrokeButtonRef: createRef<HTMLButtonElement>(),
-      batchImageButtonRef: createRef<HTMLButtonElement>(),
+      batchImageButtonRef: {
+        current: document.createElement('button'),
+      },
       showBatchImagePicker: false,
       setShowBatchImagePicker: vi.fn(),
       batchPickerFor: null,
@@ -225,6 +255,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     vi.clearAllMocks();
     captured.sound = null;
     captured.font = null;
+    captured.image = null;
     selectKey(ID_A);
     host = document.createElement('div');
     pageHost = document.createElement('div');
@@ -237,7 +268,178 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     act(() => root.unmount());
     host.remove();
     pageHost.remove();
+    delete window.__dmn_window_type;
   });
+
+  type ImagePanelKind = 'mixed' | 'graph' | 'knob';
+
+  const selectImageTargets = (
+    kind: ImagePanelKind,
+    suffix: 'a' | 'b' | 'synthetic',
+  ) => {
+    const ids =
+      suffix === 'synthetic'
+        ? kind === 'mixed'
+          ? [ID_A, 'stat-0']
+          : [`${kind}-0`]
+        : kind === 'mixed'
+        ? ['key', 'stat', 'graph', 'knob'].map(
+            (type, index) =>
+              `${suffix}${index + 1}${index + 1}${index + 1}${index + 1}${
+                index + 1
+              }${index + 1}${index + 1}-${index + 1}${index + 1}${index + 1}${
+                index + 1
+              }-4${index + 1}${index + 1}${index + 1}-8${index + 1}${
+                index + 1
+              }${index + 1}-${index + 1}${index + 1}${index + 1}${index + 1}${
+                index + 1
+              }${index + 1}${index + 1}${index + 1}${index + 1}${index + 1}${
+                index + 1
+              }${index + 1}`,
+          )
+        : [
+            suffix === 'a'
+              ? kind === 'graph'
+                ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
+                : 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+              : kind === 'graph'
+              ? 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1'
+              : 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2',
+          ];
+    const types =
+      kind === 'mixed'
+        ? suffix === 'synthetic'
+          ? (['key', 'stat'] as const)
+          : (['key', 'stat', 'graph', 'knob'] as const)
+        : ([kind] as const);
+    useGridSelectionStore.setState({
+      selectedElements: types.map((type, index) => ({
+        type,
+        id: ids[index],
+        index,
+      })),
+    });
+    return types.map((elementType, index) => ({
+      elementType,
+      id: ids[index],
+    }));
+  };
+
+  const renderImagePanel = (
+    kind: ImagePanelKind,
+    legacy: ReturnType<typeof vi.fn>,
+  ) => {
+    const props = panelProps();
+    const shared = {
+      ...props,
+      showBatchImagePicker: true,
+      handleBatchStyleChangeComplete: kind === 'mixed' ? legacy : vi.fn(),
+      handleGraphBatchSharedSetting: kind === 'graph' ? legacy : vi.fn(),
+      handleKnobBatchSharedSetting: kind === 'knob' ? legacy : vi.fn(),
+    };
+    const panel =
+      kind === 'mixed' ? (
+        <BatchKeyLikePanel {...(shared as unknown as PanelProps)} />
+      ) : kind === 'graph' ? (
+        <BatchGraphOnlyPanel
+          {...(shared as unknown as React.ComponentProps<
+            typeof BatchGraphOnlyPanel
+          >)}
+        />
+      ) : (
+        <BatchKnobOnlyPanel
+          {...(shared as unknown as React.ComponentProps<
+            typeof BatchKnobOnlyPanel
+          >)}
+        />
+      );
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          {panel}
+        </PanelNavProvider>,
+      );
+    });
+  };
+
+  it.each([
+    ['main', 'mixed'],
+    ['main', 'graph'],
+    ['main', 'knob'],
+    ['panel', 'mixed'],
+    ['panel', 'graph'],
+    ['panel', 'knob'],
+  ] as const)(
+    '%s %s batch ImagePicker load와 reset은 open 시점 ID를 고정한다',
+    (windowType, kind) => {
+      window.__dmn_window_type = windowType;
+      const targetsA = selectImageTargets(kind, 'a');
+      const legacy = vi.fn();
+      renderImagePanel(kind, legacy);
+      expect(captured.image?.completionBinding).toBe('element-id');
+
+      selectImageTargets(kind, 'b');
+      renderImagePanel(kind, legacy);
+      act(() => {
+        captured.image?.onIdleImageChange('  frozen.png  ');
+        captured.image?.onIdleImageReset();
+      });
+
+      const selectedWriter =
+        windowType === 'panel'
+          ? patches.patchInactiveImageViaAuthority
+          : patches.patchInactiveImageByTargets;
+      const otherWriter =
+        windowType === 'panel'
+          ? patches.patchInactiveImageByTargets
+          : patches.patchInactiveImageViaAuthority;
+      expect(selectedWriter.mock.calls).toEqual([
+        [targetsA, '  frozen.png  '],
+        [targetsA, ''],
+      ]);
+      expect(otherWriter).not.toHaveBeenCalled();
+      expect(legacy).not.toHaveBeenCalled();
+      expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['mixed', 'graph', 'knob'] as const)(
+    '%s batch ImagePicker에 synthetic ID가 있으면 load와 reset 전체가 legacy다',
+    (kind) => {
+      window.__dmn_window_type = 'panel';
+      selectImageTargets(kind, 'synthetic');
+      const legacy = vi.fn();
+      renderImagePanel(kind, legacy);
+
+      expect(captured.image?.completionBinding).toBe('session-mode');
+      act(() => {
+        captured.image?.onIdleImageChange('legacy.png');
+        captured.image?.onIdleImageReset();
+      });
+
+      expect(patches.patchInactiveImageByTargets).not.toHaveBeenCalled();
+      expect(patches.patchInactiveImageViaAuthority).not.toHaveBeenCalled();
+      if (kind === 'mixed') {
+        expect(legacy.mock.calls).toEqual([
+          ['inactiveImage', 'legacy.png'],
+          ['inactiveImage', ''],
+        ]);
+      } else {
+        expect(legacy.mock.calls).toEqual([
+          [{ inactiveImage: 'legacy.png' }],
+          [{ inactiveImage: '' }],
+        ]);
+      }
+    },
+  );
 
   it('페이지가 열려 있는 동안 동일 개수 선택 교체에도 시작 선택에 적용한다', () => {
     renderPanel({

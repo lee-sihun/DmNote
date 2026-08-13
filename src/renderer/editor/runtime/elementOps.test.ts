@@ -61,6 +61,8 @@ import {
   patchKnobPropertiesByIds,
   patchKnobPropertyById,
   patchKnobAxisIdById,
+  patchInactiveImageById,
+  patchInactiveImageByTargets,
   patchNotePropertiesByIds,
   patchNotePropertyById,
   patchStatTypeById,
@@ -2444,6 +2446,82 @@ describe('elementOps', () => {
       sensitivity: 1,
       reverse: false,
     });
+  });
+
+  it('inactiveImage는 raw string을 single과 혼합 4타입 한 commit으로 보낸다', async () => {
+    const statId = '33333333-3333-4333-8333-333333333333';
+    const graphId = '44444444-4444-4444-8444-444444444444';
+    const knobId = '55555555-5555-4555-8555-555555555555';
+    const stat = { ...keyAt(statId), statType: 'kps' } as never;
+    const graph = graphAt(graphId, {
+      inactiveImage: 'graph-before.png',
+      activeImage: 'graph-active.png',
+    });
+    const knob = {
+      ...keyAt(knobId),
+      axisId: '',
+      sensitivity: 1,
+      reverse: false,
+    } as never;
+    useStatItemStore.setState({ positions: { '4key': [stat] } });
+    useGraphItemStore.setState({ positions: { '4key': [graph] } });
+    useKnobItemStore.setState({ positions: { '4key': [knob] } });
+
+    await patchInactiveImageById('key', ID_A, '  /tmp/raw.png  ');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { inactiveImage: '  /tmp/raw.png  ' },
+        },
+      ],
+      expect.anything(),
+    );
+
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: statId },
+      { elementType: 'graph' as const, id: graphId },
+      { elementType: 'knob' as const, id: knobId },
+    ];
+    await patchInactiveImageByTargets(targets, 'picked.png');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { inactiveImage: 'picked.png' },
+      })),
+      expect.anything(),
+    );
+    expect(useGraphItemStore.getState().positions['4key'][0]).toMatchObject({
+      inactiveImage: 'picked.png',
+      activeImage: graph.activeImage,
+    });
+  });
+
+  it('inactiveImage batch는 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
+    await expect(patchInactiveImageByTargets([], 'picked.png')).resolves.toBe(
+      false,
+    );
+    await expect(
+      patchInactiveImageByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'stat', id: ID_A },
+        ],
+        'picked.png',
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchInactiveImageByTargets(
+        [{ elementType: 'knob', id: 'knob-0' }],
+        'picked.png',
+      ),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
 
   it('note 편입 전 실패는 자기 eager leaf만 복원한다', async () => {

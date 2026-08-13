@@ -8771,6 +8771,225 @@ mod tests {
     }
 
     #[test]
+    fn inactive_image_batch_replays_raw_empty_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-inactive-image-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut document = store.editor_get().document;
+        let mut template = document.key_positions["4key"][0].clone();
+        template.inactive_image = None;
+        template.active_image = Some("active-sibling.png".to_string());
+        template.idle_image_fit = Some(crate::models::ImageFit::Contain);
+        template.idle_transparent = true;
+        template.counter.enabled = false;
+        document.key_positions.get_mut("4key").unwrap()[0] = template.clone();
+        let targets = [
+            (EditorElementTypeV1::Key, template.id.clone()),
+            (EditorElementTypeV1::Stat, uuid::Uuid::new_v4().to_string()),
+            (EditorElementTypeV1::Graph, uuid::Uuid::new_v4().to_string()),
+            (EditorElementTypeV1::Knob, uuid::Uuid::new_v4().to_string()),
+        ];
+        document.stat_positions.insert(
+            "4key".to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: KeyPosition {
+                    id: targets[1].1.clone(),
+                    ..template.clone()
+                },
+            }],
+        );
+        document.graph_positions.insert(
+            "4key".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 1000,
+                graph_color: "graph-sibling".to_string(),
+                show_avg_line: true,
+                position: KeyPosition {
+                    id: targets[2].1.clone(),
+                    ..template.clone()
+                },
+            }],
+        );
+        document.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "axis-sibling".to_string(),
+                sensitivity: 2.0,
+                reverse: true,
+                position: KeyPosition {
+                    id: targets[3].1.clone(),
+                    ..template
+                },
+            }],
+        );
+        let setup = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    keys: Some(document.keys),
+                    key_positions: Some(document.key_positions),
+                    stat_positions: Some(document.stat_positions),
+                    graph_positions: Some(document.graph_positions),
+                    knob_positions: Some(document.knob_positions),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        let patch = EditorElementPropertyPatchV1::InactiveImage(
+            crate::models::EditorInactiveImagePropertyPatchV1 {
+                inactive_image: String::new(),
+            },
+        );
+        let ops = targets
+            .iter()
+            .map(|(element_type, id)| patch_property_op(*element_type, id, patch.clone()))
+            .chain(std::iter::once(patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                patch.clone(),
+            )))
+            .collect::<Vec<_>>();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            changed.result.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        for position in [
+            &changed.document.key_positions["4key"][0],
+            &changed.document.stat_positions["4key"][0].position,
+            &changed.document.graph_positions["4key"][0].position,
+            &changed.document.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.inactive_image.as_deref(), Some(""));
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+            assert_eq!(
+                position.idle_image_fit,
+                Some(crate::models::ImageFit::Contain)
+            );
+            assert!(position.idle_transparent);
+            assert!(!position.counter.enabled);
+        }
+        assert_eq!(
+            changed.document.graph_positions["4key"][0].graph_color,
+            "graph-sibling"
+        );
+        assert_eq!(
+            changed.document.knob_positions["4key"][0].axis_id,
+            "axis-sibling"
+        );
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &targets[0].1,
+            EditorElementPropertyPatchV1::InactiveImage(
+                crate::models::EditorInactiveImagePropertyPatchV1 {
+                    inactive_image: "different.png".to_string(),
+                },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..4].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        for position in [
+            &undone.key_positions["4key"][0],
+            &undone.stat_positions["4key"][0].position,
+            &undone.graph_positions["4key"][0].position,
+            &undone.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.inactive_image, None);
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+        }
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        for position in [
+            &redone.key_positions["4key"][0],
+            &redone.stat_positions["4key"][0].position,
+            &redone.graph_positions["4key"][0].position,
+            &redone.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.inactive_image.as_deref(), Some(""));
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+        }
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn stat_type_patch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-stat-type-history-test");
         std::fs::create_dir_all(&dir).unwrap();

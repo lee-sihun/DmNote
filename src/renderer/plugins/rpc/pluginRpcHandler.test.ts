@@ -90,6 +90,13 @@ const mocks = vi.hoisted(() => ({
     (_ids?: unknown, _patch?: unknown, _options?: { preflight?: () => void }) =>
       Promise.resolve(true),
   ),
+  patchInactiveImage: vi.fn(
+    (
+      _targets?: unknown,
+      _inactiveImage?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -166,6 +173,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchGraphColorsByIds: mocks.patchGraphColors,
   patchFontStyleByTargets: mocks.patchFontStyle,
   patchFontFamilyByTargets: mocks.patchFontFamily,
+  patchInactiveImageByTargets: mocks.patchInactiveImage,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -255,6 +263,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchFontStyle.mockResolvedValue(true);
     mocks.patchFontFamily.mockReset();
     mocks.patchFontFamily.mockResolvedValue(true);
+    mocks.patchInactiveImage.mockReset();
+    mocks.patchInactiveImage.mockResolvedValue(true);
     mocks.patchNoteProperties.mockReset();
     mocks.patchNoteProperties.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
@@ -524,6 +534,7 @@ describe('plugin panel persisted element mutations', () => {
     ['글꼴 밑줄', { fontUnderline: false }],
     ['글꼴 취소선', { fontStrikethrough: true }],
     ['글꼴 패밀리', { fontFamily: '  Raw Family  ' }],
+    ['대기 이미지', { inactiveImage: '  Raw Image.png  ' }],
     ['노트 효과', { noteEffectEnabled: false }, 'key'],
     ['노트 Y 보정', { noteAutoYCorrection: true }, 'key'],
     ['노트 글로우', { noteGlowEnabled: false }, 'key'],
@@ -663,6 +674,44 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.patchFontFamily).toHaveBeenCalledWith(targets, patch, {
       preflight: expect.any(Function),
     });
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('inactiveImage batch는 혼합 native 대상과 raw string을 한 semantic commit으로 전달한다', async () => {
+    const targets = [
+      {
+        elementType: 'key',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat',
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+      {
+        elementType: 'graph',
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      },
+      {
+        elementType: 'knob',
+        id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      },
+    ] as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { inactiveImage: '  Raw Image.png  ' },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchInactiveImage).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchInactiveImage).toHaveBeenCalledWith(
+      targets,
+      '  Raw Image.png  ',
+      { preflight: expect.any(Function) },
+    );
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
@@ -1157,6 +1206,54 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'inactiveImage non-string',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { inactiveImage: null },
+      },
+    ],
+    [
+      'inactiveImage combined',
+      {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { inactiveImage: 'idle.png', activeImage: 'active.png' },
+      },
+    ],
+    [
+      'inactiveImage extra',
+      {
+        targets: [{ elementType: 'knob', id: 'stable' }],
+        patch: { inactiveImage: 'idle.png', extra: true },
+      },
+    ],
+    [
+      'inactiveImage duplicate target',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable' },
+          { elementType: 'key', id: 'stable' },
+        ],
+        patch: { inactiveImage: 'idle.png' },
+      },
+    ],
+    [
+      'inactiveImage synthetic target',
+      {
+        targets: [{ elementType: 'graph', id: 'graph-0' }],
+        patch: { inactiveImage: 'idle.png' },
+      },
+    ],
+    [
+      'inactiveImage oversized batch',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'stat',
+          id: `stable-image-${index}`,
+        })),
+        patch: { inactiveImage: 'idle.png' },
+      },
+    ],
+    [
       'fontWeight fractional',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
@@ -1337,6 +1434,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchUseInlineStyles).not.toHaveBeenCalled();
       expect(mocks.patchFontStyle).not.toHaveBeenCalled();
       expect(mocks.patchFontFamily).not.toHaveBeenCalled();
+      expect(mocks.patchInactiveImage).not.toHaveBeenCalled();
       expect(mocks.patchNoteProperties).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
@@ -1974,6 +2072,31 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'graph', id: 'stable-graph' },
         ],
         patch: { fontFamily: '  Raw Family  ' },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('inactiveImage 혼합 batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchInactiveImage.mockImplementationOnce(
+      async (_targets, _value, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          { elementType: 'key', id: 'stable-key' },
+          { elementType: 'knob', id: 'stable-knob' },
+        ],
+        patch: { inactiveImage: '  Raw Image.png  ' },
       }),
     );
 

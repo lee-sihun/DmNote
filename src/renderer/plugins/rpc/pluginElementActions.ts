@@ -534,6 +534,26 @@ export const patchFontFamilyViaAuthority = (
   });
 };
 
+export const patchInactiveImageViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  inactiveImage: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { inactiveImage },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
 export const patchNotePropertiesViaAuthority = (
   ids: readonly string[],
   patch: EditorNotePropertyPatchV1,

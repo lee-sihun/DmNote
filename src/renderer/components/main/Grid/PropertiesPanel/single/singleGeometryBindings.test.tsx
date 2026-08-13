@@ -15,6 +15,19 @@ const captured = vi.hoisted(() => ({
     value: string;
     onChange: (value: string) => void;
   }>,
+  image: null as null | {
+    completionBinding?: string;
+    onIdleImageChange: (value: string) => void;
+    onIdleImageReset: () => void;
+  },
+}));
+const elementPatch = vi.hoisted(() => ({
+  applyElementPatchById: vi.fn(async () => true),
+}));
+
+vi.mock('@src/renderer/editor/runtime/elementPatch', () => elementPatch);
+vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+  reportElementOpError: vi.fn(),
 }));
 
 vi.mock('../PropertyInputs', () => ({
@@ -45,7 +58,10 @@ vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
   default: () => null,
 }));
 vi.mock('@components/main/Modal/content/pickers/ImagePicker', () => ({
-  default: () => null,
+  default: (props: NonNullable<(typeof captured)['image']>) => {
+    captured.image = props;
+    return null;
+  },
 }));
 vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
   ColorSwatchButton: () => null,
@@ -92,10 +108,289 @@ describe('single geometry input bindings', () => {
   beforeEach(() => {
     captured.numbers.clear();
     captured.dropdowns.length = 0;
+    captured.image = null;
+    elementPatch.applyElementPatchById.mockClear();
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
   });
+
+  it.each(['key', 'stat'] as const)(
+    '%s StyleTab ImagePicker load와 reset은 inactiveImage callback만 호출한다',
+    (type) => {
+      const commit = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacy}
+            onInactiveImageCommit={commit}
+            showImagePicker
+            onToggleImagePicker={vi.fn()}
+            imageButtonRef={{ current: document.createElement('button') }}
+            shadowActiveState={false}
+            showSoundControls={false}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+      act(() => {
+        captured.image?.onIdleImageChange('  picked.png  ');
+        captured.image?.onIdleImageReset();
+      });
+
+      expect(captured.image?.completionBinding).toBe('element-id');
+      expect(commit.mock.calls).toEqual([['  picked.png  '], ['']]);
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['graph', 'knob'] as const)(
+    '%s ImagePicker load와 reset은 stable callback이 있으면 legacy를 쓰지 않는다',
+    (type) => {
+      const commit = vi.fn();
+      const legacy = vi.fn();
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        onInactiveImageCommit: commit,
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: false,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...createDefaultKeyPosition(),
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              }}
+              singleGraphIndex={0}
+              handleGraphUpdate={legacy}
+              showGraphImagePicker
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={{
+                current: document.createElement('button'),
+              }}
+              graphClassNameDraft=""
+              setGraphClassNameDraft={vi.fn()}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={0}
+              handleKnobUpdate={legacy}
+            />
+          ),
+        );
+      });
+      if (type === 'knob') {
+        const configure = [...container.querySelectorAll('button')].find(
+          (button) => button.textContent === 'propertiesPanel.configure',
+        );
+        act(() => configure?.click());
+      }
+
+      act(() => {
+        captured.image?.onIdleImageChange('picked.png');
+        captured.image?.onIdleImageReset();
+      });
+
+      expect(captured.image?.completionBinding).toBe('element-id');
+      expect(commit.mock.calls).toEqual([['picked.png'], ['']]);
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key', 'stat', 'graph', 'knob'] as const)(
+    '%s idless ImagePicker load와 reset은 기존 writer만 쓴다',
+    (type) => {
+      const legacy = vi.fn();
+      const idless = { ...createDefaultKeyPosition(), id: undefined };
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: false,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'key' || type === 'stat' ? (
+            <StyleTabContent
+              keyIndex={0}
+              keyPosition={idless}
+              keyCode={type === 'key' ? 'A' : null}
+              keyInfo={null}
+              onPositionChange={vi.fn()}
+              onKeyUpdate={legacy}
+              showImagePicker
+              onToggleImagePicker={vi.fn()}
+              imageButtonRef={{ current: document.createElement('button') }}
+              shadowActiveState={false}
+              showSoundControls={false}
+              panelElement={null}
+              t={(key) => key}
+            />
+          ) : type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...idless,
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              }}
+              singleGraphIndex={0}
+              handleGraphUpdate={legacy}
+              showGraphImagePicker
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={{
+                current: document.createElement('button'),
+              }}
+              graphClassNameDraft=""
+              setGraphClassNameDraft={vi.fn()}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...idless,
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={0}
+              handleKnobUpdate={legacy}
+            />
+          ),
+        );
+      });
+      if (type === 'knob') {
+        const configure = [...container.querySelectorAll('button')].find(
+          (button) => button.textContent === 'propertiesPanel.configure',
+        );
+        act(() => configure?.click());
+      }
+      act(() => {
+        captured.image?.onIdleImageChange('legacy.png');
+        captured.image?.onIdleImageReset();
+      });
+
+      expect(captured.image?.completionBinding).toBe('session-mode');
+      expect(elementPatch.applyElementPatchById).not.toHaveBeenCalled();
+      expect(legacy).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['graph', 'knob'] as const)(
+    '%s stable ImagePicker 기존 경로는 load ID 적용과 reset index 저장을 구분한다',
+    (type) => {
+      const legacy = vi.fn();
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: false,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...createDefaultKeyPosition(),
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              }}
+              singleGraphIndex={0}
+              handleGraphUpdate={legacy}
+              showGraphImagePicker
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={{
+                current: document.createElement('button'),
+              }}
+              graphClassNameDraft=""
+              setGraphClassNameDraft={vi.fn()}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={0}
+              handleKnobUpdate={legacy}
+            />
+          ),
+        );
+      });
+      if (type === 'knob') {
+        const configure = [...container.querySelectorAll('button')].find(
+          (button) => button.textContent === 'propertiesPanel.configure',
+        );
+        act(() => configure?.click());
+      }
+      act(() => {
+        captured.image?.onIdleImageChange('legacy.png');
+        captured.image?.onIdleImageReset();
+      });
+      expect(captured.image?.completionBinding).toBe('element-id');
+      expect(elementPatch.applyElementPatchById).toHaveBeenCalledTimes(1);
+      expect(legacy).toHaveBeenCalledTimes(1);
+    },
+  );
 
   afterEach(() => {
     act(() => root.unmount());

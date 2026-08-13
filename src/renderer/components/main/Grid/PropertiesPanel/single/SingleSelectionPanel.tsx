@@ -320,6 +320,7 @@ interface SingleGraphPanelProps {
   handleGraphUpdate: (
     data: Partial<GraphItemPosition> & { index: number },
   ) => void;
+  onInactiveImageCommit?: (inactiveImage: string) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
@@ -346,6 +347,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   handleRenameCancel,
   handleRenameStart,
   handleGraphUpdate,
+  onInactiveImageCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   showGraphImagePicker,
@@ -746,7 +748,11 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             panelElement={panelElement}
             showActiveState={false}
             completionBinding={
-              singleGraphPosition.id ? 'element-id' : 'session-mode'
+              onInactiveImageCommit ||
+              (singleGraphPosition.id &&
+                !isSyntheticElementId(singleGraphPosition.id))
+                ? 'element-id'
+                : 'session-mode'
             }
             idleImage={singleGraphPosition.inactiveImage || ''}
             activeImage={singleGraphPosition.activeImage || ''}
@@ -763,7 +769,9 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               'cover'
             }
             onIdleImageChange={(imageUrl: string) =>
-              applyToGraphById({ inactiveImage: imageUrl })
+              onInactiveImageCommit
+                ? onInactiveImageCommit(imageUrl)
+                : applyToGraphById({ inactiveImage: imageUrl })
             }
             onActiveImageChange={(imageUrl: string) =>
               applyToGraphById({ activeImage: imageUrl })
@@ -793,10 +801,12 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               })
             }
             onIdleImageReset={() =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                inactiveImage: '',
-              })
+              onInactiveImageCommit
+                ? onInactiveImageCommit('')
+                : handleGraphUpdate({
+                    index: singleGraphIndex,
+                    inactiveImage: '',
+                  })
             }
             onActiveImageReset={() =>
               handleGraphUpdate({
@@ -832,6 +842,7 @@ interface SingleKnobPanelProps {
   handleKnobUpdate: (
     data: Partial<KnobItemPosition> & { index: number },
   ) => void;
+  onInactiveImageCommit?: (inactiveImage: string) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
@@ -853,6 +864,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   handleRenameCancel,
   handleRenameStart,
   handleKnobUpdate,
+  onInactiveImageCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   panelElement,
@@ -1517,7 +1529,11 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             referenceRef={imageButtonRef}
             panelElement={panelRef.current}
             completionBinding={
-              singleKnobPosition.id ? 'element-id' : 'session-mode'
+              onInactiveImageCommit ||
+              (singleKnobPosition.id &&
+                !isSyntheticElementId(singleKnobPosition.id))
+                ? 'element-id'
+                : 'session-mode'
             }
             idleImage={singleKnobPosition.inactiveImage || ''}
             activeImage={singleKnobPosition.activeImage || ''}
@@ -1534,7 +1550,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               'cover'
             }
             onIdleImageChange={(imageUrl: string) =>
-              applyToKnobById({ inactiveImage: imageUrl })
+              onInactiveImageCommit
+                ? onInactiveImageCommit(imageUrl)
+                : applyToKnobById({ inactiveImage: imageUrl })
             }
             onActiveImageChange={(imageUrl: string) =>
               applyToKnobById({ activeImage: imageUrl })
@@ -1564,7 +1582,12 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               })
             }
             onIdleImageReset={() =>
-              handleKnobUpdate({ index: singleKnobIndex, inactiveImage: '' })
+              onInactiveImageCommit
+                ? onInactiveImageCommit('')
+                : handleKnobUpdate({
+                    index: singleKnobIndex,
+                    inactiveImage: '',
+                  })
             }
             onActiveImageReset={() =>
               handleKnobUpdate({ index: singleKnobIndex, activeImage: '' })
@@ -1651,6 +1674,7 @@ interface SingleKeyStatPanelProps {
   >;
   handleSizeBlur: (committed?: SizeCommit) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
+  onInactiveImageCommit?: (inactiveImage: string) => void;
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
   imageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -1692,6 +1716,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   setLocalState,
   handleSizeBlur,
   handleGeometryCommit,
+  onInactiveImageCommit,
   showImagePicker,
   setShowImagePicker,
   imageButtonRef,
@@ -1877,6 +1902,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               shadowActiveState={!isSingleStat}
               showImagePicker={showImagePicker}
               onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
+              onInactiveImageCommit={onInactiveImageCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}

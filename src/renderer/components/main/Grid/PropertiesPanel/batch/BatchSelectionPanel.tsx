@@ -35,7 +35,12 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
-import { applyElementPatchesById } from '@src/renderer/editor/runtime/elementPatch';
+import {
+  applyElementPatchesById,
+  type ElementIdSelection,
+} from '@src/renderer/editor/runtime/elementPatch';
+import { patchInactiveImageByTargets } from '@src/renderer/editor/runtime/elementOps';
+import { patchInactiveImageViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   captureBatchElementBinding,
@@ -44,6 +49,29 @@ import {
 import { usePanelNav } from '../PanelNavContext';
 import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
+
+const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
+
+const commitBoundInactiveImage = (
+  binding: 'element-id' | 'session-mode',
+  selection: ElementIdSelection,
+  inactiveImage: string,
+  legacy: () => void,
+) => {
+  if (binding !== 'element-id') {
+    legacy();
+    return;
+  }
+  const targets = NATIVE_IMAGE_TYPES.flatMap((elementType) =>
+    (selection[elementType] ?? []).map((id) => ({ elementType, id })),
+  );
+  if (targets.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchInactiveImageViaAuthority(targets, inactiveImage)
+      : patchInactiveImageByTargets(targets, inactiveImage);
+  void persisted.catch(reportElementOpError);
+};
 
 const RenameIcon: React.FC = () => (
   <svg
@@ -1035,13 +1063,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               }
               completionBinding={batchImageBinding.binding}
               onIdleImageChange={(imageUrl: string) => {
-                if (batchImageBinding.binding === 'element-id') {
-                  applyElementPatchesById(batchImageBinding.selection, () => ({
-                    inactiveImage: imageUrl,
-                  })).catch(reportElementOpError);
-                  return;
-                }
-                handleBatchStyleChangeComplete('inactiveImage', imageUrl);
+                commitBoundInactiveImage(
+                  batchImageBinding.binding,
+                  batchImageBinding.selection,
+                  imageUrl,
+                  () =>
+                    handleBatchStyleChangeComplete('inactiveImage', imageUrl),
+                );
               }}
               onActiveImageChange={(imageUrl: string) => {
                 if (batchImageBinding.binding === 'element-id') {
@@ -1067,7 +1095,12 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 );
               }}
               onIdleImageReset={() => {
-                handleBatchStyleChangeComplete('inactiveImage', '');
+                commitBoundInactiveImage(
+                  batchImageBinding.binding,
+                  batchImageBinding.selection,
+                  '',
+                  () => handleBatchStyleChangeComplete('inactiveImage', ''),
+                );
               }}
               onActiveImageReset={() => {
                 handleActiveCapableStyleChangeComplete('activeImage', '');
@@ -1442,13 +1475,13 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
             }
             completionBinding={graphImageBinding.binding}
             onIdleImageChange={(imageUrl: string) => {
-              if (graphImageBinding.binding === 'element-id') {
-                applyElementPatchesById(graphImageBinding.selection, () => ({
-                  inactiveImage: imageUrl,
-                })).catch(reportElementOpError);
-                return;
-              }
-              handleGraphBatchSharedSetting({ inactiveImage: imageUrl });
+              commitBoundInactiveImage(
+                graphImageBinding.binding,
+                graphImageBinding.selection,
+                imageUrl,
+                () =>
+                  handleGraphBatchSharedSetting({ inactiveImage: imageUrl }),
+              );
             }}
             onActiveImageChange={(imageUrl: string) => {
               if (graphImageBinding.binding === 'element-id') {
@@ -1466,7 +1499,12 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               handleGraphBatchSharedSetting({ activeTransparent: value });
             }}
             onIdleImageReset={() => {
-              handleGraphBatchSharedSetting({ inactiveImage: '' });
+              commitBoundInactiveImage(
+                graphImageBinding.binding,
+                graphImageBinding.selection,
+                '',
+                () => handleGraphBatchSharedSetting({ inactiveImage: '' }),
+              );
             }}
             onActiveImageReset={() => {
               handleGraphBatchSharedSetting({ activeImage: '' });
@@ -1760,13 +1798,12 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
             }
             completionBinding={knobImageBinding.binding}
             onIdleImageChange={(imageUrl: string) => {
-              if (knobImageBinding.binding === 'element-id') {
-                applyElementPatchesById(knobImageBinding.selection, () => ({
-                  inactiveImage: imageUrl,
-                })).catch(reportElementOpError);
-                return;
-              }
-              handleKnobBatchSharedSetting({ inactiveImage: imageUrl });
+              commitBoundInactiveImage(
+                knobImageBinding.binding,
+                knobImageBinding.selection,
+                imageUrl,
+                () => handleKnobBatchSharedSetting({ inactiveImage: imageUrl }),
+              );
             }}
             onActiveImageChange={(imageUrl: string) => {
               if (knobImageBinding.binding === 'element-id') {
@@ -1784,7 +1821,12 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               handleKnobBatchSharedSetting({ activeTransparent: value });
             }}
             onIdleImageReset={() => {
-              handleKnobBatchSharedSetting({ inactiveImage: '' });
+              commitBoundInactiveImage(
+                knobImageBinding.binding,
+                knobImageBinding.selection,
+                '',
+                () => handleKnobBatchSharedSetting({ inactiveImage: '' }),
+              );
             }}
             onActiveImageReset={() => {
               handleKnobBatchSharedSetting({ activeImage: '' });

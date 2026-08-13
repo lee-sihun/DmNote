@@ -2483,6 +2483,15 @@ mod tests {
                 serde_json::json!({ "fontFamily": " raw-font " }),
             ),
             (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::InactiveImage(
+                    crate::models::EditorInactiveImagePropertyPatchV1 {
+                        inactive_image: "  raw/path.png  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "inactiveImage": "  raw/path.png  " }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::StatType(
                     crate::models::EditorStatTypePropertyPatchV1 {
@@ -2577,6 +2586,9 @@ mod tests {
             serde_json::json!({ "fontUnderline": 1 }),
             serde_json::json!({ "fontStrikethrough": "false" }),
             serde_json::json!({ "fontFamily": null }),
+            serde_json::json!({ "inactiveImage": null }),
+            serde_json::json!({ "inactiveImage": "path", "hidden": false }),
+            serde_json::json!({ "inactiveImage": "path", "unexpected": true }),
             serde_json::json!({ "statType": "invalid" }),
             serde_json::json!({ "noteEffectEnabled": 1 }),
             serde_json::json!({ "noteGlowEnabled": null }),

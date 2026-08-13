@@ -485,6 +485,9 @@ const applySemanticOps = (
             if ('axisId' in op.patch) {
               return { ...position, axisId: op.patch.axisId };
             }
+            if ('inactiveImage' in op.patch) {
+              return { ...position, inactiveImage: op.patch.inactiveImage };
+            }
             if ('useInlineStyles' in op.patch) {
               return {
                 ...position,

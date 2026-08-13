@@ -35,6 +35,8 @@ const {
   patchFontFamilyMock,
   patchFontFamilyTargetsMock,
   patchFontFamilyViaAuthorityMock,
+  patchInactiveImageMock,
+  patchInactiveImageViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -81,6 +83,8 @@ const {
   patchFontFamilyMock: vi.fn(() => Promise.resolve(true)),
   patchFontFamilyTargetsMock: vi.fn(() => Promise.resolve(true)),
   patchFontFamilyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchInactiveImageMock: vi.fn(() => Promise.resolve(true)),
+  patchInactiveImageViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -121,6 +125,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
   patchFontStyleViaAuthority: patchFontStyleViaAuthorityMock,
   patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
+  patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
@@ -137,6 +142,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontStyleByTargets: patchFontStyleTargetsMock,
   patchFontFamilyById: patchFontFamilyMock,
   patchFontFamilyByTargets: patchFontFamilyTargetsMock,
+  patchInactiveImageById: patchInactiveImageMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -294,6 +300,8 @@ const resetStores = () => {
   patchFontFamilyMock.mockClear();
   patchFontFamilyTargetsMock.mockClear();
   patchFontFamilyViaAuthorityMock.mockClear();
+  patchInactiveImageMock.mockClear();
+  patchInactiveImageViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -2200,6 +2208,109 @@ describe('PropertiesPanel detached preview contract', () => {
       }
       expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
       expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main', 'key'],
+    ['main', 'stat'],
+    ['main', 'graph'],
+    ['main', 'knob'],
+    ['panel', 'key'],
+    ['panel', 'stat'],
+    ['panel', 'graph'],
+    ['panel', 'knob'],
+  ] as const)(
+    '%s single stable %s inactiveImage load와 reset은 exact 경로만 쓴다',
+    (windowType, type) => {
+      window.__dmn_window_type = windowType;
+      const id = `${
+        type === 'key'
+          ? 'a'
+          : type === 'stat'
+          ? 'b'
+          : type === 'graph'
+          ? 'c'
+          : 'd'
+      }8888888-8888-4888-8888-888888888888`;
+      if (type === 'key') {
+        const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] as never },
+          canonicalPositions: { '4key': [position] as never },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useStatItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      } else if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useGraphItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useKnobItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props =
+        type === 'graph'
+          ? singleGraphPropsMock.mock.lastCall?.[0]
+          : type === 'knob'
+          ? singleKnobPropsMock.mock.lastCall?.[0]
+          : singleKeyStatPropsMock.mock.lastCall?.[0];
+      const commit = (
+        props as { onInactiveImageCommit: (value: string) => void }
+      ).onInactiveImageCommit;
+
+      act(() => {
+        commit('  /tmp/raw image.png  ');
+        commit('');
+      });
+
+      if (windowType === 'panel') {
+        expect(patchPropertyViaAuthorityMock).toHaveBeenNthCalledWith(1, {
+          elementType: type,
+          id,
+          patch: { inactiveImage: '  /tmp/raw image.png  ' },
+        });
+        expect(patchPropertyViaAuthorityMock).toHaveBeenNthCalledWith(2, {
+          elementType: type,
+          id,
+          patch: { inactiveImage: '' },
+        });
+        expect(patchInactiveImageMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchInactiveImageMock).toHaveBeenNthCalledWith(
+          1,
+          type,
+          id,
+          '  /tmp/raw image.png  ',
+        );
+        expect(patchInactiveImageMock).toHaveBeenNthCalledWith(2, type, id, '');
+        expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
     },
   );
 

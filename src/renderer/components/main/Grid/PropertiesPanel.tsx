@@ -89,6 +89,7 @@ import {
   commitElementGeometryById,
   patchFontFamilyById,
   patchFontFamilyByTargets,
+  patchInactiveImageById,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -2056,6 +2057,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           commitSingleGeometry(type, id, field, value)
       : undefined;
 
+  const stableInactiveImageHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (inactiveImage: string) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { inactiveImage },
+                })
+              : patchInactiveImageById(type, id, inactiveImage);
+          void persisted.catch((error) => {
+            console.error('Failed to update inactive image', error);
+          });
+        }
+      : undefined;
+
   // ============================================================================
   // 다중 선택 헬퍼 함수들
   // ============================================================================
@@ -3497,6 +3518,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
           handleKnobUpdate={handleKnobUpdate}
+          onInactiveImageCommit={stableInactiveImageHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           handleGeometryCommit={stableGeometryHandler(
             'knob',
             selectedKnobElements[0]?.id,
@@ -3531,6 +3556,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
           handleGraphUpdate={handleGraphUpdate}
+          onInactiveImageCommit={stableInactiveImageHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
           handleGeometryCommit={stableGeometryHandler(
             'graph',
             selectedGraphElements[0]?.id,
@@ -3587,6 +3616,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         localState={localState}
         setLocalState={setLocalState}
         handleSizeBlur={handleSizeBlur}
+        onInactiveImageCommit={stableInactiveImageHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
         handleGeometryCommit={stableGeometryHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat

@@ -961,6 +961,16 @@ pub(crate) fn prepare_editor_ops_transition(
                             true
                         }
                     }
+                    EditorElementPropertyPatchV1::InactiveImage(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.inactive_image.as_deref() == Some(patch.inactive_image.as_str())
+                        {
+                            false
+                        } else {
+                            position.inactive_image = Some(patch.inactive_image.clone());
+                            true
+                        }
+                    }
                     EditorElementPropertyPatchV1::StatType(patch) => {
                         let stat = candidate
                             .stat_positions
@@ -2731,6 +2741,143 @@ mod tests {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].font_family, None);
+    }
+
+    #[test]
+    fn inactive_image_patch_preserves_asset_siblings_and_raw_empty_across_native_types() {
+        let mut store = store_with_every_reorder_type();
+        for position in [
+            &mut store.key_positions.get_mut("4key").unwrap()[0],
+            &mut store.stat_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.graph_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.knob_positions.get_mut("4key").unwrap()[0].position,
+        ] {
+            position.inactive_image = None;
+            position.active_image = Some("active-sibling.png".to_string());
+            position.sound_path = Some("sound-sibling.wav".to_string());
+        }
+        let targets = [
+            (
+                EditorElementTypeV1::Key,
+                store.key_positions["4key"][0].id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                store.stat_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                store.graph_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                store.knob_positions["4key"][0].position.id.clone(),
+            ),
+        ];
+        let raw = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &targets[0].1,
+                EditorElementPropertyPatchV1::InactiveImage(
+                    crate::models::EditorInactiveImagePropertyPatchV1 {
+                        inactive_image: "  raw/path.png  ".to_string(),
+                    },
+                ),
+            )],
+        )
+        .unwrap();
+        assert_eq!(
+            raw.candidate.key_positions["4key"][0]
+                .inactive_image
+                .as_deref(),
+            Some("  raw/path.png  ")
+        );
+        let patch = EditorElementPropertyPatchV1::InactiveImage(
+            crate::models::EditorInactiveImagePropertyPatchV1 {
+                inactive_image: String::new(),
+            },
+        );
+        let ops = targets
+            .iter()
+            .map(|(element_type, id)| patch_property_op(*element_type, id, patch.clone()))
+            .chain(std::iter::once(patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                patch.clone(),
+            )))
+            .collect::<Vec<_>>();
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        for position in [
+            &transition.candidate.key_positions["4key"][0],
+            &transition.candidate.stat_positions["4key"][0].position,
+            &transition.candidate.graph_positions["4key"][0].position,
+            &transition.candidate.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.inactive_image.as_deref(), Some(""));
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+            assert_eq!(position.sound_path.as_deref(), Some("sound-sibling.wav"));
+        }
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                ops[0].clone(),
+                patch_property_op(
+                    EditorElementTypeV1::Stat,
+                    &targets[2].1,
+                    EditorElementPropertyPatchV1::InactiveImage(
+                        crate::models::EditorInactiveImagePropertyPatchV1 {
+                            inactive_image: "wrong".to_string(),
+                        },
+                    ),
+                ),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        assert_eq!(store.key_positions["4key"][0].inactive_image, None);
     }
 
     #[test]

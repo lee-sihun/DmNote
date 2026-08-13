@@ -55,6 +55,7 @@ import {
   commitElementGeometryById,
   patchElementPropertyById,
   patchFontFamilyByTargets,
+  patchInactiveImageByTargets,
   patchFontStyleByTargets,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -237,6 +238,8 @@ const parseNativeLayerPropertyTarget = (
       Number.isFinite(patch.sensitivity)) ||
     (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean') ||
     (hasExactKeys(patch, ['axisId']) && typeof patch.axisId === 'string') ||
+    (hasExactKeys(patch, ['inactiveImage']) &&
+      typeof patch.inactiveImage === 'string') ||
     (hasExactKeys(patch, ['useInlineStyles']) &&
       typeof patch.useInlineStyles === 'boolean') ||
     (hasExactKeys(patch, ['fontWeight']) &&
@@ -454,6 +457,11 @@ type NativeLayerPropertyRequest =
       patch: EditorFontFamilyPropertyPatchV1;
     }
   | {
+      kind: 'inactiveImageBatch';
+      targets: Array<{ elementType: NativeElementType; id: string }>;
+      inactiveImage: string;
+    }
+  | {
       kind: 'notePropertyBatch';
       ids: string[];
       patch: EditorNotePropertyPatchV1;
@@ -547,6 +555,11 @@ const parseNativeLayerPropertyRequest = (
     hasExactKeys(patch, ['fontFamily']) && typeof patch.fontFamily === 'string'
       ? { fontFamily: patch.fontFamily }
       : null;
+  const inactiveImage =
+    hasExactKeys(patch, ['inactiveImage']) &&
+    typeof patch.inactiveImage === 'string'
+      ? patch.inactiveImage
+      : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
     typeof patch.noteEffectEnabled === 'boolean'
@@ -581,6 +594,7 @@ const parseNativeLayerPropertyRequest = (
     useInlineStyles === null &&
     fontStylePatch === null &&
     fontFamilyPatch === null &&
+    inactiveImage === null &&
     notePropertyPatch === null
   ) {
     return null;
@@ -588,7 +602,8 @@ const parseNativeLayerPropertyRequest = (
   const elementType =
     useInlineStyles !== null ||
     fontStylePatch !== null ||
-    fontFamilyPatch !== null
+    fontFamilyPatch !== null ||
+    inactiveImage !== null
       ? null
       : notePropertyPatch !== null
       ? 'key'
@@ -634,6 +649,9 @@ const parseNativeLayerPropertyRequest = (
   }
   if (fontFamilyPatch !== null) {
     return { kind: 'fontFamilyBatch', targets, patch: fontFamilyPatch };
+  }
+  if (inactiveImage !== null) {
+    return { kind: 'inactiveImageBatch', targets, inactiveImage };
   }
   if (notePropertyPatch !== null) {
     return { kind: 'notePropertyBatch', ids, patch: notePropertyPatch };
@@ -1344,6 +1362,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
         return patchFontFamilyByTargets(
           request.targets,
           request.patch,
+          options,
+        );
+      }
+      if (request.kind === 'inactiveImageBatch') {
+        return patchInactiveImageByTargets(
+          request.targets,
+          request.inactiveImage,
           options,
         );
       }

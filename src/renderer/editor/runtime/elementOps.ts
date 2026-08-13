@@ -1149,6 +1149,40 @@ export const patchKnobAxisIdById = (
   return patchElementPropertyById('knob', id, { axisId }, options);
 };
 
+export const patchInactiveImageById = (
+  type: NativeElementType,
+  id: string,
+  inactiveImage: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  return patchElementPropertyById(type, id, { inactiveImage }, options);
+};
+
+export const patchInactiveImageByTargets = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  inactiveImage: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some(
+      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+    ) ||
+    new Set(targets.map((target) => target.id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    targets.map(({ elementType, id }) => ({
+      type: elementType,
+      id,
+      patch: { inactiveImage },
+    })),
+    options,
+  );
+};
+
 export const patchKnobPropertiesByIds = (
   ids: readonly string[],
   patch: EditorKnobRuntimePropertyPatchV1,

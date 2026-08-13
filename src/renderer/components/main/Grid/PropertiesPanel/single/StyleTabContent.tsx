@@ -23,7 +23,10 @@ import {
 import { createFontStyleToggleHandlers } from '../fontStyleToggleHandlers';
 import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { resolveElementByIdAcross } from '@src/renderer/editor/model/elementIdMap';
+import {
+  isSyntheticElementId,
+  resolveElementByIdAcross,
+} from '@src/renderer/editor/model/elementIdMap';
 import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
@@ -117,6 +120,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   shadowActiveState = true,
   showImagePicker = false,
   onToggleImagePicker,
+  onInactiveImageCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -621,6 +625,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 이미지 변경 핸들러
   const handleIdleImageChange = (imageUrl: string) => {
+    if (onInactiveImageCommit) {
+      onInactiveImageCommit(imageUrl);
+      return;
+    }
     applyToBoundElement({ inactiveImage: imageUrl });
   };
 
@@ -639,6 +647,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   };
 
   const handleIdleImageReset = () => {
+    if (onInactiveImageCommit) {
+      onInactiveImageCommit('');
+      return;
+    }
     onKeyPreview?.(keyIndex, { inactiveImage: '' });
     onKeyUpdate({ index: keyIndex, inactiveImage: '' });
   };
@@ -1152,7 +1164,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             open={showImagePicker}
             referenceRef={imageButtonRef}
             panelElement={panelElement}
-            completionBinding={keyPosition.id ? 'element-id' : 'session-mode'}
+            completionBinding={
+              onInactiveImageCommit ||
+              (isIndividualMode &&
+                keyPosition.id &&
+                !isSyntheticElementId(keyPosition.id))
+                ? 'element-id'
+                : 'session-mode'
+            }
             idleImage={keyPosition.inactiveImage || ''}
             activeImage={keyPosition.activeImage || ''}
             idleTransparent={keyPosition.idleTransparent ?? false}

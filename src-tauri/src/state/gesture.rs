@@ -502,6 +502,15 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::InactiveImage(
+                    crate::models::EditorInactiveImagePropertyPatchV1 {
+                        inactive_image: String::new(),
+                    },
+                ),
+                serde_json::json!({ "inactiveImage": "" }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::StatType(
                     crate::models::EditorStatTypePropertyPatchV1 {
                         stat_type: crate::models::StatType::Total,
@@ -603,6 +612,20 @@ mod tests {
             validation_code(error).as_deref(),
             Some("INVALID_REQUEST_PAYLOAD")
         );
+
+        for patch in [
+            serde_json::json!({ "inactiveImage": null }),
+            serde_json::json!({ "inactiveImage": "path", "hidden": false }),
+            serde_json::json!({ "inactiveImage": "path", "unexpected": true }),
+        ] {
+            let mut invalid_image = layer_name_wire.clone();
+            invalid_image["editorOps"][0]["patch"] = patch;
+            let error = decode_gesture_commit_request(invalid_image).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
 
         let mut invalid_stat_type = layer_name_wire.clone();
         invalid_stat_type["editorOps"][0]["patch"] = serde_json::json!({ "statType": "invalid" });
