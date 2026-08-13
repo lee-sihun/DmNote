@@ -31,9 +31,7 @@ import { keysApi } from '@api/modules/keysApi';
 
 // editor/model — 순수 상태 변환 함수
 import {
-  addKey,
   removeKey,
-  duplicateKey,
   updateKeyPosition,
   updateKeyStyle,
   batchUpdateKeyStyle,
@@ -220,42 +218,6 @@ export function useKeyManager() {
       );
       setSelectedKey(null);
     }
-  };
-
-  const handleAddKey = () => {
-    const result = addKey(keyMappings, canonicalPositions, selectedKeyType);
-    setKeyMappings(result.mappings);
-    setPositions(result.positions);
-    persistMappingsAndPositions(result.mappings, result.positions);
-  };
-
-  const handleAddKeyAt = (dx: number, dy: number) => {
-    const result = addKey(
-      keyMappings,
-      canonicalPositions,
-      selectedKeyType,
-      dx,
-      dy,
-    );
-    setKeyMappings(result.mappings);
-    setPositions(result.positions);
-    persistMappingsAndPositions(result.mappings, result.positions);
-  };
-
-  const handleDuplicateKey = (sourceIndex: number, dx: number, dy: number) => {
-    const result = duplicateKey(
-      keyMappings,
-      canonicalPositions,
-      selectedKeyType,
-      sourceIndex,
-      dx,
-      dy,
-    );
-    if (!result) return;
-
-    setKeyMappings(result.mappings);
-    setPositions(result.positions);
-    persistMappingsAndPositions(result.mappings, result.positions);
   };
 
   const handleDeleteKey = (indexToDelete: number) => {
@@ -678,9 +640,6 @@ export function useKeyManager() {
     handleNoteColorPreview,
     handleCounterSettingsUpdate,
     handleCounterSettingsPreview,
-    handleAddKey,
-    handleAddKeyAt,
-    handleDuplicateKey,
     handleDeleteKey,
     handleMoveToFront,
     handleMoveToBack,

@@ -23,7 +23,6 @@ import { commitElementPosition } from '@src/renderer/hooks/Grid/elementPositionC
 import {
   applyZOrderByIds,
   deleteElementById,
-  placeDuplicatedKey,
   type ZOrderTarget,
 } from '@src/renderer/editor/runtime/elementOps';
 import {
@@ -46,7 +45,11 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
-import { useGridCanvasActions } from '@hooks/Grid/useGridCanvasActions';
+import {
+  addCanvasElementAt,
+  placeFrozenDuplicateAt,
+  useGridCanvasActions,
+} from '@hooks/Grid/useGridCanvasActions';
 import type { DuplicateState } from '@hooks/Grid/useGridCanvasActions';
 import GridMinimap from './GridMinimap';
 import GridBackground from './GridBackground';
@@ -93,8 +96,6 @@ import type {
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import type { StatItemPosition } from '@src/types/key/statItems';
-import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
@@ -220,8 +221,6 @@ interface GridProps {
   ) => void;
   onCounterPreview: (index: number, payload: KeyCounterSettings) => void;
   onKeyDelete: (index: number) => void;
-  onAddKeyAt: (dx: number, dy: number) => void;
-  onKeyDuplicate: (sourceIndex: number, dx: number, dy: number) => void;
   onMoveToFront: (index: number) => void | Promise<void>;
   onMoveToBack: (index: number) => void | Promise<void>;
   onMoveForward: (index: number) => void | Promise<void>;
@@ -260,8 +259,6 @@ const Grid = ({
   onNoteColorPreview,
   onCounterPreview,
   onKeyDelete,
-  onAddKeyAt,
-  onKeyDuplicate,
   onMoveToFront,
   onMoveToBack,
   onMoveForward,
@@ -691,22 +688,16 @@ const Grid = ({
     moveStatToBack,
     moveStatForward,
     moveStatBackward,
-    addStatAtPosition,
-    placeDuplicateStat,
     deleteGraphAtIndex,
     moveGraphToFront,
     moveGraphToBack,
     moveGraphForward,
     moveGraphBackward,
-    addGraphAtPosition,
-    placeDuplicateGraph,
     deleteKnobAtIndex,
     moveKnobToFront,
     moveKnobToBack,
     moveKnobForward,
     moveKnobBackward,
-    addKnobAtPosition,
-    placeDuplicateKnob,
   } = canvasActions;
 
   // 복제 시작은 로컬 UI 상태(duplicateState) 설정이 필요하므로 래퍼 사용
@@ -874,12 +865,6 @@ const Grid = ({
     syncSelectedElementsToOverlay();
   };
 
-  const addKeyAtPosition = (dx: number, dy: number) => {
-    if (typeof onAddKeyAt === 'function') {
-      onAddKeyAt(dx, dy);
-    }
-  };
-
   useEffect(() => {
     if (!toolbarAddRequest) return;
 
@@ -912,15 +897,12 @@ const Grid = ({
       defaultSize.height,
     );
     if (targetPos) {
-      if (toolbarAddRequest.type === 'key') {
-        addKeyAtPosition(targetPos.dx, targetPos.dy);
-      } else if (toolbarAddRequest.type === 'stat') {
-        addStatAtPosition(targetPos.dx, targetPos.dy);
-      } else if (toolbarAddRequest.type === 'graph') {
-        addGraphAtPosition(targetPos.dx, targetPos.dy);
-      } else if (toolbarAddRequest.type === 'knob') {
-        addKnobAtPosition(targetPos.dx, targetPos.dy);
-      }
+      addCanvasElementAt(
+        canvasActions,
+        toolbarAddRequest.type,
+        targetPos.dx,
+        targetPos.dy,
+      );
     }
 
     onToolbarAddConsumed?.();
@@ -1902,47 +1884,12 @@ const Grid = ({
           // 마우스 위치에서 키의 중심이 배치되도록 조정
           const width = duplicateState.position.width || 60;
           const height = duplicateState.position.height || 60;
-          const type = duplicateState.elementType || 'key';
-
-          if (type === 'key') {
-            if (typeof duplicateState.slot !== 'undefined') {
-              // 시작 시점 동결 payload로 배치 - sourceIndex 재조회는 고스트
-              // 대기 중 재정렬 시 다른 키를 복제한다
-              void placeDuplicatedKey(
-                {
-                  slot: duplicateState.slot,
-                  position: duplicateState.position as KeyPosition,
-                },
-                selectedKeyType,
-                snapped.x - width / 2,
-                snapped.y - height / 2,
-              ).catch(reportElementOpError);
-            } else if (typeof onKeyDuplicate === 'function') {
-              onKeyDuplicate(
-                duplicateState.sourceIndex,
-                snapped.x - width / 2,
-                snapped.y - height / 2,
-              );
-            }
-          } else if (type === 'stat') {
-            placeDuplicateStat(
-              duplicateState.position as StatItemPosition,
-              snapped.x - width / 2,
-              snapped.y - height / 2,
-            );
-          } else if (type === 'graph') {
-            placeDuplicateGraph(
-              duplicateState.position as GraphItemPosition,
-              snapped.x - width / 2,
-              snapped.y - height / 2,
-            );
-          } else if (type === 'knob') {
-            placeDuplicateKnob(
-              duplicateState.position as KnobItemPosition,
-              snapped.x - width / 2,
-              snapped.y - height / 2,
-            );
-          }
+          placeFrozenDuplicateAt(
+            canvasActions,
+            duplicateState,
+            snapped.x - width / 2,
+            snapped.y - height / 2,
+          );
         }
         setDuplicateState(null);
         setDuplicateCursor(null);
@@ -2749,14 +2696,23 @@ const Grid = ({
             }
 
             // 기본 메뉴 처리
-            if (id === 'add' && gridAddLocalPos) {
-              addKeyAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === 'addStat' && gridAddLocalPos) {
-              addStatAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === 'addGraph' && gridAddLocalPos) {
-              addGraphAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === 'addKnob' && gridAddLocalPos) {
-              addKnobAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
+            const addType =
+              id === 'add'
+                ? 'key'
+                : id === 'addStat'
+                ? 'stat'
+                : id === 'addGraph'
+                ? 'graph'
+                : id === 'addKnob'
+                ? 'knob'
+                : null;
+            if (addType && gridAddLocalPos) {
+              addCanvasElementAt(
+                canvasActions,
+                addType,
+                gridAddLocalPos.dx,
+                gridAddLocalPos.dy,
+              );
             } else if (id === 'tabCss') {
               setIsTabCssModalOpen(true);
             } else if (id === 'tabNote') {

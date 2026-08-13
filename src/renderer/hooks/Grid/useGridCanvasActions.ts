@@ -5,6 +5,18 @@
 
 import { newElementId } from '@src/renderer/editor/model/elementId';
 import {
+  addKeyAt,
+  addGraphAt,
+  addKnobAt,
+  addStatAt,
+  placeDuplicatedGraph,
+  placeDuplicatedKey,
+  placeDuplicatedKnob,
+  placeDuplicatedStat,
+} from '@src/renderer/editor/runtime/elementOps';
+import type { FrozenKeyDuplicate } from '@src/renderer/editor/runtime/elementOps';
+import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import {
   graphItemsApi,
   knobItemsApi,
   statItemsApi,
@@ -155,6 +167,12 @@ async function persistKnobPositions(
 }
 
 export interface CanvasActions {
+  addKeyAtPosition: (dx: number, dy: number) => void;
+  placeDuplicateKey: (
+    frozen: FrozenKeyDuplicate,
+    dx: number,
+    dy: number,
+  ) => void;
   // Stat 액션
   deleteStatAtIndex: (index: number) => void;
   moveStatToFront: (index: number) => void;
@@ -213,6 +231,59 @@ export interface DuplicateState {
     | KnobItemPosition;
 }
 
+export type NativeCanvasElementType = 'key' | 'stat' | 'graph' | 'knob';
+
+export const addCanvasElementAt = (
+  actions: Pick<
+    CanvasActions,
+    | 'addKeyAtPosition'
+    | 'addStatAtPosition'
+    | 'addGraphAtPosition'
+    | 'addKnobAtPosition'
+  >,
+  type: NativeCanvasElementType,
+  dx: number,
+  dy: number,
+) => {
+  if (type === 'key') actions.addKeyAtPosition(dx, dy);
+  else if (type === 'stat') actions.addStatAtPosition(dx, dy);
+  else if (type === 'graph') actions.addGraphAtPosition(dx, dy);
+  else actions.addKnobAtPosition(dx, dy);
+};
+
+export const placeFrozenDuplicateAt = (
+  actions: Pick<
+    CanvasActions,
+    | 'placeDuplicateKey'
+    | 'placeDuplicateStat'
+    | 'placeDuplicateGraph'
+    | 'placeDuplicateKnob'
+  >,
+  duplicate: DuplicateState,
+  dx: number,
+  dy: number,
+) => {
+  if (duplicate.elementType === 'key') {
+    if (typeof duplicate.slot === 'undefined') return false;
+    actions.placeDuplicateKey(
+      { slot: duplicate.slot, position: duplicate.position as KeyPosition },
+      dx,
+      dy,
+    );
+  } else if (duplicate.elementType === 'stat') {
+    actions.placeDuplicateStat(duplicate.position as StatItemPosition, dx, dy);
+  } else if (duplicate.elementType === 'graph') {
+    actions.placeDuplicateGraph(
+      duplicate.position as GraphItemPosition,
+      dx,
+      dy,
+    );
+  } else {
+    actions.placeDuplicateKnob(duplicate.position as KnobItemPosition, dx, dy);
+  }
+  return true;
+};
+
 function getStatTypeLabel(type: string): string {
   if (type === 'kps') return 'KPS';
   if (type === 'kpsAvg') return 'AVG';
@@ -222,6 +293,19 @@ function getStatTypeLabel(type: string): string {
 }
 
 export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
+  const addKeyAtPosition = (dx: number, dy: number) => {
+    void addKeyAt(selectedKeyType, dx, dy).catch(reportElementOpError);
+  };
+
+  const placeDuplicateKey = (
+    frozen: FrozenKeyDuplicate,
+    dx: number,
+    dy: number,
+  ) => {
+    void placeDuplicatedKey(frozen, selectedKeyType, dx, dy).catch(
+      reportElementOpError,
+    );
+  };
   const deleteStatAtIndex = (indexToDelete: number) => {
     const store = useStatItemStore.getState();
     const current = store.positions;
@@ -355,20 +439,14 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     dx: number,
     dy: number,
   ) => {
-    if (!templatePosition) return;
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-
     const maxZ = getMaxZIndex(selectedKeyType);
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: [
-        ...tabPositions,
-        { ...templatePosition, id: newElementId(), dx, dy, zIndex: maxZ + 1 },
-      ],
-    };
-    persistStatPositions(nextPositions, 'Failed to duplicate stat item');
+    void placeDuplicatedStat(
+      selectedKeyType,
+      templatePosition,
+      dx,
+      dy,
+      maxZ + 1,
+    ).catch(reportElementOpError);
   };
 
   const deleteGraphAtIndex = (indexToDelete: number) => {
@@ -475,27 +553,18 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     dx: number,
     dy: number,
   ) => {
-    if (!templatePosition) return;
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-
     const maxZ = getMaxZIndex(selectedKeyType);
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: [
-        ...tabPositions,
-        { ...templatePosition, id: newElementId(), dx, dy, zIndex: maxZ + 1 },
-      ],
-    };
-    persistGraphPositions(nextPositions, 'Failed to duplicate graph item');
+    void placeDuplicatedGraph(
+      selectedKeyType,
+      templatePosition,
+      dx,
+      dy,
+      maxZ + 1,
+    ).catch(reportElementOpError);
   };
 
   const addStatAtPosition = (dx: number, dy: number) => {
-    const current = useStatItemStore.getState().positions;
-
-    const list = [...(current[selectedKeyType] || [])];
-    list.push({
+    const position: StatItemPosition = {
       id: newElementId(),
       statType: 'kps',
       dx,
@@ -521,17 +590,12 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       noteAutoYCorrection: true,
       className: '',
       counter: createDefaultCounterSettings(),
-    });
-
-    const nextPositions = { ...current, [selectedKeyType]: list };
-    persistStatPositions(nextPositions, 'Failed to add stat item');
+    };
+    void addStatAt(selectedKeyType, position).catch(reportElementOpError);
   };
 
   const addGraphAtPosition = (dx: number, dy: number) => {
-    const current = useGraphItemStore.getState().positions;
-
-    const list = [...(current[selectedKeyType] || [])];
-    list.push({
+    const position: GraphItemPosition = {
       id: newElementId(),
       statType: 'kps',
       graphType: 'line',
@@ -571,10 +635,8 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       fontSize: 12,
       useInlineStyles: false,
       displayText: '',
-    });
-
-    const nextPositions = { ...current, [selectedKeyType]: list };
-    persistGraphPositions(nextPositions, 'Failed to add graph item');
+    };
+    void addGraphAt(selectedKeyType, position).catch(reportElementOpError);
   };
 
   const deleteKnobAtIndex = (indexToDelete: number) => {
@@ -670,24 +732,18 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     dx: number,
     dy: number,
   ) => {
-    if (!templatePosition) return;
-    const current = useKnobItemStore.getState().positions;
-    const tabPositions = current[selectedKeyType] || [];
     const maxZ = getMaxZIndex(selectedKeyType);
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: [
-        ...tabPositions,
-        { ...templatePosition, id: newElementId(), dx, dy, zIndex: maxZ + 1 },
-      ],
-    };
-    persistKnobPositions(nextPositions, 'Failed to duplicate knob item');
+    void placeDuplicatedKnob(
+      selectedKeyType,
+      templatePosition,
+      dx,
+      dy,
+      maxZ + 1,
+    ).catch(reportElementOpError);
   };
 
   const addKnobAtPosition = (dx: number, dy: number) => {
-    const current = useKnobItemStore.getState().positions;
-    const list = [...(current[selectedKeyType] || [])];
-    list.push({
+    const position: KnobItemPosition = {
       id: newElementId(),
       axisId: '',
       sensitivity: 1,
@@ -718,12 +774,13 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       borderColor: DEFAULT_ELEMENT_FONT,
       activeBorderColor: DEFAULT_ELEMENT_ACTIVE_FONT,
       borderWidth: 0,
-    });
-    const nextPositions = { ...current, [selectedKeyType]: list };
-    persistKnobPositions(nextPositions, 'Failed to add knob item');
+    };
+    void addKnobAt(selectedKeyType, position).catch(reportElementOpError);
   };
 
   return {
+    addKeyAtPosition,
+    placeDuplicateKey,
     deleteStatAtIndex,
     moveStatToFront,
     moveStatToBack,

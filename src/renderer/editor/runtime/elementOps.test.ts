@@ -29,6 +29,10 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
+  addGraphAt,
+  addKeyAt,
+  addKnobAt,
+  addStatAt,
   applyZOrderByIds,
   commitBatchGeometryByIds,
   commitElementGeometryById,
@@ -37,6 +41,9 @@ import {
   commitSelectedGeometryByIds,
   deleteElementById,
   placeDuplicatedKey,
+  placeDuplicatedGraph,
+  placeDuplicatedKnob,
+  placeDuplicatedStat,
   patchElementHiddenById,
   setLayerGroupHidden,
   setLayerGroupHiddenLegacy,
@@ -237,19 +244,176 @@ describe('elementOps', () => {
       position: keyAt(ID_A),
     };
 
-    const pre = documentFromStores();
-    slotBase = () => pre;
     await placeDuplicatedKey(frozen, '4key', 10, 20);
 
-    const patch = generatedPatches[0];
-    expect(patch?.keys?.['4key']).toEqual(['A', 'B', 'A']);
-    const added = patch?.keyPositions?.['4key'][2];
+    const op = api.commitSemanticOps.mock.calls[0][0][0];
+    expect(op).toMatchObject({
+      kind: 'insertFrozenElements',
+      mode: '4key',
+      groups: [],
+      zUpdates: [],
+      elements: [{ elementType: 'key', slot: 'A' }],
+    });
+    const added = op.elements[0].position;
     expect(added?.dx).toBe(10);
     expect(added?.dy).toBe(20);
     expect(added?.id).toBeTruthy();
     expect(added?.id).not.toBe(ID_A);
     // eager 반영
     expect(useKeyStore.getState().keyMappings['4key']).toHaveLength(3);
+  });
+
+  it('단일 frozen add는 4타입 exact op와 eager append를 사용한다', async () => {
+    const stat = { ...keyAt(ID_A), id: crypto.randomUUID(), statType: 'kps' };
+    const graph = {
+      ...graphAt(ID_A),
+      id: crypto.randomUUID(),
+    };
+    const knob = {
+      ...keyAt(ID_A),
+      id: crypto.randomUUID(),
+      axisId: '',
+      sensitivity: 1,
+      reverse: false,
+    };
+
+    await addKeyAt('4key', 12, 34);
+    await addStatAt('4key', stat as never);
+    await addGraphAt('4key', graph);
+    await addKnobAt('4key', knob as never);
+
+    const ops = api.commitSemanticOps.mock.calls.map((call) => call[0][0]);
+    expect(ops.map((op) => op.kind)).toEqual([
+      'insertFrozenElements',
+      'insertFrozenElements',
+      'insertFrozenElements',
+      'insertFrozenElements',
+    ]);
+    expect(ops.map((op) => op.elements[0].elementType)).toEqual([
+      'key',
+      'stat',
+      'graph',
+      'knob',
+    ]);
+    for (const op of ops) {
+      expect(op).toMatchObject({ mode: '4key', groups: [], zUpdates: [] });
+    }
+    expect(ops[0].elements[0]).toMatchObject({
+      elementType: 'key',
+      slot: '',
+      position: { dx: 12, dy: 34 },
+    });
+    expect(
+      ops.slice(1).every((op) => op.elements[0].position.zIndex == null),
+    ).toBe(true);
+    expect(useKeyStore.getState().canonicalPositions['4key']).toHaveLength(3);
+    expect(useStatItemStore.getState().positions['4key']).toHaveLength(1);
+    expect(useGraphItemStore.getState().positions['4key']).toHaveLength(1);
+    expect(useKnobItemStore.getState().positions['4key']).toHaveLength(1);
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
+  });
+
+  it('신규 UUID가 기존 native ID와 충돌하면 eager와 wire를 모두 생략한다', async () => {
+    const randomId = vi
+      .spyOn(globalThis.crypto, 'randomUUID')
+      .mockReturnValueOnce(
+        ID_A as `${string}-${string}-${string}-${string}-${string}`,
+      );
+
+    await expect(addKeyAt('4key', 1, 2)).resolves.toBe(false);
+
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+    expect(useKeyStore.getState().canonicalPositions['4key']).toHaveLength(2);
+    randomId.mockRestore();
+  });
+
+  it('연속 삽입은 서로 다른 frozen ID를 각각 한 op로 유지한다', async () => {
+    const first = addKeyAt('4key', 1, 2);
+    const second = addKeyAt('4key', 3, 4);
+    await Promise.all([first, second]);
+
+    const ids = api.commitSemanticOps.mock.calls.map(
+      (call) => call[0][0].elements[0].position.id,
+    );
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    expect(
+      useKeyStore
+        .getState()
+        .canonicalPositions['4key'].slice(-2)
+        .map((position) => position.id),
+    ).toEqual(ids);
+  });
+
+  it('item ghost 복제는 좌표를 반올림하지 않고 동결 z와 새 id를 쓴다', async () => {
+    const sourceStat = {
+      ...keyAt('synthetic-stat-0'),
+      statType: 'kps',
+      groupId: 'group-a',
+    };
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+
+    await placeDuplicatedStat('4key', sourceStat as never, 1.25, 2.75, 91);
+    await placeDuplicatedGraph(
+      '4key',
+      graphAt('synthetic-graph-0'),
+      3.25,
+      4.75,
+      92,
+    );
+    await placeDuplicatedKnob(
+      '4key',
+      {
+        ...keyAt('synthetic-knob-0'),
+        axisId: '',
+        sensitivity: 1,
+        reverse: false,
+      } as never,
+      5.25,
+      6.75,
+      93,
+    );
+
+    const elements = api.commitSemanticOps.mock.calls.map(
+      (call) => call[0][0].elements[0],
+    );
+    expect(elements.map((element) => element.position)).toMatchObject([
+      { dx: 1.25, dy: 2.75, zIndex: 91, groupId: 'group-a' },
+      { dx: 3.25, dy: 4.75, zIndex: 92 },
+      { dx: 5.25, dy: 6.75, zIndex: 93 },
+    ]);
+    expect(new Set(elements.map((element) => element.position.id)).size).toBe(
+      3,
+    );
+    expect(
+      elements.every(
+        (element) => !String(element.position.id).startsWith('synthetic-'),
+      ),
+    ).toBe(true);
+  });
+
+  it('ghost 모드의 유효 그룹만 보존하고 소실 그룹은 제거한다', async () => {
+    useLayerGroupStore.setState({
+      layerGroups: {
+        '4key': [{ id: 'group-a', name: 'Source' }],
+        '7key': [{ id: 'group-a', name: 'Target' }],
+      },
+    });
+    const source = {
+      ...graphAt('synthetic-graph-0'),
+      groupId: 'group-a',
+    };
+
+    await placeDuplicatedGraph('7key', source, 1, 2, 3);
+    useLayerGroupStore.setState({ layerGroups: { '4key': [] } });
+    await placeDuplicatedGraph('4key', source, 4, 5, 6);
+
+    const first = api.commitSemanticOps.mock.calls[0][0][0].elements[0];
+    const second = api.commitSemanticOps.mock.calls[1][0][0].elements[0];
+    expect(first.position.groupId).toBe('group-a');
+    expect(second.position.groupId).toBeUndefined();
   });
 
   it('z-order는 대상 id들에 단일 트랜잭션으로 새 z를 배정한다', async () => {
@@ -1434,7 +1598,7 @@ describe('elementOps', () => {
   });
 
   it('복제의 편입 전 실패는 추가한 pair를 제거한다', async () => {
-    api.commitGeneratedPatch.mockRejectedValue(new Error('start failed'));
+    api.commitSemanticOps.mockRejectedValue(new Error('start failed'));
 
     await expect(
       placeDuplicatedKey({ slot: 'A', position: keyAt(ID_A) }, '4key', 1, 2),
@@ -1442,6 +1606,101 @@ describe('elementOps', () => {
 
     expect(useKeyStore.getState().keyMappings['4key']).toEqual(['A', 'B']);
     expect(useKeyStore.getState().canonicalPositions['4key']).toHaveLength(2);
+  });
+
+  it('삽입 편입 전 실패라도 lastAck가 같은 ID를 소유하면 eager를 제거하지 않는다', async () => {
+    api.commitSemanticOps.mockImplementationOnce(async (ops) => {
+      const element = ops[0].elements[0];
+      const canonical = documentFromStores();
+      canonical.keys = { '4key': ['A', 'B', ''] };
+      canonical.keyPositions = {
+        '4key': [keyAt(ID_A), keyAt(ID_B), structuredClone(element.position)],
+      } as never;
+      api.lastAck = canonical;
+      throw new Error('start failed');
+    });
+
+    await expect(addKeyAt('4key', 7, 8)).rejects.toThrow('start failed');
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toHaveLength(3);
+  });
+
+  it('삽입 편입 전 실패의 lastAck가 같은 ID를 소유하면 payload가 달라도 보존한다', async () => {
+    api.commitSemanticOps.mockImplementationOnce(async (ops) => {
+      const element = ops[0].elements[0];
+      const canonical = documentFromStores();
+      canonical.keys = { '4key': ['A', 'B', 'Z'] };
+      canonical.keyPositions = {
+        '4key': [
+          keyAt(ID_A),
+          keyAt(ID_B),
+          { ...structuredClone(element.position), dx: 999 },
+        ],
+      } as never;
+      api.lastAck = canonical;
+      throw new Error('start failed');
+    });
+
+    await expect(addKeyAt('4key', 7, 8)).rejects.toThrow('start failed');
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toHaveLength(3);
+    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['A', 'B', '']);
+  });
+
+  it('삽입 실패 전에 store가 같은 ID의 외부 payload로 바뀌면 그 요소를 보존한다', async () => {
+    let externalPosition!: ReturnType<typeof keyAt>;
+    api.commitSemanticOps.mockImplementationOnce(async (ops) => {
+      const element = ops[0].elements[0];
+      externalPosition = { ...structuredClone(element.position), dx: 777 };
+      const canonical = documentFromStores();
+      canonical.keys = { '4key': ['A', 'B', 'Z'] };
+      canonical.keyPositions = {
+        '4key': [keyAt(ID_A), keyAt(ID_B), externalPosition],
+      } as never;
+      api.lastAck = canonical;
+      useKeyStore.setState({
+        keyMappings: canonical.keys,
+        canonicalPositions: canonical.keyPositions,
+        positions: canonical.keyPositions,
+      });
+      throw new Error('start failed');
+    });
+
+    await expect(addKeyAt('4key', 7, 8)).rejects.toThrow('start failed');
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([
+      keyAt(ID_A),
+      keyAt(ID_B),
+      externalPosition,
+    ]);
+    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['A', 'B', 'Z']);
+  });
+
+  it('lastAck에는 없지만 store가 같은 ID의 후속 payload로 바뀌면 보존한다', async () => {
+    let externalPosition!: ReturnType<typeof keyAt>;
+    api.commitSemanticOps.mockImplementationOnce(async (ops) => {
+      const element = ops[0].elements[0];
+      externalPosition = { ...structuredClone(element.position), dx: 555 };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A', 'B', 'Y'] },
+        canonicalPositions: {
+          '4key': [keyAt(ID_A), keyAt(ID_B), externalPosition],
+        },
+        positions: {
+          '4key': [keyAt(ID_A), keyAt(ID_B), externalPosition],
+        },
+      });
+      throw new Error('start failed');
+    });
+
+    await expect(addKeyAt('4key', 7, 8)).rejects.toThrow('start failed');
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([
+      keyAt(ID_A),
+      keyAt(ID_B),
+      externalPosition,
+    ]);
+    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['A', 'B', 'Y']);
   });
 
   it('재바인딩의 편입 전 실패는 슬롯을 복원한다', async () => {

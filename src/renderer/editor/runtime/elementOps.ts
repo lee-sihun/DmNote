@@ -9,15 +9,19 @@ import {
   isSyntheticElementId,
   resolveElementById,
 } from '../model/elementIdMap';
-import { cloneKeyPositionForDuplicate } from '../model/keys';
+import {
+  cloneKeyPositionForDuplicate,
+  createDefaultKeyPosition,
+} from '../model/keys';
+import { newElementId } from '../model/elementId';
 import { cloneSlot } from '@utils/keySlot';
+import { stableStringify } from '@utils/core/stableStringify';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
 import {
   applyPropertyIntentsEagerly,
   createPropertyReceipt,
   intentPatch,
   runElementIntent,
-  type ElementIntentGeneration,
   type ElementIntentReceipt,
   type PropertyIntents,
 } from './elementIntent';
@@ -37,6 +41,7 @@ import {
 import type {
   EditorBoundsV1,
   EditorDocumentV1,
+  EditorFrozenElementV1,
   EditorElementPropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
@@ -50,6 +55,9 @@ import type {
 
 import type { NativeElementType } from '../model/elementIdMap';
 import type { KeyPosition, KeySlot } from '@src/types/key/keys';
+import type { StatItemPosition } from '@src/types/key/statItems';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 
 // 메뉴·확인 모달처럼 대상 확정과 실행 사이가 긴 파괴적 액션의 semantic op.
 // 대상은 {type, id}로 받고, eager 반영과 wire 생성 각각이 실행 시점의
@@ -288,6 +296,179 @@ export interface FrozenKeyDuplicate {
   position: KeyPosition;
 }
 
+const documentHasElementId = (document: EditorDocumentV1, id: string) =>
+  [
+    document.keyPositions,
+    document.statPositions,
+    document.graphPositions,
+    document.knobPositions,
+  ].some((record) => findInRecord(record as unknown as LooseRecord, id));
+
+const documentHasExactFrozenElement = (
+  document: EditorDocumentV1,
+  mode: string,
+  element: EditorFrozenElementV1,
+) => {
+  const field =
+    element.elementType === 'key'
+      ? 'keyPositions'
+      : element.elementType === 'stat'
+      ? 'statPositions'
+      : element.elementType === 'graph'
+      ? 'graphPositions'
+      : 'knobPositions';
+  const index = document[field][mode]?.findIndex(
+    (position) => position.id === element.position.id,
+  );
+  if (index == null || index < 0) return false;
+  if (
+    stableStringify(document[field][mode][index]) !==
+    stableStringify(element.position)
+  ) {
+    return false;
+  }
+  return (
+    element.elementType !== 'key' ||
+    stableStringify(document.keys[mode]?.[index]) ===
+      stableStringify(element.slot)
+  );
+};
+
+const insertFrozenElement = (
+  mode: string,
+  source: EditorFrozenElementV1,
+): Promise<boolean> => {
+  const element = structuredClone(source);
+  const id = element.position.id;
+  if (!mode || typeof id !== 'string' || !id || isSyntheticElementId(id)) {
+    return Promise.resolve(false);
+  }
+  if (documentHasElementId(captureEditorDocument(), id)) {
+    return Promise.resolve(false);
+  }
+
+  const applyEager = (): ElementIntentReceipt => {
+    if (element.elementType === 'key') {
+      const state = useKeyStore.getState();
+      state.setKeyMappingsAndPositions(
+        {
+          ...state.keyMappings,
+          [mode]: [...(state.keyMappings[mode] ?? []), cloneSlot(element.slot)],
+        },
+        {
+          ...state.canonicalPositions,
+          [mode]: [
+            ...(state.canonicalPositions[mode] ?? []),
+            structuredClone(element.position),
+          ],
+        },
+      );
+    } else {
+      const state =
+        element.elementType === 'stat'
+          ? useStatItemStore.getState()
+          : element.elementType === 'graph'
+          ? useGraphItemStore.getState()
+          : useKnobItemStore.getState();
+      const positions = state.positions as unknown as LooseRecord;
+      state.setPositions({
+        ...positions,
+        [mode]: [...(positions[mode] ?? []), structuredClone(element.position)],
+      } as never);
+    }
+
+    return {
+      rollback: () => {
+        const canonical = editorCoordinator.getState().lastAck;
+        if (canonical && documentHasElementId(canonical, id)) {
+          return;
+        }
+        if (
+          !documentHasExactFrozenElement(captureEditorDocument(), mode, element)
+        ) {
+          return;
+        }
+        if (element.elementType === 'key') {
+          const state = useKeyStore.getState();
+          const positions = state.canonicalPositions as unknown as LooseRecord;
+          const located = findInRecord(positions, id);
+          if (!located) return;
+          state.setKeyMappingsAndPositions(
+            {
+              ...state.keyMappings,
+              [located.mode]: (state.keyMappings[located.mode] ?? []).filter(
+                (_, index) => index !== located.index,
+              ),
+            },
+            removeAt(positions, located.mode, located.index) as never,
+          );
+          return;
+        }
+        const state =
+          element.elementType === 'stat'
+            ? useStatItemStore.getState()
+            : element.elementType === 'graph'
+            ? useGraphItemStore.getState()
+            : useKnobItemStore.getState();
+        const positions = state.positions as unknown as LooseRecord;
+        const located = findInRecord(positions, id);
+        if (!located) return;
+        state.setPositions(
+          removeAt(positions, located.mode, located.index) as never,
+        );
+      },
+    };
+  };
+
+  const receipt = applyEager();
+  let enrolled = false;
+  return commitSemanticOps(
+    [
+      {
+        kind: 'insertFrozenElements',
+        mode,
+        elements: [element],
+        groups: [],
+        zUpdates: [],
+      },
+    ],
+    {
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then(() => true)
+    .catch((error) => {
+      if (!enrolled) receipt.rollback();
+      throw error;
+    });
+};
+
+export const addKeyAt = (mode: string, dx: number, dy: number) =>
+  insertFrozenElement(mode, {
+    elementType: 'key',
+    slot: '',
+    position: createDefaultKeyPosition(dx, dy),
+  });
+
+export const addStatAt = (mode: string, position: StatItemPosition) =>
+  insertFrozenElement(mode, { elementType: 'stat', position });
+
+export const addGraphAt = (mode: string, position: GraphItemPosition) =>
+  insertFrozenElement(mode, { elementType: 'graph', position });
+
+export const addKnobAt = (mode: string, position: KnobItemPosition) =>
+  insertFrozenElement(mode, { elementType: 'knob', position });
+
+const groupForMode = (mode: string, groupId: string | undefined) =>
+  groupId &&
+  (useLayerGroupStore.getState().layerGroups[mode] ?? []).some(
+    (group) => group.id === groupId,
+  )
+    ? groupId
+    : undefined;
+
 export const placeDuplicatedKey = (
   frozen: FrozenKeyDuplicate,
   mode: string,
@@ -296,63 +477,71 @@ export const placeDuplicatedKey = (
 ): Promise<boolean> => {
   // 구 duplicateKey와 같은 정규화: 새 신원, 좌표 반올림, 참조 분리, 기본값 백필
   const newPosition = cloneKeyPositionForDuplicate(frozen.position, dx, dy);
-  const newId = newPosition.id as string;
+  newPosition.groupId = groupForMode(mode, newPosition.groupId);
   const frozenSlot = cloneSlot(frozen.slot as never);
-
-  const applyEager = (): ElementIntentReceipt => {
-    const state = useKeyStore.getState();
-    state.setKeyMappingsAndPositions(
-      {
-        ...state.keyMappings,
-        [mode]: [...(state.keyMappings[mode] ?? []), frozenSlot as never],
-      },
-      {
-        ...state.canonicalPositions,
-        [mode]: [...(state.canonicalPositions[mode] ?? []), newPosition],
-      } as never,
-    );
-    return {
-      rollback: () => {
-        // membership CAS: 우리가 넣은 newId가 아직 있으면 pair 제거
-        const current = useKeyStore.getState();
-        const record = current.canonicalPositions as unknown as LooseRecord;
-        const located = findInRecord(record, newId);
-        if (!located) return;
-        current.setKeyMappingsAndPositions(
-          {
-            ...current.keyMappings,
-            [located.mode]: (current.keyMappings[located.mode] ?? []).filter(
-              (_, i) => i !== located.index,
-            ),
-          },
-          removeAt(record, located.mode, located.index) as never,
-        );
-      },
-    };
-  };
-
-  return runElementIntent({
-    applyEager,
-    generate: (base: EditorDocumentV1): ElementIntentGeneration => {
-      // 이미 같은 id가 들어가 있으면(이중 실행·선반영) 재추가 금지 -
-      // canonical 달성으로 보고 로컬 복제를 되돌리지 않는다
-      if (findInRecord(base.keyPositions as unknown as LooseRecord, newId)) {
-        return { kind: 'satisfied' };
-      }
-      return intentPatch({
-        schemaVersion: 1,
-        keys: {
-          ...base.keys,
-          [mode]: [...(base.keys[mode] ?? []), frozenSlot as never],
-        },
-        keyPositions: {
-          ...base.keyPositions,
-          [mode]: [...(base.keyPositions[mode] ?? []), newPosition],
-        } as never,
-      });
-    },
-  }).then((result) => result.committed || result.satisfied);
+  return insertFrozenElement(mode, {
+    elementType: 'key',
+    slot: frozenSlot,
+    position: newPosition,
+  });
 };
+
+export const placeDuplicatedStat = (
+  mode: string,
+  source: StatItemPosition,
+  dx: number,
+  dy: number,
+  zIndex: number,
+) =>
+  insertFrozenElement(mode, {
+    elementType: 'stat',
+    position: {
+      ...structuredClone(source),
+      id: newElementId(),
+      groupId: groupForMode(mode, source.groupId),
+      dx,
+      dy,
+      zIndex,
+    },
+  });
+
+export const placeDuplicatedGraph = (
+  mode: string,
+  source: GraphItemPosition,
+  dx: number,
+  dy: number,
+  zIndex: number,
+) =>
+  insertFrozenElement(mode, {
+    elementType: 'graph',
+    position: {
+      ...structuredClone(source),
+      id: newElementId(),
+      groupId: groupForMode(mode, source.groupId),
+      dx,
+      dy,
+      zIndex,
+    },
+  });
+
+export const placeDuplicatedKnob = (
+  mode: string,
+  source: KnobItemPosition,
+  dx: number,
+  dy: number,
+  zIndex: number,
+) =>
+  insertFrozenElement(mode, {
+    elementType: 'knob',
+    position: {
+      ...structuredClone(source),
+      id: newElementId(),
+      groupId: groupForMode(mode, source.groupId),
+      dx,
+      dy,
+      zIndex,
+    },
+  });
 
 // z-order: 모드 전역(4 컬렉션 + 외부 플러그인 z) 기준으로 대상 id들에
 // 새 zIndex를 선택 순서대로 할당하는 단일 트랜잭션. 루프-await로 요소마다

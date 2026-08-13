@@ -162,8 +162,6 @@ export default function App() {
     handleNoteColorUpdate,
     handleNoteColorPreview,
     handleCounterSettingsPreview,
-    handleAddKeyAt,
-    handleDuplicateKey,
     handleDeleteKey,
     handleMoveToFront,
     handleMoveToBack,
@@ -727,8 +725,6 @@ export default function App() {
               onNoteColorPreview={handleNoteColorPreview}
               onCounterPreview={handleCounterSettingsPreview}
               onKeyDelete={handleDeleteKey}
-              onAddKeyAt={handleAddKeyAt}
-              onKeyDuplicate={handleDuplicateKey}
               onMoveToFront={handleMoveToFront}
               onMoveToBack={handleMoveToBack}
               onMoveForward={handleMoveForward}
