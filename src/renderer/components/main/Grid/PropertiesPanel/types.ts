@@ -1,4 +1,4 @@
-import type { KeyPosition, KeySlot } from '@src/types/key/keys';
+import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import type { ColorModeValue, GradientSpec } from '@src/types/color';
 import type {
   GradientCanvasAnchor,
@@ -236,8 +236,13 @@ export interface StyleTabContentProps {
   onToggleImagePicker?: () => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
+  onIdleTransparentCommit?: (idleTransparent: boolean) => void;
+  onActiveTransparentCommit?: (activeTransparent: boolean) => void;
+  onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
+  onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
+  onSoundVolumeCommit?: (soundVolume: number) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
   panelElement?: HTMLElement | null;
   useCustomCSS?: boolean;

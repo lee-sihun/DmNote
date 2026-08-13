@@ -66,6 +66,8 @@ import {
   patchSoundEnabledByIds,
   patchSoundPathById,
   patchSoundPathByIds,
+  patchSoundVolumeById,
+  patchSoundVolumeByIds,
   patchCounterAnimationEnabledByTargets,
   patchCounterAnimationPresetByTargets,
   patchCounterEnabledByTargets,
@@ -74,6 +76,12 @@ import {
   patchInactiveImageByTargets,
   patchActiveImageById,
   patchActiveImageByTargets,
+  patchIdleTransparentById,
+  patchIdleTransparentByTargets,
+  patchActiveTransparentById,
+  patchActiveTransparentByTargets,
+  patchIdleImageFitById,
+  patchActiveImageFitById,
   patchNotePropertiesByIds,
   patchNotePropertyById,
   patchStatTypeById,
@@ -2586,6 +2594,81 @@ describe('elementOps', () => {
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
 
+  it('soundVolume은 key finite 0..200 leaf와 gesture만 보내고 사운드 형제를 보존한다', async () => {
+    const records = [
+      {
+        ...keyAt(ID_A),
+        soundPath: 'sounds/a.wav',
+        soundEnabled: true,
+        soundVolume: 23,
+        inactiveImage: 'idle.png',
+      },
+      {
+        ...keyAt(ID_B),
+        soundPath: 'sounds/b.wav',
+        soundEnabled: false,
+        soundVolume: 54,
+      },
+    ];
+    useKeyStore.setState({
+      canonicalPositions: { '4key': records },
+      positions: { '4key': structuredClone(records) },
+    });
+
+    await patchSoundVolumeById(ID_A, 137.5, {
+      gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { soundVolume: 137.5 },
+        },
+      ],
+      expect.objectContaining({
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      }),
+    );
+
+    await patchSoundVolumeByIds([ID_A, ID_B], 200);
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [ID_A, ID_B].map((id) => ({
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { soundVolume: 200 },
+      })),
+      expect.anything(),
+    );
+    expect(useKeyStore.getState().positions['4key']).toEqual([
+      expect.objectContaining({
+        soundVolume: 200,
+        soundPath: 'sounds/a.wav',
+        soundEnabled: true,
+        inactiveImage: 'idle.png',
+      }),
+      expect.objectContaining({
+        soundVolume: 200,
+        soundPath: 'sounds/b.wav',
+        soundEnabled: false,
+      }),
+    ]);
+  });
+
+  it('soundVolume은 invalid value와 empty, duplicate, synthetic ID를 wire 전에 거절한다', async () => {
+    await expect(patchSoundVolumeByIds([], 100)).resolves.toBe(false);
+    await expect(patchSoundVolumeByIds([ID_A, ID_A], 100)).resolves.toBe(false);
+    await expect(patchSoundVolumeByIds(['key-0'], 100)).resolves.toBe(false);
+    await expect(patchSoundVolumeByIds([ID_A], -1)).resolves.toBe(false);
+    await expect(patchSoundVolumeByIds([ID_A], 201)).resolves.toBe(false);
+    await expect(patchSoundVolumeByIds([ID_A], Number.NaN)).resolves.toBe(
+      false,
+    );
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
   it('soundPath batch는 empty, duplicate, synthetic ID를 wire 전에 거절한다', async () => {
     await expect(patchSoundPathByIds([], 'sounds/a.wav')).resolves.toBe(false);
     await expect(
@@ -3025,6 +3108,160 @@ describe('elementOps', () => {
         [{ elementType: 'knob', id: 'knob-0' }],
         'active.png',
       ),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('image transparency는 exact bool leaf만 타입별 N ops로 보내고 이미지 형제를 보존한다', async () => {
+    const graphId = '77777777-7777-4777-8777-777777777777';
+    const knobId = '88888888-8888-4888-8888-888888888888';
+    const graph = graphAt(graphId, {
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleImageFit: 'contain',
+      idleTransparent: false,
+    });
+    const knob = {
+      ...keyAt(knobId),
+      axisId: '',
+      sensitivity: 1,
+      reverse: false,
+      activeImageFit: 'cover',
+      activeTransparent: false,
+    } as never;
+    useGraphItemStore.setState({ positions: { '4key': [graph] } });
+    useKnobItemStore.setState({ positions: { '4key': [knob] } });
+
+    await patchIdleTransparentById('graph', graphId, true);
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'graph',
+          id: graphId,
+          patch: { idleTransparent: true },
+        },
+      ],
+      expect.anything(),
+    );
+    expect(useGraphItemStore.getState().positions['4key'][0]).toMatchObject({
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleImageFit: 'contain',
+      idleTransparent: true,
+    });
+
+    await patchActiveTransparentByTargets(
+      [
+        { elementType: 'key', id: ID_A },
+        { elementType: 'knob', id: knobId },
+      ],
+      true,
+    );
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { activeTransparent: true },
+        },
+        {
+          kind: 'patchElement',
+          elementType: 'knob',
+          id: knobId,
+          patch: { activeTransparent: true },
+        },
+      ],
+      expect.anything(),
+    );
+    expect(useKnobItemStore.getState().positions['4key'][0]).toMatchObject({
+      activeImageFit: 'cover',
+      activeTransparent: true,
+    });
+  });
+
+  it('image transparency batch는 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
+    await expect(patchIdleTransparentByTargets([], true)).resolves.toBe(false);
+    await expect(
+      patchIdleTransparentByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'graph', id: ID_A },
+        ],
+        true,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchActiveTransparentByTargets(
+        [{ elementType: 'knob', id: 'knob-0' }],
+        true,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchActiveTransparentById('key', 'key-0', true),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('single image fit은 state별 exact enum leaf만 보내고 이미지 형제를 보존한다', async () => {
+    const knobId = '99999999-9999-4999-8999-999999999999';
+    const knob = {
+      ...keyAt(knobId),
+      axisId: '',
+      sensitivity: 1,
+      reverse: false,
+      imageFit: 'none',
+      idleImageFit: 'cover',
+      activeImageFit: 'contain',
+      idleTransparent: true,
+      activeTransparent: false,
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+    } as never;
+    useKnobItemStore.setState({ positions: { '4key': [knob] } });
+
+    await patchIdleImageFitById('knob', knobId, 'fill');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'knob',
+          id: knobId,
+          patch: { idleImageFit: 'fill' },
+        },
+      ],
+      expect.anything(),
+    );
+    await patchActiveImageFitById('knob', knobId, 'none');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'knob',
+          id: knobId,
+          patch: { activeImageFit: 'none' },
+        },
+      ],
+      expect.anything(),
+    );
+    expect(useKnobItemStore.getState().positions['4key'][0]).toMatchObject({
+      imageFit: 'none',
+      idleImageFit: 'fill',
+      activeImageFit: 'none',
+      idleTransparent: true,
+      activeTransparent: false,
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+    });
+  });
+
+  it('single image fit은 synthetic target을 wire 전에 거절한다', async () => {
+    await expect(
+      patchIdleImageFitById('graph', 'graph-0', 'cover'),
+    ).resolves.toBe(false);
+    await expect(
+      patchActiveImageFitById('key', 'key-0', 'contain'),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });

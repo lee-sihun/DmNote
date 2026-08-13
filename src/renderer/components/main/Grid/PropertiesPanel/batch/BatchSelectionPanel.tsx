@@ -38,20 +38,26 @@ import EditSessionBoundary from '../EditSessionBoundary';
 import type { ElementIdSelection } from '@src/renderer/editor/runtime/elementPatch';
 import {
   patchActiveImageByTargets,
+  patchActiveTransparentByTargets,
   patchCounterAnimationEnabledByTargets,
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchInactiveImageByTargets,
+  patchIdleTransparentByTargets,
   patchSoundEnabledByIds,
+  patchSoundVolumeByIds,
   patchSoundPathByIds,
 } from '@src/renderer/editor/runtime/elementOps';
 import {
   patchActiveImageViaAuthority,
+  patchActiveTransparentViaAuthority,
   patchCounterAnimationEnabledViaAuthority,
   patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
   patchInactiveImageViaAuthority,
+  patchIdleTransparentViaAuthority,
   patchSoundEnabledViaAuthority,
+  patchSoundVolumeViaAuthority,
   patchSoundPathViaAuthority,
 } from '@plugins/rpc/pluginElementActions';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
@@ -105,6 +111,48 @@ const commitBoundActiveImage = (
     window.__dmn_window_type === 'panel'
       ? patchActiveImageViaAuthority(targets, activeImage)
       : patchActiveImageByTargets(targets, activeImage);
+  void persisted.catch(reportElementOpError);
+};
+
+const commitBoundIdleTransparent = (
+  binding: 'element-id' | 'session-mode',
+  selection: ElementIdSelection,
+  idleTransparent: boolean,
+  legacy: () => void,
+) => {
+  if (binding !== 'element-id') {
+    legacy();
+    return;
+  }
+  const targets = NATIVE_IMAGE_TYPES.flatMap((elementType) =>
+    (selection[elementType] ?? []).map((id) => ({ elementType, id })),
+  );
+  if (targets.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchIdleTransparentViaAuthority(targets, idleTransparent)
+      : patchIdleTransparentByTargets(targets, idleTransparent);
+  void persisted.catch(reportElementOpError);
+};
+
+const commitBoundActiveTransparent = (
+  binding: 'element-id' | 'session-mode',
+  selection: ElementIdSelection,
+  activeTransparent: boolean,
+  legacy: () => void,
+) => {
+  if (binding !== 'element-id') {
+    legacy();
+    return;
+  }
+  const targets = (['key', 'knob'] as const).flatMap((elementType) =>
+    (selection[elementType] ?? []).map((id) => ({ elementType, id })),
+  );
+  if (targets.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchActiveTransparentViaAuthority(targets, activeTransparent)
+      : patchActiveTransparentByTargets(targets, activeTransparent);
   void persisted.catch(reportElementOpError);
 };
 
@@ -406,6 +454,16 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       knob: selectedKnobElements,
     }),
   );
+  const idleTransparencyBinding = captureBatchElementBinding({
+    key: selectedKeyElements,
+    stat: selectedStatElements,
+    graph: selectedGraphElements,
+    knob: selectedKnobElements,
+  });
+  const activeTransparencyBinding = captureBatchElementBinding({
+    key: selectedKeyElements,
+    knob: selectedKnobElements,
+  });
 
   // open 판정은 activePageKey다. renderPageKey는 exit 애니메이션 동안
   // 유지되는 마운트 상태라, 닫고 250ms 안에 재열면 전환이 감지되지 않아
@@ -446,6 +504,15 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
           window.__dmn_window_type === 'panel'
             ? patchSoundEnabledViaAuthority(stableSoundTargets, soundEnabled)
             : patchSoundEnabledByIds(stableSoundTargets, soundEnabled);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const commitSoundVolume = stableSoundTargets
+    ? (soundVolume: number) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchSoundVolumeViaAuthority(stableSoundTargets, soundVolume)
+            : patchSoundVolumeByIds(stableSoundTargets, soundVolume);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -858,6 +925,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   )
                 }
                 onSoundEnabledCommit={commitSoundEnabled}
+                onSoundVolumeCommit={commitSoundVolume}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
                 shadowActiveState={
@@ -1216,12 +1284,24 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 );
               }}
               onIdleTransparentChange={(value: boolean) => {
-                handleBatchStyleChangeComplete('idleTransparent', value);
+                commitBoundIdleTransparent(
+                  idleTransparencyBinding.binding,
+                  idleTransparencyBinding.selection,
+                  value,
+                  () =>
+                    handleBatchStyleChangeComplete('idleTransparent', value),
+                );
               }}
               onActiveTransparentChange={(value: boolean) => {
-                handleActiveCapableStyleChangeComplete(
-                  'activeTransparent',
+                commitBoundActiveTransparent(
+                  activeTransparencyBinding.binding,
+                  activeTransparencyBinding.selection,
                   value,
+                  () =>
+                    handleActiveCapableStyleChangeComplete(
+                      'activeTransparent',
+                      value,
+                    ),
                 );
               }}
               onIdleImageReset={() => {
@@ -1348,6 +1428,9 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   const graphImageBinding = useBatchElementBinding(showBatchImagePicker, () =>
     captureBatchElementBinding({ graph: selectedGraphElements }),
   );
+  const graphTransparencyBinding = captureBatchElementBinding({
+    graph: selectedGraphElements,
+  });
 
   const graphShapeOptions = [
     { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
@@ -1620,10 +1703,12 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               );
             }}
             onIdleTransparentChange={(value: boolean) => {
-              handleGraphBatchSharedSetting({ idleTransparent: value });
-            }}
-            onActiveTransparentChange={(value: boolean) => {
-              handleGraphBatchSharedSetting({ activeTransparent: value });
+              commitBoundIdleTransparent(
+                graphTransparencyBinding.binding,
+                graphTransparencyBinding.selection,
+                value,
+                () => handleGraphBatchSharedSetting({ idleTransparent: value }),
+              );
             }}
             onIdleImageReset={() => {
               commitBoundInactiveImage(
@@ -1741,6 +1826,9 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   const knobImageBinding = useBatchElementBinding(showBatchImagePicker, () =>
     captureBatchElementBinding({ knob: selectedKnobElements }),
   );
+  const knobTransparencyBinding = captureBatchElementBinding({
+    knob: selectedKnobElements,
+  });
 
   const sensitivityState = getMixedValueKnobs(
     (pos) => Number(pos.sensitivity ?? 1),
@@ -1938,10 +2026,21 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               );
             }}
             onIdleTransparentChange={(value: boolean) => {
-              handleKnobBatchSharedSetting({ idleTransparent: value });
+              commitBoundIdleTransparent(
+                knobTransparencyBinding.binding,
+                knobTransparencyBinding.selection,
+                value,
+                () => handleKnobBatchSharedSetting({ idleTransparent: value }),
+              );
             }}
             onActiveTransparentChange={(value: boolean) => {
-              handleKnobBatchSharedSetting({ activeTransparent: value });
+              commitBoundActiveTransparent(
+                knobTransparencyBinding.binding,
+                knobTransparencyBinding.selection,
+                value,
+                () =>
+                  handleKnobBatchSharedSetting({ activeTransparent: value }),
+              );
             }}
             onIdleImageReset={() => {
               commitBoundInactiveImage(

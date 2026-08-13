@@ -23,6 +23,8 @@ const captured = vi.hoisted(() => ({
     onIdleImageReset: () => void;
     onActiveImageChange?: (imageUrl: string) => void;
     onActiveImageReset?: () => void;
+    onIdleTransparentChange?: (value: boolean) => void;
+    onActiveTransparentChange?: (value: boolean) => void;
   },
   animation: null as null | {
     completionBinding?: CompletionBinding;
@@ -51,10 +53,16 @@ const patches = vi.hoisted(() => ({
   patchInactiveImageViaAuthority: vi.fn(async () => true),
   patchActiveImageByTargets: vi.fn(async () => true),
   patchActiveImageViaAuthority: vi.fn(async () => true),
+  patchIdleTransparentByTargets: vi.fn(async () => true),
+  patchIdleTransparentViaAuthority: vi.fn(async () => true),
+  patchActiveTransparentByTargets: vi.fn(async () => true),
+  patchActiveTransparentViaAuthority: vi.fn(async () => true),
   patchSoundPathByIds: vi.fn(async () => true),
   patchSoundPathViaAuthority: vi.fn(async () => true),
   patchSoundEnabledByIds: vi.fn(async () => true),
   patchSoundEnabledViaAuthority: vi.fn(async () => true),
+  patchSoundVolumeByIds: vi.fn(async () => true),
+  patchSoundVolumeViaAuthority: vi.fn(async () => true),
   patchCounterAnimationPresetByTargets: vi.fn(async () => true),
   patchCounterAnimationPresetViaAuthority: vi.fn(async () => true),
   patchCounterEnabledByTargets: vi.fn(async () => true),
@@ -69,8 +77,11 @@ vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchActiveImageByTargets: patches.patchActiveImageByTargets,
   patchInactiveImageByTargets: patches.patchInactiveImageByTargets,
+  patchIdleTransparentByTargets: patches.patchIdleTransparentByTargets,
+  patchActiveTransparentByTargets: patches.patchActiveTransparentByTargets,
   patchSoundPathByIds: patches.patchSoundPathByIds,
   patchSoundEnabledByIds: patches.patchSoundEnabledByIds,
+  patchSoundVolumeByIds: patches.patchSoundVolumeByIds,
   patchCounterAnimationPresetByTargets:
     patches.patchCounterAnimationPresetByTargets,
   patchCounterEnabledByTargets: patches.patchCounterEnabledByTargets,
@@ -81,8 +92,12 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
   patchInactiveImageViaAuthority: patches.patchInactiveImageViaAuthority,
+  patchIdleTransparentViaAuthority: patches.patchIdleTransparentViaAuthority,
+  patchActiveTransparentViaAuthority:
+    patches.patchActiveTransparentViaAuthority,
   patchSoundPathViaAuthority: patches.patchSoundPathViaAuthority,
   patchSoundEnabledViaAuthority: patches.patchSoundEnabledViaAuthority,
+  patchSoundVolumeViaAuthority: patches.patchSoundVolumeViaAuthority,
   patchCounterAnimationPresetViaAuthority:
     patches.patchCounterAnimationPresetViaAuthority,
   patchCounterEnabledViaAuthority: patches.patchCounterEnabledViaAuthority,
@@ -224,6 +239,15 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         .find(({ max }) => max === 9999);
       expect(gap).toMatchObject({ min: 0, max: 9999 });
       gap?.onChange(value);
+    });
+
+  const changeSoundVolume = (value: number) =>
+    act(() => {
+      const volume = [...captured.numbers]
+        .reverse()
+        .find(({ max }) => max === 200);
+      expect(volume).toMatchObject({ min: 0, max: 200 });
+      volume?.onChange(value);
     });
 
   const selectKey = (id: string) => {
@@ -481,6 +505,88 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         ).not.toHaveBeenCalled();
       }
       expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['main', 'panel'] as const)(
+    '%s soundVolume commit은 current key subset만 쓴다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      act(() => selectKey(ID_A));
+      renderPanel({ active: null, renderKey: null });
+      act(() => selectKey(ID_B));
+      renderPanel({ active: null, renderKey: null });
+
+      changeSoundVolume(137.5);
+      if (windowType === 'panel') {
+        expect(patches.patchSoundVolumeViaAuthority).toHaveBeenCalledWith(
+          [ID_B],
+          137.5,
+        );
+        expect(patches.patchSoundVolumeByIds).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchSoundVolumeByIds).toHaveBeenCalledWith(
+          [ID_B],
+          137.5,
+        );
+        expect(patches.patchSoundVolumeViaAuthority).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('soundVolume은 graph/knob synthetic를 무시하고 stable key subset만 쓴다', () => {
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: ID_A, index: 0 },
+        { type: 'graph', id: 'graph-0', index: 0 },
+        { type: 'knob', id: 'knob-0', index: 0 },
+      ],
+    });
+    renderPanel({ active: null, renderKey: null });
+
+    changeSoundVolume(80);
+    expect(patches.patchSoundVolumeByIds).toHaveBeenCalledWith([ID_A], 80);
+  });
+
+  it.each(['key-0', ''])(
+    'soundVolume key subset에 %j가 있으면 전체 legacy다',
+    (id) => {
+      const stable = keyAt(ID_A);
+      const unsupported = keyAt(id);
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        canonicalPositions: { '4key': [stable, unsupported] },
+        positions: { '4key': [stable, unsupported] },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: ID_A, index: 0 },
+          { type: 'key', id, index: 1 },
+        ],
+      });
+      const props = panelProps();
+      const legacy = vi.fn();
+      props.handleKeyOnlyStyleChangeComplete = legacy;
+      act(() => {
+        root.render(
+          <PanelNavProvider
+            value={{
+              activePageKey: null,
+              renderPageKey: null,
+              openPage: vi.fn(),
+              closePage: vi.fn(),
+              pageHost,
+            }}
+          >
+            <BatchKeyLikePanel {...props} />
+          </PanelNavProvider>,
+        );
+      });
+
+      changeSoundVolume(80);
+      expect(legacy).toHaveBeenCalledWith('soundVolume', 80);
+      expect(patches.patchSoundVolumeByIds).not.toHaveBeenCalled();
+      expect(patches.patchSoundVolumeViaAuthority).not.toHaveBeenCalled();
     },
   );
 
@@ -871,6 +977,106 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           [{ activeImage: '' }],
         ]);
       }
+    },
+  );
+
+  it.each([
+    ['main', 'mixed', 'idle'],
+    ['panel', 'graph', 'idle'],
+    ['main', 'knob', 'active'],
+    ['panel', 'mixed', 'active'],
+  ] as const)(
+    '%s %s batch %s transparency는 picker open이 아니라 최신 선택 ID를 쓴다',
+    (windowType, kind, state) => {
+      window.__dmn_window_type = windowType;
+      selectImageTargets(kind, 'a');
+      const legacy = vi.fn();
+      renderImagePanel(kind, legacy);
+      const targetsB = selectImageTargets(kind, 'b').filter((target) =>
+        state === 'idle'
+          ? true
+          : target.elementType === 'key' || target.elementType === 'knob',
+      );
+      renderImagePanel(kind, legacy);
+
+      act(() => {
+        if (state === 'idle') {
+          captured.image?.onIdleTransparentChange?.(true);
+        } else {
+          captured.image?.onActiveTransparentChange?.(true);
+        }
+      });
+
+      const selectedWriter =
+        state === 'idle'
+          ? windowType === 'panel'
+            ? patches.patchIdleTransparentViaAuthority
+            : patches.patchIdleTransparentByTargets
+          : windowType === 'panel'
+          ? patches.patchActiveTransparentViaAuthority
+          : patches.patchActiveTransparentByTargets;
+      expect(selectedWriter).toHaveBeenCalledWith(targetsB, true);
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('active transparency는 stat synthetic를 무시하고 stable key subset만 쓴다', () => {
+    window.__dmn_window_type = 'main';
+    selectImageTargets('mixed', 'synthetic');
+    const legacy = vi.fn();
+    renderImagePanel('mixed', legacy);
+
+    act(() => captured.image?.onActiveTransparentChange?.(true));
+
+    expect(patches.patchActiveTransparentByTargets).toHaveBeenCalledWith(
+      [{ elementType: 'key', id: ID_A }],
+      true,
+    );
+    expect(legacy).not.toHaveBeenCalled();
+  });
+
+  it('active transparency는 relevant synthetic key가 있으면 whole legacy다', () => {
+    window.__dmn_window_type = 'panel';
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: 'key-0', index: 0 },
+        { type: 'knob', id: ID_A, index: 0 },
+      ],
+    });
+    const legacy = vi.fn();
+    renderImagePanel('mixed', legacy);
+
+    act(() => captured.image?.onActiveTransparentChange?.(false));
+
+    expect(patches.patchActiveTransparentViaAuthority).not.toHaveBeenCalled();
+    expect(patches.patchActiveTransparentByTargets).not.toHaveBeenCalled();
+    expect(legacy).toHaveBeenCalledWith('activeTransparent', false);
+  });
+
+  it.each([
+    [
+      'synthetic',
+      [
+        { type: 'key' as const, id: ID_A, index: 0 },
+        { type: 'graph' as const, id: 'graph-0', index: 0 },
+      ],
+    ],
+    ['empty', [{ type: 'key' as const, id: '', index: 0 }]],
+  ] as const)(
+    'idle transparency %s selection은 semantic 없이 whole legacy다',
+    (_label, selectedElements) => {
+      window.__dmn_window_type = 'panel';
+      useGridSelectionStore.setState({
+        selectedElements: [...selectedElements],
+      });
+      const legacy = vi.fn();
+      renderImagePanel('mixed', legacy);
+
+      act(() => captured.image?.onIdleTransparentChange?.(true));
+
+      expect(patches.patchIdleTransparentViaAuthority).not.toHaveBeenCalled();
+      expect(patches.patchIdleTransparentByTargets).not.toHaveBeenCalled();
+      expect(legacy).toHaveBeenCalledWith('idleTransparent', true);
     },
   );
 

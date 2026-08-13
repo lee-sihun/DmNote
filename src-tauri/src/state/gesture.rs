@@ -519,6 +519,42 @@ mod tests {
                 serde_json::json!({ "activeImage": "  active.png  " }),
             ),
             (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::IdleTransparent(
+                    crate::models::EditorIdleTransparentPropertyPatchV1 {
+                        idle_transparent: true,
+                    },
+                ),
+                serde_json::json!({ "idleTransparent": true }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::ActiveTransparent(
+                    crate::models::EditorActiveTransparentPropertyPatchV1 {
+                        active_transparent: false,
+                    },
+                ),
+                serde_json::json!({ "activeTransparent": false }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::IdleImageFit(
+                    crate::models::EditorIdleImageFitPropertyPatchV1 {
+                        idle_image_fit: crate::models::ImageFit::Fill,
+                    },
+                ),
+                serde_json::json!({ "idleImageFit": "fill" }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::ActiveImageFit(
+                    crate::models::EditorActiveImageFitPropertyPatchV1 {
+                        active_image_fit: crate::models::ImageFit::Cover,
+                    },
+                ),
+                serde_json::json!({ "activeImageFit": "cover" }),
+            ),
+            (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::SoundPath(
                     crate::models::EditorSoundPathPropertyPatchV1 {
@@ -535,6 +571,15 @@ mod tests {
                     },
                 ),
                 serde_json::json!({ "soundEnabled": false }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::SoundVolume(
+                    crate::models::EditorSoundVolumePropertyPatchV1 {
+                        sound_volume: 137.5,
+                    },
+                ),
+                serde_json::json!({ "soundVolume": 137.5 }),
             ),
             (
                 EditorElementTypeV1::Key,
@@ -719,6 +764,16 @@ mod tests {
             serde_json::json!({ "activeImage": null }),
             serde_json::json!({ "activeImage": "path", "hidden": false }),
             serde_json::json!({ "activeImage": "path", "unexpected": true }),
+            serde_json::json!({ "idleTransparent": null }),
+            serde_json::json!({ "idleTransparent": "true" }),
+            serde_json::json!({ "idleTransparent": true, "activeTransparent": false }),
+            serde_json::json!({ "activeTransparent": 1 }),
+            serde_json::json!({ "activeTransparent": false, "unexpected": true }),
+            serde_json::json!({ "idleImageFit": "stretch" }),
+            serde_json::json!({ "idleImageFit": null }),
+            serde_json::json!({ "idleImageFit": "cover", "activeImageFit": "contain" }),
+            serde_json::json!({ "activeImageFit": 1 }),
+            serde_json::json!({ "activeImageFit": "none", "unexpected": true }),
             serde_json::json!({ "soundPath": null }),
             serde_json::json!({ "soundPath": 1 }),
             serde_json::json!({ "soundPath": "path", "soundEnabled": true }),
@@ -726,6 +781,10 @@ mod tests {
             serde_json::json!({ "soundEnabled": null }),
             serde_json::json!({ "soundEnabled": "true" }),
             serde_json::json!({ "soundEnabled": true, "unexpected": true }),
+            serde_json::json!({ "soundVolume": null }),
+            serde_json::json!({ "soundVolume": "100" }),
+            serde_json::json!({ "soundVolume": 100, "soundEnabled": true }),
+            serde_json::json!({ "soundVolume": 100, "unexpected": true }),
             serde_json::json!({ "counterEnabled": 1 }),
             serde_json::json!({ "counterAnimationEnabled": null }),
             serde_json::json!({ "counterAnimationEnabled": true, "hidden": false }),

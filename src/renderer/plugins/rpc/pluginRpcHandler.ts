@@ -54,6 +54,7 @@ import {
   commitBatchGeometryByIds,
   commitElementGeometryById,
   patchActiveImageByTargets,
+  patchActiveTransparentByTargets,
   patchCounterAnimationEnabledByTargets,
   patchCounterAnimationPresetByTargets,
   patchCounterEnabledByTargets,
@@ -61,8 +62,10 @@ import {
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
+  patchIdleTransparentByTargets,
   patchSoundEnabledByIds,
   patchSoundPathByIds,
+  patchSoundVolumeByIds,
   patchFontStyleByTargets,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -366,11 +369,31 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['soundPath']) &&
       target.elementType === 'key' &&
       typeof patch.soundPath === 'string') ||
+    (hasExactKeys(patch, ['soundVolume']) &&
+      target.elementType === 'key' &&
+      typeof patch.soundVolume === 'number' &&
+      Number.isFinite(patch.soundVolume) &&
+      patch.soundVolume >= 0 &&
+      patch.soundVolume <= 200) ||
     (hasExactKeys(patch, ['inactiveImage']) &&
       typeof patch.inactiveImage === 'string') ||
     (hasExactKeys(patch, ['activeImage']) &&
       (target.elementType === 'key' || target.elementType === 'knob') &&
       typeof patch.activeImage === 'string') ||
+    (hasExactKeys(patch, ['idleTransparent']) &&
+      typeof patch.idleTransparent === 'boolean') ||
+    (hasExactKeys(patch, ['activeTransparent']) &&
+      (target.elementType === 'key' || target.elementType === 'knob') &&
+      typeof patch.activeTransparent === 'boolean') ||
+    (hasExactKeys(patch, ['idleImageFit']) &&
+      ['cover', 'contain', 'fill', 'none'].includes(
+        patch.idleImageFit as string,
+      )) ||
+    (hasExactKeys(patch, ['activeImageFit']) &&
+      (target.elementType === 'key' || target.elementType === 'knob') &&
+      ['cover', 'contain', 'fill', 'none'].includes(
+        patch.activeImageFit as string,
+      )) ||
     (hasExactKeys(patch, ['counterEnabled']) &&
       (target.elementType === 'key' || target.elementType === 'stat') &&
       typeof patch.counterEnabled === 'boolean') ||
@@ -630,9 +653,25 @@ type NativeLayerPropertyRequest =
       soundPath: string;
     }
   | {
+      kind: 'soundVolumeBatch';
+      ids: string[];
+      soundVolume: number;
+      gestureId?: string;
+    }
+  | {
       kind: 'activeImageBatch';
       targets: Array<{ elementType: 'key' | 'knob'; id: string }>;
       activeImage: string;
+    }
+  | {
+      kind: 'idleTransparentBatch';
+      targets: Array<{ elementType: NativeElementType; id: string }>;
+      idleTransparent: boolean;
+    }
+  | {
+      kind: 'activeTransparentBatch';
+      targets: Array<{ elementType: 'key' | 'knob'; id: string }>;
+      activeTransparent: boolean;
     }
   | {
       kind: 'counterAnimationPresetBatch';
@@ -674,8 +713,14 @@ const parseNativeLayerPropertyRequest = (
     const target = parseNativeLayerPropertyTarget(payload.target);
     return target ? { kind: 'single', target } : null;
   }
+  const payloadKeys = Object.keys(payload);
   if (
-    !hasExactKeys(payload, ['targets', 'patch']) ||
+    (payloadKeys.length !== 2 && payloadKeys.length !== 3) ||
+    !['targets', 'patch'].every((key) => key in payload) ||
+    payloadKeys.some(
+      (key) => !['targets', 'patch', 'gestureId'].includes(key),
+    ) ||
+    ('gestureId' in payload && !isCanonicalGestureId(payload.gestureId)) ||
     !Array.isArray(payload.targets) ||
     payload.targets.length === 0 ||
     payload.targets.length > MAX_LAYER_RPC_TARGETS ||
@@ -757,10 +802,28 @@ const parseNativeLayerPropertyRequest = (
     typeof patch.soundEnabled === 'boolean'
       ? patch.soundEnabled
       : null;
+  const soundVolume =
+    hasExactKeys(patch, ['soundVolume']) &&
+    typeof patch.soundVolume === 'number' &&
+    Number.isFinite(patch.soundVolume) &&
+    patch.soundVolume >= 0 &&
+    patch.soundVolume <= 200
+      ? patch.soundVolume
+      : null;
   const activeImage =
     hasExactKeys(patch, ['activeImage']) &&
     typeof patch.activeImage === 'string'
       ? patch.activeImage
+      : null;
+  const idleTransparent =
+    hasExactKeys(patch, ['idleTransparent']) &&
+    typeof patch.idleTransparent === 'boolean'
+      ? patch.idleTransparent
+      : null;
+  const activeTransparent =
+    hasExactKeys(patch, ['activeTransparent']) &&
+    typeof patch.activeTransparent === 'boolean'
+      ? patch.activeTransparent
       : null;
   const counterAnimationPreset = hasExactKeys(patch, ['counterAnimationPreset'])
     ? parseCounterAnimationPresetIntent(patch.counterAnimationPreset)
@@ -836,7 +899,10 @@ const parseNativeLayerPropertyRequest = (
     inactiveImage === null &&
     soundEnabled === null &&
     soundPath === null &&
+    soundVolume === null &&
     activeImage === null &&
+    idleTransparent === null &&
+    activeTransparent === null &&
     counterBooleanPatch === null &&
     counterLayoutPatch === null &&
     counterAnimationPreset === null &&
@@ -844,17 +910,24 @@ const parseNativeLayerPropertyRequest = (
   ) {
     return null;
   }
+  if ('gestureId' in payload && soundVolume === null) return null;
   const elementType =
     useInlineStyles !== null ||
     fontStylePatch !== null ||
     fontFamilyPatch !== null ||
     inactiveImage !== null
       ? null
+      : idleTransparent !== null
+      ? null
       : soundEnabled !== null
       ? 'key'
       : soundPath !== null
       ? 'key'
+      : soundVolume !== null
+      ? 'key'
       : activeImage !== null
+      ? 'active-capable'
+      : activeTransparent !== null
       ? 'active-capable'
       : counterBooleanPatch !== null
       ? 'counter-capable'
@@ -925,11 +998,31 @@ const parseNativeLayerPropertyRequest = (
   if (soundPath !== null) {
     return { kind: 'soundPathBatch', ids, soundPath };
   }
+  if (soundVolume !== null) {
+    return {
+      kind: 'soundVolumeBatch',
+      ids,
+      soundVolume,
+      ...(typeof payload.gestureId === 'string'
+        ? { gestureId: payload.gestureId }
+        : {}),
+    };
+  }
   if (activeImage !== null) {
     return {
       kind: 'activeImageBatch',
       targets: targets as Array<{ elementType: 'key' | 'knob'; id: string }>,
       activeImage,
+    };
+  }
+  if (idleTransparent !== null) {
+    return { kind: 'idleTransparentBatch', targets, idleTransparent };
+  }
+  if (activeTransparent !== null) {
+    return {
+      kind: 'activeTransparentBatch',
+      targets: targets as Array<{ elementType: 'key' | 'knob'; id: string }>,
+      activeTransparent,
     };
   }
   if (counterAnimationPreset !== null) {
@@ -1811,10 +1904,30 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       if (request.kind === 'soundPathBatch') {
         return patchSoundPathByIds(request.ids, request.soundPath, options);
       }
+      if (request.kind === 'soundVolumeBatch') {
+        return patchSoundVolumeByIds(request.ids, request.soundVolume, {
+          ...options,
+          ...(request.gestureId ? { gestureId: request.gestureId } : {}),
+        });
+      }
       if (request.kind === 'activeImageBatch') {
         return patchActiveImageByTargets(
           request.targets,
           request.activeImage,
+          options,
+        );
+      }
+      if (request.kind === 'idleTransparentBatch') {
+        return patchIdleTransparentByTargets(
+          request.targets,
+          request.idleTransparent,
+          options,
+        );
+      }
+      if (request.kind === 'activeTransparentBatch') {
+        return patchActiveTransparentByTargets(
+          request.targets,
+          request.activeTransparent,
           options,
         );
       }

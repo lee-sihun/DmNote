@@ -104,6 +104,20 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchIdleTransparent: vi.fn(
+    (
+      _targets?: unknown,
+      _idleTransparent?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
+  patchActiveTransparent: vi.fn(
+    (
+      _targets?: unknown,
+      _activeTransparent?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   patchSoundPath: vi.fn(
     (
       _ids?: unknown,
@@ -116,6 +130,13 @@ const mocks = vi.hoisted(() => ({
       _ids?: unknown,
       _soundEnabled?: unknown,
       _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
+  patchSoundVolume: vi.fn(
+    (
+      _ids?: unknown,
+      _soundVolume?: unknown,
+      _options?: { gestureId?: string; preflight?: () => void },
     ) => Promise.resolve(true),
   ),
   patchCounterAnimationPreset: vi.fn(
@@ -232,8 +253,11 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontFamilyByTargets: mocks.patchFontFamily,
   patchInactiveImageByTargets: mocks.patchInactiveImage,
   patchActiveImageByTargets: mocks.patchActiveImage,
+  patchIdleTransparentByTargets: mocks.patchIdleTransparent,
+  patchActiveTransparentByTargets: mocks.patchActiveTransparent,
   patchSoundPathByIds: mocks.patchSoundPath,
   patchSoundEnabledByIds: mocks.patchSoundEnabled,
+  patchSoundVolumeByIds: mocks.patchSoundVolume,
   patchCounterAnimationPresetByTargets: mocks.patchCounterAnimationPreset,
   patchCounterEnabledByTargets: mocks.patchCounterEnabled,
   patchCounterAnimationEnabledByTargets: mocks.patchCounterAnimationEnabled,
@@ -338,10 +362,16 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchInactiveImage.mockResolvedValue(true);
     mocks.patchActiveImage.mockReset();
     mocks.patchActiveImage.mockResolvedValue(true);
+    mocks.patchIdleTransparent.mockReset();
+    mocks.patchIdleTransparent.mockResolvedValue(true);
+    mocks.patchActiveTransparent.mockReset();
+    mocks.patchActiveTransparent.mockResolvedValue(true);
     mocks.patchSoundPath.mockReset();
     mocks.patchSoundPath.mockResolvedValue(true);
     mocks.patchSoundEnabled.mockReset();
     mocks.patchSoundEnabled.mockResolvedValue(true);
+    mocks.patchSoundVolume.mockReset();
+    mocks.patchSoundVolume.mockResolvedValue(true);
     mocks.patchCounterAnimationPreset.mockReset();
     mocks.patchCounterAnimationPreset.mockResolvedValue(true);
     mocks.patchCounterEnabled.mockReset();
@@ -634,6 +664,10 @@ describe('plugin panel persisted element mutations', () => {
     ['글꼴 패밀리', { fontFamily: '  Raw Family  ' }],
     ['대기 이미지', { inactiveImage: '  Raw Image.png  ' }],
     ['활성 이미지', { activeImage: '  Raw Active.png  ' }, 'key'],
+    ['대기 투명', { idleTransparent: true }],
+    ['활성 투명', { activeTransparent: false }, 'knob'],
+    ['대기 이미지 맞춤', { idleImageFit: 'contain' }],
+    ['활성 이미지 맞춤', { activeImageFit: 'fill' }, 'key'],
     ['노트 효과', { noteEffectEnabled: false }, 'key'],
     ['노트 Y 보정', { noteAutoYCorrection: true }, 'key'],
     ['노트 글로우', { noteGlowEnabled: false }, 'key'],
@@ -845,6 +879,33 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
 
+  it.each([
+    ['idle', { idleTransparent: true }, 'patchIdleTransparent'],
+    ['active', { activeTransparent: false }, 'patchActiveTransparent'],
+  ] as const)(
+    '%s transparency batch는 exact bool을 전용 helper에 전달한다',
+    async (_label, patch, mockName) => {
+      const targets = [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ] as const;
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', { targets, patch }),
+      );
+
+      await vi.waitFor(() => expect(mocks[mockName]).toHaveBeenCalledOnce());
+      expect(mocks[mockName]).toHaveBeenCalledWith(
+        targets,
+        Object.values(patch)[0],
+        { preflight: expect.any(Function) },
+      );
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
+
   it('soundPath batch는 key ID와 raw string을 한 semantic commit으로 전달한다', async () => {
     const targets = [
       { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
@@ -890,6 +951,34 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
     },
   );
+
+  it('soundVolume batch는 key IDs, finite literal, gesture를 전용 semantic commit으로 전달한다', async () => {
+    const targets = [
+      { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      { elementType: 'key', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    ] as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { soundVolume: 137.5 },
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchSoundVolume).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchSoundVolume).toHaveBeenCalledWith(
+      targets.map(({ id }) => id),
+      137.5,
+      {
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        preflight: expect.any(Function),
+      },
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
 
   it('counter animation preset batch는 key/stat exact intent를 한 semantic commit으로 전달한다', async () => {
     const targets = [
@@ -1847,6 +1936,118 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'idleTransparent non-boolean',
+      {
+        targets: [{ elementType: 'graph', id: 'stable-idle-transparent' }],
+        patch: { idleTransparent: 1 },
+      },
+    ],
+    [
+      'idleTransparent combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable-idle-transparent' }],
+        patch: { idleTransparent: true, activeTransparent: false },
+      },
+    ],
+    [
+      'activeTransparent wrong stat type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable-active-transparent' }],
+        patch: { activeTransparent: true },
+      },
+    ],
+    [
+      'activeTransparent wrong graph type',
+      {
+        targets: [{ elementType: 'graph', id: 'stable-active-transparent' }],
+        patch: { activeTransparent: true },
+      },
+    ],
+    [
+      'activeTransparent non-boolean',
+      {
+        targets: [{ elementType: 'key', id: 'stable-active-transparent' }],
+        patch: { activeTransparent: 'true' },
+      },
+    ],
+    [
+      'activeTransparent duplicate target',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable-active-transparent' },
+          { elementType: 'knob', id: 'stable-active-transparent' },
+        ],
+        patch: { activeTransparent: true },
+      },
+    ],
+    [
+      'idleTransparent synthetic target',
+      {
+        targets: [{ elementType: 'graph', id: 'graph-0' }],
+        patch: { idleTransparent: true },
+      },
+    ],
+    [
+      'idleTransparent oversized batch',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'key',
+          id: `stable-transparent-${index}`,
+        })),
+        patch: { idleTransparent: true },
+      },
+    ],
+    [
+      'idleImageFit invalid enum',
+      {
+        target: {
+          elementType: 'graph',
+          id: 'stable-fit',
+          patch: { idleImageFit: 'stretch' },
+        },
+      },
+    ],
+    [
+      'idleImageFit combined',
+      {
+        target: {
+          elementType: 'key',
+          id: 'stable-fit',
+          patch: { idleImageFit: 'cover', activeImageFit: 'contain' },
+        },
+      },
+    ],
+    [
+      'activeImageFit wrong stat type',
+      {
+        target: {
+          elementType: 'stat',
+          id: 'stable-fit',
+          patch: { activeImageFit: 'contain' },
+        },
+      },
+    ],
+    [
+      'activeImageFit wrong graph type',
+      {
+        target: {
+          elementType: 'graph',
+          id: 'stable-fit',
+          patch: { activeImageFit: 'fill' },
+        },
+      },
+    ],
+    [
+      'activeImageFit non-string',
+      {
+        target: {
+          elementType: 'key',
+          id: 'stable-fit',
+          patch: { activeImageFit: 1 },
+        },
+      },
+    ],
+    [
       'soundEnabled wrong stat type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
@@ -1892,6 +2093,106 @@ describe('plugin panel persisted element mutations', () => {
           id: `stable-sound-enabled-${index}`,
         })),
         patch: { soundEnabled: true },
+      },
+    ],
+    [
+      'soundVolume wrong stat type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { soundVolume: 100 },
+      },
+    ],
+    [
+      'soundVolume below range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundVolume: -0.1 },
+      },
+    ],
+    [
+      'soundVolume above range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundVolume: 200.1 },
+      },
+    ],
+    [
+      'soundVolume non-number',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundVolume: '100' },
+      },
+    ],
+    [
+      'soundVolume NaN',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundVolume: Number.NaN },
+      },
+    ],
+    [
+      'soundVolume infinity',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundVolume: Number.POSITIVE_INFINITY },
+      },
+    ],
+    [
+      'soundVolume combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundVolume: 100, soundEnabled: true },
+      },
+    ],
+    [
+      'soundVolume non canonical gesture',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundVolume: 100 },
+        gestureId: 'bad space',
+      },
+    ],
+    [
+      'soundVolume oversized gesture',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundVolume: 100 },
+        gestureId: `${'a'.repeat(65)}`,
+      },
+    ],
+    [
+      'other property gesture',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundEnabled: true },
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      },
+    ],
+    [
+      'soundVolume duplicate target',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable' },
+          { elementType: 'key', id: 'stable' },
+        ],
+        patch: { soundVolume: 100 },
+      },
+    ],
+    [
+      'soundVolume synthetic target',
+      {
+        targets: [{ elementType: 'key', id: 'key-0' }],
+        patch: { soundVolume: 100 },
+      },
+    ],
+    [
+      'soundVolume oversized batch',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'key',
+          id: `stable-sound-volume-${index}`,
+        })),
+        patch: { soundVolume: 100 },
       },
     ],
     [
@@ -2142,8 +2443,11 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchFontFamily).not.toHaveBeenCalled();
       expect(mocks.patchInactiveImage).not.toHaveBeenCalled();
       expect(mocks.patchActiveImage).not.toHaveBeenCalled();
+      expect(mocks.patchIdleTransparent).not.toHaveBeenCalled();
+      expect(mocks.patchActiveTransparent).not.toHaveBeenCalled();
       expect(mocks.patchSoundPath).not.toHaveBeenCalled();
       expect(mocks.patchSoundEnabled).not.toHaveBeenCalled();
+      expect(mocks.patchSoundVolume).not.toHaveBeenCalled();
       expect(mocks.patchNoteProperties).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
@@ -2672,6 +2976,31 @@ describe('plugin panel persisted element mutations', () => {
     });
   });
 
+  it('image fit은 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchElementProperty.mockImplementationOnce(
+      async (_type, _id, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'knob',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { activeImageFit: 'contain' },
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
   it('graphColor batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
     mocks.patchGraphColors.mockImplementationOnce(
       async (_ids, _graphColor, options) => {
@@ -2841,6 +3170,31 @@ describe('plugin panel persisted element mutations', () => {
     });
   });
 
+  it('image transparency batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchIdleTransparent.mockImplementationOnce(
+      async (_targets, _value, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          { elementType: 'key', id: 'stable-key' },
+          { elementType: 'graph', id: 'stable-graph' },
+        ],
+        patch: { idleTransparent: true },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
   it('soundPath batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
     mocks.patchSoundPath.mockImplementationOnce(
       async (_ids, _value, options) => {
@@ -2875,6 +3229,29 @@ describe('plugin panel persisted element mutations', () => {
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'key', id: 'stable-key' }],
         patch: { soundEnabled: true },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('soundVolume batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchSoundVolume.mockImplementationOnce(
+      async (_ids, _value, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [{ elementType: 'key', id: 'stable-key' }],
+        patch: { soundVolume: 100 },
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
     );
 

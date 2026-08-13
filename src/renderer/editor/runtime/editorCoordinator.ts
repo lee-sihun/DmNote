@@ -488,6 +488,9 @@ const applySemanticOps = (
             if ('soundEnabled' in op.patch) {
               return { ...position, soundEnabled: op.patch.soundEnabled };
             }
+            if ('soundVolume' in op.patch) {
+              return { ...position, soundVolume: op.patch.soundVolume };
+            }
             if ('soundPath' in op.patch) {
               return { ...position, soundPath: op.patch.soundPath };
             }
@@ -496,6 +499,24 @@ const applySemanticOps = (
             }
             if ('activeImage' in op.patch) {
               return { ...position, activeImage: op.patch.activeImage };
+            }
+            if ('idleTransparent' in op.patch) {
+              return {
+                ...position,
+                idleTransparent: op.patch.idleTransparent,
+              };
+            }
+            if ('activeTransparent' in op.patch) {
+              return {
+                ...position,
+                activeTransparent: op.patch.activeTransparent,
+              };
+            }
+            if ('idleImageFit' in op.patch) {
+              return { ...position, idleImageFit: op.patch.idleImageFit };
+            }
+            if ('activeImageFit' in op.patch) {
+              return { ...position, activeImageFit: op.patch.activeImageFit };
             }
             if ('counterEnabled' in op.patch) {
               const counter = position.counter as

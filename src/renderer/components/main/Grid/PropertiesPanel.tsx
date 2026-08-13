@@ -45,6 +45,7 @@ import {
   patchNotePropertiesViaAuthority,
   patchSoundPathViaAuthority,
   patchSoundEnabledViaAuthority,
+  patchSoundVolumeViaAuthority,
   patchCounterAnimationEnabledViaAuthority,
   patchCounterAnimationPresetViaAuthority,
   patchCounterEnabledViaAuthority,
@@ -58,7 +59,7 @@ import {
   parseAlphaPercent,
   hexWithAlphaPercent,
 } from '@utils/color/colorUtils';
-import type { KeyPosition } from '@src/types/key/keys';
+import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
@@ -96,11 +97,16 @@ import {
   patchElementLayerNameById,
   commitElementGeometryById,
   patchActiveImageById,
+  patchActiveImageFitById,
+  patchActiveTransparentById,
   patchFontFamilyById,
   patchFontFamilyByTargets,
   patchInactiveImageById,
+  patchIdleImageFitById,
+  patchIdleTransparentById,
   patchSoundPathById,
   patchSoundEnabledById,
+  patchSoundVolumeById,
   patchCounterAnimationEnabledById,
   patchCounterAnimationPresetById,
   patchCounterEnabledById,
@@ -2112,6 +2118,86 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableIdleTransparentHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (idleTransparent: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { idleTransparent },
+                })
+              : patchIdleTransparentById(type, id, idleTransparent);
+          void persisted.catch((error) => {
+            console.error('Failed to update idle transparency', error);
+          });
+        }
+      : undefined;
+
+  const stableActiveTransparentHandler = (
+    type: 'key' | 'knob',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (activeTransparent: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { activeTransparent },
+                })
+              : patchActiveTransparentById(type, id, activeTransparent);
+          void persisted.catch((error) => {
+            console.error('Failed to update active transparency', error);
+          });
+        }
+      : undefined;
+
+  const stableIdleImageFitHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (idleImageFit: ImageFit) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { idleImageFit },
+                })
+              : patchIdleImageFitById(type, id, idleImageFit);
+          void persisted.catch((error) => {
+            console.error('Failed to update idle image fit', error);
+          });
+        }
+      : undefined;
+
+  const stableActiveImageFitHandler = (
+    type: 'key' | 'knob',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (activeImageFit: ImageFit) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { activeImageFit },
+                })
+              : patchActiveImageFitById(type, id, activeImageFit);
+          void persisted.catch((error) => {
+            console.error('Failed to update active image fit', error);
+          });
+        }
+      : undefined;
+
   const stableSoundPathHandler = (id: string | undefined) =>
     id && !isSyntheticElementId(id)
       ? (soundPath: string) => {
@@ -2134,6 +2220,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               : patchSoundEnabledById(id, soundEnabled);
           void persisted.catch((error) => {
             console.error('Failed to update sound enabled', error);
+          });
+        }
+      : undefined;
+
+  const stableSoundVolumeHandler = (id: string | undefined) =>
+    id && !isSyntheticElementId(id)
+      ? (soundVolume: number) => {
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchSoundVolumeViaAuthority([id], soundVolume, gestureId)
+              : patchSoundVolumeById(id, soundVolume, { gestureId });
+          editGestureController.settleCommit(persisted);
+          void persisted.catch((error) => {
+            console.error('Failed to update sound volume', error);
           });
         }
       : undefined;
@@ -3657,6 +3759,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
+          onIdleTransparentCommit={stableIdleTransparentHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onActiveTransparentCommit={stableActiveTransparentHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onIdleImageFitCommit={stableIdleImageFitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
+          onActiveImageFitCommit={stableActiveImageFitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           handleGeometryCommit={stableGeometryHandler(
             'knob',
             selectedKnobElements[0]?.id,
@@ -3692,6 +3810,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameStart={handleRenameStart}
           handleGraphUpdate={handleGraphUpdate}
           onInactiveImageCommit={stableInactiveImageHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onIdleTransparentCommit={stableIdleTransparentHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onIdleImageFitCommit={stableIdleImageFitHandler(
             'graph',
             selectedGraphElements[0]?.id,
           )}
@@ -3762,6 +3888,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? stableActiveImageHandler('key', selectedKeyElements[0]?.id)
             : undefined
         }
+        onIdleTransparentCommit={stableIdleTransparentHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onActiveTransparentCommit={
+          isSingleKey
+            ? stableActiveTransparentHandler('key', selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onIdleImageFitCommit={stableIdleImageFitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onActiveImageFitCommit={
+          isSingleKey
+            ? stableActiveImageFitHandler('key', selectedKeyElements[0]?.id)
+            : undefined
+        }
         onSoundPathCommit={
           isSingleKey
             ? stableSoundPathHandler(selectedKeyElements[0]?.id)
@@ -3770,6 +3918,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         onSoundEnabledCommit={
           isSingleKey
             ? stableSoundEnabledHandler(selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onSoundVolumeCommit={
+          isSingleKey
+            ? stableSoundVolumeHandler(selectedKeyElements[0]?.id)
             : undefined
         }
         onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(

@@ -615,6 +615,28 @@ export const patchSoundEnabledViaAuthority = (
   });
 };
 
+export const patchSoundVolumeViaAuthority = (
+  ids: readonly string[],
+  soundVolume: number,
+  gestureId?: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'key' as const, id })),
+        patch: { soundVolume },
+        ...(gestureId ? { gestureId } : {}),
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
 export const patchCounterAnimationPresetViaAuthority = (
   targets: readonly { elementType: 'key' | 'stat'; id: string }[],
   intent: import('@src/types/editor').EditorCounterAnimationPresetIntentV1,
@@ -748,6 +770,46 @@ export const patchActiveImageViaAuthority = (
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
         patch: { activeImage },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchIdleTransparentViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  idleTransparent: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { idleTransparent },
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchActiveTransparentViaAuthority = (
+  targets: readonly { elementType: 'key' | 'knob'; id: string }[],
+  activeTransparent: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { activeTransparent },
       },
       authorityGeneration,
       retryPolicy: 'default',

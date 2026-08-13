@@ -756,7 +756,7 @@ export const patchElementPropertyById = (
   type: NativeElementType,
   id: string,
   patch: EditorElementPropertyPatchV1,
-  options: { preflight?: () => void } = {},
+  options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id) return Promise.resolve(false);
   const eagerPatch =
@@ -775,6 +775,7 @@ export const patchElementPropertyById = (
   return commitSemanticOps(
     [{ kind: 'patchElement', elementType: type, id, patch }],
     {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
       preflight: options.preflight,
       onEnrolled: () => {
         enrolled = true;
@@ -796,7 +797,7 @@ interface ElementPropertyPatchTarget {
 
 const patchElementPropertiesByIds = (
   targets: readonly ElementPropertyPatchTarget[],
-  options: { preflight?: () => void } = {},
+  options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (targets.length === 0 || targets.some((target) => !target.id)) {
     return Promise.resolve(false);
@@ -828,6 +829,7 @@ const patchElementPropertiesByIds = (
       patch,
     })),
     {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
       preflight: options.preflight,
       onEnrolled: () => {
         enrolled = true;
@@ -1184,6 +1186,44 @@ export const patchSoundEnabledByIds = (
   }
   return patchElementPropertiesByIds(
     ids.map((id) => ({ type: 'key', id, patch: { soundEnabled } })),
+    options,
+  );
+};
+
+export const patchSoundVolumeById = (
+  id: string,
+  soundVolume: number,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    !id ||
+    isSyntheticElementId(id) ||
+    !Number.isFinite(soundVolume) ||
+    soundVolume < 0 ||
+    soundVolume > 200
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertyById('key', id, { soundVolume }, options);
+};
+
+export const patchSoundVolumeByIds = (
+  ids: readonly string[],
+  soundVolume: number,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0 || isSyntheticElementId(id)) ||
+    new Set(ids).size !== ids.length ||
+    !Number.isFinite(soundVolume) ||
+    soundVolume < 0 ||
+    soundVolume > 200
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    ids.map((id) => ({ type: 'key', id, patch: { soundVolume } })),
     options,
   );
 };
@@ -1592,6 +1632,96 @@ export const patchActiveImageByTargets = (
     })),
     options,
   );
+};
+
+export const patchIdleTransparentById = (
+  type: NativeElementType,
+  id: string,
+  idleTransparent: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  return patchElementPropertyById(type, id, { idleTransparent }, options);
+};
+
+export const patchIdleTransparentByTargets = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  idleTransparent: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some(
+      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+    ) ||
+    new Set(targets.map((target) => target.id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    targets.map(({ elementType, id }) => ({
+      type: elementType,
+      id,
+      patch: { idleTransparent },
+    })),
+    options,
+  );
+};
+
+export const patchActiveTransparentById = (
+  type: 'key' | 'knob',
+  id: string,
+  activeTransparent: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  return patchElementPropertyById(type, id, { activeTransparent }, options);
+};
+
+export const patchActiveTransparentByTargets = (
+  targets: readonly { elementType: 'key' | 'knob'; id: string }[],
+  activeTransparent: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some(
+      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+    ) ||
+    new Set(targets.map((target) => target.id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    targets.map(({ elementType, id }) => ({
+      type: elementType,
+      id,
+      patch: { activeTransparent },
+    })),
+    options,
+  );
+};
+
+type ImageFit = 'cover' | 'contain' | 'fill' | 'none';
+
+export const patchIdleImageFitById = (
+  type: NativeElementType,
+  id: string,
+  idleImageFit: ImageFit,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  return patchElementPropertyById(type, id, { idleImageFit }, options);
+};
+
+export const patchActiveImageFitById = (
+  type: 'key' | 'knob',
+  id: string,
+  activeImageFit: ImageFit,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  return patchElementPropertyById(type, id, { activeImageFit }, options);
 };
 
 export const patchKnobPropertiesByIds = (

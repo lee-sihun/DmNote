@@ -750,14 +750,21 @@ pub(crate) fn prepare_editor_ops_transition(
                 validate_editor_op_target_type(op_index, EditorElementTypeV1::Knob, *element_type)?;
             } else if matches!(patch, EditorElementPropertyPatchV1::StatType(_)) {
                 validate_editor_op_target_type(op_index, EditorElementTypeV1::Stat, *element_type)?;
-            } else if matches!(patch, EditorElementPropertyPatchV1::ActiveImage(_)) {
+            } else if matches!(
+                patch,
+                EditorElementPropertyPatchV1::ActiveImage(_)
+                    | EditorElementPropertyPatchV1::ActiveTransparent(_)
+                    | EditorElementPropertyPatchV1::ActiveImageFit(_)
+            ) {
                 if !matches!(
                     element_type,
                     EditorElementTypeV1::Key | EditorElementTypeV1::Knob
                 ) {
                     return Err(EditorCommitError::validation(
                         "ELEMENT_TYPE_MISMATCH",
-                        format!("editor op {op_index} active image target must be key or knob"),
+                        format!(
+                            "editor op {op_index} active image state target must be key or knob"
+                        ),
                     ));
                 }
             } else if let EditorElementPropertyPatchV1::CounterAnimationPreset(patch) = patch {
@@ -798,6 +805,7 @@ pub(crate) fn prepare_editor_ops_transition(
                 patch,
                 EditorElementPropertyPatchV1::SoundPath(_)
                     | EditorElementPropertyPatchV1::SoundEnabled(_)
+                    | EditorElementPropertyPatchV1::SoundVolume(_)
                     | EditorElementPropertyPatchV1::NoteEffectEnabled(_)
                     | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
                     | EditorElementPropertyPatchV1::NoteAutoYCorrection(_)
@@ -805,6 +813,18 @@ pub(crate) fn prepare_editor_ops_transition(
                     | EditorElementPropertyPatchV1::NoteBorderSide(_)
             ) {
                 validate_editor_op_target_type(op_index, EditorElementTypeV1::Key, *element_type)?;
+                if let EditorElementPropertyPatchV1::SoundVolume(patch) = patch {
+                    if !patch.sound_volume.is_finite()
+                        || !(0.0..=200.0).contains(&patch.sound_volume)
+                    {
+                        return Err(EditorCommitError::validation(
+                            "SOUND_VOLUME_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} sound volume must be finite and between 0 and 200"
+                            ),
+                        ));
+                    }
+                }
             }
         }
     }
@@ -1103,6 +1123,42 @@ pub(crate) fn prepare_editor_ops_transition(
                             true
                         }
                     }
+                    EditorElementPropertyPatchV1::IdleTransparent(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.idle_transparent == patch.idle_transparent {
+                            false
+                        } else {
+                            position.idle_transparent = patch.idle_transparent;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::ActiveTransparent(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.active_transparent == patch.active_transparent {
+                            false
+                        } else {
+                            position.active_transparent = patch.active_transparent;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::IdleImageFit(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.idle_image_fit.as_ref() == Some(&patch.idle_image_fit) {
+                            false
+                        } else {
+                            position.idle_image_fit = Some(patch.idle_image_fit.clone());
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::ActiveImageFit(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.active_image_fit.as_ref() == Some(&patch.active_image_fit) {
+                            false
+                        } else {
+                            position.active_image_fit = Some(patch.active_image_fit.clone());
+                            true
+                        }
+                    }
                     EditorElementPropertyPatchV1::SoundPath(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
                         if position.sound_path.as_deref() == Some(patch.sound_path.as_str()) {
@@ -1118,6 +1174,15 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.sound_enabled = Some(patch.sound_enabled);
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::SoundVolume(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.sound_volume == Some(patch.sound_volume) {
+                            false
+                        } else {
+                            position.sound_volume = Some(patch.sound_volume);
                             true
                         }
                     }
@@ -3232,6 +3297,348 @@ mod tests {
     }
 
     #[test]
+    fn image_transparency_patches_preserve_opposite_state_and_asset_siblings() {
+        let mut store = store_with_every_reorder_type();
+        for position in [
+            &mut store.key_positions.get_mut("4key").unwrap()[0],
+            &mut store.stat_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.graph_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.knob_positions.get_mut("4key").unwrap()[0].position,
+        ] {
+            position.idle_transparent = false;
+            position.active_transparent = false;
+            position.inactive_image = Some("idle-sibling.png".to_string());
+            position.active_image = Some("active-sibling.png".to_string());
+            position.image_fit = Some(crate::models::ImageFit::Fill);
+            position.idle_image_fit = Some(crate::models::ImageFit::Contain);
+            position.active_image_fit = Some(crate::models::ImageFit::None);
+            position.counter.enabled = true;
+        }
+        let targets = [
+            (
+                EditorElementTypeV1::Key,
+                store.key_positions["4key"][0].id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                store.stat_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                store.graph_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                store.knob_positions["4key"][0].position.id.clone(),
+            ),
+        ];
+        let idle_patch = EditorElementPropertyPatchV1::IdleTransparent(
+            crate::models::EditorIdleTransparentPropertyPatchV1 {
+                idle_transparent: true,
+            },
+        );
+        let idle_ops = targets
+            .iter()
+            .map(|(element_type, id)| patch_property_op(*element_type, id, idle_patch.clone()))
+            .chain(std::iter::once(patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                idle_patch.clone(),
+            )))
+            .collect::<Vec<_>>();
+
+        let idle = prepare_editor_ops_transition(&store, &idle_ops).unwrap();
+        assert_eq!(
+            idle.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            idle.op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        for position in [
+            &idle.candidate.key_positions["4key"][0],
+            &idle.candidate.stat_positions["4key"][0].position,
+            &idle.candidate.graph_positions["4key"][0].position,
+            &idle.candidate.knob_positions["4key"][0].position,
+        ] {
+            assert!(position.idle_transparent);
+            assert!(!position.active_transparent);
+            assert_eq!(position.inactive_image.as_deref(), Some("idle-sibling.png"));
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+            assert_eq!(position.image_fit, Some(crate::models::ImageFit::Fill));
+            assert_eq!(
+                position.idle_image_fit,
+                Some(crate::models::ImageFit::Contain)
+            );
+            assert_eq!(
+                position.active_image_fit,
+                Some(crate::models::ImageFit::None)
+            );
+            assert!(position.counter.enabled);
+        }
+        let idle_replay = prepare_editor_ops_transition(&idle.scratch, &idle_ops).unwrap();
+        assert!(idle_replay.changed_fields.is_empty());
+        assert_eq!(
+            idle_replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let active_patch = EditorElementPropertyPatchV1::ActiveTransparent(
+            crate::models::EditorActiveTransparentPropertyPatchV1 {
+                active_transparent: true,
+            },
+        );
+        let active_ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &targets[0].1,
+                active_patch.clone(),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &targets[3].1,
+                active_patch.clone(),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                active_patch.clone(),
+            ),
+        ];
+        let active = prepare_editor_ops_transition(&idle.scratch, &active_ops).unwrap();
+        assert_eq!(
+            active
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert!(active.candidate.key_positions["4key"][0].active_transparent);
+        assert!(
+            active.candidate.knob_positions["4key"][0]
+                .position
+                .active_transparent
+        );
+        assert!(active.candidate.key_positions["4key"][0].idle_transparent);
+        assert!(
+            active.candidate.knob_positions["4key"][0]
+                .position
+                .idle_transparent
+        );
+
+        for element_type in [EditorElementTypeV1::Stat, EditorElementTypeV1::Graph] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    idle_ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        active_patch.clone(),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert!(!store.key_positions["4key"][0].idle_transparent);
+        }
+    }
+
+    #[test]
+    fn image_fit_patches_materialize_state_specific_values_and_preserve_siblings() {
+        let mut store = store_with_every_reorder_type();
+        for position in [
+            &mut store.key_positions.get_mut("4key").unwrap()[0],
+            &mut store.stat_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.graph_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.knob_positions.get_mut("4key").unwrap()[0].position,
+        ] {
+            position.image_fit = Some(crate::models::ImageFit::Cover);
+            position.idle_image_fit = None;
+            position.active_image_fit = None;
+            position.idle_transparent = true;
+            position.active_transparent = true;
+            position.inactive_image = Some("idle-sibling.png".to_string());
+            position.active_image = Some("active-sibling.png".to_string());
+            position.counter.enabled = true;
+        }
+        let targets = [
+            (
+                EditorElementTypeV1::Key,
+                store.key_positions["4key"][0].id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                store.stat_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                store.graph_positions["4key"][0].position.id.clone(),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                store.knob_positions["4key"][0].position.id.clone(),
+            ),
+        ];
+        let idle_patch = EditorElementPropertyPatchV1::IdleImageFit(
+            crate::models::EditorIdleImageFitPropertyPatchV1 {
+                idle_image_fit: crate::models::ImageFit::Cover,
+            },
+        );
+        let idle_ops = targets
+            .iter()
+            .map(|(element_type, id)| patch_property_op(*element_type, id, idle_patch.clone()))
+            .chain(std::iter::once(patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                idle_patch.clone(),
+            )))
+            .collect::<Vec<_>>();
+
+        let idle = prepare_editor_ops_transition(&store, &idle_ops).unwrap();
+        assert_eq!(
+            idle.op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        for position in [
+            &idle.candidate.key_positions["4key"][0],
+            &idle.candidate.stat_positions["4key"][0].position,
+            &idle.candidate.graph_positions["4key"][0].position,
+            &idle.candidate.knob_positions["4key"][0].position,
+        ] {
+            assert_eq!(position.image_fit, Some(crate::models::ImageFit::Cover));
+            assert_eq!(
+                position.idle_image_fit,
+                Some(crate::models::ImageFit::Cover)
+            );
+            assert_eq!(position.active_image_fit, None);
+            assert!(position.idle_transparent);
+            assert!(position.active_transparent);
+            assert_eq!(position.inactive_image.as_deref(), Some("idle-sibling.png"));
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+            assert!(position.counter.enabled);
+        }
+        let idle_replay = prepare_editor_ops_transition(&idle.scratch, &idle_ops).unwrap();
+        assert!(idle_replay.changed_fields.is_empty());
+        assert_eq!(
+            idle_replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let active_patch = EditorElementPropertyPatchV1::ActiveImageFit(
+            crate::models::EditorActiveImageFitPropertyPatchV1 {
+                active_image_fit: crate::models::ImageFit::Cover,
+            },
+        );
+        let active_ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &targets[0].1,
+                active_patch.clone(),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &targets[3].1,
+                active_patch.clone(),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                active_patch.clone(),
+            ),
+        ];
+        let active = prepare_editor_ops_transition(&idle.scratch, &active_ops).unwrap();
+        assert_eq!(
+            active
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        assert_eq!(
+            active.candidate.key_positions["4key"][0].active_image_fit,
+            Some(crate::models::ImageFit::Cover)
+        );
+        assert_eq!(
+            active.candidate.knob_positions["4key"][0]
+                .position
+                .active_image_fit,
+            Some(crate::models::ImageFit::Cover)
+        );
+
+        for element_type in [EditorElementTypeV1::Stat, EditorElementTypeV1::Graph] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    idle_ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        active_patch.clone(),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store.key_positions["4key"][0].idle_image_fit, None);
+        }
+    }
+
+    #[test]
     fn sound_path_patch_is_key_only_and_preserves_sound_and_asset_siblings() {
         let mut store = store_with_every_reorder_type();
         for position in store.key_positions.get_mut("4key").unwrap() {
@@ -3437,6 +3844,138 @@ mod tests {
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
             assert_eq!(store.key_positions["4key"][0].sound_enabled, None);
+        }
+    }
+
+    #[test]
+    fn sound_volume_patch_materializes_default_and_validates_range_atomically() {
+        let mut store = store_with_every_reorder_type();
+        let key_ids = store.key_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        for (index, position) in store
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .iter_mut()
+            .take(2)
+            .enumerate()
+        {
+            position.sound_volume = if index == 0 { None } else { Some(100.0) };
+            position.sound_path = Some("sounds/sibling.wav".to_string());
+            position.sound_enabled = Some(true);
+            position.inactive_image = Some("idle-sibling.png".to_string());
+            position.active_image = Some("active-sibling.png".to_string());
+            position.counter.enabled = false;
+        }
+        let patch = EditorElementPropertyPatchV1::SoundVolume(
+            crate::models::EditorSoundVolumePropertyPatchV1 {
+                sound_volume: 100.0,
+            },
+        );
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &key_ids[0], patch.clone()),
+            patch_property_op(EditorElementTypeV1::Key, &key_ids[1], patch.clone()),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                patch.clone(),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        for position in transition.candidate.key_positions["4key"].iter().take(2) {
+            assert_eq!(position.sound_volume, Some(100.0));
+            assert_eq!(position.sound_path.as_deref(), Some("sounds/sibling.wav"));
+            assert_eq!(position.sound_enabled, Some(true));
+            assert_eq!(position.inactive_image.as_deref(), Some("idle-sibling.png"));
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+            assert!(!position.counter.enabled);
+        }
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        for element_type in [
+            EditorElementTypeV1::Stat,
+            EditorElementTypeV1::Graph,
+            EditorElementTypeV1::Knob,
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        patch.clone(),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store.key_positions["4key"][0].sound_volume, None);
+        }
+        for invalid in [-1.0, 200.1, f64::NAN, f64::INFINITY] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        EditorElementTypeV1::Key,
+                        uuid::Uuid::new_v4().to_string(),
+                        EditorElementPropertyPatchV1::SoundVolume(
+                            crate::models::EditorSoundVolumePropertyPatchV1 {
+                                sound_volume: invalid,
+                            },
+                        ),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("SOUND_VOLUME_OUT_OF_RANGE"));
+            assert_eq!(store.key_positions["4key"][0].sound_volume, None);
+        }
+        for boundary in [0.0, 200.0] {
+            prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &key_ids[0],
+                    EditorElementPropertyPatchV1::SoundVolume(
+                        crate::models::EditorSoundVolumePropertyPatchV1 {
+                            sound_volume: boundary,
+                        },
+                    ),
+                )],
+            )
+            .unwrap();
         }
     }
 

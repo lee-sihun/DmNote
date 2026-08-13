@@ -66,6 +66,7 @@ interface BatchStyleTabContentProps {
   soundBinding?: BatchElementBinding;
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
+  onSoundVolumeCommit?: (soundVolume: number) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -147,6 +148,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   soundBinding = LEGACY_BATCH_ELEMENT_BINDING,
   onSoundPathCommit,
   onSoundEnabledCommit,
+  onSoundVolumeCommit,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -1243,12 +1245,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 ) : null}
                 <NumberInput
                   value={soundMixedValue((pos) => pos.soundVolume, 100).value}
-                  onChange={(value) =>
-                    soundChangeComplete(
-                      'soundVolume',
-                      Math.max(0, Math.min(200, value)),
-                    )
-                  }
+                  onChange={(value) => {
+                    const soundVolume = Math.max(0, Math.min(200, value));
+                    if (onSoundVolumeCommit) {
+                      onSoundVolumeCommit(soundVolume);
+                    } else {
+                      soundChangeComplete('soundVolume', soundVolume);
+                    }
+                  }}
                   suffix="%"
                   min={0}
                   max={200}

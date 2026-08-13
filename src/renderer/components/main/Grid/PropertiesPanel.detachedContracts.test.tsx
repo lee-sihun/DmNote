@@ -39,10 +39,16 @@ const {
   patchInactiveImageMock,
   patchInactiveImageViaAuthorityMock,
   patchActiveImageMock,
+  patchIdleTransparentMock,
+  patchActiveTransparentMock,
+  patchIdleImageFitMock,
+  patchActiveImageFitMock,
   patchSoundPathMock,
   patchSoundPathViaAuthorityMock,
   patchSoundEnabledMock,
   patchSoundEnabledViaAuthorityMock,
+  patchSoundVolumeMock,
+  patchSoundVolumeViaAuthorityMock,
   patchCounterEnabledMock,
   patchCounterAnimationEnabledMock,
   patchCounterEnabledViaAuthorityMock,
@@ -98,10 +104,16 @@ const {
   patchInactiveImageMock: vi.fn(() => Promise.resolve(true)),
   patchInactiveImageViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchActiveImageMock: vi.fn(() => Promise.resolve(true)),
+  patchIdleTransparentMock: vi.fn(() => Promise.resolve(true)),
+  patchActiveTransparentMock: vi.fn(() => Promise.resolve(true)),
+  patchIdleImageFitMock: vi.fn(() => Promise.resolve(true)),
+  patchActiveImageFitMock: vi.fn(() => Promise.resolve(true)),
   patchSoundPathMock: vi.fn(() => Promise.resolve(true)),
   patchSoundPathViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchSoundEnabledMock: vi.fn(() => Promise.resolve(true)),
   patchSoundEnabledViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundVolumeMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundVolumeViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchCounterEnabledMock: vi.fn(() => Promise.resolve(true)),
   patchCounterAnimationEnabledMock: vi.fn(() => Promise.resolve(true)),
   patchCounterEnabledViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
@@ -153,6 +165,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
   patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
   patchSoundEnabledViaAuthority: patchSoundEnabledViaAuthorityMock,
+  patchSoundVolumeViaAuthority: patchSoundVolumeViaAuthorityMock,
   patchCounterEnabledViaAuthority: patchCounterEnabledViaAuthorityMock,
   patchCounterAnimationEnabledViaAuthority:
     patchCounterAnimationEnabledViaAuthorityMock,
@@ -175,8 +188,13 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontFamilyByTargets: patchFontFamilyTargetsMock,
   patchInactiveImageById: patchInactiveImageMock,
   patchActiveImageById: patchActiveImageMock,
+  patchIdleTransparentById: patchIdleTransparentMock,
+  patchActiveTransparentById: patchActiveTransparentMock,
+  patchIdleImageFitById: patchIdleImageFitMock,
+  patchActiveImageFitById: patchActiveImageFitMock,
   patchSoundPathById: patchSoundPathMock,
   patchSoundEnabledById: patchSoundEnabledMock,
+  patchSoundVolumeById: patchSoundVolumeMock,
   patchCounterEnabledById: patchCounterEnabledMock,
   patchCounterAnimationEnabledById: patchCounterAnimationEnabledMock,
   patchCounterLayoutById: patchCounterLayoutMock,
@@ -340,10 +358,16 @@ const resetStores = () => {
   patchInactiveImageMock.mockClear();
   patchInactiveImageViaAuthorityMock.mockClear();
   patchActiveImageMock.mockClear();
+  patchIdleTransparentMock.mockClear();
+  patchActiveTransparentMock.mockClear();
+  patchIdleImageFitMock.mockClear();
+  patchActiveImageFitMock.mockClear();
   patchSoundPathMock.mockClear();
   patchSoundPathViaAuthorityMock.mockClear();
   patchSoundEnabledMock.mockClear();
   patchSoundEnabledViaAuthorityMock.mockClear();
+  patchSoundVolumeMock.mockClear();
+  patchSoundVolumeViaAuthorityMock.mockClear();
   patchCounterEnabledMock.mockClear();
   patchCounterAnimationEnabledMock.mockClear();
   patchCounterEnabledViaAuthorityMock.mockClear();
@@ -754,6 +778,406 @@ describe('PropertiesPanel detached preview contract', () => {
       } else {
         expect(settleCommitMock).not.toHaveBeenCalled();
       }
+    },
+  );
+
+  it.each([
+    ['main', 'success', true],
+    ['main', 'targetMissing', false],
+    ['main', 'failure', 'reject'],
+    ['panel', 'success', true],
+    ['panel', 'targetMissing', false],
+    ['panel', 'failure', 'reject'],
+  ] as const)(
+    '%s single stable key soundVolume %s도 writer Promise 그대로 정산한다',
+    async (windowType, _outcome, result) => {
+      window.__dmn_window_type = windowType;
+      const selectedId = 'a7aaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const indexedId = 'a7bbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const position = createDefaultKeyPosition();
+      const failure = new Error('sound volume failed');
+      const writer =
+        windowType === 'panel'
+          ? patchSoundVolumeViaAuthorityMock
+          : patchSoundVolumeMock;
+      writer.mockReturnValueOnce(
+        result === 'reject' ? Promise.reject(failure) : Promise.resolve(result),
+      );
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      activeGestureIdMock.mockReturnValue(
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      );
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A', 'B'] },
+        positions: {
+          '4key': [
+            { ...position, id: selectedId },
+            { ...position, id: indexedId },
+          ],
+        },
+        canonicalPositions: {
+          '4key': [
+            { ...position, id: selectedId },
+            { ...position, id: indexedId },
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id: selectedId, index: 1 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onSoundVolumeCommit: (value: number) => void;
+        }
+      ).onSoundVolumeCommit;
+
+      act(() => commit(137.5));
+
+      if (windowType === 'panel') {
+        expect(patchSoundVolumeViaAuthorityMock).toHaveBeenCalledWith(
+          [selectedId],
+          137.5,
+          'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        );
+        expect(patchSoundVolumeMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchSoundVolumeMock).toHaveBeenCalledWith(selectedId, 137.5, {
+          gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        });
+        expect(patchSoundVolumeViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(patchSoundVolumeMock).not.toHaveBeenCalledWith(
+        indexedId,
+        expect.anything(),
+        expect.anything(),
+      );
+      const persisted = writer.mock.results[0]?.value as Promise<boolean>;
+      expect(settleCommitMock).toHaveBeenCalledWith(persisted);
+      if (result === 'reject') {
+        await expect(persisted).rejects.toBe(failure);
+      } else {
+        await expect(persisted).resolves.toBe(result);
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat stable', 'stat', 'a7cccccc-cccc-4ccc-8ccc-cccccccccccc'],
+  ] as const)(
+    'single %s soundVolume은 exact callback을 노출하지 않는다',
+    (_label, type, id) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onSoundVolumeCommit?: (value: number) => void;
+        onKeyPreview?: (index: number, patch: Record<string, unknown>) => void;
+        onKeyUpdate?: (patch: Record<string, unknown>) => void;
+      };
+
+      expect(props.onSoundVolumeCommit).toBeUndefined();
+      if (type === 'key') {
+        act(() => {
+          props.onKeyPreview?.(0, { soundVolume: 137.5 });
+          props.onKeyUpdate?.({ index: 0, soundVolume: 137.5 });
+        });
+        expect(keyLegacyUpdateMock).toHaveBeenCalledWith({
+          index: 0,
+          soundVolume: 137.5,
+        });
+      }
+      expect(patchSoundVolumeMock).not.toHaveBeenCalled();
+      expect(patchSoundVolumeViaAuthorityMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main', 'key', 'idle'],
+    ['main', 'stat', 'idle'],
+    ['main', 'graph', 'idle'],
+    ['main', 'knob', 'idle'],
+    ['panel', 'key', 'active'],
+    ['panel', 'knob', 'active'],
+  ] as const)(
+    '%s single stable %s %s image fit은 exact 경로만 쓴다',
+    (windowType, type, state) => {
+      window.__dmn_window_type = windowType;
+      const prefix =
+        type === 'key'
+          ? 'e'
+          : type === 'stat'
+          ? 'f'
+          : type === 'graph'
+          ? '1'
+          : '2';
+      const id = `${prefix}aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;
+      const base = { dx: 0, dy: 0, width: 60, height: 60, id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [base] as never },
+          canonicalPositions: { '4key': [base] as never },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...base, statType: 'kps' } as never] },
+        });
+      } else if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...base,
+                graphType: 'line',
+                graphSpeed: 1,
+                graphColor: '#fff',
+              } as never,
+            ],
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [{ ...base, axisId: '', sensitivity: 1 } as never],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = (
+        type === 'key' || type === 'stat'
+          ? singleKeyStatPropsMock
+          : type === 'graph'
+          ? singleGraphPropsMock
+          : singleKnobPropsMock
+      ).mock.lastCall?.[0] as Record<string, (value: string) => void>;
+      const commit =
+        props[
+          state === 'idle' ? 'onIdleImageFitCommit' : 'onActiveImageFitCommit'
+        ];
+
+      act(() => commit('contain'));
+
+      const patch =
+        state === 'idle'
+          ? { idleImageFit: 'contain' }
+          : { activeImageFit: 'contain' };
+      if (windowType === 'panel') {
+        expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+          elementType: type,
+          id,
+          patch,
+        });
+      } else if (state === 'idle') {
+        expect(patchIdleImageFitMock).toHaveBeenCalledWith(type, id, 'contain');
+      } else {
+        expect(patchActiveImageFitMock).toHaveBeenCalledWith(
+          type,
+          id,
+          'contain',
+        );
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main', 'key', 'idle'],
+    ['main', 'stat', 'idle'],
+    ['main', 'graph', 'idle'],
+    ['main', 'knob', 'idle'],
+    ['panel', 'key', 'active'],
+    ['panel', 'knob', 'active'],
+  ] as const)(
+    '%s single stable %s %s transparency는 exact 경로만 쓴다',
+    (windowType, type, state) => {
+      window.__dmn_window_type = windowType;
+      const prefix =
+        type === 'key'
+          ? 'a'
+          : type === 'stat'
+          ? 'b'
+          : type === 'graph'
+          ? 'c'
+          : 'd';
+      const id = `${prefix}9999999-9999-4999-8999-999999999999`;
+      if (type === 'key') {
+        const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] as never },
+          canonicalPositions: { '4key': [position] as never },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState((store) => ({
+          positions: {
+            '4key': [{ ...store.positions['4key'][0], id }],
+          },
+        }));
+      } else if (type === 'graph') {
+        useGraphItemStore.setState((store) => ({
+          positions: {
+            '4key': [{ ...store.positions['4key'][0], id }],
+          },
+        }));
+      } else {
+        useKnobItemStore.setState((store) => ({
+          positions: {
+            '4key': [{ ...store.positions['4key'][0], id }],
+          },
+        }));
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props =
+        type === 'graph'
+          ? singleGraphPropsMock.mock.lastCall?.[0]
+          : type === 'knob'
+          ? singleKnobPropsMock.mock.lastCall?.[0]
+          : singleKeyStatPropsMock.mock.lastCall?.[0];
+      const commit = (props as Record<string, (value: boolean) => void>)[
+        state === 'idle'
+          ? 'onIdleTransparentCommit'
+          : 'onActiveTransparentCommit'
+      ];
+
+      act(() => commit(true));
+
+      const patch =
+        state === 'idle'
+          ? { idleTransparent: true }
+          : { activeTransparent: true };
+      if (windowType === 'panel') {
+        expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+          elementType: type,
+          id,
+          patch,
+        });
+      } else if (state === 'idle') {
+        expect(patchIdleTransparentMock).toHaveBeenCalledWith(type, id, true);
+      } else {
+        expect(patchActiveTransparentMock).toHaveBeenCalledWith(type, id, true);
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('stat single은 active transparency semantic callback을 노출하지 않는다', () => {
+    const id = 'b9999999-9999-4999-8999-999999999999';
+    useStatItemStore.setState((store) => ({
+      positions: { '4key': [{ ...store.positions['4key'][0], id }] },
+    }));
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'stat', id, index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+
+    expect(
+      (singleKeyStatPropsMock.mock.lastCall?.[0] as Record<string, unknown>)
+        .onActiveTransparentCommit,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', ''],
+  ] as const)(
+    'panel single %s key transparency는 exact handler 없이 기존 writer로 폴백한다',
+    (_label, id) => {
+      window.__dmn_window_type = 'panel';
+      const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [position] as never },
+        canonicalPositions: { '4key': [position] as never },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onIdleTransparentCommit?: (value: boolean) => void;
+        onActiveTransparentCommit?: (value: boolean) => void;
+        onKeyUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      expect(props.onIdleTransparentCommit).toBeUndefined();
+      expect(props.onActiveTransparentCommit).toBeUndefined();
+      act(() => props.onKeyUpdate({ index: 0, idleTransparent: true }));
+
+      expect(patchIdleTransparentMock).not.toHaveBeenCalled();
+      expect(patchActiveTransparentMock).not.toHaveBeenCalled();
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', ''],
+  ] as const)(
+    'panel single %s key image fit은 exact handler 없이 기존 writer로 폴백한다',
+    (_label, id) => {
+      window.__dmn_window_type = 'panel';
+      const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [position] as never },
+        canonicalPositions: { '4key': [position] as never },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onIdleImageFitCommit?: (value: string) => void;
+        onActiveImageFitCommit?: (value: string) => void;
+        onKeyUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      expect(props.onIdleImageFitCommit).toBeUndefined();
+      expect(props.onActiveImageFitCommit).toBeUndefined();
+      act(() => props.onKeyUpdate({ index: 0, idleImageFit: 'contain' }));
+
+      expect(patchIdleImageFitMock).not.toHaveBeenCalled();
+      expect(patchActiveImageFitMock).not.toHaveBeenCalled();
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
     },
   );
 

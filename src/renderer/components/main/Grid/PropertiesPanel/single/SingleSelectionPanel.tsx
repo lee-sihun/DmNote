@@ -321,6 +321,8 @@ interface SingleGraphPanelProps {
     data: Partial<GraphItemPosition> & { index: number },
   ) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
+  onIdleTransparentCommit?: (idleTransparent: boolean) => void;
+  onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
@@ -348,6 +350,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   handleRenameStart,
   handleGraphUpdate,
   onInactiveImageCommit,
+  onIdleTransparentCommit,
+  onIdleImageFitCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   showGraphImagePicker,
@@ -756,7 +760,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             }
             idleImage={singleGraphPosition.inactiveImage || ''}
             activeImage={singleGraphPosition.activeImage || ''}
-            idleTransparent={false}
+            idleTransparent={singleGraphPosition.idleTransparent ?? false}
             activeTransparent={false}
             idleImageFit={
               singleGraphPosition.idleImageFit ||
@@ -774,28 +778,20 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 : applyToGraphById({ inactiveImage: imageUrl })
             }
             onIdleTransparentChange={(value: boolean) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                idleTransparent: value,
-              })
-            }
-            onActiveTransparentChange={(value: boolean) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                activeTransparent: value,
-              })
+              onIdleTransparentCommit
+                ? onIdleTransparentCommit(value)
+                : handleGraphUpdate({
+                    index: singleGraphIndex,
+                    idleTransparent: value,
+                  })
             }
             onIdleImageFitChange={(fit: string) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                idleImageFit: fit as ImageFit,
-              })
-            }
-            onActiveImageFitChange={(fit: string) =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                activeImageFit: fit as ImageFit,
-              })
+              onIdleImageFitCommit
+                ? onIdleImageFitCommit(fit as ImageFit)
+                : handleGraphUpdate({
+                    index: singleGraphIndex,
+                    idleImageFit: fit as ImageFit,
+                  })
             }
             onIdleImageReset={() =>
               onInactiveImageCommit
@@ -835,6 +831,10 @@ interface SingleKnobPanelProps {
   ) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
+  onIdleTransparentCommit?: (idleTransparent: boolean) => void;
+  onActiveTransparentCommit?: (activeTransparent: boolean) => void;
+  onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
+  onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
@@ -858,6 +858,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   handleKnobUpdate,
   onInactiveImageCommit,
   onActiveImageCommit,
+  onIdleTransparentCommit,
+  onActiveTransparentCommit,
+  onIdleImageFitCommit,
+  onActiveImageFitCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   panelElement,
@@ -1554,28 +1558,36 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 : applyToKnobById({ activeImage: imageUrl })
             }
             onIdleTransparentChange={(value: boolean) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                idleTransparent: value,
-              })
+              onIdleTransparentCommit
+                ? onIdleTransparentCommit(value)
+                : handleKnobUpdate({
+                    index: singleKnobIndex,
+                    idleTransparent: value,
+                  })
             }
             onActiveTransparentChange={(value: boolean) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                activeTransparent: value,
-              })
+              onActiveTransparentCommit
+                ? onActiveTransparentCommit(value)
+                : handleKnobUpdate({
+                    index: singleKnobIndex,
+                    activeTransparent: value,
+                  })
             }
             onIdleImageFitChange={(fit: string) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                idleImageFit: fit as ImageFit,
-              })
+              onIdleImageFitCommit
+                ? onIdleImageFitCommit(fit as ImageFit)
+                : handleKnobUpdate({
+                    index: singleKnobIndex,
+                    idleImageFit: fit as ImageFit,
+                  })
             }
             onActiveImageFitChange={(fit: string) =>
-              handleKnobUpdate({
-                index: singleKnobIndex,
-                activeImageFit: fit as ImageFit,
-              })
+              onActiveImageFitCommit
+                ? onActiveImageFitCommit(fit as ImageFit)
+                : handleKnobUpdate({
+                    index: singleKnobIndex,
+                    activeImageFit: fit as ImageFit,
+                  })
             }
             onIdleImageReset={() =>
               onInactiveImageCommit
@@ -1674,8 +1686,13 @@ interface SingleKeyStatPanelProps {
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
+  onIdleTransparentCommit?: (idleTransparent: boolean) => void;
+  onActiveTransparentCommit?: (activeTransparent: boolean) => void;
+  onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
+  onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
+  onSoundVolumeCommit?: (soundVolume: number) => void;
   onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
   onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
@@ -1723,8 +1740,13 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   handleGeometryCommit,
   onInactiveImageCommit,
   onActiveImageCommit,
+  onIdleTransparentCommit,
+  onActiveTransparentCommit,
+  onIdleImageFitCommit,
+  onActiveImageFitCommit,
   onSoundPathCommit,
   onSoundEnabledCommit,
+  onSoundVolumeCommit,
   onCounterAnimationPresetCommit,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
@@ -1916,8 +1938,13 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
               onInactiveImageCommit={onInactiveImageCommit}
               onActiveImageCommit={onActiveImageCommit}
+              onIdleTransparentCommit={onIdleTransparentCommit}
+              onActiveTransparentCommit={onActiveTransparentCommit}
+              onIdleImageFitCommit={onIdleImageFitCommit}
+              onActiveImageFitCommit={onActiveImageFitCommit}
               onSoundPathCommit={onSoundPathCommit}
               onSoundEnabledCommit={onSoundEnabledCommit}
+              onSoundVolumeCommit={onSoundVolumeCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}

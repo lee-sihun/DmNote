@@ -3616,6 +3616,44 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('soundVolume은 key number top-level leaf만 적용하고 사운드 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000bc';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      soundPath: 'sounds/before.wav',
+      soundEnabled: true,
+      soundVolume: undefined,
+      inactiveImage: 'idle.png',
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { soundVolume: 100 },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      soundPath: 'sounds/before.wav',
+      soundEnabled: true,
+      soundVolume: 100,
+      inactiveImage: 'idle.png',
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
   it('activeImage는 key의 raw top-level leaf만 적용하고 이미지 형제를 보존한다', async () => {
     const id = '00000000-0000-4000-8000-0000000000b8';
     const base = withStableId(id);
@@ -3651,6 +3689,92 @@ describe('commitSemanticOpsInternal', () => {
     const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
     expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
     expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('image transparency projection은 반대 상태와 path/fit 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000bc';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleImageFit: 'contain',
+      activeImageFit: 'cover',
+      idleTransparent: false,
+      activeTransparent: false,
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { idleTransparent: true },
+      },
+    ]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleImageFit: 'contain',
+      activeImageFit: 'cover',
+      idleTransparent: true,
+      activeTransparent: false,
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { idleTransparent: true },
+      },
+    ]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('image fit projection은 legacy fit과 반대 state/path/transparency를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000bd';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      imageFit: 'none',
+      idleImageFit: 'cover',
+      activeImageFit: 'contain',
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleTransparent: true,
+      activeTransparent: false,
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { activeImageFit: 'fill' },
+      },
+    ]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      imageFit: 'none',
+      idleImageFit: 'cover',
+      activeImageFit: 'fill',
+      inactiveImage: 'idle.png',
+      activeImage: 'active.png',
+      idleTransparent: true,
+      activeTransparent: false,
+    });
     harness.coordinator.stop();
   });
 

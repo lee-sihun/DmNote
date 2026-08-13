@@ -25,6 +25,14 @@ const captured = vi.hoisted(() => ({
     onIdleImageReset: () => void;
     onActiveImageChange?: (value: string) => void;
     onActiveImageReset?: () => void;
+    idleTransparent?: boolean;
+    activeTransparent?: boolean;
+    onIdleTransparentChange?: (value: boolean) => void;
+    onActiveTransparentChange?: (value: boolean) => void;
+    idleImageFit?: string;
+    activeImageFit?: string;
+    onIdleImageFitChange?: (value: string) => void;
+    onActiveImageFitChange?: (value: string) => void;
   },
   sound: null as null | {
     completionBinding?: string;
@@ -216,6 +224,122 @@ describe('single geometry input bindings', () => {
     },
   );
 
+  it.each([
+    ['key', true],
+    ['stat', false],
+  ] as const)(
+    '%s StyleTab transparency는 도달 가능한 exact callback만 호출한다',
+    (type, activeReachable) => {
+      const idle = vi.fn();
+      const active = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacy}
+            onIdleTransparentCommit={idle}
+            onActiveTransparentCommit={activeReachable ? active : undefined}
+            showImagePicker
+            onToggleImagePicker={vi.fn()}
+            imageButtonRef={{ current: document.createElement('button') }}
+            shadowActiveState={activeReachable}
+            showSoundControls={false}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+
+      act(() => captured.image?.onIdleTransparentChange?.(true));
+      expect(idle).toHaveBeenCalledWith(true);
+      if (activeReachable) {
+        act(() => captured.image?.onActiveTransparentChange?.(false));
+        expect(active).toHaveBeenCalledWith(false);
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key', true],
+    ['stat', false],
+  ] as const)(
+    '%s StyleTab image fit은 도달 가능한 exact callback만 호출한다',
+    (type, activeReachable) => {
+      const idle = vi.fn();
+      const active = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacy}
+            onIdleImageFitCommit={idle}
+            onActiveImageFitCommit={activeReachable ? active : undefined}
+            showImagePicker
+            onToggleImagePicker={vi.fn()}
+            imageButtonRef={{ current: document.createElement('button') }}
+            shadowActiveState={activeReachable}
+            showSoundControls={false}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+
+      act(() => captured.image?.onIdleImageFitChange?.('contain'));
+      expect(idle).toHaveBeenCalledWith('contain');
+      if (activeReachable) {
+        act(() => captured.image?.onActiveImageFitChange?.('fill'));
+        expect(active).toHaveBeenCalledWith('fill');
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', undefined],
+  ] as const)(
+    '%s key transparency는 stable callback이 없으면 preview와 index legacy를 유지한다',
+    (_label, id) => {
+      const preview = vi.fn();
+      const legacy = vi.fn();
+      const position = { ...createDefaultKeyPosition(), ...(id ? { id } : {}) };
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={0}
+            keyPosition={position}
+            keyCode="A"
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyPreview={preview}
+            onKeyUpdate={legacy}
+            showImagePicker
+            onToggleImagePicker={vi.fn()}
+            imageButtonRef={{ current: document.createElement('button') }}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+
+      act(() => captured.image?.onIdleTransparentChange?.(true));
+      expect(preview).toHaveBeenCalledWith(0, { idleTransparent: true });
+      expect(legacy).toHaveBeenCalledWith({ index: 0, idleTransparent: true });
+    },
+  );
+
   it.each(['key', 'stat'] as const)(
     '%s counter bool 두 토글은 exact callback만 호출한다',
     (type) => {
@@ -370,6 +494,61 @@ describe('single geometry input bindings', () => {
     act(() => captured.checkboxes.at(-1)?.onChange());
     expect(preview).toHaveBeenCalledWith(3, { soundEnabled: true });
     expect(legacy).toHaveBeenCalledWith({ index: 3, soundEnabled: true });
+  });
+
+  it('key StyleTab soundVolume은 preview를 유지하고 clamp된 final만 exact callback에 보낸다', () => {
+    const commit = vi.fn();
+    const legacy = vi.fn();
+    const preview = vi.fn();
+    act(() => {
+      root.render(
+        <StyleTabContent
+          keyIndex={3}
+          keyPosition={{ ...createDefaultKeyPosition(), soundVolume: 80 }}
+          keyCode="A"
+          keyInfo={null}
+          onPositionChange={vi.fn()}
+          onKeyUpdate={legacy}
+          onKeyPreview={preview}
+          onSoundVolumeCommit={commit}
+          showSoundControls
+          panelElement={null}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    act(() => captured.numbers.get('%')?.onPreview?.(137.5));
+    act(() => captured.numbers.get('%')?.onChange(250));
+    expect(preview).toHaveBeenCalledWith(3, { soundVolume: 137.5 });
+    expect(commit).toHaveBeenCalledWith(200);
+    expect(legacy).not.toHaveBeenCalled();
+  });
+
+  it('key StyleTab soundVolume callback이 없으면 preview와 index legacy를 유지한다', () => {
+    const legacy = vi.fn();
+    const preview = vi.fn();
+    act(() => {
+      root.render(
+        <StyleTabContent
+          keyIndex={3}
+          keyPosition={{ ...createDefaultKeyPosition(), id: 'key-3' }}
+          keyCode="A"
+          keyInfo={null}
+          onPositionChange={vi.fn()}
+          onKeyUpdate={legacy}
+          onKeyPreview={preview}
+          showSoundControls
+          panelElement={null}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    act(() => captured.numbers.get('%')?.onPreview?.(42));
+    act(() => captured.numbers.get('%')?.onChange(-1));
+    expect(preview).toHaveBeenCalledWith(3, { soundVolume: 42 });
+    expect(legacy).toHaveBeenCalledWith({ index: 3, soundVolume: 0 });
   });
 
   it('synthetic key SoundPicker select와 clear는 기존 index writer를 유지한다', () => {
@@ -566,6 +745,8 @@ describe('single geometry input bindings', () => {
   );
 
   it('graph ImagePicker는 active writer를 노출하지 않는다', () => {
+    const legacy = vi.fn();
+    const fit = vi.fn();
     act(() => {
       root.render(
         <SingleGraphPanel
@@ -576,6 +757,7 @@ describe('single geometry input bindings', () => {
             graphType: 'line',
             graphSpeed: 1000,
             graphColor: '#fff',
+            idleTransparent: true,
           }}
           singleGraphIndex={0}
           selectedKeyType="4key"
@@ -587,7 +769,8 @@ describe('single geometry input bindings', () => {
           handleRenameCommit={vi.fn()}
           handleRenameCancel={vi.fn()}
           handleRenameStart={vi.fn()}
-          handleGraphUpdate={vi.fn()}
+          handleGraphUpdate={legacy}
+          onIdleImageFitCommit={fit}
           showGraphImagePicker
           setShowGraphImagePicker={vi.fn()}
           graphImageButtonRef={{ current: document.createElement('button') }}
@@ -603,8 +786,62 @@ describe('single geometry input bindings', () => {
 
     expect(captured.image?.onActiveImageChange).toBeUndefined();
     expect(captured.image?.onActiveImageReset).toBeUndefined();
+    expect(captured.image?.idleTransparent).toBe(true);
+    expect(captured.image?.onActiveImageFitChange).toBeUndefined();
+    act(() => captured.image?.onIdleTransparentChange?.(false));
+    act(() => captured.image?.onIdleImageFitChange?.('contain'));
+    expect(legacy).toHaveBeenCalledWith({ index: 0, idleTransparent: false });
+    expect(fit).toHaveBeenCalledWith('contain');
     expect(captured.image?.onIdleImageChange).toBeTypeOf('function');
     expect(captured.image?.onIdleImageReset).toBeTypeOf('function');
+  });
+
+  it('knob ImagePicker는 두 state image fit exact callback만 호출한다', () => {
+    const idleFit = vi.fn();
+    const activeFit = vi.fn();
+    const legacy = vi.fn();
+    act(() => {
+      root.render(
+        <SingleKnobPanel
+          setPanelElement={vi.fn()}
+          singleKnobPosition={{
+            ...createDefaultKeyPosition(),
+            axisId: 'HIDA:test',
+            sensitivity: 1,
+            reverse: false,
+          }}
+          singleKnobIndex={0}
+          selectedKeyType="4key"
+          isRenaming={false}
+          renameInputRef={createRef<HTMLInputElement>()}
+          renameValue=""
+          setRenameValue={vi.fn()}
+          renameCancelledRef={{ current: false }}
+          handleRenameCommit={vi.fn()}
+          handleRenameCancel={vi.fn()}
+          handleRenameStart={vi.fn()}
+          handleKnobUpdate={legacy}
+          onIdleImageFitCommit={idleFit}
+          onActiveImageFitCommit={activeFit}
+          singleScrollRefFor={() => vi.fn()}
+          panelElement={null}
+          useCustomCSS={false}
+          t={(key) => key}
+        />,
+      );
+    });
+    const configure = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'propertiesPanel.configure',
+    );
+    act(() => configure?.click());
+    act(() => {
+      captured.image?.onIdleImageFitChange?.('contain');
+      captured.image?.onActiveImageFitChange?.('fill');
+    });
+
+    expect(idleFit).toHaveBeenCalledWith('contain');
+    expect(activeFit).toHaveBeenCalledWith('fill');
+    expect(legacy).not.toHaveBeenCalled();
   });
 
   it.each(['key', 'knob'] as const)(

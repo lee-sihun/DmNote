@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AppStoreData, GraphPosition, GraphPositions, GraphType, KeyCounterAlign, KeyCounterAlignMode,
-    KeyCounterPlacement, KeyCounters, KeyMappings, KeyPosition, KeyPositions, KeySlot,
-    KnobPosition, KnobPositions, LayerGroups, NoteAlignment, SlotMatch, StatPosition,
+    AppStoreData, GraphPosition, GraphPositions, GraphType, ImageFit, KeyCounterAlign,
+    KeyCounterAlignMode, KeyCounterPlacement, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
+    KeySlot, KnobPosition, KnobPositions, LayerGroups, NoteAlignment, SlotMatch, StatPosition,
     StatPositions, StatType,
 };
 
@@ -224,8 +224,13 @@ pub enum EditorElementPropertyPatchV1 {
     FontFamily(EditorFontFamilyPropertyPatchV1),
     InactiveImage(EditorInactiveImagePropertyPatchV1),
     ActiveImage(EditorActiveImagePropertyPatchV1),
+    IdleTransparent(EditorIdleTransparentPropertyPatchV1),
+    ActiveTransparent(EditorActiveTransparentPropertyPatchV1),
+    IdleImageFit(EditorIdleImageFitPropertyPatchV1),
+    ActiveImageFit(EditorActiveImageFitPropertyPatchV1),
     SoundPath(EditorSoundPathPropertyPatchV1),
     SoundEnabled(EditorSoundEnabledPropertyPatchV1),
+    SoundVolume(EditorSoundVolumePropertyPatchV1),
     CounterEnabled(EditorCounterEnabledPropertyPatchV1),
     CounterAnimationEnabled(EditorCounterAnimationEnabledPropertyPatchV1),
     CounterPlacement(EditorCounterPlacementPropertyPatchV1),
@@ -350,6 +355,30 @@ pub struct EditorActiveImagePropertyPatchV1 {
     pub active_image: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorIdleTransparentPropertyPatchV1 {
+    pub idle_transparent: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorActiveTransparentPropertyPatchV1 {
+    pub active_transparent: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorIdleImageFitPropertyPatchV1 {
+    pub idle_image_fit: ImageFit,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorActiveImageFitPropertyPatchV1 {
+    pub active_image_fit: ImageFit,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorSoundPathPropertyPatchV1 {
@@ -360,6 +389,12 @@ pub struct EditorSoundPathPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorSoundEnabledPropertyPatchV1 {
     pub sound_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorSoundVolumePropertyPatchV1 {
+    pub sound_volume: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

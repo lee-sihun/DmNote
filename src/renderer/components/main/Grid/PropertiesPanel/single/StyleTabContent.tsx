@@ -122,8 +122,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onToggleImagePicker,
   onInactiveImageCommit,
   onActiveImageCommit,
+  onIdleTransparentCommit,
+  onActiveTransparentCommit,
+  onIdleImageFitCommit,
+  onActiveImageFitCommit,
   onSoundPathCommit,
   onSoundEnabledCommit,
+  onSoundVolumeCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -644,11 +649,19 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   };
 
   const handleIdleTransparentChange = (checked: boolean) => {
+    if (onIdleTransparentCommit) {
+      onIdleTransparentCommit(checked);
+      return;
+    }
     onKeyPreview?.(keyIndex, { idleTransparent: checked });
     onKeyUpdate({ index: keyIndex, idleTransparent: checked });
   };
 
   const handleActiveTransparentChange = (checked: boolean) => {
+    if (onActiveTransparentCommit) {
+      onActiveTransparentCommit(checked);
+      return;
+    }
     onKeyPreview?.(keyIndex, { activeTransparent: checked });
     onKeyUpdate({ index: keyIndex, activeTransparent: checked });
   };
@@ -672,11 +685,19 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   };
 
   const handleIdleImageFitChange = (fit: ImageFit) => {
+    if (onIdleImageFitCommit) {
+      onIdleImageFitCommit(fit);
+      return;
+    }
     onKeyPreview?.(keyIndex, { idleImageFit: fit });
     onKeyUpdate({ index: keyIndex, idleImageFit: fit });
   };
 
   const handleActiveImageFitChange = (fit: ImageFit) => {
+    if (onActiveImageFitCommit) {
+      onActiveImageFitCommit(fit);
+      return;
+    }
     onKeyPreview?.(keyIndex, { activeImageFit: fit });
     onKeyUpdate({ index: keyIndex, activeImageFit: fit });
   };
@@ -1151,12 +1172,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           >
             <NumberInput
               value={keyPosition.soundVolume ?? 100}
-              onChange={(value) =>
-                handleStyleChangeComplete(
-                  'soundVolume',
-                  Math.max(0, Math.min(200, value)),
-                )
-              }
+              onChange={(value) => {
+                const soundVolume = Math.max(0, Math.min(200, value));
+                if (onSoundVolumeCommit) {
+                  onSoundVolumeCommit(soundVolume);
+                } else {
+                  handleStyleChangeComplete('soundVolume', soundVolume);
+                }
+              }}
               onPreview={(value) =>
                 handleStylePreview(
                   'soundVolume',

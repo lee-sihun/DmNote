@@ -156,6 +156,8 @@ describe('plugin element panel queue', () => {
     ['사운드', { soundPath: '  sounds/raw.wav  ' }, 'key'],
     ['대기 이미지', { inactiveImage: '  Raw Image.png  ' }, 'graph'],
     ['활성 이미지', { activeImage: '  Raw Active.png  ' }, 'key'],
+    ['대기 이미지 맞춤', { idleImageFit: 'contain' }, 'graph'],
+    ['활성 이미지 맞춤', { activeImageFit: 'fill' }, 'knob'],
   ] as const)(
     '%s literal과 enqueue 시점 generation을 고정한다',
     async (_label, patch, elementType) => {
@@ -408,6 +410,39 @@ describe('plugin element panel queue', () => {
     );
   });
 
+  it.each([
+    ['idle', 'patchIdleTransparentViaAuthority', { idleTransparent: true }],
+    [
+      'active',
+      'patchActiveTransparentViaAuthority',
+      { activeTransparent: false },
+    ],
+  ] as const)(
+    '%s transparency batch는 exact bool과 default envelope를 고정한다',
+    async (_label, method, patch) => {
+      mocks.sendPluginRpc.mockResolvedValue({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+      const targets = [
+        {
+          elementType: 'key' as const,
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ];
+
+      await expect(
+        actions[method](targets, Object.values(patch)[0]),
+      ).resolves.toBe(true);
+      expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+        'layers:patchProperty',
+        { targets, patch },
+        0,
+        7,
+      );
+    },
+  );
+
   it('soundPath batch는 key 대상과 raw literal을 전용 envelope에 고정한다', async () => {
     mocks.sendPluginRpc.mockResolvedValue({
       kind: 'ok',
@@ -452,6 +487,36 @@ describe('plugin element panel queue', () => {
       {
         targets: ids.map((id) => ({ elementType: 'key', id })),
         patch: { soundEnabled: true },
+      },
+      0,
+      7,
+    );
+  });
+
+  it('soundVolume batch는 key 대상, absolute number, gesture를 default envelope에 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const ids = [
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    ];
+
+    await expect(
+      actions.patchSoundVolumeViaAuthority(
+        ids,
+        137.5,
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      ),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      {
+        targets: ids.map((id) => ({ elementType: 'key', id })),
+        patch: { soundVolume: 137.5 },
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       },
       0,
       7,
@@ -938,6 +1003,31 @@ describe('plugin element panel queue', () => {
     expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
   });
 
+  it('soundVolume outcome-unknown은 같은 generation과 literal을 한 번만 재전송한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchSoundVolumeViaAuthority(
+      ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+      137.5,
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
   it('activeImage batch outcome-unknown은 같은 generation과 raw literal을 한 번만 재전송한다', async () => {
     mocks.sendPluginRpc
       .mockResolvedValueOnce({ kind: 'unknown' })
@@ -970,6 +1060,41 @@ describe('plugin element panel queue', () => {
     );
     expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
   });
+
+  it.each([
+    ['idle', 'patchIdleTransparentViaAuthority'],
+    ['active', 'patchActiveTransparentViaAuthority'],
+  ] as const)(
+    '%s transparency outcome-unknown은 같은 generation과 bool을 한 번만 재전송한다',
+    async (_label, method) => {
+      mocks.sendPluginRpc
+        .mockResolvedValueOnce({ kind: 'unknown' })
+        .mockResolvedValueOnce({
+          kind: 'ok',
+          response: { modelRevision: 2 },
+        });
+      const changed = actions[method](
+        [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        true,
+      );
+      await vi.waitFor(() =>
+        expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+      );
+      actions.notePluginMirrorRevision(2);
+
+      await expect(changed).resolves.toBe(true);
+      expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+        mocks.sendPluginRpc.mock.calls[0]?.[1],
+      );
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+    },
+  );
 
   it('soundPath outcome-unknown은 snapshot만 요청하고 옛 path를 재전송하지 않는다', async () => {
     mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
@@ -1292,6 +1417,31 @@ describe('plugin element panel queue', () => {
       elementType: 'knob',
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       patch: { axisId: '  HIDA:raw  ' },
+    });
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
+  it('image fit outcome-unknown은 같은 generation과 exact enum으로 한 번 재시도한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchNativeLayerPropertyViaAuthority({
+      elementType: 'knob',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      patch: { activeImageFit: 'contain' },
     });
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),

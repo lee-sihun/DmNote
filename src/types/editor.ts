@@ -151,8 +151,13 @@ interface EditorElementPropertyValuesV1 {
   axisId: string;
   soundEnabled: boolean;
   soundPath: string;
+  soundVolume: number;
   inactiveImage: string;
   activeImage: string;
+  idleTransparent: boolean;
+  activeTransparent: boolean;
+  idleImageFit: 'cover' | 'contain' | 'fill' | 'none';
+  activeImageFit: 'cover' | 'contain' | 'fill' | 'none';
   counterEnabled: boolean;
   counterAnimationEnabled: boolean;
   counterPlacement: 'inside' | 'outside';
@@ -198,11 +203,22 @@ export type EditorSoundPathPropertyPatchV1 =
 export type EditorSoundEnabledPropertyPatchV1 =
   EditorPropertyPatchUnionV1<'soundEnabled'>;
 
+export type EditorSoundVolumePropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'soundVolume'>;
+
 export type EditorInactiveImagePropertyPatchV1 =
   EditorPropertyPatchUnionV1<'inactiveImage'>;
 
 export type EditorActiveImagePropertyPatchV1 =
   EditorPropertyPatchUnionV1<'activeImage'>;
+
+export type EditorImageTransparencyPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'idleTransparent' | 'activeTransparent'
+>;
+
+export type EditorImageFitPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'idleImageFit' | 'activeImageFit'
+>;
 
 export interface EditorCounterAnimationPresetIntentV1 {
   presetId: string;
@@ -1103,12 +1119,37 @@ export function assertEditorOpsV1(
           op.elementType === 'key' &&
           typeof op.patch.soundPath === 'string') ||
         (patchKeys.length === 1 &&
+          patchKeys[0] === 'soundVolume' &&
+          op.elementType === 'key' &&
+          typeof op.patch.soundVolume === 'number' &&
+          Number.isFinite(op.patch.soundVolume) &&
+          op.patch.soundVolume >= 0 &&
+          op.patch.soundVolume <= 200) ||
+        (patchKeys.length === 1 &&
           patchKeys[0] === 'inactiveImage' &&
           typeof op.patch.inactiveImage === 'string') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'activeImage' &&
           (op.elementType === 'key' || op.elementType === 'knob') &&
           typeof op.patch.activeImage === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'idleTransparent' &&
+          typeof op.patch.idleTransparent === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'activeTransparent' &&
+          (op.elementType === 'key' || op.elementType === 'knob') &&
+          typeof op.patch.activeTransparent === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'idleImageFit' &&
+          ['cover', 'contain', 'fill', 'none'].includes(
+            op.patch.idleImageFit as string,
+          )) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'activeImageFit' &&
+          (op.elementType === 'key' || op.elementType === 'knob') &&
+          ['cover', 'contain', 'fill', 'none'].includes(
+            op.patch.activeImageFit as string,
+          )) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'counterEnabled' &&
           (op.elementType === 'key' || op.elementType === 'stat') &&
