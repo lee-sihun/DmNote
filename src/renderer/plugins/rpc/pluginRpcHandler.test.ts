@@ -43,6 +43,22 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  setElementGroups: vi.fn(
+    (
+      _mode?: unknown,
+      _targets?: unknown,
+      _targetGroup?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
+  renameLayerGroup: vi.fn(
+    (
+      _mode?: unknown,
+      _groupId?: unknown,
+      _name?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   patchGraphTypes: vi.fn(
     (
       _ids?: unknown,
@@ -332,6 +348,8 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchNotePropertiesByIds: mocks.patchNoteProperties,
   patchUseInlineStylesByTargets: mocks.patchUseInlineStyles,
   setLayerGroupHidden: mocks.setLayerGroupHidden,
+  setElementGroupsByTargets: mocks.setElementGroups,
+  renameLayerGroupById: mocks.renameLayerGroup,
 }));
 
 vi.mock('@api/modules/resourceApi', () => ({
@@ -408,6 +426,10 @@ describe('plugin panel persisted element mutations', () => {
     mocks.commitBatchGeometry.mockResolvedValue(true);
     mocks.setLayerGroupHidden.mockReset();
     mocks.setLayerGroupHidden.mockResolvedValue(true);
+    mocks.setElementGroups.mockReset();
+    mocks.setElementGroups.mockResolvedValue(true);
+    mocks.renameLayerGroup.mockReset();
+    mocks.renameLayerGroup.mockResolvedValue(true);
     mocks.patchGraphTypes.mockReset();
     mocks.patchGraphTypes.mockResolvedValue(true);
     mocks.patchGraphColors.mockReset();
@@ -4185,6 +4207,270 @@ describe('plugin panel persisted element mutations', () => {
     );
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
+
+  it('group structural exact descriptors는 dedicated helper와 slot preflight를 쓴다', async () => {
+    const targets = [
+      {
+        elementType: 'key',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat',
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ];
+    mocks.requestListener?.(
+      envelope('layers:setElementGroups', {
+        mode: '4key',
+        targets,
+        targetGroup: { kind: 'create', id: 'group-a', name: 'Group A' },
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.setElementGroups).toHaveBeenCalledWith(
+      '4key',
+      targets,
+      { kind: 'create', id: 'group-a', name: 'Group A' },
+      { preflight: expect.any(Function) },
+    );
+
+    mocks.respond.mockClear();
+    mocks.requestListener?.(
+      envelope('layers:renameGroup', {
+        mode: '4key',
+        groupId: 'group-a',
+        name: 'After',
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.renameLayerGroup).toHaveBeenCalledWith(
+      '4key',
+      'group-a',
+      'After',
+      { preflight: expect.any(Function) },
+    );
+  });
+
+  it.each([
+    [
+      'empty targets',
+      'layers:setElementGroups',
+      { mode: '4key', targets: [], targetGroup: null },
+    ],
+    [
+      'synthetic',
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: [{ elementType: 'key', id: 'key-0' }],
+        targetGroup: null,
+      },
+    ],
+    [
+      'duplicate',
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: [
+          { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+          { elementType: 'stat', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        ],
+        targetGroup: null,
+      },
+    ],
+    [
+      'extra nested',
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: [
+          { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        ],
+        targetGroup: { kind: 'existing', id: 'group-a', extra: true },
+      },
+    ],
+    [
+      'empty rename',
+      'layers:renameGroup',
+      { mode: '4key', groupId: 'group-a', name: '' },
+    ],
+    [
+      'wrong element type',
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: [
+          {
+            elementType: 'plugin',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        targetGroup: null,
+      },
+    ],
+    [
+      'top-level extra',
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        targetGroup: null,
+        extra: true,
+      },
+    ],
+    [
+      'create missing name',
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        targetGroup: { kind: 'create', id: 'group-a' },
+      },
+    ],
+    [
+      '4097 targets',
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'key',
+          id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        })),
+        targetGroup: null,
+      },
+    ],
+    [
+      'long create name',
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        targetGroup: { kind: 'create', id: 'group-a', name: '가'.repeat(342) },
+      },
+    ],
+    [
+      'rename wrong name type',
+      'layers:renameGroup',
+      { mode: '4key', groupId: 'group-a', name: 1 },
+    ],
+  ] as const)(
+    'group structural %s payload는 executor 전에 거절한다',
+    async (_label, operation, payload) => {
+      mocks.requestListener?.(envelope(operation, payload as never));
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.setElementGroups).not.toHaveBeenCalled();
+      expect(mocks.renameLayerGroup).not.toHaveBeenCalled();
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+    },
+  );
+
+  it('setElementGroups는 slot 직전 generation 변경을 거절한다', async () => {
+    mocks.setElementGroups.mockImplementationOnce(
+      async (_mode, _targets, _targetGroup, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:setElementGroups', {
+        mode: '4key',
+        targets: [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        targetGroup: null,
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('renameLayerGroup는 완료 전에 generation이 바뀌면 stale로 응답한다', async () => {
+    let resolveRename!: (value: boolean) => void;
+    mocks.renameLayerGroup.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRename = resolve;
+      }),
+    );
+    mocks.requestListener?.(
+      envelope('layers:renameGroup', {
+        mode: '4key',
+        groupId: 'group-a',
+        name: 'After',
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.renameLayerGroup).toHaveBeenCalledOnce(),
+    );
+    mocks.authorityGeneration = 8;
+    resolveRename(true);
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it.each(['layers:setElementGroups', 'layers:renameGroup'] as const)(
+    '%s executor false는 성공으로 숨기지 않는다',
+    async (operation) => {
+      if (operation === 'layers:setElementGroups') {
+        mocks.setElementGroups.mockResolvedValueOnce(false);
+      } else {
+        mocks.renameLayerGroup.mockResolvedValueOnce(false);
+      }
+      mocks.requestListener?.(
+        operation === 'layers:setElementGroups'
+          ? envelope(operation, {
+              mode: '4key',
+              targets: [
+                {
+                  elementType: 'key',
+                  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                },
+              ],
+              targetGroup: null,
+            })
+          : envelope(operation, {
+              mode: '4key',
+              groupId: 'group-a',
+              name: 'After',
+            }),
+      );
+
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'PATCH_LAYER_PROPERTY_FAILED' },
+      });
+    },
+  );
 
   it.each([
     ['missing hidden', { mode: '4key', groupId: 'group-a' }],

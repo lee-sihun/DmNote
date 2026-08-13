@@ -3,6 +3,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 import type { LayerItem } from '../types';
 
@@ -13,7 +15,12 @@ const mocks = vi.hoisted(() => ({
   setGroupVisibilityViaAuthority: vi.fn(() => Promise.resolve(true)),
   setGroupHidden: vi.fn(() => Promise.resolve(true)),
   setGroupHiddenLegacy: vi.fn(() => Promise.resolve(true)),
+  setElementGroups: vi.fn(() => Promise.resolve(true)),
+  renameLayerGroup: vi.fn(() => Promise.resolve(true)),
+  setElementGroupsViaAuthority: vi.fn(() => Promise.resolve(true)),
+  renameLayerGroupViaAuthority: vi.fn(() => Promise.resolve(true)),
   updateKeyPositions: vi.fn(() => Promise.resolve()),
+  commitPatch: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
@@ -21,6 +28,8 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchElementLayerNameById: mocks.patchLayerName,
   setLayerGroupHidden: mocks.setGroupHidden,
   setLayerGroupHiddenLegacy: mocks.setGroupHiddenLegacy,
+  setElementGroupsByTargets: mocks.setElementGroups,
+  renameLayerGroupById: mocks.renameLayerGroup,
 }));
 vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
   deleteFrozenSelection: vi.fn(),
@@ -28,10 +37,15 @@ vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchNativeLayerPropertyViaAuthority: mocks.patchPropertyViaAuthority,
   setLayerGroupVisibilityViaAuthority: mocks.setGroupVisibilityViaAuthority,
+  setElementGroupsViaAuthority: mocks.setElementGroupsViaAuthority,
+  renameLayerGroupViaAuthority: mocks.renameLayerGroupViaAuthority,
   setPluginElementsHidden: vi.fn(),
 }));
 vi.mock('@api/modules/keysApi', () => ({
   keysApi: { updatePositions: mocks.updateKeyPositions },
+}));
+vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
+  editorCoordinator: { commitPatch: mocks.commitPatch },
 }));
 
 import { useLayerActions } from './useLayerActions';
@@ -77,7 +91,12 @@ describe('useLayerActions visibility routing', () => {
     mocks.setGroupVisibilityViaAuthority.mockClear();
     mocks.setGroupHidden.mockClear();
     mocks.setGroupHiddenLegacy.mockClear();
+    mocks.setElementGroups.mockClear();
+    mocks.renameLayerGroup.mockClear();
+    mocks.setElementGroupsViaAuthority.mockClear();
+    mocks.renameLayerGroupViaAuthority.mockClear();
     mocks.updateKeyPositions.mockClear();
+    mocks.commitPatch.mockClear();
     useKeyStore.setState({
       canonicalPositions: {
         '4key': [{ id: STABLE_ID, dx: 0, dy: 0, width: 10, height: 10 }],
@@ -85,6 +104,11 @@ describe('useLayerActions visibility routing', () => {
       positions: {
         '4key': [{ id: STABLE_ID, dx: 0, dy: 0, width: 10, height: 10 }],
       } as never,
+    });
+    useLayerGroupStore.setState({ layerGroups: {} });
+    useGridSelectionStore.setState({
+      selectedElements: [],
+      selectedGroupIds: [],
     });
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -316,5 +340,176 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.patchLayerName).not.toHaveBeenCalled();
     expect(mocks.patchPropertyViaAuthority).not.toHaveBeenCalled();
     expect(mocks.updateKeyPositions).toHaveBeenCalledOnce();
+  });
+
+  it('stable common4 selection group create는 exact create descriptor를 쓴다', async () => {
+    const statId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: STABLE_ID, index: 99 },
+        { type: 'stat', id: statId, index: 88 },
+      ],
+    });
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    );
+    const nextGroups = {
+      '4key': [
+        {
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          name: 'layerGroup.newGroup 1',
+        },
+      ],
+    };
+
+    await act(async () =>
+      actions.setGroupIdOnSelected(
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        undefined,
+        { layerGroupsForNormalization: nextGroups },
+      ),
+    );
+
+    expect(mocks.setElementGroups).toHaveBeenCalledWith(
+      '4key',
+      [
+        { elementType: 'key', id: STABLE_ID },
+        { elementType: 'stat', id: statId },
+      ],
+      {
+        kind: 'create',
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        name: 'layerGroup.newGroup 1',
+      },
+    );
+  });
+
+  it('header ungroup는 클릭 당시 explicit stable children만 null target으로 보낸다', async () => {
+    const statId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    await exposeWithItems([
+      {
+        type: 'key',
+        id: STABLE_ID,
+        index: 99,
+        name: 'A',
+        zIndex: 2,
+        hidden: false,
+        groupId: 'group-a',
+      },
+      {
+        type: 'stat',
+        id: statId,
+        index: 88,
+        name: 'B',
+        zIndex: 1,
+        hidden: false,
+        groupId: 'group-a',
+      },
+    ]);
+    act(() => actions.setContextMenuGroupId('group-a'));
+    await act(async () => actions.handleContextMenuSelect('ungroup'));
+
+    expect(mocks.setElementGroups).toHaveBeenCalledWith(
+      '4key',
+      [
+        { elementType: 'key', id: STABLE_ID },
+        { elementType: 'stat', id: statId },
+      ],
+      null,
+    );
+  });
+
+  it('synthetic header ungroup는 whole legacy이고 semantic helper를 호출하지 않는다', async () => {
+    const position = {
+      id: 'key-0',
+      dx: 0,
+      dy: 0,
+      width: 10,
+      height: 10,
+      groupId: 'group-a',
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [position] } as never,
+      positions: { '4key': [position] } as never,
+    });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+    await exposeWithItems([
+      {
+        type: 'key',
+        id: 'key-0',
+        index: 0,
+        name: 'legacy',
+        zIndex: 0,
+        hidden: false,
+        groupId: 'group-a',
+      },
+    ]);
+    act(() => actions.setContextMenuGroupId('group-a'));
+    await act(async () => actions.handleContextMenuSelect('ungroup'));
+
+    expect(mocks.setElementGroups).not.toHaveBeenCalled();
+    expect(mocks.setElementGroupsViaAuthority).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schemaVersion: 1,
+        keyPositions: expect.any(Object),
+        layerGroups: { '4key': [] },
+      }),
+    );
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].groupId,
+    ).toBeUndefined();
+    expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([]);
+  });
+
+  it('panel stable header ungroup는 authority structural route만 쓴다', async () => {
+    window.__dmn_window_type = 'panel';
+    await exposeWithItems([
+      {
+        type: 'key',
+        id: STABLE_ID,
+        index: 0,
+        name: 'A',
+        zIndex: 0,
+        hidden: false,
+        groupId: 'group-a',
+      },
+    ]);
+    act(() => actions.setContextMenuGroupId('group-a'));
+    await act(async () => actions.handleContextMenuSelect('ungroup'));
+
+    expect(mocks.setElementGroupsViaAuthority).toHaveBeenCalledWith(
+      '4key',
+      [{ elementType: 'key', id: STABLE_ID }],
+      null,
+    );
+    expect(mocks.setElementGroups).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+  });
+
+  it('group rename은 main과 panel dedicated semantic route를 쓴다', async () => {
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Before' }] },
+    });
+    await act(async () =>
+      actions.handleGroupRenameCommit('group-a', '  After  '),
+    );
+    expect(mocks.renameLayerGroup).toHaveBeenCalledWith(
+      '4key',
+      'group-a',
+      'After',
+    );
+
+    window.__dmn_window_type = 'panel';
+    await act(async () =>
+      actions.handleGroupRenameCommit('group-a', '  Panel  '),
+    );
+    expect(mocks.renameLayerGroupViaAuthority).toHaveBeenCalledWith(
+      '4key',
+      'group-a',
+      'Panel',
+    );
   });
 });

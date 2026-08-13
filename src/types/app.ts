@@ -12,6 +12,7 @@ import type { DefaultsPayload } from '@src/renderer/defaults';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type { TabNoteOverrides } from '@src/types/settings/noteSettings';
 import type { TabCssOverrides } from '@src/types/plugin/css';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 
 export interface BootstrapPayload {
   settings: SettingsState;
@@ -38,4 +39,15 @@ export interface BootstrapPayload {
   tabNoteOverrides: TabNoteOverrides;
   tabCssOverrides: TabCssOverrides;
   editorRevision: number;
+}
+
+export interface CanonicalBootstrapPayload
+  extends Omit<
+    BootstrapPayload,
+    'positions' | 'statPositions' | 'graphPositions' | 'knobPositions'
+  > {
+  positions: CanonicalEditorDocumentV1['keyPositions'];
+  statPositions: CanonicalEditorDocumentV1['statPositions'];
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'];
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'];
 }

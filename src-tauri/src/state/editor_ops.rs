@@ -5,12 +5,13 @@ use crate::{
     models::{
         compact_canonical_rgba, default_counter_animation_builtin_presets, AppStoreData,
         CounterAnimationPreset, EditorBoundsV1, EditorCounterAnimationPresetIntentV1,
-        EditorCounterFillIntentV1, EditorDocumentV1, EditorElementPropertyPatchV1,
-        EditorElementTypeV1, EditorField, EditorFrozenElementV1, EditorGroupUpdateV1,
-        EditorNoteColorV1, EditorNotePaintIntentV1, EditorOpResultStatusV1, EditorOpResultV1,
-        EditorOpV1, EditorPaintDescriptorV1, EditorPaintGradientV1, EditorShadowLeafPatchV1,
-        EditorZUpdateV1, ElementShadowSpec, GradientSpec, KeyPosition, LayerGroupDef, NoteColor,
-        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        EditorCounterFillIntentV1, EditorDocumentV1, EditorElementGroupTargetV1,
+        EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
+        EditorGroupUpdateV1, EditorNoteColorV1, EditorNotePaintIntentV1, EditorOpResultStatusV1,
+        EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1, EditorPaintGradientV1,
+        EditorShadowLeafPatchV1, EditorTargetGroupV1, EditorZUpdateV1, ElementShadowSpec,
+        GradientSpec, KeyPosition, LayerGroupDef, NoteColor, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
+        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
 };
 
@@ -1079,6 +1080,114 @@ fn apply_reorder(
     ))
 }
 
+fn apply_set_element_groups(
+    current: &EditorDocumentV1,
+    locations: &HashMap<String, ElementLocation>,
+    mode: &str,
+    targets: &[EditorElementGroupTargetV1],
+    target_group: &Option<EditorTargetGroupV1>,
+) -> Result<(EditorDocumentV1, EditorOpResultStatusV1), EditorCommitError> {
+    let mut target_missing = false;
+    for target in targets {
+        let Some(location) = locations.get(&target.id) else {
+            target_missing = true;
+            continue;
+        };
+        validate_editor_op_target_type(0, target.element_type, location.element_type)?;
+        if location.mode != mode {
+            return Err(EditorCommitError::validation(
+                "ELEMENT_GROUP_TARGET_MODE_MISMATCH",
+                format!(
+                    "setElementGroups target '{}' is not in mode '{mode}'",
+                    target.id
+                ),
+            ));
+        }
+    }
+    if target_missing {
+        return Ok((current.clone(), EditorOpResultStatusV1::TargetMissing));
+    }
+
+    let groups = current.layer_groups.get(mode);
+    match target_group {
+        Some(EditorTargetGroupV1::Existing { id })
+            if !groups.into_iter().flatten().any(|group| group.id == *id) =>
+        {
+            return Ok((current.clone(), EditorOpResultStatusV1::TargetMissing));
+        }
+        Some(EditorTargetGroupV1::Create { id, .. })
+            if groups.into_iter().flatten().any(|group| group.id == *id) =>
+        {
+            return Err(EditorCommitError::validation(
+                "LAYER_GROUP_ALREADY_EXISTS",
+                format!("layer group '{id}' already exists in mode '{mode}'"),
+            ));
+        }
+        Some(_) | None => {}
+    }
+
+    let mut candidate = current.clone();
+    if let Some(EditorTargetGroupV1::Create { id, name }) = target_group {
+        candidate
+            .layer_groups
+            .entry(mode.to_string())
+            .or_default()
+            .push(LayerGroupDef {
+                id: id.clone(),
+                name: name.clone(),
+            });
+    }
+    let next_group_id = target_group.as_ref().map(|group| match group {
+        EditorTargetGroupV1::Existing { id } | EditorTargetGroupV1::Create { id, .. } => id,
+    });
+    for target in targets {
+        let location = locations
+            .get(&target.id)
+            .expect("group target was validated above");
+        let position = position_at_mut(&mut candidate, location)?;
+        if position.group_id.as_ref() != next_group_id {
+            position.group_id = next_group_id.cloned();
+        }
+    }
+    remove_empty_layer_groups(&mut candidate, &HashSet::from([mode.to_string()]));
+
+    let status = if candidate == *current {
+        EditorOpResultStatusV1::NoChange
+    } else {
+        EditorOpResultStatusV1::Applied
+    };
+    Ok((candidate, status))
+}
+
+fn apply_rename_layer_group(
+    current: &EditorDocumentV1,
+    mode: &str,
+    group_id: &str,
+    name: &str,
+) -> (EditorDocumentV1, EditorOpResultStatusV1) {
+    let Some(current_group) = current
+        .layer_groups
+        .get(mode)
+        .into_iter()
+        .flatten()
+        .find(|group| group.id == group_id)
+    else {
+        return (current.clone(), EditorOpResultStatusV1::TargetMissing);
+    };
+    if current_group.name == name {
+        return (current.clone(), EditorOpResultStatusV1::NoChange);
+    }
+
+    let mut candidate = current.clone();
+    let group = candidate
+        .layer_groups
+        .get_mut(mode)
+        .and_then(|groups| groups.iter_mut().find(|group| group.id == group_id))
+        .expect("rename group was validated above");
+    name.clone_into(&mut group.name);
+    (candidate, EditorOpResultStatusV1::Applied)
+}
+
 fn apply_bounds(position: &mut KeyPosition, bounds: &EditorBoundsV1) {
     position.dx = bounds.dx;
     position.dy = bounds.dy;
@@ -1180,7 +1289,10 @@ pub(crate) fn prepare_editor_ops_transition(
                 }
                 None
             }
-            EditorOpV1::InsertFrozenElements { .. } | EditorOpV1::ReorderElements { .. } => None,
+            EditorOpV1::InsertFrozenElements { .. }
+            | EditorOpV1::ReorderElements { .. }
+            | EditorOpV1::SetElementGroups { .. }
+            | EditorOpV1::RenameLayerGroup { .. } => None,
         }) else {
             continue;
         };
@@ -2399,6 +2511,31 @@ pub(crate) fn prepare_editor_ops_transition(
                     bounds: None,
                 });
             }
+            EditorOpV1::SetElementGroups {
+                mode,
+                targets,
+                target_group,
+            } => {
+                let (next, status) =
+                    apply_set_element_groups(&candidate, &locations, mode, targets, target_group)?;
+                candidate = next;
+                op_results.push(EditorOpResultV1 {
+                    status,
+                    bounds: None,
+                });
+            }
+            EditorOpV1::RenameLayerGroup {
+                mode,
+                group_id,
+                name,
+            } => {
+                let (next, status) = apply_rename_layer_group(&candidate, mode, group_id, name);
+                candidate = next;
+                op_results.push(EditorOpResultV1 {
+                    status,
+                    bounds: None,
+                });
+            }
         }
     }
     delete_elements(&mut candidate, &delete_ids);
@@ -2424,11 +2561,11 @@ mod tests {
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
-            AppStoreData, EditorCounterAnimationPresetPropertyPatchV1,
+            AppStoreData, EditorCounterAnimationPresetPropertyPatchV1, EditorElementGroupTargetV1,
             EditorElementPropertyPatchV1, EditorFrozenElementV1, EditorFrozenGroupV1,
             EditorFrozenKeySlotV1, EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpV1,
-            EditorZUpdateV1, GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition,
-            StatPosition, StatType,
+            EditorTargetGroupV1, EditorZUpdateV1, GraphPosition, GraphStatType, GraphType,
+            KeyPosition, KnobPosition, StatPosition, StatType,
         },
         state::native_element_id::backfill_store_element_ids,
     };
@@ -2984,6 +3121,333 @@ mod tests {
             replay.op_results[0].status,
             EditorOpResultStatusV1::NoChange
         );
+    }
+
+    #[test]
+    fn group_structural_transition_is_frozen_atomic_and_cleans_only_empty_definitions() {
+        let mut store = store_with_every_reorder_type();
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let newcomer_id = store.key_positions["4key"][1].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let graph_id = store.graph_positions["4key"][0].position.id.clone();
+        let knob_id = store.knob_positions["4key"][0].position.id.clone();
+        store.key_positions.get_mut("4key").unwrap()[0].group_id = Some("source-group".to_string());
+        store.key_positions.get_mut("4key").unwrap()[1].group_id = Some("source-group".to_string());
+        store.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .group_id = Some("source-group".to_string());
+        store.graph_positions.get_mut("4key").unwrap()[0]
+            .position
+            .group_id = Some("source-group".to_string());
+        store.knob_positions.get_mut("4key").unwrap()[0]
+            .position
+            .group_id = Some("source-group".to_string());
+        store.layer_groups.insert(
+            "4key".to_string(),
+            vec![
+                LayerGroupDef {
+                    id: "source-group".to_string(),
+                    name: " Source ".to_string(),
+                },
+                LayerGroupDef {
+                    id: "empty-group".to_string(),
+                    name: "Empty".to_string(),
+                },
+            ],
+        );
+        let targets = vec![
+            EditorElementGroupTargetV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: key_id.clone(),
+            },
+            EditorElementGroupTargetV1 {
+                element_type: EditorElementTypeV1::Stat,
+                id: stat_id.clone(),
+            },
+            EditorElementGroupTargetV1 {
+                element_type: EditorElementTypeV1::Graph,
+                id: graph_id.clone(),
+            },
+            EditorElementGroupTargetV1 {
+                element_type: EditorElementTypeV1::Knob,
+                id: knob_id.clone(),
+            },
+        ];
+        let create = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: targets.clone(),
+            target_group: Some(EditorTargetGroupV1::Create {
+                id: " target group ".to_string(),
+                name: " Target Name ".to_string(),
+            }),
+        };
+
+        let transition =
+            prepare_editor_ops_transition(&store, std::slice::from_ref(&create)).unwrap();
+        assert_eq!(
+            transition.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ]
+        );
+        assert_eq!(
+            transition.candidate.key_positions["4key"][0]
+                .group_id
+                .as_deref(),
+            Some(" target group ")
+        );
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .group_id
+                .as_deref(),
+            Some(" target group ")
+        );
+        assert_eq!(
+            transition.candidate.graph_positions["4key"][0]
+                .position
+                .group_id
+                .as_deref(),
+            Some(" target group ")
+        );
+        assert_eq!(
+            transition.candidate.knob_positions["4key"][0]
+                .position
+                .group_id
+                .as_deref(),
+            Some(" target group ")
+        );
+        assert_eq!(
+            transition.candidate.key_positions["4key"][1]
+                .group_id
+                .as_deref(),
+            Some("source-group")
+        );
+        assert_eq!(
+            transition.candidate.layer_groups["4key"],
+            [
+                LayerGroupDef {
+                    id: "source-group".to_string(),
+                    name: " Source ".to_string(),
+                },
+                LayerGroupDef {
+                    id: " target group ".to_string(),
+                    name: " Target Name ".to_string(),
+                },
+            ]
+        );
+
+        let existing = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: targets.clone(),
+            target_group: Some(EditorTargetGroupV1::Existing {
+                id: " target group ".to_string(),
+            }),
+        };
+        let no_change =
+            prepare_editor_ops_transition(&transition.scratch, std::slice::from_ref(&existing))
+                .unwrap();
+        assert_eq!(
+            no_change.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert!(no_change.changed_fields.is_empty());
+
+        let mut cleanup_store = transition.scratch.clone();
+        cleanup_store
+            .layer_groups
+            .get_mut("4key")
+            .unwrap()
+            .push(LayerGroupDef {
+                id: "cleanup-only".to_string(),
+                name: "Cleanup".to_string(),
+            });
+        let cleanup =
+            prepare_editor_ops_transition(&cleanup_store, std::slice::from_ref(&existing)).unwrap();
+        assert_eq!(
+            cleanup.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert_eq!(cleanup.changed_fields, [EditorField::LayerGroups]);
+
+        let ungroup = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets,
+            target_group: None,
+        };
+        let ungrouped = prepare_editor_ops_transition(&transition.scratch, &[ungroup]).unwrap();
+        assert_eq!(
+            ungrouped.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert!(ungrouped.candidate.layer_groups["4key"]
+            .iter()
+            .all(|group| group.id != " target group "));
+        assert_eq!(
+            ungrouped.candidate.key_positions["4key"][1]
+                .group_id
+                .as_deref(),
+            Some("source-group")
+        );
+        assert_eq!(
+            ungrouped.candidate.key_positions["4key"]
+                .iter()
+                .find(|position| position.id == newcomer_id)
+                .unwrap()
+                .group_id
+                .as_deref(),
+            Some("source-group")
+        );
+    }
+
+    #[test]
+    fn group_structural_transition_rejects_conflicts_and_reports_missing_atomically() {
+        let mut store = store_with_every_reorder_type();
+        let key_id = store.key_positions["4key"][0].id.clone();
+        store.key_positions.get_mut("4key").unwrap()[0].group_id =
+            Some("existing-group".to_string());
+        store.layer_groups.insert(
+            "4key".to_string(),
+            vec![LayerGroupDef {
+                id: "existing-group".to_string(),
+                name: "Existing".to_string(),
+            }],
+        );
+        let before = EditorDocumentV1::from_store(&store);
+        let target = EditorElementGroupTargetV1 {
+            element_type: EditorElementTypeV1::Key,
+            id: key_id.clone(),
+        };
+
+        let missing = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: vec![
+                target.clone(),
+                EditorElementGroupTargetV1 {
+                    element_type: EditorElementTypeV1::Graph,
+                    id: uuid::Uuid::new_v4().to_string(),
+                },
+            ],
+            target_group: None,
+        };
+        let missing_transition = prepare_editor_ops_transition(&store, &[missing]).unwrap();
+        assert_eq!(
+            missing_transition.op_results[0].status,
+            EditorOpResultStatusV1::TargetMissing
+        );
+        assert_eq!(missing_transition.candidate, before);
+        assert!(missing_transition.changed_fields.is_empty());
+
+        for invalid in [
+            EditorOpV1::SetElementGroups {
+                mode: "4key".to_string(),
+                targets: vec![EditorElementGroupTargetV1 {
+                    element_type: EditorElementTypeV1::Graph,
+                    id: key_id.clone(),
+                }],
+                target_group: None,
+            },
+            EditorOpV1::SetElementGroups {
+                mode: "5key".to_string(),
+                targets: vec![target.clone()],
+                target_group: None,
+            },
+        ] {
+            let error = prepare_editor_ops_transition(&store, &[invalid]).unwrap_err();
+            assert!(matches!(
+                validation_code(&error),
+                Some("ELEMENT_TYPE_MISMATCH" | "ELEMENT_GROUP_TARGET_MODE_MISMATCH")
+            ));
+            assert_eq!(EditorDocumentV1::from_store(&store), before);
+        }
+
+        for name in ["Existing", "Different"] {
+            let collision = EditorOpV1::SetElementGroups {
+                mode: "4key".to_string(),
+                targets: vec![target.clone()],
+                target_group: Some(EditorTargetGroupV1::Create {
+                    id: "existing-group".to_string(),
+                    name: name.to_string(),
+                }),
+            };
+            let error = prepare_editor_ops_transition(&store, &[collision]).unwrap_err();
+            assert_eq!(validation_code(&error), Some("LAYER_GROUP_ALREADY_EXISTS"));
+        }
+
+        let unknown_group = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: vec![target],
+            target_group: Some(EditorTargetGroupV1::Existing {
+                id: "missing-group".to_string(),
+            }),
+        };
+        let unknown = prepare_editor_ops_transition(&store, &[unknown_group]).unwrap();
+        assert_eq!(
+            unknown.op_results[0].status,
+            EditorOpResultStatusV1::TargetMissing
+        );
+        assert_eq!(unknown.candidate, before);
+    }
+
+    #[test]
+    fn rename_layer_group_is_mode_scoped_raw_and_reports_missing() {
+        let mut store = store_with_every_reorder_type();
+        store.layer_groups.insert(
+            "4key".to_string(),
+            vec![LayerGroupDef {
+                id: "legacy group".to_string(),
+                name: "Old".to_string(),
+            }],
+        );
+        store.layer_groups.insert(
+            "5key".to_string(),
+            vec![LayerGroupDef {
+                id: "legacy group".to_string(),
+                name: "Other Mode".to_string(),
+            }],
+        );
+        let rename = EditorOpV1::RenameLayerGroup {
+            mode: "4key".to_string(),
+            group_id: "legacy group".to_string(),
+            name: " Raw Name ".to_string(),
+        };
+
+        let applied = prepare_editor_ops_transition(&store, std::slice::from_ref(&rename)).unwrap();
+        assert_eq!(
+            applied.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert_eq!(applied.changed_fields, [EditorField::LayerGroups]);
+        assert_eq!(applied.candidate.layer_groups["4key"][0].name, " Raw Name ");
+        assert_eq!(applied.candidate.layer_groups["5key"][0].name, "Other Mode");
+
+        let replay =
+            prepare_editor_ops_transition(&applied.scratch, std::slice::from_ref(&rename)).unwrap();
+        assert_eq!(
+            replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert!(replay.changed_fields.is_empty());
+
+        let missing = EditorOpV1::RenameLayerGroup {
+            mode: "4key".to_string(),
+            group_id: "missing".to_string(),
+            name: "Name".to_string(),
+        };
+        let missing_transition = prepare_editor_ops_transition(&store, &[missing]).unwrap();
+        assert_eq!(
+            missing_transition.op_results[0].status,
+            EditorOpResultStatusV1::TargetMissing
+        );
+        assert!(missing_transition.changed_fields.is_empty());
     }
 
     #[test]

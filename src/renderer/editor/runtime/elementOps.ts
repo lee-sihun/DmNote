@@ -9,6 +9,7 @@ import {
   isSyntheticElementId,
   resolveElementById,
 } from '../model/elementIdMap';
+import { isNativeElementId } from '../model/elementId';
 import {
   cloneKeyPositionForDuplicate,
   createDefaultKeyPosition,
@@ -16,7 +17,11 @@ import {
 import { newElementId } from '../model/elementId';
 import { cloneSlot } from '@utils/keySlot';
 import { stableStringify } from '@utils/core/stableStringify';
-import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
+import {
+  normalizeLayerGroupsForMode,
+  projectLayerGroupRename,
+  projectStableElementGroups,
+} from '@utils/layerGroupUtils';
 import {
   applyPropertyIntentsEagerly,
   createPropertyReceipt,
@@ -60,6 +65,8 @@ import type {
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
   EditorStatTypePropertyPatchV1,
+  EditorElementGroupTargetV1,
+  EditorTargetLayerGroupV1,
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
@@ -1095,6 +1102,154 @@ export const setLayerGroupHiddenLegacy = (
       return changed ? intentPatch(patch) : { kind: 'satisfied' };
     },
   }).then(({ committed, satisfied }) => committed || satisfied);
+};
+
+const validStructuralText = (value: string, maxBytes: number): boolean =>
+  value.length > 0 && new TextEncoder().encode(value).length <= maxBytes;
+
+const validElementGroupTargets = (
+  targets: readonly EditorElementGroupTargetV1[],
+): boolean =>
+  targets.length > 0 &&
+  targets.length <= 4096 &&
+  targets.every(
+    ({ elementType, id }) =>
+      ['key', 'stat', 'graph', 'knob'].includes(elementType) &&
+      isNativeElementId(id),
+  ) &&
+  new Set(targets.map(({ id }) => id)).size === targets.length;
+
+const validTargetLayerGroup = (
+  targetGroup: EditorTargetLayerGroupV1 | null,
+): boolean =>
+  targetGroup === null ||
+  (validStructuralText(targetGroup.id, 256) &&
+    (targetGroup.kind === 'existing' ||
+      (targetGroup.kind === 'create' &&
+        validStructuralText(targetGroup.name, 1024))));
+
+export const setElementGroupsByTargets = (
+  mode: string,
+  targets: readonly EditorElementGroupTargetV1[],
+  targetGroup: EditorTargetLayerGroupV1 | null,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    !validStructuralText(mode, 128) ||
+    !validElementGroupTargets(targets) ||
+    !validTargetLayerGroup(targetGroup)
+  ) {
+    return Promise.resolve(false);
+  }
+  const before = {
+    keyPositions: useKeyStore.getState().canonicalPositions,
+    statPositions: useStatItemStore.getState().positions,
+    graphPositions: useGraphItemStore.getState().positions,
+    knobPositions: useKnobItemStore.getState().positions,
+    layerGroups: useLayerGroupStore.getState().layerGroups,
+  };
+  const projected = projectStableElementGroups({
+    mode,
+    targets,
+    targetGroup,
+    ...before,
+  });
+  if (!projected) return Promise.resolve(false);
+  if (projected.changed) {
+    useKeyStore.getState().setPositions(projected.keyPositions);
+    useStatItemStore.getState().setPositions(projected.statPositions);
+    useGraphItemStore.getState().setPositions(projected.graphPositions);
+    useKnobItemStore.getState().setPositions(projected.knobPositions);
+    useLayerGroupStore.getState().setLayerGroups(projected.layerGroups);
+  }
+  let enrolled = false;
+  return commitSemanticOps(
+    [
+      {
+        kind: 'setElementGroups',
+        mode,
+        targets: targets.map((target) => ({ ...target })),
+        targetGroup: targetGroup ? { ...targetGroup } : null,
+      },
+    ],
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) => outcome.opResults[0]?.status !== 'targetMissing')
+    .catch((error) => {
+      if (!enrolled && projected.changed) {
+        if (
+          useKeyStore.getState().canonicalPositions === projected.keyPositions
+        ) {
+          useKeyStore.getState().setPositions(before.keyPositions);
+        }
+        if (useStatItemStore.getState().positions === projected.statPositions) {
+          useStatItemStore.getState().setPositions(before.statPositions);
+        }
+        if (
+          useGraphItemStore.getState().positions === projected.graphPositions
+        ) {
+          useGraphItemStore.getState().setPositions(before.graphPositions);
+        }
+        if (useKnobItemStore.getState().positions === projected.knobPositions) {
+          useKnobItemStore.getState().setPositions(before.knobPositions);
+        }
+        if (
+          useLayerGroupStore.getState().layerGroups === projected.layerGroups
+        ) {
+          useLayerGroupStore.getState().setLayerGroups(before.layerGroups);
+        }
+      }
+      throw error;
+    });
+};
+
+export const renameLayerGroupById = (
+  mode: string,
+  groupId: string,
+  name: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    !validStructuralText(mode, 128) ||
+    !validStructuralText(groupId, 256) ||
+    !validStructuralText(name, 1024)
+  ) {
+    return Promise.resolve(false);
+  }
+  const before = useLayerGroupStore.getState().layerGroups;
+  const projected = projectLayerGroupRename({
+    mode,
+    groupId,
+    name,
+    layerGroups: before,
+  });
+  if (!projected) return Promise.resolve(false);
+  useLayerGroupStore.getState().setLayerGroups(projected);
+  let enrolled = false;
+  return commitSemanticOps(
+    [{ kind: 'renameLayerGroup', mode, groupId, name }],
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) => outcome.opResults[0]?.status !== 'targetMissing')
+    .catch((error) => {
+      if (
+        !enrolled &&
+        useLayerGroupStore.getState().layerGroups === projected
+      ) {
+        useLayerGroupStore.getState().setLayerGroups(before);
+      }
+      throw error;
+    });
 };
 
 export const patchElementLayerNameById = (

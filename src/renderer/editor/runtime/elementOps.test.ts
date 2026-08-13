@@ -51,6 +51,8 @@ import {
   patchElementHiddenById,
   setLayerGroupHidden,
   setLayerGroupHiddenLegacy,
+  setElementGroupsByTargets,
+  renameLayerGroupById,
   patchElementLayerNameById,
   patchFontStyleById,
   patchFontStyleByTargets,
@@ -1258,6 +1260,142 @@ describe('elementOps', () => {
     expect(useKeyStore.getState().canonicalPositions['4key'][0].hidden).toBe(
       true,
     );
+  });
+
+  it('setElementGroups는 common4 membership과 source empty definition을 한 op로 바꾼다', async () => {
+    const statId = '33333333-3333-4333-8333-333333333333';
+    const graphId = '44444444-4444-4444-8444-444444444444';
+    const knobId = '55555555-5555-4555-8555-555555555555';
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'source', zIndex: 91 }],
+      },
+      positions: {
+        '4key': [{ ...keyAt(ID_A), groupId: 'source', zIndex: 91 }],
+      },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [{ ...keyAt(statId), statType: 'kps', groupId: 'source' }],
+      },
+    });
+    useGraphItemStore.setState({
+      positions: { '4key': [{ ...graphAt(graphId), className: 'graph' }] },
+    });
+    useKnobItemStore.setState({
+      positions: { '4key': [{ ...keyAt(knobId), className: 'knob' }] } as never,
+    });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'source', name: 'Source' }] },
+    });
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: statId },
+      { elementType: 'graph' as const, id: graphId },
+      { elementType: 'knob' as const, id: knobId },
+    ];
+
+    await expect(
+      setElementGroupsByTargets('4key', targets, {
+        kind: 'create',
+        id: 'target',
+        name: 'Target',
+      }),
+    ).resolves.toBe(true);
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      groupId: 'target',
+      zIndex: 91,
+    });
+    expect(useStatItemStore.getState().positions['4key'][0].groupId).toBe(
+      'target',
+    );
+    expect(useGraphItemStore.getState().positions['4key'][0]).toMatchObject({
+      groupId: 'target',
+      className: 'graph',
+    });
+    expect(useKnobItemStore.getState().positions['4key'][0]).toMatchObject({
+      groupId: 'target',
+      className: 'knob',
+    });
+    expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([
+      { id: 'target', name: 'Target' },
+    ]);
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [
+        {
+          kind: 'setElementGroups',
+          mode: '4key',
+          targets,
+          targetGroup: { kind: 'create', id: 'target', name: 'Target' },
+        },
+      ],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+  });
+
+  it('setElementGroups create collision과 invalid target은 eager/wire 전에 fail-close한다', async () => {
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'target', name: 'Same' }] },
+    });
+    const before = useKeyStore.getState().canonicalPositions;
+    await expect(
+      setElementGroupsByTargets('4key', [{ elementType: 'key', id: ID_A }], {
+        kind: 'create',
+        id: 'target',
+        name: 'Same',
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      setElementGroupsByTargets(
+        '4key',
+        [{ elementType: 'key', id: 'key-0' }],
+        null,
+      ),
+    ).resolves.toBe(false);
+    expect(useKeyStore.getState().canonicalPositions).toBe(before);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('setElementGroups는 target 하나라도 없거나 mode가 다르면 eager와 wire를 전부 생략한다', async () => {
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+    const before = useKeyStore.getState().canonicalPositions;
+    await expect(
+      setElementGroupsByTargets(
+        '4key',
+        [
+          { elementType: 'key', id: ID_A },
+          {
+            elementType: 'stat',
+            id: '33333333-3333-4333-8333-333333333333',
+          },
+        ],
+        { kind: 'existing', id: 'group-a' },
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      setElementGroupsByTargets('5key', [{ elementType: 'key', id: ID_A }], {
+        kind: 'existing',
+        id: 'group-a',
+      }),
+    ).resolves.toBe(false);
+
+    expect(useKeyStore.getState().canonicalPositions).toBe(before);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('renameLayerGroup는 exact definition만 바꾸고 편입 전 실패를 복원한다', async () => {
+    const before = { '4key': [{ id: 'group-a', name: 'Before' }] };
+    useLayerGroupStore.setState({ layerGroups: before });
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('preflight'));
+
+    await expect(
+      renameLayerGroupById('4key', 'group-a', 'After'),
+    ).rejects.toThrow('preflight');
+
+    expect(useLayerGroupStore.getState().layerGroups).toBe(before);
   });
 
   it('다중 정산 대상이 전부 사라졌으면 커밋하지 않는다', async () => {

@@ -1,5 +1,9 @@
 import { stableStringify } from '@utils/core/stableStringify';
-import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
+import {
+  normalizeLayerGroupsForMode,
+  projectLayerGroupRename,
+  projectStableElementGroups,
+} from '@utils/layerGroupUtils';
 import {
   inheritedPaintMaterialization,
   paintPropertyFields,
@@ -31,6 +35,7 @@ import {
   assertEditorCommitResult,
   assertEditorCommittedEvent,
   assertEditorDocument,
+  assertCanonicalEditorDocument,
   assertEditorGetResult,
   assertEditorOpCommitResult,
   assertEditorOpsV1,
@@ -267,6 +272,17 @@ const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
     if (op.completeModeOrder) fields.add('layerGroups');
     return [...fields];
   }
+  if (op.kind === 'setElementGroups') {
+    return [
+      ...new Set([
+        ...op.targets.map(
+          (target) => SEMANTIC_POSITION_FIELDS[target.elementType],
+        ),
+        'layerGroups' as const,
+      ]),
+    ];
+  }
+  if (op.kind === 'renameLayerGroup') return ['layerGroups'];
   if (op.kind === 'patchElement') {
     return [SEMANTIC_POSITION_FIELDS[op.elementType]];
   }
@@ -458,6 +474,37 @@ const applySemanticOps = (
         next.knobPositions = normalized.knobPositions;
         next.layerGroups = normalized.layerGroups;
       }
+      return;
+    }
+    if (op.kind === 'setElementGroups') {
+      if (result?.status === 'noChange') return;
+      const projected = projectStableElementGroups({
+        mode: op.mode,
+        targets: op.targets,
+        targetGroup: op.targetGroup,
+        keyPositions: next.keyPositions,
+        statPositions: next.statPositions,
+        graphPositions: next.graphPositions,
+        knobPositions: next.knobPositions,
+        layerGroups: next.layerGroups,
+      });
+      if (!projected) return;
+      next.keyPositions = projected.keyPositions;
+      next.statPositions = projected.statPositions;
+      next.graphPositions = projected.graphPositions;
+      next.knobPositions = projected.knobPositions;
+      next.layerGroups = projected.layerGroups;
+      return;
+    }
+    if (op.kind === 'renameLayerGroup') {
+      if (result?.status === 'noChange') return;
+      const layerGroups = projectLayerGroupRename({
+        mode: op.mode,
+        groupId: op.groupId,
+        name: op.name,
+        layerGroups: next.layerGroups,
+      });
+      if (layerGroups) next.layerGroups = layerGroups;
       return;
     }
     if (op.kind === 'patchElement') {
@@ -1143,7 +1190,7 @@ export class EditorSaveCoordinator {
     const currentDocument = canonicalizeEditorGradients(
       document ?? this.readDocument(),
     );
-    assertEditorDocument(currentDocument);
+    assertCanonicalEditorDocument(currentDocument);
     const snapshot = clone(currentDocument);
 
     const projected = this.getLatestCommitBase();
@@ -1227,12 +1274,13 @@ export class EditorSaveCoordinator {
 
     const projected = this.getLatestCommitBase();
     const target = applyEditorPatch(projected, canonicalChanges);
+    assertCanonicalEditorDocument(target, 'projected editor document');
     const newIntentFields = getChangedEditorFields(projected, target);
     const requestFields = EDITOR_FIELDS.filter(
       (field) => canonicalChanges[field] !== undefined,
     );
     const currentDocument = this.readDocument();
-    assertEditorDocument(currentDocument);
+    assertCanonicalEditorDocument(currentDocument, 'current editor document');
     const optimisticDocument = applyEditorPatch(
       currentDocument,
       canonicalChanges,
@@ -1283,8 +1331,16 @@ export class EditorSaveCoordinator {
   ): Promise<EditorSemanticCommitOutcome> {
     this.assertWritable();
     const frozenOps = clone([...ops]);
-    return this.enqueueSerialized(async () => {
+    try {
       assertEditorOpsV1(frozenOps);
+      assertCanonicalEditorDocument(
+        this.readDocument(),
+        'current editor document',
+      );
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return this.enqueueSerialized(async () => {
       const result = await this.commitGeneratedSemanticOpsInSlot(
         () => frozenOps,
         meta,
@@ -1371,8 +1427,9 @@ export class EditorSaveCoordinator {
         ...(meta.gestureId ? { gestureId: meta.gestureId } : {}),
       };
       const target = applySemanticOps(baseDocument, ops);
+      assertCanonicalEditorDocument(target, 'semantic target document');
       const currentDocument = this.readDocument();
-      assertEditorDocument(currentDocument);
+      assertCanonicalEditorDocument(currentDocument, 'current editor document');
       const optimisticDocument = applySemanticOps(currentDocument, ops);
       if (
         getChangedEditorFields(currentDocument, optimisticDocument).length > 0
@@ -1867,7 +1924,7 @@ export class EditorSaveCoordinator {
     const buffered = this.bufferedEvents;
     this.bufferedEvents = [];
     for (const event of buffered) {
-      await this.processCommittedEvent(event);
+      await this.processCommittedEventWithRecovery(event);
     }
 
     if (!this.conflict) this.phase = 'idle';
@@ -2069,6 +2126,7 @@ export class EditorSaveCoordinator {
       : canonicalChanges
       ? applyEditorPatch(baseDocument, canonicalChanges)
       : baseDocument;
+    assertCanonicalEditorDocument(target, 'gesture target document');
     const requestFields = ops
       ? [...new Set(ops.flatMap(fieldsForSemanticOp))]
       : canonicalChanges
@@ -2080,7 +2138,7 @@ export class EditorSaveCoordinator {
     // 백엔드는 맞고 UI 스토어는 옛 값에 남는다
     if (ops || canonicalChanges) {
       const currentDocument = this.readDocument();
-      assertEditorDocument(currentDocument);
+      assertCanonicalEditorDocument(currentDocument, 'current editor document');
       const optimisticDocument = ops
         ? applySemanticOps(currentDocument, ops)
         : applyEditorPatch(currentDocument, canonicalChanges!);
@@ -2377,20 +2435,47 @@ export class EditorSaveCoordinator {
 
   private enqueueEvent(event: EditorCommittedV1): Promise<void> {
     const queued = this.eventQueue.then(() =>
-      this.processCommittedEvent(event),
+      this.processCommittedEventWithRecovery(event),
     );
     this.eventQueue = queued.catch(() => undefined);
     return queued;
   }
 
-  private async processCommittedEvent(event: EditorCommittedV1): Promise<void> {
+  private async processCommittedEventWithRecovery(
+    event: EditorCommittedV1,
+  ): Promise<void> {
+    let previewSettled = false;
+    const settlePreview = () => {
+      if (previewSettled) return;
+      previewSettled = true;
+      this.onCommittedApplied?.(event);
+    };
+    try {
+      await this.processCommittedEvent(event, settlePreview);
+    } catch (error) {
+      if (!(error instanceof EditorProtocolError)) throw error;
+      this.ownMutations.delete(event.mutationId);
+      this.isolatedMutations.delete(event.mutationId);
+      try {
+        await this.fetchAndApplyCanonical('resync');
+      } finally {
+        // 잘못된 이벤트도 프리뷰 세션 정리를 막지 않는다
+        settlePreview();
+      }
+    }
+  }
+
+  private async processCommittedEvent(
+    event: EditorCommittedV1,
+    settlePreview: () => void = () => this.onCommittedApplied?.(event),
+  ): Promise<void> {
     assertEditorCommittedEvent(event);
     if (this.stopped || this.revision === null || !this.lastAck) return;
 
     if (event.revision <= this.revision) {
       this.ownMutations.delete(event.mutationId);
       this.isolatedMutations.delete(event.mutationId);
-      this.onCommittedApplied?.(event);
+      settlePreview();
       return;
     }
     if (event.revision > this.revision + 1) {
@@ -2398,13 +2483,17 @@ export class EditorSaveCoordinator {
         await this.fetchAndApplyCanonical('resync');
       } finally {
         // 프리뷰 정리는 canonical 재동기화 성공 여부와 독립
-        this.onCommittedApplied?.(event);
+        settlePreview();
       }
       return;
     }
 
     const previousCanonical = this.lastAck;
     const canonical = applyEditorPatch(previousCanonical, event.patch);
+    assertCanonicalEditorDocument(
+      canonical,
+      'editor:committed canonical document',
+    );
     const isOwnMutation = this.ownMutations.has(event.mutationId);
     if (isOwnMutation) this.ownMutations.delete(event.mutationId);
     this.revision = event.revision;
@@ -2426,7 +2515,7 @@ export class EditorSaveCoordinator {
       } else {
         this.notify();
       }
-      this.onCommittedApplied?.(event);
+      settlePreview();
       return;
     }
 
@@ -2437,7 +2526,7 @@ export class EditorSaveCoordinator {
       'event',
       previousCanonical,
     );
-    this.onCommittedApplied?.(event);
+    settlePreview();
   }
 
   private async fetchAndApplyCanonical(

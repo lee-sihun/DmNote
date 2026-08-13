@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
@@ -85,6 +86,8 @@ const {
   patchUseInlineStylesViaAuthorityMock,
   previewMock,
   patchLayerNameMock,
+  renameLayerGroupMock,
+  renameLayerGroupViaAuthorityMock,
   patchPropertyViaAuthorityMock,
   patchBoundsViaAuthorityMock,
   patchBatchGeometryViaAuthorityMock,
@@ -170,6 +173,8 @@ const {
   patchUseInlineStylesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   previewMock: vi.fn(),
   patchLayerNameMock: vi.fn(() => Promise.resolve(true)),
+  renameLayerGroupMock: vi.fn(() => Promise.resolve(true)),
+  renameLayerGroupViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchPropertyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchBoundsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchBatchGeometryViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
@@ -193,6 +198,7 @@ vi.mock('@hooks/useLenis', () => ({
   useLenis: () => ({ scrollContainerRef: vi.fn() }),
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
+  renameLayerGroupViaAuthority: renameLayerGroupViaAuthorityMock,
   patchGraphColorsViaAuthority: patchGraphColorsViaAuthorityMock,
   patchGraphPropertiesViaAuthority: patchGraphPropertiesViaAuthorityMock,
   patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
@@ -223,6 +229,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   updatePluginElement: vi.fn(),
 }));
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  renameLayerGroupById: renameLayerGroupMock,
   commitElementGeometryById: patchGeometryMock,
   commitBatchGeometryByIds: patchBatchGeometryMock,
   patchElementLayerNameById: patchLayerNameMock,
@@ -455,6 +462,8 @@ const resetStores = () => {
   patchUseInlineStylesMock.mockClear();
   patchUseInlineStylesTargetsMock.mockClear();
   patchUseInlineStylesViaAuthorityMock.mockClear();
+  renameLayerGroupMock.mockClear();
+  renameLayerGroupViaAuthorityMock.mockClear();
   patchPropertyViaAuthorityMock.mockClear();
   patchBoundsViaAuthorityMock.mockClear();
   patchBatchGeometryViaAuthorityMock.mockClear();
@@ -517,6 +526,7 @@ const resetStores = () => {
       ],
     },
   });
+  useLayerGroupStore.setState({ layerGroups: {} });
   usePropertiesPanelStore.setState({
     canvasPanelMode: 'property',
     canvasPanelActiveTab: 'layer',
@@ -742,6 +752,51 @@ describe('PropertiesPanel detached preview contract', () => {
     expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
     expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
   });
+
+  it.each(['main', 'panel'] as const)(
+    'selected group rename은 %s dedicated structural route를 쓴다',
+    async (windowType) => {
+      window.__dmn_window_type = windowType;
+      const firstId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const secondId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const base = useStatItemStore.getState().positions['4key'][0];
+      useStatItemStore.setState({
+        positions: {
+          '4key': [
+            { ...base, id: firstId, groupId: 'group-a' },
+            { ...base, id: secondId, groupId: 'group-a' },
+          ],
+        },
+      });
+      useLayerGroupStore.setState({
+        layerGroups: { '4key': [{ id: 'group-a', name: 'Before' }] },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'stat', id: firstId, index: 0 },
+          { type: 'stat', id: secondId, index: 1 },
+        ],
+        selectedGroupIds: ['group-a'],
+      });
+      mounted = mountPanel(true);
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        handleRenameCommit: (value: string) => Promise<void>;
+      };
+
+      await act(async () => props.handleRenameCommit('  After  '));
+
+      const expected =
+        windowType === 'panel'
+          ? renameLayerGroupViaAuthorityMock
+          : renameLayerGroupMock;
+      const other =
+        windowType === 'panel'
+          ? renameLayerGroupMock
+          : renameLayerGroupViaAuthorityMock;
+      expect(expected).toHaveBeenCalledWith('4key', 'group-a', 'After');
+      expect(other).not.toHaveBeenCalled();
+    },
+  );
 
   it('single stable graphType은 stale index 대신 선택 ID semantic leaf를 쓴다', async () => {
     const id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';

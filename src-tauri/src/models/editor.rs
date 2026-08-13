@@ -952,6 +952,19 @@ pub enum EditorOpV1 {
         #[serde(rename = "groupUpdates")]
         group_updates: Vec<EditorGroupUpdateV1>,
     },
+    SetElementGroups {
+        mode: String,
+        targets: Vec<EditorElementGroupTargetV1>,
+        #[serde(rename = "targetGroup")]
+        #[serde(deserialize_with = "deserialize_required_nullable_target_group")]
+        target_group: Option<EditorTargetGroupV1>,
+    },
+    RenameLayerGroup {
+        mode: String,
+        #[serde(rename = "groupId")]
+        group_id: String,
+        name: String,
+    },
 }
 
 impl EditorOpV1 {
@@ -961,9 +974,35 @@ impl EditorOpV1 {
             | Self::DeleteElement { id, .. }
             | Self::PatchElement { id, .. }
             | Self::SetKeySlot { id, .. } => Some(id),
-            Self::InsertFrozenElements { .. } | Self::ReorderElements { .. } => None,
+            Self::InsertFrozenElements { .. }
+            | Self::ReorderElements { .. }
+            | Self::SetElementGroups { .. }
+            | Self::RenameLayerGroup { .. } => None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorElementGroupTargetV1 {
+    pub element_type: EditorElementTypeV1,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum EditorTargetGroupV1 {
+    Existing { id: String },
+    Create { id: String, name: String },
+}
+
+fn deserialize_required_nullable_target_group<'de, D>(
+    deserializer: D,
+) -> Result<Option<EditorTargetGroupV1>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<EditorTargetGroupV1>::deserialize(deserializer)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

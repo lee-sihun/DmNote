@@ -1924,6 +1924,127 @@ describe('plugin element panel queue', () => {
     },
   );
 
+  it('group structural client는 frozen exact descriptors를 전송한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    ];
+    const targetGroup = {
+      kind: 'create' as const,
+      id: 'group-a',
+      name: 'Group A',
+    };
+
+    const grouped = actions.setElementGroupsViaAuthority(
+      '4key',
+      targets,
+      targetGroup,
+    );
+    targets[0]!.id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    targetGroup.name = 'Mutated';
+    await expect(grouped).resolves.toBe(true);
+    await expect(
+      actions.renameLayerGroupViaAuthority('4key', 'group-a', 'After'),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc.mock.calls[0]).toEqual([
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        targetGroup: {
+          kind: 'create',
+          id: 'group-a',
+          name: 'Group A',
+        },
+      },
+      0,
+      7,
+    ]);
+    expect(mocks.sendPluginRpc.mock.calls[1]).toEqual([
+      'layers:renameGroup',
+      { mode: '4key', groupId: 'group-a', name: 'After' },
+      1,
+      7,
+    ]);
+  });
+
+  it.each([
+    [
+      'setElementGroups',
+      () =>
+        actions.setElementGroupsViaAuthority(
+          '4key',
+          [
+            {
+              elementType: 'stat',
+              id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            },
+          ],
+          null,
+        ),
+    ],
+    [
+      'renameLayerGroup',
+      () => actions.renameLayerGroupViaAuthority('4key', 'group-a', 'After'),
+    ],
+  ] as const)('%s outcome-unknown은 replay하지 않는다', async (_label, run) => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+
+    await expect(run()).resolves.toBe(false);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
+  it.each(['MODEL_REVISION_STALE', 'PLUGIN_MODEL_REVISION_CONFLICT'])(
+    'setElementGroups %s은 frozen descriptor를 한 번만 replay한다',
+    async (errorCode) => {
+      mocks.sendPluginRpc
+        .mockResolvedValueOnce({
+          kind: 'error',
+          errorCode,
+          response: { modelRevision: 1 },
+        })
+        .mockResolvedValueOnce({
+          kind: 'ok',
+          response: { modelRevision: 2 },
+        });
+      const changed = actions.setElementGroupsViaAuthority(
+        '4key',
+        [
+          {
+            elementType: 'knob',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        { kind: 'existing', id: 'group-a' },
+      );
+      await vi.waitFor(() =>
+        expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+      );
+      actions.notePluginMirrorRevision(2);
+
+      await expect(changed).resolves.toBe(true);
+      expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+        mocks.sendPluginRpc.mock.calls[0]?.[1],
+      );
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+    },
+  );
+
   it.each(['MODEL_REVISION_STALE', 'PLUGIN_MODEL_REVISION_CONFLICT'])(
     'soundEnabled %s은 fresh snapshot 뒤 same generation과 bool을 한 번 재전송한다',
     async (errorCode) => {

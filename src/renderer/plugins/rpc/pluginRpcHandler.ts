@@ -81,8 +81,11 @@ import {
   patchKnobPropertiesByIds,
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
+  renameLayerGroupById,
+  setElementGroupsByTargets,
   setLayerGroupHidden,
 } from '@src/renderer/editor/runtime/elementOps';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type {
   BatchGeometryDescriptor,
   BatchGeometryTarget,
@@ -169,6 +172,9 @@ const hasExactKeys = (
     expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
   );
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const isCanonicalGestureId = (value: unknown): value is string =>
   typeof value === 'string' &&
@@ -1481,6 +1487,7 @@ const parseNativeLayerPropertyRequest = (
 const MAX_LAYER_REORDER_IDS = 4096;
 const MAX_LAYER_MODE_BYTES = 128;
 const MAX_LAYER_GROUP_ID_BYTES = 256;
+const MAX_LAYER_GROUP_NAME_BYTES = 1024;
 const textBytes = (value: string): number =>
   new TextEncoder().encode(value).length;
 const validWireId = (value: unknown): value is string =>
@@ -1504,6 +1511,93 @@ const parseLayerGroupVisibility = (
     return null;
   }
   return payload as { mode: string; groupId: string; hidden: boolean };
+};
+
+const parseSetElementGroups = (
+  payload: Record<string, unknown>,
+): {
+  mode: string;
+  targets: Array<{ elementType: NativeElementType; id: string }>;
+  targetGroup:
+    | { kind: 'existing'; id: string }
+    | { kind: 'create'; id: string; name: string }
+    | null;
+} | null => {
+  if (
+    !hasExactKeys(payload, ['mode', 'targets', 'targetGroup']) ||
+    typeof payload.mode !== 'string' ||
+    payload.mode.length === 0 ||
+    textBytes(payload.mode) > MAX_LAYER_MODE_BYTES ||
+    !Array.isArray(payload.targets) ||
+    payload.targets.length === 0 ||
+    payload.targets.length > MAX_LAYER_RPC_TARGETS
+  ) {
+    return null;
+  }
+  const targets: Array<{ elementType: NativeElementType; id: string }> = [];
+  const ids = new Set<string>();
+  for (const value of payload.targets) {
+    if (
+      !isRecord(value) ||
+      !hasExactKeys(value, ['elementType', 'id']) ||
+      !['key', 'stat', 'graph', 'knob'].includes(value.elementType as string) ||
+      !isNativeElementId(value.id) ||
+      ids.has(value.id)
+    ) {
+      return null;
+    }
+    ids.add(value.id);
+    targets.push({
+      elementType: value.elementType as NativeElementType,
+      id: value.id,
+    });
+  }
+  let targetGroup:
+    | { kind: 'existing'; id: string }
+    | { kind: 'create'; id: string; name: string }
+    | null = null;
+  if (payload.targetGroup !== null) {
+    if (!isRecord(payload.targetGroup)) return null;
+    const group = payload.targetGroup;
+    const create = group.kind === 'create';
+    if (
+      (group.kind !== 'existing' && !create) ||
+      !hasExactKeys(group, create ? ['kind', 'id', 'name'] : ['kind', 'id']) ||
+      typeof group.id !== 'string' ||
+      group.id.length === 0 ||
+      textBytes(group.id) > MAX_LAYER_GROUP_ID_BYTES ||
+      (create &&
+        (typeof group.name !== 'string' ||
+          group.name.length === 0 ||
+          textBytes(group.name) > MAX_LAYER_GROUP_NAME_BYTES))
+    ) {
+      return null;
+    }
+    targetGroup = create
+      ? { kind: 'create', id: group.id, name: group.name as string }
+      : { kind: 'existing', id: group.id };
+  }
+  return { mode: payload.mode, targets, targetGroup };
+};
+
+const parseRenameLayerGroup = (
+  payload: Record<string, unknown>,
+): { mode: string; groupId: string; name: string } | null => {
+  if (
+    !hasExactKeys(payload, ['mode', 'groupId', 'name']) ||
+    typeof payload.mode !== 'string' ||
+    payload.mode.length === 0 ||
+    textBytes(payload.mode) > MAX_LAYER_MODE_BYTES ||
+    typeof payload.groupId !== 'string' ||
+    payload.groupId.length === 0 ||
+    textBytes(payload.groupId) > MAX_LAYER_GROUP_ID_BYTES ||
+    typeof payload.name !== 'string' ||
+    payload.name.length === 0 ||
+    textBytes(payload.name) > MAX_LAYER_GROUP_NAME_BYTES
+  ) {
+    return null;
+  }
+  return payload as { mode: string; groupId: string; name: string };
 };
 
 const parseLayerReorderAnchors = (
@@ -2524,6 +2618,72 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           return;
         }
         console.error('Failed to patch panel native layer property', error);
+        respond(failure(envelope.requestId, 'PATCH_LAYER_PROPERTY_FAILED'));
+      });
+    return;
+  }
+
+  if (
+    envelope.operation === PLUGIN_RPC_OPERATIONS.setElementGroups ||
+    envelope.operation === PLUGIN_RPC_OPERATIONS.renameLayerGroup
+  ) {
+    const setRequest =
+      envelope.operation === PLUGIN_RPC_OPERATIONS.setElementGroups
+        ? parseSetElementGroups(envelope.payload)
+        : null;
+    const renameRequest =
+      envelope.operation === PLUGIN_RPC_OPERATIONS.renameLayerGroup
+        ? parseRenameLayerGroup(envelope.payload)
+        : null;
+    if (!setRequest && !renameRequest) {
+      respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
+      return;
+    }
+    const requestGeneration = envelope.authorityGeneration;
+    const generationLive = () =>
+      requestGeneration === getPluginAuthorityGeneration();
+    if (!generationLive()) {
+      respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+      return;
+    }
+    const options = {
+      preflight: () => {
+        if (!generationLive()) {
+          throw new Error('plugin authority generation changed');
+        }
+      },
+    };
+    const persisted = setRequest
+      ? setElementGroupsByTargets(
+          setRequest.mode,
+          setRequest.targets,
+          setRequest.targetGroup,
+          options,
+        )
+      : renameLayerGroupById(
+          renameRequest!.mode,
+          renameRequest!.groupId,
+          renameRequest!.name,
+          options,
+        );
+    void persisted
+      .then((applied) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        respond(
+          applied
+            ? success(envelope.requestId)
+            : failure(envelope.requestId, 'PATCH_LAYER_PROPERTY_FAILED'),
+        );
+      })
+      .catch((error) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        console.error('Failed to update panel layer groups', error);
         respond(failure(envelope.requestId, 'PATCH_LAYER_PROPERTY_FAILED'));
       });
     return;

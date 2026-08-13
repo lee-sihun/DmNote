@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import type { ElementIdSelection } from '@src/renderer/editor/runtime/elementPatch';
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
@@ -26,9 +27,6 @@ const NATIVE_ELEMENT_TYPES: readonly NativeElementType[] = [
   'knob',
 ];
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 // 선택 요소의 안정 ID를 그대로 캡처한다. index는 스냅샷 한정 locator라
 // 신원 재추론에 쓰지 않는다 (stale index가 다른 요소를 결합하는 오염 방지).
 // 합성 폴백 ID('key-0' 등, backfill 전 구형 데이터)가 하나라도 있으면 배치
@@ -42,7 +40,7 @@ export const captureBatchElementBinding = (
     if (!elements || elements.length === 0) continue;
     const ids: string[] = [];
     for (const element of elements) {
-      if (!UUID_PATTERN.test(element.id)) return LEGACY_BATCH_ELEMENT_BINDING;
+      if (!isNativeElementId(element.id)) return LEGACY_BATCH_ELEMENT_BINDING;
       ids.push(element.id);
     }
     selection[type] = ids;

@@ -342,6 +342,23 @@ pub(crate) fn validate_request_envelope(
                 ));
             }
 
+            let group_structural_count = ops
+                .iter()
+                .filter(|op| {
+                    matches!(
+                        op,
+                        crate::models::EditorOpV1::SetElementGroups { .. }
+                            | crate::models::EditorOpV1::RenameLayerGroup { .. }
+                    )
+                })
+                .count();
+            if group_structural_count > 0 && (ops.len() != 1 || group_structural_count != 1) {
+                return Err(EditorCommitError::validation(
+                    "INVALID_GROUP_STRUCTURAL_BATCH",
+                    "group structural operations must be the only editor op",
+                ));
+            }
+
             let mut ids = HashSet::with_capacity(ops.len());
             for op in ops {
                 let Some(id) = op.target_id() else {
@@ -351,6 +368,10 @@ pub(crate) fn validate_request_envelope(
                         }
                         crate::models::EditorOpV1::ReorderElements { .. } => {
                             validate_reorder_envelope(op)?;
+                        }
+                        crate::models::EditorOpV1::SetElementGroups { .. }
+                        | crate::models::EditorOpV1::RenameLayerGroup { .. } => {
+                            validate_group_structural_envelope(op)?;
                         }
                         _ => {}
                     }
@@ -640,6 +661,98 @@ fn validate_reorder_envelope(op: &crate::models::EditorOpV1) -> Result<(), Edito
                 "reorderElements group ID is empty or exceeds its limit",
             ));
         }
+    }
+    Ok(())
+}
+
+fn validate_group_structural_envelope(
+    op: &crate::models::EditorOpV1,
+) -> Result<(), EditorCommitError> {
+    use crate::models::{EditorOpV1, EditorTargetGroupV1};
+
+    let validate_mode = |mode: &str| {
+        if mode.is_empty() || mode.len() > MAX_MODE_ID_BYTES {
+            Err(EditorCommitError::validation(
+                "INVALID_MODE_ID",
+                "group structural mode must be non-empty and within the mode ID limit",
+            ))
+        } else {
+            Ok(())
+        }
+    };
+    let validate_group_id = |group_id: &str| {
+        if group_id.is_empty() || group_id.len() > MAX_GROUP_ID_BYTES {
+            Err(EditorCommitError::validation(
+                "INVALID_GROUP_ID",
+                "group ID must be non-empty and within its limit",
+            ))
+        } else {
+            Ok(())
+        }
+    };
+    let validate_group_name = |name: &str| {
+        if name.is_empty() || name.len() > MAX_GROUP_NAME_BYTES {
+            Err(EditorCommitError::validation(
+                "INVALID_GROUP_NAME",
+                "group name must be non-empty and within its limit",
+            ))
+        } else {
+            Ok(())
+        }
+    };
+
+    match op {
+        EditorOpV1::SetElementGroups {
+            mode,
+            targets,
+            target_group,
+        } => {
+            validate_mode(mode)?;
+            if !(1..=MAX_RENDER_ITEMS).contains(&targets.len()) {
+                return Err(EditorCommitError::validation(
+                    "INVALID_ELEMENT_GROUP_TARGET_COUNT",
+                    format!(
+                        "setElementGroups targets must contain between 1 and {MAX_RENDER_ITEMS} entries"
+                    ),
+                ));
+            }
+            let mut target_ids = HashSet::with_capacity(targets.len());
+            for target in targets {
+                if !crate::state::native_element_id::is_valid_element_id(&target.id) {
+                    return Err(EditorCommitError::validation(
+                        crate::state::native_element_id::INVALID_ELEMENT_ID,
+                        format!("setElementGroups target '{}' has an invalid ID", target.id),
+                    ));
+                }
+                if !target_ids.insert(target.id.as_str()) {
+                    return Err(EditorCommitError::validation(
+                        "DUPLICATE_ELEMENT_GROUP_TARGET",
+                        format!(
+                            "setElementGroups target '{}' appears more than once",
+                            target.id
+                        ),
+                    ));
+                }
+            }
+            match target_group {
+                Some(EditorTargetGroupV1::Existing { id }) => validate_group_id(id)?,
+                Some(EditorTargetGroupV1::Create { id, name }) => {
+                    validate_group_id(id)?;
+                    validate_group_name(name)?;
+                }
+                None => {}
+            }
+        }
+        EditorOpV1::RenameLayerGroup {
+            mode,
+            group_id,
+            name,
+        } => {
+            validate_mode(mode)?;
+            validate_group_id(group_id)?;
+            validate_group_name(name)?;
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -1946,10 +2059,11 @@ mod tests {
 
     use crate::models::{
         CustomTab, EditorBoundsV1, EditorCommitRequest, EditorDocumentV1,
-        EditorElementPropertyPatchV1, EditorElementTypeV1, EditorFrozenKeySlotV1,
-        EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1,
-        EditorZUpdateV1, ElementShadowSpec, GraphPosition, GraphStatType, GraphType, KeyPosition,
-        KnobPosition, LayerGroupDef, StatPosition, StatType,
+        EditorElementGroupTargetV1, EditorElementPropertyPatchV1, EditorElementTypeV1,
+        EditorFrozenKeySlotV1, EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1,
+        EditorOpV1, EditorPatchV1, EditorTargetGroupV1, EditorZUpdateV1, ElementShadowSpec,
+        GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition, LayerGroupDef,
+        StatPosition, StatType,
     };
 
     use super::*;
@@ -3337,6 +3451,182 @@ mod tests {
             let error = decode_editor_commit_request(wire).unwrap_err();
             assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
         }
+    }
+
+    #[test]
+    fn group_structural_wire_is_exact_tagged_required_and_sole() {
+        let target_id = Uuid::new_v4().to_string();
+        let target = EditorElementGroupTargetV1 {
+            element_type: EditorElementTypeV1::Key,
+            id: target_id.clone(),
+        };
+        let create = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: vec![target.clone()],
+            target_group: Some(EditorTargetGroupV1::Create {
+                id: " legacy group ".to_string(),
+                name: " Raw Name ".to_string(),
+            }),
+        };
+        let create_wire = serde_json::to_value(ops_request(vec![create])).unwrap();
+        assert_eq!(create_wire["ops"][0]["kind"], "setElementGroups");
+        assert_eq!(create_wire["ops"][0]["targetGroup"]["kind"], "create");
+        assert_eq!(create_wire["ops"][0]["targetGroup"]["id"], " legacy group ");
+        decode_editor_commit_request(create_wire.clone()).unwrap();
+
+        let ungroup = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: vec![target.clone()],
+            target_group: None,
+        };
+        let ungroup_wire = serde_json::to_value(ops_request(vec![ungroup])).unwrap();
+        assert!(ungroup_wire["ops"][0]["targetGroup"].is_null());
+        decode_editor_commit_request(ungroup_wire.clone()).unwrap();
+
+        let existing = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: vec![target],
+            target_group: Some(EditorTargetGroupV1::Existing {
+                id: "legacy-group".to_string(),
+            }),
+        };
+        let existing_wire = serde_json::to_value(ops_request(vec![existing])).unwrap();
+        assert_eq!(
+            existing_wire["ops"][0]["targetGroup"],
+            serde_json::json!({"kind": "existing", "id": "legacy-group"})
+        );
+        decode_editor_commit_request(existing_wire).unwrap();
+
+        let rename = EditorOpV1::RenameLayerGroup {
+            mode: " ".to_string(),
+            group_id: " ".to_string(),
+            name: " ".to_string(),
+        };
+        let rename_wire = serde_json::to_value(ops_request(vec![rename])).unwrap();
+        assert_eq!(rename_wire["ops"][0]["kind"], "renameLayerGroup");
+        decode_editor_commit_request(rename_wire.clone()).unwrap();
+
+        let mut missing_target_group = ungroup_wire.clone();
+        missing_target_group["ops"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("targetGroup");
+        let mut untagged = create_wire.clone();
+        untagged["ops"][0]["targetGroup"] = serde_json::json!({
+            "id": "group",
+            "name": "Group",
+        });
+        let mut existing_with_name = create_wire.clone();
+        existing_with_name["ops"][0]["targetGroup"] = serde_json::json!({
+            "kind": "existing",
+            "id": "group",
+            "name": "No rename",
+        });
+        let mut create_without_name = create_wire.clone();
+        create_without_name["ops"][0]["targetGroup"] = serde_json::json!({
+            "kind": "create",
+            "id": "group",
+        });
+        let mut target_extra = create_wire.clone();
+        target_extra["ops"][0]["targets"][0]["unexpected"] = serde_json::json!(true);
+        let mut group_extra = create_wire.clone();
+        group_extra["ops"][0]["targetGroup"]["unexpected"] = serde_json::json!(true);
+        let mut rename_extra = rename_wire;
+        rename_extra["ops"][0]["unexpected"] = serde_json::json!(true);
+        for invalid in [
+            missing_target_group,
+            untagged,
+            existing_with_name,
+            create_without_name,
+            target_extra,
+            group_extra,
+            rename_extra,
+        ] {
+            let error = decode_editor_commit_request(invalid).unwrap_err();
+            assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
+        }
+
+        let empty = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: Vec::new(),
+            target_group: None,
+        };
+        assert_eq!(
+            validation_code(&validate_request_envelope(&ops_request(vec![empty])).unwrap_err()),
+            Some("INVALID_ELEMENT_GROUP_TARGET_COUNT")
+        );
+        let at_limit = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: (0..MAX_RENDER_ITEMS)
+                .map(|index| EditorElementGroupTargetV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: Uuid::from_u128(index as u128 + 1).to_string(),
+                })
+                .collect(),
+            target_group: None,
+        };
+        validate_request_envelope(&ops_request(vec![at_limit.clone()])).unwrap();
+        let mut too_many = at_limit;
+        let EditorOpV1::SetElementGroups { targets, .. } = &mut too_many else {
+            unreachable!();
+        };
+        targets.push(EditorElementGroupTargetV1 {
+            element_type: EditorElementTypeV1::Key,
+            id: Uuid::from_u128(MAX_RENDER_ITEMS as u128 + 1).to_string(),
+        });
+        assert_eq!(
+            validation_code(&validate_request_envelope(&ops_request(vec![too_many])).unwrap_err()),
+            Some("INVALID_ELEMENT_GROUP_TARGET_COUNT")
+        );
+        let duplicate = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: vec![
+                EditorElementGroupTargetV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id: target_id.clone(),
+                },
+                EditorElementGroupTargetV1 {
+                    element_type: EditorElementTypeV1::Graph,
+                    id: target_id,
+                },
+            ],
+            target_group: None,
+        };
+        assert_eq!(
+            validation_code(&validate_request_envelope(&ops_request(vec![duplicate])).unwrap_err()),
+            Some("DUPLICATE_ELEMENT_GROUP_TARGET")
+        );
+
+        let accepted_uuid = Uuid::new_v4();
+        for id in [
+            accepted_uuid.simple().to_string(),
+            accepted_uuid.braced().to_string(),
+            accepted_uuid.urn().to_string(),
+            accepted_uuid.hyphenated().to_string().to_uppercase(),
+        ] {
+            let op = EditorOpV1::SetElementGroups {
+                mode: "4key".to_string(),
+                targets: vec![EditorElementGroupTargetV1 {
+                    element_type: EditorElementTypeV1::Key,
+                    id,
+                }],
+                target_group: None,
+            };
+            validate_request_envelope(&ops_request(vec![op])).unwrap();
+        }
+
+        let mixed = ops_request(vec![
+            EditorOpV1::RenameLayerGroup {
+                mode: "4key".to_string(),
+                group_id: "group".to_string(),
+                name: "Name".to_string(),
+            },
+            set_bounds_op(Uuid::new_v4().to_string(), EditorElementTypeV1::Key),
+        ]);
+        assert_eq!(
+            validation_code(&validate_request_envelope(&mixed).unwrap_err()),
+            Some("INVALID_GROUP_STRUCTURAL_BATCH")
+        );
     }
 
     #[test]

@@ -5,6 +5,8 @@
 
 import {
   patchNativeLayerPropertyViaAuthority,
+  renameLayerGroupViaAuthority,
+  setElementGroupsViaAuthority,
   setLayerGroupVisibilityViaAuthority,
   setPluginElementsHidden,
 } from '@plugins/rpc/pluginElementActions';
@@ -12,7 +14,6 @@ import { keysApi } from '@api/modules/keysApi';
 import {
   graphItemsApi,
   knobItemsApi,
-  layerGroupsApi,
   statItemsApi,
 } from '@api/modules/itemsApi';
 import { useState, useRef } from 'react';
@@ -40,10 +41,21 @@ import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozen
 import {
   patchElementHiddenById,
   patchElementLayerNameById,
+  renameLayerGroupById,
+  setElementGroupsByTargets,
   setLayerGroupHidden,
   setLayerGroupHiddenLegacy,
 } from '@src/renderer/editor/runtime/elementOps';
-import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import {
+  isSyntheticElementId,
+  resolveElementById,
+  type NativeElementType,
+} from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import type {
+  EditorElementGroupTargetV1,
+  EditorTargetLayerGroupV1,
+} from '@src/types/editor';
 
 // ============================================================================
 // 파라미터 / 반환 타입
@@ -64,6 +76,43 @@ interface UseLayerActionsParams {
 function hasChanged(current: unknown, next: unknown) {
   return stableStringify(current) !== stableStringify(next);
 }
+
+const stableSelectionGroupId = (
+  mode: string,
+  elements: readonly SelectedElement[],
+): { stable: boolean; groupId?: string } => {
+  const native = elements.filter(
+    (element): element is SelectedElement & { type: NativeElementType } =>
+      element.type === 'key' ||
+      element.type === 'stat' ||
+      element.type === 'graph' ||
+      element.type === 'knob',
+  );
+  if (
+    native.length === 0 ||
+    native.some(({ id }) => !isNativeElementId(id) || isSyntheticElementId(id))
+  ) {
+    return { stable: false };
+  }
+  const groupIds = new Set<string>();
+  for (const element of native) {
+    const locator = resolveElementById(element.type, element.id);
+    if (!locator || locator.mode !== mode) return { stable: true };
+    const record =
+      element.type === 'key'
+        ? useKeyStore.getState().canonicalPositions
+        : element.type === 'stat'
+        ? useStatItemStore.getState().positions
+        : element.type === 'graph'
+        ? useGraphItemStore.getState().positions
+        : useKnobItemStore.getState().positions;
+    const groupId = record[mode]?.[locator.index]?.groupId;
+    if (groupId) groupIds.add(groupId);
+  }
+  return groupIds.size === 1
+    ? { stable: true, groupId: [...groupIds][0] }
+    : { stable: true };
+};
 
 // ============================================================================
 // 훅
@@ -464,20 +513,11 @@ export function useLayerActions({
     );
     if (!currentGroup || currentGroup.name === trimmed) return;
 
-    const updated: LayerGroups = {
-      ...currentGroups,
-      [selectedKeyType]: currentModeGroups.map((group) =>
-        group.id === groupId ? { ...group, name: trimmed } : group,
-      ),
-    };
-
-    useLayerGroupStore.getState().setLayerGroups(updated);
     try {
-      await layerGroupsApi.update(updated);
+      await (window.__dmn_window_type === 'panel'
+        ? renameLayerGroupViaAuthority(selectedKeyType, groupId, trimmed)
+        : renameLayerGroupById(selectedKeyType, groupId, trimmed));
     } catch (error) {
-      if (useLayerGroupStore.getState().layerGroups === updated) {
-        useLayerGroupStore.getState().setLayerGroups(currentGroups);
-      }
       console.error('Failed to rename group', error);
     }
   };
@@ -497,6 +537,50 @@ export function useLayerActions({
     const selectedForUpdate =
       elementsOverride ?? useGridSelectionStore.getState().selectedElements;
     if (selectedForUpdate.length === 0) return false;
+
+    const nativeTargets = selectedForUpdate.flatMap(
+      (element): EditorElementGroupTargetV1[] =>
+        element.type === 'key' ||
+        element.type === 'stat' ||
+        element.type === 'graph' ||
+        element.type === 'knob'
+          ? [{ elementType: element.type, id: element.id }]
+          : [],
+    );
+    if (nativeTargets.length === 0) return false;
+    const stableTargets =
+      nativeTargets.every(
+        ({ id }) => isNativeElementId(id) && !isSyntheticElementId(id),
+      ) &&
+      new Set(nativeTargets.map(({ id }) => id)).size === nativeTargets.length;
+    if (stableTargets) {
+      let targetGroup: EditorTargetLayerGroupV1 | null = null;
+      if (targetGroupId) {
+        const currentGroups = useLayerGroupStore.getState().layerGroups;
+        const currentModeGroups = currentGroups[selectedKeyType] ?? [];
+        const creatingGroup = options?.layerGroupsForNormalization?.[
+          selectedKeyType
+        ]?.find(
+          (group) =>
+            group.id === targetGroupId &&
+            !currentModeGroups.some((current) => current.id === group.id),
+        );
+        targetGroup = creatingGroup
+          ? { kind: 'create', id: creatingGroup.id, name: creatingGroup.name }
+          : { kind: 'existing', id: targetGroupId };
+      }
+      return window.__dmn_window_type === 'panel'
+        ? setElementGroupsViaAuthority(
+            selectedKeyType,
+            nativeTargets,
+            targetGroup,
+          )
+        : setElementGroupsByTargets(
+            selectedKeyType,
+            nativeTargets,
+            targetGroup,
+          );
+    }
 
     const { canonicalPositions: pos } = useKeyStore.getState();
     const currentStatPositions = useStatItemStore.getState().positions;
@@ -760,14 +844,20 @@ export function useLayerActions({
       const graphPos = useGraphItemStore.getState().positions;
       const knobPos = useKnobItemStore.getState().positions;
 
-      const singleGroupId = resolveSingleGroupIdFromSelection(
+      const stableGroup = stableSelectionGroupId(
         selectedKeyType,
         selectedElements,
-        keyPos,
-        statPos,
-        graphPos,
-        knobPos,
       );
+      const singleGroupId = stableGroup.stable
+        ? stableGroup.groupId
+        : resolveSingleGroupIdFromSelection(
+            selectedKeyType,
+            selectedElements,
+            keyPos,
+            statPos,
+            graphPos,
+            knobPos,
+          );
 
       if (singleGroupId) {
         await setGroupIdOnSelected(singleGroupId);

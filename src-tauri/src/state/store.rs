@@ -4104,8 +4104,8 @@ mod gradient_real_data_simulation;
 mod tests {
     use super::{
         collect_local_font_paths, collect_local_image_path_keys, collect_local_image_paths,
-        collect_local_sound_path_keys, collect_local_sound_paths, purge_expired_trash_sessions_at,
-        recover_interrupted_processed_wav_replacements_with,
+        collect_local_sound_path_keys, collect_local_sound_paths, initialize_default_state,
+        purge_expired_trash_sessions_at, recover_interrupted_processed_wav_replacements_with,
         recover_interrupted_sound_deletions_with, stage_sound_files_for_deletion,
         sweep_unreferenced_asset_files, system_time_millis, AppStore, HistoryAuxChange,
         TrashSession, PROCESSED_WAV_TRANSACTION_LOCK, TRASH_RETENTION,
@@ -4118,12 +4118,13 @@ mod tests {
         models::{
             AppStoreData, CommittedEditorChange, CounterAnimationPreset, CounterAnimationSource,
             CustomCss, CustomFont, CustomTab, EditorBoundsV1, EditorCommitOrigin,
-            EditorCommitRequest, EditorDocumentV1, EditorElementPropertyPatchV1,
-            EditorElementTypeV1, EditorField, EditorFrozenElementV1, EditorFrozenKeySlotV1,
-            EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1, EditorZUpdateV1,
-            FontSettings, FontType, GestureCommitRequest, GesturePluginInstancesChange,
-            GraphPosition, GraphStatType, GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot,
-            KnobPosition, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
+            EditorCommitRequest, EditorDocumentV1, EditorElementGroupTargetV1,
+            EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
+            EditorFrozenKeySlotV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1,
+            EditorPatchV1, EditorTargetGroupV1, EditorZUpdateV1, FontSettings, FontType,
+            GestureCommitRequest, GesturePluginInstancesChange, GraphPosition, GraphStatType,
+            GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot, KnobPosition, LayerGroupDef,
+            OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
             PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
             SavedPluginInstance, SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource,
             StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
@@ -5486,6 +5487,290 @@ mod tests {
             .unwrap();
         drop(barrier);
         assert_eq!(store.editor_get().document, after);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn group_structural_ops_replay_reuse_and_round_trip_snapshot_history() {
+        let dir = test_directory("group-structural-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let setup = legacy_editor_commit(
+            &store,
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ],
+            |data| {
+                data.key_positions.get_mut("4key").unwrap()[0].group_id =
+                    Some("source-group".to_string());
+                data.key_positions.get_mut("4key").unwrap()[1].group_id =
+                    Some("source-group".to_string());
+                data.stat_positions.insert(
+                    "4key".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: KeyPosition {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            group_id: Some("source-group".to_string()),
+                            ..KeyPosition::default()
+                        },
+                    }],
+                );
+                data.graph_positions.insert(
+                    "4key".to_string(),
+                    vec![GraphPosition {
+                        stat_type: GraphStatType::Kps,
+                        graph_type: GraphType::Line,
+                        graph_speed: 100,
+                        graph_color: "#123456".to_string(),
+                        show_avg_line: false,
+                        position: KeyPosition {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            group_id: Some("source-group".to_string()),
+                            ..KeyPosition::default()
+                        },
+                    }],
+                );
+                data.knob_positions.insert(
+                    "4key".to_string(),
+                    vec![KnobPosition {
+                        axis_id: "axis".to_string(),
+                        sensitivity: 1.0,
+                        reverse: false,
+                        position: KeyPosition {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            group_id: Some("source-group".to_string()),
+                            ..KeyPosition::default()
+                        },
+                    }],
+                );
+                data.layer_groups.insert(
+                    "4key".to_string(),
+                    vec![LayerGroupDef {
+                        id: "source-group".to_string(),
+                        name: "Source".to_string(),
+                    }],
+                );
+            },
+        )
+        .unwrap();
+        let before = setup.document;
+        let targets = vec![
+            EditorElementGroupTargetV1 {
+                element_type: EditorElementTypeV1::Key,
+                id: before.key_positions["4key"][0].id.clone(),
+            },
+            EditorElementGroupTargetV1 {
+                element_type: EditorElementTypeV1::Stat,
+                id: before.stat_positions["4key"][0].position.id.clone(),
+            },
+            EditorElementGroupTargetV1 {
+                element_type: EditorElementTypeV1::Graph,
+                id: before.graph_positions["4key"][0].position.id.clone(),
+            },
+            EditorElementGroupTargetV1 {
+                element_type: EditorElementTypeV1::Knob,
+                id: before.knob_positions["4key"][0].position.id.clone(),
+            },
+        ];
+        let create = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: targets.clone(),
+            target_group: Some(EditorTargetGroupV1::Create {
+                id: "target-group".to_string(),
+                name: " Target ".to_string(),
+            }),
+        };
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(
+            store.editor_get().revision,
+            &mutation_id,
+            vec![create.clone()],
+        );
+        let history_before = store.history_status().history_revision;
+        let committed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            committed.result.op_results,
+            Some(vec![EditorOpResultV1 {
+                status: EditorOpResultStatusV1::Applied,
+                bounds: None,
+            }])
+        );
+        assert_eq!(
+            committed.result.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+                EditorField::LayerGroups,
+            ]
+        );
+        assert_eq!(store.history_status().history_revision, history_before + 1);
+        let after_set = committed.document.clone();
+        assert_eq!(
+            after_set.key_positions["4key"][1].group_id.as_deref(),
+            Some("source-group")
+        );
+        assert!(after_set.layer_groups["4key"]
+            .iter()
+            .any(|group| group.id == "source-group"));
+        assert!(after_set.layer_groups["4key"]
+            .iter()
+            .any(|group| group.id == "target-group" && group.name == " Target "));
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, committed.result);
+
+        let mut reused = request;
+        reused.ops = Some(vec![EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: targets.clone(),
+            target_group: None,
+        }]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let missing_revision = store.editor_get().revision;
+        let missing_history = store.history_status().history_revision;
+        let missing = store
+            .commit_editor_document(editor_ops_request(
+                missing_revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![EditorOpV1::SetElementGroups {
+                    mode: "4key".to_string(),
+                    targets: vec![
+                        targets[0].clone(),
+                        EditorElementGroupTargetV1 {
+                            element_type: EditorElementTypeV1::Key,
+                            id: uuid::Uuid::new_v4().to_string(),
+                        },
+                    ],
+                    target_group: None,
+                }],
+            ))
+            .unwrap();
+        assert_eq!(missing.result.revision, missing_revision);
+        assert_eq!(
+            missing.result.op_results.unwrap()[0].status,
+            EditorOpResultStatusV1::TargetMissing
+        );
+        assert!(missing.event.is_none());
+        assert_eq!(store.history_status().history_revision, missing_history);
+
+        let existing = EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: targets.clone(),
+            target_group: Some(EditorTargetGroupV1::Existing {
+                id: "target-group".to_string(),
+            }),
+        };
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![existing],
+            ))
+            .unwrap();
+        assert_eq!(
+            no_change.result.op_results.unwrap()[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_before + 1);
+
+        let counters = store.snapshot().key_counters;
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, before);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, after_set);
+
+        let rename = EditorOpV1::RenameLayerGroup {
+            mode: "4key".to_string(),
+            group_id: "target-group".to_string(),
+            name: " Renamed ".to_string(),
+        };
+        let rename_request = editor_ops_request(
+            store.editor_get().revision,
+            uuid::Uuid::new_v4().to_string(),
+            vec![rename.clone()],
+        );
+        let renamed = store
+            .commit_editor_document(rename_request.clone())
+            .unwrap();
+        assert_eq!(renamed.result.changed_fields, [EditorField::LayerGroups]);
+        assert_eq!(
+            renamed.result.op_results.as_ref().unwrap()[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        let after_rename = renamed.document.clone();
+        assert!(after_rename.layer_groups["4key"]
+            .iter()
+            .any(|group| group.id == "target-group" && group.name == " Renamed "));
+        let rename_replay = store.commit_editor_document(rename_request).unwrap();
+        assert!(rename_replay.replayed);
+        assert_eq!(rename_replay.result, renamed.result);
+
+        let rename_no_change = store
+            .commit_editor_document(editor_ops_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![rename],
+            ))
+            .unwrap();
+        assert_eq!(
+            rename_no_change.result.op_results.unwrap()[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert!(rename_no_change.event.is_none());
+
+        let undo_rename_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_rename_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_rename_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, after_set);
+
+        let redo_rename_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_rename_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_rename_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(store.editor_get().document, after_rename);
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
@@ -7011,6 +7296,97 @@ mod tests {
                 .is_ok_and(|id| id.get_version_num() == 4)));
 
         store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn alternate_uuid_spellings_remain_raw_distinct_through_load_bootstrap_and_event() {
+        let dir = test_directory("alternate-native-element-id-spellings-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let uuid = uuid::Uuid::new_v4();
+        let ids = vec![
+            uuid.simple().to_string(),
+            uuid.braced().to_string(),
+            uuid.urn().to_string(),
+            uuid.hyphenated().to_string().to_uppercase(),
+        ];
+        let mut data = initialize_default_state();
+        for (position, id) in data
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .iter_mut()
+            .zip(&ids)
+        {
+            position.id.clone_from(id);
+            position.hidden = false;
+        }
+        std::fs::write(
+            dir.join("store.json"),
+            serde_json::to_vec_pretty(&data).unwrap(),
+        )
+        .unwrap();
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let loaded = store.editor_get();
+        let loaded_ids = loaded.document.key_positions["4key"]
+            .iter()
+            .take(ids.len())
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(loaded_ids, ids);
+        crate::state::native_element_id::validate_document_element_ids(&loaded.document).unwrap();
+
+        let state = AppState::initialize(store).unwrap();
+        let bootstrap = state.bootstrap_payload();
+        assert_eq!(
+            bootstrap.positions["4key"]
+                .iter()
+                .take(ids.len())
+                .map(|position| position.id.clone())
+                .collect::<Vec<_>>(),
+            ids
+        );
+
+        let change = state
+            .store
+            .commit_editor_document(editor_ops_request(
+                bootstrap.editor_revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![patch_hidden_op(EditorElementTypeV1::Key, &ids[0], true)],
+            ))
+            .unwrap();
+        assert_eq!(
+            change.document.key_positions["4key"]
+                .iter()
+                .take(ids.len())
+                .map(|position| position.id.clone())
+                .collect::<Vec<_>>(),
+            ids
+        );
+        assert!(change.document.key_positions["4key"][0].hidden);
+        assert!(change.document.key_positions["4key"][1..ids.len()]
+            .iter()
+            .all(|position| !position.hidden));
+        let event_positions = change
+            .event
+            .as_ref()
+            .unwrap()
+            .patch
+            .key_positions
+            .as_ref()
+            .unwrap();
+        assert_eq!(
+            event_positions["4key"]
+                .iter()
+                .take(ids.len())
+                .map(|position| position.id.clone())
+                .collect::<Vec<_>>(),
+            ids
+        );
+
+        state.shutdown();
+        drop(state);
         let _ = std::fs::remove_dir_all(dir);
     }
 

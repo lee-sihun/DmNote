@@ -43,6 +43,8 @@ export const PLUGIN_RPC_OPERATIONS = {
   setLayerBounds: 'layers:setBounds',
   setLayerBatchGeometry: 'layers:setBatchGeometry',
   setLayerGroupVisibility: 'layers:setGroupVisibility',
+  setElementGroups: 'layers:setElementGroups',
+  renameLayerGroup: 'layers:renameGroup',
   updateCounterAnimationPreset: 'counterAnimation:updatePreset',
   deleteCounterAnimationPreset: 'counterAnimation:deletePreset',
 } as const;
@@ -51,6 +53,15 @@ export type LayerDeleteTarget = {
   elementType: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
   id: string;
 };
+
+export type ElementGroupTarget = {
+  elementType: NativeElementType;
+  id: string;
+};
+
+export type TargetLayerGroup =
+  | { kind: 'existing'; id: string }
+  | { kind: 'create'; id: string; name: string };
 
 export interface NativeLayerPropertyTarget {
   elementType: NativeElementType;
@@ -451,6 +462,46 @@ export const setLayerGroupVisibilityViaAuthority = (
       payload: { mode, groupId, hidden },
       authorityGeneration,
       retryPolicy: 'none',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const setElementGroupsViaAuthority = (
+  mode: string,
+  targets: readonly ElementGroupTarget[],
+  targetGroup: TargetLayerGroup | null,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.setElementGroups,
+      payload: {
+        mode,
+        targets: targets.map((target) => ({ ...target })),
+        targetGroup: targetGroup ? { ...targetGroup } : null,
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const renameLayerGroupViaAuthority = (
+  mode: string,
+  groupId: string,
+  name: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.renameLayerGroup,
+      payload: { mode, groupId, name },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
       resolve,
     });
     void ensureQueueDrain();

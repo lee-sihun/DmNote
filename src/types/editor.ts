@@ -15,6 +15,7 @@ import {
   type StatItemPositions,
 } from '@src/types/key/statItems';
 import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { ElementShadowValuePatch } from '@src/types/key/shadows';
 import {
   isNotePaintPropertyPatchV1,
@@ -63,6 +64,22 @@ export interface EditorDocumentV1 {
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
   layerGroups: LayerGroups;
+}
+
+export type CanonicalKeyPosition = KeyPosition & { id: string };
+export type CanonicalStatItemPosition = StatItemPosition & { id: string };
+export type CanonicalGraphItemPosition = GraphItemPosition & { id: string };
+export type CanonicalKnobItemPosition = KnobItemPosition & { id: string };
+
+export interface CanonicalEditorDocumentV1
+  extends Omit<
+    EditorDocumentV1,
+    'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
+  > {
+  keyPositions: Record<string, CanonicalKeyPosition[]>;
+  statPositions: Record<string, CanonicalStatItemPosition[]>;
+  graphPositions: Record<string, CanonicalGraphItemPosition[]>;
+  knobPositions: Record<string, CanonicalKnobItemPosition[]>;
 }
 
 export type EditorPatchV1 = {
@@ -155,6 +172,29 @@ export interface EditorReorderElementsOpV1 {
   zUpdates: EditorReorderZUpdateV1[];
   groupUpdates: EditorReorderGroupUpdateV1[];
   completeModeOrder: boolean;
+}
+
+export interface EditorElementGroupTargetV1 {
+  elementType: EditorElementTypeV1;
+  id: string;
+}
+
+export type EditorTargetLayerGroupV1 =
+  | { kind: 'existing'; id: string }
+  | { kind: 'create'; id: string; name: string };
+
+export interface EditorSetElementGroupsOpV1 {
+  kind: 'setElementGroups';
+  mode: string;
+  targets: EditorElementGroupTargetV1[];
+  targetGroup: EditorTargetLayerGroupV1 | null;
+}
+
+export interface EditorRenameLayerGroupOpV1 {
+  kind: 'renameLayerGroup';
+  mode: string;
+  groupId: string;
+  name: string;
 }
 
 interface EditorElementPropertyValuesV1 {
@@ -380,6 +420,8 @@ export type EditorOpV1 =
   | EditorDeleteElementOpV1
   | EditorInsertFrozenElementsOpV1
   | EditorReorderElementsOpV1
+  | EditorSetElementGroupsOpV1
+  | EditorRenameLayerGroupOpV1
   | EditorPatchElementOpV1
   | EditorSetKeySlotOpV1;
 
@@ -1028,6 +1070,38 @@ export function assertEditorDocument(
   assertLayerGroupReferences(value, label);
 }
 
+export function assertCanonicalEditorDocument(
+  value: unknown,
+  label = 'canonical editor document',
+): asserts value is CanonicalEditorDocumentV1 {
+  assertEditorDocument(value, label);
+  const document = value as EditorDocumentV1;
+  const seen = new Set<string>();
+  const collections = [
+    ['keyPositions', document.keyPositions],
+    ['statPositions', document.statPositions],
+    ['graphPositions', document.graphPositions],
+    ['knobPositions', document.knobPositions],
+  ] as const;
+  for (const [field, collection] of collections) {
+    for (const [mode, positions] of Object.entries(collection)) {
+      for (const [index, position] of positions.entries()) {
+        if (!isNativeElementId(position.id)) {
+          throw new EditorProtocolError(
+            `${label}.${field}.${mode}[${index}].id is invalid`,
+          );
+        }
+        if (seen.has(position.id)) {
+          throw new EditorProtocolError(
+            `${label}.${field}.${mode}[${index}].id is not globally unique`,
+          );
+        }
+        seen.add(position.id);
+      }
+    }
+  }
+}
+
 export function assertEditorPatch(
   value: unknown,
   label = 'editor patch',
@@ -1068,7 +1142,7 @@ export function assertEditorGetResult(value: EditorGetResult): void {
     throw new EditorProtocolError('editor_get returned an empty result');
   }
   assertSafeEditorRevision(value.revision, 'editor_get revision');
-  assertEditorDocument(value.document, 'editor_get document');
+  assertCanonicalEditorDocument(value.document, 'editor_get document');
 }
 
 function assertEditorBounds(
@@ -1165,7 +1239,10 @@ export function assertEditorOpsV1(
   const soleOps = value.filter(
     (op) =>
       isRecord(op) &&
-      (op.kind === 'insertFrozenElements' || op.kind === 'reorderElements'),
+      (op.kind === 'insertFrozenElements' ||
+        op.kind === 'reorderElements' ||
+        op.kind === 'setElementGroups' ||
+        op.kind === 'renameLayerGroup'),
   );
   if (soleOps.length > 0 && value.length !== 1) {
     throw new EditorProtocolError(
@@ -1580,6 +1657,81 @@ export function assertEditorOpsV1(
       }
       return;
     }
+    if (op.kind === 'setElementGroups') {
+      assertExactKeys(op, ['kind', 'mode', 'targets', 'targetGroup'], opLabel);
+      if (
+        typeof op.mode !== 'string' ||
+        op.mode.length === 0 ||
+        new TextEncoder().encode(op.mode).length > 128 ||
+        !Array.isArray(op.targets) ||
+        op.targets.length === 0 ||
+        op.targets.length > 4096
+      ) {
+        throw new EditorProtocolError(`${opLabel} is invalid`);
+      }
+      const targetIds = new Set<string>();
+      op.targets.forEach((target, targetIndex) => {
+        const targetLabel = `${opLabel}.targets[${targetIndex}]`;
+        if (!isRecord(target)) {
+          throw new EditorProtocolError(`${targetLabel} is invalid`);
+        }
+        assertExactKeys(target, ['elementType', 'id'], targetLabel);
+        if (
+          !['key', 'stat', 'graph', 'knob'].includes(
+            target.elementType as string,
+          ) ||
+          typeof target.id !== 'string' ||
+          !isNativeElementId(target.id) ||
+          targetIds.has(target.id)
+        ) {
+          throw new EditorProtocolError(`${targetLabel} is invalid`);
+        }
+        targetIds.add(target.id);
+      });
+      if (op.targetGroup !== null) {
+        if (!isRecord(op.targetGroup)) {
+          throw new EditorProtocolError(`${opLabel}.targetGroup is invalid`);
+        }
+        const targetGroup = op.targetGroup;
+        const isExisting = targetGroup.kind === 'existing';
+        const isCreate = targetGroup.kind === 'create';
+        assertExactKeys(
+          targetGroup,
+          isCreate ? ['kind', 'id', 'name'] : ['kind', 'id'],
+          `${opLabel}.targetGroup`,
+        );
+        if (
+          (!isExisting && !isCreate) ||
+          typeof targetGroup.id !== 'string' ||
+          targetGroup.id.length === 0 ||
+          new TextEncoder().encode(targetGroup.id).length > 256 ||
+          (isCreate &&
+            (typeof targetGroup.name !== 'string' ||
+              targetGroup.name.length === 0 ||
+              new TextEncoder().encode(targetGroup.name).length > 1024))
+        ) {
+          throw new EditorProtocolError(`${opLabel}.targetGroup is invalid`);
+        }
+      }
+      return;
+    }
+    if (op.kind === 'renameLayerGroup') {
+      assertExactKeys(op, ['kind', 'mode', 'groupId', 'name'], opLabel);
+      if (
+        typeof op.mode !== 'string' ||
+        op.mode.length === 0 ||
+        new TextEncoder().encode(op.mode).length > 128 ||
+        typeof op.groupId !== 'string' ||
+        op.groupId.length === 0 ||
+        new TextEncoder().encode(op.groupId).length > 256 ||
+        typeof op.name !== 'string' ||
+        op.name.length === 0 ||
+        new TextEncoder().encode(op.name).length > 1024
+      ) {
+        throw new EditorProtocolError(`${opLabel} is invalid`);
+      }
+      return;
+    }
     if (op.kind === 'setKeySlot') {
       assertExactKeys(op, ['kind', 'id', 'slot'], opLabel);
       if (typeof op.slot !== 'string') {
@@ -1880,6 +2032,46 @@ export function assertEditorOpCommitResult(
       }
       return;
     }
+    if (op.kind === 'setElementGroups') {
+      if ('bounds' in result && result.bounds !== undefined) {
+        throw new EditorProtocolError(
+          `editor_commit opResults[${index}] is invalid for setElementGroups`,
+        );
+      }
+      const touched = new Set<EditorField>(['layerGroups']);
+      op.targets.forEach((target) =>
+        touched.add(positionFields[target.elementType]),
+      );
+      touched.forEach((field) => allowedFields.add(field));
+      if (result.status === 'applied') {
+        if (value.changedFields.length === 0) {
+          throw new EditorProtocolError(
+            'editor ops changedFields does not match opResults',
+          );
+        }
+      } else if (value.changedFields.length !== 0) {
+        throw new EditorProtocolError(
+          'editor ops changedFields does not match opResults',
+        );
+      }
+      return;
+    }
+    if (op.kind === 'renameLayerGroup') {
+      if ('bounds' in result && result.bounds !== undefined) {
+        throw new EditorProtocolError(
+          `editor_commit opResults[${index}] is invalid for renameLayerGroup`,
+        );
+      }
+      allowedFields.add('layerGroups');
+      if (result.status === 'applied') {
+        requiredFields.add('layerGroups');
+      } else if (value.changedFields.length !== 0) {
+        throw new EditorProtocolError(
+          'editor ops changedFields does not match opResults',
+        );
+      }
+      return;
+    }
     if (op.kind === 'reorderElements') {
       if (
         result.status === 'targetMissing' ||
@@ -1981,6 +2173,26 @@ export function assertEditorCommittedEvent(value: EditorCommittedV1): void {
   }
   assertEditorFields(value.changedFields, 'editor:committed changedFields');
   assertEditorPatch(value.patch, 'editor:committed patch');
+  const suppliedIds = new Set<string>();
+  for (const field of POSITION_COLLECTION_FIELDS) {
+    const collection = value.patch[field];
+    if (collection === undefined) continue;
+    for (const [mode, positions] of Object.entries(collection)) {
+      for (const [index, position] of positions.entries()) {
+        if (!isNativeElementId(position.id)) {
+          throw new EditorProtocolError(
+            `editor:committed patch.${field}.${mode}[${index}].id is invalid`,
+          );
+        }
+        if (suppliedIds.has(position.id)) {
+          throw new EditorProtocolError(
+            `editor:committed patch.${field}.${mode}[${index}].id is duplicated`,
+          );
+        }
+        suppliedIds.add(position.id);
+      }
+    }
+  }
   const patchFields = EDITOR_FIELDS.filter(
     (field) => value.patch[field] !== undefined,
   );

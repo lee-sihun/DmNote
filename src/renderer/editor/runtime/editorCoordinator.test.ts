@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+import {
+  projectLayerGroupRename,
+  projectStableElementGroups,
+} from '@utils/layerGroupUtils';
 
 import {
   EditorProtocolError,
@@ -127,7 +131,10 @@ class FakeTransport implements EditorCoordinatorTransport {
                           changedFields.length > 0 ? 'applied' : 'noChange',
                         bounds: op.bounds,
                       }
-                    : { status: 'applied' },
+                    : {
+                        status:
+                          changedFields.length > 0 ? 'applied' : 'noChange',
+                      },
               ),
             }
           : {}),
@@ -316,6 +323,36 @@ const applyOpsForTest = (
         );
         return true;
       });
+      return;
+    }
+    if (op.kind === 'setElementGroups') {
+      const projected = projectStableElementGroups({
+        mode: op.mode,
+        targets: op.targets,
+        targetGroup: op.targetGroup,
+        keyPositions: next.keyPositions,
+        statPositions: next.statPositions,
+        graphPositions: next.graphPositions,
+        knobPositions: next.knobPositions,
+        layerGroups: next.layerGroups,
+      });
+      if (projected) {
+        next.keyPositions = projected.keyPositions;
+        next.statPositions = projected.statPositions;
+        next.graphPositions = projected.graphPositions;
+        next.knobPositions = projected.knobPositions;
+        next.layerGroups = projected.layerGroups;
+      }
+      return;
+    }
+    if (op.kind === 'renameLayerGroup') {
+      const groups = projectLayerGroupRename({
+        mode: op.mode,
+        groupId: op.groupId,
+        name: op.name,
+        layerGroups: next.layerGroups,
+      });
+      if (groups) next.layerGroups = groups;
       return;
     }
     const record = next[fields[op.elementType]] as Record<
@@ -619,6 +656,98 @@ describe('editor document helpers', () => {
     ).toHaveLength(0);
     harness.coordinator.stop();
   });
+
+  it.each([
+    ['state', 'state'],
+    ['patch', 'patch'],
+    ['semantic', 'semantic'],
+    ['gesture', 'gesture'],
+  ] as const)(
+    'invalid current ID는 %s 경로의 낙관 적용과 wire를 모두 막는다',
+    async (_label, path) => {
+      const base = makeDocument();
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      const invalidCurrent = structuredClone(base);
+      invalidCurrent.keyPositions['4key'][0].id = undefined;
+      harness.setLocal(invalidCurrent);
+      const commitCallback = vi.fn(async () => ({
+        revision: 0,
+        changedFields: [],
+      }));
+
+      const committing =
+        path === 'state'
+          ? harness.coordinator.commitEditorState()
+          : path === 'patch'
+          ? harness.coordinator.commitPatch({
+              schemaVersion: 1,
+              keys: { '4key': ['B'] },
+            })
+          : path === 'semantic'
+          ? harness.coordinator.commitSemanticOpsInternal([
+              {
+                kind: 'patchElement',
+                elementType: 'key',
+                id: base.keyPositions['4key'][0].id!,
+                patch: { hidden: true },
+              },
+            ])
+          : harness.coordinator.commitGesture(
+              { schemaVersion: 1, keys: { '4key': ['B'] } },
+              'canonical-id-gesture',
+              commitCallback,
+            );
+
+      await expect(committing).rejects.toBeInstanceOf(EditorProtocolError);
+      expect(harness.transport.commitMock).not.toHaveBeenCalled();
+      expect(commitCallback).not.toHaveBeenCalled();
+      expect(
+        harness.applications.filter(({ reason }) => reason === 'localPatch'),
+      ).toHaveLength(0);
+      harness.coordinator.stop();
+    },
+  );
+
+  it.each(['state', 'patch', 'gesture'] as const)(
+    'invalid target ID는 %s 경로의 낙관 적용과 wire를 모두 막는다',
+    async (path) => {
+      const base = makeDocument();
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      const invalidPositions = structuredClone(base.keyPositions);
+      invalidPositions['4key'][0].id = 'key-0';
+      const commitCallback = vi.fn(async () => ({
+        revision: 0,
+        changedFields: [],
+      }));
+
+      const committing =
+        path === 'state'
+          ? harness.coordinator.commitEditorState({
+              ...base,
+              keyPositions: invalidPositions,
+            })
+          : path === 'patch'
+          ? harness.coordinator.commitPatch({
+              schemaVersion: 1,
+              keyPositions: invalidPositions,
+            })
+          : harness.coordinator.commitGesture(
+              { schemaVersion: 1, keyPositions: invalidPositions },
+              'canonical-target-gesture',
+              commitCallback,
+            );
+
+      await expect(committing).rejects.toBeInstanceOf(EditorProtocolError);
+      expect(harness.transport.commitMock).not.toHaveBeenCalled();
+      expect(commitCallback).not.toHaveBeenCalled();
+      expect(
+        harness.applications.filter(({ reason }) => reason === 'localPatch'),
+      ).toHaveLength(0);
+      harness.coordinator.stop();
+    },
+  );
 });
 
 describe('EditorSaveCoordinator', () => {
@@ -711,7 +840,7 @@ describe('EditorSaveCoordinator', () => {
           position.id =
             current?.id && valueWithoutId(current) === valueWithoutId(position)
               ? current.id
-              : `fresh-${(issued += 1)}`;
+              : `00000000-0000-4000-8000-${String(++issued).padStart(12, '0')}`;
         });
       }
       const changedFields = getChangedEditorFields(before, next);
@@ -1946,6 +2075,43 @@ describe('EditorSaveCoordinator', () => {
     harness.coordinator.stop();
   });
 
+  it('committed patch가 기존 collection과 ID 충돌하면 권위 문서로 재동기화한다', async () => {
+    const base = makeDocument('A');
+    const remote = makeDocument('B');
+    const duplicateId = base.keyPositions['4key'][0].id!;
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    harness.transport.canonical = { revision: 1, document: remote };
+    const invalidEvent: EditorCommittedV1 = {
+      schemaVersion: 1,
+      revision: 1,
+      mutationId: 'external-duplicate',
+      changedFields: ['statPositions'],
+      patch: {
+        schemaVersion: 1,
+        statPositions: {
+          '4key': [
+            {
+              ...createDefaultKeyPosition(),
+              id: duplicateId,
+              statType: 'kps',
+            },
+          ],
+        },
+      },
+    };
+
+    harness.transport.emit(invalidEvent);
+    await vi.waitFor(() =>
+      expect(harness.coordinator.getState().revision).toBe(1),
+    );
+
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(harness.getLocal()).toEqual(remote);
+    expect(harness.coordinator.getState().lastAck).toEqual(remote);
+    harness.coordinator.stop();
+  });
+
   it('resynchronizes a revision gap and ignores an older event', async () => {
     const base = makeDocument();
     const remote = withGroups({ ...base, keys: { '4key': ['C'] } }, 'remote');
@@ -1964,6 +2130,32 @@ describe('EditorSaveCoordinator', () => {
     harness.transport.emit(eventFor(2, 'external-2', base, remote));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(harness.transport.getMock).toHaveBeenCalledTimes(2);
+    harness.coordinator.stop();
+  });
+
+  it('revision gap의 첫 canonical 응답이 invalid여도 한 번만 preview를 정리한다', async () => {
+    const base = makeDocument('A');
+    const remote = makeDocument('B');
+    const invalid = structuredClone(remote);
+    invalid.keyPositions['4key'][0].id = undefined;
+    const onCommittedApplied = vi.fn();
+    const harness = createHarness(base, { onCommittedApplied });
+    await harness.coordinator.start();
+    harness.transport.getMock
+      .mockResolvedValueOnce({ revision: 3, document: invalid })
+      .mockResolvedValueOnce({ revision: 3, document: remote });
+
+    harness.transport.emit({
+      ...eventFor(3, 'external-invalid-gap', base, remote),
+      gestureIds: ['00000000-0000-4000-8000-000000000001'],
+    });
+
+    await vi.waitFor(() =>
+      expect(harness.coordinator.getState().revision).toBe(3),
+    );
+    expect(harness.transport.getMock).toHaveBeenCalledTimes(3);
+    expect(onCommittedApplied).toHaveBeenCalledOnce();
+    expect(harness.getLocal()).toEqual(remote);
     harness.coordinator.stop();
   });
 
@@ -4307,7 +4499,8 @@ describe('commitSemanticOpsInternal', () => {
   it('note numeric projection은 nullable clear와 0을 구분하고 siblings를 보존한다', async () => {
     const ids = Array.from(
       { length: 5 },
-      (_, index) => `00000000-0000-4000-8000-0000000001${index}`,
+      (_, index) =>
+        `00000000-0000-4000-8000-${String(160 + index).padStart(12, '0')}`,
     );
     const base = makeDocument();
     base.keyPositions = {
@@ -4542,6 +4735,209 @@ describe('commitSemanticOpsInternal', () => {
     });
     expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
     harness.coordinator.stop();
+  });
+
+  it('setElementGroups projection은 membership과 empty definition만 바꾸고 raw siblings를 보존한다', async () => {
+    const keyId = '00000000-0000-4000-8000-0000000001c0';
+    const statId = '00000000-0000-4000-8000-0000000001c1';
+    const base = withStableId(keyId);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      groupId: 'source',
+      zIndex: 55,
+      className: 'key-sibling',
+    };
+    base.statPositions['4key'] = [
+      {
+        ...base.keyPositions['4key'][0],
+        id: statId,
+        statType: 'kps',
+        className: 'stat-sibling',
+      },
+    ] as never;
+    base.layerGroups = {
+      '4key': [{ id: 'source', name: 'Source' }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'setElementGroups',
+        mode: '4key',
+        targets: [
+          { elementType: 'key', id: keyId },
+          { elementType: 'stat', id: statId },
+        ],
+        targetGroup: { kind: 'create', id: 'target', name: 'Target' },
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      groupId: 'target',
+      zIndex: 55,
+      className: 'key-sibling',
+    });
+    expect(outcome.document.statPositions['4key'][0]).toMatchObject({
+      groupId: 'target',
+      className: 'stat-sibling',
+    });
+    expect(outcome.document.layerGroups['4key']).toEqual([
+      { id: 'target', name: 'Target' },
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('renameLayerGroup projection은 해당 mode definition name만 바꾼다', async () => {
+    const base = withStableId('00000000-0000-4000-8000-0000000001c2');
+    base.layerGroups = {
+      '4key': [{ id: 'group-a', name: 'Before' }],
+      '5key': [{ id: 'group-a', name: 'Other Mode' }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'renameLayerGroup',
+        mode: '4key',
+        groupId: 'group-a',
+        name: 'After',
+      },
+    ]);
+
+    expect(outcome.document.layerGroups).toEqual({
+      '4key': [{ id: 'group-a', name: 'After' }],
+      '5key': [{ id: 'group-a', name: 'Other Mode' }],
+    });
+    harness.coordinator.stop();
+  });
+
+  it('frozen header ungroup은 이후 같은 group에 들어온 newcomer와 definition을 보존한다', async () => {
+    const frozenId = '00000000-0000-4000-8000-0000000001c3';
+    const newcomerId = '00000000-0000-4000-8000-0000000001c4';
+    const base = withStableId(frozenId);
+    base.keyPositions['4key'] = [
+      { ...base.keyPositions['4key'][0], id: frozenId, groupId: 'group-a' },
+      {
+        ...base.keyPositions['4key'][0],
+        id: newcomerId,
+        groupId: 'group-a',
+        className: 'newcomer',
+      },
+    ];
+    base.keys['4key'] = ['A', 'B'];
+    base.layerGroups = {
+      '4key': [{ id: 'group-a', name: 'Group A' }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'setElementGroups',
+        mode: '4key',
+        targets: [{ elementType: 'key', id: frozenId }],
+        targetGroup: null,
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0].groupId).toBeUndefined();
+    expect(outcome.document.keyPositions['4key'][1]).toMatchObject({
+      id: newcomerId,
+      groupId: 'group-a',
+      className: 'newcomer',
+    });
+    expect(outcome.document.layerGroups['4key']).toEqual([
+      { id: 'group-a', name: 'Group A' },
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('setElementGroups fixed op는 conflict 최신 문서에도 frozen targets만 다시 적용한다', async () => {
+    const frozenId = '00000000-0000-4000-8000-0000000001c5';
+    const newcomerId = '00000000-0000-4000-8000-0000000001c6';
+    const base = withStableId(frozenId);
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.layerGroups = {
+      '4key': [{ id: 'group-a', name: 'Group A' }],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    const latest = structuredClone(base);
+    latest.keys['4key'].push('B');
+    latest.keyPositions['4key'].push({
+      ...latest.keyPositions['4key'][0],
+      id: newcomerId,
+      groupId: 'group-a',
+    });
+    harness.transport.commitMock
+      .mockImplementationOnce(async () => {
+        harness.transport.canonical = { revision: 1, document: latest };
+        throw revisionConflict();
+      })
+      .mockImplementationOnce(original);
+    const op = {
+      kind: 'setElementGroups' as const,
+      mode: '4key',
+      targets: [{ elementType: 'key' as const, id: frozenId }],
+      targetGroup: null,
+    };
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([op]);
+
+    expect(harness.transport.commitMock.mock.calls[0][0].ops).toEqual([op]);
+    expect(harness.transport.commitMock.mock.calls[1][0].ops).toEqual([op]);
+    expect(outcome.document.keyPositions['4key'][1]).toMatchObject({
+      id: newcomerId,
+      groupId: 'group-a',
+    });
+    expect(outcome.document.layerGroups['4key']).toEqual([
+      { id: 'group-a', name: 'Group A' },
+    ]);
+    harness.coordinator.stop();
+  });
+
+  it('setElementGroups targetMissing과 noChange는 canonical projection을 유지한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001c7';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.layerGroups = {
+      '4key': [{ id: 'group-a', name: 'Group A' }],
+    };
+    const op = {
+      kind: 'setElementGroups' as const,
+      mode: '4key',
+      targets: [{ elementType: 'key' as const, id }],
+      targetGroup: { kind: 'existing' as const, id: 'group-a' },
+    };
+    const noChangeHarness = createHarness(base);
+    await noChangeHarness.coordinator.start();
+
+    const noChange =
+      await noChangeHarness.coordinator.commitSemanticOpsInternal([op]);
+
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(base);
+    noChangeHarness.coordinator.stop();
+
+    const missingHarness = createHarness(base);
+    await missingHarness.coordinator.start();
+    missingHarness.transport.commitMock.mockResolvedValueOnce({
+      revision: 0,
+      changedFields: [],
+      opResults: [{ status: 'targetMissing' }],
+    });
+
+    const missing = await missingHarness.coordinator.commitSemanticOpsInternal([
+      op,
+    ]);
+
+    expect(missing.opResults).toEqual([{ status: 'targetMissing' }]);
+    expect(missingHarness.transport.getMock).toHaveBeenCalledTimes(2);
+    expect(missing.document).toEqual(base);
+    missingHarness.coordinator.stop();
   });
 
   it('setKeySlot은 최신 paired ID index의 slot만 바꾼다', async () => {

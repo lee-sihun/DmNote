@@ -5,6 +5,10 @@ import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { LayerGroups, LayerGroupDef } from '@src/types/layerGroups';
+import type {
+  EditorElementGroupTargetV1,
+  EditorTargetLayerGroupV1,
+} from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 export const isPluginVisibleInMode = (
@@ -163,6 +167,10 @@ export function applyGroupIdToSelectedElements(params: {
   const nextKnobMode = [...(knobPositions[mode] || [])];
 
   let changed = false;
+  let keyChanged = false;
+  let statChanged = false;
+  let graphChanged = false;
+  let knobChanged = false;
 
   selectedElements.forEach((element) => {
     if (!isGroupableElement(element)) return;
@@ -171,6 +179,7 @@ export function applyGroupIdToSelectedElements(params: {
       const current = nextKeyMode[element.index];
       if (!current || current.groupId === targetGroupId) return;
       nextKeyMode[element.index] = { ...current, groupId: targetGroupId };
+      keyChanged = true;
       changed = true;
       return;
     }
@@ -179,6 +188,7 @@ export function applyGroupIdToSelectedElements(params: {
       const current = nextStatMode[element.index];
       if (!current || current.groupId === targetGroupId) return;
       nextStatMode[element.index] = { ...current, groupId: targetGroupId };
+      statChanged = true;
       changed = true;
       return;
     }
@@ -187,6 +197,7 @@ export function applyGroupIdToSelectedElements(params: {
       const current = nextGraphMode[element.index];
       if (!current || current.groupId === targetGroupId) return;
       nextGraphMode[element.index] = { ...current, groupId: targetGroupId };
+      graphChanged = true;
       changed = true;
       return;
     }
@@ -194,15 +205,14 @@ export function applyGroupIdToSelectedElements(params: {
     const current = nextKnobMode[element.index];
     if (!current || current.groupId === targetGroupId) return;
     nextKnobMode[element.index] = { ...current, groupId: targetGroupId };
+    knobChanged = true;
     changed = true;
   });
 
-  if (changed) {
-    nextKeyPositions[mode] = nextKeyMode;
-    nextStatPositions[mode] = nextStatMode;
-    nextGraphPositions[mode] = nextGraphMode;
-    nextKnobPositions[mode] = nextKnobMode;
-  }
+  if (keyChanged) nextKeyPositions[mode] = nextKeyMode;
+  if (statChanged) nextStatPositions[mode] = nextStatMode;
+  if (graphChanged) nextGraphPositions[mode] = nextGraphMode;
+  if (knobChanged) nextKnobPositions[mode] = nextKnobMode;
 
   return {
     keyPositions: changed ? nextKeyPositions : keyPositions,
@@ -210,6 +220,127 @@ export function applyGroupIdToSelectedElements(params: {
     graphPositions: changed ? nextGraphPositions : graphPositions,
     knobPositions: changed ? nextKnobPositions : knobPositions,
     changed,
+  };
+}
+
+export interface StableElementGroupProjection {
+  keyPositions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
+  layerGroups: LayerGroups;
+  changed: boolean;
+}
+
+export function projectStableElementGroups(params: {
+  mode: string;
+  targets: readonly EditorElementGroupTargetV1[];
+  targetGroup: EditorTargetLayerGroupV1 | null;
+  keyPositions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
+  layerGroups: LayerGroups;
+}): StableElementGroupProjection | null {
+  const {
+    mode,
+    targets,
+    targetGroup,
+    keyPositions,
+    statPositions,
+    graphPositions,
+    knobPositions,
+    layerGroups,
+  } = params;
+  const records = {
+    key: keyPositions,
+    stat: statPositions,
+    graph: graphPositions,
+    knob: knobPositions,
+  } as const;
+  const selectedElements: SelectedElement[] = [];
+  for (const target of targets) {
+    const positions = records[target.elementType][mode] ?? [];
+    const index = positions.findIndex((position) => position?.id === target.id);
+    if (index < 0) return null;
+    selectedElements.push({
+      type: target.elementType,
+      id: target.id,
+      index,
+    });
+  }
+
+  const currentModeGroups = layerGroups[mode] ?? [];
+  let nextLayerGroups = layerGroups;
+  if (targetGroup?.kind === 'existing') {
+    if (!currentModeGroups.some((group) => group.id === targetGroup.id)) {
+      return null;
+    }
+  } else if (targetGroup?.kind === 'create') {
+    const existing = currentModeGroups.find(
+      (group) => group.id === targetGroup.id,
+    );
+    if (existing) return null;
+    nextLayerGroups = {
+      ...layerGroups,
+      [mode]: [
+        ...currentModeGroups,
+        { id: targetGroup.id, name: targetGroup.name },
+      ],
+    };
+  }
+
+  const grouped = applyGroupIdToSelectedElements({
+    mode,
+    selectedElements,
+    keyPositions,
+    statPositions,
+    graphPositions,
+    knobPositions,
+    targetGroupId: targetGroup?.id,
+  });
+  const targetTypes = new Set(targets.map((target) => target.elementType));
+  const normalized = normalizeLayerGroupsForMode({
+    mode,
+    keyPositions: targetTypes.has('key') ? grouped.keyPositions : keyPositions,
+    statPositions: targetTypes.has('stat')
+      ? grouped.statPositions
+      : statPositions,
+    graphPositions: targetTypes.has('graph')
+      ? grouped.graphPositions
+      : graphPositions,
+    knobPositions: targetTypes.has('knob')
+      ? grouped.knobPositions
+      : knobPositions,
+    layerGroups: nextLayerGroups,
+  });
+  return {
+    keyPositions: normalized.keyPositions,
+    statPositions: normalized.statPositions,
+    graphPositions: normalized.graphPositions,
+    knobPositions: normalized.knobPositions,
+    layerGroups: normalized.layerGroups,
+    changed:
+      grouped.changed ||
+      normalized.positionsChanged ||
+      normalized.groupsChanged ||
+      nextLayerGroups !== layerGroups,
+  };
+}
+
+export function projectLayerGroupRename(params: {
+  mode: string;
+  groupId: string;
+  name: string;
+  layerGroups: LayerGroups;
+}): LayerGroups | null {
+  const modeGroups = params.layerGroups[params.mode] ?? [];
+  if (!modeGroups.some((group) => group.id === params.groupId)) return null;
+  return {
+    ...params.layerGroups,
+    [params.mode]: modeGroups.map((group) =>
+      group.id === params.groupId ? { ...group, name: params.name } : group,
+    ),
   };
 }
 

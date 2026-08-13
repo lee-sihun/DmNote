@@ -5,8 +5,31 @@ const runtime = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: runtime.invoke }));
 
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
-import { EditorProtocolError, assertEditorOpsV1 } from '@src/types/editor';
-import { editorCommitRaw } from './editorApi';
+import {
+  EditorProtocolError,
+  assertEditorCommittedEvent,
+  assertEditorOpsV1,
+} from '@src/types/editor';
+import { editorApi, editorCommitRaw } from './editorApi';
+
+import type { EditorCommittedV1, EditorDocumentV1 } from '@src/types/editor';
+
+const canonicalDocument = (): EditorDocumentV1 => ({
+  schemaVersion: 1,
+  keys: { '4key': ['A'] },
+  keyPositions: {
+    '4key': [
+      {
+        ...createDefaultKeyPosition(),
+        id: '00000000-0000-4000-8000-000000000001',
+      },
+    ],
+  },
+  statPositions: {},
+  graphPositions: {},
+  knobPositions: {},
+  layerGroups: {},
+});
 
 describe('editorCommitRaw semantic op protocol', () => {
   beforeEach(() => {
@@ -303,6 +326,53 @@ describe('editorCommitRaw semantic op protocol', () => {
     expect(() =>
       assertEditorOpsV1([{ ...valid, mode: '한'.repeat(43) }]),
     ).toThrow(EditorProtocolError);
+  });
+
+  it('group structural ops는 exact sole payload와 native UUID targets만 수용한다', () => {
+    const set = {
+      kind: 'setElementGroups' as const,
+      mode: '4key',
+      targets: [
+        {
+          elementType: 'key' as const,
+          id: '00000000-0000-4000-8000-000000000031',
+        },
+      ],
+      targetGroup: { kind: 'create' as const, id: 'group-a', name: 'Group A' },
+    };
+    const rename = {
+      kind: 'renameLayerGroup' as const,
+      mode: '4key',
+      groupId: 'group-a',
+      name: 'After',
+    };
+    expect(() => assertEditorOpsV1([set])).not.toThrow();
+    expect(() => assertEditorOpsV1([rename])).not.toThrow();
+    expect(() =>
+      assertEditorOpsV1([
+        set,
+        {
+          kind: 'deleteElement',
+          elementType: 'key',
+          id: set.targets[0].id,
+        },
+      ]),
+    ).toThrow(EditorProtocolError);
+    for (const invalid of [
+      { ...set, targets: [] },
+      { ...set, targets: [{ elementType: 'key', id: 'key-0' }] },
+      { ...set, targets: [...set.targets, set.targets[0]] },
+      {
+        ...set,
+        targetGroup: { kind: 'existing', id: 'group-a', name: 'extra' },
+      },
+      { ...rename, name: '' },
+      { ...rename, extra: true },
+    ]) {
+      expect(() => assertEditorOpsV1([invalid as never])).toThrow(
+        EditorProtocolError,
+      );
+    }
   });
 
   it('patchElement와 setKeySlot은 좁은 exact payload만 수용한다', () => {
@@ -935,6 +1005,88 @@ describe('editorCommitRaw semantic op protocol', () => {
       opResults: [{ status: 'applied' }],
     });
     await expect(editorCommitRaw(request)).rejects.toBeInstanceOf(
+      EditorProtocolError,
+    );
+  });
+});
+
+describe('editor canonical ID ingress', () => {
+  beforeEach(() => {
+    runtime.invoke.mockReset();
+    window.__dmn_runtime = 'tauri';
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'key-0'],
+    ['nil', '00000000-0000-0000-0000-000000000000'],
+  ])('editor_get은 %s native ID를 거절한다', async (_label, id) => {
+    const document = canonicalDocument();
+    document.keyPositions['4key'][0] = {
+      ...document.keyPositions['4key'][0],
+      id,
+    };
+    runtime.invoke.mockResolvedValueOnce({ revision: 0, document });
+
+    await expect(editorApi.get()).rejects.toBeInstanceOf(EditorProtocolError);
+    expect(runtime.invoke).toHaveBeenCalledOnce();
+  });
+
+  it('editor_get은 collection 전체의 raw ID 중복을 거절한다', async () => {
+    const document = canonicalDocument();
+    document.statPositions['4key'] = [
+      {
+        ...createDefaultKeyPosition(),
+        id: document.keyPositions['4key'][0].id,
+        statType: 'kps',
+      },
+    ];
+    runtime.invoke.mockResolvedValueOnce({ revision: 0, document });
+
+    await expect(editorApi.get()).rejects.toBeInstanceOf(EditorProtocolError);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'key-0'],
+    ['nil', '00000000-0000-0000-0000-000000000000'],
+  ])('committed patch는 %s native ID를 거절한다', (_label, id) => {
+    const position = { ...createDefaultKeyPosition(), id };
+    const event: EditorCommittedV1 = {
+      schemaVersion: 1,
+      revision: 1,
+      mutationId: 'external-invalid-id',
+      changedFields: ['keyPositions'],
+      patch: {
+        schemaVersion: 1,
+        keyPositions: { '4key': [position] },
+      },
+    };
+
+    expect(() => assertEditorCommittedEvent(event)).toThrow(
+      EditorProtocolError,
+    );
+  });
+
+  it('committed patch는 collection 사이 raw ID 중복을 거절한다', () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const event: EditorCommittedV1 = {
+      schemaVersion: 1,
+      revision: 1,
+      mutationId: 'external-duplicate-id',
+      changedFields: ['keyPositions', 'statPositions'],
+      patch: {
+        schemaVersion: 1,
+        keyPositions: {
+          '4key': [{ ...createDefaultKeyPosition(), id }],
+        },
+        statPositions: {
+          '4key': [{ ...createDefaultKeyPosition(), id, statType: 'kps' }],
+        },
+      },
+    };
+
+    expect(() => assertEditorCommittedEvent(event)).toThrow(
       EditorProtocolError,
     );
   });

@@ -8,7 +8,6 @@ import React, {
 import {
   graphItemsApi,
   knobItemsApi,
-  layerGroupsApi,
   statItemsApi,
 } from '@api/modules/itemsApi';
 import { useTranslation } from '@contexts/useTranslation';
@@ -58,6 +57,7 @@ import {
   patchCounterStrokeViaAuthority,
   patchCounterFillViaAuthority,
   patchFontColorViaAuthority,
+  renameLayerGroupViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -111,6 +111,7 @@ import {
 import {
   commitBatchGeometryByIds,
   patchElementLayerNameById,
+  renameLayerGroupById,
   commitElementGeometryById,
   patchActiveImageById,
   patchActiveImageFitById,
@@ -954,16 +955,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
     if (!currentGroup || currentGroup.name === trimmed) return;
 
-    const updated = {
-      ...currentGroups,
-      [selectedKeyType]: currentModeGroups.map((group) =>
-        group.id === groupId ? { ...group, name: trimmed } : group,
-      ),
-    };
-
-    useLayerGroupStore.getState().setLayerGroups(updated);
     try {
-      await layerGroupsApi.update(updated);
+      await (window.__dmn_window_type === 'panel'
+        ? renameLayerGroupViaAuthority(selectedKeyType, groupId, trimmed)
+        : renameLayerGroupById(selectedKeyType, groupId, trimmed));
     } catch (error) {
       console.error('Failed to rename group', error);
     }

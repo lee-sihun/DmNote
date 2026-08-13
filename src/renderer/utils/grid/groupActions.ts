@@ -10,12 +10,56 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { setElementGroupsByTargets } from '@src/renderer/editor/runtime/elementOps';
+import { setElementGroupsViaAuthority } from '@plugins/rpc/pluginElementActions';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import {
+  isSyntheticElementId,
+  resolveElementById,
+} from '@src/renderer/editor/model/elementIdMap';
 import {
   applyGroupIdToSelectedElements,
   buildNextLayerGroupName,
   normalizeLayerGroupsForMode,
   resolveSingleGroupIdFromSelection,
 } from '@utils/layerGroupUtils';
+import type { EditorElementGroupTargetV1 } from '@src/types/editor';
+
+const stableGroupTargets = (
+  elements: readonly SelectedElement[],
+): EditorElementGroupTargetV1[] | null => {
+  const targets = elements.flatMap((element) =>
+    element.type === 'key' ||
+    element.type === 'stat' ||
+    element.type === 'graph' ||
+    element.type === 'knob'
+      ? [{ elementType: element.type, id: element.id }]
+      : [],
+  );
+  if (targets.length === 0) return [];
+  return targets.every(
+    ({ id }) => isNativeElementId(id) && !isSyntheticElementId(id),
+  ) && new Set(targets.map(({ id }) => id)).size === targets.length
+    ? targets
+    : null;
+};
+
+const currentGroupId = (
+  mode: string,
+  target: EditorElementGroupTargetV1,
+): string | undefined => {
+  const locator = resolveElementById(target.elementType, target.id);
+  if (!locator || locator.mode !== mode) return undefined;
+  const record =
+    target.elementType === 'key'
+      ? useKeyStore.getState().canonicalPositions
+      : target.elementType === 'stat'
+      ? useStatItemStore.getState().positions
+      : target.elementType === 'graph'
+      ? useGraphItemStore.getState().positions
+      : useKnobItemStore.getState().positions;
+  return record[mode]?.[locator.index]?.groupId;
+};
 
 /**
  * 선택된 요소들을 그룹화
@@ -27,6 +71,35 @@ export async function groupSelectedElements(
   newGroupLabel: string,
 ): Promise<boolean> {
   if (selectedElements.length === 0) return false;
+
+  const stableTargets = stableGroupTargets(selectedElements);
+  if (stableTargets?.length === 0) return false;
+  if (stableTargets) {
+    const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
+    const groupIds = new Set(
+      stableTargets
+        .map((target) => currentGroupId(selectedKeyType, target))
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    const existingId = groupIds.size === 1 ? [...groupIds][0] : undefined;
+    const targetGroup = existingId
+      ? ({ kind: 'existing', id: existingId } as const)
+      : ({
+          kind: 'create',
+          id: crypto.randomUUID(),
+          name: buildNextLayerGroupName(
+            newGroupLabel,
+            currentLayerGroups[selectedKeyType] ?? [],
+          ),
+        } as const);
+    return window.__dmn_window_type === 'panel'
+      ? setElementGroupsViaAuthority(
+          selectedKeyType,
+          stableTargets,
+          targetGroup,
+        )
+      : setElementGroupsByTargets(selectedKeyType, stableTargets, targetGroup);
+  }
 
   // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
   const { canonicalPositions: positions } = useKeyStore.getState();
@@ -121,6 +194,14 @@ export async function ungroupSelectedElements(
   selectedElements: SelectedElement[],
 ): Promise<boolean> {
   if (selectedElements.length === 0) return false;
+
+  const stableTargets = stableGroupTargets(selectedElements);
+  if (stableTargets?.length === 0) return false;
+  if (stableTargets) {
+    return window.__dmn_window_type === 'panel'
+      ? setElementGroupsViaAuthority(selectedKeyType, stableTargets, null)
+      : setElementGroupsByTargets(selectedKeyType, stableTargets, null);
+  }
 
   const { canonicalPositions: positions } = useKeyStore.getState();
   const statPos = useStatItemStore.getState().positions;

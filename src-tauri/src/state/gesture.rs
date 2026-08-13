@@ -154,9 +154,9 @@ pub(crate) fn validate_gesture_commit_request(
 mod tests {
     use super::*;
     use crate::models::{
-        EditorBoundsV1, EditorElementPropertyPatchV1, EditorElementTypeV1, EditorFrozenKeySlotV1,
-        EditorGroupUpdateV1, EditorOpV1, EditorPatchV1, EditorZUpdateV1,
-        GesturePluginInstancesChange, EDITOR_OPS_VERSION,
+        EditorBoundsV1, EditorElementGroupTargetV1, EditorElementPropertyPatchV1,
+        EditorElementTypeV1, EditorFrozenKeySlotV1, EditorGroupUpdateV1, EditorOpV1, EditorPatchV1,
+        EditorTargetGroupV1, EditorZUpdateV1, GesturePluginInstancesChange, EDITOR_OPS_VERSION,
     };
 
     fn gesture_request(plugin_ids: &[String]) -> GestureCommitRequest {
@@ -331,6 +331,97 @@ mod tests {
 
         for wire in [unknown_z, unknown_group, missing_group_id] {
             let error = decode_gesture_commit_request(wire).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
+    }
+
+    #[test]
+    fn gesture_group_structural_wire_is_exact_tagged_and_required_nullable() {
+        let target = EditorElementGroupTargetV1 {
+            element_type: EditorElementTypeV1::Key,
+            id: uuid::Uuid::new_v4().to_string(),
+        };
+        let mut request = gesture_request(&["plugin-a".to_string()]);
+        request.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        request.editor_ops = Some(vec![EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: vec![target.clone()],
+            target_group: Some(EditorTargetGroupV1::Create {
+                id: " legacy group ".to_string(),
+                name: " Raw Name ".to_string(),
+            }),
+        }]);
+        let create = serde_json::to_value(request).unwrap();
+        assert_eq!(
+            create["editorOps"][0]["targetGroup"],
+            serde_json::json!({
+                "kind": "create",
+                "id": " legacy group ",
+                "name": " Raw Name ",
+            })
+        );
+        let decoded = decode_gesture_commit_request(create.clone()).unwrap();
+        validate_gesture_commit_request(&decoded).unwrap();
+
+        let mut ungroup_request = gesture_request(&["plugin-a".to_string()]);
+        ungroup_request.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        ungroup_request.editor_ops = Some(vec![EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: vec![target],
+            target_group: None,
+        }]);
+        let ungroup = serde_json::to_value(ungroup_request).unwrap();
+        assert!(ungroup["editorOps"][0]["targetGroup"].is_null());
+        let decoded = decode_gesture_commit_request(ungroup.clone()).unwrap();
+        validate_gesture_commit_request(&decoded).unwrap();
+
+        let mut rename_request = gesture_request(&["plugin-a".to_string()]);
+        rename_request.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        rename_request.editor_ops = Some(vec![EditorOpV1::RenameLayerGroup {
+            mode: "4key".to_string(),
+            group_id: "legacy-group".to_string(),
+            name: "Name".to_string(),
+        }]);
+        let rename = serde_json::to_value(rename_request).unwrap();
+        assert_eq!(rename["editorOps"][0]["groupId"], "legacy-group");
+        let decoded = decode_gesture_commit_request(rename.clone()).unwrap();
+        validate_gesture_commit_request(&decoded).unwrap();
+
+        let mut missing_target_group = ungroup.clone();
+        missing_target_group["editorOps"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("targetGroup");
+        let mut untagged = create.clone();
+        untagged["editorOps"][0]["targetGroup"] = serde_json::json!({
+            "id": "group",
+            "name": "Group",
+        });
+        let mut combined = create.clone();
+        combined["editorOps"][0]["targetGroup"] = serde_json::json!({
+            "kind": "existing",
+            "id": "group",
+            "name": "No rename",
+        });
+        let mut target_extra = create.clone();
+        target_extra["editorOps"][0]["targets"][0]["unexpected"] = serde_json::json!(true);
+        let mut group_extra = create;
+        group_extra["editorOps"][0]["targetGroup"]["unexpected"] = serde_json::json!(true);
+        let mut rename_extra = rename;
+        rename_extra["editorOps"][0]["unexpected"] = serde_json::json!(true);
+
+        for invalid in [
+            missing_target_group,
+            untagged,
+            combined,
+            target_extra,
+            group_extra,
+            rename_extra,
+        ] {
+            let error = decode_gesture_commit_request(invalid).unwrap_err();
             assert_eq!(
                 validation_code(error).as_deref(),
                 Some("INVALID_REQUEST_PAYLOAD")

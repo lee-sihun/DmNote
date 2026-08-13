@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   captureBatchElementBinding,
+  LEGACY_BATCH_ELEMENT_BINDING,
   useBatchElementBinding,
   type BatchElementBinding,
 } from './useBatchElementBinding';
@@ -36,6 +37,28 @@ describe('captureBatchElementBinding', () => {
 
     expect(binding.binding).toBe('session-mode');
     expect(binding.selection).toEqual({});
+  });
+
+  it.each([
+    ['simple', 'aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa'],
+    ['uppercase', 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA'],
+    ['braced', '{aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa}'],
+    ['urn', 'urn:uuid:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+  ])('Rust가 허용하는 %s UUID를 안정 ID로 캡처한다', (_label, id) => {
+    expect(captureBatchElementBinding({ key: [{ id }] })).toEqual({
+      binding: 'element-id',
+      selection: { key: [id] },
+    });
+  });
+
+  it.each([
+    ['nil', '00000000-0000-0000-0000-000000000000'],
+    ['trimmed', ` ${ID_A}`],
+    ['uppercase urn prefix', 'URN:UUID:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+  ])('Rust가 거절하는 %s ID는 legacy로 보낸다', (_label, id) => {
+    expect(captureBatchElementBinding({ key: [{ id }] })).toBe(
+      LEGACY_BATCH_ELEMENT_BINDING,
+    );
   });
 });
 

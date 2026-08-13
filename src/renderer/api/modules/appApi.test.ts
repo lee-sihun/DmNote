@@ -33,6 +33,23 @@ import {
   appApi,
   runAfterEditorFlush,
 } from './appApi';
+import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+
+const bootstrapPayload = () => ({
+  keys: { '4key': ['A'] },
+  positions: {
+    '4key': [
+      {
+        ...createDefaultKeyPosition(),
+        id: '00000000-0000-4000-8000-000000000001',
+      },
+    ],
+  },
+  statPositions: {},
+  graphPositions: {},
+  knobPositions: {},
+  layerGroups: {},
+});
 
 describe('runAfterEditorFlush', () => {
   afterEach(() => {
@@ -61,6 +78,44 @@ describe('runAfterEditorFlush', () => {
 
     expect(result).toBe('done');
     expect(order).toEqual(['flush', 'quit']);
+  });
+
+  it('bootstrap native ID가 canonical일 때만 payload를 반환한다', async () => {
+    invoke.mockResolvedValueOnce(bootstrapPayload());
+
+    await expect(appApi.bootstrap()).resolves.toMatchObject({
+      positions: {
+        '4key': [{ id: '00000000-0000-4000-8000-000000000001' }],
+      },
+    });
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'key-0'],
+    ['nil', '00000000-0000-0000-0000-000000000000'],
+  ])('bootstrap의 %s native ID를 반환 전에 거절한다', async (_label, id) => {
+    const payload = bootstrapPayload();
+    if (id === undefined) delete payload.positions['4key'][0].id;
+    else payload.positions['4key'][0].id = id;
+    invoke.mockResolvedValueOnce(payload);
+
+    await expect(appApi.bootstrap()).rejects.toThrow();
+  });
+
+  it('bootstrap의 전역 중복 native ID를 반환 전에 거절한다', async () => {
+    const payload = bootstrapPayload();
+    payload.statPositions = {
+      '4key': [
+        {
+          ...payload.positions['4key'][0],
+          statType: 'kps',
+        },
+      ],
+    };
+    invoke.mockResolvedValueOnce(payload);
+
+    await expect(appApi.bootstrap()).rejects.toThrow();
   });
 
   it('cancels the lifecycle action when saving fails', async () => {
