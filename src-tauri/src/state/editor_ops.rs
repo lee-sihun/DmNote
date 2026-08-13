@@ -791,6 +791,11 @@ pub(crate) fn prepare_editor_ops_transition(
                     | EditorElementPropertyPatchV1::CounterAlign(_)
                     | EditorElementPropertyPatchV1::CounterAlignMode(_)
                     | EditorElementPropertyPatchV1::CounterGap(_)
+                    | EditorElementPropertyPatchV1::CounterFontSize(_)
+                    | EditorElementPropertyPatchV1::CounterFontWeight(_)
+                    | EditorElementPropertyPatchV1::CounterFontItalic(_)
+                    | EditorElementPropertyPatchV1::CounterFontUnderline(_)
+                    | EditorElementPropertyPatchV1::CounterFontStrikethrough(_)
             ) {
                 if !matches!(
                     element_type,
@@ -800,6 +805,26 @@ pub(crate) fn prepare_editor_ops_transition(
                         "ELEMENT_TYPE_MISMATCH",
                         format!("editor op {op_index} counter target must be key or stat"),
                     ));
+                }
+                if let EditorElementPropertyPatchV1::CounterFontSize(patch) = patch {
+                    if !(8..=72).contains(&patch.counter_font_size) {
+                        return Err(EditorCommitError::validation(
+                            "COUNTER_FONT_SIZE_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} counter font size must be between 8 and 72"
+                            ),
+                        ));
+                    }
+                }
+                if let EditorElementPropertyPatchV1::CounterFontWeight(patch) = patch {
+                    if !(100..=900).contains(&patch.counter_font_weight) {
+                        return Err(EditorCommitError::validation(
+                            "COUNTER_FONT_WEIGHT_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} counter font weight must be between 100 and 900"
+                            ),
+                        ));
+                    }
                 }
             } else if matches!(
                 patch,
@@ -1237,6 +1262,51 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.counter.gap = patch.counter_gap;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterFontSize(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.font_size == patch.counter_font_size {
+                            false
+                        } else {
+                            position.counter.font_size = patch.counter_font_size;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterFontWeight(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.font_weight == patch.counter_font_weight {
+                            false
+                        } else {
+                            position.counter.font_weight = patch.counter_font_weight;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterFontItalic(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.font_italic == patch.counter_font_italic {
+                            false
+                        } else {
+                            position.counter.font_italic = patch.counter_font_italic;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterFontUnderline(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.font_underline == patch.counter_font_underline {
+                            false
+                        } else {
+                            position.counter.font_underline = patch.counter_font_underline;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterFontStrikethrough(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.font_strikethrough == patch.counter_font_strikethrough {
+                            false
+                        } else {
+                            position.counter.font_strikethrough = patch.counter_font_strikethrough;
                             true
                         }
                     }
@@ -4313,6 +4383,262 @@ mod tests {
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
             assert_eq!(store.key_positions["4key"][0].counter, originals[0]);
         }
+    }
+
+    #[test]
+    fn counter_typography_patches_preserve_siblings_and_validate_types_and_ranges_atomically() {
+        let mut store = store_with_every_reorder_type();
+        let key_ids = store.key_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        let first_stat = store.stat_positions["4key"][0].clone();
+        for _ in 0..2 {
+            let mut stat = first_stat.clone();
+            stat.position.id = uuid::Uuid::new_v4().to_string();
+            store.stat_positions.get_mut("4key").unwrap().push(stat);
+        }
+        let stat_ids = store.stat_positions["4key"]
+            .iter()
+            .take(3)
+            .map(|position| position.position.id.clone())
+            .collect::<Vec<_>>();
+        for counter in store.key_positions.get_mut("4key").unwrap()[..2]
+            .iter_mut()
+            .map(|position| &mut position.counter)
+            .chain(
+                store.stat_positions.get_mut("4key").unwrap()[..3]
+                    .iter_mut()
+                    .map(|position| &mut position.position.counter),
+            )
+        {
+            counter.font_size = 16;
+            counter.font_weight = 400;
+            counter.font_italic = false;
+            counter.font_underline = false;
+            counter.font_strikethrough = false;
+            counter.font_family = Some("font-sibling".to_string());
+            counter.fill.idle = "fill-sibling".to_string();
+            counter.stroke.active = "stroke-sibling".to_string();
+            counter.placement = crate::models::KeyCounterPlacement::Outside;
+            counter.animation.preset_id = Some("builtin-linear".to_string());
+        }
+        let originals = [
+            store.key_positions["4key"][0].counter.clone(),
+            store.key_positions["4key"][1].counter.clone(),
+            store.stat_positions["4key"][0].position.counter.clone(),
+            store.stat_positions["4key"][1].position.counter.clone(),
+            store.stat_positions["4key"][2].position.counter.clone(),
+        ];
+        let patches = [
+            EditorElementPropertyPatchV1::CounterFontSize(
+                crate::models::EditorCounterFontSizePropertyPatchV1 {
+                    counter_font_size: 72,
+                },
+            ),
+            EditorElementPropertyPatchV1::CounterFontWeight(
+                crate::models::EditorCounterFontWeightPropertyPatchV1 {
+                    counter_font_weight: 900,
+                },
+            ),
+            EditorElementPropertyPatchV1::CounterFontItalic(
+                crate::models::EditorCounterFontItalicPropertyPatchV1 {
+                    counter_font_italic: true,
+                },
+            ),
+            EditorElementPropertyPatchV1::CounterFontUnderline(
+                crate::models::EditorCounterFontUnderlinePropertyPatchV1 {
+                    counter_font_underline: true,
+                },
+            ),
+            EditorElementPropertyPatchV1::CounterFontStrikethrough(
+                crate::models::EditorCounterFontStrikethroughPropertyPatchV1 {
+                    counter_font_strikethrough: true,
+                },
+            ),
+        ];
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &key_ids[0], patches[0].clone()),
+            patch_property_op(EditorElementTypeV1::Key, &key_ids[1], patches[1].clone()),
+            patch_property_op(EditorElementTypeV1::Stat, &stat_ids[0], patches[2].clone()),
+            patch_property_op(EditorElementTypeV1::Stat, &stat_ids[1], patches[3].clone()),
+            patch_property_op(EditorElementTypeV1::Stat, &stat_ids[2], patches[4].clone()),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                patches[0].clone(),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let actual = [
+            transition.candidate.key_positions["4key"][0]
+                .counter
+                .clone(),
+            transition.candidate.key_positions["4key"][1]
+                .counter
+                .clone(),
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .counter
+                .clone(),
+            transition.candidate.stat_positions["4key"][1]
+                .position
+                .counter
+                .clone(),
+            transition.candidate.stat_positions["4key"][2]
+                .position
+                .counter
+                .clone(),
+        ];
+        let mut expected = originals.clone();
+        expected[0].font_size = 72;
+        expected[1].font_weight = 900;
+        expected[2].font_italic = true;
+        expected[3].font_underline = true;
+        expected[4].font_strikethrough = true;
+        assert_eq!(actual, expected);
+        assert_eq!(
+            transition.changed_fields,
+            [EditorField::KeyPositions, EditorField::StatPositions]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        for (element_type, patch) in [
+            (EditorElementTypeV1::Graph, patches[0].clone()),
+            (EditorElementTypeV1::Knob, patches[1].clone()),
+            (EditorElementTypeV1::Graph, patches[2].clone()),
+            (EditorElementTypeV1::Knob, patches[3].clone()),
+            (EditorElementTypeV1::Graph, patches[4].clone()),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(element_type, uuid::Uuid::new_v4().to_string(), patch),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store.key_positions["4key"][0].counter, originals[0]);
+        }
+
+        for (patch, code) in [
+            (
+                EditorElementPropertyPatchV1::CounterFontSize(
+                    crate::models::EditorCounterFontSizePropertyPatchV1 {
+                        counter_font_size: 7,
+                    },
+                ),
+                "COUNTER_FONT_SIZE_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::CounterFontSize(
+                    crate::models::EditorCounterFontSizePropertyPatchV1 {
+                        counter_font_size: 73,
+                    },
+                ),
+                "COUNTER_FONT_SIZE_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::CounterFontWeight(
+                    crate::models::EditorCounterFontWeightPropertyPatchV1 {
+                        counter_font_weight: 99,
+                    },
+                ),
+                "COUNTER_FONT_WEIGHT_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::CounterFontWeight(
+                    crate::models::EditorCounterFontWeightPropertyPatchV1 {
+                        counter_font_weight: 901,
+                    },
+                ),
+                "COUNTER_FONT_WEIGHT_OUT_OF_RANGE",
+            ),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(EditorElementTypeV1::Stat, &stat_ids[0], patch),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(code));
+            assert_eq!(store.key_positions["4key"][0].counter, originals[0]);
+        }
+
+        let lower_boundaries = prepare_editor_ops_transition(
+            &store,
+            &[
+                patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &key_ids[0],
+                    EditorElementPropertyPatchV1::CounterFontSize(
+                        crate::models::EditorCounterFontSizePropertyPatchV1 {
+                            counter_font_size: 8,
+                        },
+                    ),
+                ),
+                patch_property_op(
+                    EditorElementTypeV1::Stat,
+                    &stat_ids[0],
+                    EditorElementPropertyPatchV1::CounterFontWeight(
+                        crate::models::EditorCounterFontWeightPropertyPatchV1 {
+                            counter_font_weight: 100,
+                        },
+                    ),
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            lower_boundaries.candidate.key_positions["4key"][0]
+                .counter
+                .font_size,
+            8
+        );
+        assert_eq!(
+            lower_boundaries.candidate.stat_positions["4key"][0]
+                .position
+                .counter
+                .font_weight,
+            100
+        );
     }
 
     #[test]

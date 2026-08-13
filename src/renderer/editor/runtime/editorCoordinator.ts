@@ -582,6 +582,57 @@ const applySemanticOps = (
                 counter: { ...counter, gap: op.patch.counterGap },
               };
             }
+            if ('counterFontSize' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, fontSize: op.patch.counterFontSize },
+              };
+            }
+            if ('counterFontWeight' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, fontWeight: op.patch.counterFontWeight },
+              };
+            }
+            if ('counterFontItalic' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, fontItalic: op.patch.counterFontItalic },
+              };
+            }
+            if ('counterFontUnderline' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: {
+                  ...counter,
+                  fontUnderline: op.patch.counterFontUnderline,
+                },
+              };
+            }
+            if ('counterFontStrikethrough' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: {
+                  ...counter,
+                  fontStrikethrough: op.patch.counterFontStrikethrough,
+                },
+              };
+            }
             if ('counterAnimationPreset' in op.patch) {
               const counter = position.counter as
                 | Record<string, unknown>

@@ -2618,6 +2618,51 @@ mod tests {
                 serde_json::json!({ "counterGap": u32::MAX }),
             ),
             (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::CounterFontSize(
+                    crate::models::EditorCounterFontSizePropertyPatchV1 {
+                        counter_font_size: 72,
+                    },
+                ),
+                serde_json::json!({ "counterFontSize": 72 }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterFontWeight(
+                    crate::models::EditorCounterFontWeightPropertyPatchV1 {
+                        counter_font_weight: 900,
+                    },
+                ),
+                serde_json::json!({ "counterFontWeight": 900 }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::CounterFontItalic(
+                    crate::models::EditorCounterFontItalicPropertyPatchV1 {
+                        counter_font_italic: true,
+                    },
+                ),
+                serde_json::json!({ "counterFontItalic": true }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterFontUnderline(
+                    crate::models::EditorCounterFontUnderlinePropertyPatchV1 {
+                        counter_font_underline: true,
+                    },
+                ),
+                serde_json::json!({ "counterFontUnderline": true }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::CounterFontStrikethrough(
+                    crate::models::EditorCounterFontStrikethroughPropertyPatchV1 {
+                        counter_font_strikethrough: true,
+                    },
+                ),
+                serde_json::json!({ "counterFontStrikethrough": true }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::CounterAnimationPreset(
                     crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
@@ -2773,6 +2818,14 @@ mod tests {
             serde_json::json!({ "counterGap": 1.5 }),
             serde_json::json!({ "counterGap": 4_294_967_296_u64 }),
             serde_json::json!({ "counterPlacement": "inside", "counterAlign": "top" }),
+            serde_json::json!({ "counterFontSize": -1 }),
+            serde_json::json!({ "counterFontSize": 16.5 }),
+            serde_json::json!({ "counterFontWeight": "400" }),
+            serde_json::json!({ "counterFontItalic": null }),
+            serde_json::json!({ "counterFontUnderline": 1 }),
+            serde_json::json!({ "counterFontStrikethrough": "false" }),
+            serde_json::json!({ "counterFontSize": 16, "counterFontWeight": 400 }),
+            serde_json::json!({ "counterFontSize": 16, "unexpected": true }),
             serde_json::json!({ "counterAnimationPreset": null }),
             serde_json::json!({ "counterAnimationPreset": {} }),
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "enabled": true } }),

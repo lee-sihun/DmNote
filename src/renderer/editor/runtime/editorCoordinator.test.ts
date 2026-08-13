@@ -3902,6 +3902,40 @@ describe('commitSemanticOpsInternal', () => {
     }
   });
 
+  it('counter typography 5 leaf projection은 각 필드만 적용하고 raw siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000cc';
+    for (const [patch, expected] of [
+      [{ counterFontSize: 72 }, { fontSize: 72 }],
+      [{ counterFontWeight: 900 }, { fontWeight: 900 }],
+      [{ counterFontItalic: true }, { fontItalic: true }],
+      [{ counterFontUnderline: true }, { fontUnderline: true }],
+      [{ counterFontStrikethrough: true }, { fontStrikethrough: true }],
+    ] as const) {
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        counter: {
+          ...base.keyPositions['4key'][0].counter,
+          fontSize: 12,
+          fontWeight: 400,
+          fontItalic: false,
+          fontUnderline: false,
+          fontStrikethrough: false,
+          customSentinel: 'keep-raw',
+        },
+      } as never;
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      await harness.coordinator.commitSemanticOpsInternal([
+        { kind: 'patchElement', elementType: 'key', id, patch },
+      ]);
+      expect(
+        harness.coordinator.getState().lastAck?.keyPositions['4key'][0].counter,
+      ).toMatchObject({ ...expected, customSentinel: 'keep-raw' });
+      harness.coordinator.stop();
+    }
+  });
+
   it('note 5 leaf를 한 commit으로 적용하고 무관 note 필드를 보존한다', async () => {
     const ids = [
       '00000000-0000-4000-8000-0000000000d1',

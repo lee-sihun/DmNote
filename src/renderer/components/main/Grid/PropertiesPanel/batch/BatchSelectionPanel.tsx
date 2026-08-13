@@ -42,6 +42,7 @@ import {
   patchCounterAnimationEnabledByTargets,
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
+  patchCounterTypographyByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
   patchSoundEnabledByIds,
@@ -54,6 +55,7 @@ import {
   patchCounterAnimationEnabledViaAuthority,
   patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
+  patchCounterTypographyViaAuthority,
   patchInactiveImageViaAuthority,
   patchIdleTransparentViaAuthority,
   patchSoundEnabledViaAuthority,
@@ -548,6 +550,17 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
           window.__dmn_window_type === 'panel'
             ? patchCounterLayoutViaAuthority(stableCounterTargets, patch)
             : patchCounterLayoutByTargets(stableCounterTargets, patch);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const commitCounterTypography = stableCounterTargets
+    ? (
+        patch: import('@src/types/editor').EditorCounterTypographyPropertyPatchV1,
+      ) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterTypographyViaAuthority(stableCounterTargets, patch)
+            : patchCounterTypographyByTargets(stableCounterTargets, patch);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -1137,6 +1150,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 onCounterEnabledCommit={commitCounterEnabled}
                 onCounterAnimationEnabledCommit={commitCounterAnimationEnabled}
                 onCounterLayoutCommit={commitCounterLayout}
+                onCounterTypographyCommit={commitCounterTypography}
                 colorState={batchCounterColorState}
                 getCounterColorDisplay={getCounterColorDisplay}
                 onFillPickerToggle={() => handleBatchPickerToggle('fill')}

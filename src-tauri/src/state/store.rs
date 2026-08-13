@@ -10510,6 +10510,252 @@ mod tests {
     }
 
     #[test]
+    fn counter_typography_batch_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-counter-typography-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let stat_ids = (0..3)
+            .map(|_| uuid::Uuid::new_v4().to_string())
+            .collect::<Vec<_>>();
+        let setup = legacy_editor_commit(
+            &store,
+            &[EditorField::KeyPositions, EditorField::StatPositions],
+            |data| {
+                let key_positions = data.key_positions.get_mut("4key").unwrap();
+                for position in key_positions.iter_mut().take(2) {
+                    let counter = &mut position.counter;
+                    counter.font_size = 16;
+                    counter.font_weight = 400;
+                    counter.font_italic = false;
+                    counter.font_underline = false;
+                    counter.font_strikethrough = false;
+                    counter.font_family = Some("font-sibling".to_string());
+                    counter.fill.idle = "fill-sibling".to_string();
+                    counter.stroke.active = "stroke-sibling".to_string();
+                    counter.placement = crate::models::KeyCounterPlacement::Outside;
+                    counter.animation.preset_id = Some("builtin-linear".to_string());
+                }
+                let stat_positions = key_positions
+                    .iter()
+                    .cycle()
+                    .zip(stat_ids.iter())
+                    .map(|(position, id)| {
+                        let mut position = position.clone();
+                        position.id = id.clone();
+                        StatPosition {
+                            stat_type: StatType::Kps,
+                            position,
+                        }
+                    })
+                    .collect();
+                data.stat_positions
+                    .insert("4key".to_string(), stat_positions);
+            },
+        )
+        .unwrap();
+        let before = store.editor_get().document;
+        let key_ids = before.key_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        let original_counters = [
+            before.key_positions["4key"][0].counter.clone(),
+            before.key_positions["4key"][1].counter.clone(),
+            before.stat_positions["4key"][0].position.counter.clone(),
+            before.stat_positions["4key"][1].position.counter.clone(),
+            before.stat_positions["4key"][2].position.counter.clone(),
+        ];
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[0],
+                EditorElementPropertyPatchV1::CounterFontSize(
+                    crate::models::EditorCounterFontSizePropertyPatchV1 {
+                        counter_font_size: 72,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[1],
+                EditorElementPropertyPatchV1::CounterFontWeight(
+                    crate::models::EditorCounterFontWeightPropertyPatchV1 {
+                        counter_font_weight: 900,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_ids[0],
+                EditorElementPropertyPatchV1::CounterFontItalic(
+                    crate::models::EditorCounterFontItalicPropertyPatchV1 {
+                        counter_font_italic: true,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_ids[1],
+                EditorElementPropertyPatchV1::CounterFontUnderline(
+                    crate::models::EditorCounterFontUnderlinePropertyPatchV1 {
+                        counter_font_underline: true,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_ids[2],
+                EditorElementPropertyPatchV1::CounterFontStrikethrough(
+                    crate::models::EditorCounterFontStrikethroughPropertyPatchV1 {
+                        counter_font_strikethrough: true,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::CounterFontSize(
+                    crate::models::EditorCounterFontSizePropertyPatchV1 {
+                        counter_font_size: 72,
+                    },
+                ),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            changed.result.changed_fields,
+            [EditorField::KeyPositions, EditorField::StatPositions]
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let changed_counters = [
+            changed.document.key_positions["4key"][0].counter.clone(),
+            changed.document.key_positions["4key"][1].counter.clone(),
+            changed.document.stat_positions["4key"][0]
+                .position
+                .counter
+                .clone(),
+            changed.document.stat_positions["4key"][1]
+                .position
+                .counter
+                .clone(),
+            changed.document.stat_positions["4key"][2]
+                .position
+                .counter
+                .clone(),
+        ];
+        let mut expected_counters = original_counters.clone();
+        expected_counters[0].font_size = 72;
+        expected_counters[1].font_weight = 900;
+        expected_counters[2].font_italic = true;
+        expected_counters[3].font_underline = true;
+        expected_counters[4].font_strikethrough = true;
+        assert_eq!(changed_counters, expected_counters);
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &key_ids[0],
+            EditorElementPropertyPatchV1::CounterFontSize(
+                crate::models::EditorCounterFontSizePropertyPatchV1 {
+                    counter_font_size: 24,
+                },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..5].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert_eq!(
+            [
+                undone.key_positions["4key"][0].counter.clone(),
+                undone.key_positions["4key"][1].counter.clone(),
+                undone.stat_positions["4key"][0].position.counter.clone(),
+                undone.stat_positions["4key"][1].position.counter.clone(),
+                undone.stat_positions["4key"][2].position.counter.clone(),
+            ],
+            original_counters
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert_eq!(
+            [
+                redone.key_positions["4key"][0].counter.clone(),
+                redone.key_positions["4key"][1].counter.clone(),
+                redone.stat_positions["4key"][0].position.counter.clone(),
+                redone.stat_positions["4key"][1].position.counter.clone(),
+                redone.stat_positions["4key"][2].position.counter.clone(),
+            ],
+            expected_counters
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn counter_animation_preset_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-counter-animation-preset-history-test");
         std::fs::create_dir_all(&dir).unwrap();

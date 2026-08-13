@@ -1697,6 +1697,7 @@ interface SingleKeyStatPanelProps {
   onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
   onCounterLayoutCommit?: CounterTabContentProps['onCounterLayoutCommit'];
+  onCounterTypographyCommit?: CounterTabContentProps['onCounterTypographyCommit'];
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
   imageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -1751,6 +1752,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
   onCounterLayoutCommit,
+  onCounterTypographyCommit,
   showImagePicker,
   setShowImagePicker,
   imageButtonRef,
@@ -2009,6 +2011,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onCounterEnabledCommit={onCounterEnabledCommit}
               onCounterAnimationEnabledCommit={onCounterAnimationEnabledCommit}
               onCounterLayoutCommit={onCounterLayoutCommit}
+              onCounterTypographyCommit={onCounterTypographyCommit}
               onCounterAnimationPresetCommit={onCounterAnimationPresetCommit}
               panelElement={panelElement}
               t={t}

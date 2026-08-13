@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EditorCounterLayoutPropertyPatchV1 } from '@src/types/editor';
+import type {
+  EditorCounterLayoutPropertyPatchV1,
+  EditorCounterTypographyPropertyPatchV1,
+} from '@src/types/editor';
 
 const mocks = vi.hoisted(() => ({
   sendPluginRpc: vi.fn(),
@@ -679,6 +682,68 @@ describe('plugin element panel queue', () => {
         },
       ],
       { counterGap: 4_294_967_295 },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(1);
+    await expect(pending).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+  });
+
+  it('counter typography 5 batch는 exact key/stat target과 default envelope를 보낸다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat' as const,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ];
+    const patches: EditorCounterTypographyPropertyPatchV1[] = [
+      { counterFontSize: 72 },
+      { counterFontWeight: 900 },
+      { counterFontItalic: true },
+      { counterFontUnderline: true },
+      { counterFontStrikethrough: true },
+    ];
+
+    for (const patch of patches) {
+      await expect(
+        actions.patchCounterTypographyViaAuthority(targets, patch),
+      ).resolves.toBe(true);
+    }
+    expect(
+      mocks.sendPluginRpc.mock.calls.map((call) => call.slice(0, 2)),
+    ).toEqual(
+      patches.map((patch) => ['layers:patchProperty', { targets, patch }]),
+    );
+  });
+
+  it('counter typography outcome-unknown은 same literal default retry를 한 번만 한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+    const pending = actions.patchCounterTypographyViaAuthority(
+      [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      { counterFontSize: 72 },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),

@@ -44,6 +44,12 @@ const captured = vi.hoisted(() => ({
     max?: number;
     onChange: (value: number) => void;
   }>,
+  fontStyles: [] as Array<{
+    onBoldChange: (value: boolean) => void;
+    onItalicChange: (value: boolean) => void;
+    onUnderlineChange: (value: boolean) => void;
+    onStrikethroughChange: (value: boolean) => void;
+  }>,
 }));
 
 const patches = vi.hoisted(() => ({
@@ -71,6 +77,8 @@ const patches = vi.hoisted(() => ({
   patchCounterAnimationEnabledViaAuthority: vi.fn(async () => true),
   patchCounterLayoutByTargets: vi.fn(async () => true),
   patchCounterLayoutViaAuthority: vi.fn(async () => true),
+  patchCounterTypographyByTargets: vi.fn(async () => true),
+  patchCounterTypographyViaAuthority: vi.fn(async () => true),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
@@ -88,6 +96,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterAnimationEnabledByTargets:
     patches.patchCounterAnimationEnabledByTargets,
   patchCounterLayoutByTargets: patches.patchCounterLayoutByTargets,
+  patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
@@ -104,6 +113,8 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterAnimationEnabledViaAuthority:
     patches.patchCounterAnimationEnabledViaAuthority,
   patchCounterLayoutViaAuthority: patches.patchCounterLayoutViaAuthority,
+  patchCounterTypographyViaAuthority:
+    patches.patchCounterTypographyViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
@@ -161,6 +172,15 @@ vi.mock(
         onChange: (value: number) => void;
       }) => {
         captured.numbers.push(props);
+        return null;
+      },
+      FontStyleToggle: (props: {
+        onBoldChange: (value: boolean) => void;
+        onItalicChange: (value: boolean) => void;
+        onUnderlineChange: (value: boolean) => void;
+        onStrikethroughChange: (value: boolean) => void;
+      }) => {
+        captured.fontStyles.push(props);
         return null;
       },
     };
@@ -397,6 +417,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     captured.checkboxes.length = 0;
     captured.dropdowns.length = 0;
     captured.numbers.length = 0;
+    captured.fontStyles.length = 0;
     selectKey(ID_A);
     host = document.createElement('div');
     pageHost = document.createElement('div');
@@ -727,6 +748,80 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     ]);
     expect(patches.patchCounterLayoutByTargets).not.toHaveBeenCalled();
     expect(patches.patchCounterLayoutViaAuthority).not.toHaveBeenCalled();
+  });
+
+  it.each(['main', 'panel'] as const)(
+    '%s batch counter typography는 current key/stat에 5 exact leaf를 적용한다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const statA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const statB = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const legacy = vi.fn();
+      act(() => selectCounterTargets(ID_A, statA));
+      renderCounterPanel(legacy);
+      act(() => selectCounterTargets(ID_B, statB));
+      renderCounterPanel(legacy);
+
+      const fontSize = captured.numbers
+        .filter((input) => input.min === 8 && input.max === 72)
+        .at(-1);
+      const fontStyle = captured.fontStyles.at(-1);
+      act(() => fontSize?.onChange(72));
+      act(() => fontStyle?.onBoldChange(true));
+      act(() => fontStyle?.onItalicChange(true));
+      act(() => fontStyle?.onUnderlineChange(true));
+      act(() => fontStyle?.onStrikethroughChange(true));
+      const targets = [
+        { elementType: 'key', id: ID_B },
+        { elementType: 'stat', id: statB },
+      ];
+      const calls = [
+        [targets, { counterFontSize: 72 }],
+        [targets, { counterFontWeight: 700 }],
+        [targets, { counterFontItalic: true }],
+        [targets, { counterFontUnderline: true }],
+        [targets, { counterFontStrikethrough: true }],
+      ];
+      if (windowType === 'panel') {
+        expect(patches.patchCounterTypographyViaAuthority.mock.calls).toEqual(
+          calls,
+        );
+        expect(patches.patchCounterTypographyByTargets).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchCounterTypographyByTargets.mock.calls).toEqual(
+          calls,
+        );
+        expect(
+          patches.patchCounterTypographyViaAuthority,
+        ).not.toHaveBeenCalled();
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('batch counter typography relevant synthetic는 5 controls 모두 whole legacy다', () => {
+    const legacy = vi.fn();
+    act(() => selectCounterTargets(ID_A, 'stat-0'));
+    renderCounterPanel(legacy);
+
+    const fontSize = captured.numbers
+      .filter((input) => input.min === 8 && input.max === 72)
+      .at(-1);
+    const fontStyle = captured.fontStyles.at(-1);
+    act(() => fontSize?.onChange(72));
+    act(() => fontStyle?.onBoldChange(true));
+    act(() => fontStyle?.onItalicChange(true));
+    act(() => fontStyle?.onUnderlineChange(true));
+    act(() => fontStyle?.onStrikethroughChange(true));
+    expect(legacy.mock.calls).toEqual([
+      [{ fontSize: 72 }],
+      [{ fontWeight: 700 }],
+      [{ fontItalic: true }],
+      [{ fontUnderline: true }],
+      [{ fontStrikethrough: true }],
+    ]);
+    expect(patches.patchCounterTypographyByTargets).not.toHaveBeenCalled();
+    expect(patches.patchCounterTypographyViaAuthority).not.toHaveBeenCalled();
   });
 
   type ImagePanelKind = 'mixed' | 'graph' | 'knob';

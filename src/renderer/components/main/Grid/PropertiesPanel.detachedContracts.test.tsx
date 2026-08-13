@@ -55,6 +55,8 @@ const {
   patchCounterAnimationEnabledViaAuthorityMock,
   patchCounterLayoutMock,
   patchCounterLayoutViaAuthorityMock,
+  patchCounterTypographyMock,
+  patchCounterTypographyViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -122,6 +124,8 @@ const {
   ),
   patchCounterLayoutMock: vi.fn(() => Promise.resolve(true)),
   patchCounterLayoutViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterTypographyMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterTypographyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -170,6 +174,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterAnimationEnabledViaAuthority:
     patchCounterAnimationEnabledViaAuthorityMock,
   patchCounterLayoutViaAuthority: patchCounterLayoutViaAuthorityMock,
+  patchCounterTypographyViaAuthority: patchCounterTypographyViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
@@ -198,6 +203,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterEnabledById: patchCounterEnabledMock,
   patchCounterAnimationEnabledById: patchCounterAnimationEnabledMock,
   patchCounterLayoutById: patchCounterLayoutMock,
+  patchCounterTypographyById: patchCounterTypographyMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -374,6 +380,8 @@ const resetStores = () => {
   patchCounterAnimationEnabledViaAuthorityMock.mockClear();
   patchCounterLayoutMock.mockClear();
   patchCounterLayoutViaAuthorityMock.mockClear();
+  patchCounterTypographyMock.mockClear();
+  patchCounterTypographyViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -908,6 +916,110 @@ describe('PropertiesPanel detached preview contract', () => {
       }
       expect(patchSoundVolumeMock).not.toHaveBeenCalled();
       expect(patchSoundVolumeViaAuthorityMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main key', 'main', 'key'],
+    ['main stat', 'main', 'stat'],
+    ['panel key', 'panel', 'key'],
+    ['panel stat', 'panel', 'stat'],
+  ] as const)(
+    '%s counter typography callback은 선택 descriptor ID exact writer만 쓴다',
+    (_label, windowType, type) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'a3311111-1111-4111-8111-111111111111'
+          : 'a3322222-2222-4222-8222-222222222222';
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onCounterTypographyCommit: (patch: {
+            counterFontSize: number;
+          }) => void;
+        }
+      ).onCounterTypographyCommit;
+
+      act(() => commit({ counterFontSize: 72 }));
+      if (windowType === 'panel') {
+        expect(patchCounterTypographyViaAuthorityMock).toHaveBeenCalledWith(
+          [{ elementType: type, id }],
+          { counterFontSize: 72 },
+        );
+        expect(patchCounterTypographyMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchCounterTypographyMock).toHaveBeenCalledWith(type, id, {
+          counterFontSize: 72,
+        });
+        expect(patchCounterTypographyViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat synthetic', 'stat', 'stat-0'],
+    ['stat empty', 'stat', ''],
+  ] as const)(
+    'panel single %s counter typography은 exact callback 없이 legacy다',
+    (_label, type, id) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onCounterTypographyCommit?: (patch: {
+          counterFontSize: number;
+        }) => void;
+        onKeyUpdate?: (patch: Record<string, unknown>) => void;
+        handleStatUpdate?: (patch: Record<string, unknown>) => void;
+      };
+      expect(props.onCounterTypographyCommit).toBeUndefined();
+      const legacy =
+        type === 'key' ? props.onKeyUpdate : props.handleStatUpdate;
+      act(() =>
+        legacy?.({
+          index: 0,
+          counter: { ...position.counter, fontSize: 72 },
+        }),
+      );
+      expect(patchCounterTypographyMock).not.toHaveBeenCalled();
+      expect(patchCounterTypographyViaAuthorityMock).not.toHaveBeenCalled();
+      if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      else expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
     },
   );
 

@@ -237,6 +237,11 @@ pub enum EditorElementPropertyPatchV1 {
     CounterAlign(EditorCounterAlignPropertyPatchV1),
     CounterAlignMode(EditorCounterAlignModePropertyPatchV1),
     CounterGap(EditorCounterGapPropertyPatchV1),
+    CounterFontSize(EditorCounterFontSizePropertyPatchV1),
+    CounterFontWeight(EditorCounterFontWeightPropertyPatchV1),
+    CounterFontItalic(EditorCounterFontItalicPropertyPatchV1),
+    CounterFontUnderline(EditorCounterFontUnderlinePropertyPatchV1),
+    CounterFontStrikethrough(EditorCounterFontStrikethroughPropertyPatchV1),
     CounterAnimationPreset(EditorCounterAnimationPresetPropertyPatchV1),
     StatType(EditorStatTypePropertyPatchV1),
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
@@ -431,6 +436,36 @@ pub struct EditorCounterAlignModePropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorCounterGapPropertyPatchV1 {
     pub counter_gap: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFontSizePropertyPatchV1 {
+    pub counter_font_size: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFontWeightPropertyPatchV1 {
+    pub counter_font_weight: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFontItalicPropertyPatchV1 {
+    pub counter_font_italic: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFontUnderlinePropertyPatchV1 {
+    pub counter_font_underline: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterFontStrikethroughPropertyPatchV1 {
+    pub counter_font_strikethrough: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

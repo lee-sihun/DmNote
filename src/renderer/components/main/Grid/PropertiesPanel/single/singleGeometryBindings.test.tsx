@@ -9,6 +9,8 @@ const captured = vi.hoisted(() => ({
       onChange: (value: number) => void;
       onBlur?: (value?: number) => void;
       onPreview?: (value: number) => void;
+      min?: number;
+      max?: number;
     }
   >(),
   dropdowns: [] as Array<{
@@ -19,6 +21,12 @@ const captured = vi.hoisted(() => ({
     checked: boolean;
     onChange: () => void;
   }>,
+  fontStyle: null as null | {
+    onBoldChange: (value: boolean) => void;
+    onItalicChange: (value: boolean) => void;
+    onUnderlineChange: (value: boolean) => void;
+    onStrikethroughChange: (value: boolean) => void;
+  },
   image: null as null | {
     completionBinding?: string;
     onIdleImageChange: (value: string) => void;
@@ -83,7 +91,10 @@ vi.mock('../PropertyInputs', () => ({
   },
   TextInput: () => null,
   ColorInput: () => null,
-  FontStyleToggle: () => null,
+  FontStyleToggle: (props: NonNullable<(typeof captured)['fontStyle']>) => {
+    captured.fontStyle = props;
+    return null;
+  },
   Tabs: () => null,
 }));
 vi.mock('@components/main/common/Dropdown', () => ({
@@ -176,6 +187,7 @@ describe('single geometry input bindings', () => {
     captured.numbers.clear();
     captured.dropdowns.length = 0;
     captured.checkboxes.length = 0;
+    captured.fontStyle = null;
     captured.image = null;
     captured.sound = null;
     captured.animation = null;
@@ -220,6 +232,43 @@ describe('single geometry input bindings', () => {
 
       expect(captured.image?.completionBinding).toBe('element-id');
       expect(commit.mock.calls).toEqual([['  picked.png  '], ['']]);
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key', 'stat'] as const)(
+    '%s counter typography 5 입력은 exact one-leaf callback만 호출한다',
+    (type) => {
+      const typography = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            isStat={type === 'stat'}
+            onKeyUpdate={legacy}
+            onCounterTypographyCommit={typography}
+            t={(key) => key}
+          />,
+        );
+      });
+
+      const fontSize = [...captured.numbers.values()].find(
+        (input) => input.min === 8,
+      );
+      act(() => fontSize?.onChange(72));
+      act(() => captured.fontStyle?.onBoldChange(true));
+      act(() => captured.fontStyle?.onItalicChange(true));
+      act(() => captured.fontStyle?.onUnderlineChange(true));
+      act(() => captured.fontStyle?.onStrikethroughChange(true));
+      expect(typography.mock.calls).toEqual([
+        [{ counterFontSize: 72 }],
+        [{ counterFontWeight: 700 }],
+        [{ counterFontItalic: true }],
+        [{ counterFontUnderline: true }],
+        [{ counterFontStrikethrough: true }],
+      ]);
       expect(legacy).not.toHaveBeenCalled();
     },
   );

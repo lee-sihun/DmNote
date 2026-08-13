@@ -59,6 +59,7 @@ import {
   patchCounterAnimationPresetByTargets,
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
+  patchCounterTypographyByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
@@ -83,6 +84,7 @@ import type {
   EditorElementPropertyPatchV1,
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
+  EditorCounterTypographyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
@@ -418,6 +420,25 @@ const parseNativeLayerPropertyTarget = (
       Number.isSafeInteger(patch.counterGap) &&
       (patch.counterGap as number) >= 0 &&
       (patch.counterGap as number) <= 4_294_967_295) ||
+    (hasExactKeys(patch, ['counterFontSize']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      Number.isSafeInteger(patch.counterFontSize) &&
+      (patch.counterFontSize as number) >= 8 &&
+      (patch.counterFontSize as number) <= 72) ||
+    (hasExactKeys(patch, ['counterFontWeight']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      Number.isSafeInteger(patch.counterFontWeight) &&
+      (patch.counterFontWeight as number) >= 100 &&
+      (patch.counterFontWeight as number) <= 900) ||
+    (hasExactKeys(patch, ['counterFontItalic']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      typeof patch.counterFontItalic === 'boolean') ||
+    (hasExactKeys(patch, ['counterFontUnderline']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      typeof patch.counterFontUnderline === 'boolean') ||
+    (hasExactKeys(patch, ['counterFontStrikethrough']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      typeof patch.counterFontStrikethrough === 'boolean') ||
     (hasExactKeys(patch, ['counterAnimationPreset']) &&
       (target.elementType === 'key' || target.elementType === 'stat') &&
       counterAnimationPreset !== null) ||
@@ -689,6 +710,11 @@ type NativeLayerPropertyRequest =
       patch: EditorCounterLayoutPropertyPatchV1;
     }
   | {
+      kind: 'counterTypographyBatch';
+      targets: Array<{ elementType: 'key' | 'stat'; id: string }>;
+      patch: EditorCounterTypographyPropertyPatchV1;
+    }
+  | {
       kind: 'notePropertyBatch';
       ids: string[];
       patch: EditorNotePropertyPatchV1;
@@ -862,6 +888,27 @@ const parseNativeLayerPropertyRequest = (
         (patch.counterGap as number) <= 4_294_967_295
       ? { counterGap: patch.counterGap as number }
       : null;
+  const counterTypographyPatch: EditorCounterTypographyPropertyPatchV1 | null =
+    hasExactKeys(patch, ['counterFontSize']) &&
+    Number.isSafeInteger(patch.counterFontSize) &&
+    (patch.counterFontSize as number) >= 8 &&
+    (patch.counterFontSize as number) <= 72
+      ? { counterFontSize: patch.counterFontSize as number }
+      : hasExactKeys(patch, ['counterFontWeight']) &&
+        Number.isSafeInteger(patch.counterFontWeight) &&
+        (patch.counterFontWeight as number) >= 100 &&
+        (patch.counterFontWeight as number) <= 900
+      ? { counterFontWeight: patch.counterFontWeight as number }
+      : hasExactKeys(patch, ['counterFontItalic']) &&
+        typeof patch.counterFontItalic === 'boolean'
+      ? { counterFontItalic: patch.counterFontItalic }
+      : hasExactKeys(patch, ['counterFontUnderline']) &&
+        typeof patch.counterFontUnderline === 'boolean'
+      ? { counterFontUnderline: patch.counterFontUnderline }
+      : hasExactKeys(patch, ['counterFontStrikethrough']) &&
+        typeof patch.counterFontStrikethrough === 'boolean'
+      ? { counterFontStrikethrough: patch.counterFontStrikethrough }
+      : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
     typeof patch.noteEffectEnabled === 'boolean'
@@ -905,6 +952,7 @@ const parseNativeLayerPropertyRequest = (
     activeTransparent === null &&
     counterBooleanPatch === null &&
     counterLayoutPatch === null &&
+    counterTypographyPatch === null &&
     counterAnimationPreset === null &&
     notePropertyPatch === null
   ) {
@@ -932,6 +980,8 @@ const parseNativeLayerPropertyRequest = (
       : counterBooleanPatch !== null
       ? 'counter-capable'
       : counterLayoutPatch !== null
+      ? 'counter-capable'
+      : counterTypographyPatch !== null
       ? 'counter-capable'
       : counterAnimationPreset !== null
       ? 'counter-capable'
@@ -1053,6 +1103,16 @@ const parseNativeLayerPropertyRequest = (
         id: string;
       }>,
       patch: counterLayoutPatch,
+    };
+  }
+  if (counterTypographyPatch !== null) {
+    return {
+      kind: 'counterTypographyBatch',
+      targets: targets as Array<{
+        elementType: 'key' | 'stat';
+        id: string;
+      }>,
+      patch: counterTypographyPatch,
     };
   }
   if (notePropertyPatch !== null) {
@@ -1811,6 +1871,24 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
             options,
           );
         }
+        if (
+          'counterFontSize' in request.target.patch ||
+          'counterFontWeight' in request.target.patch ||
+          'counterFontItalic' in request.target.patch ||
+          'counterFontUnderline' in request.target.patch ||
+          'counterFontStrikethrough' in request.target.patch
+        ) {
+          return patchCounterTypographyByTargets(
+            [
+              {
+                elementType: request.target.elementType as 'key' | 'stat',
+                id: request.target.id,
+              },
+            ],
+            request.target.patch as EditorCounterTypographyPropertyPatchV1,
+            options,
+          );
+        }
         if ('soundEnabled' in request.target.patch) {
           return patchSoundEnabledByIds(
             [request.target.id],
@@ -1953,6 +2031,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       }
       if (request.kind === 'counterLayoutBatch') {
         return patchCounterLayoutByTargets(
+          request.targets,
+          request.patch,
+          options,
+        );
+      }
+      if (request.kind === 'counterTypographyBatch') {
+        return patchCounterTypographyByTargets(
           request.targets,
           request.patch,
           options,

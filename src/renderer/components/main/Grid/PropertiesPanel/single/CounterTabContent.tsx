@@ -47,6 +47,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
   onCounterLayoutCommit,
+  onCounterTypographyCommit,
   onCounterAnimationPresetCommit,
   panelElement,
   t,
@@ -430,7 +431,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         <PropertyRow label={t('counterSetting.fontSize') || '폰트 크기'}>
           <NumberInput
             value={counterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}
-            onChange={(value) => handleCounterUpdate({ fontSize: value })}
+            onChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({ counterFontSize: value });
+                return;
+              }
+              handleCounterUpdate({ fontSize: value });
+            }}
             suffix="px"
             min={8}
             max={72}
@@ -445,18 +452,38 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             isItalic={counterSettings.fontItalic ?? false}
             isUnderline={counterSettings.fontUnderline ?? false}
             isStrikethrough={counterSettings.fontStrikethrough ?? false}
-            onBoldChange={(value) =>
-              handleCounterUpdate({ fontWeight: value ? 700 : 400 })
-            }
-            onItalicChange={(value) =>
-              handleCounterUpdate({ fontItalic: value })
-            }
-            onUnderlineChange={(value) =>
-              handleCounterUpdate({ fontUnderline: value })
-            }
-            onStrikethroughChange={(value) =>
-              handleCounterUpdate({ fontStrikethrough: value })
-            }
+            onBoldChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({
+                  counterFontWeight: value ? 700 : 400,
+                });
+                return;
+              }
+              handleCounterUpdate({ fontWeight: value ? 700 : 400 });
+            }}
+            onItalicChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({ counterFontItalic: value });
+                return;
+              }
+              handleCounterUpdate({ fontItalic: value });
+            }}
+            onUnderlineChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({ counterFontUnderline: value });
+                return;
+              }
+              handleCounterUpdate({ fontUnderline: value });
+            }}
+            onStrikethroughChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({
+                  counterFontStrikethrough: value,
+                });
+                return;
+              }
+              handleCounterUpdate({ fontStrikethrough: value });
+            }}
           />
         </PropertyRow>
       </PropertySection>

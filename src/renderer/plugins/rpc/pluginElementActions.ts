@@ -711,6 +711,26 @@ export const patchCounterLayoutViaAuthority = (
   });
 };
 
+export const patchCounterTypographyViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  patch: import('@src/types/editor').EditorCounterTypographyPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
 export const updateCounterAnimationPresetViaAuthority = (
   request: import('@src/types/key/counterAnimation').CounterAnimationUpdateRequest,
 ): Promise<

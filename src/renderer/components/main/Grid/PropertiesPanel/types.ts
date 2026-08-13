@@ -8,6 +8,7 @@ import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
 import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
+  EditorCounterTypographyPropertyPatchV1,
 } from '@src/types/editor';
 
 // ============================================================================
@@ -267,6 +268,9 @@ export interface CounterTabContentProps {
   onCounterEnabledCommit?: (enabled: boolean) => void;
   onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
   onCounterLayoutCommit?: (patch: EditorCounterLayoutPropertyPatchV1) => void;
+  onCounterTypographyCommit?: (
+    patch: EditorCounterTypographyPropertyPatchV1,
+  ) => void;
   onCounterAnimationPresetCommit?: (
     intent: EditorCounterAnimationPresetIntentV1,
   ) => void;

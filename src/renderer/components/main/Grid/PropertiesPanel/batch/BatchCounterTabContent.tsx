@@ -23,7 +23,10 @@ import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPrev
 import { usePanelNav } from '../PanelNavContext';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
-import type { EditorCounterLayoutPropertyPatchV1 } from '@src/types/editor';
+import type {
+  EditorCounterLayoutPropertyPatchV1,
+  EditorCounterTypographyPropertyPatchV1,
+} from '@src/types/editor';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-counter:font';
@@ -41,6 +44,9 @@ interface BatchCounterTabContentProps {
   onCounterEnabledCommit?: (enabled: boolean) => void;
   onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
   onCounterLayoutCommit?: (patch: EditorCounterLayoutPropertyPatchV1) => void;
+  onCounterTypographyCommit?: (
+    patch: EditorCounterTypographyPropertyPatchV1,
+  ) => void;
   // 컬러 디스플레이 (현재 상태 기준)
   colorState: 'idle' | 'active';
   getCounterColorDisplay: (target: 'fill' | 'stroke') => string;
@@ -67,6 +73,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
   onCounterLayoutCommit,
+  onCounterTypographyCommit,
   colorState,
   getCounterColorDisplay,
   onFillPickerToggle,
@@ -302,7 +309,13 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         <PropertyRow label={t('counterSetting.fontSize') || '폰트 크기'}>
           <NumberInput
             value={batchCounterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}
-            onChange={(value) => handleBatchCounterUpdate({ fontSize: value })}
+            onChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({ counterFontSize: value });
+                return;
+              }
+              handleBatchCounterUpdate({ fontSize: value });
+            }}
             suffix="px"
             min={8}
             max={72}
@@ -317,18 +330,38 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             isItalic={batchCounterSettings.fontItalic ?? false}
             isUnderline={batchCounterSettings.fontUnderline ?? false}
             isStrikethrough={batchCounterSettings.fontStrikethrough ?? false}
-            onBoldChange={(value) =>
-              handleBatchCounterUpdate({ fontWeight: value ? 700 : 400 })
-            }
-            onItalicChange={(value) =>
-              handleBatchCounterUpdate({ fontItalic: value })
-            }
-            onUnderlineChange={(value) =>
-              handleBatchCounterUpdate({ fontUnderline: value })
-            }
-            onStrikethroughChange={(value) =>
-              handleBatchCounterUpdate({ fontStrikethrough: value })
-            }
+            onBoldChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({
+                  counterFontWeight: value ? 700 : 400,
+                });
+                return;
+              }
+              handleBatchCounterUpdate({ fontWeight: value ? 700 : 400 });
+            }}
+            onItalicChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({ counterFontItalic: value });
+                return;
+              }
+              handleBatchCounterUpdate({ fontItalic: value });
+            }}
+            onUnderlineChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({ counterFontUnderline: value });
+                return;
+              }
+              handleBatchCounterUpdate({ fontUnderline: value });
+            }}
+            onStrikethroughChange={(value) => {
+              if (onCounterTypographyCommit) {
+                onCounterTypographyCommit({
+                  counterFontStrikethrough: value,
+                });
+                return;
+              }
+              handleBatchCounterUpdate({ fontStrikethrough: value });
+            }}
           />
         </PropertyRow>
       </PropertySection>

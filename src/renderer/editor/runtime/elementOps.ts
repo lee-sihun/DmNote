@@ -45,6 +45,7 @@ import type {
   EditorElementPropertyPatchV1,
   EditorCounterBooleanPropertyPatchV1,
   EditorCounterLayoutPropertyPatchV1,
+  EditorCounterTypographyPropertyPatchV1,
   EditorCounterAnimationPresetIntentV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
@@ -1427,6 +1428,128 @@ export const patchCounterLayoutById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> =>
   patchCounterLayoutByTargets([{ elementType, id }], patch, options);
+
+const counterTypographyPropertyIntents = (
+  targets: readonly CounterAnimationTarget[],
+  patch: EditorCounterTypographyPropertyPatchV1,
+): PropertyIntents => {
+  const document = captureEditorDocument();
+  const propertyIntents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { elementType, id } of targets) {
+    const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
+    const record = document[field] as Record<
+      string,
+      Array<Record<string, unknown> & { id?: string }>
+    >;
+    const current = Object.values(record)
+      .flat()
+      .find((position) => position.id === id);
+    if (
+      !current ||
+      current.counter === null ||
+      typeof current.counter !== 'object' ||
+      Array.isArray(current.counter)
+    ) {
+      continue;
+    }
+    const counter = current.counter as Record<string, unknown>;
+    const nextCounter =
+      'counterFontSize' in patch
+        ? { ...counter, fontSize: patch.counterFontSize }
+        : 'counterFontWeight' in patch
+        ? { ...counter, fontWeight: patch.counterFontWeight }
+        : 'counterFontItalic' in patch
+        ? { ...counter, fontItalic: patch.counterFontItalic }
+        : 'counterFontUnderline' in patch
+        ? { ...counter, fontUnderline: patch.counterFontUnderline }
+        : { ...counter, fontStrikethrough: patch.counterFontStrikethrough };
+    const byId = propertyIntents.get(elementType) ?? new Map();
+    byId.set(id, { counter: nextCounter });
+    propertyIntents.set(elementType, byId);
+  }
+  return propertyIntents;
+};
+
+const isCounterTypographyPatch = (
+  patch: EditorCounterTypographyPropertyPatchV1,
+): boolean => {
+  if (Object.keys(patch).length !== 1) return false;
+  if ('counterFontSize' in patch) {
+    return (
+      Number.isSafeInteger(patch.counterFontSize) &&
+      patch.counterFontSize >= 8 &&
+      patch.counterFontSize <= 72
+    );
+  }
+  if ('counterFontWeight' in patch) {
+    return (
+      Number.isSafeInteger(patch.counterFontWeight) &&
+      patch.counterFontWeight >= 100 &&
+      patch.counterFontWeight <= 900
+    );
+  }
+  if ('counterFontItalic' in patch) {
+    return typeof patch.counterFontItalic === 'boolean';
+  }
+  if ('counterFontUnderline' in patch) {
+    return typeof patch.counterFontUnderline === 'boolean';
+  }
+  return (
+    'counterFontStrikethrough' in patch &&
+    typeof patch.counterFontStrikethrough === 'boolean'
+  );
+};
+
+export const patchCounterTypographyByTargets = (
+  targets: readonly CounterAnimationTarget[],
+  patch: EditorCounterTypographyPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    !isCounterTypographyPatch(patch) ||
+    targets.length === 0 ||
+    targets.some(({ id }) => id.length === 0 || isSyntheticElementId(id)) ||
+    new Set(targets.map(({ id }) => id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  const receipt = applyPropertyIntentsEagerly(
+    counterTypographyPropertyIntents(targets, patch),
+  );
+  let enrolled = false;
+  return commitSemanticOps(
+    targets.map(({ elementType, id }) => ({
+      kind: 'patchElement' as const,
+      elementType,
+      id,
+      patch,
+    })),
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchCounterTypographyById = (
+  elementType: 'key' | 'stat',
+  id: string,
+  patch: EditorCounterTypographyPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchCounterTypographyByTargets([{ elementType, id }], patch, options);
 
 export const patchCounterEnabledByTargets = (
   targets: readonly CounterAnimationTarget[],

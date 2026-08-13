@@ -164,6 +164,11 @@ interface EditorElementPropertyValuesV1 {
   counterAlign: 'top' | 'bottom' | 'left' | 'right';
   counterAlignMode: 'center' | 'between';
   counterGap: number;
+  counterFontSize: number;
+  counterFontWeight: number;
+  counterFontItalic: boolean;
+  counterFontUnderline: boolean;
+  counterFontStrikethrough: boolean;
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
   useInlineStyles: boolean;
   fontWeight: number;
@@ -237,6 +242,14 @@ export type EditorCounterBooleanPropertyPatchV1 = EditorPropertyPatchUnionV1<
 
 export type EditorCounterLayoutPropertyPatchV1 = EditorPropertyPatchUnionV1<
   'counterPlacement' | 'counterAlign' | 'counterAlignMode' | 'counterGap'
+>;
+
+export type EditorCounterTypographyPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  | 'counterFontSize'
+  | 'counterFontWeight'
+  | 'counterFontItalic'
+  | 'counterFontUnderline'
+  | 'counterFontStrikethrough'
 >;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -1180,6 +1193,30 @@ export function assertEditorOpsV1(
           Number.isSafeInteger(op.patch.counterGap) &&
           (op.patch.counterGap as number) >= 0 &&
           (op.patch.counterGap as number) <= 4_294_967_295) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterFontSize' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          Number.isSafeInteger(op.patch.counterFontSize) &&
+          (op.patch.counterFontSize as number) >= 8 &&
+          (op.patch.counterFontSize as number) <= 72) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterFontWeight' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          Number.isSafeInteger(op.patch.counterFontWeight) &&
+          (op.patch.counterFontWeight as number) >= 100 &&
+          (op.patch.counterFontWeight as number) <= 900) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterFontItalic' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          typeof op.patch.counterFontItalic === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterFontUnderline' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          typeof op.patch.counterFontUnderline === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterFontStrikethrough' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          typeof op.patch.counterFontStrikethrough === 'boolean') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'counterAnimationPreset' &&
           (op.elementType === 'key' || op.elementType === 'stat') &&

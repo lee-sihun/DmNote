@@ -50,6 +50,7 @@ import {
   patchCounterAnimationPresetViaAuthority,
   patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
+  patchCounterTypographyViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -72,6 +73,7 @@ import type {
   EditorElementTypeV1,
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
+  EditorCounterTypographyPropertyPatchV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
@@ -111,6 +113,7 @@ import {
   patchCounterAnimationPresetById,
   patchCounterEnabledById,
   patchCounterLayoutById,
+  patchCounterTypographyById,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -2310,6 +2313,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableCounterTypographyHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (patch: EditorCounterTypographyPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterTypographyViaAuthority([{ elementType, id }], patch)
+              : patchCounterTypographyById(elementType, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter typography', error);
+          });
+        }
+      : undefined;
+
   // ============================================================================
   // 다중 선택 헬퍼 함수들
   // ============================================================================
@@ -3944,6 +3963,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             : selectedKeyElements[0]?.id,
         )}
         onCounterLayoutCommit={stableCounterLayoutHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterTypographyCommit={stableCounterTypographyHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

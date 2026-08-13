@@ -167,6 +167,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchCounterTypography: vi.fn(
+    (
+      _targets?: unknown,
+      _patch?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   updateCounterAnimation: vi.fn(
     (_request?: unknown, _options?: unknown): Promise<unknown> =>
       Promise.resolve(null),
@@ -262,6 +269,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterEnabledByTargets: mocks.patchCounterEnabled,
   patchCounterAnimationEnabledByTargets: mocks.patchCounterAnimationEnabled,
   patchCounterLayoutByTargets: mocks.patchCounterLayout,
+  patchCounterTypographyByTargets: mocks.patchCounterTypography,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -380,6 +388,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchCounterAnimationEnabled.mockResolvedValue(true);
     mocks.patchCounterLayout.mockReset();
     mocks.patchCounterLayout.mockResolvedValue(true);
+    mocks.patchCounterTypography.mockReset();
+    mocks.patchCounterTypography.mockResolvedValue(true);
     mocks.updateCounterAnimation.mockReset();
     mocks.updateCounterAnimation.mockResolvedValue({
       preset: { id: 'preset-a' },
@@ -1113,6 +1123,58 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
+    { counterFontSize: 72 },
+    { counterFontWeight: 900 },
+    { counterFontItalic: true },
+    { counterFontUnderline: true },
+    { counterFontStrikethrough: true },
+  ] as const)(
+    'counter typography batch $patch는 key/stat exact leaf를 전용 helper에 전달한다',
+    async (patch) => {
+      const targets = [
+        { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      ] as const;
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', { targets, patch }),
+      );
+      await vi.waitFor(() =>
+        expect(mocks.patchCounterTypography).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.patchCounterTypography).toHaveBeenCalledWith(
+        targets,
+        patch,
+        { preflight: expect.any(Function) },
+      );
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
+
+  it('counter typography single은 slot 직전 generation 변경을 거절한다', async () => {
+    mocks.patchCounterTypography.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { counterFontSize: 72 },
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it.each([
     {
       targets: [{ elementType: 'graph', id: 'a' }],
       patch: { counterAnimationPreset: { presetId: 'a' } },
@@ -1182,6 +1244,30 @@ describe('plugin panel persisted element mutations', () => {
       patch: { counterGap: 4, counterAlign: 'top' },
     },
     {
+      targets: [{ elementType: 'graph', id: 'a' }],
+      patch: { counterFontSize: 12 },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterFontSize: 7 },
+    },
+    {
+      targets: [{ elementType: 'stat', id: 'a' }],
+      patch: { counterFontWeight: 901 },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterFontWeight: 400.5 },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterFontItalic: 1 },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterFontUnderline: true, counterFontStrikethrough: false },
+    },
+    {
       targets: [
         { elementType: 'key', id: 'a' },
         { elementType: 'stat', id: 'a' },
@@ -1212,6 +1298,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchCounterEnabled).not.toHaveBeenCalled();
       expect(mocks.patchCounterAnimationEnabled).not.toHaveBeenCalled();
       expect(mocks.patchCounterLayout).not.toHaveBeenCalled();
+      expect(mocks.patchCounterTypography).not.toHaveBeenCalled();
     },
   );
 

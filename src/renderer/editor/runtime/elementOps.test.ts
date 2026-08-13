@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultKeyPosition } from '../model/keys';
-import type { EditorCounterLayoutPropertyPatchV1 } from '@src/types/editor';
+import type {
+  EditorCounterLayoutPropertyPatchV1,
+  EditorCounterTypographyPropertyPatchV1,
+} from '@src/types/editor';
 
 const api = vi.hoisted(() => ({
   commitGeneratedPatch: vi.fn(),
@@ -72,6 +75,7 @@ import {
   patchCounterAnimationPresetByTargets,
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
+  patchCounterTypographyByTargets,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -2966,6 +2970,95 @@ describe('elementOps', () => {
         counterPlacement: 'inside',
       }),
     ).resolves.toBe(false);
+  });
+
+  it('counter typography 5 leaf는 raw counter sibling을 보존해 key/stat N ops 한 commit으로 보낸다', async () => {
+    const statId = '33333333-3333-4333-8333-333333333333';
+    const rawCounter = {
+      ...createDefaultKeyPosition().counter,
+      customSentinel: 'keep-raw',
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
+      positions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...keyAt(statId),
+            statType: 'kps',
+            counter: structuredClone(rawCounter),
+          },
+        ],
+      },
+    });
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: statId },
+    ];
+    const patches: EditorCounterTypographyPropertyPatchV1[] = [
+      { counterFontSize: 72 },
+      { counterFontWeight: 900 },
+      { counterFontItalic: true },
+      { counterFontUnderline: true },
+      { counterFontStrikethrough: true },
+    ];
+
+    for (const patch of patches) {
+      api.captureEditorDocument.mockReturnValue(documentFromStores());
+      await patchCounterTypographyByTargets(targets, patch);
+      expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+        targets.map(({ elementType, id }) => ({
+          kind: 'patchElement',
+          elementType,
+          id,
+          patch,
+        })),
+        expect.anything(),
+      );
+    }
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter,
+    ).toMatchObject({
+      fontSize: 72,
+      fontWeight: 900,
+      fontItalic: true,
+      fontUnderline: true,
+      fontStrikethrough: true,
+      customSentinel: 'keep-raw',
+    });
+  });
+
+  it('counter typography는 invalid leaf와 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
+    await expect(
+      patchCounterTypographyByTargets([], { counterFontSize: 8 }),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterTypographyByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'stat', id: ID_A },
+        ],
+        { counterFontWeight: 400 },
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterTypographyByTargets([{ elementType: 'key', id: 'key-0' }], {
+        counterFontItalic: true,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterTypographyByTargets([{ elementType: 'key', id: ID_A }], {
+        counterFontSize: 7,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterTypographyByTargets([{ elementType: 'key', id: ID_A }], {
+        counterFontWeight: 400.5,
+      }),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
 
   it('inactiveImage는 raw string을 single과 혼합 4타입 한 commit으로 보낸다', async () => {
