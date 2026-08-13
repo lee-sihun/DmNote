@@ -129,6 +129,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onSoundPathCommit,
   onSoundEnabledCommit,
   onSoundVolumeCommit,
+  onDisplayTextPreview,
+  onDisplayTextCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -704,10 +706,18 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
+    if (onDisplayTextPreview) {
+      onDisplayTextPreview(value);
+      return;
+    }
     onKeyPreview?.(keyIndex, { displayText: value });
   };
 
   const handleDisplayTextBlur = (value: string) => {
+    if (onDisplayTextCommit) {
+      onDisplayTextCommit(value);
+      return;
+    }
     onKeyUpdate({
       index: keyIndex,
       displayText: value,

@@ -60,6 +60,7 @@ import {
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
+  patchDisplayTextByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
@@ -87,6 +88,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
+  EditorDisplayTextPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -365,6 +367,8 @@ const parseNativeLayerPropertyTarget = (
       Number.isFinite(patch.sensitivity)) ||
     (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean') ||
     (hasExactKeys(patch, ['axisId']) && typeof patch.axisId === 'string') ||
+    (hasExactKeys(patch, ['displayText']) &&
+      typeof patch.displayText === 'string') ||
     (hasExactKeys(patch, ['soundEnabled']) &&
       target.elementType === 'key' &&
       typeof patch.soundEnabled === 'boolean') ||
@@ -662,6 +666,12 @@ type NativeLayerPropertyRequest =
       patch: EditorFontFamilyPropertyPatchV1;
     }
   | {
+      kind: 'displayTextBatch';
+      targets: Array<{ elementType: NativeElementType; id: string }>;
+      patch: EditorDisplayTextPropertyPatchV1;
+      gestureId?: string;
+    }
+  | {
       kind: 'inactiveImageBatch';
       targets: Array<{ elementType: NativeElementType; id: string }>;
       inactiveImage: string;
@@ -817,6 +827,11 @@ const parseNativeLayerPropertyRequest = (
     hasExactKeys(patch, ['fontFamily']) && typeof patch.fontFamily === 'string'
       ? { fontFamily: patch.fontFamily }
       : null;
+  const displayTextPatch: EditorDisplayTextPropertyPatchV1 | null =
+    hasExactKeys(patch, ['displayText']) &&
+    typeof patch.displayText === 'string'
+      ? { displayText: patch.displayText }
+      : null;
   const inactiveImage =
     hasExactKeys(patch, ['inactiveImage']) &&
     typeof patch.inactiveImage === 'string'
@@ -949,6 +964,7 @@ const parseNativeLayerPropertyRequest = (
     useInlineStyles === null &&
     fontStylePatch === null &&
     fontFamilyPatch === null &&
+    displayTextPatch === null &&
     inactiveImage === null &&
     soundEnabled === null &&
     soundPath === null &&
@@ -964,11 +980,18 @@ const parseNativeLayerPropertyRequest = (
   ) {
     return null;
   }
-  if ('gestureId' in payload && soundVolume === null) return null;
+  if (
+    'gestureId' in payload &&
+    soundVolume === null &&
+    displayTextPatch === null
+  ) {
+    return null;
+  }
   const elementType =
     useInlineStyles !== null ||
     fontStylePatch !== null ||
     fontFamilyPatch !== null ||
+    displayTextPatch !== null ||
     inactiveImage !== null
       ? null
       : idleTransparent !== null
@@ -1044,6 +1067,16 @@ const parseNativeLayerPropertyRequest = (
   }
   if (fontFamilyPatch !== null) {
     return { kind: 'fontFamilyBatch', targets, patch: fontFamilyPatch };
+  }
+  if (displayTextPatch !== null) {
+    return {
+      kind: 'displayTextBatch',
+      targets,
+      patch: displayTextPatch,
+      ...(typeof payload.gestureId === 'string'
+        ? { gestureId: payload.gestureId }
+        : {}),
+    };
   }
   if (inactiveImage !== null) {
     return { kind: 'inactiveImageBatch', targets, inactiveImage };
@@ -1970,6 +2003,16 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           request.targets,
           request.patch,
           options,
+        );
+      }
+      if (request.kind === 'displayTextBatch') {
+        return patchDisplayTextByTargets(
+          request.targets,
+          request.patch.displayText,
+          {
+            ...options,
+            ...(request.gestureId ? { gestureId: request.gestureId } : {}),
+          },
         );
       }
       if (request.kind === 'inactiveImageBatch') {

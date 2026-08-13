@@ -2484,6 +2484,15 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::DisplayText(
+                    crate::models::EditorDisplayTextPropertyPatchV1 {
+                        display_text: "  raw display  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "displayText": "  raw display  " }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
                 EditorElementPropertyPatchV1::InactiveImage(
                     crate::models::EditorInactiveImagePropertyPatchV1 {
                         inactive_image: "  raw/path.png  ".to_string(),
@@ -2790,6 +2799,10 @@ mod tests {
             serde_json::json!({ "fontUnderline": 1 }),
             serde_json::json!({ "fontStrikethrough": "false" }),
             serde_json::json!({ "fontFamily": null }),
+            serde_json::json!({ "displayText": null }),
+            serde_json::json!({ "displayText": 1 }),
+            serde_json::json!({ "displayText": "text", "hidden": true }),
+            serde_json::json!({ "displayText": "text", "unexpected": true }),
             serde_json::json!({ "inactiveImage": null }),
             serde_json::json!({ "inactiveImage": "path", "hidden": false }),
             serde_json::json!({ "inactiveImage": "path", "unexpected": true }),

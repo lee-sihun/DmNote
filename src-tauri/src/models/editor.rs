@@ -222,6 +222,7 @@ pub enum EditorElementPropertyPatchV1 {
     FontUnderline(EditorFontUnderlinePropertyPatchV1),
     FontStrikethrough(EditorFontStrikethroughPropertyPatchV1),
     FontFamily(EditorFontFamilyPropertyPatchV1),
+    DisplayText(EditorDisplayTextPropertyPatchV1),
     InactiveImage(EditorInactiveImagePropertyPatchV1),
     ActiveImage(EditorActiveImagePropertyPatchV1),
     IdleTransparent(EditorIdleTransparentPropertyPatchV1),
@@ -347,6 +348,12 @@ pub struct EditorFontStrikethroughPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorFontFamilyPropertyPatchV1 {
     pub font_family: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorDisplayTextPropertyPatchV1 {
+    pub display_text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

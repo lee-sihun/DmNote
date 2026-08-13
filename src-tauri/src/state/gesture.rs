@@ -501,6 +501,15 @@ mod tests {
                 serde_json::json!({ "fontFamily": " raw-font " }),
             ),
             (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::DisplayText(
+                    crate::models::EditorDisplayTextPropertyPatchV1 {
+                        display_text: "  raw display  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "displayText": "  raw display  " }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::InactiveImage(
                     crate::models::EditorInactiveImagePropertyPatchV1 {
@@ -810,6 +819,21 @@ mod tests {
             validation_code(error).as_deref(),
             Some("INVALID_REQUEST_PAYLOAD")
         );
+
+        for patch in [
+            serde_json::json!({ "displayText": null }),
+            serde_json::json!({ "displayText": 1 }),
+            serde_json::json!({ "displayText": "text", "hidden": true }),
+            serde_json::json!({ "displayText": "text", "unexpected": true }),
+        ] {
+            let mut invalid_display_text = layer_name_wire.clone();
+            invalid_display_text["editorOps"][0]["patch"] = patch;
+            let error = decode_gesture_commit_request(invalid_display_text).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
 
         for patch in [
             serde_json::json!({ "inactiveImage": null }),

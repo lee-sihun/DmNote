@@ -30,6 +30,13 @@ const captured = vi.hoisted(() => ({
   font: null as null | {
     onFontSelect: (fontName: string | null) => void;
   },
+  texts: [] as Array<{
+    value: string;
+    onChange: (value: string) => void;
+    onBlur?: (value: string) => void;
+    onPreview?: (value: string) => void;
+    onCancel?: () => void;
+  }>,
   image: null as null | {
     completionBinding?: string;
     onIdleImageChange: (value: string) => void;
@@ -72,34 +79,40 @@ vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
 }));
 
-vi.mock('../PropertyInputs', () => ({
-  PropertyRow: ({ children }: { children: React.ReactNode }) => children,
-  PropertySection: ({ children }: { children: React.ReactNode }) => children,
-  NumberInput: (props: {
-    prefix?: string;
-    suffix?: string;
-    max?: number;
-    min?: number;
-    onChange: (value: number) => void;
-    onBlur?: (value?: number) => void;
-    onPreview?: (value: number) => void;
-  }) => {
-    captured.numbers.set(
-      !props.prefix && props.suffix === 'px' && props.max === 9999
-        ? 'counter-gap'
-        : props.prefix ?? props.suffix ?? '',
-      props as never,
-    );
-    return null;
-  },
-  TextInput: () => null,
-  ColorInput: () => null,
-  FontStyleToggle: (props: NonNullable<(typeof captured)['fontStyle']>) => {
-    captured.fontStyle = props;
-    return null;
-  },
-  Tabs: () => null,
-}));
+vi.mock('../PropertyInputs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../PropertyInputs')>();
+  return {
+    PropertyRow: ({ children }: { children: React.ReactNode }) => children,
+    PropertySection: ({ children }: { children: React.ReactNode }) => children,
+    NumberInput: (props: {
+      prefix?: string;
+      suffix?: string;
+      max?: number;
+      min?: number;
+      onChange: (value: number) => void;
+      onBlur?: (value?: number) => void;
+      onPreview?: (value: number) => void;
+    }) => {
+      captured.numbers.set(
+        !props.prefix && props.suffix === 'px' && props.max === 9999
+          ? 'counter-gap'
+          : props.prefix ?? props.suffix ?? '',
+        props as never,
+      );
+      return null;
+    },
+    TextInput: (props: (typeof captured.texts)[number]) => {
+      captured.texts.push(props);
+      return <actual.TextInput {...props} />;
+    },
+    ColorInput: () => null,
+    FontStyleToggle: (props: NonNullable<(typeof captured)['fontStyle']>) => {
+      captured.fontStyle = props;
+      return null;
+    },
+    Tabs: () => null,
+  };
+});
 vi.mock('@components/main/common/Dropdown', () => ({
   default: (props: { value: string; onChange: (value: string) => void }) => {
     captured.dropdowns.push(props);
@@ -185,16 +198,32 @@ import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const setInputValue = (input: HTMLInputElement, value: string) => {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'value',
+  )?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
 describe('single geometry input bindings', () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) =>
+      window.clearTimeout(id),
+    );
     captured.numbers.clear();
     captured.dropdowns.length = 0;
     captured.checkboxes.length = 0;
     captured.fontStyle = null;
     captured.font = null;
+    captured.texts.length = 0;
     captured.image = null;
     captured.sound = null;
     captured.animation = null;
@@ -240,6 +269,121 @@ describe('single geometry input bindings', () => {
       expect(captured.image?.completionBinding).toBe('element-id');
       expect(commit.mock.calls).toEqual([['  picked.png  '], ['']]);
       expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key', 'stat'] as const)(
+    '%s StyleTab displayText는 preview와 blur를 exact callbacks로 분리한다',
+    (type) => {
+      const preview = vi.fn();
+      const commit = vi.fn();
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={3}
+            keyPosition={{
+              ...createDefaultKeyPosition(),
+              displayText: 'Before',
+            }}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacyCommit}
+            onKeyPreview={legacyPreview}
+            onDisplayTextPreview={preview}
+            onDisplayTextCommit={commit}
+            showSoundControls={false}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+      const displayText = captured.texts.find(
+        (input) => input.value === 'Before',
+      );
+      act(() => displayText?.onChange('  Preview  '));
+      act(() => displayText?.onBlur?.('  Final  '));
+
+      expect(preview).toHaveBeenCalledWith('  Preview  ');
+      expect(commit).toHaveBeenCalledWith('  Final  ');
+      expect(legacyPreview).not.toHaveBeenCalled();
+      expect(legacyCommit).not.toHaveBeenCalled();
+    },
+  );
+
+  it('displayText actual TextInput은 preview 뒤 blur commit을 같은 final literal로 호출한다', async () => {
+    const preview = vi.fn();
+    const commit = vi.fn();
+    act(() => {
+      root.render(
+        <StyleTabContent
+          keyIndex={0}
+          keyPosition={{
+            ...createDefaultKeyPosition(),
+            displayText: 'Before',
+          }}
+          keyCode="A"
+          keyInfo={null}
+          onPositionChange={vi.fn()}
+          onKeyUpdate={vi.fn()}
+          onDisplayTextPreview={preview}
+          onDisplayTextCommit={commit}
+          showSoundControls={false}
+          panelElement={null}
+          t={(key) => key}
+        />,
+      );
+    });
+    const input =
+      container.querySelector<HTMLInputElement>('input[type="text"]')!;
+    act(() => input.focus());
+    act(() => setInputValue(input, '  Final label  '));
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(preview).toHaveBeenLastCalledWith('  Final label  ');
+
+    act(() => input.blur());
+    expect(commit).toHaveBeenCalledOnce();
+    expect(commit).toHaveBeenCalledWith('  Final label  ');
+    expect(preview.mock.invocationCallOrder[0]).toBeLessThan(
+      commit.mock.invocationCallOrder[0],
+    );
+  });
+
+  it.each(['key', 'stat'] as const)(
+    '%s StyleTab displayText exact callback이 없으면 preview와 whole legacy를 유지한다',
+    (type) => {
+      const preview = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={3}
+            keyPosition={{ ...createDefaultKeyPosition(), displayText: '' }}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacy}
+            onKeyPreview={preview}
+            showSoundControls={false}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+      const displayText = captured.texts.find((input) => input.value === '');
+      act(() => displayText?.onChange('Preview'));
+      act(() => displayText?.onBlur?.('Final'));
+
+      expect(preview).toHaveBeenCalledWith(3, { displayText: 'Preview' });
+      expect(legacy).toHaveBeenCalledWith({
+        index: 3,
+        displayText: 'Final',
+      });
     },
   );
 
@@ -1272,6 +1416,7 @@ describe('single geometry input bindings', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    vi.unstubAllGlobals();
   });
 
   it('key/stat StyleTab은 X/Y preview와 blur commit을 축별로 연결한다', () => {

@@ -1693,6 +1693,8 @@ interface SingleKeyStatPanelProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
+  onDisplayTextPreview?: (displayText: string) => void;
+  onDisplayTextCommit?: (displayText: string) => void;
   onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
   onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
@@ -1748,6 +1750,8 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onSoundPathCommit,
   onSoundEnabledCommit,
   onSoundVolumeCommit,
+  onDisplayTextPreview,
+  onDisplayTextCommit,
   onCounterAnimationPresetCommit,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
@@ -1947,6 +1951,8 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onSoundPathCommit={onSoundPathCommit}
               onSoundEnabledCommit={onSoundEnabledCommit}
               onSoundVolumeCommit={onSoundVolumeCommit}
+              onDisplayTextPreview={onDisplayTextPreview}
+              onDisplayTextCommit={onDisplayTextCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}

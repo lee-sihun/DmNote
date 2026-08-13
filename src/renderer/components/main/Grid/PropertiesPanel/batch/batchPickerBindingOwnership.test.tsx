@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
@@ -79,6 +81,15 @@ const patches = vi.hoisted(() => ({
   patchCounterLayoutViaAuthority: vi.fn(async () => true),
   patchCounterTypographyByTargets: vi.fn(async () => true),
   patchCounterTypographyViaAuthority: vi.fn(async () => true),
+  patchDisplayTextByTargets: vi.fn(async () => true),
+  patchDisplayTextViaAuthority: vi.fn(async () => true),
+}));
+
+const gestures = vi.hoisted(() => ({
+  preview: vi.fn(),
+  cancel: vi.fn(),
+  settleCommit: vi.fn(),
+  activeGestureId: vi.fn(() => 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
@@ -97,6 +108,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
     patches.patchCounterAnimationEnabledByTargets,
   patchCounterLayoutByTargets: patches.patchCounterLayoutByTargets,
   patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
+  patchDisplayTextByTargets: patches.patchDisplayTextByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
@@ -115,6 +127,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterLayoutViaAuthority: patches.patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority:
     patches.patchCounterTypographyViaAuthority,
+  patchDisplayTextViaAuthority: patches.patchDisplayTextViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
@@ -197,10 +210,10 @@ vi.mock('@components/main/Grid/PropertiesPanel/ShadowControls', () => ({
 }));
 vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
   editGestureController: {
-    preview: vi.fn(),
-    cancel: vi.fn(),
-    settleCommit: vi.fn(),
-    activeGestureId: () => null,
+    preview: gestures.preview,
+    cancel: gestures.cancel,
+    settleCommit: gestures.settleCommit,
+    activeGestureId: gestures.activeGestureId,
     commitPendingAsync: vi.fn(async () => true),
   },
 }));
@@ -217,6 +230,15 @@ import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from '@components/main/Grid/Properti
 const BATCH_STYLE_FONT_PAGE_KEY = 'batch-style:font';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+const setInputValue = (input: HTMLInputElement, value: string) => {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'value',
+  )?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+};
 
 const ID_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ID_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -410,6 +432,12 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) =>
+      window.clearTimeout(id),
+    );
     captured.sound = null;
     captured.font = null;
     captured.image = null;
@@ -431,6 +459,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     host.remove();
     pageHost.remove();
     delete window.__dmn_window_type;
+    vi.unstubAllGlobals();
   });
 
   const selectCounterTargets = (keyId: string, statId: string) => {
@@ -553,6 +582,170 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         );
         expect(patches.patchSoundVolumeViaAuthority).not.toHaveBeenCalled();
       }
+    },
+  );
+
+  it.each(['main', 'panel'] as const)(
+    '%s displayText actual input은 mixed 4-type stable IDs를 preview하고 같은 gesture로 commit한다',
+    async (windowType) => {
+      window.__dmn_window_type = windowType;
+      const keyId = ID_A;
+      const statId = ID_B;
+      const graphId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const knobId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const otherId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        canonicalPositions: { '4key': [keyAt(otherId), keyAt(keyId)] },
+        positions: { '4key': [keyAt(otherId), keyAt(keyId)] },
+      });
+      useStatItemStore.setState({
+        positions: { '4key': [{ ...keyAt(statId), statType: 'kps' }] },
+      });
+      useGraphItemStore.setState({
+        positions: { '4key': [keyAt(graphId)] } as never,
+      });
+      useKnobItemStore.setState({
+        positions: { '4key': [keyAt(knobId)] } as never,
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: keyId, index: 0 },
+          { type: 'stat', id: statId, index: 0 },
+          { type: 'graph', id: graphId, index: 0 },
+          { type: 'knob', id: knobId, index: 0 },
+        ],
+      });
+      renderPanel({ active: null, renderKey: null });
+      const input = host.querySelector<HTMLInputElement>('input[type="text"]');
+      expect(input).not.toBeNull();
+
+      act(() => input?.focus());
+      act(() => setInputValue(input!, '  Preview label  '));
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(gestures.preview.mock.calls).toEqual([
+        [
+          '4key',
+          [{ index: 1, patch: { displayText: '  Preview label  ' } }],
+          { domain: 'keyPosition' },
+        ],
+        [
+          '4key',
+          [{ index: 0, patch: { displayText: '  Preview label  ' } }],
+          { domain: 'statPosition' },
+        ],
+        [
+          '4key',
+          [{ index: 0, patch: { displayText: '  Preview label  ' } }],
+          { domain: 'graphPosition' },
+        ],
+        [
+          '4key',
+          [{ index: 0, patch: { displayText: '  Preview label  ' } }],
+          { domain: 'knobPosition' },
+        ],
+      ]);
+      act(() => input?.blur());
+
+      const targets = [
+        { elementType: 'key', id: keyId },
+        { elementType: 'stat', id: statId },
+        { elementType: 'graph', id: graphId },
+        { elementType: 'knob', id: knobId },
+      ];
+      const writer =
+        windowType === 'panel'
+          ? patches.patchDisplayTextViaAuthority
+          : patches.patchDisplayTextByTargets;
+      expect(writer).toHaveBeenCalledWith(
+        targets,
+        '  Preview label  ',
+        windowType === 'panel'
+          ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+          : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+      );
+      expect(gestures.settleCommit).toHaveBeenCalledWith(
+        writer.mock.results[0]?.value,
+      );
+    },
+  );
+
+  it('displayText stable target 하나가 사라지면 partial preview 없이 중단한다', async () => {
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      canonicalPositions: { '4key': [keyAt(ID_A)] },
+      positions: { '4key': [keyAt(ID_A)] },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: ID_A, index: 0 },
+        { type: 'graph', id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', index: 0 },
+      ],
+    });
+    useGraphItemStore.setState({ positions: {} });
+    renderPanel({ active: null, renderKey: null });
+    const input = host.querySelector<HTMLInputElement>('input[type="text"]')!;
+    act(() => input.focus());
+    act(() => setInputValue(input, 'Preview'));
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(gestures.preview).not.toHaveBeenCalled();
+  });
+
+  it.each(['key-0', ''])(
+    'displayText mixed selection에 %j가 있으면 actual input 전체가 legacy다',
+    async (id) => {
+      const stable = keyAt(ID_A);
+      const unsupported = keyAt(id);
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        canonicalPositions: { '4key': [stable, unsupported] },
+        positions: { '4key': [stable, unsupported] },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: ID_A, index: 0 },
+          { type: 'key', id, index: 1 },
+        ],
+      });
+      const props = panelProps();
+      const preview = vi.fn();
+      const commit = vi.fn();
+      props.handleBatchStyleChange = preview;
+      props.handleBatchStyleChangeComplete = commit;
+      act(() => {
+        root.render(
+          <PanelNavProvider
+            value={{
+              activePageKey: null,
+              renderPageKey: null,
+              openPage: vi.fn(),
+              closePage: vi.fn(),
+              pageHost,
+            }}
+          >
+            <BatchKeyLikePanel {...props} />
+          </PanelNavProvider>,
+        );
+      });
+      const input = host.querySelector<HTMLInputElement>('input[type="text"]')!;
+      act(() => input.focus());
+      act(() => setInputValue(input, 'Legacy'));
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+      act(() => input.blur());
+
+      expect(preview).toHaveBeenCalledWith('displayText', 'Legacy');
+      expect(commit).toHaveBeenCalledWith('displayText', 'Legacy');
+      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
+      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
     },
   );
 
@@ -1024,6 +1217,15 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(captured.image?.onIdleImageChange).toBeTypeOf('function');
     expect(captured.image?.onIdleImageReset).toBeTypeOf('function');
   });
+
+  it.each(['graph', 'knob'] as const)(
+    '%s-only batch는 displayText input을 노출하지 않는다',
+    (kind) => {
+      selectImageTargets(kind, 'a');
+      renderImagePanel(kind, vi.fn());
+      expect(host.querySelector('input[type="text"]')).toBeNull();
+    },
+  );
 
   it.each(['mixed', 'graph', 'knob'] as const)(
     '%s batch ImagePicker에 synthetic ID가 있으면 load와 reset 전체가 legacy다',

@@ -698,6 +698,9 @@ const applySemanticOps = (
             if ('fontFamily' in op.patch) {
               return { ...position, fontFamily: op.patch.fontFamily };
             }
+            if ('displayText' in op.patch) {
+              return { ...position, displayText: op.patch.displayText };
+            }
             if ('noteEffectEnabled' in op.patch) {
               return {
                 ...position,

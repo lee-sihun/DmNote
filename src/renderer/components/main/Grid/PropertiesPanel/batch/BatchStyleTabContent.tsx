@@ -67,6 +67,8 @@ interface BatchStyleTabContentProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
+  onDisplayTextPreview?: (displayText: string) => void;
+  onDisplayTextCommit?: (displayText: string) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -149,6 +151,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   onSoundPathCommit,
   onSoundEnabledCommit,
   onSoundVolumeCommit,
+  onDisplayTextPreview,
+  onDisplayTextCommit,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -1003,10 +1007,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 return (
                   <TextInput
                     value={isMixed ? '' : displayTextValue}
-                    onChange={(v) =>
-                      handleBatchStyleChangeComplete('displayText', v)
-                    }
-                    onPreview={(v) => handleBatchStyleChange('displayText', v)}
+                    onChange={(v) => {
+                      if (onDisplayTextCommit) onDisplayTextCommit(v);
+                      else handleBatchStyleChangeComplete('displayText', v);
+                    }}
+                    onPreview={(v) => {
+                      if (onDisplayTextPreview) onDisplayTextPreview(v);
+                      else handleBatchStyleChange('displayText', v);
+                    }}
                     onCancel={() => editGestureController.cancel()}
                     placeholder={isMixed ? 'Mixed' : value}
                     width="54px"

@@ -86,6 +86,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchDisplayText: vi.fn(
+    (
+      _targets?: unknown,
+      _displayText?: unknown,
+      _options?: { gestureId?: string; preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   patchNoteProperties: vi.fn(
     (_ids?: unknown, _patch?: unknown, _options?: { preflight?: () => void }) =>
       Promise.resolve(true),
@@ -258,6 +265,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchGraphColorsByIds: mocks.patchGraphColors,
   patchFontStyleByTargets: mocks.patchFontStyle,
   patchFontFamilyByTargets: mocks.patchFontFamily,
+  patchDisplayTextByTargets: mocks.patchDisplayText,
   patchInactiveImageByTargets: mocks.patchInactiveImage,
   patchActiveImageByTargets: mocks.patchActiveImage,
   patchIdleTransparentByTargets: mocks.patchIdleTransparent,
@@ -366,6 +374,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchFontStyle.mockResolvedValue(true);
     mocks.patchFontFamily.mockReset();
     mocks.patchFontFamily.mockResolvedValue(true);
+    mocks.patchDisplayText.mockReset();
+    mocks.patchDisplayText.mockResolvedValue(true);
     mocks.patchInactiveImage.mockReset();
     mocks.patchInactiveImage.mockResolvedValue(true);
     mocks.patchActiveImage.mockReset();
@@ -817,6 +827,41 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.patchFontFamily).toHaveBeenCalledWith(targets, patch, {
       preflight: expect.any(Function),
     });
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('displayText batch는 common targets와 gesture를 한 semantic commit으로 전달한다', async () => {
+    const targets = [
+      {
+        elementType: 'key',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'graph',
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ] as const;
+    const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { displayText: '  Raw label  ' },
+        gestureId,
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchDisplayText).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchDisplayText).toHaveBeenCalledWith(
+      targets,
+      '  Raw label  ',
+      {
+        gestureId,
+        preflight: expect.any(Function),
+      },
+    );
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
@@ -1982,6 +2027,43 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'displayText non-string',
+      {
+        targets: [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        patch: { displayText: 1 },
+      },
+    ],
+    [
+      'displayText combined',
+      {
+        targets: [
+          {
+            elementType: 'graph',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        patch: { displayText: 'Graph', fontItalic: true },
+      },
+    ],
+    [
+      'displayText non canonical gesture',
+      {
+        targets: [
+          {
+            elementType: 'stat',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        patch: { displayText: '' },
+        gestureId: 'not-a-uuid',
+      },
+    ],
+    [
       'inactiveImage non-string',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
@@ -2590,6 +2672,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchUseInlineStyles).not.toHaveBeenCalled();
       expect(mocks.patchFontStyle).not.toHaveBeenCalled();
       expect(mocks.patchFontFamily).not.toHaveBeenCalled();
+      expect(mocks.patchDisplayText).not.toHaveBeenCalled();
       expect(mocks.patchInactiveImage).not.toHaveBeenCalled();
       expect(mocks.patchActiveImage).not.toHaveBeenCalled();
       expect(mocks.patchIdleTransparent).not.toHaveBeenCalled();
@@ -3309,6 +3392,29 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'knob', id: 'stable-knob' },
         ],
         patch: { activeImage: '  Raw Active.png  ' },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('displayText batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchDisplayText.mockImplementationOnce(
+      async (_targets, _value, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [{ elementType: 'knob', id: 'stable-knob' }],
+        patch: { displayText: 'Knob' },
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
     );
 

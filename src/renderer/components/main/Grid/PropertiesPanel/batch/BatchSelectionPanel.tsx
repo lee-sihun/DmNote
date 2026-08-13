@@ -43,6 +43,7 @@ import {
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
+  patchDisplayTextByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
   patchSoundEnabledByIds,
@@ -56,6 +57,7 @@ import {
   patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority,
+  patchDisplayTextViaAuthority,
   patchInactiveImageViaAuthority,
   patchIdleTransparentViaAuthority,
   patchSoundEnabledViaAuthority,
@@ -63,6 +65,7 @@ import {
   patchSoundPathViaAuthority,
 } from '@plugins/rpc/pluginElementActions';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import {
   captureBatchElementBinding,
   useBatchElementBinding,
@@ -70,7 +73,10 @@ import {
 import { usePanelNav } from '../PanelNavContext';
 import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
-import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import {
+  isSyntheticElementId,
+  resolveElementById,
+} from '@src/renderer/editor/model/elementIdMap';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
 
@@ -494,6 +500,61 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     counterTargets.every(({ id }) => id.length > 0 && !isSyntheticElementId(id))
       ? counterTargets
       : null;
+  const displayTextTargets = selectedBatchStyleElements.map(({ type, id }) => ({
+    elementType: type as 'key' | 'stat' | 'graph' | 'knob',
+    id,
+  }));
+  const stableDisplayTextTargets =
+    displayTextTargets.length > 0 &&
+    displayTextTargets.every(
+      ({ id }) => id.length > 0 && !isSyntheticElementId(id),
+    )
+      ? displayTextTargets
+      : null;
+  const previewDisplayText = stableDisplayTextTargets
+    ? (displayText: string) => {
+        const grouped = new Map<
+          'key' | 'stat' | 'graph' | 'knob',
+          Array<{ index: number; patch: { displayText: string } }>
+        >();
+        for (const target of stableDisplayTextTargets) {
+          const locator = resolveElementById(target.elementType, target.id);
+          if (!locator || locator.mode !== selectedKeyType) return;
+          const entries = grouped.get(target.elementType) ?? [];
+          entries.push({ index: locator.index, patch: { displayText } });
+          grouped.set(target.elementType, entries);
+        }
+        for (const [type, entries] of grouped) {
+          editGestureController.preview(selectedKeyType, entries, {
+            domain:
+              type === 'key'
+                ? 'keyPosition'
+                : type === 'stat'
+                ? 'statPosition'
+                : type === 'graph'
+                ? 'graphPosition'
+                : 'knobPosition',
+          });
+        }
+      }
+    : undefined;
+  const commitDisplayText = stableDisplayTextTargets
+    ? (displayText: string) => {
+        const gestureId = editGestureController.activeGestureId() ?? undefined;
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchDisplayTextViaAuthority(
+                stableDisplayTextTargets,
+                displayText,
+                gestureId,
+              )
+            : patchDisplayTextByTargets(stableDisplayTextTargets, displayText, {
+                gestureId,
+              });
+        editGestureController.settleCommit(persisted);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
   const soundTargets = selectedKeyElements.map(({ id }) => id);
   const stableSoundTargets =
     soundTargets.length > 0 &&
@@ -939,6 +1000,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 }
                 onSoundEnabledCommit={commitSoundEnabled}
                 onSoundVolumeCommit={commitSoundVolume}
+                onDisplayTextPreview={previewDisplayText}
+                onDisplayTextCommit={commitDisplayText}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
                 shadowActiveState={

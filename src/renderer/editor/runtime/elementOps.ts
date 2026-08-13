@@ -1962,6 +1962,40 @@ export const patchFontFamilyByTargets = (
   );
 };
 
+export const patchDisplayTextById = (
+  type: NativeElementType,
+  id: string,
+  displayText: string,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  return patchElementPropertyById(type, id, { displayText }, options);
+};
+
+export const patchDisplayTextByTargets = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  displayText: string,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some(
+      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+    ) ||
+    new Set(targets.map((target) => target.id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    targets.map(({ elementType, id }) => ({
+      type: elementType,
+      id,
+      patch: { displayText },
+    })),
+    options,
+  );
+};
+
 export const patchNotePropertyById = (
   id: string,
   patch: EditorNotePropertyPatchV1,

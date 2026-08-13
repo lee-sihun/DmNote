@@ -36,6 +36,8 @@ const {
   patchFontFamilyMock,
   patchFontFamilyTargetsMock,
   patchFontFamilyViaAuthorityMock,
+  patchDisplayTextMock,
+  patchDisplayTextViaAuthorityMock,
   patchInactiveImageMock,
   patchInactiveImageViaAuthorityMock,
   patchActiveImageMock,
@@ -103,6 +105,8 @@ const {
   patchFontFamilyMock: vi.fn(() => Promise.resolve(true)),
   patchFontFamilyTargetsMock: vi.fn(() => Promise.resolve(true)),
   patchFontFamilyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchDisplayTextMock: vi.fn(() => Promise.resolve(true)),
+  patchDisplayTextViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchInactiveImageMock: vi.fn(() => Promise.resolve(true)),
   patchInactiveImageViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchActiveImageMock: vi.fn(() => Promise.resolve(true)),
@@ -166,6 +170,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchGraphTypesViaAuthority: patchGraphTypesViaAuthorityMock,
   patchFontStyleViaAuthority: patchFontStyleViaAuthorityMock,
   patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
+  patchDisplayTextViaAuthority: patchDisplayTextViaAuthorityMock,
   patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
   patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
   patchSoundEnabledViaAuthority: patchSoundEnabledViaAuthorityMock,
@@ -191,6 +196,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontStyleByTargets: patchFontStyleTargetsMock,
   patchFontFamilyById: patchFontFamilyMock,
   patchFontFamilyByTargets: patchFontFamilyTargetsMock,
+  patchDisplayTextById: patchDisplayTextMock,
   patchInactiveImageById: patchInactiveImageMock,
   patchActiveImageById: patchActiveImageMock,
   patchIdleTransparentById: patchIdleTransparentMock,
@@ -374,6 +380,8 @@ const resetStores = () => {
   patchSoundEnabledViaAuthorityMock.mockClear();
   patchSoundVolumeMock.mockClear();
   patchSoundVolumeViaAuthorityMock.mockClear();
+  patchDisplayTextMock.mockClear();
+  patchDisplayTextViaAuthorityMock.mockClear();
   patchCounterEnabledMock.mockClear();
   patchCounterAnimationEnabledMock.mockClear();
   patchCounterEnabledViaAuthorityMock.mockClear();
@@ -916,6 +924,174 @@ describe('PropertiesPanel detached preview contract', () => {
       }
       expect(patchSoundVolumeMock).not.toHaveBeenCalled();
       expect(patchSoundVolumeViaAuthorityMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main', 'key', true],
+    ['main', 'key', false],
+    ['main', 'key', 'reject'],
+    ['panel', 'key', true],
+    ['panel', 'key', false],
+    ['panel', 'key', 'reject'],
+    ['main', 'stat', true],
+    ['main', 'stat', false],
+    ['main', 'stat', 'reject'],
+    ['panel', 'stat', true],
+    ['panel', 'stat', false],
+    ['panel', 'stat', 'reject'],
+  ] as const)(
+    '%s single stable %s displayText 결과 %s도 시작 ID preview와 writer Promise를 보존한다',
+    async (windowType, type, result) => {
+      window.__dmn_window_type = windowType;
+      const selectedId =
+        type === 'key'
+          ? 'a8aaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+          : 'a8cccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const indexedId = 'a8bbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const position = createDefaultKeyPosition();
+      const failure = new Error('display text failed');
+      const writer =
+        windowType === 'panel'
+          ? patchDisplayTextViaAuthorityMock
+          : patchDisplayTextMock;
+      writer.mockReturnValueOnce(
+        result === 'reject' ? Promise.reject(failure) : Promise.resolve(result),
+      );
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      activeGestureIdMock.mockReturnValue(
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      );
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['B', 'A'] },
+          positions: {
+            '4key': [
+              { ...position, id: indexedId },
+              { ...position, id: selectedId },
+            ],
+          },
+          canonicalPositions: {
+            '4key': [
+              { ...position, id: indexedId },
+              { ...position, id: selectedId },
+            ],
+          },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: {
+            '4key': [
+              { ...position, id: indexedId, statType: 'kps' },
+              { ...position, id: selectedId, statType: 'kps' },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id: selectedId, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onDisplayTextPreview: (value: string) => void;
+        onDisplayTextCommit: (value: string) => void;
+      };
+
+      act(() => props.onDisplayTextPreview('  Preview label  '));
+      expect(previewMock).toHaveBeenCalledWith(
+        '4key',
+        [{ index: 1, patch: { displayText: '  Preview label  ' } }],
+        { domain: type === 'key' ? 'keyPosition' : 'statPosition' },
+      );
+      act(() => props.onDisplayTextCommit('  Final label  '));
+
+      if (windowType === 'panel') {
+        expect(patchDisplayTextViaAuthorityMock).toHaveBeenCalledWith(
+          [{ elementType: type, id: selectedId }],
+          '  Final label  ',
+          'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        );
+        expect(patchDisplayTextMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchDisplayTextMock).toHaveBeenCalledWith(
+          type,
+          selectedId,
+          '  Final label  ',
+          { gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' },
+        );
+        expect(patchDisplayTextViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      const persisted = writer.mock.results[0]?.value as Promise<boolean>;
+      expect(settleCommitMock).toHaveBeenCalledWith(persisted);
+      if (result === 'reject') await expect(persisted).rejects.toBe(failure);
+      else await expect(persisted).resolves.toBe(result);
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat synthetic', 'stat', 'stat-0'],
+    ['stat empty', 'stat', ''],
+  ] as const)(
+    'single %s displayText는 exact callbacks 없이 whole legacy를 유지한다',
+    (_label, type, id) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onDisplayTextPreview?: (value: string) => void;
+        onDisplayTextCommit?: (value: string) => void;
+        onKeyPreview?: (index: number, patch: Record<string, unknown>) => void;
+        onKeyUpdate?: (patch: Record<string, unknown>) => void;
+        handleStatPreview?: (
+          index: number,
+          patch: Record<string, unknown>,
+        ) => void;
+        handleStatUpdate?: (patch: Record<string, unknown>) => void;
+      };
+
+      expect(props.onDisplayTextPreview).toBeUndefined();
+      expect(props.onDisplayTextCommit).toBeUndefined();
+      act(() => {
+        if (type === 'key') {
+          props.onKeyPreview?.(0, { displayText: 'Preview' });
+          props.onKeyUpdate?.({ index: 0, displayText: 'Final' });
+        } else {
+          props.handleStatPreview?.(0, { displayText: 'Preview' });
+          props.handleStatUpdate?.({ index: 0, displayText: 'Final' });
+        }
+      });
+      if (type === 'key') {
+        expect(keyLegacyUpdateMock).toHaveBeenCalledWith({
+          index: 0,
+          displayText: 'Final',
+        });
+      } else {
+        expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+      }
+      expect(patchDisplayTextMock).not.toHaveBeenCalled();
+      expect(patchDisplayTextViaAuthorityMock).not.toHaveBeenCalled();
+      if (type === 'key') expect(settleCommitMock).not.toHaveBeenCalled();
+      else expect(settleCommitMock).toHaveBeenCalledOnce();
     },
   );
 

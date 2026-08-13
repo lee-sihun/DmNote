@@ -357,6 +357,42 @@ describe('plugin element panel queue', () => {
     );
   });
 
+  it('displayText batch는 common targets, raw literal, gesture를 default envelope에 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'graph' as const,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ];
+
+    await expect(
+      actions.patchDisplayTextViaAuthority(
+        targets,
+        '  Raw label  ',
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      ),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      {
+        targets,
+        patch: { displayText: '  Raw label  ' },
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      },
+      0,
+      7,
+    );
+  });
+
   it('inactiveImage batch는 혼합 native 대상과 raw literal을 고정한다', async () => {
     mocks.sendPluginRpc.mockResolvedValue({
       kind: 'ok',
@@ -1080,6 +1116,36 @@ describe('plugin element panel queue', () => {
         },
       ],
       { fontFamily: '  Raw Family  ' },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
+  it('displayText outcome-unknown은 같은 gesture와 raw literal을 한 번만 재전송한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchDisplayTextViaAuthority(
+      [
+        {
+          elementType: 'stat',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      '  Raw label  ',
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),

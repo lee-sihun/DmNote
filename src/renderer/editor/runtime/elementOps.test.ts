@@ -56,6 +56,8 @@ import {
   patchFontStyleByTargets,
   patchFontFamilyById,
   patchFontFamilyByTargets,
+  patchDisplayTextById,
+  patchDisplayTextByTargets,
   patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -2390,6 +2392,61 @@ describe('elementOps', () => {
       fontFamily: 'Before',
       counter: { fontFamily: 'Counter Family' },
     });
+  });
+
+  it('displayText는 raw common-4 leaf와 gesture를 N ops 한 commit으로 보낸다', async () => {
+    const graphId = '00000000-0000-4000-8000-0000000000d3';
+    const knobId = '00000000-0000-4000-8000-0000000000d4';
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: ID_B },
+      { elementType: 'graph' as const, id: graphId },
+      { elementType: 'knob' as const, id: knobId },
+    ];
+
+    await patchDisplayTextByTargets(targets, '  Raw label  ', {
+      gestureId: 'gesture-display',
+    });
+
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { displayText: '  Raw label  ' },
+      })),
+    );
+    expect(api.commitSemanticOps.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        gestureId: 'gesture-display',
+        onEnrolled: expect.any(Function),
+      }),
+    );
+  });
+
+  it('displayText는 invalid target을 wire 전에 거절하고 편입 전 실패를 복원한다', async () => {
+    await expect(
+      patchDisplayTextByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'graph', id: ID_A },
+        ],
+        '',
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchDisplayTextByTargets([{ elementType: 'knob', id: 'knob-0' }], ''),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+    await expect(patchDisplayTextById('key', ID_A, 'After')).rejects.toThrow(
+      'start failed',
+    );
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].displayText,
+    ).toBeUndefined();
   });
 
   it('note literal은 single과 key batch를 exact leaf 한 commit으로 보낸다', async () => {

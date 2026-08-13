@@ -38,6 +38,7 @@ import {
   patchGraphPropertiesViaAuthority,
   patchGraphTypesViaAuthority,
   patchFontFamilyViaAuthority,
+  patchDisplayTextViaAuthority,
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
@@ -103,6 +104,7 @@ import {
   patchActiveTransparentById,
   patchFontFamilyById,
   patchFontFamilyByTargets,
+  patchDisplayTextById,
   patchInactiveImageById,
   patchIdleImageFitById,
   patchIdleTransparentById,
@@ -2243,6 +2245,54 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableDisplayTextPreviewHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (displayText: string) => {
+          const locator = resolveElementById(type, id);
+          if (!locator) return;
+          editGestureController.preview(
+            locator.mode,
+            [{ index: locator.index, patch: { displayText } }],
+            {
+              domain:
+                type === 'key'
+                  ? 'keyPosition'
+                  : type === 'stat'
+                  ? 'statPosition'
+                  : type === 'graph'
+                  ? 'graphPosition'
+                  : 'knobPosition',
+            },
+          );
+        }
+      : undefined;
+
+  const stableDisplayTextCommitHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (displayText: string) => {
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchDisplayTextViaAuthority(
+                  [{ elementType: type, id }],
+                  displayText,
+                  gestureId,
+                )
+              : patchDisplayTextById(type, id, displayText, { gestureId });
+          editGestureController.settleCommit(persisted);
+          void persisted.catch((error) => {
+            console.error('Failed to update display text', error);
+          });
+        }
+      : undefined;
+
   const stableCounterAnimationPresetHandler = (
     elementType: 'key' | 'stat',
     id: string | undefined,
@@ -3944,6 +3994,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? stableSoundVolumeHandler(selectedKeyElements[0]?.id)
             : undefined
         }
+        onDisplayTextPreview={stableDisplayTextPreviewHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onDisplayTextCommit={stableDisplayTextCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
         onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
