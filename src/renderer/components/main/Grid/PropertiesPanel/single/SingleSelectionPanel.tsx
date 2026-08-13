@@ -21,6 +21,7 @@ import type {
   CounterTabContentProps,
   NoteTabContentProps,
   SizeCommit,
+  StyleTabContentProps,
 } from '../types';
 import {
   getActivePairPreservation,
@@ -1754,6 +1755,7 @@ interface SingleKeyStatPanelProps {
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onFontColorCommit?: StyleTabContentProps['onFontColorCommit'];
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   onNotePaintCommit?: NoteTabContentProps['onNotePaintCommit'];
   onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
@@ -1816,6 +1818,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onStylePropertyPreview,
   onStylePropertyCommit,
   onPaintCommit,
+  onFontColorCommit,
   onShadowCommit,
   onNotePaintCommit,
   onCounterAnimationPresetCommit,
@@ -2022,6 +2025,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onStylePropertyPreview={onStylePropertyPreview}
               onStylePropertyCommit={onStylePropertyCommit}
               onPaintCommit={onPaintCommit}
+              onFontColorCommit={onFontColorCommit}
               onShadowCommit={onShadowCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}

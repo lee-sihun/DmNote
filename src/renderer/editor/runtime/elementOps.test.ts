@@ -84,6 +84,7 @@ import {
   patchCounterTypographyByTargets,
   patchCounterStrokeByTargets,
   patchCounterFillByTargets,
+  patchFontColorByTargets,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -2084,6 +2085,72 @@ describe('elementOps', () => {
         expect.objectContaining({ id: ID_A, patch }),
         expect.objectContaining({ id: graphB, patch }),
       ]);
+    },
+  );
+
+  it('idle font color는 key와 knob의 비어 있던 active를 pre-edit idle raw로 materialize한다', async () => {
+    const key = {
+      ...keyAt(ID_A),
+      fontColor: '  key idle raw  ',
+      activeFontColor: '   ',
+      className: 'key-sibling',
+    };
+    const knobId = 'a3999999-9999-4999-8999-999999999999';
+    const knob = {
+      ...keyAt(knobId),
+      fontColor: '  knob idle raw  ',
+      activeFontColor: undefined,
+      className: 'knob-sibling',
+    } as never;
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [key] },
+      positions: { '4key': [key] },
+    });
+    useKnobItemStore.setState({ positions: { '4key': [knob] } });
+
+    await patchFontColorByTargets(
+      [
+        { elementType: 'key', id: ID_A },
+        { elementType: 'knob', id: knobId },
+      ],
+      { fontColor: ' new idle ' },
+    );
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      fontColor: ' new idle ',
+      activeFontColor: '  key idle raw  ',
+      className: 'key-sibling',
+    });
+    expect(useKnobItemStore.getState().positions['4key'][0]).toMatchObject({
+      fontColor: ' new idle ',
+      activeFontColor: '  knob idle raw  ',
+      className: 'knob-sibling',
+    });
+  });
+
+  it.each([
+    [
+      'active stat',
+      [{ elementType: 'stat', id: ID_A }],
+      { activeFontColor: '#fff' },
+    ],
+    [
+      'active graph',
+      [{ elementType: 'graph', id: ID_A }],
+      { activeFontColor: '#fff' },
+    ],
+    [
+      'synthetic idle',
+      [{ elementType: 'key', id: 'key-0' }],
+      { fontColor: '#fff' },
+    ],
+  ] as const)(
+    'font color %s는 eager/wire 전에 거절한다',
+    async (_label, targets, patch) => {
+      await expect(
+        patchFontColorByTargets(targets as never, patch as never),
+      ).resolves.toBe(false);
+      expect(api.commitSemanticOps).not.toHaveBeenCalled();
     },
   );
 

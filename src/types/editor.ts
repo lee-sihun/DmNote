@@ -28,6 +28,10 @@ import {
   type CounterFillPropertyPatchV1,
 } from '@src/types/key/counterFill';
 import {
+  isFontColorPropertyPatchV1,
+  type FontColorPropertyPatchV1,
+} from '@src/types/key/fontColor';
+import {
   canonicalizePositionGradients,
   type PaintDescriptorV1,
 } from '@src/types/color';
@@ -198,6 +202,8 @@ interface EditorElementPropertyValuesV1 {
   fontFamily: string;
   displayText: string;
   className: string;
+  fontColor: string;
+  activeFontColor: string;
   borderWidth: number;
   borderRadius: number;
   fontSize: number;
@@ -309,6 +315,8 @@ export type EditorFontFamilyPropertyPatchV1 =
 export type EditorTextPropertyPatchV1 = EditorPropertyPatchUnionV1<
   'displayText' | 'className'
 >;
+
+export type EditorFontColorPropertyPatchV1 = FontColorPropertyPatchV1;
 
 export type EditorNumericStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'borderWidth' | 'borderRadius' | 'fontSize'
@@ -1217,6 +1225,9 @@ export function assertEditorOpsV1(
       const counterFillPatchValid = (
         isCounterFillPropertyPatchV1 as (value: unknown) => boolean
       )(op.patch);
+      const fontColorPatchValid = (
+        isFontColorPropertyPatchV1 as (value: unknown) => boolean
+      )(op.patch);
       const counterAnimationPreset = op.patch.counterAnimationPreset;
       const counterAnimationPresetValid = (() => {
         if (!isRecord(counterAnimationPreset)) return false;
@@ -1334,6 +1345,10 @@ export function assertEditorOpsV1(
           (op.elementType === 'key' ||
             (!('counterFillActive' in op.patch) &&
               op.elementType === 'stat'))) ||
+        (fontColorPatchValid &&
+          (!('activeFontColor' in op.patch) ||
+            op.elementType === 'key' ||
+            op.elementType === 'knob')) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'displayText' &&
           typeof op.patch.displayText === 'string') ||

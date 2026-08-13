@@ -2544,6 +2544,24 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::FontColor(
+                    crate::models::EditorFontColorPropertyPatchV1 {
+                        font_color: "  raw font color  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "fontColor": "  raw font color  " }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::ActiveFontColor(
+                    crate::models::EditorActiveFontColorPropertyPatchV1 {
+                        active_font_color: String::new(),
+                    },
+                ),
+                serde_json::json!({ "activeFontColor": "" }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
                     shadow: crate::models::EditorShadowLeafPatchV1::OffsetX(
                         crate::models::EditorShadowOffsetXLeafPatchV1 { offset_x: -12.5 },
@@ -3079,6 +3097,11 @@ mod tests {
             serde_json::json!({ "className": 1 }),
             serde_json::json!({ "className": "class", "hidden": true }),
             serde_json::json!({ "className": "class", "unexpected": true }),
+            serde_json::json!({ "fontColor": null }),
+            serde_json::json!({ "fontColor": 1 }),
+            serde_json::json!({ "activeFontColor": false }),
+            serde_json::json!({ "fontColor": "idle", "activeFontColor": "active" }),
+            serde_json::json!({ "activeFontColor": "active", "unexpected": true }),
             serde_json::json!({ "shadow": {} }),
             serde_json::json!({ "shadow": { "offsetX": 1, "blur": 2 } }),
             serde_json::json!({ "shadow": { "color": "shadow", "unexpected": true } }),

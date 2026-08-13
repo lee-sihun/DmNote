@@ -8176,6 +8176,204 @@ mod tests {
     }
 
     #[test]
+    fn font_color_patches_preserve_active_fallbacks_and_reject_wrong_active_types() {
+        let mut store = store_with_every_reorder_type();
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let graph_id = store.graph_positions["4key"][0].position.id.clone();
+        let knob_id = store.knob_positions["4key"][0].position.id.clone();
+
+        let key = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        key.font_color = Some(" key idle ".to_string());
+        key.active_font_color = None;
+        let stat = &mut store.stat_positions.get_mut("4key").unwrap()[0].position;
+        stat.font_color = None;
+        stat.active_font_color = Some("stat-active-sibling".to_string());
+        let graph = &mut store.graph_positions.get_mut("4key").unwrap()[0].position;
+        graph.font_color = Some("graph-old".to_string());
+        graph.active_font_color = Some("graph-active-sibling".to_string());
+        let knob = &mut store.knob_positions.get_mut("4key").unwrap()[0].position;
+        knob.font_color = Some(" knob idle ".to_string());
+        knob.active_font_color = Some("   ".to_string());
+
+        let original = store.clone();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::FontColor(
+                    crate::models::EditorFontColorPropertyPatchV1 {
+                        font_color: " key idle ".to_string(),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::FontColor(
+                    crate::models::EditorFontColorPropertyPatchV1 {
+                        font_color: String::new(),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_id,
+                EditorElementPropertyPatchV1::FontColor(
+                    crate::models::EditorFontColorPropertyPatchV1 {
+                        font_color: " graph new ".to_string(),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_id,
+                EditorElementPropertyPatchV1::FontColor(
+                    crate::models::EditorFontColorPropertyPatchV1 {
+                        font_color: "knob-new".to_string(),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::ActiveFontColor(
+                    crate::models::EditorActiveFontColorPropertyPatchV1 {
+                        active_font_color: "missing".to_string(),
+                    },
+                ),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let mut expected_key = original.key_positions["4key"][0].clone();
+        expected_key.active_font_color = Some(" key idle ".to_string());
+        assert_eq!(transition.candidate.key_positions["4key"][0], expected_key);
+        let mut expected_stat = original.stat_positions["4key"][0].position.clone();
+        expected_stat.font_color = Some(String::new());
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0].position,
+            expected_stat
+        );
+        let mut expected_graph = original.graph_positions["4key"][0].position.clone();
+        expected_graph.font_color = Some(" graph new ".to_string());
+        assert_eq!(
+            transition.candidate.graph_positions["4key"][0].position,
+            expected_graph
+        );
+        let mut expected_knob = original.knob_positions["4key"][0].position.clone();
+        expected_knob.font_color = Some("knob-new".to_string());
+        expected_knob.active_font_color = Some(" knob idle ".to_string());
+        assert_eq!(
+            transition.candidate.knob_positions["4key"][0].position,
+            expected_knob
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let mut active_store = store.clone();
+        let active_key_id = active_store.key_positions["4key"][1].id.clone();
+        active_store.key_positions.get_mut("4key").unwrap()[1].active_font_color = None;
+        let active = prepare_editor_ops_transition(
+            &active_store,
+            &[
+                patch_property_op(
+                    EditorElementTypeV1::Key,
+                    active_key_id,
+                    EditorElementPropertyPatchV1::ActiveFontColor(
+                        crate::models::EditorActiveFontColorPropertyPatchV1 {
+                            active_font_color: String::new(),
+                        },
+                    ),
+                ),
+                patch_property_op(
+                    EditorElementTypeV1::Knob,
+                    &knob_id,
+                    EditorElementPropertyPatchV1::ActiveFontColor(
+                        crate::models::EditorActiveFontColorPropertyPatchV1 {
+                            active_font_color: " active raw ".to_string(),
+                        },
+                    ),
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            active.candidate.key_positions["4key"][1]
+                .active_font_color
+                .as_deref(),
+            Some("")
+        );
+        assert_eq!(
+            active.candidate.knob_positions["4key"][0]
+                .position
+                .active_font_color
+                .as_deref(),
+            Some(" active raw ")
+        );
+
+        for element_type in [EditorElementTypeV1::Stat, EditorElementTypeV1::Graph] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        EditorElementPropertyPatchV1::ActiveFontColor(
+                            crate::models::EditorActiveFontColorPropertyPatchV1 {
+                                active_font_color: "wrong-type".to_string(),
+                            },
+                        ),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store, original);
+        }
+    }
+
+    #[test]
     fn shadow_masks_seed_current_defaults_preserve_siblings_and_reject_invalid_plans() {
         let mut store = store_with_every_reorder_type();
         let key_id = store.key_positions["4key"][0].id.clone();

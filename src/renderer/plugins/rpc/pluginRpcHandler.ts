@@ -61,6 +61,7 @@ import {
   patchCounterLayoutByTargets,
   patchCounterStrokeByTargets,
   patchCounterFillByTargets,
+  patchFontColorByTargets,
   patchCounterTypographyByTargets,
   patchPaintByTargets,
   patchShadowByTargets,
@@ -93,6 +94,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
@@ -109,6 +111,7 @@ import {
 } from '@src/types/editor';
 import { isNotePaintPropertyPatchV1 } from '@src/types/key/notePaint';
 import { isCounterFillPropertyPatchV1 } from '@src/types/key/counterFill';
+import { isFontColorPropertyPatchV1 } from '@src/types/key/fontColor';
 import type {
   LayerReorderAnchorsWire,
   LayerReorderIntentWire,
@@ -418,6 +421,7 @@ const parseNativeLayerPropertyTarget = (
   const shadowPatch = isEditorShadowPropertyPatchV1(patch);
   const notePaintPatch = isNotePaintPropertyPatchV1(patch);
   const counterFillPatch = isCounterFillPropertyPatchV1(patch);
+  const fontColorPatch = isFontColorPropertyPatchV1(patch);
   const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
   const patchValid =
     (shadowPatch &&
@@ -429,6 +433,10 @@ const parseNativeLayerPropertyTarget = (
     (counterFillPatch &&
       (target.elementType === 'key' ||
         (!('counterFillActive' in patch) && target.elementType === 'stat'))) ||
+    (fontColorPatch &&
+      (!('activeFontColor' in patch) ||
+        target.elementType === 'key' ||
+        target.elementType === 'knob')) ||
     (paintPatch &&
       (!('activeBackgroundPaint' in patch) && !('activeBorderPaint' in patch)
         ? true
@@ -874,6 +882,12 @@ type NativeLayerPropertyRequest =
       patch: EditorCounterFillPropertyPatchV1;
     }
   | {
+      kind: 'fontColorBatch';
+      targets: Array<{ elementType: NativeElementType; id: string }>;
+      patch: EditorFontColorPropertyPatchV1;
+      gestureId?: string;
+    }
+  | {
       kind: 'notePropertyBatch';
       ids: string[];
       patch: EditorNotePropertyPatchV1;
@@ -1119,6 +1133,8 @@ const parseNativeLayerPropertyRequest = (
       : null;
   const counterFillPatch: EditorCounterFillPropertyPatchV1 | null =
     isCounterFillPropertyPatchV1(patch) ? patch : null;
+  const fontColorPatch: EditorFontColorPropertyPatchV1 | null =
+    isFontColorPropertyPatchV1(patch) ? patch : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
     typeof patch.noteEffectEnabled === 'boolean'
@@ -1169,6 +1185,7 @@ const parseNativeLayerPropertyRequest = (
     counterTypographyPatch === null &&
     counterStrokePatch === null &&
     counterFillPatch === null &&
+    fontColorPatch === null &&
     counterAnimationPreset === null &&
     notePropertyPatch === null
   ) {
@@ -1178,7 +1195,8 @@ const parseNativeLayerPropertyRequest = (
     'gestureId' in payload &&
     soundVolume === null &&
     stylePropertyPatch === null &&
-    notePaintPatch === null
+    notePaintPatch === null &&
+    fontColorPatch === null
   ) {
     return null;
   }
@@ -1215,6 +1233,8 @@ const parseNativeLayerPropertyRequest = (
       ? 'counter-capable'
       : counterFillPatch !== null
       ? 'counter-capable'
+      : fontColorPatch !== null
+      ? null
       : counterAnimationPreset !== null
       ? 'counter-capable'
       : notePropertyPatch !== null
@@ -1250,6 +1270,10 @@ const parseNativeLayerPropertyRequest = (
       (counterFillPatch !== null &&
         'counterFillActive' in counterFillPatch &&
         target.elementType !== 'key') ||
+      (fontColorPatch !== null &&
+        'activeFontColor' in fontColorPatch &&
+        target.elementType !== 'key' &&
+        target.elementType !== 'knob') ||
       (stylePropertyPatch !== null &&
         'borderRadius' in stylePropertyPatch &&
         stylePropertyPatch.borderRadius > 100 &&
@@ -1429,6 +1453,16 @@ const parseNativeLayerPropertyRequest = (
         id: string;
       }>,
       patch: counterFillPatch,
+    };
+  }
+  if (fontColorPatch !== null) {
+    return {
+      kind: 'fontColorBatch',
+      targets,
+      patch: fontColorPatch,
+      ...(typeof payload.gestureId === 'string'
+        ? { gestureId: payload.gestureId }
+        : {}),
     };
   }
   if (notePropertyPatch !== null) {
@@ -2216,6 +2250,18 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
             options,
           );
         }
+        if (isFontColorPropertyPatchV1(request.target.patch)) {
+          return patchFontColorByTargets(
+            [
+              {
+                elementType: request.target.elementType,
+                id: request.target.id,
+              },
+            ],
+            request.target.patch,
+            options,
+          );
+        }
         if (
           'counterPlacement' in request.target.patch ||
           'counterAlign' in request.target.patch ||
@@ -2452,6 +2498,12 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           request.patch,
           options,
         );
+      }
+      if (request.kind === 'fontColorBatch') {
+        return patchFontColorByTargets(request.targets, request.patch, {
+          ...options,
+          ...(request.gestureId ? { gestureId: request.gestureId } : {}),
+        });
       }
       if (request.kind === 'notePropertyBatch') {
         return patchNotePropertiesByIds(request.ids, request.patch, options);

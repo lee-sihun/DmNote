@@ -51,6 +51,7 @@ import {
   patchShadowByTargets,
   patchNotePaintByIds,
   patchCounterFillByTargets,
+  patchFontColorByTargets,
   patchStylePropertyByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
@@ -69,6 +70,7 @@ import {
   patchShadowViaAuthority,
   patchNotePaintViaAuthority,
   patchCounterFillViaAuthority,
+  patchFontColorViaAuthority,
   patchStylePropertyViaAuthority,
   patchInactiveImageViaAuthority,
   patchIdleTransparentViaAuthority,
@@ -95,6 +97,7 @@ import type {
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
 } from '@src/types/editor';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
@@ -218,6 +221,89 @@ const createPaintCommitHandler =
         : patchPaintByTargets(relevant, patch);
     void persisted.catch(reportElementOpError);
   };
+
+const createFontColorHandlers = (
+  targets: readonly {
+    elementType: 'key' | 'stat' | 'graph' | 'knob';
+    id: string;
+  }[],
+  selectedKeyType: string,
+  legacyPreview: (property: keyof KeyPosition, value: unknown) => void,
+  legacyCommit: (property: keyof KeyPosition, value: unknown) => void,
+  legacyActiveCommit: (property: keyof KeyPosition, value: unknown) => void,
+) => {
+  const relevantTargets = (patch: EditorFontColorPropertyPatchV1) =>
+    'activeFontColor' in patch
+      ? targets.filter(
+          ({ elementType }) => elementType === 'key' || elementType === 'knob',
+        )
+      : targets;
+  const stableTargets = (patch: EditorFontColorPropertyPatchV1) => {
+    const relevant = relevantTargets(patch);
+    return relevant.length > 0 &&
+      relevant.every(({ id }) => id.length > 0 && !isSyntheticElementId(id)) &&
+      new Set(relevant.map(({ id }) => id)).size === relevant.length
+      ? relevant
+      : null;
+  };
+  return {
+    previewFontColor: (patch: EditorFontColorPropertyPatchV1) => {
+      const stable = stableTargets(patch);
+      if (!stable) {
+        if ('fontColor' in patch) legacyPreview('fontColor', patch.fontColor);
+        return;
+      }
+      const grouped = new Map<
+        'key' | 'stat' | 'graph' | 'knob',
+        Array<{ index: number; patch: EditorFontColorPropertyPatchV1 }>
+      >();
+      for (const target of stable) {
+        const locator = resolveElementById(target.elementType, target.id);
+        if (!locator || locator.mode !== selectedKeyType) return;
+        const entries = grouped.get(target.elementType) ?? [];
+        entries.push({ index: locator.index, patch });
+        grouped.set(target.elementType, entries);
+      }
+      for (const [type, entries] of grouped) {
+        editGestureController.preview(selectedKeyType, entries, {
+          domain:
+            type === 'key'
+              ? 'keyPosition'
+              : type === 'stat'
+              ? 'statPosition'
+              : type === 'graph'
+              ? 'graphPosition'
+              : 'knobPosition',
+        });
+      }
+    },
+    commitFontColor: (patch: EditorFontColorPropertyPatchV1) => {
+      const stable = stableTargets(patch);
+      if (!stable) {
+        if ('activeFontColor' in patch) {
+          legacyActiveCommit('activeFontColor', patch.activeFontColor);
+        } else {
+          legacyCommit('fontColor', patch.fontColor);
+        }
+        return;
+      }
+      const active = 'activeFontColor' in patch;
+      const gestureId = active
+        ? undefined
+        : editGestureController.activeGestureId() ?? undefined;
+      const persisted =
+        window.__dmn_window_type === 'panel'
+          ? patchFontColorViaAuthority(stable, patch, gestureId)
+          : patchFontColorByTargets(
+              stable,
+              patch,
+              gestureId ? { gestureId } : {},
+            );
+      if (!active) editGestureController.settleCommit(persisted);
+      void persisted.catch(reportElementOpError);
+    },
+  };
+};
 
 const createShadowCommitHandler =
   (
@@ -703,6 +789,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const commitPaint = createPaintCommitHandler(
     textPropertyTargets,
     handleBatchGradientCommit ?? (() => undefined),
+  );
+  const { previewFontColor, commitFontColor } = createFontColorHandlers(
+    textPropertyTargets,
+    selectedKeyType,
+    handleBatchStyleChange,
+    handleBatchStyleChangeComplete,
+    handleActiveCapableStyleChangeComplete,
   );
   const shadowTargets = [
     ...selectedKeyElements.map(({ id }) => ({
@@ -1228,6 +1321,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 onStylePropertyPreview={previewStyleProperty}
                 onStylePropertyCommit={commitStyleProperty}
                 onPaintCommit={commitPaint}
+                onFontColorPreview={previewFontColor}
+                onFontColorCommit={commitFontColor}
                 onShadowCommit={commitShadow}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}

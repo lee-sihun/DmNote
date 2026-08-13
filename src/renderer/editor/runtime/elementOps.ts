@@ -48,6 +48,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
   EditorCounterAnimationPresetIntentV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
@@ -86,6 +87,10 @@ import {
   isCounterFillPropertyPatchV1,
   projectCounterFillPatch,
 } from '@src/types/key/counterFill';
+import {
+  isFontColorPropertyPatchV1,
+  projectFontColorPatch,
+} from '@src/types/key/fontColor';
 import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
@@ -2308,6 +2313,92 @@ export const patchCounterFillById = (
   patch: EditorCounterFillPropertyPatchV1,
   options: { preflight?: () => void } = {},
 ) => patchCounterFillByTargets([{ elementType, id }], patch, options);
+
+type FontColorTarget = { elementType: NativeElementType; id: string };
+
+const fontColorPropertyIntents = (
+  targets: readonly FontColorTarget[],
+  patch: EditorFontColorPropertyPatchV1,
+): PropertyIntents => {
+  const document = captureEditorDocument();
+  const intents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { elementType, id } of targets) {
+    const collection =
+      elementType === 'key'
+        ? document.keyPositions
+        : elementType === 'stat'
+        ? document.statPositions
+        : elementType === 'graph'
+        ? document.graphPositions
+        : document.knobPositions;
+    const current = Object.values(collection)
+      .flat()
+      .find((position) => position.id === id) as KeyPosition | undefined;
+    if (!current) continue;
+    const byId =
+      intents.get(elementType) ?? new Map<string, Record<string, unknown>>();
+    byId.set(id, projectFontColorPatch(current, elementType, patch));
+    intents.set(elementType, byId);
+  }
+  return intents;
+};
+
+export const patchFontColorByTargets = (
+  targets: readonly FontColorTarget[],
+  patch: EditorFontColorPropertyPatchV1,
+  options: { preflight?: () => void; gestureId?: string } = {},
+): Promise<boolean> => {
+  const active = 'activeFontColor' in patch;
+  if (
+    !isFontColorPropertyPatchV1(patch) ||
+    targets.length === 0 ||
+    targets.some(
+      ({ elementType, id }) =>
+        !id ||
+        isSyntheticElementId(id) ||
+        (active && elementType !== 'key' && elementType !== 'knob'),
+    ) ||
+    new Set(targets.map(({ id }) => id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  const receipt = applyPropertyIntentsEagerly(
+    fontColorPropertyIntents(targets, patch),
+  );
+  let enrolled = false;
+  return commitSemanticOps(
+    targets.map(({ elementType, id }) => ({
+      kind: 'patchElement' as const,
+      elementType,
+      id,
+      patch: structuredClone(patch),
+    })),
+    {
+      gestureId: options.gestureId,
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchFontColorById = (
+  elementType: NativeElementType,
+  id: string,
+  patch: EditorFontColorPropertyPatchV1,
+  options: { preflight?: () => void; gestureId?: string } = {},
+) => patchFontColorByTargets([{ elementType, id }], patch, options);
 
 type ShadowTarget = {
   elementType: NativeElementType;

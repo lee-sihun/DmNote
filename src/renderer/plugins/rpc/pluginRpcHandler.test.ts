@@ -195,6 +195,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchFontColor: vi.fn(
+    (
+      _targets?: unknown,
+      _patch?: unknown,
+      _options?: { gestureId?: string; preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   patchPaint: vi.fn(
     (
       _targets?: unknown,
@@ -315,6 +322,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterTypographyByTargets: mocks.patchCounterTypography,
   patchCounterStrokeByTargets: mocks.patchCounterStroke,
   patchCounterFillByTargets: mocks.patchCounterFill,
+  patchFontColorByTargets: mocks.patchFontColor,
   patchPaintByTargets: mocks.patchPaint,
   patchShadowByTargets: mocks.patchShadow,
   patchNotePaintByIds: mocks.patchNotePaint,
@@ -444,6 +452,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchCounterStroke.mockResolvedValue(true);
     mocks.patchCounterFill.mockReset();
     mocks.patchCounterFill.mockResolvedValue(true);
+    mocks.patchFontColor.mockReset();
+    mocks.patchFontColor.mockResolvedValue(true);
     mocks.patchPaint.mockReset();
     mocks.patchPaint.mockResolvedValue(true);
     mocks.patchShadow.mockReset();
@@ -1802,6 +1812,55 @@ describe('plugin panel persisted element mutations', () => {
     });
   });
 
+  it('font color batch는 canonical gesture와 exact raw patch를 dedicated helper에 전달한다', async () => {
+    const targets = [
+      { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      { elementType: 'knob', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    ];
+    const patch = { fontColor: '  raw idle  ' } as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch,
+        gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.patchFontColor).toHaveBeenCalledOnce());
+    expect(mocks.patchFontColor).toHaveBeenCalledWith(targets, patch, {
+      gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      preflight: expect.any(Function),
+    });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
+  it('font color single도 generic eager를 우회하고 slot generation을 검사한다', async () => {
+    mocks.patchFontColor.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'knob',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { activeFontColor: ' active raw ' },
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.patchFontColor).toHaveBeenCalledOnce();
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
   it('paint batch는 exact descriptor와 slot preflight를 전용 helper에 전달한다', async () => {
     const targets = [
       { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
@@ -2084,6 +2143,33 @@ describe('plugin panel persisted element mutations', () => {
       patch: { counterFillIdle: { color: '#fff' } },
     },
     {
+      targets: [{ elementType: 'stat', id: 'a' }],
+      patch: { activeFontColor: '#fff' },
+    },
+    {
+      targets: [{ elementType: 'graph', id: 'a' }],
+      patch: { activeFontColor: '#fff' },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { fontColor: null },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { fontColor: '#fff', activeFontColor: '#000' },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'key-0' }],
+      patch: { fontColor: '#fff' },
+    },
+    {
+      targets: Array.from({ length: 4097 }, (_, index) => ({
+        elementType: 'key',
+        id: `font-color-${index}`,
+      })),
+      patch: { fontColor: '#fff' },
+    },
+    {
       targets: [
         { elementType: 'key', id: 'a' },
         { elementType: 'stat', id: 'a' },
@@ -2116,6 +2202,8 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchCounterLayout).not.toHaveBeenCalled();
       expect(mocks.patchCounterTypography).not.toHaveBeenCalled();
       expect(mocks.patchCounterStroke).not.toHaveBeenCalled();
+      expect(mocks.patchCounterFill).not.toHaveBeenCalled();
+      expect(mocks.patchFontColor).not.toHaveBeenCalled();
     },
   );
 

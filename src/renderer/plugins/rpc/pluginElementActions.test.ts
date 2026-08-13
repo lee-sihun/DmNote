@@ -1103,6 +1103,85 @@ describe('plugin element panel queue', () => {
     );
   });
 
+  it('idle font color는 gesture와 exact targets를 staleOnly envelope에 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({
+      kind: 'ok',
+      response: { modelRevision: 2 },
+    });
+    const targets = [
+      {
+        elementType: 'knob' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    ];
+    const patch = { fontColor: '  raw idle  ' } as const;
+
+    await expect(
+      actions.patchFontColorViaAuthority(
+        targets,
+        patch,
+        'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      ),
+    ).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      {
+        targets,
+        patch,
+        gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      },
+      0,
+      7,
+    );
+  });
+
+  it('idle font color outcome-unknown은 옛 current-dependent intent를 재전송하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+
+    await expect(
+      actions.patchFontColorViaAuthority(
+        [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        { fontColor: '#fff' },
+      ),
+    ).resolves.toBe(false);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
+  it('active font color outcome-unknown은 same raw literal을 default로 한 번 재전송한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchFontColorViaAuthority(
+      [
+        {
+          elementType: 'knob',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      { activeFontColor: '  active raw  ' },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+  });
+
   it('counter animation update/delete는 exact descriptor와 성공 payload를 반환한다', async () => {
     const updateResponse = {
       preset: { id: 'preset-a' },

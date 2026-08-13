@@ -63,7 +63,10 @@ import { resolveElementShadowForPosition } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
-import type { EditorShadowPropertyPatchV1 } from '@src/types/editor';
+import type {
+  EditorFontColorPropertyPatchV1,
+  EditorShadowPropertyPatchV1,
+} from '@src/types/editor';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
@@ -134,6 +137,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onStylePropertyPreview,
   onStylePropertyCommit,
   onPaintCommit,
+  onFontColorCommit,
   onShadowCommit,
   imageButtonRef,
   panelElement,
@@ -430,6 +434,15 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   ) => {
     const prop = resolveColorProperty(target);
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
+
+    if (target === 'fontColor' && onFontColorCommit) {
+      onFontColorCommit(
+        (prop === 'activeFontColor'
+          ? { activeFontColor: color }
+          : { fontColor: color }) as EditorFontColorPropertyPatchV1,
+      );
+      return;
+    }
 
     const updates: Partial<KeyPosition> = {
       [prop]: color,

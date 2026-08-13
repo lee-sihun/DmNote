@@ -110,6 +110,8 @@ const patches = vi.hoisted(() => ({
   patchCounterStrokeViaAuthority: vi.fn(async () => true),
   patchCounterFillByTargets: vi.fn(async () => true),
   patchCounterFillViaAuthority: vi.fn(async () => true),
+  patchFontColorByTargets: vi.fn(async () => true),
+  patchFontColorViaAuthority: vi.fn(async () => true),
   patchPaintByTargets: vi.fn(async () => true),
   patchPaintViaAuthority: vi.fn(async () => true),
   patchShadowByTargets: vi.fn(async () => true),
@@ -145,6 +147,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
   patchCounterStrokeByTargets: patches.patchCounterStrokeByTargets,
   patchCounterFillByTargets: patches.patchCounterFillByTargets,
+  patchFontColorByTargets: patches.patchFontColorByTargets,
   patchPaintByTargets: patches.patchPaintByTargets,
   patchShadowByTargets: patches.patchShadowByTargets,
   patchNotePaintByIds: patches.patchNotePaintByIds,
@@ -169,6 +172,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
     patches.patchCounterTypographyViaAuthority,
   patchCounterStrokeViaAuthority: patches.patchCounterStrokeViaAuthority,
   patchCounterFillViaAuthority: patches.patchCounterFillViaAuthority,
+  patchFontColorViaAuthority: patches.patchFontColorViaAuthority,
   patchPaintViaAuthority: patches.patchPaintViaAuthority,
   patchShadowViaAuthority: patches.patchShadowViaAuthority,
   patchNotePaintViaAuthority: patches.patchNotePaintViaAuthority,
@@ -335,6 +339,22 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     act(() =>
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
+  };
+
+  const openFontColorPicker = async () => {
+    const label = Array.from(host.querySelectorAll('p')).find(
+      (element) => element.textContent === 'propertiesPanel.fontColor',
+    );
+    const button = label?.parentElement?.querySelector('button');
+    expect(button).not.toBeNull();
+    act(() =>
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(captured.color).not.toBeNull();
   };
 
   const latestCounterDropdown = (value: string) =>
@@ -1191,6 +1211,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       useCustomCSS: true,
       handleBatchStyleChange: legacyPreview,
       handleBatchStyleChangeComplete: legacyCommit,
+      handleActiveCapableStyleChangeComplete: legacyCommit,
     };
     const panel =
       kind === 'mixed' ? (
@@ -1316,6 +1337,155 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(legacyCommit).toHaveBeenCalledWith('className', 'LegacyClass');
       expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
       expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main idle', 'main', 'idle'],
+    ['panel active', 'panel', 'active'],
+  ] as const)(
+    '%s mixed batch font color는 latest current type subset과 기존 gesture timing을 쓴다',
+    async (_label, windowType, state) => {
+      window.__dmn_window_type = windowType;
+      const idsA = [
+        'f1111111-1111-4111-8111-111111111111',
+        'f2222222-2222-4222-8222-222222222222',
+        'f3333333-3333-4333-8333-333333333333',
+        'f4444444-4444-4444-8444-444444444444',
+      ];
+      const idsB = [
+        'f5111111-1111-4111-8111-111111111111',
+        'f5222222-2222-4222-8222-222222222222',
+        'f5333333-3333-4333-8333-333333333333',
+        'f5444444-4444-4444-8444-444444444444',
+      ];
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      setClassNameTargets('mixed', idsA);
+      renderClassNamePanel('mixed', legacyPreview, legacyCommit);
+      setClassNameTargets('mixed', idsB);
+      renderClassNamePanel('mixed', legacyPreview, legacyCommit);
+      await openFontColorPicker();
+      if (state === 'active') {
+        act(() => captured.color?.onStateModeChange?.('active'));
+      }
+      gestures.preview.mockClear();
+      gestures.settleCommit.mockClear();
+
+      act(() => captured.color?.onColorChange('local-only'));
+      expect(gestures.preview).not.toHaveBeenCalled();
+      act(() => captured.color?.onColorChangeComplete(' final raw '));
+
+      const targets = [
+        { elementType: 'key' as const, id: idsB[0] },
+        ...(state === 'idle'
+          ? [
+              { elementType: 'stat' as const, id: idsB[1] },
+              { elementType: 'graph' as const, id: idsB[2] },
+            ]
+          : []),
+        { elementType: 'knob' as const, id: idsB[3] },
+      ];
+      const patch =
+        state === 'active'
+          ? { activeFontColor: ' final raw ' }
+          : { fontColor: ' final raw ' };
+      const writer =
+        windowType === 'panel'
+          ? patches.patchFontColorViaAuthority
+          : patches.patchFontColorByTargets;
+      const gestureId =
+        state === 'idle' ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' : undefined;
+      if (windowType === 'panel') {
+        expect(writer).toHaveBeenCalledWith(targets, patch, gestureId);
+      } else {
+        expect(writer).toHaveBeenCalledWith(
+          targets,
+          patch,
+          gestureId === undefined ? {} : { gestureId },
+        );
+      }
+      if (state === 'idle') {
+        expect(gestures.preview).toHaveBeenCalled();
+        expect(gestures.settleCommit).toHaveBeenCalledWith(
+          writer.mock.results[0]?.value,
+        );
+      } else {
+        expect(gestures.preview).not.toHaveBeenCalled();
+        expect(gestures.settleCommit).not.toHaveBeenCalled();
+      }
+      expect(legacyPreview).not.toHaveBeenCalled();
+      expect(legacyCommit).not.toHaveBeenCalled();
+    },
+  );
+
+  it('mixed batch active font color는 non-active synthetic를 무시하고 relevant synthetic면 whole legacy다', async () => {
+    const legacyPreview = vi.fn();
+    const legacyCommit = vi.fn();
+    setClassNameTargets('mixed', [ID_A, 'stat-0', 'graph-0', ID_B]);
+    renderClassNamePanel('mixed', legacyPreview, legacyCommit);
+    await openFontColorPicker();
+    act(() => captured.color?.onStateModeChange?.('active'));
+    act(() => captured.color?.onColorChangeComplete('#112233'));
+    expect(patches.patchFontColorByTargets).toHaveBeenCalledWith(
+      [
+        { elementType: 'key', id: ID_A },
+        { elementType: 'knob', id: ID_B },
+      ],
+      { activeFontColor: '#112233' },
+      {},
+    );
+
+    vi.clearAllMocks();
+    setClassNameTargets('mixed', ['key-0', ID_A, ID_B, 'knob-0']);
+    renderClassNamePanel('mixed', legacyPreview, legacyCommit);
+    await openFontColorPicker();
+    act(() => captured.color?.onStateModeChange?.('active'));
+    act(() => captured.color?.onColorChangeComplete('#445566'));
+    expect(patches.patchFontColorByTargets).not.toHaveBeenCalled();
+    expect(patches.patchFontColorViaAuthority).not.toHaveBeenCalled();
+    expect(legacyCommit).toHaveBeenCalledWith('activeFontColor', '#445566');
+  });
+
+  it.each([
+    ['synthetic', 'stat-0'],
+    ['empty', ''],
+  ] as const)(
+    'mixed batch idle font color는 relevant %s target이면 whole legacy다',
+    async (_label, statId) => {
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      setClassNameTargets('mixed', [
+        ID_A,
+        statId,
+        ID_B,
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      ]);
+      renderClassNamePanel('mixed', legacyPreview, legacyCommit);
+      await openFontColorPicker();
+
+      act(() => captured.color?.onColorChange('#112233'));
+      act(() => captured.color?.onColorChangeComplete('#445566'));
+
+      expect(legacyPreview).toHaveBeenCalledWith('fontColor', '#445566');
+      expect(legacyCommit).toHaveBeenCalledWith('fontColor', '#445566');
+      expect(patches.patchFontColorByTargets).not.toHaveBeenCalled();
+      expect(patches.patchFontColorViaAuthority).not.toHaveBeenCalled();
+      expect(gestures.preview).not.toHaveBeenCalled();
+      expect(gestures.settleCommit).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['graph', 'knob'] as const)(
+    '%s-only batch는 font color UI를 노출하지 않는다',
+    (kind) => {
+      setClassNameTargets(kind, [ID_A]);
+      renderClassNamePanel(kind, vi.fn(), vi.fn());
+      expect(
+        Array.from(host.querySelectorAll('p')).some(
+          (element) => element.textContent === 'propertiesPanel.fontColor',
+        ),
+      ).toBe(false);
     },
   );
 

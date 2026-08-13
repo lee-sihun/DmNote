@@ -432,6 +432,8 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['key', { counterStrokeIdle: '  Raw Idle Stroke  ' }],
     ['stat', { counterStrokeIdle: '' }],
     ['key', { counterStrokeActive: '  Raw Active Stroke  ' }],
+    ['graph', { fontColor: '  Raw Idle Font  ' }],
+    ['knob', { activeFontColor: '' }],
     ['stat', { counterFillIdle: { color: ' raw solid ' } }],
     [
       'key',
@@ -773,6 +775,10 @@ describe('editorCommitRaw semantic op protocol', () => {
     ],
     ['key', { counterAnimationPreset: { presetId: 'a', scale: Number.NaN } }],
     ['graph', { counterFillIdle: { color: '#fff' } }],
+    ['stat', { activeFontColor: '#fff' }],
+    ['graph', { activeFontColor: '#fff' }],
+    ['key', { fontColor: 1 }],
+    ['key', { fontColor: '#fff', activeFontColor: '#000' }],
     ['stat', { counterFillActive: { color: '#fff' } }],
     ['key', { counterFillIdle: { color: '#fff', gradient: null } }],
     [

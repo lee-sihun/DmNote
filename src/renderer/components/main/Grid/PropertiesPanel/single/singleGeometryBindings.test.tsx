@@ -813,6 +813,51 @@ describe('single geometry input bindings', () => {
     },
   );
 
+  it.each([
+    ['key', true],
+    ['stat', false],
+  ] as const)(
+    '%s font color actual ColorPicker는 local drag 뒤 final raw leaf만 commit한다',
+    (type, activeReachable) => {
+      const fontColor = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacy}
+            onFontColorCommit={fontColor}
+            shadowActiveState={activeReachable}
+            showSoundControls={false}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+      act(() => captured.swatches.at(-1)?.onClick());
+      act(() => captured.color?.onColorChange('local-only'));
+      expect(fontColor).not.toHaveBeenCalled();
+      act(() => captured.color?.onColorChangeComplete(' idle raw '));
+      expect(fontColor).toHaveBeenLastCalledWith({ fontColor: ' idle raw ' });
+      if (activeReachable) {
+        act(() => captured.color?.onStateModeChange?.('active'));
+        act(() => captured.color?.onColorChange('active-local'));
+        expect(fontColor).toHaveBeenCalledOnce();
+        act(() => captured.color?.onColorChangeComplete(' active raw '));
+        expect(fontColor).toHaveBeenLastCalledWith({
+          activeFontColor: ' active raw ',
+        });
+      } else {
+        expect(captured.color?.onStateModeChange).toBeUndefined();
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
   it('graph paint는 exact gradient pair를 final callback으로만 전달한다', async () => {
     const paint = vi.fn();
     const legacy = vi.fn();

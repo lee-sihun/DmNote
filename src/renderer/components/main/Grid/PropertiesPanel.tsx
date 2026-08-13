@@ -57,6 +57,7 @@ import {
   patchCounterTypographyViaAuthority,
   patchCounterStrokeViaAuthority,
   patchCounterFillViaAuthority,
+  patchFontColorViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -82,6 +83,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
@@ -134,6 +136,7 @@ import {
   patchCounterStrokeByTargets,
   patchCounterFillById,
   patchCounterFillByTargets,
+  patchFontColorById,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -2331,6 +2334,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableFontColorCommitHandler = (
+    type: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (patch: EditorFontColorPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchFontColorViaAuthority([{ elementType: type, id }], patch)
+              : patchFontColorById(type, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update font color', error);
+          });
+        }
+      : undefined;
+
   const stableShadowCommitHandler = (
     type: 'key' | 'stat' | 'knob',
     id: string | undefined,
@@ -4174,6 +4193,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           { settleGesture: true },
         )}
         onPaintCommit={stablePaintCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onFontColorCommit={stableFontColorCommitHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

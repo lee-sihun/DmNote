@@ -4476,6 +4476,74 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('font color projection은 idle key fallback을 pre-edit raw로 materialize하고 siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001b1';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      fontColor: '  idle raw  ',
+      activeFontColor: ' ',
+      className: 'sibling',
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { fontColor: '  idle raw  ' },
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      fontColor: '  idle raw  ',
+      activeFontColor: '  idle raw  ',
+      className: 'sibling',
+    });
+    harness.coordinator.stop();
+  });
+
+  it('font color revision conflict retry는 latest idle raw에서 active fallback을 다시 합성한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000001b2';
+    const base = withStableId(id);
+    Object.assign(base.keyPositions['4key'][0], {
+      fontColor: 'old-idle',
+      activeFontColor: undefined,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    const latest = structuredClone(base);
+    Object.assign(latest.keyPositions['4key'][0], {
+      fontColor: 'latest-idle',
+      activeFontColor: ' ',
+    });
+    harness.transport.commitMock
+      .mockImplementationOnce(async () => {
+        harness.transport.canonical = { revision: 1, document: latest };
+        throw revisionConflict();
+      })
+      .mockImplementationOnce(original);
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { fontColor: 'new-idle' },
+      },
+    ]);
+
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      fontColor: 'new-idle',
+      activeFontColor: 'latest-idle',
+    });
+    expect(harness.transport.commitMock).toHaveBeenCalledTimes(2);
+    harness.coordinator.stop();
+  });
+
   it('setKeySlot은 최신 paired ID index의 slot만 바꾼다', async () => {
     const id = '00000000-0000-4000-8000-000000000087';
     const otherId = '00000000-0000-4000-8000-000000000086';

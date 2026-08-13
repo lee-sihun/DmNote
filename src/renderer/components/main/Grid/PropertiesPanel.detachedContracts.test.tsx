@@ -65,6 +65,8 @@ const {
   patchCounterStrokeViaAuthorityMock,
   patchCounterFillMock,
   patchCounterFillViaAuthorityMock,
+  patchFontColorMock,
+  patchFontColorViaAuthorityMock,
   patchPaintMock,
   patchPaintViaAuthorityMock,
   patchShadowMock,
@@ -148,6 +150,8 @@ const {
   patchCounterStrokeViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchCounterFillMock: vi.fn(() => Promise.resolve(true)),
   patchCounterFillViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchFontColorMock: vi.fn(() => Promise.resolve(true)),
+  patchFontColorViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchPaintMock: vi.fn(() => Promise.resolve(true)),
   patchPaintViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchShadowMock: vi.fn(() => Promise.resolve(true)),
@@ -209,6 +213,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterTypographyViaAuthority: patchCounterTypographyViaAuthorityMock,
   patchCounterStrokeViaAuthority: patchCounterStrokeViaAuthorityMock,
   patchCounterFillViaAuthority: patchCounterFillViaAuthorityMock,
+  patchFontColorViaAuthority: patchFontColorViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
@@ -245,6 +250,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterStrokeById: patchCounterStrokeMock,
   patchCounterStrokeByTargets: patchCounterStrokeTargetsMock,
   patchCounterFillById: patchCounterFillMock,
+  patchFontColorById: patchFontColorMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -437,6 +443,8 @@ const resetStores = () => {
   patchCounterStrokeViaAuthorityMock.mockClear();
   patchCounterFillMock.mockClear();
   patchCounterFillViaAuthorityMock.mockClear();
+  patchFontColorMock.mockClear();
+  patchFontColorViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -1830,6 +1838,91 @@ describe('PropertiesPanel detached preview contract', () => {
       expect(patchCounterFillViaAuthorityMock).not.toHaveBeenCalled();
       if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
       else expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['main key idle', 'main', 'key', { fontColor: ' idle raw ' }],
+    ['panel key active', 'panel', 'key', { activeFontColor: ' active raw ' }],
+    ['main stat idle', 'main', 'stat', { fontColor: '' }],
+  ] as const)(
+    '%s font color는 stable ID exact writer만 쓴다',
+    (_label, windowType, type, patch) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'a3855555-5555-4555-8555-555555555555'
+          : 'a3866666-6666-4666-8666-666666666666';
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onFontColorCommit: (value: typeof patch) => void;
+        }
+      ).onFontColorCommit;
+
+      act(() => commit(patch));
+      if (windowType === 'panel') {
+        expect(patchFontColorViaAuthorityMock).toHaveBeenCalledWith(
+          [{ elementType: type, id }],
+          patch,
+        );
+        expect(patchFontColorMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchFontColorMock).toHaveBeenCalledWith(type, id, patch);
+        expect(patchFontColorViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat synthetic', 'stat', 'stat-0'],
+    ['stat empty', 'stat', ''],
+  ] as const)(
+    'single %s font color는 exact callback 없이 legacy다',
+    (_label, type, id) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onFontColorCommit?: (patch: Record<string, unknown>) => void;
+      };
+      expect(props.onFontColorCommit).toBeUndefined();
+      expect(patchFontColorMock).not.toHaveBeenCalled();
+      expect(patchFontColorViaAuthorityMock).not.toHaveBeenCalled();
     },
   );
 

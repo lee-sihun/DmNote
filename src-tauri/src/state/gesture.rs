@@ -542,6 +542,24 @@ mod tests {
                 serde_json::json!({ "className": "  raw class  " }),
             ),
             (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::FontColor(
+                    crate::models::EditorFontColorPropertyPatchV1 {
+                        font_color: String::new(),
+                    },
+                ),
+                serde_json::json!({ "fontColor": "" }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::ActiveFontColor(
+                    crate::models::EditorActiveFontColorPropertyPatchV1 {
+                        active_font_color: "  raw active font  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "activeFontColor": "  raw active font  " }),
+            ),
+            (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
                     shadow: crate::models::EditorShadowLeafPatchV1::Blur(
@@ -1086,6 +1104,22 @@ mod tests {
             let mut invalid_class_name = layer_name_wire.clone();
             invalid_class_name["editorOps"][0]["patch"] = patch;
             let error = decode_gesture_commit_request(invalid_class_name).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
+
+        for patch in [
+            serde_json::json!({ "fontColor": null }),
+            serde_json::json!({ "fontColor": false }),
+            serde_json::json!({ "activeFontColor": 1 }),
+            serde_json::json!({ "fontColor": "idle", "activeFontColor": "active" }),
+            serde_json::json!({ "fontColor": "idle", "unexpected": true }),
+        ] {
+            let mut invalid_font_color = layer_name_wire.clone();
+            invalid_font_color["editorOps"][0]["patch"] = patch;
+            let error = decode_gesture_commit_request(invalid_font_color).unwrap_err();
             assert_eq!(
                 validation_code(error).as_deref(),
                 Some("INVALID_REQUEST_PAYLOAD")

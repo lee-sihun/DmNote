@@ -47,6 +47,7 @@ import { editGestureController } from '@src/renderer/editor/runtime/editGestureC
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import type {
   EditorPaintPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
@@ -79,6 +80,8 @@ interface BatchStyleTabContentProps {
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onFontColorPreview?: (patch: EditorFontColorPropertyPatchV1) => void;
+  onFontColorCommit?: (patch: EditorFontColorPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
@@ -165,6 +168,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   onStylePropertyPreview,
   onStylePropertyCommit,
   onPaintCommit,
+  onFontColorPreview,
+  onFontColorCommit,
   onShadowCommit,
   showSoundControls = false,
   showShadowControls = true,
@@ -1144,13 +1149,26 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   stateMode={effectiveColorState}
                   onStateModeChange={setColorState}
                   onChange={(color) =>
-                    handleBatchStyleChange('fontColor', color)
+                    onFontColorPreview
+                      ? onFontColorPreview(
+                          effectiveColorState === 'active'
+                            ? { activeFontColor: color }
+                            : { fontColor: color },
+                        )
+                      : handleBatchStyleChange('fontColor', color)
                   }
                   onChangeComplete={(color) =>
-                    handleBatchStyleChangeComplete('fontColor', color)
+                    onFontColorCommit
+                      ? onFontColorCommit({ fontColor: color })
+                      : handleBatchStyleChangeComplete('fontColor', color)
                   }
                   onActiveChangeComplete={(color) =>
-                    handleActiveStyleChangeComplete('activeFontColor', color)
+                    onFontColorCommit
+                      ? onFontColorCommit({ activeFontColor: color })
+                      : handleActiveStyleChangeComplete(
+                          'activeFontColor',
+                          color,
+                        )
                   }
                   panelElement={panelElement}
                 />

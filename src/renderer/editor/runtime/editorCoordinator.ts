@@ -14,6 +14,10 @@ import {
   projectCounterFillPatch,
 } from '@src/types/key/counterFill';
 import {
+  isFontColorPropertyPatchV1,
+  projectFontColorPatch,
+} from '@src/types/key/fontColor';
+import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
@@ -805,6 +809,16 @@ const applySemanticOps = (
               return {
                 ...position,
                 ...projectCounterFillPatch(position as never, op.patch),
+              };
+            }
+            if (isFontColorPropertyPatchV1(op.patch)) {
+              return {
+                ...position,
+                ...projectFontColorPatch(
+                  position as never,
+                  op.elementType,
+                  op.patch,
+                ),
               };
             }
             if (isNotePaintPropertyPatchV1(op.patch)) {

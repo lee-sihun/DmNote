@@ -24,6 +24,7 @@ import type {
   EditorPreviewStylePropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
+  EditorFontColorPropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
@@ -858,6 +859,28 @@ export const patchCounterFillViaAuthority = (
       },
       authorityGeneration,
       retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchFontColorViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorFontColorPropertyPatchV1,
+  gestureId?: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+        ...(gestureId ? { gestureId } : {}),
+      },
+      authorityGeneration,
+      retryPolicy: 'activeFontColor' in patch ? 'default' : 'staleOnly',
       resolve,
     });
     void ensureQueueDrain();
