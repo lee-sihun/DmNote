@@ -51,6 +51,7 @@ import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import {
+  commitElementGeometryById,
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchFontStyleByTargets,
@@ -107,6 +108,9 @@ const LAYER_DELETE_TARGET_TYPES = new Set([
   'plugin',
 ]);
 const MAX_LAYER_RPC_TARGETS = 4096;
+const MAX_GESTURE_ID_BYTES = 64;
+const CANONICAL_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const hasExactKeys = (
   value: Record<string, unknown>,
@@ -118,6 +122,11 @@ const hasExactKeys = (
     expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
   );
 };
+
+const isCanonicalGestureId = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  new TextEncoder().encode(value).length <= MAX_GESTURE_ID_BYTES &&
+  CANONICAL_UUID_PATTERN.test(value);
 
 const parseLayerDeleteTargets = (
   payload: Record<string, unknown>,
@@ -252,7 +261,10 @@ const parseNativeLayerPropertyTarget = (
       target.elementType === 'key' &&
       ['all', 'vertical', 'horizontal'].includes(
         patch.noteBorderSide as string,
-      ));
+      )) ||
+    (hasExactKeys(patch, ['statType']) &&
+      target.elementType === 'stat' &&
+      ['kps', 'kpsAvg', 'kpsMax', 'total'].includes(patch.statType as string));
   const graphOnlyPatch =
     hasExactKeys(patch, ['graphType']) ||
     hasExactKeys(patch, ['graphColor']) ||
@@ -269,6 +281,59 @@ const parseNativeLayerPropertyTarget = (
     return null;
   }
   return target as unknown as NativeLayerPropertyTarget;
+};
+
+interface NativeLayerBoundsTarget {
+  elementType: NativeElementType;
+  id: string;
+  patch: Partial<Record<'dx' | 'dy' | 'width' | 'height', number>>;
+  gestureId?: string;
+}
+
+const parseNativeLayerBoundsTarget = (
+  payload: Record<string, unknown>,
+): NativeLayerBoundsTarget | null => {
+  if (!hasExactKeys(payload, ['target'])) return null;
+  const value = payload.target;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const target = value as Record<string, unknown>;
+  const targetKeys = Object.keys(target);
+  if (
+    (targetKeys.length !== 3 && targetKeys.length !== 4) ||
+    !['elementType', 'id', 'patch'].every((key) => key in target) ||
+    targetKeys.some(
+      (key) => !['elementType', 'id', 'patch', 'gestureId'].includes(key),
+    ) ||
+    typeof target.elementType !== 'string' ||
+    !['key', 'stat', 'graph', 'knob'].includes(target.elementType) ||
+    typeof target.id !== 'string' ||
+    target.id.trim().length === 0 ||
+    isSyntheticElementId(target.id) ||
+    (target.gestureId !== undefined &&
+      !isCanonicalGestureId(target.gestureId)) ||
+    (target.gestureId !== undefined &&
+      target.elementType !== 'key' &&
+      target.elementType !== 'stat') ||
+    target.patch === null ||
+    typeof target.patch !== 'object' ||
+    Array.isArray(target.patch)
+  ) {
+    return null;
+  }
+  const patch = target.patch as Record<string, unknown>;
+  const fields = Object.keys(patch);
+  if (
+    fields.length !== 1 ||
+    !['dx', 'dy', 'width', 'height'].includes(fields[0]) ||
+    !Number.isFinite(patch[fields[0]]) ||
+    ((fields[0] === 'width' || fields[0] === 'height') &&
+      (patch[fields[0]] as number) <= 0)
+  ) {
+    return null;
+  }
+  return target as unknown as NativeLayerBoundsTarget;
 };
 
 type NativeLayerPropertyRequest =
@@ -1188,6 +1253,50 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
         }
         console.error('Failed to patch panel native layer property', error);
         respond(failure(envelope.requestId, 'PATCH_LAYER_PROPERTY_FAILED'));
+      });
+    return;
+  }
+
+  if (envelope.operation === PLUGIN_RPC_OPERATIONS.setLayerBounds) {
+    const target = parseNativeLayerBoundsTarget(envelope.payload);
+    if (!target) {
+      respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
+      return;
+    }
+    const requestGeneration = envelope.authorityGeneration;
+    const generationLive = () =>
+      requestGeneration === getPluginAuthorityGeneration();
+    if (!generationLive()) {
+      respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+      return;
+    }
+    void commitElementGeometryById(
+      target.elementType,
+      target.id,
+      target.patch,
+      {
+        ...(target.gestureId ? { gestureId: target.gestureId } : {}),
+        preflight: () => {
+          if (!generationLive()) {
+            throw new Error('plugin authority generation changed');
+          }
+        },
+      },
+    )
+      .then(() => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        respond(success(envelope.requestId));
+      })
+      .catch((error) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        console.error('Failed to set panel native layer bounds', error);
+        respond(failure(envelope.requestId, 'SET_LAYER_BOUNDS_FAILED'));
       });
     return;
   }

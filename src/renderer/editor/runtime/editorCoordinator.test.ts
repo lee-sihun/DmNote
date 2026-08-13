@@ -407,6 +407,9 @@ const applyOpsForTest = (
           if ('noteBorderSide' in op.patch) {
             return { ...position, noteBorderSide: op.patch.noteBorderSide };
           }
+          if ('statType' in op.patch) {
+            return { ...position, statType: op.patch.statType };
+          }
           return { ...position, hidden: op.patch.hidden };
         });
       } else {
@@ -2942,6 +2945,18 @@ describe('commitSemanticOpsInternal', () => {
     patch: { hidden },
   });
 
+  it('fixed invalid ops는 Promise로 거절하고 transport start 전에 중단한다', async () => {
+    const harness = createHarness(makeDocument());
+    const invalid = [{ kind: 'setBounds' }] as unknown as EditorOpV1[];
+
+    const committing = harness.coordinator.commitSemanticOpsInternal(invalid);
+
+    await expect(committing).rejects.toBeInstanceOf(EditorProtocolError);
+    expect(harness.transport.getMock).not.toHaveBeenCalled();
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    harness.coordinator.stop();
+  });
+
   it('patchElement는 대상 leaf만 바꾸고 무관 필드를 보존한다', async () => {
     const id = '00000000-0000-4000-8000-000000000088';
     const base = withStableId(id);
@@ -3030,6 +3045,39 @@ describe('commitSemanticOpsInternal', () => {
     expect(outcome.document.graphPositions['4key'][0]).toMatchObject({
       graphType: 'bar',
       id,
+      noteWidth: 321,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('statType patch는 stat의 해당 leaf만 바꾸고 무관 필드를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000008f';
+    const base = makeDocument();
+    base.statPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id,
+          statType: 'kps',
+          noteWidth: 321,
+        },
+      ],
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'stat',
+        id,
+        patch: { statType: 'kpsAvg' },
+      },
+    ]);
+
+    expect(outcome.document.statPositions['4key'][0]).toMatchObject({
+      id,
+      statType: 'kpsAvg',
       noteWidth: 321,
     });
     harness.coordinator.stop();
@@ -3900,6 +3948,149 @@ describe('commitSemanticOpsInternal', () => {
       dirty: false,
     });
     expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['conflict-preview']);
+    harness.coordinator.stop();
+  });
+
+  it('generated semantic op는 conflict 뒤 최신 canonical에서 다시 생성한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010c';
+    const base = withStableId(id);
+    Object.assign(base.keyPositions['4key'][0], {
+      dx: 1,
+      dy: 2,
+      width: 60,
+      height: 60,
+    });
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    harness.transport.commitMock
+      .mockRejectedValueOnce(revisionConflict())
+      .mockImplementationOnce(original);
+    const canonical = structuredClone(base);
+    Object.assign(canonical.keyPositions['4key'][0], {
+      dy: 77,
+      width: 123,
+      height: 91,
+    });
+    harness.transport.canonical = { revision: 1, document: canonical };
+    const generate = vi.fn((document: EditorDocumentV1) => {
+      const current = document.keyPositions['4key'][0];
+      return [
+        {
+          kind: 'setBounds' as const,
+          elementType: 'key' as const,
+          id,
+          bounds: {
+            dx: 50,
+            dy: current.dy,
+            width: current.width,
+            height: current.height,
+          },
+        },
+      ];
+    });
+
+    await harness.coordinator.commitGeneratedSemanticOpsInternal(generate);
+
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(
+      harness.transport.commitMock.mock.calls[0][0].ops?.[0],
+    ).toMatchObject({ bounds: { dx: 50, dy: 2, width: 60, height: 60 } });
+    expect(
+      harness.transport.commitMock.mock.calls[1][0].ops?.[0],
+    ).toMatchObject({ bounds: { dx: 50, dy: 77, width: 123, height: 91 } });
+    harness.coordinator.stop();
+  });
+
+  it('generated semantic op의 IO 재전송은 generator를 다시 평가하지 않는다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010d';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    harness.transport.commitMock
+      .mockRejectedValueOnce(ioError())
+      .mockImplementationOnce(original);
+    const generate = vi.fn(() => [setBoundsOp(id)]);
+
+    await harness.coordinator.commitGeneratedSemanticOpsInternal(generate);
+
+    expect(generate).toHaveBeenCalledOnce();
+    expect(harness.transport.commitMock.mock.calls[0][0]).toEqual(
+      harness.transport.commitMock.mock.calls[1][0],
+    );
+    harness.coordinator.stop();
+  });
+
+  it('generated semantic op 첫 생성이 null이면 편입과 wire 없이 끝낸다', async () => {
+    const harness = createHarness(makeDocument());
+    await harness.coordinator.start();
+    const onEnrolled = vi.fn();
+
+    const outcome =
+      await harness.coordinator.commitGeneratedSemanticOpsInternal(() => null, {
+        onEnrolled,
+      });
+
+    expect(outcome).toBeNull();
+    expect(onEnrolled).not.toHaveBeenCalled();
+    expect(harness.transport.commitMock).not.toHaveBeenCalled();
+    expect(harness.coordinator.getState().phase).toBe('idle');
+    harness.coordinator.stop();
+  });
+
+  it('generated semantic op가 conflict 뒤 target을 잃으면 canonical과 gesture 폐기를 유지한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010e';
+    const onGestureIdsDiscarded = vi.fn();
+    const harness = createHarness(withStableId(id), {
+      onGestureIdsDiscarded,
+    });
+    await harness.coordinator.start();
+    harness.transport.commitMock.mockRejectedValueOnce(revisionConflict());
+    const missing = makeDocument('B');
+    harness.transport.canonical = { revision: 1, document: missing };
+    const generate = vi.fn((document: EditorDocumentV1) =>
+      document.keyPositions['4key'].some((position) => position.id === id)
+        ? [setBoundsOp(id)]
+        : null,
+    );
+
+    const outcome =
+      await harness.coordinator.commitGeneratedSemanticOpsInternal(generate, {
+        gestureId: 'geometry-preview',
+      });
+
+    expect(outcome).toBeNull();
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(harness.transport.commitMock).toHaveBeenCalledOnce();
+    expect(onGestureIdsDiscarded).toHaveBeenCalledWith(['geometry-preview']);
+    expect(harness.coordinator.getState()).toMatchObject({
+      phase: 'idle',
+      lastAck: missing,
+    });
+    harness.coordinator.stop();
+  });
+
+  it('fixed semantic op는 호출자 변조와 무관하게 최초 intent로 conflict 재시도한다', async () => {
+    const id = '00000000-0000-4000-8000-00000000010f';
+    const harness = createHarness(withStableId(id));
+    await harness.coordinator.start();
+    const original = harness.transport.commitMock.getMockImplementation()!;
+    const op = setBoundsOp(id);
+    harness.transport.commitMock
+      .mockImplementationOnce(async () => {
+        op.bounds.dx = 999;
+        throw revisionConflict();
+      })
+      .mockImplementationOnce(original);
+
+    await harness.coordinator.commitSemanticOpsInternal([op]);
+
+    expect(
+      harness.transport.commitMock.mock.calls[0][0].ops?.[0],
+    ).toMatchObject({ bounds: { dx: 12 } });
+    expect(
+      harness.transport.commitMock.mock.calls[1][0].ops?.[0],
+    ).toMatchObject({ bounds: { dx: 12 } });
     harness.coordinator.stop();
   });
 

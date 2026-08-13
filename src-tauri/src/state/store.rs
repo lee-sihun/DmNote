@@ -8759,6 +8759,141 @@ mod tests {
     }
 
     #[test]
+    fn stat_type_patch_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-stat-type-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get();
+        let stat_id = uuid::Uuid::new_v4().to_string();
+        let stat = StatPosition {
+            stat_type: StatType::Kps,
+            position: KeyPosition {
+                id: stat_id.clone(),
+                ..initial.document.key_positions["4key"][0].clone()
+            },
+        };
+        let setup = store
+            .commit_editor_document(editor_request(
+                initial.revision,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    stat_positions: Some(HashMap::from([("4key".to_string(), vec![stat.clone()])])),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        let patch = |stat_type| {
+            EditorElementPropertyPatchV1::StatType(crate::models::EditorStatTypePropertyPatchV1 {
+                stat_type,
+            })
+        };
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Stat, &stat_id, patch(StatType::Total)),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                uuid::Uuid::new_v4().to_string(),
+                patch(StatType::KpsAvg),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(changed.result.changed_fields, [EditorField::StatPositions]);
+        assert_eq!(
+            changed.document.stat_positions["4key"][0].stat_type,
+            StatType::Total
+        );
+        assert_eq!(
+            changed.document.stat_positions["4key"][0].position,
+            stat.position
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Stat,
+            &stat_id,
+            patch(StatType::KpsMax),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![patch_property_op(
+                    EditorElementTypeV1::Stat,
+                    &stat_id,
+                    patch(StatType::Total),
+                )],
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.stat_positions["4key"][0].stat_type,
+            StatType::Kps
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.stat_positions["4key"][0].stat_type,
+            StatType::Total
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn note_literal_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-note-literal-history-test");
         std::fs::create_dir_all(&dir).unwrap();

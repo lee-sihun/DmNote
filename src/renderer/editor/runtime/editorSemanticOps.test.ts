@@ -2,18 +2,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
   commitSemanticOpsInternal: vi.fn(),
+  commitGeneratedSemanticOpsInternal: vi.fn(),
   discardSemanticGesture: vi.fn(),
 }));
 
 vi.mock('./editorStateCoordinator', () => ({
   editorCoordinator: {
     commitSemanticOpsInternal: api.commitSemanticOpsInternal,
+    commitGeneratedSemanticOpsInternal: api.commitGeneratedSemanticOpsInternal,
     discardSemanticGesture: api.discardSemanticGesture,
   },
 }));
 
 import { enqueueEditorCompatibilityWrite } from './editorCompatibilityQueue';
-import { commitSemanticOps } from './editorSemanticOps';
+import {
+  commitGeneratedSemanticOps,
+  commitSemanticOps,
+} from './editorSemanticOps';
 
 describe('commitSemanticOps', () => {
   beforeEach(() => {
@@ -47,6 +52,20 @@ describe('commitSemanticOps', () => {
     ).rejects.toThrow('conflict pending');
 
     expect(api.discardSemanticGesture).toHaveBeenCalledWith('pre-enrollment');
+  });
+
+  it('generated semantic targetLost는 편입 전 preview gesture를 폐기한다', async () => {
+    api.commitGeneratedSemanticOpsInternal.mockResolvedValueOnce(null);
+
+    await expect(
+      commitGeneratedSemanticOps(() => null, {
+        gestureId: 'target-lost-preview',
+      }),
+    ).resolves.toBeNull();
+
+    expect(api.discardSemanticGesture).toHaveBeenCalledWith(
+      'target-lost-preview',
+    );
   });
 
   it('compatibility writer 뒤에서 coordinator 직렬 슬롯에 합류한다', async () => {

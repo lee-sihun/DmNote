@@ -3,6 +3,7 @@ import { createDefaultKeyPosition } from '../model/keys';
 
 const api = vi.hoisted(() => ({
   commitGeneratedPatch: vi.fn(),
+  commitGeneratedSemanticOps: vi.fn(),
   commitSemanticOps: vi.fn(),
   lastAck: null as EditorDocumentV1 | null,
 }));
@@ -15,6 +16,7 @@ vi.mock('./editorStateCoordinator', () => ({
 }));
 
 vi.mock('./editorSemanticOps', () => ({
+  commitGeneratedSemanticOps: api.commitGeneratedSemanticOps,
   commitSemanticOps: api.commitSemanticOps,
 }));
 
@@ -26,6 +28,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
   applyZOrderByIds,
+  commitElementGeometryById,
   commitElementBoundsById,
   commitSingleElementBoundsById,
   commitSelectedGeometryByIds,
@@ -47,6 +50,7 @@ import {
   patchKnobPropertyById,
   patchNotePropertiesByIds,
   patchNotePropertyById,
+  patchStatTypeById,
   patchUseInlineStylesById,
   patchUseInlineStylesByTargets,
   rebindKeySlotById,
@@ -117,6 +121,22 @@ describe('elementOps', () => {
         return {
           document: documentFromStores(),
           opResults: _ops.map((op) =>
+            op.kind === 'setBounds'
+              ? { status: 'applied', bounds: op.bounds }
+              : { status: 'applied' },
+          ),
+        };
+      }),
+    );
+    api.commitGeneratedSemanticOps.mockImplementation((generate, meta) =>
+      enqueueEditorCompatibilityOperation(async () => {
+        const ops = generate((slotBase ?? documentFromStores)());
+        if (!ops) return null;
+        meta?.preflight?.();
+        meta?.onEnrolled?.();
+        return {
+          document: documentFromStores(),
+          opResults: ops.map((op) =>
             op.kind === 'setBounds'
               ? { status: 'applied', bounds: op.bounds }
               : { status: 'applied' },
@@ -322,6 +342,119 @@ describe('elementOps', () => {
     // 기하는 의도값, mutation이 재작성한 필드는 base 값 유지
     expect(record?.[0].dx).toBe(50);
     expect(record?.[0].inactiveImage).toBe('rewritten-by-mutation.png');
+  });
+
+  it('단일 축 기하는 슬롯 최신 base의 나머지 bounds를 보존한다', async () => {
+    const base = documentFromStores();
+    base.keyPositions = {
+      '4key': [
+        { ...keyAt(ID_A), dx: 10, dy: 77, width: 123, height: 91 },
+        keyAt(ID_B),
+      ],
+    } as never;
+    slotBase = () => base;
+
+    await commitElementGeometryById('key', ID_A, { dx: 50 });
+
+    const ops = api.commitGeneratedSemanticOps.mock.calls[0][0](base);
+    expect(ops).toEqual([
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: ID_A,
+        bounds: { dx: 50, dy: 77, width: 123, height: 91 },
+      },
+    ]);
+  });
+
+  it('statType은 stat 안정 ID에 exact one-leaf op를 보낸다', async () => {
+    useStatItemStore.setState({
+      positions: {
+        '4key': [{ ...keyAt(ID_A), statType: 'kps' }] as never,
+      },
+    });
+
+    await patchStatTypeById(ID_A, { statType: 'kpsMax' });
+
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'stat',
+          id: ID_A,
+          patch: { statType: 'kpsMax' },
+        },
+      ],
+      expect.objectContaining({ onEnrolled: expect.any(Function) }),
+    );
+    expect(useStatItemStore.getState().positions['4key'][0].statType).toBe(
+      'kpsMax',
+    );
+  });
+
+  it('단일 축 기하는 호출 뒤 patch 변조와 무관하게 최초 intent를 유지한다', async () => {
+    const patch = { dx: 50 } as { dx: number; dy?: number };
+    let capturedGenerate:
+      | ((base: EditorDocumentV1) => readonly unknown[] | null)
+      | null = null;
+    api.commitGeneratedSemanticOps.mockImplementationOnce(
+      async (generate, meta) => {
+        capturedGenerate = generate;
+        meta?.onEnrolled?.();
+        const ops = generate(documentFromStores());
+        return {
+          document: documentFromStores(),
+          opResults: ops!.map((op: { bounds: unknown }) => ({
+            status: 'applied',
+            bounds: op.bounds,
+          })),
+        };
+      },
+    );
+
+    const committed = commitElementGeometryById('key', ID_A, patch);
+    patch.dx = 999;
+    patch.dy = 777;
+    await committed;
+
+    const ops = capturedGenerate!(documentFromStores()) as Array<{
+      bounds: Record<string, number>;
+    }>;
+    expect(ops[0].bounds.dx).toBe(50);
+    expect(ops[0].bounds.dy).not.toBe(777);
+  });
+
+  it('단일 축 기하 대상이 슬롯 전에 사라지면 eager를 복원한다', async () => {
+    const before = structuredClone(
+      useKeyStore.getState().canonicalPositions['4key'][0],
+    );
+    const missing = documentFromStores();
+    missing.keys = { '4key': ['B'] };
+    missing.keyPositions = { '4key': [keyAt(ID_B)] } as never;
+    slotBase = () => missing;
+
+    await expect(
+      commitElementGeometryById('key', ID_A, { width: 90 }),
+    ).resolves.toBe(false);
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].width).toBe(
+      before.width,
+    );
+  });
+
+  it('단일 축 기하는 편입 전 실패만 CAS 복원한다', async () => {
+    api.commitGeneratedSemanticOps.mockRejectedValueOnce(
+      new Error('start failed'),
+    );
+    const before = useKeyStore.getState().canonicalPositions['4key'][0].height;
+
+    await expect(
+      commitElementGeometryById('key', ID_A, { height: 80 }),
+    ).rejects.toThrow('start failed');
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].height).toBe(
+      before,
+    );
   });
 
   it('리사이즈 정산은 크기 필드까지 의도에 싣는다', async () => {

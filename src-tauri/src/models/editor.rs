@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     AppStoreData, GraphPosition, GraphPositions, GraphType, KeyCounters, KeyMappings, KeyPosition,
     KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroups, NoteAlignment, SlotMatch,
-    StatPosition, StatPositions,
+    StatPosition, StatPositions, StatType,
 };
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
@@ -220,6 +220,7 @@ pub enum EditorElementPropertyPatchV1 {
     FontUnderline(EditorFontUnderlinePropertyPatchV1),
     FontStrikethrough(EditorFontStrikethroughPropertyPatchV1),
     FontFamily(EditorFontFamilyPropertyPatchV1),
+    StatType(EditorStatTypePropertyPatchV1),
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
     NoteGlowEnabled(EditorNoteGlowEnabledPropertyPatchV1),
     NoteAutoYCorrection(EditorNoteAutoYCorrectionPropertyPatchV1),
@@ -316,6 +317,12 @@ pub struct EditorFontStrikethroughPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorFontFamilyPropertyPatchV1 {
     pub font_family: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorStatTypePropertyPatchV1 {
+    pub stat_type: StatType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

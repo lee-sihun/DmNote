@@ -494,6 +494,15 @@ mod tests {
                 serde_json::json!({ "fontFamily": " raw-font " }),
             ),
             (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::StatType(
+                    crate::models::EditorStatTypePropertyPatchV1 {
+                        stat_type: crate::models::StatType::Total,
+                    },
+                ),
+                serde_json::json!({ "statType": "total" }),
+            ),
+            (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteEffectEnabled(
                     crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
@@ -563,6 +572,14 @@ mod tests {
         let mut invalid_font_family = layer_name_wire.clone();
         invalid_font_family["editorOps"][0]["patch"] = serde_json::json!({ "fontFamily": null });
         let error = decode_gesture_commit_request(invalid_font_family).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
+        );
+
+        let mut invalid_stat_type = layer_name_wire.clone();
+        invalid_stat_type["editorOps"][0]["patch"] = serde_json::json!({ "statType": "invalid" });
+        let error = decode_gesture_commit_request(invalid_stat_type).unwrap_err();
         assert_eq!(
             validation_code(error).as_deref(),
             Some("INVALID_REQUEST_PAYLOAD")

@@ -40,10 +40,12 @@ import {
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
+  patchNativeLayerBoundsViaAuthority,
   patchNotePropertiesViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
+import type { NativeLayerBoundsTarget } from '@plugins/rpc/pluginElementActions';
 import {
   toRgbHexColor,
   parseAlphaPercent,
@@ -82,6 +84,7 @@ import {
 } from '@src/renderer/editor/runtime/previewOverlay';
 import {
   patchElementLayerNameById,
+  commitElementGeometryById,
   patchFontFamilyById,
   patchFontFamilyByTargets,
   patchFontStyleById,
@@ -96,9 +99,11 @@ import {
   patchKnobPropertyById,
   patchNotePropertiesByIds,
   patchNotePropertyById,
+  patchStatTypeById,
   patchUseInlineStylesById,
   patchUseInlineStylesByTargets,
 } from '@src/renderer/editor/runtime/elementOps';
+import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 
 // 분리된 컴포넌트들 및 훅
@@ -144,6 +149,22 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
     case 'kps':
     default:
       return 'KPS';
+  }
+};
+
+const geometryAxisPatch = (
+  field: GeometryField,
+  value: number,
+): NativeLayerBoundsTarget['patch'] => {
+  switch (field) {
+    case 'dx':
+      return { dx: value };
+    case 'dy':
+      return { dy: value };
+    case 'width':
+      return { width: value };
+    case 'height':
+      return { height: value };
   }
 };
 
@@ -1438,11 +1459,36 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     data: Partial<StatItemPosition> & { index: number },
   ) => {
     const { index, ...updates } = data;
+    const updateKeys = Object.keys(updates);
+    const statType = updates.statType;
     const fontStylePatch = getFontStylePatch(updates);
     const fontFamilyPatch = getFontFamilyPatch(updates);
     const useInlineStyles = getUseInlineStylesPatch(updates);
     const selectedStat =
       selectedStatElements.length === 1 ? selectedStatElements[0] : null;
+    if (
+      updateKeys.length === 1 &&
+      updateKeys[0] === 'statType' &&
+      statType !== undefined &&
+      ['kps', 'kpsAvg', 'kpsMax', 'total'].includes(statType) &&
+      selectedStat &&
+      selectedStat.id.length > 0 &&
+      !isSyntheticElementId(selectedStat.id)
+    ) {
+      const patch = { statType };
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? patchNativeLayerPropertyViaAuthority({
+              elementType: 'stat',
+              id: selectedStat.id,
+              patch,
+            })
+          : patchStatTypeById(selectedStat.id, patch);
+      void commit.catch((error) => {
+        console.error('Failed to update stat type', error);
+      });
+      return;
+    }
     if (
       fontStylePatch &&
       selectedStat &&
@@ -1955,6 +2001,41 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     }
   };
+
+  const commitSingleGeometry = (
+    type: EditorElementTypeV1,
+    id: string,
+    field: GeometryField,
+    value: number,
+  ) => {
+    const patch = geometryAxisPatch(field, value);
+    const ownsPreviewGesture = type === 'key' || type === 'stat';
+    const gestureId = ownsPreviewGesture
+      ? editGestureController.activeGestureId() ?? undefined
+      : undefined;
+    const persisted =
+      window.__dmn_window_type === 'panel'
+        ? patchNativeLayerBoundsViaAuthority({
+            elementType: type,
+            id,
+            patch,
+            ...(gestureId ? { gestureId } : {}),
+          })
+        : commitElementGeometryById(type, id, patch, { gestureId });
+    if (ownsPreviewGesture) editGestureController.settleCommit(persisted);
+    void persisted.catch((error) => {
+      console.error('Failed to update element geometry', error);
+    });
+  };
+
+  const stableGeometryHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (field: GeometryField, value: number) =>
+          commitSingleGeometry(type, id, field, value)
+      : undefined;
 
   // ============================================================================
   // 다중 선택 헬퍼 함수들
@@ -3342,6 +3423,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
           handleKnobUpdate={handleKnobUpdate}
+          handleGeometryCommit={stableGeometryHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           singleScrollRefFor={singleScrollRefFor}
           panelElement={panelElement}
           useCustomCSS={useCustomCSS}
@@ -3372,6 +3457,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
           handleGraphUpdate={handleGraphUpdate}
+          handleGeometryCommit={stableGeometryHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
           singleScrollRefFor={singleScrollRefFor}
           showGraphImagePicker={showGraphImagePicker}
           setShowGraphImagePicker={setShowGraphImagePicker}
@@ -3424,6 +3513,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         localState={localState}
         setLocalState={setLocalState}
         handleSizeBlur={handleSizeBlur}
+        handleGeometryCommit={stableGeometryHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
         showImagePicker={showImagePicker}
         setShowImagePicker={setShowImagePicker}
         imageButtonRef={imageButtonRef}

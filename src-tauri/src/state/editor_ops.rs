@@ -670,6 +670,8 @@ pub(crate) fn prepare_editor_ops_transition(
                     | EditorElementPropertyPatchV1::Sensitivity(_)
             ) {
                 validate_editor_op_target_type(op_index, EditorElementTypeV1::Knob, *element_type)?;
+            } else if matches!(patch, EditorElementPropertyPatchV1::StatType(_)) {
+                validate_editor_op_target_type(op_index, EditorElementTypeV1::Stat, *element_type)?;
             } else if matches!(
                 patch,
                 EditorElementPropertyPatchV1::NoteEffectEnabled(_)
@@ -937,6 +939,24 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.font_family = Some(patch.font_family.clone());
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::StatType(patch) => {
+                        let stat = candidate
+                            .stat_positions
+                            .get_mut(&location.mode)
+                            .and_then(|positions| positions.get_mut(location.index))
+                            .ok_or_else(|| {
+                                EditorCommitError::validation(
+                                    "ELEMENT_LOCATOR_INVALID",
+                                    "stat property target no longer matches its stable ID",
+                                )
+                            })?;
+                        if stat.stat_type == patch.stat_type {
+                            false
+                        } else {
+                            stat.stat_type = patch.stat_type.clone();
                             true
                         }
                     }
@@ -2677,6 +2697,73 @@ mod tests {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].font_family, None);
+    }
+
+    #[test]
+    fn stat_type_patch_is_stat_only_and_preserves_embedded_position() {
+        let mut store = store_with_every_reorder_type();
+        store.graph_positions.get_mut("4key").unwrap()[0].stat_type = GraphStatType::KpsMax;
+        let stat = store.stat_positions["4key"][0].clone();
+        let graph = store.graph_positions["4key"][0].clone();
+        let stat_id = stat.position.id.clone();
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        let patch =
+            EditorElementPropertyPatchV1::StatType(crate::models::EditorStatTypePropertyPatchV1 {
+                stat_type: StatType::Total,
+            });
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Stat, &stat_id, patch.clone()),
+            patch_property_op(EditorElementTypeV1::Stat, missing_id, patch.clone()),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0].stat_type,
+            StatType::Total
+        );
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0].position,
+            stat.position
+        );
+        assert_eq!(transition.candidate.graph_positions["4key"][0], graph);
+        assert_eq!(transition.changed_fields, [EditorField::StatPositions]);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                ops[0].clone(),
+                patch_property_op(EditorElementTypeV1::Graph, &stat_id, patch),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        assert_eq!(store.stat_positions["4key"][0], stat);
+        assert_eq!(store.graph_positions["4key"][0], graph);
     }
 
     #[test]

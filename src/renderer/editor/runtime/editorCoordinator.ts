@@ -149,6 +149,10 @@ export interface EditorSemanticCommitMeta {
   preflight?: () => void;
 }
 
+export type EditorSemanticOpsGenerator = (
+  base: EditorDocumentV1,
+) => readonly EditorOpV1[] | null;
+
 export class EditorReadOnlyError extends Error {
   constructor() {
     super('editor coordinator is read-only');
@@ -525,6 +529,9 @@ const applySemanticOps = (
             }
             if ('noteBorderSide' in op.patch) {
               return { ...position, noteBorderSide: op.patch.noteBorderSide };
+            }
+            if ('statType' in op.patch) {
+              return { ...position, statType: op.patch.statType };
             }
             return { ...position, hidden: op.patch.hidden };
           }),
@@ -909,8 +916,29 @@ export class EditorSaveCoordinator {
     meta: EditorSemanticCommitMeta = {},
   ): Promise<EditorSemanticCommitOutcome> {
     this.assertWritable();
+    const frozenOps = clone([...ops]);
+    return this.enqueueSerialized(async () => {
+      assertEditorOpsV1(frozenOps);
+      const result = await this.commitGeneratedSemanticOpsInSlot(
+        () => frozenOps,
+        meta,
+      );
+      if (!result) {
+        throw new EditorProtocolError(
+          'fixed semantic ops generated no request',
+        );
+      }
+      return result;
+    });
+  }
+
+  commitGeneratedSemanticOpsInternal(
+    generate: EditorSemanticOpsGenerator,
+    meta: EditorSemanticCommitMeta = {},
+  ): Promise<EditorSemanticCommitOutcome | null> {
+    this.assertWritable();
     return this.enqueueSerialized(() =>
-      this.commitSemanticOpsInSlot(ops, meta),
+      this.commitGeneratedSemanticOpsInSlot(generate, meta),
     );
   }
 
@@ -918,11 +946,10 @@ export class EditorSaveCoordinator {
     this.onGestureIdsDiscarded?.([gestureId]);
   }
 
-  private async commitSemanticOpsInSlot(
-    inputOps: readonly EditorOpV1[],
+  private async commitGeneratedSemanticOpsInSlot(
+    generate: EditorSemanticOpsGenerator,
     meta: EditorSemanticCommitMeta,
-  ): Promise<EditorSemanticCommitOutcome> {
-    assertEditorOpsV1(inputOps);
+  ): Promise<EditorSemanticCommitOutcome | null> {
     await this.start();
     await this.drainUntilSettled();
     await this.eventQueue;
@@ -930,7 +957,6 @@ export class EditorSaveCoordinator {
       throw this.error ?? new Error('editor conflict pending');
     }
 
-    const ops = clone([...inputOps]);
     let baseDocument = clone(this.requireLastAck());
     let baseRevision = this.requireRevision();
     let mutationId = this.createMutationId();
@@ -939,8 +965,25 @@ export class EditorSaveCoordinator {
     let enrolled = false;
 
     while (true) {
+      let ops: EditorOpV1[];
       try {
         meta.preflight?.();
+        const generated = generate(clone(baseDocument));
+        if (!generated) {
+          if (enrolled) {
+            this.applyDocument(clone(this.requireLastAck()), 'rejected');
+            if (meta.gestureId) {
+              this.onGestureIdsDiscarded?.([meta.gestureId]);
+            }
+            this.error = null;
+            this.failureKind = null;
+            this.phase = 'idle';
+            this.notify();
+          }
+          return null;
+        }
+        assertEditorOpsV1(generated);
+        ops = clone([...generated]);
       } catch (error) {
         if (enrolled) {
           this.applyDocument(clone(this.requireLastAck()), 'rejected');

@@ -23,6 +23,14 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  commitElementGeometry: vi.fn(
+    (
+      _type?: unknown,
+      _id?: unknown,
+      _patch?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   patchGraphTypes: vi.fn(
     (
       _ids?: unknown,
@@ -140,6 +148,7 @@ vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  commitElementGeometryById: mocks.commitElementGeometry,
   patchElementPropertyById: mocks.patchElementProperty,
   patchGraphColorsByIds: mocks.patchGraphColors,
   patchFontStyleByTargets: mocks.patchFontStyle,
@@ -212,6 +221,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.commitLayerDropIntent.mockResolvedValue(undefined);
     mocks.patchElementProperty.mockReset();
     mocks.patchElementProperty.mockResolvedValue(true);
+    mocks.commitElementGeometry.mockReset();
+    mocks.commitElementGeometry.mockResolvedValue(true);
     mocks.patchGraphTypes.mockReset();
     mocks.patchGraphTypes.mockResolvedValue(true);
     mocks.patchGraphColors.mockReset();
@@ -1297,6 +1308,150 @@ describe('plugin panel persisted element mutations', () => {
 
     mocks.authorityGeneration = 8;
     finish();
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('statType은 stat-only exact property leaf로 전달한다', async () => {
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'stat',
+          id,
+          patch: { statType: 'kpsMax' },
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.patchElementProperty).toHaveBeenCalledWith(
+      'stat',
+      id,
+      { statType: 'kpsMax' },
+      expect.objectContaining({ preflight: expect.any(Function) }),
+    );
+  });
+
+  it.each([
+    ['wrong type', 'graph', { statType: 'kps' }],
+    ['wrong enum', 'stat', { statType: 'unknown' }],
+    ['combined', 'stat', { statType: 'kps', hidden: true }],
+  ])(
+    'statType %s payload는 실행 전에 거절한다',
+    async (_label, elementType, patch) => {
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', {
+          target: { elementType, id: 'stable', patch },
+        }),
+      );
+
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+    },
+  );
+
+  it('native bounds는 exact 단일 축 descriptor를 main generator에 전달한다', async () => {
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    mocks.requestListener?.(
+      envelope('layers:setBounds', {
+        target: {
+          elementType: 'stat',
+          id,
+          patch: { width: 140 },
+          gestureId,
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitElementGeometry).toHaveBeenCalledWith(
+      'stat',
+      id,
+      { width: 140 },
+      expect.objectContaining({
+        gestureId,
+        preflight: expect.any(Function),
+      }),
+    );
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    [{ dx: 1, dy: 2 }],
+    [{ width: 0 }],
+    [{ height: Number.NaN }],
+    [{ unknown: 1 }],
+  ])('native bounds invalid patch %j는 실행 전에 거절한다', async (patch) => {
+    mocks.requestListener?.(
+      envelope('layers:setBounds', {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch,
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitElementGeometry).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_PAYLOAD' },
+    });
+  });
+
+  it.each([['not-a-uuid'], ['a'.repeat(65)]])(
+    'native bounds invalid gestureId %j는 실행 전에 거절한다',
+    async (gestureId) => {
+      mocks.requestListener?.(
+        envelope('layers:setBounds', {
+          target: {
+            elementType: 'stat',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            patch: { dx: 42 },
+            gestureId,
+          },
+        }),
+      );
+
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.commitElementGeometry).not.toHaveBeenCalled();
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+    },
+  );
+
+  it('native bounds는 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    mocks.commitElementGeometry.mockImplementationOnce(
+      async (_type, _id, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:setBounds', {
+        target: {
+          elementType: 'stat',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { dx: 42 },
+          gestureId,
+        },
+      }),
+    );
 
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({

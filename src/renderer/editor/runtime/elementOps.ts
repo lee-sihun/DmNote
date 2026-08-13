@@ -17,7 +17,10 @@ import {
   type ElementIntentReceipt,
   type PropertyIntents,
 } from './elementIntent';
-import { commitSemanticOps } from './editorSemanticOps';
+import {
+  commitGeneratedSemanticOps,
+  commitSemanticOps,
+} from './editorSemanticOps';
 import { editorCoordinator } from './editorStateCoordinator';
 
 import type {
@@ -29,6 +32,7 @@ import type {
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
+  EditorStatTypePropertyPatchV1,
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
@@ -875,11 +879,84 @@ export const patchNotePropertiesByIds = (
   );
 };
 
+export const patchStatTypeById = (
+  id: string,
+  patch: EditorStatTypePropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById('stat', id, patch, options);
+};
+
 // 다중 선택 정산: 대상 id들의 현재 canonical 기하(dx·dy)를 의도로 캡처해
 // 슬롯 안에서 id 재해석으로 적용한다. 4컬렉션 full-record 캡처는 배타
 // mutation(카운터 프리셋 삭제 등)의 IPC 창과 겹치면 직렬화 때문에 그 직후에
 // 확정적으로 착지해 무관 필드 재작성을 되돌린다 - 기하만 실어 그 결합을 끊는다
 export type GeometryField = 'dx' | 'dy' | 'width' | 'height';
+export type GeometryPatch = Partial<Record<GeometryField, number>>;
+
+export const commitElementGeometryById = (
+  type: NativeElementType,
+  id: string,
+  patch: GeometryPatch,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> => {
+  const entries = Object.entries(patch) as Array<[GeometryField, number]>;
+  if (
+    id.length === 0 ||
+    entries.length === 0 ||
+    entries.some(
+      ([field, value]) =>
+        !['dx', 'dy', 'width', 'height'].includes(field) ||
+        !Number.isFinite(value) ||
+        ((field === 'width' || field === 'height') && value <= 0),
+    )
+  ) {
+    return Promise.resolve(false);
+  }
+
+  const frozenPatch = Object.fromEntries(entries) as GeometryPatch;
+  const intents: PropertyIntents = new Map([
+    [type, new Map([[id, frozenPatch as Record<string, unknown>]])],
+  ]);
+  const receipt = applyPropertyIntentsEagerly(intents);
+  let enrolled = false;
+
+  return commitGeneratedSemanticOps(
+    (base) => {
+      const record = base[FIELD_BY_TYPE[type]] as unknown as LooseRecord;
+      const locator = findInRecord(record, id);
+      if (!locator) return null;
+      const position = record[locator.mode]?.[locator.index];
+      if (!position) return null;
+      const bounds: EditorBoundsV1 = {
+        dx: position.dx as number,
+        dy: position.dy as number,
+        width: position.width as number,
+        height: position.height as number,
+        ...frozenPatch,
+      };
+      return [{ kind: 'setBounds', elementType: type, id, bounds }];
+    },
+    {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
+      ...(options.preflight ? { preflight: options.preflight } : {}),
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) => {
+      if (!outcome) {
+        if (!enrolled) receipt?.rollback();
+        return false;
+      }
+      return outcome.opResults[0]?.status !== 'targetMissing';
+    })
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
 
 export const commitSelectedGeometryByIds = (
   targets: readonly ZOrderTarget[],

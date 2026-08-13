@@ -69,6 +69,7 @@ import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorS
 import ShadowControls from '../ShadowControls';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import EditSessionBoundary from '../EditSessionBoundary';
+import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -316,6 +317,7 @@ interface SingleGraphPanelProps {
   handleGraphUpdate: (
     data: Partial<GraphItemPosition> & { index: number },
   ) => void;
+  handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
   setShowGraphImagePicker: (value: boolean) => void;
@@ -341,6 +343,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   handleRenameCancel,
   handleRenameStart,
   handleGraphUpdate,
+  handleGeometryCommit,
   singleScrollRefFor,
   showGraphImagePicker,
   setShowGraphImagePicker,
@@ -427,12 +430,13 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
                   value={Math.round(singleGraphPosition.dx || 0)}
-                  onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      dx: value,
-                    })
-                  }
+                  onChange={(value) => {
+                    if (handleGeometryCommit) {
+                      handleGeometryCommit('dx', value);
+                    } else {
+                      handleGraphUpdate({ index: singleGraphIndex, dx: value });
+                    }
+                  }}
                   prefix="X"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -440,12 +444,13 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 />
                 <NumberInput
                   value={Math.round(singleGraphPosition.dy || 0)}
-                  onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      dy: value,
-                    })
-                  }
+                  onChange={(value) => {
+                    if (handleGeometryCommit) {
+                      handleGeometryCommit('dy', value);
+                    } else {
+                      handleGraphUpdate({ index: singleGraphIndex, dy: value });
+                    }
+                  }}
                   prefix="Y"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -456,12 +461,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
                 <NumberInput
                   value={Math.round(singleGraphPosition.width || 200)}
-                  onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      width: Math.max(20, value),
-                    })
-                  }
+                  onChange={(value) => {
+                    const width = Math.max(20, value);
+                    if (handleGeometryCommit) {
+                      handleGeometryCommit('width', width);
+                    } else {
+                      handleGraphUpdate({ index: singleGraphIndex, width });
+                    }
+                  }}
                   prefix="W"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -469,12 +476,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 />
                 <NumberInput
                   value={Math.round(singleGraphPosition.height || 100)}
-                  onChange={(value) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      height: Math.max(20, value),
-                    })
-                  }
+                  onChange={(value) => {
+                    const height = Math.max(20, value);
+                    if (handleGeometryCommit) {
+                      handleGeometryCommit('height', height);
+                    } else {
+                      handleGraphUpdate({ index: singleGraphIndex, height });
+                    }
+                  }}
                   prefix="H"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -820,6 +829,7 @@ interface SingleKnobPanelProps {
   handleKnobUpdate: (
     data: Partial<KnobItemPosition> & { index: number },
   ) => void;
+  handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
@@ -840,6 +850,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   handleRenameCancel,
   handleRenameStart,
   handleKnobUpdate,
+  handleGeometryCommit,
   singleScrollRefFor,
   panelElement,
   useCustomCSS,
@@ -1214,9 +1225,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
                   value={Math.round(singleKnobPosition.dx || 0)}
-                  onChange={(value) =>
-                    handleKnobUpdate({ index: singleKnobIndex, dx: value })
-                  }
+                  onChange={(value) => {
+                    if (handleGeometryCommit) {
+                      handleGeometryCommit('dx', value);
+                    } else {
+                      handleKnobUpdate({ index: singleKnobIndex, dx: value });
+                    }
+                  }}
                   prefix="X"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -1224,9 +1239,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 />
                 <NumberInput
                   value={Math.round(singleKnobPosition.dy || 0)}
-                  onChange={(value) =>
-                    handleKnobUpdate({ index: singleKnobIndex, dy: value })
-                  }
+                  onChange={(value) => {
+                    if (handleGeometryCommit) {
+                      handleGeometryCommit('dy', value);
+                    } else {
+                      handleKnobUpdate({ index: singleKnobIndex, dy: value });
+                    }
+                  }}
                   prefix="Y"
                   width={AXIS_FIELD_WIDTH}
                   min={-9999}
@@ -1237,12 +1256,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
                 <NumberInput
                   value={Math.round(singleKnobPosition.width || 60)}
-                  onChange={(value) =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      width: Math.max(20, value),
-                    })
-                  }
+                  onChange={(value) => {
+                    const width = Math.max(20, value);
+                    if (handleGeometryCommit) {
+                      handleGeometryCommit('width', width);
+                    } else {
+                      handleKnobUpdate({ index: singleKnobIndex, width });
+                    }
+                  }}
                   prefix="W"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -1250,12 +1271,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 />
                 <NumberInput
                   value={Math.round(singleKnobPosition.height || 60)}
-                  onChange={(value) =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      height: Math.max(20, value),
-                    })
-                  }
+                  onChange={(value) => {
+                    const height = Math.max(20, value);
+                    if (handleGeometryCommit) {
+                      handleGeometryCommit('height', height);
+                    } else {
+                      handleKnobUpdate({ index: singleKnobIndex, height });
+                    }
+                  }}
                   prefix="H"
                   width={AXIS_FIELD_WIDTH}
                   min={20}
@@ -1596,6 +1619,7 @@ interface SingleKeyStatPanelProps {
     React.SetStateAction<Partial<KeyPosition> & { dx?: number; dy?: number }>
   >;
   handleSizeBlur: (committed?: SizeCommit) => void;
+  handleGeometryCommit?: (field: GeometryField, value: number) => void;
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
   imageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -1636,6 +1660,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   localState,
   setLocalState,
   handleSizeBlur,
+  handleGeometryCommit,
   showImagePicker,
   setShowImagePicker,
   imageButtonRef,
@@ -1842,6 +1867,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
                 setLocalState((prev) => ({ ...prev, height: value }))
               }
               onSizeBlur={handleSizeBlur}
+              onGeometryCommit={handleGeometryCommit}
             />
           </EditSessionBoundary>
         </div>

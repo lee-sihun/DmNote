@@ -32,6 +32,7 @@ export const PLUGIN_RPC_OPERATIONS = {
   deleteLayerSelection: 'layers:deleteSelection',
   reorderLayerSelection: 'layers:reorderSelection',
   patchLayerProperty: 'layers:patchProperty',
+  setLayerBounds: 'layers:setBounds',
 } as const;
 
 export type LayerDeleteTarget = {
@@ -43,6 +44,17 @@ export interface NativeLayerPropertyTarget {
   elementType: NativeElementType;
   id: string;
   patch: EditorElementPropertyPatchV1;
+}
+
+export interface NativeLayerBoundsTarget {
+  elementType: NativeElementType;
+  id: string;
+  patch:
+    | { dx: number; dy?: never; width?: never; height?: never }
+    | { dx?: never; dy: number; width?: never; height?: never }
+    | { dx?: never; dy?: never; width: number; height?: never }
+    | { dx?: never; dy?: never; width?: never; height: number };
+  gestureId?: string;
 }
 
 export interface LayerReorderAnchorsWire {
@@ -349,6 +361,22 @@ export const patchNativeLayerPropertyViaAuthority = (
   return new Promise((resolve) => {
     outboundQueue.push({
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: { target: structuredClone(target) },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchNativeLayerBoundsViaAuthority = (
+  target: NativeLayerBoundsTarget,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.setLayerBounds,
       payload: { target: structuredClone(target) },
       authorityGeneration,
       retryPolicy: 'default',

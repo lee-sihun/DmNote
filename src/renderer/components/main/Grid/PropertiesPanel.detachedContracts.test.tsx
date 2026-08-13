@@ -39,6 +39,7 @@ const {
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
   patchNotePropertyMock,
+  patchStatTypeMock,
   patchNotePropertiesMock,
   patchNotePropertiesViaAuthorityMock,
   patchUseInlineStylesMock,
@@ -47,8 +48,11 @@ const {
   previewMock,
   patchLayerNameMock,
   patchPropertyViaAuthorityMock,
+  patchBoundsViaAuthorityMock,
+  patchGeometryMock,
   statUpdatePositionsMock,
   settleCommitMock,
+  activeGestureIdMock,
   singleGraphPropsMock,
   singleKeyStatPropsMock,
   singleKnobPropsMock,
@@ -79,6 +83,7 @@ const {
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
   patchNotePropertyMock: vi.fn(() => Promise.resolve(true)),
+  patchStatTypeMock: vi.fn(() => Promise.resolve(true)),
   patchNotePropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchNotePropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchUseInlineStylesMock: vi.fn(() => Promise.resolve(true)),
@@ -87,8 +92,11 @@ const {
   previewMock: vi.fn(),
   patchLayerNameMock: vi.fn(() => Promise.resolve(true)),
   patchPropertyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchBoundsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchGeometryMock: vi.fn(() => Promise.resolve(true)),
   statUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   settleCommitMock: vi.fn(),
+  activeGestureIdMock: vi.fn(() => null as string | null),
   singleGraphPropsMock: vi.fn(),
   singleKeyStatPropsMock: vi.fn(),
   singleKnobPropsMock: vi.fn(),
@@ -111,11 +119,13 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
+  patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
   patchNotePropertiesViaAuthority: patchNotePropertiesViaAuthorityMock,
   patchUseInlineStylesViaAuthority: patchUseInlineStylesViaAuthorityMock,
   updatePluginElement: vi.fn(),
 }));
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  commitElementGeometryById: patchGeometryMock,
   patchElementLayerNameById: patchLayerNameMock,
   patchFontStyleById: patchFontStyleMock,
   patchFontStyleByTargets: patchFontStyleTargetsMock,
@@ -131,6 +141,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchKnobPropertyById: patchKnobPropertyMock,
   patchNotePropertiesByIds: patchNotePropertiesMock,
   patchNotePropertyById: patchNotePropertyMock,
+  patchStatTypeById: patchStatTypeMock,
   patchUseInlineStylesById: patchUseInlineStylesMock,
   patchUseInlineStylesByTargets: patchUseInlineStylesTargetsMock,
 }));
@@ -142,6 +153,7 @@ vi.mock('@api/modules/itemsApi', () => ({
 }));
 vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
   editGestureController: {
+    activeGestureId: activeGestureIdMock,
     preview: previewMock,
     settleCommit: settleCommitMock,
   },
@@ -253,6 +265,8 @@ const mountPanel = (
 const resetStores = () => {
   previewMock.mockClear();
   settleCommitMock.mockClear();
+  activeGestureIdMock.mockReset();
+  activeGestureIdMock.mockReturnValue(null);
   singleKeyStatPropsMock.mockClear();
   singleGraphPropsMock.mockClear();
   batchGraphPropsMock.mockClear();
@@ -278,12 +292,15 @@ const resetStores = () => {
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
   patchNotePropertyMock.mockClear();
+  patchStatTypeMock.mockClear();
   patchNotePropertiesMock.mockClear();
   patchNotePropertiesViaAuthorityMock.mockClear();
   patchUseInlineStylesMock.mockClear();
   patchUseInlineStylesTargetsMock.mockClear();
   patchUseInlineStylesViaAuthorityMock.mockClear();
   patchPropertyViaAuthorityMock.mockClear();
+  patchBoundsViaAuthorityMock.mockClear();
+  patchGeometryMock.mockClear();
   graphUpdatePositionsMock.mockClear();
   knobUpdatePositionsMock.mockClear();
   keyLegacyUpdateMock.mockClear();
@@ -401,6 +418,120 @@ describe('PropertiesPanel detached preview contract', () => {
     expect(statUpdatePositionsMock).not.toHaveBeenCalled();
   });
 
+  it.each(['kpsAvg', 'total'] as const)(
+    'single stable statType %s는 선택 ID semantic leaf를 쓴다',
+    (statType) => {
+      const id = 'abababab-abab-4bab-8bab-abababababab';
+      useStatItemStore.setState({
+        positions: {
+          '4key': [
+            {
+              ...useStatItemStore.getState().positions['4key'][0],
+              id,
+            },
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'stat', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        handleStatUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.handleStatUpdate({ index: 0, statType }));
+
+      expect(patchStatTypeMock).toHaveBeenCalledWith(id, { statType });
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('single stable statType은 stale index 대신 선택 ID semantic leaf를 쓴다', () => {
+    const id = 'abababab-abab-4bab-8bab-abababababab';
+    const otherId = 'acacacac-acac-4cac-8cac-acacacacacac';
+    const base = useStatItemStore.getState().positions['4key'][0];
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          { ...base, id },
+          { ...base, id: otherId },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'stat', id, index: 1 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+      handleStatUpdate: (update: Record<string, unknown>) => void;
+    };
+
+    act(() => props.handleStatUpdate({ index: 1, statType: 'kpsMax' }));
+
+    expect(patchStatTypeMock).toHaveBeenCalledWith(id, {
+      statType: 'kpsMax',
+    });
+    expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+    expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it('panel single stable statType은 exact authority RPC만 쓴다', () => {
+    window.__dmn_window_type = 'panel';
+    const id = 'acacacac-acac-4cac-8cac-acacacacacac';
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...useStatItemStore.getState().positions['4key'][0],
+            id,
+          },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'stat', id, index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+      handleStatUpdate: (update: Record<string, unknown>) => void;
+    };
+
+    act(() => props.handleStatUpdate({ index: 0, statType: 'kpsMax' }));
+
+    expect(patchPropertyViaAuthorityMock).toHaveBeenCalledWith({
+      elementType: 'stat',
+      id,
+      patch: { statType: 'kpsMax' },
+    });
+    expect(patchStatTypeMock).not.toHaveBeenCalled();
+    expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['stat-0', ''])(
+    'single legacy statType id=%j는 기존 writer를 유지한다',
+    (id) => {
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'stat', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        handleStatUpdate: (update: Record<string, unknown>) => void;
+      };
+
+      act(() => props.handleStatUpdate({ index: 0, statType: 'total' }));
+
+      expect(patchStatTypeMock).not.toHaveBeenCalled();
+      expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
   it('panel header stable native rename은 exact authority RPC만 호출한다', async () => {
     window.__dmn_window_type = 'panel';
     const id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -478,6 +609,264 @@ describe('PropertiesPanel detached preview contract', () => {
     expect(patchGraphTypeMock).toHaveBeenCalledWith(id, 'bar');
     expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
     expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['key', 'dx', 12],
+    ['stat', 'dy', 13],
+    ['graph', 'width', 140],
+    ['knob', 'height', 150],
+  ] as const)(
+    'single stable %s geometry는 변경 축만 semantic helper에 넘긴다',
+    (type, field, value) => {
+      const id = `${type}-11111111-1111-4111-8111-111111111111`;
+      const base = {
+        dx: 1,
+        dy: 2,
+        width: 60,
+        height: 60,
+        id,
+      };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [base as never] },
+          canonicalPositions: { '4key': [base as never] },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...base, statType: 'kps' } as never] },
+        });
+      } else if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...base,
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1,
+                graphColor: '#fff',
+              } as never,
+            ],
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [{ ...base, axisId: 'HIDA:test', sensitivity: 1 } as never],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = (
+        type === 'key' || type === 'stat'
+          ? singleKeyStatPropsMock
+          : type === 'graph'
+          ? singleGraphPropsMock
+          : singleKnobPropsMock
+      ).mock.lastCall?.[0] as {
+        handleGeometryCommit: (field: string, value: number) => void;
+      };
+
+      act(() => props.handleGeometryCommit(field, value));
+
+      expect(patchGeometryMock).toHaveBeenCalledWith(
+        type,
+        id,
+        { [field]: value },
+        {},
+      );
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      if (type === 'key' || type === 'stat') {
+        expect(settleCommitMock).toHaveBeenCalledOnce();
+      } else {
+        expect(settleCommitMock).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each(['key', 'stat', 'graph', 'knob'] as const)(
+    'panel single stable %s geometry는 exact authority RPC만 쓴다',
+    (type) => {
+      window.__dmn_window_type = 'panel';
+      const id = `${type}-22222222-2222-4222-8222-222222222222`;
+      const base = { dx: 1, dy: 2, width: 60, height: 60, id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [base as never] },
+          canonicalPositions: { '4key': [base as never] },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...base, statType: 'kps' } as never] },
+        });
+      } else if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...base,
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1,
+                graphColor: '#fff',
+              } as never,
+            ],
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [{ ...base, axisId: 'HIDA:test', sensitivity: 1 } as never],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = (
+        type === 'key' || type === 'stat'
+          ? singleKeyStatPropsMock
+          : type === 'graph'
+          ? singleGraphPropsMock
+          : singleKnobPropsMock
+      ).mock.lastCall?.[0] as {
+        handleGeometryCommit: (field: string, value: number) => void;
+      };
+
+      act(() => props.handleGeometryCommit('dx', 42));
+
+      expect(patchBoundsViaAuthorityMock).toHaveBeenCalledWith({
+        elementType: type,
+        id,
+        patch: { dx: 42 },
+      });
+      expect(patchGeometryMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('key/stat geometry만 활성 preview gesture를 semantic commit에 결합하고 정산한다', () => {
+    activeGestureIdMock.mockReturnValue('geometry-preview');
+    const id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A'] },
+      positions: {
+        '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id } as never],
+      },
+      canonicalPositions: {
+        '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id } as never],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'key', id, index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+      handleGeometryCommit: (field: string, value: number) => void;
+    };
+
+    act(() => props.handleGeometryCommit('dx', 42));
+
+    expect(patchGeometryMock).toHaveBeenCalledWith(
+      'key',
+      id,
+      { dx: 42 },
+      { gestureId: 'geometry-preview' },
+    );
+    expect(settleCommitMock).toHaveBeenCalledWith(
+      patchGeometryMock.mock.results[0].value,
+    );
+  });
+
+  it('graph geometry는 무관한 활성 preview gesture를 결합하거나 정산하지 않는다', () => {
+    activeGestureIdMock.mockReturnValue('unrelated-preview');
+    const id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const base = useGraphItemStore.getState().positions['4key'][0];
+    useGraphItemStore.setState({ positions: { '4key': [{ ...base, id }] } });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'graph', id, index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+      handleGeometryCommit: (field: string, value: number) => void;
+    };
+
+    act(() => props.handleGeometryCommit('dx', 42));
+
+    expect(patchGeometryMock).toHaveBeenCalledWith('graph', id, { dx: 42 }, {});
+    expect(settleCommitMock).not.toHaveBeenCalled();
+  });
+
+  it('single graph geometry는 stale index의 position id 대신 선택 descriptor id를 쓴다', () => {
+    const selectedId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const wrongId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const base = useGraphItemStore.getState().positions['4key'][0];
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          { ...base, id: selectedId },
+          { ...base, id: wrongId },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'graph', id: selectedId, index: 1 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+      handleGeometryCommit: (field: string, value: number) => void;
+    };
+
+    act(() => props.handleGeometryCommit('dy', 43));
+
+    expect(patchGeometryMock).toHaveBeenCalledWith(
+      'graph',
+      selectedId,
+      { dy: 43 },
+      {},
+    );
+  });
+
+  it('synthetic 선택 descriptor는 indexed position에 stable id가 있어도 semantic으로 승격하지 않는다', () => {
+    const base = useGraphItemStore.getState().positions['4key'][0];
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...base,
+            id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'graph', id: 'graph-0', index: 0 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const props = singleGraphPropsMock.mock.lastCall?.[0] as {
+      handleGeometryCommit?: unknown;
+      handleGraphUpdate: (update: Record<string, unknown>) => void;
+    };
+
+    expect(props.handleGeometryCommit).toBeUndefined();
+    act(() => props.handleGraphUpdate({ index: 0, dx: 42 }));
+    expect(patchGeometryMock).not.toHaveBeenCalled();
+    expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
   });
 
   it('panel single stable graphType은 exact authority RPC만 쓴다', async () => {

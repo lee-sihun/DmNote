@@ -159,6 +159,7 @@ interface EditorElementPropertyValuesV1 {
   noteGlowEnabled: boolean;
   noteAlignment: 'left' | 'center' | 'right';
   noteBorderSide: 'all' | 'vertical' | 'horizontal';
+  statType: 'kps' | 'kpsAvg' | 'kpsMax' | 'total';
 }
 
 type ExactEditorPropertyPatchV1<K extends keyof EditorElementPropertyValuesV1> =
@@ -190,6 +191,9 @@ export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteAlignment'
   | 'noteBorderSide'
 >;
+
+export type EditorStatTypePropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'statType'>;
 
 export type EditorElementPropertyPatchV1 = EditorPropertyPatchUnionV1<
   keyof EditorElementPropertyValuesV1
@@ -1024,7 +1028,11 @@ export function assertEditorOpsV1(
           op.elementType === 'key' &&
           ['all', 'vertical', 'horizontal'].includes(
             op.patch.noteBorderSide as string,
-          ));
+          )) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'statType' &&
+          op.elementType === 'stat' &&
+          STAT_TYPES.has(op.patch.statType as string));
       if (!patchIsValid) {
         throw new EditorProtocolError(`${opLabel}.patch is invalid`);
       }

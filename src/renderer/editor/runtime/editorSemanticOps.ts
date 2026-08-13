@@ -5,6 +5,7 @@ import type { EditorOpV1 } from '@src/types/editor';
 import type {
   EditorSemanticCommitMeta,
   EditorSemanticCommitOutcome,
+  EditorSemanticOpsGenerator,
 } from './editorCoordinator';
 
 export const commitSemanticOps = (
@@ -28,4 +29,34 @@ export const commitSemanticOps = (
     }
     throw error;
   });
+};
+
+export const commitGeneratedSemanticOps = (
+  generate: EditorSemanticOpsGenerator,
+  meta?: EditorSemanticCommitMeta,
+): Promise<EditorSemanticCommitOutcome | null> => {
+  let enrolled = false;
+  const run = enqueueEditorCompatibilityOperation(() =>
+    editorCoordinator.commitGeneratedSemanticOpsInternal(generate, {
+      ...meta,
+      onEnrolled: () => {
+        enrolled = true;
+        meta?.onEnrolled?.();
+      },
+    }),
+  );
+  if (!meta?.gestureId) return run;
+  return run
+    .then((result) => {
+      if (!result && !enrolled) {
+        editorCoordinator.discardSemanticGesture(meta.gestureId!);
+      }
+      return result;
+    })
+    .catch((error) => {
+      if (!enrolled) {
+        editorCoordinator.discardSemanticGesture(meta.gestureId!);
+      }
+      throw error;
+    });
 };

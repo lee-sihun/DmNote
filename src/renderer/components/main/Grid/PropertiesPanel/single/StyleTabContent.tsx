@@ -58,6 +58,7 @@ import {
 import { resolveElementShadow } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
@@ -95,6 +96,7 @@ interface StyleTabContentInternalProps extends StyleTabContentProps {
   onLocalWidthChange?: (value: number) => void;
   onLocalHeightChange?: (value: number) => void;
   onSizeBlur?: (committed?: SizeCommit) => void;
+  onGeometryCommit?: (field: GeometryField, value: number) => void;
 }
 
 const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
@@ -130,6 +132,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onLocalWidthChange,
   onLocalHeightChange,
   onSizeBlur,
+  onGeometryCommit,
 }) => {
   const DEFAULT_KEY_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
   const DEFAULT_KEY_BORDER_COLOR = DEFAULT_ELEMENT_BORDER;
@@ -540,14 +543,22 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     if (onLocalDxChange) {
       onLocalDxChange(value);
     }
-    onPositionChange(keyIndex, value, localDy ?? keyPosition.dy);
+    if (onGeometryCommit) {
+      onGeometryCommit('dx', value);
+    } else {
+      onPositionChange(keyIndex, value, localDy ?? keyPosition.dy);
+    }
   };
 
   const handlePositionYChange = (value: number) => {
     if (onLocalDyChange) {
       onLocalDyChange(value);
     }
-    onPositionChange(keyIndex, localDx ?? keyPosition.dx, value);
+    if (onGeometryCommit) {
+      onGeometryCommit('dy', value);
+    } else {
+      onPositionChange(keyIndex, localDx ?? keyPosition.dx, value);
+    }
   };
 
   // 크기 변경 핸들러
@@ -812,7 +823,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 : localWidth ?? keyPosition.width ?? 60
             }
             onChange={handleWidthChange}
-            onBlur={(width) => onSizeBlur?.({ width })}
+            onBlur={(width) => {
+              if (onGeometryCommit) {
+                if (width !== undefined) onGeometryCommit('width', width);
+                return;
+              }
+              onSizeBlur?.({ width });
+            }}
             onCancel={() => editGestureController.cancel()}
             prefix="W"
             width={AXIS_FIELD_WIDTH}
@@ -828,7 +845,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 : localHeight ?? keyPosition.height ?? 60
             }
             onChange={handleHeightChange}
-            onBlur={(height) => onSizeBlur?.({ height })}
+            onBlur={(height) => {
+              if (onGeometryCommit) {
+                if (height !== undefined) onGeometryCommit('height', height);
+                return;
+              }
+              onSizeBlur?.({ height });
+            }}
             onCancel={() => editGestureController.cancel()}
             prefix="H"
             width={AXIS_FIELD_WIDTH}

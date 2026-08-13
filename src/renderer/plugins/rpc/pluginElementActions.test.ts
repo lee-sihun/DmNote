@@ -182,6 +182,62 @@ describe('plugin element panel queue', () => {
     },
   );
 
+  it('native bounds는 exact 단일 축과 enqueue generation을 고정한다', async () => {
+    const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+
+    await expect(
+      actions.patchNativeLayerBoundsViaAuthority({
+        elementType: 'key',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        patch: { dx: 42 },
+        gestureId,
+      }),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:setBounds',
+      {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { dx: 42 },
+          gestureId,
+        },
+      },
+      0,
+      7,
+    );
+  });
+
+  it('native bounds outcome-unknown은 같은 generation과 축 literal로 한 번 재시도한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchNativeLayerBoundsViaAuthority({
+      elementType: 'knob',
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      patch: { height: 150 },
+    });
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
   it('fontFamily batch는 혼합 native 대상과 raw literal을 고정한다', async () => {
     mocks.sendPluginRpc.mockResolvedValue({
       kind: 'ok',
