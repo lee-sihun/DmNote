@@ -79,6 +79,21 @@ describe('id 기반 선택 재조정', () => {
     expect(selected[0].index).toBe(1);
   });
 
+  it('같은 길이라도 그 자리 요소가 교체됐으면 선택을 푼다', () => {
+    useGridSelectionStore
+      .getState()
+      .setSelectedElements([{ type: 'key', id: a.id!, index: 1 }]);
+    // 삭제+삽입이 한 문서에 정산되면 길이는 그대로지만 자리의 요소는 다르다
+    const replacement = { ...createDefaultKeyPosition(), dx: 999 };
+
+    invalidateSelectionForChangedIndexedElementArrays(
+      arraysOf([b, a]),
+      arraysOf([b, replacement]),
+    );
+
+    expect(useGridSelectionStore.getState().selectedElements).toHaveLength(0);
+  });
+
   it('길이가 바뀌면 재채택 대신 경계 판정을 따른다', () => {
     useGridSelectionStore
       .getState()

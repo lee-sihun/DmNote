@@ -397,6 +397,16 @@ export function invalidateSelectionForChangedIndexedElementArrays(
       id?: string;
     }[];
 
+  const currentPositionsFor = (
+    type: IndexedSelectableElementType,
+  ): readonly unknown[] =>
+    type === 'key' ? current.keyPositions : current[type];
+
+  // 같은 자리의 요소가 id만 빼고 동일한지 - 신원 재발급과 요소 교체를 가른다
+  const sameSlotPayload = (type: IndexedSelectableElementType, index: number) =>
+    stableStringify(withoutElementId(currentPositionsFor(type)[index])) ===
+    stableStringify(withoutElementId(nextPositionsFor(type)[index]));
+
   let changed = false;
   const selectedElements = selection.selectedElements.flatMap((element) => {
     if (element.type === 'plugin') return [element];
@@ -416,11 +426,13 @@ export function invalidateSelectionForChangedIndexedElementArrays(
         return [element];
       }
 
-      // id가 사라졌어도 그 타입에 구조 경계가 없으면 요소는 그대로이고 신원만
-      // 재발급된 것이다 (탭 프리셋 rekey, v1 어댑터 재발급) - 자리로 재채택한다
+      // id가 사라졌어도 그 자리의 요소가 id만 빼고 그대로면 신원만 재발급된
+      // 것이다 (탭 프리셋 rekey, v1 어댑터 재발급) - 자리로 재채택한다.
+      // 내용이 다르면 요소가 교체된 것이므로 예전처럼 선택을 푼다
       const rekeyed =
         boundaries.get(element.type) === undefined &&
-        typeof element.index === 'number'
+        typeof element.index === 'number' &&
+        sameSlotPayload(element.type, element.index)
           ? nextPositions[element.index]?.id
           : undefined;
       if (rekeyed !== undefined) {
