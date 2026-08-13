@@ -29,8 +29,6 @@ import {
 } from '@utils/core/elementDefaults';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
-import { applyElementPatchesById } from '@src/renderer/editor/runtime/elementPatch';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   LEGACY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,
@@ -66,6 +64,7 @@ interface BatchStyleTabContentProps {
   // 사운드 완료의 시작 시점 결합. 소유자는 EditSessionBoundary 밖 부모다 -
   // 이 컴포넌트는 선택 변경 시 리마운트되어 open 중 재캡처가 일어난다
   soundBinding?: BatchElementBinding;
+  onSoundPathCommit?: (soundPath: string) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -145,6 +144,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   hideDisplayText = false,
   hideFontControls = false,
   soundBinding = LEGACY_BATCH_ELEMENT_BINDING,
+  onSoundPathCommit,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -1287,10 +1287,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             }
             onSoundSelect={(soundPath) => {
               const nextPath = soundPath || '';
-              if (soundBinding.binding === 'element-id') {
-                applyElementPatchesById(soundBinding.selection, () => ({
-                  soundPath: nextPath,
-                })).catch(reportElementOpError);
+              if (onSoundPathCommit) {
+                onSoundPathCommit(nextPath);
                 return;
               }
               (

@@ -685,7 +685,8 @@ pub(crate) fn prepare_editor_ops_transition(
                 }
             } else if matches!(
                 patch,
-                EditorElementPropertyPatchV1::NoteEffectEnabled(_)
+                EditorElementPropertyPatchV1::SoundPath(_)
+                    | EditorElementPropertyPatchV1::NoteEffectEnabled(_)
                     | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
                     | EditorElementPropertyPatchV1::NoteAutoYCorrection(_)
                     | EditorElementPropertyPatchV1::NoteAlignment(_)
@@ -987,6 +988,15 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.active_image = Some(patch.active_image.clone());
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::SoundPath(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.sound_path.as_deref() == Some(patch.sound_path.as_str()) {
+                            false
+                        } else {
+                            position.sound_path = Some(patch.sound_path.clone());
                             true
                         }
                     }
@@ -3011,6 +3021,117 @@ mod tests {
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
             assert_eq!(store.key_positions["4key"][0].active_image, None);
+        }
+    }
+
+    #[test]
+    fn sound_path_patch_is_key_only_and_preserves_sound_and_asset_siblings() {
+        let mut store = store_with_every_reorder_type();
+        for position in store.key_positions.get_mut("4key").unwrap() {
+            position.sound_path = None;
+            position.sound_enabled = Some(true);
+            position.sound_volume = Some(137.5);
+            position.inactive_image = Some("idle-sibling.png".to_string());
+            position.active_image = Some("active-sibling.png".to_string());
+            position.counter.enabled = false;
+        }
+        let key_ids = store.key_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        let patch = EditorElementPropertyPatchV1::SoundPath(
+            crate::models::EditorSoundPathPropertyPatchV1 {
+                sound_path: String::new(),
+            },
+        );
+        let ops = key_ids
+            .iter()
+            .map(|id| patch_property_op(EditorElementTypeV1::Key, id, patch.clone()))
+            .chain(std::iter::once(patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                patch.clone(),
+            )))
+            .collect::<Vec<_>>();
+
+        let raw = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[0],
+                EditorElementPropertyPatchV1::SoundPath(
+                    crate::models::EditorSoundPathPropertyPatchV1 {
+                        sound_path: "  raw/sound.wav  ".to_string(),
+                    },
+                ),
+            )],
+        )
+        .unwrap();
+        assert_eq!(
+            raw.candidate.key_positions["4key"][0].sound_path.as_deref(),
+            Some("  raw/sound.wav  ")
+        );
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        for position in transition.candidate.key_positions["4key"].iter().take(2) {
+            assert_eq!(position.sound_path.as_deref(), Some(""));
+            assert_eq!(position.sound_enabled, Some(true));
+            assert_eq!(position.sound_volume, Some(137.5));
+            assert_eq!(position.inactive_image.as_deref(), Some("idle-sibling.png"));
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+            assert!(!position.counter.enabled);
+        }
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        for element_type in [
+            EditorElementTypeV1::Stat,
+            EditorElementTypeV1::Graph,
+            EditorElementTypeV1::Knob,
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        patch.clone(),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert!(store.key_positions["4key"]
+                .iter()
+                .all(|position| position.sound_path.is_none()));
         }
     }
 

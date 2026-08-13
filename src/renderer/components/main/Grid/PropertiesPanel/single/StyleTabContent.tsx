@@ -122,6 +122,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onToggleImagePicker,
   onInactiveImageCommit,
   onActiveImageCommit,
+  onSoundPathCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -611,7 +612,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 삭제됐거나 type이 옮겨졌으면 자산만 남기고 연결은 조용히 중단한다
   const applyToBoundElement = (patch: Omit<Partial<KeyPosition>, 'id'>) => {
     const id = keyPosition.id;
-    if (!id) {
+    if (!id || isSyntheticElementId(id)) {
       // id 없는 구형 데이터는 기존 index 경로 유지
       onKeyPreview?.(keyIndex, patch);
       onKeyUpdate({ index: keyIndex, ...patch });
@@ -1276,10 +1277,19 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         createPortal(
           <SoundPicker
             open
-            completionBinding={keyPosition.id ? 'element-id' : 'session-mode'}
+            completionBinding={
+              onSoundPathCommit ||
+              (keyPosition.id && !isSyntheticElementId(keyPosition.id))
+                ? 'element-id'
+                : 'session-mode'
+            }
             selectedSound={keyPosition.soundPath || null}
             onSoundSelect={(soundPath) => {
               const nextPath = soundPath || '';
+              if (onSoundPathCommit) {
+                onSoundPathCommit(nextPath);
+                return;
+              }
               applyToBoundElement({ soundPath: nextPath });
             }}
             previewVolume={keyPosition.soundVolume ?? 100}

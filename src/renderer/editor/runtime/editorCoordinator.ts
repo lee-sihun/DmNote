@@ -485,6 +485,9 @@ const applySemanticOps = (
             if ('axisId' in op.patch) {
               return { ...position, axisId: op.patch.axisId };
             }
+            if ('soundPath' in op.patch) {
+              return { ...position, soundPath: op.patch.soundPath };
+            }
             if ('inactiveImage' in op.patch) {
               return { ...position, inactiveImage: op.patch.inactiveImage };
             }

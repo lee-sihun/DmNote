@@ -38,6 +38,8 @@ const {
   patchInactiveImageMock,
   patchInactiveImageViaAuthorityMock,
   patchActiveImageMock,
+  patchSoundPathMock,
+  patchSoundPathViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -87,6 +89,8 @@ const {
   patchInactiveImageMock: vi.fn(() => Promise.resolve(true)),
   patchInactiveImageViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchActiveImageMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundPathMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundPathViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -128,6 +132,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchFontStyleViaAuthority: patchFontStyleViaAuthorityMock,
   patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
   patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
+  patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
@@ -146,6 +151,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontFamilyByTargets: patchFontFamilyTargetsMock,
   patchInactiveImageById: patchInactiveImageMock,
   patchActiveImageById: patchActiveImageMock,
+  patchSoundPathById: patchSoundPathMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -306,6 +312,8 @@ const resetStores = () => {
   patchInactiveImageMock.mockClear();
   patchInactiveImageViaAuthorityMock.mockClear();
   patchActiveImageMock.mockClear();
+  patchSoundPathMock.mockClear();
+  patchSoundPathViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -1424,6 +1432,93 @@ describe('PropertiesPanel detached preview contract', () => {
       expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
     },
   );
+
+  it.each(['main', 'panel'] as const)(
+    '%s single stable key sound select와 clear는 exact ID 경로만 쓴다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const id = 'a7777777-7777-4777-8777-777777777777';
+      const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [position] as never },
+        canonicalPositions: { '4key': [position] as never },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onSoundPathCommit: (value: string) => void;
+        }
+      ).onSoundPathCommit;
+
+      act(() => {
+        commit('  sounds/raw.wav  ');
+        commit('');
+      });
+
+      if (windowType === 'panel') {
+        expect(patchSoundPathViaAuthorityMock.mock.calls).toEqual([
+          [[id], '  sounds/raw.wav  '],
+          [[id], ''],
+        ]);
+        expect(patchSoundPathMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchSoundPathMock.mock.calls).toEqual([
+          [id, '  sounds/raw.wav  '],
+          [id, ''],
+        ]);
+        expect(patchSoundPathViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('single key sound는 stale index의 record 대신 선택 descriptor ID를 동결한다', () => {
+    const selectedId = 'a7666666-6666-4666-8666-666666666666';
+    const indexedId = 'a7555555-5555-4555-8555-555555555555';
+    const position = { dx: 0, dy: 0, width: 60, height: 60 };
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A', 'B'] },
+      positions: {
+        '4key': [
+          { ...position, id: selectedId },
+          { ...position, id: indexedId },
+        ] as never,
+      },
+      canonicalPositions: {
+        '4key': [
+          { ...position, id: selectedId },
+          { ...position, id: indexedId },
+        ] as never,
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [{ type: 'key', id: selectedId, index: 1 }],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const commit = (
+      singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onSoundPathCommit: (value: string) => void;
+      }
+    ).onSoundPathCommit;
+
+    act(() => commit('sounds/selected.wav'));
+
+    expect(patchSoundPathMock).toHaveBeenCalledWith(
+      selectedId,
+      'sounds/selected.wav',
+    );
+    expect(patchSoundPathMock).not.toHaveBeenCalledWith(
+      indexedId,
+      expect.anything(),
+    );
+    expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+  });
 
   it.each([
     ['main', 'main'],

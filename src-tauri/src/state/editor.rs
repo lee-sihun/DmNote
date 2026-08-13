@@ -2501,6 +2501,15 @@ mod tests {
                 serde_json::json!({ "activeImage": "  raw/active.png  " }),
             ),
             (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::SoundPath(
+                    crate::models::EditorSoundPathPropertyPatchV1 {
+                        sound_path: "  raw/sound.wav  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "soundPath": "  raw/sound.wav  " }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::StatType(
                     crate::models::EditorStatTypePropertyPatchV1 {
@@ -2601,6 +2610,10 @@ mod tests {
             serde_json::json!({ "activeImage": null }),
             serde_json::json!({ "activeImage": "path", "hidden": false }),
             serde_json::json!({ "activeImage": "path", "unexpected": true }),
+            serde_json::json!({ "soundPath": null }),
+            serde_json::json!({ "soundPath": 1 }),
+            serde_json::json!({ "soundPath": "path", "soundEnabled": true }),
+            serde_json::json!({ "soundPath": "path", "unexpected": true }),
             serde_json::json!({ "statType": "invalid" }),
             serde_json::json!({ "noteEffectEnabled": 1 }),
             serde_json::json!({ "noteGlowEnabled": null }),

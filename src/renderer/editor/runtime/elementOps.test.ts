@@ -61,6 +61,8 @@ import {
   patchKnobPropertiesByIds,
   patchKnobPropertyById,
   patchKnobAxisIdById,
+  patchSoundPathById,
+  patchSoundPathByIds,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -2448,6 +2450,76 @@ describe('elementOps', () => {
       sensitivity: 1,
       reverse: false,
     });
+  });
+
+  it('soundPath는 key raw string을 single과 N ops 한 commit으로 보내고 형제를 보존한다', async () => {
+    const records = [
+      {
+        ...keyAt(ID_A),
+        soundPath: 'sounds/a.wav',
+        soundEnabled: true,
+        soundVolume: 137,
+      },
+      {
+        ...keyAt(ID_B),
+        soundPath: 'sounds/b.wav',
+        soundEnabled: false,
+        soundVolume: 54,
+      },
+    ];
+    useKeyStore.setState({
+      canonicalPositions: { '4key': records },
+      positions: { '4key': structuredClone(records) },
+    });
+
+    await patchSoundPathById(ID_A, '  sounds/raw.wav  ');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { soundPath: '  sounds/raw.wav  ' },
+        },
+      ],
+      expect.anything(),
+    );
+
+    await patchSoundPathByIds([ID_A, ID_B], '');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [ID_A, ID_B].map((id) => ({
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { soundPath: '' },
+      })),
+      expect.anything(),
+    );
+    expect(useKeyStore.getState().positions['4key']).toEqual([
+      expect.objectContaining({
+        id: ID_A,
+        soundPath: '',
+        soundEnabled: true,
+        soundVolume: 137,
+      }),
+      expect.objectContaining({
+        id: ID_B,
+        soundPath: '',
+        soundEnabled: false,
+        soundVolume: 54,
+      }),
+    ]);
+  });
+
+  it('soundPath batch는 empty, duplicate, synthetic ID를 wire 전에 거절한다', async () => {
+    await expect(patchSoundPathByIds([], 'sounds/a.wav')).resolves.toBe(false);
+    await expect(
+      patchSoundPathByIds([ID_A, ID_A], 'sounds/a.wav'),
+    ).resolves.toBe(false);
+    await expect(patchSoundPathByIds(['key-0'], 'sounds/a.wav')).resolves.toBe(
+      false,
+    );
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
   });
 
   it('inactiveImage는 raw string을 single과 혼합 4타입 한 commit으로 보낸다', async () => {

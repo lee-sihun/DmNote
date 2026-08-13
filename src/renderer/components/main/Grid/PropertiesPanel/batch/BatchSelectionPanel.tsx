@@ -39,10 +39,12 @@ import type { ElementIdSelection } from '@src/renderer/editor/runtime/elementPat
 import {
   patchActiveImageByTargets,
   patchInactiveImageByTargets,
+  patchSoundPathByIds,
 } from '@src/renderer/editor/runtime/elementOps';
 import {
   patchActiveImageViaAuthority,
   patchInactiveImageViaAuthority,
+  patchSoundPathViaAuthority,
 } from '@plugins/rpc/pluginElementActions';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
@@ -94,6 +96,25 @@ const commitBoundActiveImage = (
     window.__dmn_window_type === 'panel'
       ? patchActiveImageViaAuthority(targets, activeImage)
       : patchActiveImageByTargets(targets, activeImage);
+  void persisted.catch(reportElementOpError);
+};
+
+const commitBoundSoundPath = (
+  binding: 'element-id' | 'session-mode',
+  selection: ElementIdSelection,
+  soundPath: string,
+  legacy: () => void,
+) => {
+  if (binding !== 'element-id') {
+    legacy();
+    return;
+  }
+  const ids = selection.key ?? [];
+  if (ids.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchSoundPathViaAuthority(ids, soundPath)
+      : patchSoundPathByIds(ids, soundPath);
   void persisted.catch(reportElementOpError);
 };
 
@@ -753,6 +774,15 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               <BatchStyleTabContent
                 selectedCount={selectedBatchStyleElements.length}
                 soundBinding={soundBinding}
+                onSoundPathCommit={(soundPath) =>
+                  commitBoundSoundPath(
+                    soundBinding.binding,
+                    soundBinding.selection,
+                    soundPath,
+                    () =>
+                      handleKeyOnlyStyleChangeComplete('soundPath', soundPath),
+                  )
+                }
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
                 shadowActiveState={

@@ -149,6 +149,7 @@ interface EditorElementPropertyValuesV1 {
   reverse: boolean;
   sensitivity: number;
   axisId: string;
+  soundPath: string;
   inactiveImage: string;
   activeImage: string;
   useInlineStyles: boolean;
@@ -182,6 +183,9 @@ export type EditorKnobRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
 
 export type EditorKnobAxisPropertyPatchV1 =
   EditorPropertyPatchUnionV1<'axisId'>;
+
+export type EditorSoundPathPropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'soundPath'>;
 
 export type EditorInactiveImagePropertyPatchV1 =
   EditorPropertyPatchUnionV1<'inactiveImage'>;
@@ -1001,6 +1005,10 @@ export function assertEditorOpsV1(
           patchKeys[0] === 'axisId' &&
           op.elementType === 'knob' &&
           typeof op.patch.axisId === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'soundPath' &&
+          op.elementType === 'key' &&
+          typeof op.patch.soundPath === 'string') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'inactiveImage' &&
           typeof op.patch.inactiveImage === 'string') ||

@@ -1674,6 +1674,7 @@ interface SingleKeyStatPanelProps {
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
+  onSoundPathCommit?: (soundPath: string) => void;
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
   imageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -1717,6 +1718,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   handleGeometryCommit,
   onInactiveImageCommit,
   onActiveImageCommit,
+  onSoundPathCommit,
   showImagePicker,
   setShowImagePicker,
   imageButtonRef,
@@ -1904,6 +1906,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
               onInactiveImageCommit={onInactiveImageCommit}
               onActiveImageCommit={onActiveImageCommit}
+              onSoundPathCommit={onSoundPathCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}

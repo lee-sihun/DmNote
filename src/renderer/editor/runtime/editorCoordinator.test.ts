@@ -3495,6 +3495,46 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('soundPath는 key raw top-level leaf만 적용하고 사운드 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000b9';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      soundPath: 'sounds/before.wav',
+      soundEnabled: true,
+      soundVolume: 137,
+      inactiveImage: 'idle.png',
+      counter: { ...base.keyPositions['4key'][0].counter, enabled: true },
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { soundPath: '  sounds/raw.wav  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      soundPath: '  sounds/raw.wav  ',
+      soundEnabled: true,
+      soundVolume: 137,
+      inactiveImage: 'idle.png',
+      counter: { enabled: true },
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
   it('activeImage는 key의 raw top-level leaf만 적용하고 이미지 형제를 보존한다', async () => {
     const id = '00000000-0000-4000-8000-0000000000b8';
     const base = withStableId(id);

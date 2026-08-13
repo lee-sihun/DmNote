@@ -57,6 +57,7 @@ import {
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
+  patchSoundPathByIds,
   patchFontStyleByTargets,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -239,6 +240,9 @@ const parseNativeLayerPropertyTarget = (
       Number.isFinite(patch.sensitivity)) ||
     (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean') ||
     (hasExactKeys(patch, ['axisId']) && typeof patch.axisId === 'string') ||
+    (hasExactKeys(patch, ['soundPath']) &&
+      target.elementType === 'key' &&
+      typeof patch.soundPath === 'string') ||
     (hasExactKeys(patch, ['inactiveImage']) &&
       typeof patch.inactiveImage === 'string') ||
     (hasExactKeys(patch, ['activeImage']) &&
@@ -466,6 +470,11 @@ type NativeLayerPropertyRequest =
       inactiveImage: string;
     }
   | {
+      kind: 'soundPathBatch';
+      ids: string[];
+      soundPath: string;
+    }
+  | {
       kind: 'activeImageBatch';
       targets: Array<{ elementType: 'key' | 'knob'; id: string }>;
       activeImage: string;
@@ -569,6 +578,10 @@ const parseNativeLayerPropertyRequest = (
     typeof patch.inactiveImage === 'string'
       ? patch.inactiveImage
       : null;
+  const soundPath =
+    hasExactKeys(patch, ['soundPath']) && typeof patch.soundPath === 'string'
+      ? patch.soundPath
+      : null;
   const activeImage =
     hasExactKeys(patch, ['activeImage']) &&
     typeof patch.activeImage === 'string'
@@ -609,6 +622,7 @@ const parseNativeLayerPropertyRequest = (
     fontStylePatch === null &&
     fontFamilyPatch === null &&
     inactiveImage === null &&
+    soundPath === null &&
     activeImage === null &&
     notePropertyPatch === null
   ) {
@@ -620,6 +634,8 @@ const parseNativeLayerPropertyRequest = (
     fontFamilyPatch !== null ||
     inactiveImage !== null
       ? null
+      : soundPath !== null
+      ? 'key'
       : activeImage !== null
       ? 'active-capable'
       : notePropertyPatch !== null
@@ -674,6 +690,9 @@ const parseNativeLayerPropertyRequest = (
   }
   if (inactiveImage !== null) {
     return { kind: 'inactiveImageBatch', targets, inactiveImage };
+  }
+  if (soundPath !== null) {
+    return { kind: 'soundPathBatch', ids, soundPath };
   }
   if (activeImage !== null) {
     return {
@@ -1400,6 +1419,9 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           request.inactiveImage,
           options,
         );
+      }
+      if (request.kind === 'soundPathBatch') {
+        return patchSoundPathByIds(request.ids, request.soundPath, options);
       }
       if (request.kind === 'activeImageBatch') {
         return patchActiveImageByTargets(

@@ -43,6 +43,7 @@ import {
   patchNativeLayerPropertyViaAuthority,
   patchNativeLayerBoundsViaAuthority,
   patchNotePropertiesViaAuthority,
+  patchSoundPathViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -91,6 +92,7 @@ import {
   patchFontFamilyById,
   patchFontFamilyByTargets,
   patchInactiveImageById,
+  patchSoundPathById,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -2098,6 +2100,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableSoundPathHandler = (id: string | undefined) =>
+    id && !isSyntheticElementId(id)
+      ? (soundPath: string) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchSoundPathViaAuthority([id], soundPath)
+              : patchSoundPathById(id, soundPath);
+          void persisted.catch((error) => {
+            console.error('Failed to update sound path', error);
+          });
+        }
+      : undefined;
+
   // ============================================================================
   // 다중 선택 헬퍼 함수들
   // ============================================================================
@@ -3650,6 +3665,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         onActiveImageCommit={
           isSingleKey
             ? stableActiveImageHandler('key', selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onSoundPathCommit={
+          isSingleKey
+            ? stableSoundPathHandler(selectedKeyElements[0]?.id)
             : undefined
         }
         handleGeometryCommit={stableGeometryHandler(

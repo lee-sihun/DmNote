@@ -1149,6 +1149,33 @@ export const patchKnobAxisIdById = (
   return patchElementPropertyById('knob', id, { axisId }, options);
 };
 
+export const patchSoundPathById = (
+  id: string,
+  soundPath: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  return patchElementPropertyById('key', id, { soundPath }, options);
+};
+
+export const patchSoundPathByIds = (
+  ids: readonly string[],
+  soundPath: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0 || isSyntheticElementId(id)) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    ids.map((id) => ({ type: 'key', id, patch: { soundPath } })),
+    options,
+  );
+};
+
 export const patchInactiveImageById = (
   type: NativeElementType,
   id: string,

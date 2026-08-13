@@ -32,16 +32,20 @@ const patches = vi.hoisted(() => ({
   patchInactiveImageViaAuthority: vi.fn(async () => true),
   patchActiveImageByTargets: vi.fn(async () => true),
   patchActiveImageViaAuthority: vi.fn(async () => true),
+  patchSoundPathByIds: vi.fn(async () => true),
+  patchSoundPathViaAuthority: vi.fn(async () => true),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchActiveImageByTargets: patches.patchActiveImageByTargets,
   patchInactiveImageByTargets: patches.patchInactiveImageByTargets,
+  patchSoundPathByIds: patches.patchSoundPathByIds,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
   patchInactiveImageViaAuthority: patches.patchInactiveImageViaAuthority,
+  patchSoundPathViaAuthority: patches.patchSoundPathViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
@@ -536,9 +540,9 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(captured.sound?.completionBinding).toBe('element-id');
 
     act(() => captured.sound!.onSoundSelect('first.wav'));
-    expect(patches.applyElementPatchesById).toHaveBeenLastCalledWith(
-      { key: [ID_A] },
-      expect.any(Function),
+    expect(patches.patchSoundPathByIds).toHaveBeenLastCalledWith(
+      [ID_A],
+      'first.wav',
     );
 
     // 같은 개수의 다른 선택으로 교체 - 경계는 리마운트되지만 결합은 유지
@@ -549,10 +553,81 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     });
 
     act(() => captured.sound!.onSoundSelect('second.wav'));
-    expect(patches.applyElementPatchesById).toHaveBeenLastCalledWith(
-      { key: [ID_A] },
-      expect.any(Function),
-    );
+    act(() => captured.sound!.onSoundSelect(''));
+    expect(patches.patchSoundPathByIds.mock.calls).toEqual([
+      [[ID_A], 'first.wav'],
+      [[ID_A], 'second.wav'],
+      [[ID_A], ''],
+    ]);
+    expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
+  });
+
+  it('panel sound select와 clear는 open 시점 key ID를 authority에만 보낸다', () => {
+    window.__dmn_window_type = 'panel';
+    renderPanel({
+      active: BATCH_STYLE_SOUND_PAGE_KEY,
+      renderKey: BATCH_STYLE_SOUND_PAGE_KEY,
+    });
+    act(() => selectKey(ID_B));
+    renderPanel({
+      active: BATCH_STYLE_SOUND_PAGE_KEY,
+      renderKey: BATCH_STYLE_SOUND_PAGE_KEY,
+    });
+
+    act(() => captured.sound!.onSoundSelect('  sounds/raw.wav  '));
+    act(() => captured.sound!.onSoundSelect(''));
+
+    expect(patches.patchSoundPathViaAuthority.mock.calls).toEqual([
+      [[ID_A], '  sounds/raw.wav  '],
+      [[ID_A], ''],
+    ]);
+    expect(patches.patchSoundPathByIds).not.toHaveBeenCalled();
+    expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
+  });
+
+  it('synthetic key sound select와 clear는 key subset 전체 legacy다', () => {
+    const stable = keyAt(ID_A);
+    const synthetic = keyAt('key-0');
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      canonicalPositions: { '4key': [stable, synthetic] },
+      positions: { '4key': [stable, synthetic] },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: ID_A, index: 0 },
+        { type: 'key', id: 'key-0', index: 1 },
+      ],
+    });
+    const props = panelProps();
+    const legacy = vi.fn();
+    props.handleKeyOnlyStyleChangeComplete = legacy;
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: BATCH_STYLE_SOUND_PAGE_KEY,
+            renderPageKey: BATCH_STYLE_SOUND_PAGE_KEY,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...props} />
+        </PanelNavProvider>,
+      );
+    });
+
+    expect(captured.sound?.completionBinding).toBe('session-mode');
+    act(() => captured.sound!.onSoundSelect('legacy.wav'));
+    act(() => captured.sound!.onSoundSelect(''));
+
+    expect(legacy.mock.calls).toEqual([
+      ['soundPath', 'legacy.wav'],
+      ['soundPath', ''],
+    ]);
+    expect(patches.patchSoundPathByIds).not.toHaveBeenCalled();
+    expect(patches.patchSoundPathViaAuthority).not.toHaveBeenCalled();
   });
 
   it('BatchStyle FontPicker 선택은 raw top-level fontFamily로 전달한다', () => {
@@ -589,9 +664,9 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       renderKey: BATCH_STYLE_SOUND_PAGE_KEY,
     });
     act(() => captured.sound!.onSoundSelect('first.wav'));
-    expect(patches.applyElementPatchesById).toHaveBeenLastCalledWith(
-      { key: [ID_A] },
-      expect.any(Function),
+    expect(patches.patchSoundPathByIds).toHaveBeenLastCalledWith(
+      [ID_A],
+      'first.wav',
     );
 
     // close: activePageKey는 즉시 null, renderPageKey는 exit 동안 유지
@@ -606,9 +681,9 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     });
 
     act(() => captured.sound!.onSoundSelect('second.wav'));
-    expect(patches.applyElementPatchesById).toHaveBeenLastCalledWith(
-      { key: [ID_B] },
-      expect.any(Function),
+    expect(patches.patchSoundPathByIds).toHaveBeenLastCalledWith(
+      [ID_B],
+      'second.wav',
     );
   });
 });

@@ -232,6 +232,7 @@ export interface StyleTabContentProps {
   onToggleImagePicker?: () => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
+  onSoundPathCommit?: (soundPath: string) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
   panelElement?: HTMLElement | null;
   useCustomCSS?: boolean;

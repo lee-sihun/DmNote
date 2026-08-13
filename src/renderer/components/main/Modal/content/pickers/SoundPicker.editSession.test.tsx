@@ -195,8 +195,7 @@ describe('SoundPicker 비동기 완료와 모드 전환', () => {
     expect(onSoundSelect).not.toHaveBeenCalled();
   });
 
-  // element-id 결합은 유효성 판정을 ID applier에 위임한다.
-  // 가드 2곳(트림 저장, 삭제 후 해제) 모두 같은 조건으로 통과해야 한다
+  // element-id 결합은 유효성 판정을 ID applier에 위임한다
   it('element-id 결합이면 모드가 바뀌어도 트림 저장을 연결한다', async () => {
     await mountPicker('element-id');
     switchMode();

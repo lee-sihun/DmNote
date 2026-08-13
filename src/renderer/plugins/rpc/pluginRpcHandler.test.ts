@@ -104,6 +104,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchSoundPath: vi.fn(
+    (
+      _ids?: unknown,
+      _soundPath?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -182,6 +189,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontFamilyByTargets: mocks.patchFontFamily,
   patchInactiveImageByTargets: mocks.patchInactiveImage,
   patchActiveImageByTargets: mocks.patchActiveImage,
+  patchSoundPathByIds: mocks.patchSoundPath,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -275,6 +283,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchInactiveImage.mockResolvedValue(true);
     mocks.patchActiveImage.mockReset();
     mocks.patchActiveImage.mockResolvedValue(true);
+    mocks.patchSoundPath.mockReset();
+    mocks.patchSoundPath.mockResolvedValue(true);
     mocks.patchNoteProperties.mockReset();
     mocks.patchNoteProperties.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
@@ -538,6 +548,7 @@ describe('plugin panel persisted element mutations', () => {
     ['그래프 애니메이션', { graphAnimationEnabled: true }],
     ['그래프 속도', { graphSpeed: 1200 }],
     ['노브 축', { axisId: '  HIDA:raw  ' }, 'knob'],
+    ['사운드', { soundPath: '  sounds/raw.wav  ' }, 'key'],
     ['인라인 스타일', { useInlineStyles: true }],
     ['글꼴 굵기', { fontWeight: 700 }],
     ['글꼴 기울임', { fontItalic: true }],
@@ -751,6 +762,28 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.patchActiveImage).toHaveBeenCalledWith(
       targets,
       '  Raw Active.png  ',
+      { preflight: expect.any(Function) },
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('soundPath batch는 key ID와 raw string을 한 semantic commit으로 전달한다', async () => {
+    const targets = [
+      { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      { elementType: 'key', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    ] as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { soundPath: '  sounds/raw.wav  ' },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.patchSoundPath).toHaveBeenCalledOnce());
+    expect(mocks.patchSoundPath).toHaveBeenCalledWith(
+      targets.map((target) => target.id),
+      '  sounds/raw.wav  ',
       { preflight: expect.any(Function) },
     );
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
@@ -1350,6 +1383,71 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'soundPath wrong stat type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { soundPath: 'sounds/stat.wav' },
+      },
+    ],
+    [
+      'soundPath single wrong stat type',
+      {
+        target: {
+          elementType: 'stat',
+          id: 'stable',
+          patch: { soundPath: 'sounds/stat.wav' },
+        },
+      },
+    ],
+    [
+      'soundPath non-string',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundPath: null },
+      },
+    ],
+    [
+      'soundPath combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundPath: 'sounds/key.wav', soundEnabled: true },
+      },
+    ],
+    [
+      'soundPath extra',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundPath: 'sounds/key.wav', extra: true },
+      },
+    ],
+    [
+      'soundPath duplicate target',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable' },
+          { elementType: 'key', id: 'stable' },
+        ],
+        patch: { soundPath: 'sounds/key.wav' },
+      },
+    ],
+    [
+      'soundPath synthetic target',
+      {
+        targets: [{ elementType: 'key', id: 'key-0' }],
+        patch: { soundPath: 'sounds/key.wav' },
+      },
+    ],
+    [
+      'soundPath oversized batch',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'key',
+          id: `stable-sound-${index}`,
+        })),
+        patch: { soundPath: 'sounds/key.wav' },
+      },
+    ],
+    [
       'fontWeight fractional',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
@@ -1532,6 +1630,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchFontFamily).not.toHaveBeenCalled();
       expect(mocks.patchInactiveImage).not.toHaveBeenCalled();
       expect(mocks.patchActiveImage).not.toHaveBeenCalled();
+      expect(mocks.patchSoundPath).not.toHaveBeenCalled();
       expect(mocks.patchNoteProperties).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
@@ -2219,6 +2318,28 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'knob', id: 'stable-knob' },
         ],
         patch: { activeImage: '  Raw Active.png  ' },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('soundPath batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchSoundPath.mockImplementationOnce(
+      async (_ids, _value, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [{ elementType: 'key', id: 'stable-key' }],
+        patch: { soundPath: '  sounds/raw.wav  ' },
       }),
     );
 

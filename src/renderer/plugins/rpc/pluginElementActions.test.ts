@@ -152,6 +152,7 @@ describe('plugin element panel queue', () => {
     ['이름 clear', { layerName: null }, 'stat'],
     ['글꼴 패밀리', { fontFamily: '  Raw Family  ' }, 'stat'],
     ['노브 축', { axisId: '  HIDA:raw  ' }, 'knob'],
+    ['사운드', { soundPath: '  sounds/raw.wav  ' }, 'key'],
     ['대기 이미지', { inactiveImage: '  Raw Image.png  ' }, 'graph'],
     ['활성 이미지', { activeImage: '  Raw Active.png  ' }, 'key'],
   ] as const)(
@@ -401,6 +402,31 @@ describe('plugin element panel queue', () => {
     expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
       'layers:patchProperty',
       { targets, patch: { activeImage: '  Raw Active.png  ' } },
+      0,
+      7,
+    );
+  });
+
+  it('soundPath batch는 key 대상과 raw literal을 전용 envelope에 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const ids = [
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    ];
+
+    await expect(
+      actions.patchSoundPathViaAuthority(ids, '  sounds/raw.wav  '),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      {
+        targets: ids.map((id) => ({ elementType: 'key', id })),
+        patch: { soundPath: '  sounds/raw.wav  ' },
+      },
       0,
       7,
     );
@@ -663,6 +689,71 @@ describe('plugin element panel queue', () => {
       mocks.sendPluginRpc.mock.calls[0]?.[1],
     );
     expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
+  it('soundPath outcome-unknown은 snapshot만 요청하고 옛 path를 재전송하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+
+    await expect(
+      actions.patchSoundPathViaAuthority(
+        ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+        'sounds/deleted.wav',
+      ),
+    ).resolves.toBe(false);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
+  it.each(['MODEL_REVISION_STALE', 'PLUGIN_MODEL_REVISION_CONFLICT'])(
+    'soundPath %s은 fresh snapshot 뒤 same generation과 raw literal로 한 번 재전송한다',
+    async (errorCode) => {
+      mocks.sendPluginRpc
+        .mockResolvedValueOnce({
+          kind: 'error',
+          errorCode,
+          response: { modelRevision: 1 },
+        })
+        .mockResolvedValueOnce({
+          kind: 'ok',
+          response: { modelRevision: 2 },
+        });
+      const changed = actions.patchSoundPathViaAuthority(
+        ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+        '  sounds/raw.wav  ',
+      );
+      await vi.waitFor(() =>
+        expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+      );
+      actions.notePluginMirrorRevision(2);
+
+      await expect(changed).resolves.toBe(true);
+      expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+        mocks.sendPluginRpc.mock.calls[0]?.[1],
+      );
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+    },
+  );
+
+  it('soundPath revision stale 대기 중 generation이 바뀌면 재전송하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({
+      kind: 'error',
+      errorCode: 'MODEL_REVISION_STALE',
+      response: { modelRevision: 1 },
+    });
+    const changed = actions.patchSoundPathViaAuthority(
+      ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+      'sounds/raw.wav',
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    mocks.authorityGeneration = 8;
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(false);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
   });
 
   it('note batch outcome-unknown 재시도는 같은 generation과 absolute literal을 한 번만 재전송한다', async () => {

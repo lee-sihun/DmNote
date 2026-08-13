@@ -151,7 +151,7 @@ interface QueuedElementOp {
   operation: string;
   payload: Record<string, unknown>;
   authorityGeneration?: number;
-  retryPolicy?: 'default' | 'idempotentDelete' | 'none';
+  retryPolicy?: 'default' | 'idempotentDelete' | 'staleOnly' | 'none';
   resolve?: (succeeded: boolean) => void;
 }
 
@@ -184,6 +184,17 @@ const drainQueue = async (): Promise<boolean> => {
       continue;
     }
     if (op.retryPolicy === 'none') {
+      succeeded = false;
+      op.resolve?.(false);
+      requestFreshSnapshot();
+      continue;
+    }
+    const retryableStaleOutcome =
+      op.retryPolicy === 'staleOnly' &&
+      outcome.kind === 'error' &&
+      (outcome.errorCode === 'MODEL_REVISION_STALE' ||
+        outcome.errorCode === 'PLUGIN_MODEL_REVISION_CONFLICT');
+    if (op.retryPolicy === 'staleOnly' && !retryableStaleOutcome) {
       succeeded = false;
       op.resolve?.(false);
       requestFreshSnapshot();
@@ -548,6 +559,26 @@ export const patchInactiveImageViaAuthority = (
       },
       authorityGeneration,
       retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchSoundPathViaAuthority = (
+  ids: readonly string[],
+  soundPath: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'key' as const, id })),
+        patch: { soundPath },
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
       resolve,
     });
     void ensureQueueDrain();

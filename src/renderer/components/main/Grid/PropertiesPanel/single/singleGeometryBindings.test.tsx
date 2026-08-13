@@ -22,6 +22,15 @@ const captured = vi.hoisted(() => ({
     onActiveImageChange?: (value: string) => void;
     onActiveImageReset?: () => void;
   },
+  sound: null as null | {
+    completionBinding?: string;
+    onSoundSelect: (soundPath: string | null) => void;
+  },
+  nav: {
+    activePageKey: null as string | null,
+    renderPageKey: null as string | null,
+    pageHost: null as HTMLElement | null,
+  },
 }));
 const elementPatch = vi.hoisted(() => ({
   applyElementPatchById: vi.fn(async () => true),
@@ -65,6 +74,12 @@ vi.mock('@components/main/Modal/content/pickers/ImagePicker', () => ({
     return null;
   },
 }));
+vi.mock('@components/main/Modal/content/pickers/SoundPicker', () => ({
+  default: (props: NonNullable<(typeof captured)['sound']>) => {
+    captured.sound = props;
+    return null;
+  },
+}));
 vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
   ColorSwatchButton: () => null,
 }));
@@ -76,7 +91,11 @@ vi.mock('../EditSessionBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock('../PanelNavContext', () => ({
-  usePanelNav: () => ({ openPage: vi.fn(), closePage: vi.fn() }),
+  usePanelNav: () => ({
+    ...captured.nav,
+    openPage: vi.fn(),
+    closePage: vi.fn(),
+  }),
 }));
 vi.mock('@hooks/useKeySlotCapture', () => ({
   useKeySlotCapture: () => ({
@@ -111,6 +130,10 @@ describe('single geometry input bindings', () => {
     captured.numbers.clear();
     captured.dropdowns.length = 0;
     captured.image = null;
+    captured.sound = null;
+    captured.nav.activePageKey = null;
+    captured.nav.renderPageKey = null;
+    captured.nav.pageHost = null;
     elementPatch.applyElementPatchById.mockClear();
     container = document.createElement('div');
     document.body.append(container);
@@ -152,6 +175,95 @@ describe('single geometry input bindings', () => {
       expect(legacy).not.toHaveBeenCalled();
     },
   );
+
+  it('key StyleTab SoundPicker select와 clear는 exact callback으로 raw path를 전달한다', () => {
+    const commit = vi.fn();
+    const legacy = vi.fn();
+    captured.nav.activePageKey = 'single-style:sound';
+    captured.nav.renderPageKey = 'single-style:sound';
+    captured.nav.pageHost = document.body;
+    act(() => {
+      root.render(
+        <StyleTabContent
+          keyIndex={0}
+          keyPosition={{
+            ...createDefaultKeyPosition(),
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          }}
+          keyCode="A"
+          keyInfo={null}
+          onPositionChange={vi.fn()}
+          onKeyUpdate={legacy}
+          onSoundPathCommit={commit}
+          showSoundControls
+          panelElement={null}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    expect(captured.sound?.completionBinding).toBe('element-id');
+    act(() => captured.sound?.onSoundSelect('  sounds/raw.wav  '));
+    act(() => captured.sound?.onSoundSelect(null));
+
+    expect(commit.mock.calls).toEqual([['  sounds/raw.wav  '], ['']]);
+    expect(legacy).not.toHaveBeenCalled();
+  });
+
+  it('synthetic key SoundPicker select와 clear는 기존 index writer를 유지한다', () => {
+    const legacy = vi.fn();
+    captured.nav.activePageKey = 'single-style:sound';
+    captured.nav.renderPageKey = 'single-style:sound';
+    captured.nav.pageHost = document.body;
+    act(() => {
+      root.render(
+        <StyleTabContent
+          keyIndex={3}
+          keyPosition={{ ...createDefaultKeyPosition(), id: 'key-3' }}
+          keyCode="A"
+          keyInfo={null}
+          onPositionChange={vi.fn()}
+          onKeyUpdate={legacy}
+          showSoundControls
+          panelElement={null}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    expect(captured.sound?.completionBinding).toBe('session-mode');
+    act(() => captured.sound?.onSoundSelect('legacy.wav'));
+    act(() => captured.sound?.onSoundSelect(''));
+
+    expect(legacy.mock.calls).toEqual([
+      [{ index: 3, soundPath: 'legacy.wav' }],
+      [{ index: 3, soundPath: '' }],
+    ]);
+    expect(elementPatch.applyElementPatchById).not.toHaveBeenCalled();
+  });
+
+  it('stat StyleTab은 SoundPicker를 렌더하지 않는다', () => {
+    captured.nav.activePageKey = 'single-style:sound';
+    captured.nav.renderPageKey = 'single-style:sound';
+    captured.nav.pageHost = document.body;
+    act(() => {
+      root.render(
+        <StyleTabContent
+          keyIndex={0}
+          keyPosition={createDefaultKeyPosition()}
+          keyCode={null}
+          keyInfo={null}
+          onPositionChange={vi.fn()}
+          onKeyUpdate={vi.fn()}
+          showSoundControls={false}
+          panelElement={null}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    expect(captured.sound).toBeNull();
+  });
 
   it.each(['key', 'knob'] as const)(
     '%s ImagePicker active load와 reset은 exact callback만 호출한다',
