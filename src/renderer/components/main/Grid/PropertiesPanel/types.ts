@@ -13,6 +13,7 @@ import type {
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
+  EditorNotePaintPropertyPatchV1,
 } from '@src/types/editor';
 
 // ============================================================================
@@ -265,6 +266,7 @@ export interface NoteTabContentProps {
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onNotePaintCommit?: (patch: EditorNotePaintPropertyPatchV1) => void;
   panelElement?: HTMLElement | null;
   t: (key: string) => string;
 }

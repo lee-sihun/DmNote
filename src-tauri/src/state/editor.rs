@@ -2865,6 +2865,53 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NotePaint(
+                    crate::models::EditorNotePaintPropertyPatchV1 {
+                        note_paint: crate::models::EditorNotePaintIntentV1::Color(
+                            crate::models::EditorNotePaintColorIntentV1 {
+                                color: crate::models::EditorNoteColorV1::Gradient(
+                                    crate::models::EditorNoteGradientColorV1 {
+                                        kind:
+                                            crate::models::EditorNoteGradientColorKindV1::Gradient,
+                                        top: "top".to_string(),
+                                        bottom: "bottom".to_string(),
+                                    },
+                                ),
+                            },
+                        ),
+                    },
+                ),
+                serde_json::json!({ "notePaint": { "color": { "type": "gradient", "top": "top", "bottom": "bottom" } } }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteGlowPaint(
+                    crate::models::EditorNoteGlowPaintPropertyPatchV1 {
+                        note_glow_paint: crate::models::EditorNotePaintIntentV1::GradientOpacity(
+                            crate::models::EditorNotePaintGradientOpacityIntentV1 {
+                                opacity: 70,
+                                opacity_top: 10,
+                                opacity_bottom: 90,
+                            },
+                        ),
+                    },
+                ),
+                serde_json::json!({ "noteGlowPaint": { "opacity": 70, "opacityTop": 10, "opacityBottom": 90 } }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteBorderPaint(
+                    crate::models::EditorNoteBorderPaintPropertyPatchV1 {
+                        note_border_paint: crate::models::EditorNoteBorderPaintV1 {
+                            color: "#A1b2C3".to_string(),
+                            opacity: 55,
+                        },
+                    },
+                ),
+                serde_json::json!({ "noteBorderPaint": { "color": "#A1b2C3", "opacity": 55 } }),
+            ),
+            (
+                EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteOffsetX(
                     crate::models::EditorNoteOffsetXPropertyPatchV1 {
                         note_offset_x: None,
@@ -3077,6 +3124,15 @@ mod tests {
             serde_json::json!({ "noteGlowSize": "20" }),
             serde_json::json!({ "noteGlowSize": 20, "noteGlowEnabled": true }),
             serde_json::json!({ "noteGlowSize": 20, "unexpected": true }),
+            serde_json::json!({ "notePaint": {} }),
+            serde_json::json!({ "notePaint": { "color": { "top": "a", "bottom": "b" } } }),
+            serde_json::json!({ "notePaint": { "color": { "type": "gradient", "top": "a", "bottom": "b", "unexpected": true } } }),
+            serde_json::json!({ "notePaint": { "opacity": 50, "opacityTop": 40 } }),
+            serde_json::json!({ "notePaint": { "color": "x", "opacity": 50 } }),
+            serde_json::json!({ "noteGlowPaint": { "opacity": "70" } }),
+            serde_json::json!({ "noteBorderPaint": { "color": "#FFFFFF" } }),
+            serde_json::json!({ "noteBorderPaint": { "color": "#FFFFFF", "opacity": 100, "unexpected": true } }),
+            serde_json::json!({ "notePaint": { "color": "x" }, "noteGlowPaint": { "color": "y" } }),
             serde_json::json!({ "noteOffsetX": "0" }),
             serde_json::json!({ "noteOffsetX": null, "noteOffsetY": null }),
             serde_json::json!({ "noteOffsetY": null, "unexpected": true }),

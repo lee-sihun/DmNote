@@ -63,6 +63,7 @@ import {
   patchCounterTypographyByTargets,
   patchPaintByTargets,
   patchShadowByTargets,
+  patchNotePaintByIds,
   patchStylePropertyByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
@@ -92,6 +93,7 @@ import type {
   EditorCounterStrokePropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
+  EditorNotePaintPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
@@ -103,6 +105,7 @@ import {
   isEditorPaintPropertyPatchV1,
   isEditorShadowPropertyPatchV1,
 } from '@src/types/editor';
+import { isNotePaintPropertyPatchV1 } from '@src/types/key/notePaint';
 import type {
   LayerReorderAnchorsWire,
   LayerReorderIntentWire,
@@ -410,6 +413,7 @@ const parseNativeLayerPropertyTarget = (
   );
   const paintPatch = isEditorPaintPropertyPatchV1(patch);
   const shadowPatch = isEditorShadowPropertyPatchV1(patch);
+  const notePaintPatch = isNotePaintPropertyPatchV1(patch);
   const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
   const patchValid =
     (shadowPatch &&
@@ -417,6 +421,7 @@ const parseNativeLayerPropertyTarget = (
       (!('activeShadow' in patch) ||
         target.elementType === 'key' ||
         target.elementType === 'knob')) ||
+    (notePaintPatch && target.elementType === 'key') ||
     (paintPatch &&
       (!('activeBackgroundPaint' in patch) && !('activeBorderPaint' in patch)
         ? true
@@ -784,6 +789,12 @@ type NativeLayerPropertyRequest =
       patch: EditorShadowPropertyPatchV1;
     }
   | {
+      kind: 'notePaintBatch';
+      ids: string[];
+      patch: EditorNotePaintPropertyPatchV1;
+      gestureId?: string;
+    }
+  | {
       kind: 'stylePropertyBatch';
       targets: Array<{ elementType: NativeElementType; id: string }>;
       patch: EditorPreviewStylePropertyPatchV1;
@@ -953,6 +964,7 @@ const parseNativeLayerPropertyRequest = (
   const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
   const paintPatch = isEditorPaintPropertyPatchV1(patch) ? patch : null;
   const shadowPatch = isEditorShadowPropertyPatchV1(patch) ? patch : null;
+  const notePaintPatch = isNotePaintPropertyPatchV1(patch) ? patch : null;
   const stylePropertyPatch: EditorPreviewStylePropertyPatchV1 | null =
     hasExactKeys(patch, ['displayText']) &&
     typeof patch.displayText === 'string'
@@ -1129,6 +1141,7 @@ const parseNativeLayerPropertyRequest = (
     fontFamilyPatch === null &&
     paintPatch === null &&
     shadowPatch === null &&
+    notePaintPatch === null &&
     stylePropertyPatch === null &&
     inactiveImage === null &&
     soundEnabled === null &&
@@ -1149,7 +1162,8 @@ const parseNativeLayerPropertyRequest = (
   if (
     'gestureId' in payload &&
     soundVolume === null &&
-    stylePropertyPatch === null
+    stylePropertyPatch === null &&
+    notePaintPatch === null
   ) {
     return null;
   }
@@ -1169,6 +1183,8 @@ const parseNativeLayerPropertyRequest = (
       : soundPath !== null
       ? 'key'
       : soundVolume !== null
+      ? 'key'
+      : notePaintPatch !== null
       ? 'key'
       : activeImage !== null
       ? 'active-capable'
@@ -1231,6 +1247,7 @@ const parseNativeLayerPropertyRequest = (
           ('activeShadow' in shadowPatch &&
             target.elementType !== 'key' &&
             target.elementType !== 'knob'))) ||
+      (notePaintPatch !== null && target.elementType !== 'key') ||
       (stylePropertyPatch !== null &&
         ('noteOffsetX' in stylePropertyPatch ||
           'noteOffsetY' in stylePropertyPatch ||
@@ -1276,6 +1293,16 @@ const parseNativeLayerPropertyRequest = (
         id: string;
       }>,
       patch: shadowPatch,
+    };
+  }
+  if (notePaintPatch !== null) {
+    return {
+      kind: 'notePaintBatch',
+      ids,
+      patch: notePaintPatch,
+      ...(typeof payload.gestureId === 'string'
+        ? { gestureId: payload.gestureId }
+        : {}),
     };
   }
   if (stylePropertyPatch !== null) {
@@ -2140,6 +2167,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
             options,
           );
         }
+        if (isNotePaintPropertyPatchV1(request.target.patch)) {
+          return patchNotePaintByIds(
+            [request.target.id],
+            request.target.patch,
+            options,
+          );
+        }
         if (
           'counterPlacement' in request.target.patch ||
           'counterAlign' in request.target.patch ||
@@ -2272,6 +2306,12 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       }
       if (request.kind === 'shadowBatch') {
         return patchShadowByTargets(request.targets, request.patch, options);
+      }
+      if (request.kind === 'notePaintBatch') {
+        return patchNotePaintByIds(request.ids, request.patch, {
+          ...options,
+          ...(request.gestureId ? { gestureId: request.gestureId } : {}),
+        });
       }
       if (request.kind === 'stylePropertyBatch') {
         return patchStylePropertyByTargets(request.targets, request.patch, {

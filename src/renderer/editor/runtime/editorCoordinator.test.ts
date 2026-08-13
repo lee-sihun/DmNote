@@ -4353,6 +4353,86 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('note paint projection은 exact mask마다 fresh siblings를 보존한다', async () => {
+    const ids = [
+      '00000000-0000-4000-8000-0000000001a0',
+      '00000000-0000-4000-8000-0000000001a1',
+      '00000000-0000-4000-8000-0000000001a2',
+    ];
+    const base = makeDocument();
+    base.keys = { '4key': ['A', 'B', 'C'] };
+    base.keyPositions = {
+      '4key': ids.map((id) => ({
+        ...createDefaultKeyPosition(),
+        id,
+        noteColor: '#old',
+        noteOpacity: 80,
+        noteOpacityTop: 70,
+        noteOpacityBottom: 60,
+        noteGlowColor: '#glow',
+        noteGlowOpacity: 50,
+        noteGlowOpacityTop: 40,
+        noteGlowOpacityBottom: 30,
+        noteBorderColor: '#112233',
+        noteBorderOpacity: 20,
+        className: 'sibling',
+      })),
+    };
+    const ops: EditorOpV1[] = [
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[0],
+        patch: { notePaint: { opacity: 99 } },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[1],
+        patch: {
+          noteGlowPaint: { opacity: 66, opacityTop: 55, opacityBottom: 44 },
+        },
+      },
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id: ids[2],
+        patch: { noteBorderPaint: { color: '#A0B1C2', opacity: 77 } },
+      },
+    ];
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal(ops);
+
+    expect(outcome.document.keyPositions['4key']).toMatchObject([
+      {
+        noteColor: '#old',
+        noteOpacity: 99,
+        noteOpacityTop: 70,
+        noteOpacityBottom: 60,
+        noteGlowOpacity: 50,
+        className: 'sibling',
+      },
+      {
+        noteGlowColor: '#glow',
+        noteGlowOpacity: 66,
+        noteGlowOpacityTop: 55,
+        noteGlowOpacityBottom: 44,
+        noteOpacityTop: 70,
+        className: 'sibling',
+      },
+      {
+        noteBorderColor: '#A0B1C2',
+        noteBorderOpacity: 77,
+        noteColor: '#old',
+        noteGlowColor: '#glow',
+        className: 'sibling',
+      },
+    ]);
+    harness.coordinator.stop();
+  });
+
   it('setKeySlot은 최신 paired ID index의 slot만 바꾼다', async () => {
     const id = '00000000-0000-4000-8000-000000000087';
     const otherId = '00000000-0000-4000-8000-000000000086';

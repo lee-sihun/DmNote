@@ -41,6 +41,7 @@ import {
   patchStylePropertyViaAuthority,
   patchPaintViaAuthority,
   patchShadowViaAuthority,
+  patchNotePaintViaAuthority,
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
@@ -82,6 +83,7 @@ import type {
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
+  EditorNotePaintPropertyPatchV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
@@ -114,6 +116,7 @@ import {
   patchStylePropertyById,
   patchPaintById,
   patchShadowById,
+  patchNotePaintById,
   patchInactiveImageById,
   patchIdleImageFitById,
   patchIdleTransparentById,
@@ -2340,6 +2343,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableNotePaintCommitHandler = (id: string | undefined) =>
+    id && !isSyntheticElementId(id)
+      ? (patch: EditorNotePaintPropertyPatchV1) => {
+          const gestureId =
+            editGestureController.activeGestureId() ?? undefined;
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNotePaintViaAuthority([id], patch, gestureId)
+              : patchNotePaintById(id, patch, { gestureId });
+          editGestureController.settleCommit(persisted);
+          void persisted.catch((error) => {
+            console.error('Failed to update note paint', error);
+          });
+        }
+      : undefined;
+
   const stableCounterAnimationPresetHandler = (
     elementType: 'key' | 'stat',
     id: string | undefined,
@@ -3478,33 +3497,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     if (batchPickerFor === 'noteColor') {
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchNoteColorChangeKeysOnly(newColor);
-      } else {
-        handleBatchNoteColorChange(newColor);
-      }
+      handleBatchNoteColorChangeKeysOnly(newColor);
     } else if (batchPickerFor === 'glowColor') {
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchGlowColorChangeKeysOnly(newColor);
-      } else {
-        handleBatchGlowColorChange(newColor);
-      }
+      handleBatchGlowColorChangeKeysOnly(newColor);
     } else if (batchPickerFor === 'borderColor') {
       // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화, 알파는 noteBorderOpacity로 분리
       const raw = typeof newColor === 'string' ? newColor : undefined;
       const solidColor = toRgbHexColor(raw);
       const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchKeyOnlyStyleChange('noteBorderColor', solidColor);
-        handleBatchKeyOnlyStyleChange('noteBorderOpacity', opacity);
-      } else {
-        handleBatchStyleChange('noteBorderColor', solidColor);
-        handleBatchStyleChange('noteBorderOpacity', opacity);
-      }
+      handleBatchKeyOnlyStyleChange('noteBorderColor', solidColor);
+      handleBatchKeyOnlyStyleChange('noteBorderOpacity', opacity);
     }
   };
 
-  const handleBatchPickerColorChangeComplete = (newColor: NoteColor) => {
+  const completeBatchPickerColorChange = (
+    newColor: NoteColor,
+    onNotePaintCommit?: (patch: EditorNotePaintPropertyPatchV1) => void,
+  ) => {
     if (!batchPickerFor) return;
 
     if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
@@ -3552,28 +3561,29 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       : createDefaultCounterSettings();
 
     if (batchPickerFor === 'noteColor') {
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchNoteColorChangeCompleteKeysOnly(newColor);
+      if (onNotePaintCommit) {
+        onNotePaintCommit({ notePaint: { color: newColor } });
       } else {
-        handleBatchNoteColorChangeComplete(newColor);
+        handleBatchNoteColorChangeCompleteKeysOnly(newColor);
       }
     } else if (batchPickerFor === 'glowColor') {
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-        handleBatchGlowColorChangeCompleteKeysOnly(newColor);
+      if (onNotePaintCommit) {
+        onNotePaintCommit({ noteGlowPaint: { color: newColor } });
       } else {
-        handleBatchGlowColorChangeComplete(newColor);
+        handleBatchGlowColorChangeCompleteKeysOnly(newColor);
       }
     } else if (batchPickerFor === 'borderColor') {
       // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화(이슈 #73), 알파는 noteBorderOpacity로 분리
       const raw = typeof newColor === 'string' ? newColor : undefined;
       const solidColor = toRgbHexColor(raw);
       const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
-      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+      if (onNotePaintCommit) {
+        onNotePaintCommit({
+          noteBorderPaint: { color: solidColor, opacity },
+        });
+      } else {
         handleBatchKeyOnlyStyleChangeComplete('noteBorderColor', solidColor);
         handleBatchKeyOnlyStyleChangeComplete('noteBorderOpacity', opacity);
-      } else {
-        handleBatchStyleChangeComplete('noteBorderColor', solidColor);
-        handleBatchStyleChangeComplete('noteBorderOpacity', opacity);
       }
     } else if (batchPickerFor === 'fill') {
       const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
@@ -3638,6 +3648,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     }
   };
+  const handleBatchPickerColorChangeComplete = (newColor: NoteColor) =>
+    completeBatchPickerColorChange(newColor);
+  const handleBatchNotePickerColorChangeComplete = (
+    newColor: NoteColor,
+    onNotePaintCommit: (patch: EditorNotePaintPropertyPatchV1) => void,
+  ) => completeBatchPickerColorChange(newColor, onNotePaintCommit);
 
   // ============================================================================
   // 렌더링
@@ -3745,6 +3761,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchPickerColorChangeComplete={
             handleBatchPickerColorChangeComplete
           }
+          handleBatchNotePickerColorChangeComplete={
+            handleBatchNotePickerColorChangeComplete
+          }
+          handleBatchKeyOnlyStyleChange={handleBatchKeyOnlyStyleChange}
           getBatchPickerColor={getBatchPickerColor}
           getBatchPickerRef={getBatchPickerRef}
           batchColorPickerInteractiveRefs={batchColorPickerInteractiveRefs}
@@ -4129,6 +4149,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? selectedStatElements[0]?.id
             : selectedKeyElements[0]?.id,
         )}
+        onNotePaintCommit={
+          isSingleKey
+            ? stableNotePaintCommitHandler(selectedKeyElements[0]?.id)
+            : undefined
+        }
         onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat

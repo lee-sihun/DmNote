@@ -49,6 +49,7 @@ import {
   patchCounterTypographyByTargets,
   patchPaintByTargets,
   patchShadowByTargets,
+  patchNotePaintByIds,
   patchStylePropertyByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
@@ -65,6 +66,7 @@ import {
   patchCounterTypographyViaAuthority,
   patchPaintViaAuthority,
   patchShadowViaAuthority,
+  patchNotePaintViaAuthority,
   patchStylePropertyViaAuthority,
   patchInactiveImageViaAuthority,
   patchIdleTransparentViaAuthority,
@@ -89,6 +91,7 @@ import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorShadowPropertyPatchV1,
+  EditorNotePaintPropertyPatchV1,
 } from '@src/types/editor';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
@@ -529,6 +532,14 @@ interface BatchKeyLikePanelProps {
   handleBatchPickerToggle: (target: BatchPickerTarget) => void;
   handleBatchPickerColorChange: (newColor: NoteColor) => void;
   handleBatchPickerColorChangeComplete: (newColor: NoteColor) => void;
+  handleBatchNotePickerColorChangeComplete: (
+    newColor: NoteColor,
+    onNotePaintCommit: (patch: EditorNotePaintPropertyPatchV1) => void,
+  ) => void;
+  handleBatchKeyOnlyStyleChange: (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => void;
   getBatchPickerColor: () => NoteColor | string;
   getBatchPickerRef: () => React.RefObject<HTMLButtonElement | null> | null;
   batchColorPickerInteractiveRefs: React.RefObject<HTMLButtonElement | null>[];
@@ -613,6 +624,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchPickerToggle,
   handleBatchPickerColorChange,
   handleBatchPickerColorChangeComplete,
+  handleBatchNotePickerColorChangeComplete,
+  handleBatchKeyOnlyStyleChange,
   getBatchPickerColor,
   getBatchPickerRef,
   batchColorPickerInteractiveRefs,
@@ -711,6 +724,24 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       selectedKeyType,
       { settleGesture: false },
     );
+  const notePaintIds = selectedKeyElements.map(({ id }) => id);
+  const stableNotePaintIds =
+    notePaintIds.length > 0 &&
+    notePaintIds.every((id) => id.length > 0 && !isSyntheticElementId(id)) &&
+    new Set(notePaintIds).size === notePaintIds.length
+      ? notePaintIds
+      : null;
+  const commitNotePaint = stableNotePaintIds
+    ? (patch: EditorNotePaintPropertyPatchV1) => {
+        const gestureId = editGestureController.activeGestureId() ?? undefined;
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchNotePaintViaAuthority(stableNotePaintIds, patch, gestureId)
+            : patchNotePaintByIds(stableNotePaintIds, patch, { gestureId });
+        editGestureController.settleCommit(persisted);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
   const soundTargets = selectedKeyElements.map(({ id }) => id);
   const stableSoundTargets =
     soundTargets.length > 0 &&
@@ -1397,7 +1428,21 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               panelElement={panelElement}
               color={getBatchPickerColor()}
               onColorChange={handleBatchPickerColorChange}
-              onColorChangeComplete={handleBatchPickerColorChangeComplete}
+              onColorChangeComplete={(color) => {
+                if (
+                  commitNotePaint &&
+                  (batchPickerFor === 'noteColor' ||
+                    batchPickerFor === 'glowColor' ||
+                    batchPickerFor === 'borderColor')
+                ) {
+                  handleBatchNotePickerColorChangeComplete(
+                    color,
+                    commitNotePaint,
+                  );
+                  return;
+                }
+                handleBatchPickerColorChangeComplete(color);
+              }}
               onClose={() => setBatchPickerFor(null)}
               interactiveRefs={batchColorPickerInteractiveRefs}
               solidOnly={
@@ -1428,13 +1473,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                     ...prev,
                     noteOpacity: value,
                   }));
-                  handleBatchStyleChange('noteOpacity', value);
+                  handleBatchKeyOnlyStyleChange('noteOpacity', value);
                 } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     glowOpacity: value,
                   }));
-                  handleBatchStyleChange('noteGlowOpacity', value);
+                  handleBatchKeyOnlyStyleChange('noteGlowOpacity', value);
                 }
               }}
               onOpacityPercentChangeComplete={(value: number) => {
@@ -1443,13 +1488,24 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                     ...prev,
                     noteOpacity: value,
                   }));
-                  handleBatchStyleChangeComplete('noteOpacity', value);
+                  if (commitNotePaint) {
+                    commitNotePaint({ notePaint: { opacity: value } });
+                  } else {
+                    handleBatchKeyOnlyStyleChangeComplete('noteOpacity', value);
+                  }
                 } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     glowOpacity: value,
                   }));
-                  handleBatchStyleChangeComplete('noteGlowOpacity', value);
+                  if (commitNotePaint) {
+                    commitNotePaint({ noteGlowPaint: { opacity: value } });
+                  } else {
+                    handleBatchKeyOnlyStyleChangeComplete(
+                      'noteGlowOpacity',
+                      value,
+                    );
+                  }
                 }
               }}
               opacityPercentLabel={

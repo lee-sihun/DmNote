@@ -6,6 +6,10 @@ import {
 } from '@src/types/color';
 import { projectElementShadowPatch } from '@src/types/key/shadows';
 import {
+  isNotePaintPropertyPatchV1,
+  projectNotePaintPatch,
+} from '@src/types/key/notePaint';
+import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
@@ -792,6 +796,9 @@ const applySemanticOps = (
                   defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
                 }),
               };
+            }
+            if (isNotePaintPropertyPatchV1(op.patch)) {
+              return { ...position, ...projectNotePaintPatch(op.patch) };
             }
             if ('displayText' in op.patch) {
               return { ...position, displayText: op.patch.displayText };

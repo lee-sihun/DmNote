@@ -6,10 +6,10 @@ use crate::{
         default_counter_animation_builtin_presets, AppStoreData, CounterAnimationPreset,
         EditorBoundsV1, EditorCounterAnimationPresetIntentV1, EditorDocumentV1,
         EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
-        EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1,
-        EditorPaintDescriptorV1, EditorShadowLeafPatchV1, EditorZUpdateV1, ElementShadowSpec,
-        GradientSpec, KeyPosition, LayerGroupDef, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
-        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
+        EditorGroupUpdateV1, EditorNoteColorV1, EditorNotePaintIntentV1, EditorOpResultStatusV1,
+        EditorOpResultV1, EditorOpV1, EditorPaintDescriptorV1, EditorShadowLeafPatchV1,
+        EditorZUpdateV1, ElementShadowSpec, GradientSpec, KeyPosition, LayerGroupDef, NoteColor,
+        SHADOW_BLUR_MAX, SHADOW_BLUR_MIN, SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
 };
 
@@ -380,6 +380,116 @@ fn patch_shadow_enabled(
         active.enabled = enabled;
     }
     changed
+}
+
+fn validate_note_paint_intent(patch: &EditorNotePaintIntentV1) -> Result<(), EditorCommitError> {
+    let valid_opacity = |value: u32| value <= 100;
+    let valid = match patch {
+        EditorNotePaintIntentV1::Color(_) => true,
+        EditorNotePaintIntentV1::Opacity(patch) => valid_opacity(patch.opacity),
+        EditorNotePaintIntentV1::GradientOpacity(patch) => {
+            valid_opacity(patch.opacity)
+                && valid_opacity(patch.opacity_top)
+                && valid_opacity(patch.opacity_bottom)
+        }
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(EditorCommitError::validation(
+            "NOTE_OPACITY_OUT_OF_RANGE",
+            "note opacity values must be integers between 0 and 100",
+        ))
+    }
+}
+
+fn editor_note_color(color: &EditorNoteColorV1) -> NoteColor {
+    match color {
+        EditorNoteColorV1::Solid(color) => NoteColor::Solid(color.clone()),
+        EditorNoteColorV1::Gradient(gradient) => NoteColor::Gradient {
+            top: gradient.top.clone(),
+            bottom: gradient.bottom.clone(),
+        },
+    }
+}
+
+fn patch_note_paint(
+    position: &mut KeyPosition,
+    glow: bool,
+    patch: &EditorNotePaintIntentV1,
+) -> bool {
+    match patch {
+        EditorNotePaintIntentV1::Color(patch) => {
+            let color = editor_note_color(&patch.color);
+            if glow {
+                if position.note_glow_color.as_ref() == Some(&color) {
+                    false
+                } else {
+                    position.note_glow_color = Some(color);
+                    true
+                }
+            } else if position.note_color == color {
+                false
+            } else {
+                position.note_color = color;
+                true
+            }
+        }
+        EditorNotePaintIntentV1::Opacity(patch) => {
+            let opacity = if glow {
+                &mut position.note_glow_opacity
+            } else {
+                &mut position.note_opacity
+            };
+            if *opacity == patch.opacity {
+                false
+            } else {
+                *opacity = patch.opacity;
+                true
+            }
+        }
+        EditorNotePaintIntentV1::GradientOpacity(patch) => {
+            let (opacity, opacity_top, opacity_bottom) = if glow {
+                (
+                    &mut position.note_glow_opacity,
+                    &mut position.note_glow_opacity_top,
+                    &mut position.note_glow_opacity_bottom,
+                )
+            } else {
+                (
+                    &mut position.note_opacity,
+                    &mut position.note_opacity_top,
+                    &mut position.note_opacity_bottom,
+                )
+            };
+            let changed = *opacity != patch.opacity
+                || *opacity_top != Some(patch.opacity_top)
+                || *opacity_bottom != Some(patch.opacity_bottom);
+            *opacity = patch.opacity;
+            *opacity_top = Some(patch.opacity_top);
+            *opacity_bottom = Some(patch.opacity_bottom);
+            changed
+        }
+    }
+}
+
+fn validate_note_border_paint(color: &str, opacity: u32) -> Result<(), EditorCommitError> {
+    let valid_color = color.len() == 7
+        && color.starts_with('#')
+        && color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit);
+    if !valid_color {
+        return Err(EditorCommitError::validation(
+            "INVALID_NOTE_BORDER_COLOR",
+            "note border color must use #RRGGBB format",
+        ));
+    }
+    if opacity > 100 {
+        return Err(EditorCommitError::validation(
+            "NOTE_OPACITY_OUT_OF_RANGE",
+            "note border opacity must be an integer between 0 and 100",
+        ));
+    }
+    Ok(())
 }
 
 fn insert_location(
@@ -1178,6 +1288,9 @@ pub(crate) fn prepare_editor_ops_transition(
                     | EditorElementPropertyPatchV1::NoteEffectEnabled(_)
                     | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
                     | EditorElementPropertyPatchV1::NoteGlowSize(_)
+                    | EditorElementPropertyPatchV1::NotePaint(_)
+                    | EditorElementPropertyPatchV1::NoteGlowPaint(_)
+                    | EditorElementPropertyPatchV1::NoteBorderPaint(_)
                     | EditorElementPropertyPatchV1::NoteOffsetX(_)
                     | EditorElementPropertyPatchV1::NoteOffsetY(_)
                     | EditorElementPropertyPatchV1::NoteWidth(_)
@@ -1211,6 +1324,21 @@ pub(crate) fn prepare_editor_ops_transition(
                             ),
                         ));
                     }
+                }
+                match patch {
+                    EditorElementPropertyPatchV1::NotePaint(patch) => {
+                        validate_note_paint_intent(&patch.note_paint)?;
+                    }
+                    EditorElementPropertyPatchV1::NoteGlowPaint(patch) => {
+                        validate_note_paint_intent(&patch.note_glow_paint)?;
+                    }
+                    EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
+                        validate_note_border_paint(
+                            &patch.note_border_paint.color,
+                            patch.note_border_paint.opacity,
+                        )?;
+                    }
+                    _ => {}
                 }
                 if let EditorElementPropertyPatchV1::NoteOffsetX(patch) = patch {
                     if patch.note_offset_x.is_some_and(|value| {
@@ -1971,6 +2099,23 @@ pub(crate) fn prepare_editor_ops_transition(
                             position.note_glow_size = patch.note_glow_size;
                             true
                         }
+                    }
+                    EditorElementPropertyPatchV1::NotePaint(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        patch_note_paint(position, false, &patch.note_paint)
+                    }
+                    EditorElementPropertyPatchV1::NoteGlowPaint(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        patch_note_paint(position, true, &patch.note_glow_paint)
+                    }
+                    EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        let changed = position.note_border_color.as_deref()
+                            != Some(patch.note_border_paint.color.as_str())
+                            || position.note_border_opacity != patch.note_border_paint.opacity;
+                        position.note_border_color = Some(patch.note_border_paint.color.clone());
+                        position.note_border_opacity = patch.note_border_paint.opacity;
+                        changed
                     }
                     EditorElementPropertyPatchV1::NoteOffsetX(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -6675,6 +6820,231 @@ mod tests {
             .unwrap_err();
             assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
             assert_eq!(store.key_positions["4key"][0], original);
+        }
+    }
+
+    #[test]
+    fn note_paint_masks_preserve_siblings_materialize_options_and_reject_invalid_plans() {
+        let mut store = base_store();
+        let ids = [
+            store.key_positions["4key"][0].id.clone(),
+            store.key_positions["4key"][1].id.clone(),
+            store.key_positions["4key"][2].id.clone(),
+            store.key_positions["4key"][3].id.clone(),
+            store.key_positions["5key"][0].id.clone(),
+        ];
+        let positions = store.key_positions.get_mut("4key").unwrap();
+        positions[0].note_color = NoteColor::Solid("old-note".to_string());
+        positions[0].note_opacity = 41;
+        positions[0].note_opacity_top = Some(42);
+        positions[0].note_opacity_bottom = Some(43);
+        positions[1].note_opacity = 50;
+        positions[1].note_opacity_top = Some(11);
+        positions[1].note_opacity_bottom = Some(22);
+        positions[2].note_glow_color = None;
+        positions[2].note_glow_opacity = 71;
+        positions[2].note_glow_opacity_top = Some(72);
+        positions[2].note_glow_opacity_bottom = Some(73);
+        positions[3].note_border_color = None;
+        positions[3].note_border_opacity = 100;
+        let full = &mut store.key_positions.get_mut("5key").unwrap()[0];
+        full.note_glow_opacity = 65;
+        full.note_glow_opacity_top = None;
+        full.note_glow_opacity_bottom = None;
+        full.note_glow_color = Some(NoteColor::Solid("glow-sibling".to_string()));
+        let original = store.clone();
+
+        let note_color = EditorElementPropertyPatchV1::NotePaint(
+            crate::models::EditorNotePaintPropertyPatchV1 {
+                note_paint: EditorNotePaintIntentV1::Color(
+                    crate::models::EditorNotePaintColorIntentV1 {
+                        color: EditorNoteColorV1::Gradient(
+                            crate::models::EditorNoteGradientColorV1 {
+                                kind: crate::models::EditorNoteGradientColorKindV1::Gradient,
+                                top: "top".to_string(),
+                                bottom: "bottom".to_string(),
+                            },
+                        ),
+                    },
+                ),
+            },
+        );
+        let note_opacity = EditorElementPropertyPatchV1::NotePaint(
+            crate::models::EditorNotePaintPropertyPatchV1 {
+                note_paint: EditorNotePaintIntentV1::Opacity(
+                    crate::models::EditorNotePaintOpacityIntentV1 { opacity: 60 },
+                ),
+            },
+        );
+        let glow_color = EditorElementPropertyPatchV1::NoteGlowPaint(
+            crate::models::EditorNoteGlowPaintPropertyPatchV1 {
+                note_glow_paint: EditorNotePaintIntentV1::Color(
+                    crate::models::EditorNotePaintColorIntentV1 {
+                        color: EditorNoteColorV1::Solid(String::new()),
+                    },
+                ),
+            },
+        );
+        let border = EditorElementPropertyPatchV1::NoteBorderPaint(
+            crate::models::EditorNoteBorderPaintPropertyPatchV1 {
+                note_border_paint: crate::models::EditorNoteBorderPaintV1 {
+                    color: "#FFFFFF".to_string(),
+                    opacity: 100,
+                },
+            },
+        );
+        let glow_tuple = EditorElementPropertyPatchV1::NoteGlowPaint(
+            crate::models::EditorNoteGlowPaintPropertyPatchV1 {
+                note_glow_paint: EditorNotePaintIntentV1::GradientOpacity(
+                    crate::models::EditorNotePaintGradientOpacityIntentV1 {
+                        opacity: 65,
+                        opacity_top: 10,
+                        opacity_bottom: 90,
+                    },
+                ),
+            },
+        );
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &ids[0], note_color.clone()),
+            patch_property_op(EditorElementTypeV1::Key, &ids[1], note_opacity.clone()),
+            patch_property_op(EditorElementTypeV1::Key, &ids[2], glow_color.clone()),
+            patch_property_op(EditorElementTypeV1::Key, &ids[3], border.clone()),
+            patch_property_op(EditorElementTypeV1::Key, &ids[4], glow_tuple.clone()),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                note_color.clone(),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let positions = &transition.candidate.key_positions["4key"];
+        assert_eq!(
+            positions[0].note_color,
+            NoteColor::Gradient {
+                top: "top".to_string(),
+                bottom: "bottom".to_string(),
+            }
+        );
+        assert_eq!(positions[0].note_opacity, 41);
+        assert_eq!(positions[0].note_opacity_top, Some(42));
+        assert_eq!(positions[0].note_opacity_bottom, Some(43));
+        assert_eq!(positions[1].note_opacity, 60);
+        assert_eq!(positions[1].note_opacity_top, Some(11));
+        assert_eq!(positions[1].note_opacity_bottom, Some(22));
+        assert_eq!(
+            positions[2].note_glow_color,
+            Some(NoteColor::Solid(String::new()))
+        );
+        assert_eq!(positions[2].note_glow_opacity, 71);
+        assert_eq!(positions[2].note_glow_opacity_top, Some(72));
+        assert_eq!(positions[2].note_glow_opacity_bottom, Some(73));
+        assert_eq!(positions[3].note_border_color.as_deref(), Some("#FFFFFF"));
+        assert_eq!(positions[3].note_border_opacity, 100);
+        let full = &transition.candidate.key_positions["5key"][0];
+        assert_eq!(full.note_glow_opacity, 65);
+        assert_eq!(full.note_glow_opacity_top, Some(10));
+        assert_eq!(full.note_glow_opacity_bottom, Some(90));
+        assert_eq!(
+            full.note_glow_color,
+            Some(NoteColor::Solid("glow-sibling".to_string()))
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        for (invalid, expected_code) in [
+            (
+                EditorElementPropertyPatchV1::NotePaint(
+                    crate::models::EditorNotePaintPropertyPatchV1 {
+                        note_paint: EditorNotePaintIntentV1::Opacity(
+                            crate::models::EditorNotePaintOpacityIntentV1 { opacity: 101 },
+                        ),
+                    },
+                ),
+                "NOTE_OPACITY_OUT_OF_RANGE",
+            ),
+            (
+                EditorElementPropertyPatchV1::NoteBorderPaint(
+                    crate::models::EditorNoteBorderPaintPropertyPatchV1 {
+                        note_border_paint: crate::models::EditorNoteBorderPaintV1 {
+                            color: "rgba(1,2,3,1)".to_string(),
+                            opacity: 100,
+                        },
+                    },
+                ),
+                "INVALID_NOTE_BORDER_COLOR",
+            ),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        EditorElementTypeV1::Key,
+                        uuid::Uuid::new_v4().to_string(),
+                        invalid,
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(store, original);
+            assert_eq!(
+                error.error_code,
+                crate::errors::EditorCommitErrorCode::ValidationFailed
+            );
+            assert_eq!(validation_code(&error), Some(expected_code));
+        }
+        for element_type in [
+            EditorElementTypeV1::Stat,
+            EditorElementTypeV1::Graph,
+            EditorElementTypeV1::Knob,
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        glow_color.clone(),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store, original);
         }
     }
 

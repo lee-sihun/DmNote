@@ -17,6 +17,12 @@ import {
 import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
 import type { ElementShadowValuePatch } from '@src/types/key/shadows';
 import {
+  isNotePaintPropertyPatchV1,
+  type NoteBorderPaintValueV1,
+  type NotePaintPropertyPatchV1,
+  type NotePaintValuePatchV1,
+} from '@src/types/key/notePaint';
+import {
   canonicalizePositionGradients,
   type PaintDescriptorV1,
 } from '@src/types/color';
@@ -201,6 +207,9 @@ interface EditorElementPropertyValuesV1 {
   shadow: ElementShadowValuePatch;
   activeShadow: ElementShadowValuePatch;
   shadowEnabled: boolean;
+  notePaint: NotePaintValuePatchV1;
+  noteGlowPaint: NotePaintValuePatchV1;
+  noteBorderPaint: NoteBorderPaintValueV1;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
@@ -319,6 +328,8 @@ export type EditorPaintPropertyPatchV1 = EditorPropertyPatchUnionV1<
 export type EditorShadowPropertyPatchV1 = EditorPropertyPatchUnionV1<
   'shadow' | 'activeShadow' | 'shadowEnabled'
 >;
+
+export type EditorNotePaintPropertyPatchV1 = NotePaintPropertyPatchV1;
 
 export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteEffectEnabled'
@@ -1192,6 +1203,9 @@ export function assertEditorOpsV1(
       }
       assertUniqueDirectTarget(op.id, opLabel);
       const patchKeys = Object.keys(op.patch);
+      const notePaintPatchValid = (
+        isNotePaintPropertyPatchV1 as (value: unknown) => boolean
+      )(op.patch);
       const counterAnimationPreset = op.patch.counterAnimationPreset;
       const counterAnimationPresetValid = (() => {
         if (!isRecord(counterAnimationPreset)) return false;
@@ -1304,6 +1318,7 @@ export function assertEditorOpsV1(
           (!('activeShadow' in op.patch) ||
             op.elementType === 'key' ||
             op.elementType === 'knob')) ||
+        (notePaintPatchValid && op.elementType === 'key') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'displayText' &&
           typeof op.patch.displayText === 'string') ||

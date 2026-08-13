@@ -53,6 +53,7 @@ import type {
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
+  EditorNotePaintPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -76,6 +77,10 @@ import {
   type PaintPropertyNameV1,
 } from '@src/types/color';
 import { projectElementShadowPatch } from '@src/types/key/shadows';
+import {
+  isNotePaintPropertyPatchV1,
+  projectNotePaintPatch,
+} from '@src/types/key/notePaint';
 import {
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
   DEFAULT_ELEMENT_SHADOW_SPEC,
@@ -2315,6 +2320,69 @@ export const patchShadowById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> =>
   patchShadowByTargets([{ elementType, id }], patch, options);
+
+const notePaintPropertyIntents = (
+  ids: readonly string[],
+  patch: EditorNotePaintPropertyPatchV1,
+): PropertyIntents => {
+  const document = captureEditorDocument();
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const id of ids) {
+    const current = Object.values(document.keyPositions)
+      .flat()
+      .find((position) => position.id === id);
+    if (!current) continue;
+    byId.set(id, projectNotePaintPatch(patch) as Record<string, unknown>);
+  }
+  return new Map([['key', byId]]);
+};
+
+export const patchNotePaintByIds = (
+  ids: readonly string[],
+  patch: EditorNotePaintPropertyPatchV1,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    !isNotePaintPropertyPatchV1(patch) ||
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0 || isSyntheticElementId(id)) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return Promise.resolve(false);
+  }
+  const receipt = applyPropertyIntentsEagerly(
+    notePaintPropertyIntents(ids, patch),
+  );
+  let enrolled = false;
+  return commitSemanticOps(
+    ids.map((id) => ({
+      kind: 'patchElement' as const,
+      elementType: 'key' as const,
+      id,
+      patch: structuredClone(patch),
+    })),
+    {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchNotePaintById = (
+  id: string,
+  patch: EditorNotePaintPropertyPatchV1,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> => patchNotePaintByIds([id], patch, options);
 
 export const patchStylePropertyById = (
   type: NativeElementType,

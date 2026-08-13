@@ -41,6 +41,8 @@ const captured = vi.hoisted(() => ({
     onStateModeChange?: (mode: string) => void;
     onColorChange: (color: string) => void;
     onColorChangeComplete: (color: string) => void;
+    onOpacityPercentChange?: (value: number) => void;
+    onOpacityPercentChangeComplete?: (value: number) => void;
   },
   checkboxes: [] as Array<{ checked: boolean; onChange: () => void }>,
   dropdowns: [] as Array<{
@@ -110,6 +112,8 @@ const patches = vi.hoisted(() => ({
   patchPaintViaAuthority: vi.fn(async () => true),
   patchShadowByTargets: vi.fn(async () => true),
   patchShadowViaAuthority: vi.fn(async () => true),
+  patchNotePaintByIds: vi.fn(async () => true),
+  patchNotePaintViaAuthority: vi.fn(async () => true),
   patchDisplayTextByTargets: vi.fn(async () => true),
   patchDisplayTextViaAuthority: vi.fn(async () => true),
 }));
@@ -140,6 +144,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterStrokeByTargets: patches.patchCounterStrokeByTargets,
   patchPaintByTargets: patches.patchPaintByTargets,
   patchShadowByTargets: patches.patchShadowByTargets,
+  patchNotePaintByIds: patches.patchNotePaintByIds,
   patchStylePropertyByTargets: patches.patchDisplayTextByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
@@ -162,6 +167,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterStrokeViaAuthority: patches.patchCounterStrokeViaAuthority,
   patchPaintViaAuthority: patches.patchPaintViaAuthority,
   patchShadowViaAuthority: patches.patchShadowViaAuthority,
+  patchNotePaintViaAuthority: patches.patchNotePaintViaAuthority,
   patchStylePropertyViaAuthority: patches.patchDisplayTextViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
@@ -420,6 +426,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       getSelectedBatchStyleData: () => [],
       getSelectedKeyOnlyPositions: () => [],
       handleBatchKeyOnlyStyleChangeComplete: vi.fn(),
+      handleBatchKeyOnlyStyleChange: vi.fn(),
       handleBatchNoteColorChangeKeysOnly: vi.fn(),
       handleBatchGlowColorChangeKeysOnly: vi.fn(),
       batchNoteColorButtonRef: createRef<HTMLButtonElement>(),
@@ -452,6 +459,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       handleBatchPickerToggle: vi.fn(),
       handleBatchPickerColorChange: vi.fn(),
       handleBatchPickerColorChangeComplete: vi.fn(),
+      handleBatchNotePickerColorChangeComplete: vi.fn(),
       getBatchPickerColor: () => '#ffffff',
       getBatchPickerRef: () => createRef<HTMLButtonElement>(),
       batchColorPickerInteractiveRefs: [],
@@ -1752,6 +1760,132 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(commit).not.toHaveBeenCalled();
       act(() => captured.color?.onColorChangeComplete('  final raw  '));
       expect(commit).toHaveBeenCalledWith('  final raw  ');
+    },
+  );
+
+  it.each(['main', 'panel'] as const)(
+    'batch note paint는 latest current key만 %s exact commit하고 non-key synthetic를 무시한다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const renderNote = (keyId: string) => {
+        useGridSelectionStore.setState({
+          selectedElements: [
+            { type: 'key', id: keyId, index: 0 },
+            { type: 'stat', id: 'stat-0', index: 0 },
+            { type: 'graph', id: 'graph-0', index: 0 },
+            { type: 'knob', id: 'knob-0', index: 0 },
+          ],
+        });
+        const props = panelProps();
+        props.activeTab = 'note';
+        props.batchPickerFor = 'noteColor';
+        props.batchLocalOpacities = {
+          noteOpacity: 80,
+          glowOpacity: 70,
+        };
+        props.handleBatchNotePickerColorChangeComplete = (color, semantic) =>
+          semantic?.({ notePaint: { color } });
+        act(() => {
+          root.render(
+            <PanelNavProvider
+              value={{
+                activePageKey: null,
+                renderPageKey: null,
+                openPage: vi.fn(),
+                closePage: vi.fn(),
+                pageHost,
+              }}
+            >
+              <BatchKeyLikePanel {...props} />
+            </PanelNavProvider>,
+          );
+        });
+        return props;
+      };
+      renderNote(ID_A);
+      const props = renderNote(ID_B);
+
+      act(() => captured.color?.onColorChange('solid-drag'));
+      expect(patches.patchNotePaintByIds).not.toHaveBeenCalled();
+      expect(patches.patchNotePaintViaAuthority).not.toHaveBeenCalled();
+      act(() => captured.color?.onColorChangeComplete(' final note '));
+      act(() => captured.color?.onOpacityPercentChange?.(61));
+      expect(props.handleBatchKeyOnlyStyleChange).toHaveBeenCalledWith(
+        'noteOpacity',
+        61,
+      );
+      act(() => captured.color?.onOpacityPercentChangeComplete?.(62));
+
+      const writer =
+        windowType === 'panel'
+          ? patches.patchNotePaintViaAuthority
+          : patches.patchNotePaintByIds;
+      const otherWriter =
+        windowType === 'panel'
+          ? patches.patchNotePaintByIds
+          : patches.patchNotePaintViaAuthority;
+      expect(writer.mock.calls).toEqual([
+        [
+          [ID_B],
+          { notePaint: { color: ' final note ' } },
+          windowType === 'panel'
+            ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+            : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+        ],
+        [
+          [ID_B],
+          { notePaint: { opacity: 62 } },
+          windowType === 'panel'
+            ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+            : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+        ],
+      ]);
+      expect(otherWriter).not.toHaveBeenCalled();
+      expect(gestures.settleCommit).toHaveBeenCalledTimes(2);
+      expect(
+        props.handleBatchKeyOnlyStyleChangeComplete,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key-0', ''])(
+    'batch note paint relevant %j key는 whole legacy이고 semantic을 보내지 않는다',
+    (id) => {
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id, index: 0 },
+          { type: 'stat', id: 'stat-0', index: 0 },
+        ],
+      });
+      const props = panelProps();
+      props.activeTab = 'note';
+      props.batchPickerFor = 'glowColor';
+      props.batchLocalOpacities = { noteOpacity: 80, glowOpacity: 70 };
+      act(() => {
+        root.render(
+          <PanelNavProvider
+            value={{
+              activePageKey: null,
+              renderPageKey: null,
+              openPage: vi.fn(),
+              closePage: vi.fn(),
+              pageHost,
+            }}
+          >
+            <BatchKeyLikePanel {...props} />
+          </PanelNavProvider>,
+        );
+      });
+
+      act(() => captured.color?.onOpacityPercentChangeComplete?.(42));
+
+      expect(props.handleBatchKeyOnlyStyleChangeComplete).toHaveBeenCalledWith(
+        'noteGlowOpacity',
+        42,
+      );
+      expect(patches.patchNotePaintByIds).not.toHaveBeenCalled();
+      expect(patches.patchNotePaintViaAuthority).not.toHaveBeenCalled();
+      expect(gestures.settleCommit).not.toHaveBeenCalled();
     },
   );
 

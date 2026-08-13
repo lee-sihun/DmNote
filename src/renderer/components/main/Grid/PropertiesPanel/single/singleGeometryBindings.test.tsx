@@ -85,6 +85,14 @@ const captured = vi.hoisted(() => ({
     onStateModeChange?: (mode: string) => void;
     onColorChange: (color: string) => void;
     onColorChangeComplete: (color: string) => void;
+    onOpacityPercentChange?: (
+      value: number,
+      target: 'solid' | 'top' | 'bottom',
+    ) => void;
+    onOpacityPercentChangeComplete?: (
+      value: number,
+      target: 'solid' | 'top' | 'bottom',
+    ) => void;
   },
   colorInputs: [] as Array<{
     onModeCommit?: (
@@ -573,6 +581,92 @@ describe('single geometry input bindings', () => {
       [{ noteBorderWidth: 3.5 }],
       [{ noteBorderRadius: 13.5 }],
     ]);
+  });
+
+  it('single NoteTab actual picker는 local drag 뒤 color, full opacity, border pair를 exact commit한다', () => {
+    const commit = vi.fn();
+    const legacyPreview = vi.fn();
+    const legacyCommit = vi.fn();
+    act(() => {
+      root.render(
+        <NoteTabContent
+          keyIndex={4}
+          keyPosition={{
+            ...createDefaultKeyPosition(),
+            noteOpacity: 80,
+            noteOpacityTop: 70,
+            noteOpacityBottom: 60,
+          }}
+          onKeyUpdate={legacyCommit}
+          onKeyPreview={legacyPreview}
+          onNotePaintCommit={commit}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    act(() => captured.swatches[0]?.onClick());
+    act(() => captured.color?.onColorChange('drag-only'));
+    expect(legacyPreview).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+    act(() => captured.color?.onColorChangeComplete(' final-note '));
+    expect(legacyPreview).toHaveBeenLastCalledWith(4, {
+      noteColor: ' final-note ',
+    });
+    expect(commit).toHaveBeenLastCalledWith({
+      notePaint: { color: ' final-note ' },
+    });
+
+    act(() => captured.color?.onOpacityPercentChangeComplete?.(45, 'top'));
+    expect(legacyPreview).toHaveBeenLastCalledWith(4, {
+      noteOpacity: 53,
+      noteOpacityTop: 45,
+      noteOpacityBottom: 60,
+    });
+    expect(commit).toHaveBeenLastCalledWith({
+      notePaint: { opacity: 53, opacityTop: 45, opacityBottom: 60 },
+    });
+
+    act(() => captured.swatches[2]?.onClick());
+    act(() => captured.color?.onColorChangeComplete(' final-glow '));
+    expect(commit).toHaveBeenLastCalledWith({
+      noteGlowPaint: { color: ' final-glow ' },
+    });
+    act(() => captured.color?.onOpacityPercentChangeComplete?.(35, 'solid'));
+    expect(commit).toHaveBeenLastCalledWith({
+      noteGlowPaint: { opacity: 35, opacityTop: 35, opacityBottom: 35 },
+    });
+
+    act(() => captured.swatches[1]?.onClick());
+    act(() => captured.color?.onColorChangeComplete('#A0B1C280'));
+    expect(commit).toHaveBeenLastCalledWith({
+      noteBorderPaint: { color: '#A0B1C2', opacity: 50 },
+    });
+    expect(legacyCommit).not.toHaveBeenCalled();
+  });
+
+  it('single NoteTab actual picker callback이 없으면 preview와 whole legacy writer를 유지한다', () => {
+    const preview = vi.fn();
+    const legacy = vi.fn();
+    act(() => {
+      root.render(
+        <NoteTabContent
+          keyIndex={2}
+          keyPosition={createDefaultKeyPosition()}
+          onKeyUpdate={legacy}
+          onKeyPreview={preview}
+          t={(key) => key}
+        />,
+      );
+    });
+    act(() => captured.swatches[2]?.onClick());
+    act(() => captured.color?.onColorChangeComplete('legacy-glow'));
+
+    expect(preview).toHaveBeenCalledWith(2, { noteGlowColor: 'legacy-glow' });
+    expect(legacy).toHaveBeenCalledWith({
+      index: 2,
+      noteGlowColor: 'legacy-glow',
+    });
   });
 
   it('single NoteTab noteGlowSize callback이 없으면 기존 preview와 whole writer다', () => {

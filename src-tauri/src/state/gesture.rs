@@ -856,6 +856,42 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NotePaint(
+                    crate::models::EditorNotePaintPropertyPatchV1 {
+                        note_paint: crate::models::EditorNotePaintIntentV1::Color(
+                            crate::models::EditorNotePaintColorIntentV1 {
+                                color: crate::models::EditorNoteColorV1::Solid(String::new()),
+                            },
+                        ),
+                    },
+                ),
+                serde_json::json!({ "notePaint": { "color": "" } }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteGlowPaint(
+                    crate::models::EditorNoteGlowPaintPropertyPatchV1 {
+                        note_glow_paint: crate::models::EditorNotePaintIntentV1::Opacity(
+                            crate::models::EditorNotePaintOpacityIntentV1 { opacity: 70 },
+                        ),
+                    },
+                ),
+                serde_json::json!({ "noteGlowPaint": { "opacity": 70 } }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteBorderPaint(
+                    crate::models::EditorNoteBorderPaintPropertyPatchV1 {
+                        note_border_paint: crate::models::EditorNoteBorderPaintV1 {
+                            color: "#112233".to_string(),
+                            opacity: 0,
+                        },
+                    },
+                ),
+                serde_json::json!({ "noteBorderPaint": { "color": "#112233", "opacity": 0 } }),
+            ),
+            (
+                EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteOffsetX(
                     crate::models::EditorNoteOffsetXPropertyPatchV1 {
                         note_offset_x: Some(0.0),
@@ -1129,6 +1165,14 @@ mod tests {
             serde_json::json!({ "noteGlowSize": "20" }),
             serde_json::json!({ "noteGlowSize": 20, "noteGlowEnabled": true }),
             serde_json::json!({ "noteGlowSize": 20, "unexpected": true }),
+            serde_json::json!({ "notePaint": {} }),
+            serde_json::json!({ "notePaint": { "color": { "top": "a", "bottom": "b" } } }),
+            serde_json::json!({ "notePaint": { "color": { "type": "gradient", "top": "a", "bottom": "b", "unexpected": true } } }),
+            serde_json::json!({ "notePaint": { "opacity": 50, "opacityBottom": 60 } }),
+            serde_json::json!({ "noteGlowPaint": { "color": "x", "opacity": 70 } }),
+            serde_json::json!({ "noteBorderPaint": { "color": "#FFFFFF" } }),
+            serde_json::json!({ "noteBorderPaint": { "color": "#FFFFFF", "opacity": "100" } }),
+            serde_json::json!({ "notePaint": { "color": "x" }, "unexpected": true }),
             serde_json::json!({ "noteOffsetX": "0" }),
             serde_json::json!({ "noteOffsetX": null, "noteOffsetY": null }),
             serde_json::json!({ "noteOffsetY": null, "unexpected": true }),

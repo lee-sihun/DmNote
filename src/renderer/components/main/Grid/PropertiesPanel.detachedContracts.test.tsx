@@ -67,6 +67,8 @@ const {
   patchPaintViaAuthorityMock,
   patchShadowMock,
   patchShadowViaAuthorityMock,
+  patchNotePaintMock,
+  patchNotePaintViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -146,6 +148,8 @@ const {
   patchPaintViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchShadowMock: vi.fn(() => Promise.resolve(true)),
   patchShadowViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePaintMock: vi.fn(() => Promise.resolve(true)),
+  patchNotePaintViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -189,6 +193,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchStylePropertyViaAuthority: patchDisplayTextViaAuthorityMock,
   patchPaintViaAuthority: patchPaintViaAuthorityMock,
   patchShadowViaAuthority: patchShadowViaAuthorityMock,
+  patchNotePaintViaAuthority: patchNotePaintViaAuthorityMock,
   patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
   patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
   patchSoundEnabledViaAuthority: patchSoundEnabledViaAuthorityMock,
@@ -218,6 +223,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchStylePropertyById: patchDisplayTextMock,
   patchPaintById: patchPaintMock,
   patchShadowById: patchShadowMock,
+  patchNotePaintById: patchNotePaintMock,
   patchInactiveImageById: patchInactiveImageMock,
   patchActiveImageById: patchActiveImageMock,
   patchIdleTransparentById: patchIdleTransparentMock,
@@ -410,6 +416,8 @@ const resetStores = () => {
   patchPaintViaAuthorityMock.mockClear();
   patchShadowMock.mockClear();
   patchShadowViaAuthorityMock.mockClear();
+  patchNotePaintMock.mockClear();
+  patchNotePaintViaAuthorityMock.mockClear();
   patchCounterEnabledMock.mockClear();
   patchCounterAnimationEnabledMock.mockClear();
   patchCounterEnabledViaAuthorityMock.mockClear();
@@ -1794,6 +1802,88 @@ describe('PropertiesPanel detached preview contract', () => {
       expect(legacyBatchCounterUpdateMock).not.toHaveBeenCalled();
     },
   );
+
+  it('batch note picker 부모는 mixed selection에서도 key-only preview와 exact final descriptor만 만든다', () => {
+    const keyId = 'e2aaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const position = createDefaultKeyPosition();
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A'] },
+      positions: { '4key': [{ ...position, id: keyId }] },
+      canonicalPositions: { '4key': [{ ...position, id: keyId }] },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [{ ...position, id: 'stat-0', statType: 'kps' }],
+      },
+    });
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...position,
+            id: 'graph-0',
+            graphType: 'line',
+            graphSpeed: 1,
+            graphColor: '#fff',
+          } as never,
+        ],
+      },
+    });
+    useKnobItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...position,
+            id: 'knob-0',
+            axisId: 'HIDA:test',
+            sensitivity: 1,
+          } as never,
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: keyId, index: 0 },
+        { type: 'stat', id: 'stat-0', index: 0 },
+        { type: 'graph', id: 'graph-0', index: 0 },
+        { type: 'knob', id: 'knob-0', index: 0 },
+      ],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    let props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+      setBatchPickerFor: (value: 'noteColor' | 'borderColor') => void;
+      handleBatchPickerColorChange: (value: string) => void;
+      handleBatchNotePickerColorChangeComplete: (
+        value: string,
+        commit: (patch: Record<string, unknown>) => void,
+      ) => void;
+    };
+    act(() => props.setBatchPickerFor('noteColor'));
+    props = batchKeyLikePropsMock.mock.lastCall?.[0] as typeof props;
+    const semantic = vi.fn();
+    act(() => props.handleBatchPickerColorChange('note-drag'));
+    act(() =>
+      props.handleBatchNotePickerColorChangeComplete(' final note ', semantic),
+    );
+    expect(semantic).toHaveBeenLastCalledWith({
+      notePaint: { color: ' final note ' },
+    });
+
+    act(() => props.setBatchPickerFor('borderColor'));
+    props = batchKeyLikePropsMock.mock.lastCall?.[0] as typeof props;
+    act(() => props.handleBatchPickerColorChange('#A0B1C280'));
+    act(() =>
+      props.handleBatchNotePickerColorChangeComplete('#A0B1C280', semantic),
+    );
+    expect(semantic).toHaveBeenLastCalledWith({
+      noteBorderPaint: { color: '#A0B1C2', opacity: 50 },
+    });
+    expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+    expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
+    expect(legacyBatchStyleCommitMock).not.toHaveBeenCalled();
+  });
 
   it.each([
     ['active ignores synthetic stat', 'active', 'stat', true],
@@ -3524,6 +3614,122 @@ describe('PropertiesPanel detached preview contract', () => {
         );
       }
       expect(patchPaintMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main', { notePaint: { color: ' raw note ' } }, true],
+    [
+      'panel',
+      { noteGlowPaint: { opacity: 60, opacityTop: 50, opacityBottom: 40 } },
+      false,
+    ],
+    ['main', { noteBorderPaint: { color: '#A0B1C2', opacity: 55 } }, 'reject'],
+    ['panel', { notePaint: { color: ' panel note ' } }, true],
+    [
+      'main',
+      { noteGlowPaint: { opacity: 70, opacityTop: 60, opacityBottom: 50 } },
+      false,
+    ],
+    ['panel', { noteBorderPaint: { color: '#112233', opacity: 45 } }, 'reject'],
+  ] as const)(
+    '%s single stable note paint는 원 ID와 writer Promise를 그대로 정산한다',
+    async (windowType, patch, result) => {
+      window.__dmn_window_type = windowType;
+      const selectedId = 'e1aaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const indexedId = 'e1bbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const position = createDefaultKeyPosition();
+      const writer =
+        windowType === 'panel'
+          ? patchNotePaintViaAuthorityMock
+          : patchNotePaintMock;
+      const failure = new Error('note paint failed');
+      writer.mockReturnValueOnce(
+        result === 'reject' ? Promise.reject(failure) : Promise.resolve(result),
+      );
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      activeGestureIdMock.mockReturnValue(
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      );
+      useKeyStore.setState({
+        keyMappings: { '4key': ['B', 'A'] },
+        positions: {
+          '4key': [
+            { ...position, id: indexedId },
+            { ...position, id: selectedId },
+          ],
+        },
+        canonicalPositions: {
+          '4key': [
+            { ...position, id: indexedId },
+            { ...position, id: selectedId },
+          ],
+        },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id: selectedId, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onNotePaintCommit: (patch: Record<string, unknown>) => void;
+        }
+      ).onNotePaintCommit;
+
+      act(() => commit(patch));
+
+      if (windowType === 'panel') {
+        expect(writer).toHaveBeenCalledWith(
+          [selectedId],
+          patch,
+          'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        );
+      } else {
+        expect(writer).toHaveBeenCalledWith(selectedId, patch, {
+          gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        });
+      }
+      const persisted = writer.mock.results[0]?.value as Promise<boolean>;
+      expect(settleCommitMock).toHaveBeenCalledWith(persisted);
+      if (result === 'reject') await expect(persisted).rejects.toBe(failure);
+      else await expect(persisted).resolves.toBe(result);
+      errorSpy.mockRestore();
+    },
+  );
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', ''],
+  ] as const)(
+    'single %s key note paint는 exact callback 없이 whole legacy writer를 유지한다',
+    (_label, id) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [position] },
+        canonicalPositions: { '4key': [position] },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as Record<
+        string,
+        unknown
+      >;
+      expect(props.onNotePaintCommit).toBeUndefined();
+      act(() =>
+        (props.onKeyUpdate as (patch: Record<string, unknown>) => void)({
+          index: 0,
+          noteColor: 'legacy-note',
+        }),
+      );
+      expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      expect(patchNotePaintMock).not.toHaveBeenCalled();
+      expect(patchNotePaintViaAuthorityMock).not.toHaveBeenCalled();
+      expect(settleCommitMock).not.toHaveBeenCalled();
     },
   );
 

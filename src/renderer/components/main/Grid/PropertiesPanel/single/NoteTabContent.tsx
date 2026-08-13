@@ -49,6 +49,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   onKeyPreview,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onNotePaintCommit,
   panelElement,
   t,
 }) => {
@@ -350,7 +351,11 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         colorValue = newColor;
       }
       onKeyPreview?.(keyIndex, { noteColor: colorValue });
-      onKeyUpdate({ index: keyIndex, noteColor: colorValue });
+      if (onNotePaintCommit) {
+        onNotePaintCommit({ notePaint: { color: colorValue } });
+      } else {
+        onKeyUpdate({ index: keyIndex, noteColor: colorValue });
+      }
     } else {
       if (
         newColor &&
@@ -373,7 +378,11 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         colorValue = newColor;
       }
       onKeyPreview?.(keyIndex, { noteGlowColor: colorValue });
-      onKeyUpdate({ index: keyIndex, noteGlowColor: colorValue });
+      if (onNotePaintCommit) {
+        onNotePaintCommit({ noteGlowPaint: { color: colorValue } });
+      } else {
+        onKeyUpdate({ index: keyIndex, noteGlowColor: colorValue });
+      }
     }
   };
 
@@ -852,11 +861,17 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                   noteBorderColor: hex,
                   noteBorderOpacity: opacity,
                 });
-                onKeyUpdate({
-                  index: keyIndex,
-                  noteBorderColor: hex,
-                  noteBorderOpacity: opacity,
-                });
+                if (onNotePaintCommit) {
+                  onNotePaintCommit({
+                    noteBorderPaint: { color: hex, opacity },
+                  });
+                } else {
+                  onKeyUpdate({
+                    index: keyIndex,
+                    noteBorderColor: hex,
+                    noteBorderOpacity: opacity,
+                  });
+                }
                 return;
               }
               handleColorChangeComplete(pickerFor, c);
@@ -934,7 +949,17 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                       noteOpacityBottom: value,
                     };
                     onKeyPreview?.(keyIndex, payload);
-                    onKeyUpdate({ index: keyIndex, ...payload });
+                    if (onNotePaintCommit) {
+                      onNotePaintCommit({
+                        notePaint: {
+                          opacity: value,
+                          opacityTop: value,
+                          opacityBottom: value,
+                        },
+                      });
+                    } else {
+                      onKeyUpdate({ index: keyIndex, ...payload });
+                    }
                     return;
                   }
 
@@ -953,7 +978,17 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                     noteOpacityBottom: nextBottom,
                   };
                   onKeyPreview?.(keyIndex, payload);
-                  onKeyUpdate({ index: keyIndex, ...payload });
+                  if (onNotePaintCommit) {
+                    onNotePaintCommit({
+                      notePaint: {
+                        opacity: nextBase,
+                        opacityTop: nextTop,
+                        opacityBottom: nextBottom,
+                      },
+                    });
+                  } else {
+                    onKeyUpdate({ index: keyIndex, ...payload });
+                  }
                   return;
                 }
 
@@ -967,7 +1002,17 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                     noteGlowOpacityBottom: value,
                   };
                   onKeyPreview?.(keyIndex, payload);
-                  onKeyUpdate({ index: keyIndex, ...payload });
+                  if (onNotePaintCommit) {
+                    onNotePaintCommit({
+                      noteGlowPaint: {
+                        opacity: value,
+                        opacityTop: value,
+                        opacityBottom: value,
+                      },
+                    });
+                  } else {
+                    onKeyUpdate({ index: keyIndex, ...payload });
+                  }
                   return;
                 }
 
@@ -985,7 +1030,17 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                   noteGlowOpacityBottom: nextBottom,
                 };
                 onKeyPreview?.(keyIndex, payload);
-                onKeyUpdate({ index: keyIndex, ...payload });
+                if (onNotePaintCommit) {
+                  onNotePaintCommit({
+                    noteGlowPaint: {
+                      opacity: nextBase,
+                      opacityTop: nextTop,
+                      opacityBottom: nextBottom,
+                    },
+                  });
+                } else {
+                  onKeyUpdate({ index: keyIndex, ...payload });
+                }
               },
               opacityPercentLabel:
                 pickerFor === 'note'

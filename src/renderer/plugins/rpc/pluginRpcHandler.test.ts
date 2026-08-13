@@ -202,6 +202,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchNotePaint: vi.fn(
+    (
+      _ids?: unknown,
+      _patch?: unknown,
+      _options?: { gestureId?: string; preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   updateCounterAnimation: vi.fn(
     (_request?: unknown, _options?: unknown): Promise<unknown> =>
       Promise.resolve(null),
@@ -302,6 +309,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterStrokeByTargets: mocks.patchCounterStroke,
   patchPaintByTargets: mocks.patchPaint,
   patchShadowByTargets: mocks.patchShadow,
+  patchNotePaintByIds: mocks.patchNotePaint,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -430,6 +438,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchPaint.mockResolvedValue(true);
     mocks.patchShadow.mockReset();
     mocks.patchShadow.mockResolvedValue(true);
+    mocks.patchNotePaint.mockReset();
+    mocks.patchNotePaint.mockResolvedValue(true);
     mocks.updateCounterAnimation.mockReset();
     mocks.updateCounterAnimation.mockResolvedValue({
       preset: { id: 'preset-a' },
@@ -1174,6 +1184,77 @@ describe('plugin panel persisted element mutations', () => {
           },
         ],
         patch: { noteWidth: null },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
+  it('note paint batch는 canonical gesture와 exact mask를 dedicated executor에 전달한다', async () => {
+    const ids = ['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: ids.map((id) => ({ elementType: 'key', id })),
+        patch: { notePaint: { opacity: 60 } },
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.patchNotePaint).toHaveBeenCalledOnce());
+    expect(mocks.patchNotePaint).toHaveBeenCalledWith(
+      ids,
+      { notePaint: { opacity: 60 } },
+      {
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        preflight: expect.any(Function),
+      },
+    );
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
+  it('note paint single target도 generic eager를 우회한다', async () => {
+    const id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'key',
+          id,
+          patch: { noteBorderPaint: { color: '#A0B1C2', opacity: 55 } },
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.patchNotePaint).toHaveBeenCalledOnce());
+    expect(mocks.patchNotePaint).toHaveBeenCalledWith(
+      [id],
+      { noteBorderPaint: { color: '#A0B1C2', opacity: 55 } },
+      { preflight: expect.any(Function) },
+    );
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
+  it('note paint는 slot 직전 generation 변경을 dedicated executor에서 거절한다', async () => {
+    mocks.patchNotePaint.mockImplementationOnce(
+      async (_ids, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          {
+            elementType: 'key',
+            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          },
+        ],
+        patch: { noteGlowPaint: { color: '#fff' } },
       }),
     );
 
@@ -2816,6 +2897,58 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'note paint wrong type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { notePaint: { color: '#fff' } },
+      },
+    ],
+    [
+      'note paint incomplete gradient',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: {
+          notePaint: { color: { type: 'gradient', top: '#fff' } },
+        },
+      },
+    ],
+    [
+      'note paint opacity range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteGlowPaint: { opacity: 101 } },
+      },
+    ],
+    [
+      'note paint incomplete opacity tuple',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { notePaint: { opacity: 50, opacityTop: 40 } },
+      },
+    ],
+    [
+      'note paint combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { notePaint: { color: '#fff' }, noteGlowPaint: { opacity: 50 } },
+      },
+    ],
+    [
+      'note border paint invalid color',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteBorderPaint: { color: '#fff', opacity: 50 } },
+      },
+    ],
+    [
+      'note paint non canonical gesture',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { notePaint: { opacity: 50 } },
+        gestureId: 'not-a-uuid',
+      },
+    ],
+    [
       'numeric style duplicate target',
       {
         targets: [
@@ -3460,6 +3593,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchSoundEnabled).not.toHaveBeenCalled();
       expect(mocks.patchSoundVolume).not.toHaveBeenCalled();
       expect(mocks.patchNoteProperties).not.toHaveBeenCalled();
+      expect(mocks.patchNotePaint).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
         error: { code: 'INVALID_PAYLOAD' },

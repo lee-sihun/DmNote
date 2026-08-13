@@ -481,6 +481,21 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['key', { noteBorderWidth: 20 }],
     ['key', { noteBorderRadius: 1 }],
     ['key', { noteBorderRadius: 100 }],
+    ['key', { notePaint: { color: '' } }],
+    [
+      'key',
+      {
+        noteGlowPaint: {
+          color: { type: 'gradient', top: ' raw top ', bottom: '' },
+        },
+      },
+    ],
+    ['key', { notePaint: { opacity: 0 } }],
+    [
+      'key',
+      { noteGlowPaint: { opacity: 90, opacityTop: 80, opacityBottom: 70 } },
+    ],
+    ['key', { noteBorderPaint: { color: '#A0b1C2', opacity: 100 } }],
     ['key', { backgroundPaint: { color: ' raw ', gradient: null } }],
     [
       'knob',
@@ -610,6 +625,31 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['key', { noteBorderRadius: 100.1 }],
     ['key', { noteBorderRadius: null }],
     ['key', { noteOffsetX: 0, noteOffsetY: 0 }],
+    ['stat', { notePaint: { color: '#fff' } }],
+    ['key', { notePaint: { color: { type: 'gradient', top: '#fff' } } }],
+    [
+      'key',
+      {
+        notePaint: {
+          color: {
+            type: 'gradient',
+            top: '#fff',
+            bottom: '#000',
+            extra: true,
+          },
+        },
+      },
+    ],
+    ['key', { notePaint: { opacity: 101 } }],
+    ['key', { notePaint: { opacity: 50, opacityTop: 40 } }],
+    [
+      'key',
+      { notePaint: { opacity: 50, opacityTop: 40, opacityBottom: 30.5 } },
+    ],
+    ['key', { noteGlowPaint: { color: '#fff', opacity: 50 } }],
+    ['key', { noteBorderPaint: { color: '#fff', opacity: 50 } }],
+    ['key', { noteBorderPaint: { color: '#FFFFFF', opacity: -1 } }],
+    ['key', { notePaint: { color: '#fff' }, noteGlowSize: 20 }],
     ['stat', { activeBackgroundPaint: { color: '#fff', gradient: null } }],
     ['graph', { activeBorderPaint: { color: '#fff', gradient: null } }],
     ['key', { backgroundPaint: { color: '#fff' } }],

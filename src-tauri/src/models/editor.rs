@@ -262,6 +262,9 @@ pub enum EditorElementPropertyPatchV1 {
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
     NoteGlowEnabled(EditorNoteGlowEnabledPropertyPatchV1),
     NoteGlowSize(EditorNoteGlowSizePropertyPatchV1),
+    NotePaint(EditorNotePaintPropertyPatchV1),
+    NoteGlowPaint(EditorNoteGlowPaintPropertyPatchV1),
+    NoteBorderPaint(EditorNoteBorderPaintPropertyPatchV1),
     NoteOffsetX(EditorNoteOffsetXPropertyPatchV1),
     NoteOffsetY(EditorNoteOffsetYPropertyPatchV1),
     NoteWidth(EditorNoteWidthPropertyPatchV1),
@@ -715,6 +718,81 @@ pub struct EditorNoteGlowEnabledPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorNoteGlowSizePropertyPatchV1 {
     pub note_glow_size: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNotePaintPropertyPatchV1 {
+    pub note_paint: EditorNotePaintIntentV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteGlowPaintPropertyPatchV1 {
+    pub note_glow_paint: EditorNotePaintIntentV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EditorNotePaintIntentV1 {
+    Color(EditorNotePaintColorIntentV1),
+    Opacity(EditorNotePaintOpacityIntentV1),
+    GradientOpacity(EditorNotePaintGradientOpacityIntentV1),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNotePaintColorIntentV1 {
+    pub color: EditorNoteColorV1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNotePaintOpacityIntentV1 {
+    pub opacity: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNotePaintGradientOpacityIntentV1 {
+    pub opacity: u32,
+    pub opacity_top: u32,
+    pub opacity_bottom: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EditorNoteColorV1 {
+    Solid(String),
+    Gradient(EditorNoteGradientColorV1),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteGradientColorV1 {
+    #[serde(rename = "type")]
+    pub kind: EditorNoteGradientColorKindV1,
+    pub top: String,
+    pub bottom: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EditorNoteGradientColorKindV1 {
+    Gradient,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteBorderPaintPropertyPatchV1 {
+    pub note_border_paint: EditorNoteBorderPaintV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteBorderPaintV1 {
+    pub color: String,
+    pub opacity: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

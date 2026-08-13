@@ -60,6 +60,8 @@ import {
   patchStylePropertyByTargets,
   patchPaintByTargets,
   patchShadowByTargets,
+  patchNotePaintById,
+  patchNotePaintByIds,
   patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -2734,6 +2736,115 @@ describe('elementOps', () => {
       expect(api.commitSemanticOps).not.toHaveBeenCalled();
     },
   );
+
+  it('note paint exact mask는 요청 leaf만 eager 투영하고 gesture를 wire에 보존한다', async () => {
+    const key = {
+      ...keyAt(ID_A),
+      noteColor: 'idle-color',
+      noteOpacity: 80,
+      noteOpacityTop: 70,
+      noteOpacityBottom: 60,
+      noteGlowColor: 'glow-sibling',
+      noteGlowOpacity: 50,
+      noteGlowOpacityTop: 40,
+      noteGlowOpacityBottom: 30,
+      noteBorderColor: '#112233',
+      noteBorderOpacity: 20,
+      className: 'sibling',
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [key] },
+      positions: { '4key': [key] },
+    });
+
+    await patchNotePaintByIds(
+      [ID_A],
+      { noteGlowPaint: { opacity: 77 } },
+      { gestureId: '00000000-0000-4000-8000-000000000077' },
+    );
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      noteColor: 'idle-color',
+      noteOpacity: 80,
+      noteOpacityTop: 70,
+      noteOpacityBottom: 60,
+      noteGlowColor: 'glow-sibling',
+      noteGlowOpacity: 77,
+      noteGlowOpacityTop: 40,
+      noteGlowOpacityBottom: 30,
+      noteBorderColor: '#112233',
+      noteBorderOpacity: 20,
+      className: 'sibling',
+    });
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { noteGlowPaint: { opacity: 77 } },
+        },
+      ],
+      expect.objectContaining({
+        gestureId: '00000000-0000-4000-8000-000000000077',
+      }),
+    );
+
+    await patchNotePaintById(ID_A, {
+      notePaint: { opacity: 66, opacityTop: 55, opacityBottom: 44 },
+    });
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      noteOpacity: 66,
+      noteOpacityTop: 55,
+      noteOpacityBottom: 44,
+      noteGlowOpacity: 77,
+    });
+  });
+
+  it.each([
+    ['synthetic', ['key-0'], { notePaint: { color: '#fff' } }],
+    ['empty', [], { notePaint: { opacity: 50 } }],
+    ['duplicate', [ID_A, ID_A], { notePaint: { opacity: 50 } }],
+    ['combined', [ID_A], { notePaint: { color: '#fff', opacity: 50 } }],
+    [
+      'border color',
+      [ID_A],
+      { noteBorderPaint: { color: '#fff', opacity: 50 } },
+    ],
+  ] as const)(
+    'note paint %s는 wire 전에 거절한다',
+    async (_label, ids, patch) => {
+      await expect(patchNotePaintByIds([...ids], patch as never)).resolves.toBe(
+        false,
+      );
+      expect(api.commitSemanticOps).not.toHaveBeenCalled();
+    },
+  );
+
+  it('note paint 편입 전 실패는 자기 eager leaf만 복원한다', async () => {
+    const key = {
+      ...keyAt(ID_A),
+      noteOpacity: 80,
+      noteOpacityTop: 70,
+      noteOpacityBottom: 60,
+      noteGlowColor: 'fresh-sibling',
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [key] },
+      positions: { '4key': [key] },
+    });
+    api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
+
+    await expect(
+      patchNotePaintById(ID_A, { notePaint: { opacity: 99 } }),
+    ).rejects.toThrow('start failed');
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      noteOpacity: 80,
+      noteOpacityTop: 70,
+      noteOpacityBottom: 60,
+      noteGlowColor: 'fresh-sibling',
+    });
+  });
 
   it.each([
     ['wrong type', 'stat', { noteOffsetX: 0 }],

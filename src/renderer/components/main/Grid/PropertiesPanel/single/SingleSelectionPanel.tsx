@@ -17,7 +17,11 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import type { CounterTabContentProps, SizeCommit } from '../types';
+import type {
+  CounterTabContentProps,
+  NoteTabContentProps,
+  SizeCommit,
+} from '../types';
 import {
   getActivePairPreservation,
   gradientPairPatch,
@@ -1751,6 +1755,7 @@ interface SingleKeyStatPanelProps {
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
+  onNotePaintCommit?: NoteTabContentProps['onNotePaintCommit'];
   onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
   onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
@@ -1811,6 +1816,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onStylePropertyCommit,
   onPaintCommit,
   onShadowCommit,
+  onNotePaintCommit,
   onCounterAnimationPresetCommit,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
@@ -2057,6 +2063,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
                 onKeyPreview={onKeyPreview}
                 onStylePropertyPreview={onStylePropertyPreview}
                 onStylePropertyCommit={onStylePropertyCommit}
+                onNotePaintCommit={onNotePaintCommit}
                 panelElement={panelElement}
                 t={t}
               />
