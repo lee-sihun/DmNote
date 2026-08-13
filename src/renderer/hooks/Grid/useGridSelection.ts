@@ -1528,9 +1528,8 @@ export function useGridSelection({
         }
       }
 
-      let result: { committed: boolean; satisfied: boolean };
       try {
-        result = await runMixedGestureElementIntent({
+        await runMixedGestureElementIntent({
           gestureId,
           initialPluginIds: pluginScope(
             usePluginDisplayElementStore.getState().elements,
@@ -1575,7 +1574,6 @@ export function useGridSelection({
         // 편입 후 실패의 상태 정합은 projection·canonical pull이 소유 -
         // 호출부 경계에서는 기록만 (삭제 경로와 대칭)
         console.error('Failed to persist pasted elements', error);
-        result = { committed: false, satisfied: false };
       }
 
       sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {

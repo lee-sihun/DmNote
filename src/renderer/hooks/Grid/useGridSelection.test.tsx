@@ -292,8 +292,10 @@ describe('useGridSelection compound history gesture', () => {
         ]);
     });
     // 커밋 정산을 붙잡아 라운드트립 중 상태를 관찰한다
-    let settle: (value: { committed: boolean; satisfied: boolean }) => void =
-      () => {};
+    let settle: (value: {
+      committed: boolean;
+      satisfied: boolean;
+    }) => void = () => {};
     mocks.runMixedGestureIntent.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -309,8 +311,7 @@ describe('useGridSelection compound history gesture', () => {
 
     // 정산 전에 이미 사본을 가리켜야 한다 - 원본에 남아 있으면 라운드트립
     // 중의 Delete가 원본을 지운다
-    const duringRoundTrip =
-      useGridSelectionStore.getState().selectedElements;
+    const duringRoundTrip = useGridSelectionStore.getState().selectedElements;
     expect(duringRoundTrip).toHaveLength(1);
     expect(duringRoundTrip[0].id).not.toBe(STABLE_KEY_ID);
     expect(duringRoundTrip[0].index).toBe(1);
