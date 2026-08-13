@@ -2492,6 +2492,15 @@ mod tests {
                 serde_json::json!({ "displayText": "  raw display  " }),
             ),
             (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::ClassName(
+                    crate::models::EditorClassNamePropertyPatchV1 {
+                        class_name: "  raw class  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "className": "  raw class  " }),
+            ),
+            (
                 EditorElementTypeV1::Knob,
                 EditorElementPropertyPatchV1::InactiveImage(
                     crate::models::EditorInactiveImagePropertyPatchV1 {
@@ -2803,6 +2812,10 @@ mod tests {
             serde_json::json!({ "displayText": 1 }),
             serde_json::json!({ "displayText": "text", "hidden": true }),
             serde_json::json!({ "displayText": "text", "unexpected": true }),
+            serde_json::json!({ "className": null }),
+            serde_json::json!({ "className": 1 }),
+            serde_json::json!({ "className": "class", "hidden": true }),
+            serde_json::json!({ "className": "class", "unexpected": true }),
             serde_json::json!({ "inactiveImage": null }),
             serde_json::json!({ "inactiveImage": "path", "hidden": false }),
             serde_json::json!({ "inactiveImage": "path", "unexpected": true }),

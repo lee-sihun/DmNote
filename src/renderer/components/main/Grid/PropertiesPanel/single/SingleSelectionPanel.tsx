@@ -73,6 +73,7 @@ import ShadowControls from '../ShadowControls';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import EditSessionBoundary from '../EditSessionBoundary';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
+import type { EditorTextPropertyPatchV1 } from '@src/types/editor';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -323,6 +324,7 @@ interface SingleGraphPanelProps {
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
+  onTextPropertyCommit?: (patch: EditorTextPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
@@ -352,6 +354,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   onInactiveImageCommit,
   onIdleTransparentCommit,
   onIdleImageFitCommit,
+  onTextPropertyCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   showGraphImagePicker,
@@ -728,12 +731,16 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   <TextInput
                     value={graphClassNameDraft}
                     onChange={setGraphClassNameDraft}
-                    onBlur={(value) =>
+                    onBlur={(value) => {
+                      if (onTextPropertyCommit) {
+                        onTextPropertyCommit({ className: value });
+                        return;
+                      }
                       handleGraphUpdate({
                         index: singleGraphIndex,
                         className: value,
-                      })
-                    }
+                      });
+                    }}
                     placeholder="className"
                     width="90px"
                   />
@@ -835,6 +842,7 @@ interface SingleKnobPanelProps {
   onActiveTransparentCommit?: (activeTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
+  onTextPropertyCommit?: (patch: EditorTextPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
@@ -862,6 +870,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   onActiveTransparentCommit,
   onIdleImageFitCommit,
   onActiveImageFitCommit,
+  onTextPropertyCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   panelElement,
@@ -1482,12 +1491,16 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                     <TextInput
                       value={classNameDraft}
                       onChange={setClassNameDraft}
-                      onBlur={(value) =>
+                      onBlur={(value) => {
+                        if (onTextPropertyCommit) {
+                          onTextPropertyCommit({ className: value });
+                          return;
+                        }
                         handleKnobUpdate({
                           index: singleKnobIndex,
                           className: value,
-                        })
-                      }
+                        });
+                      }}
                       placeholder="className"
                       width="90px"
                     />
@@ -1693,8 +1706,8 @@ interface SingleKeyStatPanelProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onDisplayTextPreview?: (displayText: string) => void;
-  onDisplayTextCommit?: (displayText: string) => void;
+  onTextPropertyPreview?: (patch: EditorTextPropertyPatchV1) => void;
+  onTextPropertyCommit?: (patch: EditorTextPropertyPatchV1) => void;
   onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
   onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
@@ -1750,8 +1763,8 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onSoundPathCommit,
   onSoundEnabledCommit,
   onSoundVolumeCommit,
-  onDisplayTextPreview,
-  onDisplayTextCommit,
+  onTextPropertyPreview,
+  onTextPropertyCommit,
   onCounterAnimationPresetCommit,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
@@ -1951,8 +1964,8 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onSoundPathCommit={onSoundPathCommit}
               onSoundEnabledCommit={onSoundEnabledCommit}
               onSoundVolumeCommit={onSoundVolumeCommit}
-              onDisplayTextPreview={onDisplayTextPreview}
-              onDisplayTextCommit={onDisplayTextCommit}
+              onTextPropertyPreview={onTextPropertyPreview}
+              onTextPropertyCommit={onTextPropertyCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}

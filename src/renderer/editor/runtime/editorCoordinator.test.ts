@@ -3539,6 +3539,45 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('className은 common position leaf만 투영하고 displayText sibling을 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000c5';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      className: undefined,
+      displayText: 'Sibling label',
+      fontFamily: 'Sibling Family',
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { className: '  Raw class  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.opResults).toEqual([{ status: 'applied' }]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      className: '  Raw class  ',
+      displayText: 'Sibling label',
+      fontFamily: 'Sibling Family',
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document.keyPositions['4key'][0].className).toBe(
+      '  Raw class  ',
+    );
+    harness.coordinator.stop();
+  });
+
   it('inactiveImage는 raw top-level leaf만 적용하고 이미지 형제를 보존한다', async () => {
     const id = '00000000-0000-4000-8000-0000000000b7';
     const base = withStableId(id);

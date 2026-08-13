@@ -38,7 +38,7 @@ import {
   patchGraphPropertiesViaAuthority,
   patchGraphTypesViaAuthority,
   patchFontFamilyViaAuthority,
-  patchDisplayTextViaAuthority,
+  patchTextPropertyViaAuthority,
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
@@ -75,6 +75,7 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
+  EditorTextPropertyPatchV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
@@ -104,7 +105,7 @@ import {
   patchActiveTransparentById,
   patchFontFamilyById,
   patchFontFamilyByTargets,
-  patchDisplayTextById,
+  patchTextPropertyById,
   patchInactiveImageById,
   patchIdleImageFitById,
   patchIdleTransparentById,
@@ -2245,17 +2246,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
-  const stableDisplayTextPreviewHandler = (
+  const stableTextPropertyPreviewHandler = (
     type: EditorElementTypeV1,
     id: string | undefined,
   ) =>
     id && !isSyntheticElementId(id)
-      ? (displayText: string) => {
+      ? (patch: EditorTextPropertyPatchV1) => {
           const locator = resolveElementById(type, id);
           if (!locator) return;
           editGestureController.preview(
             locator.mode,
-            [{ index: locator.index, patch: { displayText } }],
+            [{ index: locator.index, patch }],
             {
               domain:
                 type === 'key'
@@ -2270,25 +2271,29 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
-  const stableDisplayTextCommitHandler = (
+  const stableTextPropertyCommitHandler = (
     type: EditorElementTypeV1,
     id: string | undefined,
+    options: { settleGesture?: boolean } = {},
   ) =>
     id && !isSyntheticElementId(id)
-      ? (displayText: string) => {
-          const gestureId =
-            editGestureController.activeGestureId() ?? undefined;
+      ? (patch: EditorTextPropertyPatchV1) => {
+          const gestureId = options.settleGesture
+            ? editGestureController.activeGestureId() ?? undefined
+            : undefined;
           const persisted =
             window.__dmn_window_type === 'panel'
-              ? patchDisplayTextViaAuthority(
+              ? patchTextPropertyViaAuthority(
                   [{ elementType: type, id }],
-                  displayText,
+                  patch,
                   gestureId,
                 )
-              : patchDisplayTextById(type, id, displayText, { gestureId });
-          editGestureController.settleCommit(persisted);
+              : patchTextPropertyById(type, id, patch, { gestureId });
+          if (options.settleGesture) {
+            editGestureController.settleCommit(persisted);
+          }
           void persisted.catch((error) => {
-            console.error('Failed to update display text', error);
+            console.error('Failed to update text property', error);
           });
         }
       : undefined;
@@ -3848,6 +3853,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
+          onTextPropertyCommit={stableTextPropertyCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           singleScrollRefFor={singleScrollRefFor}
           panelElement={panelElement}
           useCustomCSS={useCustomCSS}
@@ -3891,6 +3900,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             selectedGraphElements[0]?.id,
           )}
           handleGeometryCommit={stableGeometryHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onTextPropertyCommit={stableTextPropertyCommitHandler(
             'graph',
             selectedGraphElements[0]?.id,
           )}
@@ -3994,17 +4007,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? stableSoundVolumeHandler(selectedKeyElements[0]?.id)
             : undefined
         }
-        onDisplayTextPreview={stableDisplayTextPreviewHandler(
+        onTextPropertyPreview={stableTextPropertyPreviewHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id
             : selectedKeyElements[0]?.id,
         )}
-        onDisplayTextCommit={stableDisplayTextCommitHandler(
+        onTextPropertyCommit={stableTextPropertyCommitHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id
             : selectedKeyElements[0]?.id,
+          { settleGesture: true },
         )}
         onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(
           isSingleStat ? 'stat' : 'key',

@@ -265,7 +265,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchGraphColorsByIds: mocks.patchGraphColors,
   patchFontStyleByTargets: mocks.patchFontStyle,
   patchFontFamilyByTargets: mocks.patchFontFamily,
-  patchDisplayTextByTargets: mocks.patchDisplayText,
+  patchTextPropertyByTargets: mocks.patchDisplayText,
   patchInactiveImageByTargets: mocks.patchInactiveImage,
   patchActiveImageByTargets: mocks.patchActiveImage,
   patchIdleTransparentByTargets: mocks.patchIdleTransparent,
@@ -856,7 +856,38 @@ describe('plugin panel persisted element mutations', () => {
     );
     expect(mocks.patchDisplayText).toHaveBeenCalledWith(
       targets,
-      '  Raw label  ',
+      { displayText: '  Raw label  ' },
+      {
+        gestureId,
+        preflight: expect.any(Function),
+      },
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('className batch는 common targets와 gesture를 공용 text commit으로 전달한다', async () => {
+    const targets = [
+      {
+        elementType: 'knob',
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ] as const;
+    const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { className: '  Raw class  ' },
+        gestureId,
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchDisplayText).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchDisplayText).toHaveBeenCalledWith(
+      targets,
+      { className: '  Raw class  ' },
       {
         gestureId,
         preflight: expect.any(Function),
@@ -2060,6 +2091,55 @@ describe('plugin panel persisted element mutations', () => {
           },
         ],
         patch: { displayText: '' },
+        gestureId: 'not-a-uuid',
+      },
+    ],
+    [
+      'className null',
+      {
+        targets: [
+          {
+            elementType: 'knob',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        patch: { className: null },
+      },
+    ],
+    [
+      'className combined',
+      {
+        targets: [
+          {
+            elementType: 'key',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        patch: { className: 'key-class', displayText: 'Key' },
+      },
+    ],
+    [
+      'className extra',
+      {
+        targets: [
+          {
+            elementType: 'graph',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        patch: { className: 'graph-class', extra: true },
+      },
+    ],
+    [
+      'className non canonical gesture',
+      {
+        targets: [
+          {
+            elementType: 'stat',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        patch: { className: '' },
         gestureId: 'not-a-uuid',
       },
     ],

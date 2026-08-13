@@ -701,6 +701,9 @@ const applySemanticOps = (
             if ('displayText' in op.patch) {
               return { ...position, displayText: op.patch.displayText };
             }
+            if ('className' in op.patch) {
+              return { ...position, className: op.patch.className };
+            }
             if ('noteEffectEnabled' in op.patch) {
               return {
                 ...position,

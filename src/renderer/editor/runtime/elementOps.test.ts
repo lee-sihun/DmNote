@@ -56,8 +56,8 @@ import {
   patchFontStyleByTargets,
   patchFontFamilyById,
   patchFontFamilyByTargets,
-  patchDisplayTextById,
-  patchDisplayTextByTargets,
+  patchTextPropertyById,
+  patchTextPropertyByTargets,
   patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -2404,9 +2404,13 @@ describe('elementOps', () => {
       { elementType: 'knob' as const, id: knobId },
     ];
 
-    await patchDisplayTextByTargets(targets, '  Raw label  ', {
-      gestureId: 'gesture-display',
-    });
+    await patchTextPropertyByTargets(
+      targets,
+      { displayText: '  Raw label  ' },
+      {
+        gestureId: 'gesture-display',
+      },
+    );
 
     expect(api.commitSemanticOps).toHaveBeenCalledOnce();
     expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual(
@@ -2425,25 +2429,58 @@ describe('elementOps', () => {
     );
   });
 
+  it('className은 raw common-4 leaf와 gesture를 공용 text commit으로 보낸다', async () => {
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: ID_B },
+    ];
+
+    await patchTextPropertyByTargets(
+      targets,
+      { className: '  Raw class  ' },
+      {
+        gestureId: 'gesture-class',
+      },
+    );
+
+    expect(api.commitSemanticOps).toHaveBeenCalledOnce();
+    expect(api.commitSemanticOps.mock.calls[0]?.[0]).toEqual(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { className: '  Raw class  ' },
+      })),
+    );
+    expect(api.commitSemanticOps.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        gestureId: 'gesture-class',
+        onEnrolled: expect.any(Function),
+      }),
+    );
+  });
+
   it('displayText는 invalid target을 wire 전에 거절하고 편입 전 실패를 복원한다', async () => {
     await expect(
-      patchDisplayTextByTargets(
+      patchTextPropertyByTargets(
         [
           { elementType: 'key', id: ID_A },
           { elementType: 'graph', id: ID_A },
         ],
-        '',
+        { displayText: '' },
       ),
     ).resolves.toBe(false);
     await expect(
-      patchDisplayTextByTargets([{ elementType: 'knob', id: 'knob-0' }], ''),
+      patchTextPropertyByTargets([{ elementType: 'knob', id: 'knob-0' }], {
+        displayText: '',
+      }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
 
     api.commitSemanticOps.mockRejectedValueOnce(new Error('start failed'));
-    await expect(patchDisplayTextById('key', ID_A, 'After')).rejects.toThrow(
-      'start failed',
-    );
+    await expect(
+      patchTextPropertyById('key', ID_A, { displayText: 'After' }),
+    ).rejects.toThrow('start failed');
     expect(
       useKeyStore.getState().canonicalPositions['4key'][0].displayText,
     ).toBeUndefined();

@@ -510,6 +510,15 @@ mod tests {
                 serde_json::json!({ "displayText": "  raw display  " }),
             ),
             (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::ClassName(
+                    crate::models::EditorClassNamePropertyPatchV1 {
+                        class_name: "  raw class  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "className": "  raw class  " }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::InactiveImage(
                     crate::models::EditorInactiveImagePropertyPatchV1 {
@@ -829,6 +838,21 @@ mod tests {
             let mut invalid_display_text = layer_name_wire.clone();
             invalid_display_text["editorOps"][0]["patch"] = patch;
             let error = decode_gesture_commit_request(invalid_display_text).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
+
+        for patch in [
+            serde_json::json!({ "className": null }),
+            serde_json::json!({ "className": 1 }),
+            serde_json::json!({ "className": "class", "hidden": true }),
+            serde_json::json!({ "className": "class", "unexpected": true }),
+        ] {
+            let mut invalid_class_name = layer_name_wire.clone();
+            invalid_class_name["editorOps"][0]["patch"] = patch;
+            let error = decode_gesture_commit_request(invalid_class_name).unwrap_err();
             assert_eq!(
                 validation_code(error).as_deref(),
                 Some("INVALID_REQUEST_PAYLOAD")

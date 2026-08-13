@@ -21,6 +21,7 @@ import type {
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
+  EditorTextPropertyPatchV1,
 } from '@src/types/editor';
 
 import { getPluginAuthorityGeneration, sendPluginRpc } from './pluginRpcClient';
@@ -555,9 +556,9 @@ export const patchFontFamilyViaAuthority = (
   });
 };
 
-export const patchDisplayTextViaAuthority = (
+export const patchTextPropertyViaAuthority = (
   targets: readonly { elementType: NativeElementType; id: string }[],
-  displayText: string,
+  patch: EditorTextPropertyPatchV1,
   gestureId?: string,
 ): Promise<boolean> => {
   const authorityGeneration = getPluginAuthorityGeneration();
@@ -566,7 +567,7 @@ export const patchDisplayTextViaAuthority = (
       operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
       payload: {
         targets: targets.map(({ elementType, id }) => ({ elementType, id })),
-        patch: { displayText },
+        patch: structuredClone(patch),
         ...(gestureId ? { gestureId } : {}),
       },
       authorityGeneration,

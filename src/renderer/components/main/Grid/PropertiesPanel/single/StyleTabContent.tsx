@@ -129,8 +129,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onSoundPathCommit,
   onSoundEnabledCommit,
   onSoundVolumeCommit,
-  onDisplayTextPreview,
-  onDisplayTextCommit,
+  onTextPropertyPreview,
+  onTextPropertyCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -706,16 +706,16 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
-    if (onDisplayTextPreview) {
-      onDisplayTextPreview(value);
+    if (onTextPropertyPreview) {
+      onTextPropertyPreview({ displayText: value });
       return;
     }
     onKeyPreview?.(keyIndex, { displayText: value });
   };
 
   const handleDisplayTextBlur = (value: string) => {
-    if (onDisplayTextCommit) {
-      onDisplayTextCommit(value);
+    if (onTextPropertyCommit) {
+      onTextPropertyCommit({ displayText: value });
       return;
     }
     onKeyUpdate({
@@ -726,10 +726,18 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 클래스명 핸들러
   const handleClassNameChange = (value: string) => {
+    if (onTextPropertyPreview) {
+      onTextPropertyPreview({ className: value });
+      return;
+    }
     onKeyPreview?.(keyIndex, { className: value });
   };
 
   const handleClassNameBlur = (value: string) => {
+    if (onTextPropertyCommit) {
+      onTextPropertyCommit({ className: value });
+      return;
+    }
     onKeyUpdate({ index: keyIndex, className: value });
   };
 

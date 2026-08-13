@@ -43,7 +43,7 @@ import {
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
-  patchDisplayTextByTargets,
+  patchTextPropertyByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
   patchSoundEnabledByIds,
@@ -57,7 +57,7 @@ import {
   patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority,
-  patchDisplayTextViaAuthority,
+  patchTextPropertyViaAuthority,
   patchInactiveImageViaAuthority,
   patchIdleTransparentViaAuthority,
   patchSoundEnabledViaAuthority,
@@ -77,8 +77,66 @@ import {
   isSyntheticElementId,
   resolveElementById,
 } from '@src/renderer/editor/model/elementIdMap';
+import type { EditorTextPropertyPatchV1 } from '@src/types/editor';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
+
+const createTextPropertyHandlers = (
+  targets: readonly {
+    elementType: 'key' | 'stat' | 'graph' | 'knob';
+    id: string;
+  }[],
+  selectedKeyType: string,
+) => {
+  const stableTargets =
+    targets.length > 0 &&
+    targets.every(({ id }) => id.length > 0 && !isSyntheticElementId(id)) &&
+    new Set(targets.map(({ id }) => id)).size === targets.length
+      ? targets
+      : null;
+  if (!stableTargets) {
+    return {
+      previewTextProperty: undefined,
+      commitTextProperty: undefined,
+    };
+  }
+  return {
+    previewTextProperty: (patch: EditorTextPropertyPatchV1) => {
+      const grouped = new Map<
+        'key' | 'stat' | 'graph' | 'knob',
+        Array<{ index: number; patch: EditorTextPropertyPatchV1 }>
+      >();
+      for (const target of stableTargets) {
+        const locator = resolveElementById(target.elementType, target.id);
+        if (!locator || locator.mode !== selectedKeyType) return;
+        const entries = grouped.get(target.elementType) ?? [];
+        entries.push({ index: locator.index, patch });
+        grouped.set(target.elementType, entries);
+      }
+      for (const [type, entries] of grouped) {
+        editGestureController.preview(selectedKeyType, entries, {
+          domain:
+            type === 'key'
+              ? 'keyPosition'
+              : type === 'stat'
+              ? 'statPosition'
+              : type === 'graph'
+              ? 'graphPosition'
+              : 'knobPosition',
+        });
+      }
+    },
+    commitTextProperty: (patch: EditorTextPropertyPatchV1) => {
+      const gestureId = editGestureController.activeGestureId() ?? undefined;
+      const persisted =
+        window.__dmn_window_type === 'panel'
+          ? patchTextPropertyViaAuthority(stableTargets, patch, gestureId)
+          : patchTextPropertyByTargets(stableTargets, patch, { gestureId });
+      editGestureController.settleCommit(persisted);
+      void persisted.catch(reportElementOpError);
+    },
+  };
+};
 
 const commitBoundInactiveImage = (
   binding: 'element-id' | 'session-mode',
@@ -500,61 +558,14 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     counterTargets.every(({ id }) => id.length > 0 && !isSyntheticElementId(id))
       ? counterTargets
       : null;
-  const displayTextTargets = selectedBatchStyleElements.map(({ type, id }) => ({
-    elementType: type as 'key' | 'stat' | 'graph' | 'knob',
-    id,
-  }));
-  const stableDisplayTextTargets =
-    displayTextTargets.length > 0 &&
-    displayTextTargets.every(
-      ({ id }) => id.length > 0 && !isSyntheticElementId(id),
-    )
-      ? displayTextTargets
-      : null;
-  const previewDisplayText = stableDisplayTextTargets
-    ? (displayText: string) => {
-        const grouped = new Map<
-          'key' | 'stat' | 'graph' | 'knob',
-          Array<{ index: number; patch: { displayText: string } }>
-        >();
-        for (const target of stableDisplayTextTargets) {
-          const locator = resolveElementById(target.elementType, target.id);
-          if (!locator || locator.mode !== selectedKeyType) return;
-          const entries = grouped.get(target.elementType) ?? [];
-          entries.push({ index: locator.index, patch: { displayText } });
-          grouped.set(target.elementType, entries);
-        }
-        for (const [type, entries] of grouped) {
-          editGestureController.preview(selectedKeyType, entries, {
-            domain:
-              type === 'key'
-                ? 'keyPosition'
-                : type === 'stat'
-                ? 'statPosition'
-                : type === 'graph'
-                ? 'graphPosition'
-                : 'knobPosition',
-          });
-        }
-      }
-    : undefined;
-  const commitDisplayText = stableDisplayTextTargets
-    ? (displayText: string) => {
-        const gestureId = editGestureController.activeGestureId() ?? undefined;
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchDisplayTextViaAuthority(
-                stableDisplayTextTargets,
-                displayText,
-                gestureId,
-              )
-            : patchDisplayTextByTargets(stableDisplayTextTargets, displayText, {
-                gestureId,
-              });
-        editGestureController.settleCommit(persisted);
-        void persisted.catch(reportElementOpError);
-      }
-    : undefined;
+  const textPropertyTargets = selectedBatchStyleElements.map(
+    ({ type, id }) => ({
+      elementType: type as 'key' | 'stat' | 'graph' | 'knob',
+      id,
+    }),
+  );
+  const { previewTextProperty, commitTextProperty } =
+    createTextPropertyHandlers(textPropertyTargets, selectedKeyType);
   const soundTargets = selectedKeyElements.map(({ id }) => id);
   const stableSoundTargets =
     soundTargets.length > 0 &&
@@ -1000,8 +1011,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 }
                 onSoundEnabledCommit={commitSoundEnabled}
                 onSoundVolumeCommit={commitSoundVolume}
-                onDisplayTextPreview={previewDisplayText}
-                onDisplayTextCommit={commitDisplayText}
+                onTextPropertyPreview={previewTextProperty}
+                onTextPropertyCommit={commitTextProperty}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
                 shadowActiveState={
@@ -1508,6 +1519,14 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   const graphTransparencyBinding = captureBatchElementBinding({
     graph: selectedGraphElements,
   });
+  const { previewTextProperty, commitTextProperty } =
+    createTextPropertyHandlers(
+      selectedGraphElements.map(({ id }) => ({
+        elementType: 'graph',
+        id,
+      })),
+      selectedKeyType,
+    );
 
   const graphShapeOptions = [
     { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
@@ -1609,6 +1628,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           <EditSessionBoundary>
             <BatchStyleTabContent
               selectedCount={selectedGraphElements.length}
+              onTextPropertyPreview={previewTextProperty}
+              onTextPropertyCommit={commitTextProperty}
               hideDisplayText
               hideFontControls
               showSoundControls={false}
@@ -1897,6 +1918,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   setShowBatchImagePicker,
   panelElement,
   useCustomCSS,
+  selectedKeyType,
   t,
 }) => {
   // 이미지 피커 open 시점의 노브 선택을 ID로 고정
@@ -1906,6 +1928,14 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   const knobTransparencyBinding = captureBatchElementBinding({
     knob: selectedKnobElements,
   });
+  const { previewTextProperty, commitTextProperty } =
+    createTextPropertyHandlers(
+      selectedKnobElements.map(({ id }) => ({
+        elementType: 'knob',
+        id,
+      })),
+      selectedKeyType,
+    );
 
   const sensitivityState = getMixedValueKnobs(
     (pos) => Number(pos.sensitivity ?? 1),
@@ -1983,6 +2013,8 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
           <EditSessionBoundary>
             <BatchStyleTabContent
               selectedCount={selectedKnobElements.length}
+              onTextPropertyPreview={previewTextProperty}
+              onTextPropertyCommit={commitTextProperty}
               hideDisplayText
               hideFontControls
               showSoundControls={false}

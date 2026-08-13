@@ -60,7 +60,7 @@ import {
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
-  patchDisplayTextByTargets,
+  patchTextPropertyByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
@@ -88,7 +88,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
-  EditorDisplayTextPropertyPatchV1,
+  EditorTextPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -369,6 +369,8 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['axisId']) && typeof patch.axisId === 'string') ||
     (hasExactKeys(patch, ['displayText']) &&
       typeof patch.displayText === 'string') ||
+    (hasExactKeys(patch, ['className']) &&
+      typeof patch.className === 'string') ||
     (hasExactKeys(patch, ['soundEnabled']) &&
       target.elementType === 'key' &&
       typeof patch.soundEnabled === 'boolean') ||
@@ -666,9 +668,9 @@ type NativeLayerPropertyRequest =
       patch: EditorFontFamilyPropertyPatchV1;
     }
   | {
-      kind: 'displayTextBatch';
+      kind: 'textPropertyBatch';
       targets: Array<{ elementType: NativeElementType; id: string }>;
-      patch: EditorDisplayTextPropertyPatchV1;
+      patch: EditorTextPropertyPatchV1;
       gestureId?: string;
     }
   | {
@@ -827,10 +829,13 @@ const parseNativeLayerPropertyRequest = (
     hasExactKeys(patch, ['fontFamily']) && typeof patch.fontFamily === 'string'
       ? { fontFamily: patch.fontFamily }
       : null;
-  const displayTextPatch: EditorDisplayTextPropertyPatchV1 | null =
+  const textPropertyPatch: EditorTextPropertyPatchV1 | null =
     hasExactKeys(patch, ['displayText']) &&
     typeof patch.displayText === 'string'
       ? { displayText: patch.displayText }
+      : hasExactKeys(patch, ['className']) &&
+        typeof patch.className === 'string'
+      ? { className: patch.className }
       : null;
   const inactiveImage =
     hasExactKeys(patch, ['inactiveImage']) &&
@@ -964,7 +969,7 @@ const parseNativeLayerPropertyRequest = (
     useInlineStyles === null &&
     fontStylePatch === null &&
     fontFamilyPatch === null &&
-    displayTextPatch === null &&
+    textPropertyPatch === null &&
     inactiveImage === null &&
     soundEnabled === null &&
     soundPath === null &&
@@ -983,7 +988,7 @@ const parseNativeLayerPropertyRequest = (
   if (
     'gestureId' in payload &&
     soundVolume === null &&
-    displayTextPatch === null
+    textPropertyPatch === null
   ) {
     return null;
   }
@@ -991,7 +996,7 @@ const parseNativeLayerPropertyRequest = (
     useInlineStyles !== null ||
     fontStylePatch !== null ||
     fontFamilyPatch !== null ||
-    displayTextPatch !== null ||
+    textPropertyPatch !== null ||
     inactiveImage !== null
       ? null
       : idleTransparent !== null
@@ -1068,11 +1073,11 @@ const parseNativeLayerPropertyRequest = (
   if (fontFamilyPatch !== null) {
     return { kind: 'fontFamilyBatch', targets, patch: fontFamilyPatch };
   }
-  if (displayTextPatch !== null) {
+  if (textPropertyPatch !== null) {
     return {
-      kind: 'displayTextBatch',
+      kind: 'textPropertyBatch',
       targets,
-      patch: displayTextPatch,
+      patch: textPropertyPatch,
       ...(typeof payload.gestureId === 'string'
         ? { gestureId: payload.gestureId }
         : {}),
@@ -2005,15 +2010,11 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           options,
         );
       }
-      if (request.kind === 'displayTextBatch') {
-        return patchDisplayTextByTargets(
-          request.targets,
-          request.patch.displayText,
-          {
-            ...options,
-            ...(request.gestureId ? { gestureId: request.gestureId } : {}),
-          },
-        );
+      if (request.kind === 'textPropertyBatch') {
+        return patchTextPropertyByTargets(request.targets, request.patch, {
+          ...options,
+          ...(request.gestureId ? { gestureId: request.gestureId } : {}),
+        });
       }
       if (request.kind === 'inactiveImageBatch') {
         return patchInactiveImageByTargets(

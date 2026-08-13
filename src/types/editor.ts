@@ -178,6 +178,7 @@ interface EditorElementPropertyValuesV1 {
   fontStrikethrough: boolean;
   fontFamily: string;
   displayText: string;
+  className: string;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
@@ -262,8 +263,9 @@ export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
 export type EditorFontFamilyPropertyPatchV1 =
   EditorPropertyPatchUnionV1<'fontFamily'>;
 
-export type EditorDisplayTextPropertyPatchV1 =
-  EditorPropertyPatchUnionV1<'displayText'>;
+export type EditorTextPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'displayText' | 'className'
+>;
 
 export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteEffectEnabled'
@@ -1132,6 +1134,9 @@ export function assertEditorOpsV1(
         (patchKeys.length === 1 &&
           patchKeys[0] === 'displayText' &&
           typeof op.patch.displayText === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'className' &&
+          typeof op.patch.className === 'string') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'soundEnabled' &&
           op.elementType === 'key' &&

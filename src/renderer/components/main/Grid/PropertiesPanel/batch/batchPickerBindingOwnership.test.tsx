@@ -108,7 +108,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
     patches.patchCounterAnimationEnabledByTargets,
   patchCounterLayoutByTargets: patches.patchCounterLayoutByTargets,
   patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
-  patchDisplayTextByTargets: patches.patchDisplayTextByTargets,
+  patchTextPropertyByTargets: patches.patchDisplayTextByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
@@ -127,7 +127,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterLayoutViaAuthority: patches.patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority:
     patches.patchCounterTypographyViaAuthority,
-  patchDisplayTextViaAuthority: patches.patchDisplayTextViaAuthority,
+  patchTextPropertyViaAuthority: patches.patchDisplayTextViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
@@ -662,7 +662,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
           : patches.patchDisplayTextByTargets;
       expect(writer).toHaveBeenCalledWith(
         targets,
-        '  Preview label  ',
+        { displayText: '  Preview label  ' },
         windowType === 'panel'
           ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
           : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
@@ -744,6 +744,196 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
       expect(preview).toHaveBeenCalledWith('displayText', 'Legacy');
       expect(commit).toHaveBeenCalledWith('displayText', 'Legacy');
+      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
+      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
+    },
+  );
+
+  type ClassNamePanelKind = 'mixed' | 'graph' | 'knob';
+
+  const setClassNameTargets = (
+    kind: ClassNamePanelKind,
+    ids: readonly string[],
+  ) => {
+    const types =
+      kind === 'mixed'
+        ? (['key', 'stat', 'graph', 'knob'] as const)
+        : ([kind] as const);
+    const byType = new Map<string, string>(
+      types.map((type, index) => [type, ids[index] ?? ''] as const),
+    );
+    const keyId = byType.get('key');
+    const statId = byType.get('stat');
+    const graphId = byType.get('graph');
+    const knobId = byType.get('knob');
+    if (keyId !== undefined) {
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        positions: { '4key': [keyAt(keyId)] },
+        canonicalPositions: { '4key': [keyAt(keyId)] },
+      });
+    }
+    if (statId !== undefined) {
+      useStatItemStore.setState({
+        positions: { '4key': [{ ...keyAt(statId), statType: 'kps' }] },
+      });
+    }
+    if (graphId !== undefined) {
+      useGraphItemStore.setState({
+        positions: { '4key': [keyAt(graphId)] } as never,
+      });
+    }
+    if (knobId !== undefined) {
+      useKnobItemStore.setState({
+        positions: { '4key': [keyAt(knobId)] } as never,
+      });
+    }
+    useGridSelectionStore.setState({
+      selectedElements: types.map((type, index) => ({
+        type,
+        id: ids[index],
+        index: 0,
+      })),
+    });
+    return types.map((elementType, index) => ({
+      elementType,
+      id: ids[index],
+    }));
+  };
+
+  const renderClassNamePanel = (
+    kind: ClassNamePanelKind,
+    legacyPreview: ReturnType<typeof vi.fn>,
+    legacyCommit: ReturnType<typeof vi.fn>,
+  ) => {
+    const shared = {
+      ...panelProps(),
+      useCustomCSS: true,
+      handleBatchStyleChange: legacyPreview,
+      handleBatchStyleChangeComplete: legacyCommit,
+    };
+    const panel =
+      kind === 'mixed' ? (
+        <BatchKeyLikePanel {...(shared as unknown as PanelProps)} />
+      ) : kind === 'graph' ? (
+        <BatchGraphOnlyPanel
+          {...(shared as unknown as React.ComponentProps<
+            typeof BatchGraphOnlyPanel
+          >)}
+        />
+      ) : (
+        <BatchKnobOnlyPanel
+          {...(shared as unknown as React.ComponentProps<
+            typeof BatchKnobOnlyPanel
+          >)}
+        />
+      );
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          {panel}
+        </PanelNavProvider>,
+      );
+    });
+  };
+
+  it.each([
+    ['main', 'mixed'],
+    ['panel', 'mixed'],
+    ['main', 'graph'],
+    ['panel', 'graph'],
+    ['main', 'knob'],
+    ['panel', 'knob'],
+  ] as const)(
+    '%s %s batch className actual input은 preview하고 같은 gesture로 commit한다',
+    async (windowType, kind) => {
+      window.__dmn_window_type = windowType;
+      const ids =
+        kind === 'mixed'
+          ? [
+              'a1111111-1111-4111-8111-111111111111',
+              'a2222222-2222-4222-8222-222222222222',
+              'a3333333-3333-4333-8333-333333333333',
+              'a4444444-4444-4444-8444-444444444444',
+            ]
+          : kind === 'graph'
+          ? ['a5555555-5555-4555-8555-555555555555']
+          : ['a6666666-6666-4666-8666-666666666666'];
+      const targets = setClassNameTargets(kind, ids);
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      renderClassNamePanel(kind, legacyPreview, legacyCommit);
+      const input = host.querySelector<HTMLInputElement>(
+        'input[placeholder="className"]',
+      );
+      expect(input).not.toBeNull();
+
+      act(() => input?.focus());
+      act(() => setInputValue(input!, '  Raw class  '));
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(gestures.preview).toHaveBeenCalled();
+      expect(
+        gestures.preview.mock.calls.flatMap((call) =>
+          (call[1] as Array<{ patch: unknown }>).map(({ patch }) => patch),
+        ),
+      ).toContainEqual({ className: '  Raw class  ' });
+      act(() => input?.blur());
+
+      const writer =
+        windowType === 'panel'
+          ? patches.patchDisplayTextViaAuthority
+          : patches.patchDisplayTextByTargets;
+      expect(writer).toHaveBeenCalledWith(
+        targets,
+        { className: '  Raw class  ' },
+        windowType === 'panel'
+          ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+          : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
+      );
+      expect(gestures.settleCommit).toHaveBeenCalledWith(
+        writer.mock.results[0]?.value,
+      );
+      expect(legacyPreview).not.toHaveBeenCalled();
+      expect(legacyCommit).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['mixed', 'graph', 'knob'] as const)(
+    '%s batch className relevant synthetic는 actual input 전체가 legacy다',
+    async (kind) => {
+      const ids =
+        kind === 'mixed'
+          ? [ID_A, ID_B, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'knob-0']
+          : [`${kind}-0`];
+      setClassNameTargets(kind, ids);
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      renderClassNamePanel(kind, legacyPreview, legacyCommit);
+      const input = host.querySelector<HTMLInputElement>(
+        'input[placeholder="className"]',
+      )!;
+
+      act(() => input.focus());
+      act(() => setInputValue(input, 'LegacyClass'));
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+      act(() => input.blur());
+
+      expect(legacyPreview).toHaveBeenCalledWith('className', 'LegacyClass');
+      expect(legacyCommit).toHaveBeenCalledWith('className', 'LegacyClass');
       expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
       expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
     },

@@ -292,8 +292,8 @@ describe('single geometry input bindings', () => {
             onPositionChange={vi.fn()}
             onKeyUpdate={legacyCommit}
             onKeyPreview={legacyPreview}
-            onDisplayTextPreview={preview}
-            onDisplayTextCommit={commit}
+            onTextPropertyPreview={preview}
+            onTextPropertyCommit={commit}
             showSoundControls={false}
             panelElement={null}
             t={(key) => key}
@@ -306,12 +306,126 @@ describe('single geometry input bindings', () => {
       act(() => displayText?.onChange('  Preview  '));
       act(() => displayText?.onBlur?.('  Final  '));
 
-      expect(preview).toHaveBeenCalledWith('  Preview  ');
-      expect(commit).toHaveBeenCalledWith('  Final  ');
+      expect(preview).toHaveBeenCalledWith({ displayText: '  Preview  ' });
+      expect(commit).toHaveBeenCalledWith({ displayText: '  Final  ' });
       expect(legacyPreview).not.toHaveBeenCalled();
       expect(legacyCommit).not.toHaveBeenCalled();
     },
   );
+
+  it.each(['key', 'stat'] as const)(
+    '%s StyleTab className은 custom CSS에서 preview와 blur를 공용 text callbacks로 분리한다',
+    (type) => {
+      const preview = vi.fn();
+      const commit = vi.fn();
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={3}
+            keyPosition={{
+              ...createDefaultKeyPosition(),
+              className: 'BeforeClass',
+            }}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacyCommit}
+            onKeyPreview={legacyPreview}
+            onTextPropertyPreview={preview}
+            onTextPropertyCommit={commit}
+            showSoundControls={false}
+            useCustomCSS
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+      const className = captured.texts.find(
+        (input) => input.value === 'BeforeClass',
+      );
+      act(() => className?.onChange('  Preview class  '));
+      act(() => className?.onBlur?.('  Final class  '));
+
+      expect(preview).toHaveBeenCalledWith({
+        className: '  Preview class  ',
+      });
+      expect(commit).toHaveBeenCalledWith({ className: '  Final class  ' });
+      expect(legacyPreview).not.toHaveBeenCalled();
+      expect(legacyCommit).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key', 'stat'] as const)(
+    '%s StyleTab className exact callback이 없으면 preview와 whole legacy를 유지한다',
+    (type) => {
+      const preview = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={3}
+            keyPosition={{
+              ...createDefaultKeyPosition(),
+              id: `${type}-3`,
+              className: 'BeforeClass',
+            }}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacy}
+            onKeyPreview={preview}
+            showSoundControls={false}
+            useCustomCSS
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+      const input = captured.texts.find(
+        (candidate) => candidate.value === 'BeforeClass',
+      );
+      act(() => input?.onChange('PreviewClass'));
+      act(() => input?.onBlur?.('FinalClass'));
+
+      expect(preview).toHaveBeenCalledWith(3, {
+        className: 'PreviewClass',
+      });
+      expect(legacy).toHaveBeenCalledWith({
+        index: 3,
+        className: 'FinalClass',
+      });
+    },
+  );
+
+  it('StyleTab은 custom CSS가 꺼지면 className input을 노출하지 않는다', () => {
+    act(() => {
+      root.render(
+        <StyleTabContent
+          keyIndex={0}
+          keyPosition={{
+            ...createDefaultKeyPosition(),
+            className: 'HiddenClass',
+          }}
+          keyCode="A"
+          keyInfo={null}
+          onPositionChange={vi.fn()}
+          onKeyUpdate={vi.fn()}
+          onTextPropertyPreview={vi.fn()}
+          onTextPropertyCommit={vi.fn()}
+          showSoundControls={false}
+          useCustomCSS={false}
+          panelElement={null}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    expect(captured.texts.some((input) => input.value === 'HiddenClass')).toBe(
+      false,
+    );
+  });
 
   it('displayText actual TextInput은 preview 뒤 blur commit을 같은 final literal로 호출한다', async () => {
     const preview = vi.fn();
@@ -328,8 +442,8 @@ describe('single geometry input bindings', () => {
           keyInfo={null}
           onPositionChange={vi.fn()}
           onKeyUpdate={vi.fn()}
-          onDisplayTextPreview={preview}
-          onDisplayTextCommit={commit}
+          onTextPropertyPreview={preview}
+          onTextPropertyCommit={commit}
           showSoundControls={false}
           panelElement={null}
           t={(key) => key}
@@ -344,11 +458,13 @@ describe('single geometry input bindings', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
-    expect(preview).toHaveBeenLastCalledWith('  Final label  ');
+    expect(preview).toHaveBeenLastCalledWith({
+      displayText: '  Final label  ',
+    });
 
     act(() => input.blur());
     expect(commit).toHaveBeenCalledOnce();
-    expect(commit).toHaveBeenCalledWith('  Final label  ');
+    expect(commit).toHaveBeenCalledWith({ displayText: '  Final label  ' });
     expect(preview.mock.invocationCallOrder[0]).toBeLessThan(
       commit.mock.invocationCallOrder[0],
     );
@@ -1696,6 +1812,155 @@ describe('single geometry input bindings', () => {
       act(() => captured.numbers.get('H')?.onChange(150));
 
       expect(legacy).toHaveBeenCalledTimes(4);
+    },
+  );
+
+  it.each(['graph', 'knob'] as const)(
+    '%s className은 local draft 뒤 blur에서만 stable exact commit한다',
+    (type) => {
+      const commit = vi.fn();
+      const legacy = vi.fn();
+      const setGraphDraft = vi.fn();
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        onTextPropertyCommit: commit,
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: true,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...createDefaultKeyPosition(),
+                className: 'BeforeClass',
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              }}
+              singleGraphIndex={0}
+              handleGraphUpdate={legacy}
+              showGraphImagePicker={false}
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={createRef<HTMLButtonElement>()}
+              graphClassNameDraft="BeforeClass"
+              setGraphClassNameDraft={setGraphDraft}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                className: 'BeforeClass',
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={0}
+              handleKnobUpdate={legacy}
+            />
+          ),
+        );
+      });
+      const input = captured.texts.find(
+        (candidate) => candidate.value === 'BeforeClass',
+      );
+      act(() => input?.onChange('DraftClass'));
+      expect(commit).not.toHaveBeenCalled();
+      if (type === 'graph') {
+        expect(setGraphDraft).toHaveBeenCalledWith('DraftClass');
+      }
+      act(() => input?.onBlur?.('  Final class  '));
+
+      expect(commit).toHaveBeenCalledOnce();
+      expect(commit).toHaveBeenCalledWith({ className: '  Final class  ' });
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['graph', 'knob'] as const)(
+    '%s synthetic className은 local draft 뒤 기존 index writer로 commit한다',
+    (type) => {
+      const legacy = vi.fn();
+      const common = {
+        setPanelElement: vi.fn(),
+        selectedKeyType: '4key',
+        isRenaming: false,
+        renameInputRef: createRef<HTMLInputElement>(),
+        renameValue: '',
+        setRenameValue: vi.fn(),
+        renameCancelledRef: { current: false },
+        handleRenameCommit: vi.fn(),
+        handleRenameCancel: vi.fn(),
+        handleRenameStart: vi.fn(),
+        singleScrollRefFor: () => vi.fn(),
+        panelElement: null,
+        useCustomCSS: true,
+        t: (key: string) => key,
+      };
+      act(() => {
+        root.render(
+          type === 'graph' ? (
+            <SingleGraphPanel
+              {...common}
+              singleGraphPosition={{
+                ...createDefaultKeyPosition(),
+                id: 'graph-0',
+                className: 'BeforeClass',
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              }}
+              singleGraphIndex={4}
+              handleGraphUpdate={legacy}
+              showGraphImagePicker={false}
+              setShowGraphImagePicker={vi.fn()}
+              graphImageButtonRef={createRef<HTMLButtonElement>()}
+              graphClassNameDraft="BeforeClass"
+              setGraphClassNameDraft={vi.fn()}
+            />
+          ) : (
+            <SingleKnobPanel
+              {...common}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                id: 'knob-0',
+                className: 'BeforeClass',
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={4}
+              handleKnobUpdate={legacy}
+            />
+          ),
+        );
+      });
+      const input = captured.texts.find(
+        (candidate) => candidate.value === 'BeforeClass',
+      );
+      act(() => input?.onChange('DraftClass'));
+      expect(legacy).not.toHaveBeenCalled();
+      act(() => input?.onBlur?.('FinalClass'));
+
+      expect(legacy).toHaveBeenCalledWith({
+        index: 4,
+        className: 'FinalClass',
+      });
     },
   );
 });

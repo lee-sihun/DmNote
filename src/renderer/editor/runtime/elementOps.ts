@@ -49,6 +49,7 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
+  EditorTextPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -1962,19 +1963,19 @@ export const patchFontFamilyByTargets = (
   );
 };
 
-export const patchDisplayTextById = (
+export const patchTextPropertyById = (
   type: NativeElementType,
   id: string,
-  displayText: string,
+  patch: EditorTextPropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
-  return patchElementPropertyById(type, id, { displayText }, options);
+  return patchElementPropertyById(type, id, patch, options);
 };
 
-export const patchDisplayTextByTargets = (
+export const patchTextPropertyByTargets = (
   targets: readonly { elementType: NativeElementType; id: string }[],
-  displayText: string,
+  patch: EditorTextPropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
   if (
@@ -1990,7 +1991,7 @@ export const patchDisplayTextByTargets = (
     targets.map(({ elementType, id }) => ({
       type: elementType,
       id,
-      patch: { displayText },
+      patch,
     })),
     options,
   );

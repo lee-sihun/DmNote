@@ -9,6 +9,7 @@ import type {
   EditorCounterAnimationPresetIntentV1,
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
+  EditorTextPropertyPatchV1,
 } from '@src/types/editor';
 
 // ============================================================================
@@ -244,8 +245,8 @@ export interface StyleTabContentProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onDisplayTextPreview?: (displayText: string) => void;
-  onDisplayTextCommit?: (displayText: string) => void;
+  onTextPropertyPreview?: (patch: EditorTextPropertyPatchV1) => void;
+  onTextPropertyCommit?: (patch: EditorTextPropertyPatchV1) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
   panelElement?: HTMLElement | null;
   useCustomCSS?: boolean;

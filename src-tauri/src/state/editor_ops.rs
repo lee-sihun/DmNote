@@ -1139,6 +1139,15 @@ pub(crate) fn prepare_editor_ops_transition(
                             true
                         }
                     }
+                    EditorElementPropertyPatchV1::ClassName(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.class_name.as_deref() == Some(patch.class_name.as_str()) {
+                            false
+                        } else {
+                            position.class_name = Some(patch.class_name.clone());
+                            true
+                        }
+                    }
                     EditorElementPropertyPatchV1::InactiveImage(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
                         if position.inactive_image.as_deref() == Some(patch.inactive_image.as_str())
@@ -3275,6 +3284,148 @@ mod tests {
         .unwrap_err();
         assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         assert_eq!(store.key_positions["4key"][0].display_text, None);
+    }
+
+    #[test]
+    fn class_name_patch_materializes_raw_strings_across_native_types() {
+        let mut store = store_with_every_reorder_type();
+        for position in [
+            &mut store.key_positions.get_mut("4key").unwrap()[0],
+            &mut store.stat_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.graph_positions.get_mut("4key").unwrap()[0].position,
+            &mut store.knob_positions.get_mut("4key").unwrap()[0].position,
+        ] {
+            position.class_name = None;
+            position.display_text = Some("display-sibling".to_string());
+            position.layer_name = Some("layer-sibling".to_string());
+            position.font_family = Some("font-sibling".to_string());
+            position.counter.font_family = Some("counter-font-sibling".to_string());
+        }
+        let targets = [
+            (
+                EditorElementTypeV1::Key,
+                store.key_positions["4key"][0].id.clone(),
+                "",
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                store.stat_positions["4key"][0].position.id.clone(),
+                "  raw stat class  ",
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                store.graph_positions["4key"][0].position.id.clone(),
+                "raw graph class",
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                store.knob_positions["4key"][0].position.id.clone(),
+                "raw knob class",
+            ),
+        ];
+        let ops = targets
+            .iter()
+            .map(|(element_type, id, class_name)| {
+                patch_property_op(
+                    *element_type,
+                    id,
+                    EditorElementPropertyPatchV1::ClassName(
+                        crate::models::EditorClassNamePropertyPatchV1 {
+                            class_name: (*class_name).to_string(),
+                        },
+                    ),
+                )
+            })
+            .chain(std::iter::once(patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::ClassName(
+                    crate::models::EditorClassNamePropertyPatchV1 {
+                        class_name: "missing".to_string(),
+                    },
+                ),
+            )))
+            .collect::<Vec<_>>();
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let actual = [
+            &transition.candidate.key_positions["4key"][0],
+            &transition.candidate.stat_positions["4key"][0].position,
+            &transition.candidate.graph_positions["4key"][0].position,
+            &transition.candidate.knob_positions["4key"][0].position,
+        ];
+        for (position, expected) in actual
+            .into_iter()
+            .zip(targets.iter().map(|target| target.2))
+        {
+            assert_eq!(position.class_name.as_deref(), Some(expected));
+            assert_eq!(position.display_text.as_deref(), Some("display-sibling"));
+            assert_eq!(position.layer_name.as_deref(), Some("layer-sibling"));
+            assert_eq!(position.font_family.as_deref(), Some("font-sibling"));
+            assert_eq!(
+                position.counter.font_family.as_deref(),
+                Some("counter-font-sibling")
+            );
+        }
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                ops[0].clone(),
+                patch_property_op(
+                    EditorElementTypeV1::Stat,
+                    &targets[2].1,
+                    EditorElementPropertyPatchV1::ClassName(
+                        crate::models::EditorClassNamePropertyPatchV1 {
+                            class_name: "wrong-type".to_string(),
+                        },
+                    ),
+                ),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+        assert_eq!(store.key_positions["4key"][0].class_name, None);
     }
 
     #[test]

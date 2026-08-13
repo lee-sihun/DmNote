@@ -374,9 +374,9 @@ describe('plugin element panel queue', () => {
     ];
 
     await expect(
-      actions.patchDisplayTextViaAuthority(
+      actions.patchTextPropertyViaAuthority(
         targets,
-        '  Raw label  ',
+        { displayText: '  Raw label  ' },
         'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       ),
     ).resolves.toBe(true);
@@ -386,6 +386,38 @@ describe('plugin element panel queue', () => {
       {
         targets,
         patch: { displayText: '  Raw label  ' },
+        gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      },
+      0,
+      7,
+    );
+  });
+
+  it('className batch도 공용 text envelope와 default retry를 사용한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'knob' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    ];
+
+    await expect(
+      actions.patchTextPropertyViaAuthority(
+        targets,
+        { className: '  Raw class  ' },
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      ),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      {
+        targets,
+        patch: { className: '  Raw class  ' },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       },
       0,
@@ -1137,14 +1169,14 @@ describe('plugin element panel queue', () => {
         kind: 'ok',
         response: { modelRevision: 2 },
       });
-    const changed = actions.patchDisplayTextViaAuthority(
+    const changed = actions.patchTextPropertyViaAuthority(
       [
         {
           elementType: 'stat',
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         },
       ],
-      '  Raw label  ',
+      { displayText: '  Raw label  ' },
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     );
     await vi.waitFor(() =>

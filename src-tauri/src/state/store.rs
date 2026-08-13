@@ -9011,6 +9011,149 @@ mod tests {
     }
 
     #[test]
+    fn class_name_replays_raw_empty_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-class-name-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut document = store.editor_get().document;
+        let target_id = document.key_positions["4key"][0].id.clone();
+        {
+            let position = &mut document.key_positions.get_mut("4key").unwrap()[0];
+            position.class_name = None;
+            position.display_text = Some("display-sibling".to_string());
+            position.font_family = Some("font-sibling".to_string());
+            position.counter.font_family = Some("counter-font-sibling".to_string());
+        }
+        let setup = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    keys: Some(document.keys),
+                    key_positions: Some(document.key_positions),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &target_id,
+                EditorElementPropertyPatchV1::ClassName(
+                    crate::models::EditorClassNamePropertyPatchV1 {
+                        class_name: String::new(),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::ClassName(
+                    crate::models::EditorClassNamePropertyPatchV1 {
+                        class_name: "missing".to_string(),
+                    },
+                ),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(changed.result.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let position = &changed.document.key_positions["4key"][0];
+        assert_eq!(position.class_name.as_deref(), Some(""));
+        assert_eq!(position.display_text.as_deref(), Some("display-sibling"));
+        assert_eq!(position.font_family.as_deref(), Some("font-sibling"));
+        assert_eq!(
+            position.counter.font_family.as_deref(),
+            Some("counter-font-sibling")
+        );
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &target_id,
+            EditorElementPropertyPatchV1::ClassName(
+                crate::models::EditorClassNamePropertyPatchV1 {
+                    class_name: "different".to_string(),
+                },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![ops[0].clone()],
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        let position = &undone.key_positions["4key"][0];
+        assert_eq!(position.class_name, None);
+        assert_eq!(position.display_text.as_deref(), Some("display-sibling"));
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        let position = &redone.key_positions["4key"][0];
+        assert_eq!(position.class_name.as_deref(), Some(""));
+        assert_eq!(position.display_text.as_deref(), Some("display-sibling"));
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn inactive_image_batch_replays_raw_empty_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-inactive-image-history-test");
         std::fs::create_dir_all(&dir).unwrap();

@@ -41,6 +41,7 @@ import {
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
+import type { EditorTextPropertyPatchV1 } from '@src/types/editor';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
@@ -67,8 +68,8 @@ interface BatchStyleTabContentProps {
   onSoundPathCommit?: (soundPath: string) => void;
   onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onSoundVolumeCommit?: (soundVolume: number) => void;
-  onDisplayTextPreview?: (displayText: string) => void;
-  onDisplayTextCommit?: (displayText: string) => void;
+  onTextPropertyPreview?: (patch: EditorTextPropertyPatchV1) => void;
+  onTextPropertyCommit?: (patch: EditorTextPropertyPatchV1) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -151,8 +152,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   onSoundPathCommit,
   onSoundEnabledCommit,
   onSoundVolumeCommit,
-  onDisplayTextPreview,
-  onDisplayTextCommit,
+  onTextPropertyPreview,
+  onTextPropertyCommit,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -1008,11 +1009,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   <TextInput
                     value={isMixed ? '' : displayTextValue}
                     onChange={(v) => {
-                      if (onDisplayTextCommit) onDisplayTextCommit(v);
+                      if (onTextPropertyCommit)
+                        onTextPropertyCommit({ displayText: v });
                       else handleBatchStyleChangeComplete('displayText', v);
                     }}
                     onPreview={(v) => {
-                      if (onDisplayTextPreview) onDisplayTextPreview(v);
+                      if (onTextPropertyPreview)
+                        onTextPropertyPreview({ displayText: v });
                       else handleBatchStyleChange('displayText', v);
                     }}
                     onCancel={() => editGestureController.cancel()}
@@ -1176,9 +1179,15 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   : getMixedValue((pos) => pos.className, '').value
               }
               onChange={(value) => {
-                handleBatchStyleChangeComplete('className', value);
+                if (onTextPropertyCommit)
+                  onTextPropertyCommit({ className: value });
+                else handleBatchStyleChangeComplete('className', value);
               }}
-              onPreview={(value) => handleBatchStyleChange('className', value)}
+              onPreview={(value) => {
+                if (onTextPropertyPreview)
+                  onTextPropertyPreview({ className: value });
+                else handleBatchStyleChange('className', value);
+              }}
               onCancel={() => editGestureController.cancel()}
               placeholder={
                 getMixedValue((pos) => pos.className, '').isMixed
