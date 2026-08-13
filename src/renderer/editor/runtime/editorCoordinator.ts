@@ -494,6 +494,35 @@ const applySemanticOps = (
             if ('activeImage' in op.patch) {
               return { ...position, activeImage: op.patch.activeImage };
             }
+            if ('counterAnimationPreset' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              const animation = (counter?.animation ?? {}) as Record<
+                string,
+                unknown
+              >;
+              const intent = op.patch.counterAnimationPreset;
+              return {
+                ...position,
+                counter: {
+                  ...counter,
+                  animation: {
+                    ...animation,
+                    ...('applyPresetId' in intent
+                      ? { presetId: intent.presetId }
+                      : {}),
+                    ...('bezier' in intent
+                      ? { bezier: [...intent.bezier] }
+                      : {}),
+                    ...('scale' in intent ? { scale: intent.scale } : {}),
+                    ...('durationMs' in intent
+                      ? { durationMs: intent.durationMs }
+                      : {}),
+                  },
+                },
+              };
+            }
             if ('useInlineStyles' in op.patch) {
               return {
                 ...position,

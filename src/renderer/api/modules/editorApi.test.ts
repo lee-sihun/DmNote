@@ -399,6 +399,19 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['knob', { inactiveImage: 'knob.png' }],
     ['key', { activeImage: '  /tmp/raw active.png  ' }],
     ['knob', { activeImage: '' }],
+    ['key', { counterAnimationPreset: { presetId: 'builtin-ease-out' } }],
+    [
+      'stat',
+      {
+        counterAnimationPreset: {
+          presetId: 'preset-a',
+          applyPresetId: true,
+          bezier: [0.25, 0.1, 0.25, 1],
+          scale: 1.2,
+          durationMs: 500,
+        },
+      },
+    ],
     ['key', { useInlineStyles: false }],
     ['stat', { useInlineStyles: true }],
     ['graph', { useInlineStyles: false }],
@@ -452,6 +465,32 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['graph', { activeImage: 'active.png' }],
     ['key', { activeImage: 1 }],
     ['knob', { activeImage: 'active.png', inactiveImage: 'idle.png' }],
+    ['graph', { counterAnimationPreset: { presetId: 'preset-a' } }],
+    ['key', { counterAnimationPreset: { presetId: '' } }],
+    [
+      'key',
+      { counterAnimationPreset: { presetId: 'a', applyPresetId: false } },
+    ],
+    ['key', { counterAnimationPreset: { presetId: 'a', extra: true } }],
+    ['key', { counterAnimationPreset: { presetId: 'a', bezier: [0, 0, 0] } }],
+    [
+      'key',
+      { counterAnimationPreset: { presetId: 'a', bezier: [-0.1, 0, 0, 1] } },
+    ],
+    [
+      'key',
+      { counterAnimationPreset: { presetId: 'a', bezier: [0, 2.1, 0, 1] } },
+    ],
+    ['key', { counterAnimationPreset: { presetId: 'a', scale: Number.NaN } }],
+    ['key', { counterAnimationPreset: { presetId: 'a', durationMs: 0 } }],
+    ['key', { counterAnimationPreset: { presetId: 'a', durationMs: 5001 } }],
+    [
+      'key',
+      {
+        counterAnimationPreset: { presetId: 'a' },
+        fontItalic: true,
+      },
+    ],
     ['key', { useInlineStyles: 1 }],
     ['key', { fontWeight: -1 }],
     ['key', { fontWeight: 4_294_967_296 }],

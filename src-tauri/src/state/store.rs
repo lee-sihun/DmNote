@@ -4116,18 +4116,18 @@ mod tests {
         errors::{EditorCommitError, EditorCommitErrorCode},
         keyboard::KeyboardManager,
         models::{
-            AppStoreData, CommittedEditorChange, CustomCss, CustomFont, CustomTab, EditorBoundsV1,
-            EditorCommitOrigin, EditorCommitRequest, EditorDocumentV1,
-            EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
-            EditorFrozenKeySlotV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1,
-            EditorPatchV1, EditorZUpdateV1, FontSettings, FontType, GestureCommitRequest,
-            GesturePluginInstancesChange, GraphPosition, GraphStatType, GraphType, JsPlugin,
-            KeyCounters, KeyPosition, KeySlot, KnobPosition, OverlayBounds, PanelBounds,
-            PendingProcessedWavReplacement, PluginInstancesCommitRequest,
-            PluginInstancesReconcileRequest, PluginPoint, SavedPluginInstance, SettingsPatchInput,
-            SlotMatch, SoundLibraryEntry, SoundSource, StatPosition, StatType, TabCss,
-            TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2, EDITOR_OPS_VERSION,
-            EDITOR_SCHEMA_VERSION,
+            AppStoreData, CommittedEditorChange, CounterAnimationPreset, CounterAnimationSource,
+            CustomCss, CustomFont, CustomTab, EditorBoundsV1, EditorCommitOrigin,
+            EditorCommitRequest, EditorDocumentV1, EditorElementPropertyPatchV1,
+            EditorElementTypeV1, EditorField, EditorFrozenElementV1, EditorFrozenKeySlotV1,
+            EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorPatchV1, EditorZUpdateV1,
+            FontSettings, FontType, GestureCommitRequest, GesturePluginInstancesChange,
+            GraphPosition, GraphStatType, GraphType, JsPlugin, KeyCounters, KeyPosition, KeySlot,
+            KnobPosition, OverlayBounds, PanelBounds, PendingProcessedWavReplacement,
+            PluginInstancesCommitRequest, PluginInstancesReconcileRequest, PluginPoint,
+            SavedPluginInstance, SettingsPatchInput, SlotMatch, SoundLibraryEntry, SoundSource,
+            StatPosition, StatType, TabCss, TabNoteSettings, EDITOR_COMMIT_SCHEMA_VERSION_V2,
+            EDITOR_OPS_VERSION, EDITOR_SCHEMA_VERSION,
         },
         services::{css_watcher::commit_css_reload, settings::apply_patch_to_store},
         state::{
@@ -9307,6 +9307,206 @@ mod tests {
             assert_eq!(position.sound_enabled, Some(true));
             assert_eq!(position.sound_volume, Some(137.5));
         }
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn counter_animation_preset_batch_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-counter-animation-preset-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let preset = CounterAnimationPreset {
+            id: "user-current".to_string(),
+            name: "Current".to_string(),
+            source: CounterAnimationSource::User,
+            label_key: None,
+            bezier: [0.1, 0.2, 0.8, 0.9],
+            scale: 1.25,
+            duration_ms: 420,
+        };
+        let key_id = store.editor_get().document.key_positions["4key"][0]
+            .id
+            .clone();
+        let stat_id = uuid::Uuid::new_v4().to_string();
+        store
+            .update(|data| data.counter_animation_presets.push(preset.clone()))
+            .unwrap();
+        let setup = legacy_editor_commit(
+            &store,
+            &[EditorField::KeyPositions, EditorField::StatPositions],
+            |data| {
+                let key = &mut data.key_positions.get_mut("4key").unwrap()[0];
+                key.counter.animation.enabled = false;
+                key.counter.animation.preset_id = Some("builtin-ease-out".to_string());
+                key.counter.animation.bezier = [0.3, 0.4, 0.5, 0.6];
+                key.counter.animation.scale = 0.75;
+                key.counter.animation.duration_ms = 777;
+                let mut stat_position = key.clone();
+                stat_position.id = stat_id.clone();
+                data.stat_positions.insert(
+                    "4key".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: stat_position,
+                    }],
+                );
+            },
+        )
+        .unwrap();
+        let partial = EditorElementPropertyPatchV1::CounterAnimationPreset(
+            crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
+                counter_animation_preset: crate::models::EditorCounterAnimationPresetIntentV1 {
+                    preset_id: preset.id.clone(),
+                    apply_preset_id: None,
+                    bezier: None,
+                    scale: Some(preset.scale),
+                    duration_ms: None,
+                },
+            },
+        );
+        let full = EditorElementPropertyPatchV1::CounterAnimationPreset(
+            crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
+                counter_animation_preset: crate::models::EditorCounterAnimationPresetIntentV1 {
+                    preset_id: preset.id.clone(),
+                    apply_preset_id: Some(true),
+                    bezier: Some(preset.bezier),
+                    scale: Some(preset.scale),
+                    duration_ms: Some(preset.duration_ms),
+                },
+            },
+        );
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &key_id, partial.clone()),
+            patch_property_op(EditorElementTypeV1::Stat, &stat_id, full.clone()),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                full.clone(),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            changed.result.changed_fields,
+            [EditorField::KeyPositions, EditorField::StatPositions]
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let key_animation = &changed.document.key_positions["4key"][0].counter.animation;
+        assert!(!key_animation.enabled);
+        assert_eq!(key_animation.preset_id.as_deref(), Some("builtin-ease-out"));
+        assert_eq!(key_animation.bezier, [0.3, 0.4, 0.5, 0.6]);
+        assert_eq!(key_animation.scale, preset.scale);
+        assert_eq!(key_animation.duration_ms, 777);
+        let stat_animation = &changed.document.stat_positions["4key"][0]
+            .position
+            .counter
+            .animation;
+        assert_eq!(
+            stat_animation.preset_id.as_deref(),
+            Some(preset.id.as_str())
+        );
+        assert_eq!(stat_animation.bezier, preset.bezier);
+        assert_eq!(stat_animation.scale, preset.scale);
+        assert_eq!(stat_animation.duration_ms, preset.duration_ms);
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &key_id,
+            full.clone(),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..2].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        for animation in [
+            &undone.key_positions["4key"][0].counter.animation,
+            &undone.stat_positions["4key"][0].position.counter.animation,
+        ] {
+            assert_eq!(animation.preset_id.as_deref(), Some("builtin-ease-out"));
+            assert_eq!(animation.bezier, [0.3, 0.4, 0.5, 0.6]);
+            assert_eq!(animation.scale, 0.75);
+            assert_eq!(animation.duration_ms, 777);
+        }
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert_eq!(
+            redone.key_positions["4key"][0]
+                .counter
+                .animation
+                .preset_id
+                .as_deref(),
+            Some("builtin-ease-out")
+        );
+        assert_eq!(
+            redone.stat_positions["4key"][0]
+                .position
+                .counter
+                .animation
+                .preset_id
+                .as_deref(),
+            Some(preset.id.as_str())
+        );
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

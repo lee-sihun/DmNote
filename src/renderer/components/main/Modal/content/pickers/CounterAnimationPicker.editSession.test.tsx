@@ -18,19 +18,31 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   savePreset: null as null | ((payload: unknown) => void),
+  menuSelect: null as null | ((id: string) => void),
+  remove: vi.fn(),
+  authorityDelete: vi.fn(),
 }));
 
 vi.mock('./CommonListPickerPage', () => ({ default: () => null }));
-vi.mock('@components/main/Modal/ListPopup', () => ({ default: () => null }));
+vi.mock('@components/main/Modal/ListPopup', () => ({
+  default: ({ onSelect }: { onSelect: (id: string) => void }) => {
+    mocks.menuSelect = onSelect;
+    return null;
+  },
+}));
 vi.mock('@hooks/usePickerItemMenu', () => ({
   usePickerItemMenu: () => ({
-    menuKey: null,
-    renderKey: null,
+    menuKey: 'preset-user',
+    renderKey: 'preset-user',
     renderPosition: null,
     open: vi.fn(),
     openFromButton: vi.fn(),
     close: vi.fn(),
   }),
+}));
+vi.mock('@plugins/rpc/pluginElementActions', () => ({
+  deleteCounterAnimationPresetViaAuthority: (...args: unknown[]) =>
+    mocks.authorityDelete(...args),
 }));
 // 편집 모달의 저장 콜백을 밖으로 꺼낸다
 vi.mock('../editors/CounterAnimationEditorModal', () => ({
@@ -81,9 +93,14 @@ describe('CounterAnimationPicker 저장 완료와 모드 전환', () => {
   beforeEach(async () => {
     onAnimationChange = vi.fn();
     list = vi.fn(async () => ({ builtinPresets: [], userPresets: [] }));
+    mocks.remove.mockReset().mockResolvedValue({ success: true });
+    mocks.authorityDelete.mockReset().mockResolvedValue({ success: true });
     mocks.savePreset = null;
     useKeyStore.setState({ selectedKeyType: '4key' });
-    window.api = { counterAnimation: { list } } as never;
+    window.api = {
+      counterAnimation: { list, remove: mocks.remove },
+      ui: { dialog: { confirm: vi.fn(async () => true) } },
+    } as never;
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -146,5 +163,32 @@ describe('CounterAnimationPicker 저장 완료와 모드 전환', () => {
     await savePreset();
 
     expect(onAnimationChange).toHaveBeenCalled();
+  });
+
+  it('panel delete는 main authority만 호출하고 element callback은 만들지 않는다', async () => {
+    window.__dmn_window_type = 'panel';
+    list.mockResolvedValue({
+      builtinPresets: [],
+      userPresets: [
+        {
+          id: 'preset-user',
+          name: 'User',
+          source: 'user',
+          bezier: [0.25, 0.1, 0.25, 1],
+          scale: 1.2,
+          durationMs: 300,
+        },
+      ],
+    });
+    act(() => root.unmount());
+    root = createRoot(container);
+    await mountPicker();
+    await act(async () => {
+      mocks.menuSelect?.('delete');
+      await settle();
+    });
+    expect(mocks.authorityDelete).toHaveBeenCalledWith('preset-user');
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(onAnimationChange).not.toHaveBeenCalled();
   });
 });

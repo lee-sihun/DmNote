@@ -26,6 +26,14 @@ const captured = vi.hoisted(() => ({
     completionBinding?: string;
     onSoundSelect: (soundPath: string | null) => void;
   },
+  animation: null as null | {
+    completionBinding?: string;
+    onAnimationChange: (
+      animation: ReturnType<
+        typeof createDefaultKeyPosition
+      >['counter']['animation'],
+    ) => void;
+  },
   nav: {
     activePageKey: null as string | null,
     renderPageKey: null as string | null,
@@ -80,6 +88,18 @@ vi.mock('@components/main/Modal/content/pickers/SoundPicker', () => ({
     return null;
   },
 }));
+vi.mock(
+  '@components/main/Modal/content/pickers/CounterAnimationPicker',
+  () => ({
+    default: (props: NonNullable<(typeof captured)['animation']>) => {
+      captured.animation = props;
+      return null;
+    },
+  }),
+);
+vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
+  default: () => null,
+}));
 vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
   ColorSwatchButton: () => null,
 }));
@@ -113,6 +133,7 @@ vi.mock('@utils/core/axisEventBus', () => ({
 }));
 
 import StyleTabContent from './StyleTabContent';
+import CounterTabContent from './CounterTabContent';
 import {
   SingleGraphPanel,
   SingleKeyStatPanel,
@@ -131,6 +152,7 @@ describe('single geometry input bindings', () => {
     captured.dropdowns.length = 0;
     captured.image = null;
     captured.sound = null;
+    captured.animation = null;
     captured.nav.activePageKey = null;
     captured.nav.renderPageKey = null;
     captured.nav.pageHost = null;
@@ -263,6 +285,72 @@ describe('single geometry input bindings', () => {
     });
 
     expect(captured.sound).toBeNull();
+  });
+
+  it.each(['key', 'stat'] as const)(
+    '%s CounterAnimationPicker는 single exact diff intent를 전달한다',
+    (type) => {
+      const commit = vi.fn();
+      const legacy = vi.fn();
+      captured.nav.activePageKey = 'single-counter:animation';
+      captured.nav.renderPageKey = 'single-counter:animation';
+      captured.nav.pageHost = document.body;
+      const position = createDefaultKeyPosition();
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={position}
+            isStat={type === 'stat'}
+            onKeyUpdate={legacy}
+            onCounterAnimationPresetCommit={commit}
+            t={(key) => key}
+          />,
+        );
+      });
+
+      expect(captured.animation?.completionBinding).toBe('element-id');
+      act(() =>
+        captured.animation?.onAnimationChange({
+          ...position.counter.animation,
+          presetId: 'preset-b',
+          scale: 1.4,
+        }),
+      );
+      expect(commit).toHaveBeenCalledWith({
+        presetId: 'preset-b',
+        applyPresetId: true,
+        scale: 1.4,
+      });
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('synthetic CounterAnimationPicker는 whole counter legacy를 유지한다', () => {
+    const legacy = vi.fn();
+    captured.nav.activePageKey = 'single-counter:animation';
+    captured.nav.renderPageKey = 'single-counter:animation';
+    captured.nav.pageHost = document.body;
+    const position = { ...createDefaultKeyPosition(), id: 'key-0' };
+    act(() => {
+      root.render(
+        <CounterTabContent
+          keyIndex={0}
+          keyPosition={position}
+          onKeyUpdate={legacy}
+          t={(key) => key}
+        />,
+      );
+    });
+    expect(captured.animation?.completionBinding).toBe('session-mode');
+    const next = { ...position.counter.animation, presetId: 'preset-b' };
+    act(() => captured.animation?.onAnimationChange(next));
+    expect(legacy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        index: 0,
+        counter: expect.objectContaining({ animation: next }),
+      }),
+    );
   });
 
   it.each(['key', 'knob'] as const)(

@@ -2511,6 +2511,30 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterAnimationPreset(
+                    crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
+                        counter_animation_preset:
+                            crate::models::EditorCounterAnimationPresetIntentV1 {
+                                preset_id: "user-motion".to_string(),
+                                apply_preset_id: Some(true),
+                                bezier: Some([0.1, 0.2, 0.8, 0.9]),
+                                scale: Some(1.25),
+                                duration_ms: Some(420),
+                            },
+                    },
+                ),
+                serde_json::json!({
+                    "counterAnimationPreset": {
+                        "presetId": "user-motion",
+                        "applyPresetId": true,
+                        "bezier": [0.1, 0.2, 0.8, 0.9],
+                        "scale": 1.25,
+                        "durationMs": 420
+                    }
+                }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::StatType(
                     crate::models::EditorStatTypePropertyPatchV1 {
                         stat_type: StatType::Total,
@@ -2614,6 +2638,13 @@ mod tests {
             serde_json::json!({ "soundPath": 1 }),
             serde_json::json!({ "soundPath": "path", "soundEnabled": true }),
             serde_json::json!({ "soundPath": "path", "unexpected": true }),
+            serde_json::json!({ "counterAnimationPreset": null }),
+            serde_json::json!({ "counterAnimationPreset": {} }),
+            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "enabled": true } }),
+            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "applyPresetId": false } }),
+            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "bezier": [0.1, 0.2, 0.8] } }),
+            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "durationMs": 1.5 } }),
+            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset" }, "hidden": true }),
             serde_json::json!({ "statType": "invalid" }),
             serde_json::json!({ "noteEffectEnabled": 1 }),
             serde_json::json!({ "noteGlowEnabled": null }),

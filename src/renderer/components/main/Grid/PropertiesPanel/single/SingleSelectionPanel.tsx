@@ -17,7 +17,7 @@ import type {
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import type { SizeCommit } from '../types';
+import type { CounterTabContentProps, SizeCommit } from '../types';
 import {
   getActivePairPreservation,
   gradientPairPatch,
@@ -1675,6 +1675,7 @@ interface SingleKeyStatPanelProps {
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
   onSoundPathCommit?: (soundPath: string) => void;
+  onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
   imageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -1719,6 +1720,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onInactiveImageCommit,
   onActiveImageCommit,
   onSoundPathCommit,
+  onCounterAnimationPresetCommit,
   showImagePicker,
   setShowImagePicker,
   imageButtonRef,
@@ -1968,6 +1970,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               keyDisplayName={keyLikeInfo?.displayName}
               isStat={isSingleStat}
               onKeyUpdate={handleKeyLikeUpdate}
+              onCounterAnimationPresetCommit={onCounterAnimationPresetCommit}
               panelElement={panelElement}
               t={t}
             />

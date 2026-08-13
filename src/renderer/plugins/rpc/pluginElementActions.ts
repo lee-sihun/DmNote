@@ -36,6 +36,8 @@ export const PLUGIN_RPC_OPERATIONS = {
   setLayerBounds: 'layers:setBounds',
   setLayerBatchGeometry: 'layers:setBatchGeometry',
   setLayerGroupVisibility: 'layers:setGroupVisibility',
+  updateCounterAnimationPreset: 'counterAnimation:updatePreset',
+  deleteCounterAnimationPreset: 'counterAnimation:deletePreset',
 } as const;
 
 export type LayerDeleteTarget = {
@@ -153,6 +155,7 @@ interface QueuedElementOp {
   authorityGeneration?: number;
   retryPolicy?: 'default' | 'idempotentDelete' | 'staleOnly' | 'none';
   resolve?: (succeeded: boolean) => void;
+  resolvePayload?: (payload: Record<string, unknown> | null) => void;
 }
 
 const outboundQueue: QueuedElementOp[] = [];
@@ -181,11 +184,13 @@ const drainQueue = async (): Promise<boolean> => {
     const outcome = await sendQueuedOp(op);
     if (outcome.kind === 'ok') {
       op.resolve?.(true);
+      op.resolvePayload?.(outcome.response.payload ?? null);
       continue;
     }
     if (op.retryPolicy === 'none') {
       succeeded = false;
       op.resolve?.(false);
+      op.resolvePayload?.(null);
       requestFreshSnapshot();
       continue;
     }
@@ -197,6 +202,7 @@ const drainQueue = async (): Promise<boolean> => {
     if (op.retryPolicy === 'staleOnly' && !retryableStaleOutcome) {
       succeeded = false;
       op.resolve?.(false);
+      op.resolvePayload?.(null);
       requestFreshSnapshot();
       continue;
     }
@@ -209,6 +215,7 @@ const drainQueue = async (): Promise<boolean> => {
     if (op.retryPolicy === 'idempotentDelete' && !retryableDeleteOutcome) {
       succeeded = false;
       op.resolve?.(false);
+      op.resolvePayload?.(null);
       requestFreshSnapshot();
       continue;
     }
@@ -225,15 +232,18 @@ const drainQueue = async (): Promise<boolean> => {
     ) {
       succeeded = false;
       op.resolve?.(false);
+      op.resolvePayload?.(null);
       continue;
     }
     const retry = await sendQueuedOp(op);
     if (retry.kind === 'ok') {
       op.resolve?.(true);
+      op.resolvePayload?.(retry.response.payload ?? null);
       continue;
     }
     succeeded = false;
     op.resolve?.(false);
+    op.resolvePayload?.(null);
     if (retry.kind === 'error') {
       console.error(
         `Plugin RPC ${op.operation} retry failed: ${retry.errorCode}`,
@@ -580,6 +590,74 @@ export const patchSoundPathViaAuthority = (
       authorityGeneration,
       retryPolicy: 'staleOnly',
       resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchCounterAnimationPresetViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  intent: import('@src/types/editor').EditorCounterAnimationPresetIntentV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: { counterAnimationPreset: structuredClone(intent) },
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const updateCounterAnimationPresetViaAuthority = (
+  request: import('@src/types/key/counterAnimation').CounterAnimationUpdateRequest,
+): Promise<
+  | import('@src/types/key/counterAnimation').CounterAnimationUpsertResponse
+  | null
+> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.updateCounterAnimationPreset,
+      payload: { request: structuredClone(request) },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolvePayload: (payload) =>
+        resolve(
+          payload as unknown as
+            | import('@src/types/key/counterAnimation').CounterAnimationUpsertResponse
+            | null,
+        ),
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const deleteCounterAnimationPresetViaAuthority = (
+  id: string,
+): Promise<
+  | import('@src/types/key/counterAnimation').CounterAnimationDeleteResponse
+  | null
+> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.deleteCounterAnimationPreset,
+      payload: { id },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolvePayload: (payload) =>
+        resolve(
+          payload as unknown as
+            | import('@src/types/key/counterAnimation').CounterAnimationDeleteResponse
+            | null,
+        ),
     });
     void ensureQueueDrain();
   });

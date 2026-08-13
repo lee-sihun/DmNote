@@ -27,6 +27,7 @@ import { useEditSessionCompletionGuard } from '@src/renderer/contexts/EditSessio
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
 import { counterAnimationApi } from '@api/modules/resourceApi';
+import { deleteCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
 
 interface CounterAnimationPickerProps {
   open: boolean;
@@ -211,7 +212,11 @@ const CounterAnimationPicker = ({
         counterAnimationLibraryCache = next;
         return next;
       });
-      await counterAnimationApi.remove(preset.id);
+      const removed =
+        window.__dmn_window_type === 'panel'
+          ? await deleteCounterAnimationPresetViaAuthority(preset.id)
+          : await counterAnimationApi.remove(preset.id);
+      if (!removed) throw new Error('counter animation delete failed');
       await loadLibrary();
     } catch (error) {
       console.error('Failed to delete counter animation preset', error);

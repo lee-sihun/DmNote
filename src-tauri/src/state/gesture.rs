@@ -529,6 +529,24 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterAnimationPreset(
+                    crate::models::EditorCounterAnimationPresetPropertyPatchV1 {
+                        counter_animation_preset:
+                            crate::models::EditorCounterAnimationPresetIntentV1 {
+                                preset_id: "builtin-ease-out".to_string(),
+                                apply_preset_id: None,
+                                bezier: None,
+                                scale: None,
+                                duration_ms: None,
+                            },
+                    },
+                ),
+                serde_json::json!({
+                    "counterAnimationPreset": { "presetId": "builtin-ease-out" }
+                }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::StatType(
                     crate::models::EditorStatTypePropertyPatchV1 {
                         stat_type: crate::models::StatType::Total,
@@ -642,6 +660,12 @@ mod tests {
             serde_json::json!({ "soundPath": 1 }),
             serde_json::json!({ "soundPath": "path", "soundEnabled": true }),
             serde_json::json!({ "soundPath": "path", "unexpected": true }),
+            serde_json::json!({ "counterAnimationPreset": null }),
+            serde_json::json!({ "counterAnimationPreset": {} }),
+            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "enabled": false } }),
+            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "applyPresetId": false } }),
+            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "scale": "1.2" } }),
+            serde_json::json!({ "counterAnimationPreset": { "presetId": "preset" }, "hidden": true }),
         ] {
             let mut invalid_image = layer_name_wire.clone();
             invalid_image["editorOps"][0]["patch"] = patch;

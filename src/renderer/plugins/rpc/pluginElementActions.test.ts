@@ -432,6 +432,120 @@ describe('plugin element panel queue', () => {
     );
   });
 
+  it('counter animation preset batch는 exact nested intent를 staleOnly envelope로 보낸다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat' as const,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ];
+    const intent = { presetId: 'preset-a', scale: 1.4 };
+
+    await expect(
+      actions.patchCounterAnimationPresetViaAuthority(targets, intent),
+    ).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      { targets, patch: { counterAnimationPreset: intent } },
+      0,
+      7,
+    );
+  });
+
+  it('counter animation update/delete는 exact descriptor와 성공 payload를 반환한다', async () => {
+    const updateResponse = {
+      preset: { id: 'preset-a' },
+      affectedUsageCount: 2,
+    };
+    const deleteResponse = {
+      success: true,
+      id: 'preset-a',
+      affectedUsageCount: 2,
+      fallbackPresetId: 'builtin-ease-out',
+    };
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 1, payload: updateResponse },
+      })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2, payload: deleteResponse },
+      });
+    const request = {
+      id: 'preset-a',
+      name: 'Preset A',
+      bezier: [0.25, 0.1, 0.25, 1] as [number, number, number, number],
+      scale: 1.2,
+      durationMs: 400,
+    };
+
+    await expect(
+      actions.updateCounterAnimationPresetViaAuthority(request),
+    ).resolves.toEqual(updateResponse);
+    await expect(
+      actions.deleteCounterAnimationPresetViaAuthority('preset-a'),
+    ).resolves.toEqual(deleteResponse);
+    expect(mocks.sendPluginRpc.mock.calls[0]?.slice(0, 2)).toEqual([
+      'counterAnimation:updatePreset',
+      { request },
+    ]);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.slice(0, 2)).toEqual([
+      'counterAnimation:deletePreset',
+      { id: 'preset-a' },
+    ]);
+  });
+
+  it('counter animation update outcome-unknown은 snapshot만 요청하고 재실행하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+    await expect(
+      actions.updateCounterAnimationPresetViaAuthority({
+        id: 'preset-a',
+        name: 'Preset A',
+        bezier: [0.25, 0.1, 0.25, 1],
+        scale: 1.2,
+        durationMs: 400,
+      }),
+    ).resolves.toBeNull();
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
+  it('counter animation delete stale은 fresh snapshot 뒤 한 번만 재실행한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({
+        kind: 'error',
+        errorCode: 'MODEL_REVISION_STALE',
+        response: { modelRevision: 1 },
+      })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: {
+          modelRevision: 2,
+          payload: { success: true, id: 'preset-a' },
+        },
+      });
+    const deleting =
+      actions.deleteCounterAnimationPresetViaAuthority('preset-a');
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+    await expect(deleting).resolves.toMatchObject({ success: true });
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+  });
+
   it('인라인 스타일 batch는 혼합 native 대상과 공통 literal을 한 요청으로 고정한다', async () => {
     mocks.sendPluginRpc.mockResolvedValue({
       kind: 'ok',

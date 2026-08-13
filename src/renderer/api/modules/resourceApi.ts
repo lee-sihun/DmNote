@@ -144,20 +144,21 @@ export const counterAnimationApi = {
     ),
   update: (
     request: import('@src/types/plugin/api').CounterAnimationUpdateRequest,
+    options: { preflight?: () => void } = {},
   ) =>
-    runExclusiveLegacyMutation(() =>
-      invoke<import('@src/types/plugin/api').CounterAnimationUpsertResponse>(
-        'counter_animation_update',
-        { request },
-      ),
-    ),
-  remove: (id: string) =>
-    runExclusiveLegacyMutation(() =>
-      invoke<import('@src/types/plugin/api').CounterAnimationDeleteResponse>(
-        'counter_animation_delete',
-        { id },
-      ),
-    ),
+    runExclusiveLegacyMutation(() => {
+      options.preflight?.();
+      return invoke<
+        import('@src/types/plugin/api').CounterAnimationUpsertResponse
+      >('counter_animation_update', { request });
+    }),
+  remove: (id: string, options: { preflight?: () => void } = {}) =>
+    runExclusiveLegacyMutation(() => {
+      options.preflight?.();
+      return invoke<
+        import('@src/types/plugin/api').CounterAnimationDeleteResponse
+      >('counter_animation_delete', { id });
+    }),
   onChanged: (
     listener: (
       payload: import('@src/types/plugin/api').CounterAnimationListResponse,

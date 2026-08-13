@@ -383,6 +383,28 @@ const applyOpsForTest = (
           if ('fontFamily' in op.patch) {
             return { ...position, fontFamily: op.patch.fontFamily };
           }
+          if ('counterAnimationPreset' in op.patch) {
+            const counter = position.counter as Record<string, unknown>;
+            const animation = counter.animation as Record<string, unknown>;
+            const intent = op.patch.counterAnimationPreset;
+            return {
+              ...position,
+              counter: {
+                ...counter,
+                animation: {
+                  ...animation,
+                  ...('applyPresetId' in intent
+                    ? { presetId: intent.presetId }
+                    : {}),
+                  ...('bezier' in intent ? { bezier: [...intent.bezier] } : {}),
+                  ...('scale' in intent ? { scale: intent.scale } : {}),
+                  ...('durationMs' in intent
+                    ? { durationMs: intent.durationMs }
+                    : {}),
+                },
+              },
+            };
+          }
           if ('noteEffectEnabled' in op.patch) {
             return {
               ...position,
@@ -3570,6 +3592,68 @@ describe('commitSemanticOpsInternal', () => {
     const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
     expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
     expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
+  it('counter animation preset projection은 apply mask와 nested sibling을 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000ca';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      counter: {
+        ...base.keyPositions['4key'][0].counter,
+        fontFamily: 'Counter Family',
+        animation: {
+          ...base.keyPositions['4key'][0].counter.animation,
+          enabled: false,
+          presetId: 'preset-c',
+          scale: 2,
+          durationMs: 300,
+        },
+      },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const preserved = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: {
+          counterAnimationPreset: {
+            presetId: 'preset-a',
+            scale: 1.4,
+          },
+        },
+      },
+    ]);
+    expect(preserved.document.keyPositions['4key'][0].counter).toMatchObject({
+      fontFamily: 'Counter Family',
+      animation: {
+        enabled: false,
+        presetId: 'preset-c',
+        scale: 1.4,
+        durationMs: 300,
+      },
+    });
+
+    const assigned = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: {
+          counterAnimationPreset: {
+            presetId: 'preset-a',
+            applyPresetId: true as const,
+          },
+        },
+      },
+    ]);
+    expect(
+      assigned.document.keyPositions['4key'][0].counter.animation.presetId,
+    ).toBe('preset-a');
     harness.coordinator.stop();
   });
 

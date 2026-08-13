@@ -224,6 +224,7 @@ pub enum EditorElementPropertyPatchV1 {
     InactiveImage(EditorInactiveImagePropertyPatchV1),
     ActiveImage(EditorActiveImagePropertyPatchV1),
     SoundPath(EditorSoundPathPropertyPatchV1),
+    CounterAnimationPreset(EditorCounterAnimationPresetPropertyPatchV1),
     StatType(EditorStatTypePropertyPatchV1),
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
     NoteGlowEnabled(EditorNoteGlowEnabledPropertyPatchV1),
@@ -345,6 +346,41 @@ pub struct EditorActiveImagePropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorSoundPathPropertyPatchV1 {
     pub sound_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterAnimationPresetPropertyPatchV1 {
+    pub counter_animation_preset: EditorCounterAnimationPresetIntentV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterAnimationPresetIntentV1 {
+    pub preset_id: String,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_true"
+    )]
+    pub apply_preset_id: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bezier: Option<[f64; 4]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u32>,
+}
+
+fn deserialize_optional_true<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = bool::deserialize(deserializer)?;
+    if !value {
+        return Err(serde::de::Error::custom("applyPresetId must be true"));
+    }
+    Ok(Some(true))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

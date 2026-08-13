@@ -5,6 +5,7 @@ import type {
   GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
+import type { EditorCounterAnimationPresetIntentV1 } from '@src/types/editor';
 
 // ============================================================================
 // 탭 상수
@@ -254,6 +255,9 @@ export interface CounterTabContentProps {
   keyDisplayName?: string;
   isStat?: boolean;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
+  onCounterAnimationPresetCommit?: (
+    intent: EditorCounterAnimationPresetIntentV1,
+  ) => void;
   panelElement?: HTMLElement | null;
   t: (key: string) => string;
 }

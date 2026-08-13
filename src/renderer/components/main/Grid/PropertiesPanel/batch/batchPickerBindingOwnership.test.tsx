@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
@@ -23,6 +24,14 @@ const captured = vi.hoisted(() => ({
     onActiveImageChange?: (imageUrl: string) => void;
     onActiveImageReset?: () => void;
   },
+  animation: null as null | {
+    completionBinding?: CompletionBinding;
+    onAnimationChange: (
+      animation: ReturnType<
+        typeof createDefaultKeyPosition
+      >['counter']['animation'],
+    ) => void;
+  },
 }));
 
 const patches = vi.hoisted(() => ({
@@ -34,6 +43,8 @@ const patches = vi.hoisted(() => ({
   patchActiveImageViaAuthority: vi.fn(async () => true),
   patchSoundPathByIds: vi.fn(async () => true),
   patchSoundPathViaAuthority: vi.fn(async () => true),
+  patchCounterAnimationPresetByTargets: vi.fn(async () => true),
+  patchCounterAnimationPresetViaAuthority: vi.fn(async () => true),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
@@ -41,11 +52,15 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchActiveImageByTargets: patches.patchActiveImageByTargets,
   patchInactiveImageByTargets: patches.patchInactiveImageByTargets,
   patchSoundPathByIds: patches.patchSoundPathByIds,
+  patchCounterAnimationPresetByTargets:
+    patches.patchCounterAnimationPresetByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
   patchInactiveImageViaAuthority: patches.patchInactiveImageViaAuthority,
   patchSoundPathViaAuthority: patches.patchSoundPathViaAuthority,
+  patchCounterAnimationPresetViaAuthority:
+    patches.patchCounterAnimationPresetViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
@@ -62,7 +77,10 @@ vi.mock('@components/main/Modal/content/pickers/SoundPicker', () => ({
 vi.mock(
   '@components/main/Modal/content/pickers/CounterAnimationPicker',
   () => ({
-    default: () => null,
+    default: (props: (typeof captured)['animation']) => {
+      captured.animation = props;
+      return null;
+    },
   }),
 );
 vi.mock('@components/main/Modal/content/pickers/ImagePicker', () => ({
@@ -100,6 +118,7 @@ import {
   BatchKnobOnlyPanel,
 } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
+import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from '@components/main/Grid/PropertiesPanel/batch/BatchCounterTabContent';
 
 const BATCH_STYLE_FONT_PAGE_KEY = 'batch-style:font';
 
@@ -237,6 +256,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       useCustomCSS: false,
       selectedKeyType: '4key',
       t: (key: string) => key,
+      batchCounterSettings: createDefaultKeyPosition().counter,
+      batchKeyVisual: createDefaultKeyPosition(),
     } as unknown as PanelProps;
   };
 
@@ -266,6 +287,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     captured.sound = null;
     captured.font = null;
     captured.image = null;
+    captured.animation = null;
     selectKey(ID_A);
     host = document.createElement('div');
     pageHost = document.createElement('div');
@@ -279,6 +301,119 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     host.remove();
     pageHost.remove();
     delete window.__dmn_window_type;
+  });
+
+  const selectCounterTargets = (keyId: string, statId: string) => {
+    useKeyStore.setState({
+      selectedKeyType: '4key',
+      canonicalPositions: { '4key': [keyAt(keyId)] },
+      positions: { '4key': [keyAt(keyId)] },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [{ ...keyAt(statId), statType: 'kps' }],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: keyId, index: 0 },
+        { type: 'stat', id: statId, index: 0 },
+        { type: 'graph', id: 'graph-0', index: 0 },
+      ],
+    });
+  };
+
+  const renderCounterPanel = (
+    legacy: PanelProps['handleBatchCounterUpdate'],
+  ) => {
+    const props = panelProps();
+    props.activeTab = 'counter';
+    props.handleBatchCounterUpdate = legacy;
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: BATCH_COUNTER_ANIMATION_PAGE_KEY,
+            renderPageKey: BATCH_COUNTER_ANIMATION_PAGE_KEY,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...props} />
+        </PanelNavProvider>,
+      );
+    });
+  };
+
+  it.each(['main', 'panel'] as const)(
+    '%s batch counter picker는 open 시점 key/stat만 한 exact intent로 보낸다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const statA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const statB = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      selectCounterTargets(ID_A, statA);
+      const legacy = vi.fn();
+      renderCounterPanel(legacy);
+      expect(captured.animation?.completionBinding).toBe('element-id');
+
+      selectCounterTargets(ID_B, statB);
+      renderCounterPanel(legacy);
+      act(() =>
+        captured.animation!.onAnimationChange({
+          ...createDefaultKeyPosition().counter.animation,
+          presetId: 'preset-b',
+          bezier: [0.2, 0, 0.8, 1],
+          scale: 1.3,
+          durationMs: 450,
+        }),
+      );
+
+      const exact = {
+        presetId: 'preset-b',
+        applyPresetId: true,
+        bezier: [0.2, 0, 0.8, 1],
+        scale: 1.3,
+        durationMs: 450,
+      };
+      const targets = [
+        { elementType: 'key', id: ID_A },
+        { elementType: 'stat', id: statA },
+      ];
+      if (windowType === 'panel') {
+        expect(
+          patches.patchCounterAnimationPresetViaAuthority,
+        ).toHaveBeenCalledWith(targets, exact);
+        expect(
+          patches.patchCounterAnimationPresetByTargets,
+        ).not.toHaveBeenCalled();
+      } else {
+        expect(
+          patches.patchCounterAnimationPresetByTargets,
+        ).toHaveBeenCalledWith(targets, exact);
+        expect(
+          patches.patchCounterAnimationPresetViaAuthority,
+        ).not.toHaveBeenCalled();
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('batch counter key/stat 중 synthetic가 있으면 subset 전체 legacy다', () => {
+    selectCounterTargets(ID_A, 'stat-0');
+    const legacy = vi.fn();
+    renderCounterPanel(legacy);
+    expect(captured.animation?.completionBinding).toBe('session-mode');
+    const next = {
+      ...createDefaultKeyPosition().counter.animation,
+      presetId: 'preset-b',
+    };
+    act(() => captured.animation!.onAnimationChange(next));
+    expect(legacy).toHaveBeenCalledWith({ animation: next });
+    expect(patches.patchCounterAnimationPresetByTargets).not.toHaveBeenCalled();
+    expect(
+      patches.patchCounterAnimationPresetViaAuthority,
+    ).not.toHaveBeenCalled();
   });
 
   type ImagePanelKind = 'mixed' | 'graph' | 'knob';

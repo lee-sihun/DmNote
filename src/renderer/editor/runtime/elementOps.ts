@@ -43,6 +43,7 @@ import type {
   EditorDocumentV1,
   EditorFrozenElementV1,
   EditorElementPropertyPatchV1,
+  EditorCounterAnimationPresetIntentV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
@@ -1175,6 +1176,111 @@ export const patchSoundPathByIds = (
     options,
   );
 };
+
+type CounterAnimationTarget = {
+  elementType: 'key' | 'stat';
+  id: string;
+};
+
+const counterAnimationPropertyIntents = (
+  targets: readonly CounterAnimationTarget[],
+  intent: EditorCounterAnimationPresetIntentV1,
+): PropertyIntents => {
+  const document = captureEditorDocument();
+  const propertyIntents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { elementType, id } of targets) {
+    const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
+    const record = document[field] as Record<
+      string,
+      Array<Record<string, unknown> & { id?: string }>
+    >;
+    const current = Object.values(record)
+      .flat()
+      .find((position) => position.id === id);
+    if (!current) continue;
+    if (
+      current.counter === null ||
+      typeof current.counter !== 'object' ||
+      Array.isArray(current.counter)
+    ) {
+      continue;
+    }
+    const counter = current.counter as Record<string, unknown>;
+    if (
+      counter.animation === null ||
+      typeof counter.animation !== 'object' ||
+      Array.isArray(counter.animation)
+    ) {
+      continue;
+    }
+    const animation = counter.animation as Record<string, unknown>;
+    const byId = propertyIntents.get(elementType) ?? new Map();
+    byId.set(id, {
+      counter: {
+        ...counter,
+        animation: {
+          ...animation,
+          ...('applyPresetId' in intent ? { presetId: intent.presetId } : {}),
+          ...('bezier' in intent ? { bezier: [...intent.bezier] } : {}),
+          ...('scale' in intent ? { scale: intent.scale } : {}),
+          ...('durationMs' in intent ? { durationMs: intent.durationMs } : {}),
+        },
+      },
+    });
+    propertyIntents.set(elementType, byId);
+  }
+  return propertyIntents;
+};
+
+export const patchCounterAnimationPresetByTargets = (
+  targets: readonly CounterAnimationTarget[],
+  intent: EditorCounterAnimationPresetIntentV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some(({ id }) => id.length === 0 || isSyntheticElementId(id)) ||
+    new Set(targets.map(({ id }) => id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  const receipt = applyPropertyIntentsEagerly(
+    counterAnimationPropertyIntents(targets, intent),
+  );
+  let enrolled = false;
+  return commitSemanticOps(
+    targets.map(({ elementType, id }) => ({
+      kind: 'patchElement' as const,
+      elementType,
+      id,
+      patch: { counterAnimationPreset: structuredClone(intent) },
+    })),
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchCounterAnimationPresetById = (
+  elementType: 'key' | 'stat',
+  id: string,
+  intent: EditorCounterAnimationPresetIntentV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchCounterAnimationPresetByTargets([{ elementType, id }], intent, options);
 
 export const patchInactiveImageById = (
   type: NativeElementType,

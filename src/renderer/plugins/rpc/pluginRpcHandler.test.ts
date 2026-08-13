@@ -111,6 +111,21 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchCounterAnimationPreset: vi.fn(
+    (
+      _targets?: unknown,
+      _intent?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
+  updateCounterAnimation: vi.fn(
+    (_request?: unknown, _options?: unknown): Promise<unknown> =>
+      Promise.resolve(null),
+  ),
+  deleteCounterAnimation: vi.fn(
+    (_id?: unknown, _options?: unknown): Promise<unknown> =>
+      Promise.resolve(null),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -190,12 +205,20 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchInactiveImageByTargets: mocks.patchInactiveImage,
   patchActiveImageByTargets: mocks.patchActiveImage,
   patchSoundPathByIds: mocks.patchSoundPath,
+  patchCounterAnimationPresetByTargets: mocks.patchCounterAnimationPreset,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
   patchNotePropertiesByIds: mocks.patchNoteProperties,
   patchUseInlineStylesByTargets: mocks.patchUseInlineStyles,
   setLayerGroupHidden: mocks.setLayerGroupHidden,
+}));
+
+vi.mock('@api/modules/resourceApi', () => ({
+  counterAnimationApi: {
+    update: mocks.updateCounterAnimation,
+    remove: mocks.deleteCounterAnimation,
+  },
 }));
 
 vi.mock(
@@ -285,6 +308,20 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchActiveImage.mockResolvedValue(true);
     mocks.patchSoundPath.mockReset();
     mocks.patchSoundPath.mockResolvedValue(true);
+    mocks.patchCounterAnimationPreset.mockReset();
+    mocks.patchCounterAnimationPreset.mockResolvedValue(true);
+    mocks.updateCounterAnimation.mockReset();
+    mocks.updateCounterAnimation.mockResolvedValue({
+      preset: { id: 'preset-a' },
+      affectedUsageCount: 2,
+    });
+    mocks.deleteCounterAnimation.mockReset();
+    mocks.deleteCounterAnimation.mockResolvedValue({
+      success: true,
+      id: 'preset-a',
+      affectedUsageCount: 2,
+      fallbackPresetId: 'builtin-ease-out',
+    });
     mocks.patchNoteProperties.mockReset();
     mocks.patchNoteProperties.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
@@ -789,6 +826,203 @@ describe('plugin panel persisted element mutations', () => {
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
+
+  it('counter animation preset batch는 key/stat exact intent를 한 semantic commit으로 전달한다', async () => {
+    const targets = [
+      { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    ] as const;
+    const intent = {
+      presetId: 'preset-a',
+      applyPresetId: true,
+      bezier: [0.25, 0.1, 0.25, 1],
+      scale: 1.2,
+      durationMs: 400,
+    };
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { counterAnimationPreset: intent },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchCounterAnimationPreset).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchCounterAnimationPreset).toHaveBeenCalledWith(
+      targets,
+      intent,
+      { preflight: expect.any(Function) },
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    {
+      targets: [{ elementType: 'graph', id: 'a' }],
+      patch: { counterAnimationPreset: { presetId: 'a' } },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: {
+        counterAnimationPreset: { presetId: 'a', applyPresetId: false },
+      },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: {
+        counterAnimationPreset: { presetId: 'a', bezier: [-0.1, 0, 0, 1] },
+      },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterAnimationPreset: { presetId: 'a', durationMs: 0 } },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterAnimationPreset: { presetId: 'a' }, fontItalic: true },
+    },
+  ])(
+    'counter animation invalid exact payload를 executor 전에 거절한다',
+    async (payload) => {
+      mocks.requestListener?.(envelope('layers:patchProperty', payload));
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+      expect(mocks.patchCounterAnimationPreset).not.toHaveBeenCalled();
+    },
+  );
+
+  it('counter animation preset update/delete는 exact main authority API 결과를 응답한다', async () => {
+    const request = {
+      id: 'preset-a',
+      name: 'Preset A',
+      bezier: [0.25, 0.1, 0.25, 1],
+      scale: 1.2,
+      durationMs: 400,
+    };
+    mocks.requestListener?.(
+      envelope('counterAnimation:updatePreset', { request }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.updateCounterAnimation).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.updateCounterAnimation).toHaveBeenCalledWith(request, {
+      preflight: expect.any(Function),
+    });
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: true,
+      payload: { affectedUsageCount: 2 },
+    });
+
+    mocks.respond.mockClear();
+    mocks.requestListener?.(
+      envelope('counterAnimation:deletePreset', { id: 'preset-a' }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.deleteCounterAnimation).toHaveBeenCalledOnce(),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: true,
+      payload: { success: true, id: 'preset-a' },
+    });
+  });
+
+  it('counter animation preset mutation은 시작과 슬롯 진입에서 generation을 검사한다', async () => {
+    mocks.authorityGeneration = 8;
+    mocks.requestListener?.(
+      envelope('counterAnimation:deletePreset', { id: 'preset-a' }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.deleteCounterAnimation).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+
+    mocks.authorityGeneration = 7;
+    mocks.respond.mockClear();
+    mocks.updateCounterAnimation.mockImplementationOnce(
+      async (_request, options) => {
+        mocks.authorityGeneration = 8;
+        (options as { preflight?: () => void })?.preflight?.();
+        return null;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('counterAnimation:updatePreset', {
+        request: {
+          id: 'preset-a',
+          name: 'Preset A',
+          bezier: [0.25, 0.1, 0.25, 1],
+          scale: 1.2,
+          durationMs: 400,
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('counter animation preset mutation 완료 전에 generation이 바뀌면 성공으로 응답하지 않는다', async () => {
+    let finish!: (value: unknown) => void;
+    mocks.deleteCounterAnimation.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    mocks.requestListener?.(
+      envelope('counterAnimation:deletePreset', { id: 'preset-a' }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.deleteCounterAnimation).toHaveBeenCalledOnce(),
+    );
+
+    mocks.authorityGeneration = 8;
+    finish({ success: true, id: 'preset-a' });
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it.each([
+    ['counterAnimation:updatePreset', { request: { id: 'a' } }],
+    [
+      'counterAnimation:updatePreset',
+      {
+        request: {
+          id: 'a',
+          name: 'A',
+          bezier: [0, 0, 1, 1],
+          scale: 1,
+          durationMs: 300,
+        },
+        extra: true,
+      },
+    ],
+    ['counterAnimation:deletePreset', { id: '' }],
+    ['counterAnimation:deletePreset', { id: 'a', extra: true }],
+  ])(
+    '%s invalid descriptor를 main API 전에 거절한다',
+    async (operation, payload) => {
+      mocks.requestListener?.(envelope(operation, payload));
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: false });
+      expect(mocks.updateCounterAnimation).not.toHaveBeenCalled();
+      expect(mocks.deleteCounterAnimation).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     [{ noteEffectEnabled: false }],

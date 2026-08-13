@@ -152,6 +152,7 @@ interface EditorElementPropertyValuesV1 {
   soundPath: string;
   inactiveImage: string;
   activeImage: string;
+  counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
   useInlineStyles: boolean;
   fontWeight: number;
   fontItalic: boolean;
@@ -192,6 +193,17 @@ export type EditorInactiveImagePropertyPatchV1 =
 
 export type EditorActiveImagePropertyPatchV1 =
   EditorPropertyPatchUnionV1<'activeImage'>;
+
+export interface EditorCounterAnimationPresetIntentV1 {
+  presetId: string;
+  applyPresetId?: true;
+  bezier?: [number, number, number, number];
+  scale?: number;
+  durationMs?: number;
+}
+
+export type EditorCounterAnimationPresetPropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'counterAnimationPreset'>;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'fontWeight' | 'fontItalic' | 'fontUnderline' | 'fontStrikethrough'
@@ -962,6 +974,65 @@ export function assertEditorOpsV1(
       }
       assertUniqueDirectTarget(op.id, opLabel);
       const patchKeys = Object.keys(op.patch);
+      const counterAnimationPreset = op.patch.counterAnimationPreset;
+      const counterAnimationPresetValid = (() => {
+        if (!isRecord(counterAnimationPreset)) return false;
+        const keys = Object.keys(counterAnimationPreset);
+        if (
+          !keys.includes('presetId') ||
+          keys.some(
+            (key) =>
+              ![
+                'presetId',
+                'applyPresetId',
+                'bezier',
+                'scale',
+                'durationMs',
+              ].includes(key),
+          ) ||
+          typeof counterAnimationPreset.presetId !== 'string' ||
+          counterAnimationPreset.presetId.length === 0
+        ) {
+          return false;
+        }
+        if (
+          'applyPresetId' in counterAnimationPreset &&
+          counterAnimationPreset.applyPresetId !== true
+        ) {
+          return false;
+        }
+        if (
+          'bezier' in counterAnimationPreset &&
+          (!Array.isArray(counterAnimationPreset.bezier) ||
+            counterAnimationPreset.bezier.length !== 4 ||
+            !counterAnimationPreset.bezier.every(
+              (value, index) =>
+                typeof value === 'number' &&
+                Number.isFinite(value) &&
+                (index === 0 || index === 2
+                  ? value >= 0 && value <= 1
+                  : value >= -2 && value <= 2),
+            ))
+        ) {
+          return false;
+        }
+        if (
+          'scale' in counterAnimationPreset &&
+          (typeof counterAnimationPreset.scale !== 'number' ||
+            !Number.isFinite(counterAnimationPreset.scale))
+        ) {
+          return false;
+        }
+        if (
+          'durationMs' in counterAnimationPreset &&
+          (!Number.isSafeInteger(counterAnimationPreset.durationMs) ||
+            (counterAnimationPreset.durationMs as number) < 1 ||
+            (counterAnimationPreset.durationMs as number) > 5000)
+        ) {
+          return false;
+        }
+        return true;
+      })();
       const patchIsValid =
         (patchKeys.length === 1 &&
           patchKeys[0] === 'hidden' &&
@@ -1016,6 +1087,10 @@ export function assertEditorOpsV1(
           patchKeys[0] === 'activeImage' &&
           (op.elementType === 'key' || op.elementType === 'knob') &&
           typeof op.patch.activeImage === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterAnimationPreset' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          counterAnimationPresetValid) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'useInlineStyles' &&
           typeof op.patch.useInlineStyles === 'boolean') ||

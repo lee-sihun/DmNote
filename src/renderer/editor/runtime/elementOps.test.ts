@@ -63,6 +63,7 @@ import {
   patchKnobAxisIdById,
   patchSoundPathById,
   patchSoundPathByIds,
+  patchCounterAnimationPresetByTargets,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -2520,6 +2521,123 @@ describe('elementOps', () => {
       false,
     );
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('counter animation preset은 지정 leaf만 eager/wire에 적용하고 raw counter sibling을 보존한다', async () => {
+    const rawCounter = {
+      ...createDefaultKeyPosition().counter,
+      fontFamily: null,
+      customSentinel: 'keep-raw',
+      animation: {
+        ...createDefaultKeyPosition().counter.animation,
+        enabled: false,
+        presetId: 'preset-old',
+        scale: 1.1,
+      },
+    };
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), counter: rawCounter }, keyAt(ID_B)],
+      },
+      positions: {
+        '4key': [{ ...keyAt(ID_A), counter: rawCounter }, keyAt(ID_B)],
+      },
+    });
+
+    await patchCounterAnimationPresetByTargets(
+      [{ elementType: 'key', id: ID_A }],
+      { presetId: 'preset-new', applyPresetId: true, durationMs: 450 },
+    );
+
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: {
+            counterAnimationPreset: {
+              presetId: 'preset-new',
+              applyPresetId: true,
+              durationMs: 450,
+            },
+          },
+        },
+      ],
+      expect.anything(),
+    );
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter,
+    ).toMatchObject({
+      fontFamily: null,
+      customSentinel: 'keep-raw',
+      animation: {
+        enabled: false,
+        presetId: 'preset-new',
+        scale: 1.1,
+        durationMs: 450,
+      },
+    });
+  });
+
+  it('single edit preset intent는 외부가 바꾼 fresh presetId를 보존한다', async () => {
+    const current = keyAt(ID_A);
+    current.counter = {
+      ...current.counter,
+      animation: {
+        ...current.counter.animation,
+        presetId: 'preset-c',
+        scale: 2,
+      },
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [current, keyAt(ID_B)] },
+      positions: { '4key': [current, keyAt(ID_B)] },
+    });
+
+    await patchCounterAnimationPresetByTargets(
+      [{ elementType: 'key', id: ID_A }],
+      { presetId: 'preset-a', scale: 1.4 },
+    );
+
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter.animation,
+    ).toMatchObject({ presetId: 'preset-c', scale: 1.4 });
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        expect.objectContaining({
+          patch: {
+            counterAnimationPreset: {
+              presetId: 'preset-a',
+              scale: 1.4,
+            },
+          },
+        }),
+      ],
+      expect.anything(),
+    );
+  });
+
+  it('counter animation batch는 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
+    const intent = { presetId: 'preset-a' };
+    await expect(
+      patchCounterAnimationPresetByTargets([], intent),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterAnimationPresetByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'stat', id: ID_A },
+        ],
+        intent,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterAnimationPresetByTargets(
+        [{ elementType: 'key', id: 'key-0' }],
+        intent,
+      ),
+    ).resolves.toBe(false);
   });
 
   it('inactiveImage는 raw string을 single과 혼합 4타입 한 commit으로 보낸다', async () => {

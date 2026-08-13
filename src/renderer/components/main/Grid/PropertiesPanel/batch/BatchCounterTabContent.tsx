@@ -1,9 +1,9 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyCounterSettings } from '@src/types/key/keys';
-import { normalizeCounterSettings } from '@src/types/key/keys';
-import { applyAnimationIntentMask } from '@src/types/key/counterAnimation';
-import { applyElementPatchesById } from '@src/renderer/editor/runtime/elementPatch';
+import { createCounterAnimationPresetIntent } from '@src/types/key/counterAnimation';
+import { patchCounterAnimationPresetByTargets } from '@src/renderer/editor/runtime/elementOps';
+import { patchCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   LEGACY_BATCH_ELEMENT_BINDING,
@@ -82,18 +82,23 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
     nextAnimation: KeyCounterSettings['animation'],
   ) => {
     if (animationBinding.binding === 'element-id') {
-      applyElementPatchesById(animationBinding.selection, (current) => {
-        const settings = normalizeCounterSettings(current.counter);
-        return {
-          counter: {
-            ...settings,
-            animation: applyAnimationIntentMask(
-              settings.animation,
-              nextAnimation,
-            ),
-          },
-        };
-      }).catch(reportElementOpError);
+      const targets = (['key', 'stat'] as const).flatMap((elementType) =>
+        (animationBinding.selection[elementType] ?? []).map((id) => ({
+          elementType,
+          id,
+        })),
+      );
+      if (targets.length === 0) return;
+      const intent = createCounterAnimationPresetIntent(
+        batchCounterSettings.animation,
+        nextAnimation,
+        'batch',
+      );
+      const persisted =
+        window.__dmn_window_type === 'panel'
+          ? patchCounterAnimationPresetViaAuthority(targets, intent)
+          : patchCounterAnimationPresetByTargets(targets, intent);
+      void persisted.catch(reportElementOpError);
       return;
     }
     handleBatchCounterUpdate({ animation: nextAnimation });

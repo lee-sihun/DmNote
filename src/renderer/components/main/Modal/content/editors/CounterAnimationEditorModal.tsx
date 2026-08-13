@@ -32,6 +32,7 @@ import {
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
 import { counterAnimationApi } from '@api/modules/resourceApi';
+import { updateCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
 
 type EditorMode = 'create' | 'edit';
 
@@ -870,11 +871,18 @@ const CounterAnimationEditorModal = ({
     try {
       const response =
         mode === 'edit' && initialPreset
-          ? await counterAnimationApi.update({
-              id: initialPreset.id,
-              ...requestBase,
-            })
+          ? window.__dmn_window_type === 'panel'
+            ? await updateCounterAnimationPresetViaAuthority({
+                id: initialPreset.id,
+                ...requestBase,
+              })
+            : await counterAnimationApi.update({
+                id: initialPreset.id,
+                ...requestBase,
+              })
           : await counterAnimationApi.create(requestBase);
+
+      if (!response) throw new Error('counter animation update failed');
 
       onSaved({
         preset: response.preset,

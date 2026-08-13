@@ -47,4 +47,37 @@ describe('legacy mutation 라우팅', () => {
     expect(routing.exclusive).not.toHaveBeenCalled();
     expect(routing.legacy).toHaveBeenCalledTimes(1);
   });
+
+  it('counter animation preflight는 배타 슬롯 안 invoke 직전에 실행된다', async () => {
+    const preflight = vi.fn();
+    let run: (() => Promise<unknown>) | undefined;
+    routing.exclusive.mockImplementationOnce(async (mutation) => {
+      run = mutation;
+      return null;
+    });
+
+    await counterAnimationApi.update({} as never, { preflight });
+    expect(preflight).not.toHaveBeenCalled();
+    expect(routing.invoke).not.toHaveBeenCalled();
+
+    await run?.();
+    expect(preflight).toHaveBeenCalledOnce();
+    expect(routing.invoke).toHaveBeenCalledOnce();
+  });
+
+  it('counter animation preflight 실패는 update/delete invoke를 막는다', async () => {
+    function preflight(): never {
+      throw new Error('stale generation');
+    }
+
+    for (const call of [
+      () => counterAnimationApi.update({} as never, { preflight }),
+      () => counterAnimationApi.remove('id', { preflight }),
+    ]) {
+      vi.clearAllMocks();
+      await expect(call()).rejects.toThrow('stale generation');
+      expect(routing.exclusive).toHaveBeenCalledOnce();
+      expect(routing.invoke).not.toHaveBeenCalled();
+    }
+  });
 });

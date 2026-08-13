@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     commands::editor::state::{emit_best_effort, publish_editor_change},
-    errors::{CmdResult, CommandError},
+    errors::{CmdResult, CommandError, EditorCommitError},
     models::{
         default_counter_animation_builtin_presets, default_counter_animation_preset_id,
         find_builtin_counter_animation_preset_by_id, CommittedEditorChange, CounterAnimationPreset,
@@ -148,13 +148,7 @@ pub fn counter_animation_update(
             ],
             admission,
             |store| {
-                if let Some(item) = store
-                    .counter_animation_presets
-                    .iter_mut()
-                    .find(|item| item.id == target_id)
-                {
-                    *item = next_preset.clone();
-                }
+                replace_counter_animation_preset(store, &target_id, &next_preset)?;
 
                 let affected_usage_count =
                     apply_preset_to_bound_counters(store, &target_id, &next_preset);
@@ -218,9 +212,7 @@ pub fn counter_animation_delete(
             ],
             admission,
             |store| {
-                store
-                    .counter_animation_presets
-                    .retain(|preset| preset.id != target_id);
+                remove_counter_animation_preset(store, &target_id)?;
 
                 let affected_usage_count =
                     apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
@@ -352,6 +344,42 @@ fn apply_fallback_to_bound_counters(
     apply_preset_to_bound_counters(store, preset_id, fallback)
 }
 
+fn replace_counter_animation_preset(
+    store: &mut crate::models::AppStoreData,
+    preset_id: &str,
+    replacement: &CounterAnimationPreset,
+) -> Result<(), EditorCommitError> {
+    let Some(item) = store
+        .counter_animation_presets
+        .iter_mut()
+        .find(|item| item.id == preset_id)
+    else {
+        return Err(EditorCommitError::validation(
+            "COUNTER_ANIMATION_PRESET_NOT_FOUND",
+            format!("counter animation preset not found: {preset_id}"),
+        ));
+    };
+    item.clone_from(replacement);
+    Ok(())
+}
+
+fn remove_counter_animation_preset(
+    store: &mut crate::models::AppStoreData,
+    preset_id: &str,
+) -> Result<(), EditorCommitError> {
+    let before = store.counter_animation_presets.len();
+    store
+        .counter_animation_presets
+        .retain(|preset| preset.id != preset_id);
+    if store.counter_animation_presets.len() == before {
+        return Err(EditorCommitError::validation(
+            "COUNTER_ANIMATION_PRESET_NOT_FOUND",
+            format!("counter animation preset not found: {preset_id}"),
+        ));
+    }
+    Ok(())
+}
+
 fn update_counter_animation_if_bound(
     counter: &mut crate::models::KeyCounterSettings,
     preset_id: &str,
@@ -378,7 +406,10 @@ fn update_counter_animation_if_bound(
 
 #[cfg(test)]
 mod tests {
-    use super::apply_preset_to_bound_counters;
+    use super::{
+        apply_preset_to_bound_counters, remove_counter_animation_preset,
+        replace_counter_animation_preset,
+    };
     use crate::models::{
         AppStoreData, CounterAnimationPreset, CounterAnimationSource, EditorDocumentV1,
         EditorField, GraphPosition, GraphStatType, GraphType, KeyPosition, StatPosition, StatType,
@@ -503,5 +534,35 @@ mod tests {
             before.changed_fields(&after),
             vec![EditorField::StatPositions]
         );
+    }
+
+    #[test]
+    fn preset_update_and_delete_recheck_existence_inside_the_transaction() {
+        let replacement = target_preset();
+        let mut store = counter_store(true, true, true);
+        let before = store.clone();
+
+        let update_error =
+            replace_counter_animation_preset(&mut store, TARGET_PRESET_ID, &replacement)
+                .unwrap_err();
+        assert_eq!(
+            update_error
+                .details
+                .as_ref()
+                .and_then(|details| details.validation_code.as_deref()),
+            Some("COUNTER_ANIMATION_PRESET_NOT_FOUND")
+        );
+        assert_eq!(store, before);
+
+        let delete_error =
+            remove_counter_animation_preset(&mut store, TARGET_PRESET_ID).unwrap_err();
+        assert_eq!(
+            delete_error
+                .details
+                .as_ref()
+                .and_then(|details| details.validation_code.as_deref()),
+            Some("COUNTER_ANIMATION_PRESET_NOT_FOUND")
+        );
+        assert_eq!(store, before);
     }
 }

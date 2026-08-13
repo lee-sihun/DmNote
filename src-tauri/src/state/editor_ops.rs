@@ -3,10 +3,11 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     errors::EditorCommitError,
     models::{
-        AppStoreData, EditorBoundsV1, EditorDocumentV1, EditorElementPropertyPatchV1,
-        EditorElementTypeV1, EditorField, EditorFrozenElementV1, EditorGroupUpdateV1,
-        EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorZUpdateV1, KeyPosition,
-        LayerGroupDef,
+        default_counter_animation_builtin_presets, AppStoreData, CounterAnimationPreset,
+        EditorBoundsV1, EditorCounterAnimationPresetIntentV1, EditorDocumentV1,
+        EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
+        EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorZUpdateV1,
+        KeyPosition, LayerGroupDef,
     },
 };
 
@@ -28,6 +29,82 @@ struct ElementLocation {
     element_type: EditorElementTypeV1,
     mode: String,
     index: usize,
+}
+
+fn current_counter_animation_preset(
+    store: &AppStoreData,
+    preset_id: &str,
+) -> Option<CounterAnimationPreset> {
+    let mut preset = store
+        .counter_animation_presets
+        .iter()
+        .find(|preset| preset.id == preset_id)
+        .cloned()
+        .or_else(|| {
+            default_counter_animation_builtin_presets()
+                .into_iter()
+                .find(|preset| preset.id == preset_id)
+        })?;
+    preset.normalize();
+    Some(preset)
+}
+
+fn validate_counter_animation_preset_patch(
+    store: &AppStoreData,
+    patch: &EditorCounterAnimationPresetIntentV1,
+) -> Result<(), EditorCommitError> {
+    if let Some(bezier) = patch.bezier {
+        let valid = bezier.iter().enumerate().all(|(index, value)| {
+            value.is_finite()
+                && if matches!(index, 0 | 2) {
+                    (0.0..=1.0).contains(value)
+                } else {
+                    (-2.0..=2.0).contains(value)
+                }
+        });
+        if !valid {
+            return Err(EditorCommitError::validation(
+                "INVALID_COUNTER_ANIMATION_PRESET_VALUE",
+                "counter animation bezier values are out of range",
+            ));
+        }
+    }
+    if patch.scale.is_some_and(|value| !value.is_finite()) {
+        return Err(EditorCommitError::validation(
+            "INVALID_COUNTER_ANIMATION_PRESET_VALUE",
+            "counter animation scale must be finite",
+        ));
+    }
+    if patch
+        .duration_ms
+        .is_some_and(|value| !(1..=5000).contains(&value))
+    {
+        return Err(EditorCommitError::validation(
+            "INVALID_COUNTER_ANIMATION_PRESET_VALUE",
+            "counter animation duration must be between 1 and 5000 milliseconds",
+        ));
+    }
+    let preset = current_counter_animation_preset(store, &patch.preset_id).ok_or_else(|| {
+        EditorCommitError::validation(
+            "COUNTER_ANIMATION_PRESET_NOT_FOUND",
+            format!("counter animation preset not found: {}", patch.preset_id),
+        )
+    })?;
+    if patch.bezier.is_some_and(|value| value != preset.bezier)
+        || patch.scale.is_some_and(|value| value != preset.scale)
+        || patch
+            .duration_ms
+            .is_some_and(|value| value != preset.duration_ms)
+    {
+        return Err(EditorCommitError::validation(
+            "COUNTER_ANIMATION_PRESET_MISMATCH",
+            format!(
+                "counter animation preset values are stale: {}",
+                patch.preset_id
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn insert_location(
@@ -683,6 +760,22 @@ pub(crate) fn prepare_editor_ops_transition(
                         format!("editor op {op_index} active image target must be key or knob"),
                     ));
                 }
+            } else if let EditorElementPropertyPatchV1::CounterAnimationPreset(patch) = patch {
+                if !matches!(
+                    element_type,
+                    EditorElementTypeV1::Key | EditorElementTypeV1::Stat
+                ) {
+                    return Err(EditorCommitError::validation(
+                        "ELEMENT_TYPE_MISMATCH",
+                        format!(
+                            "editor op {op_index} counter animation target must be key or stat"
+                        ),
+                    ));
+                }
+                validate_counter_animation_preset_patch(
+                    current_store,
+                    &patch.counter_animation_preset,
+                )?;
             } else if matches!(
                 patch,
                 EditorElementPropertyPatchV1::SoundPath(_)
@@ -1000,6 +1093,37 @@ pub(crate) fn prepare_editor_ops_transition(
                             true
                         }
                     }
+                    EditorElementPropertyPatchV1::CounterAnimationPreset(patch) => {
+                        let patch = &patch.counter_animation_preset;
+                        let position = position_at_mut(&mut candidate, location)?;
+                        let animation = &mut position.counter.animation;
+                        let mut changed = false;
+                        if patch.apply_preset_id == Some(true)
+                            && animation.preset_id.as_deref() != Some(patch.preset_id.as_str())
+                        {
+                            animation.preset_id = Some(patch.preset_id.clone());
+                            changed = true;
+                        }
+                        if let Some(bezier) = patch.bezier {
+                            if animation.bezier != bezier {
+                                animation.bezier = bezier;
+                                changed = true;
+                            }
+                        }
+                        if let Some(scale) = patch.scale {
+                            if animation.scale != scale {
+                                animation.scale = scale;
+                                changed = true;
+                            }
+                        }
+                        if let Some(duration_ms) = patch.duration_ms {
+                            if animation.duration_ms != duration_ms {
+                                animation.duration_ms = duration_ms;
+                                changed = true;
+                            }
+                        }
+                        changed
+                    }
                     EditorElementPropertyPatchV1::StatType(patch) => {
                         let stat = candidate
                             .stat_positions
@@ -1165,7 +1289,8 @@ mod tests {
     use crate::{
         defaults::{default_keys, default_positions},
         models::{
-            AppStoreData, EditorElementPropertyPatchV1, EditorFrozenElementV1, EditorFrozenGroupV1,
+            AppStoreData, EditorCounterAnimationPresetPropertyPatchV1,
+            EditorElementPropertyPatchV1, EditorFrozenElementV1, EditorFrozenGroupV1,
             EditorFrozenKeySlotV1, EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpV1,
             EditorZUpdateV1, GraphPosition, GraphStatType, GraphType, KeyPosition, KnobPosition,
             StatPosition, StatType,
@@ -3132,6 +3257,256 @@ mod tests {
             assert!(store.key_positions["4key"]
                 .iter()
                 .all(|position| position.sound_path.is_none()));
+        }
+    }
+
+    #[test]
+    fn counter_animation_preset_patch_uses_current_library_and_preserves_unmasked_fields() {
+        let mut store = store_with_every_reorder_type();
+        let preset = CounterAnimationPreset {
+            id: "user-current".to_string(),
+            name: "Current".to_string(),
+            source: crate::models::CounterAnimationSource::User,
+            label_key: None,
+            bezier: [0.1, 0.2, 0.8, 0.9],
+            scale: 1.25,
+            duration_ms: 420,
+        };
+        store.counter_animation_presets.push(preset.clone());
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let missing_id = uuid::Uuid::new_v4().to_string();
+        {
+            let animation = &mut store.key_positions.get_mut("4key").unwrap()[0]
+                .counter
+                .animation;
+            animation.enabled = false;
+            animation.preset_id = Some("builtin-ease-out".to_string());
+            animation.bezier = [0.3, 0.4, 0.5, 0.6];
+            animation.scale = 0.75;
+            animation.duration_ms = 777;
+        }
+        let partial = EditorElementPropertyPatchV1::CounterAnimationPreset(
+            EditorCounterAnimationPresetPropertyPatchV1 {
+                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
+                    preset_id: preset.id.clone(),
+                    apply_preset_id: None,
+                    bezier: None,
+                    scale: Some(preset.scale),
+                    duration_ms: None,
+                },
+            },
+        );
+        let full = EditorElementPropertyPatchV1::CounterAnimationPreset(
+            EditorCounterAnimationPresetPropertyPatchV1 {
+                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
+                    preset_id: preset.id.clone(),
+                    apply_preset_id: Some(true),
+                    bezier: Some(preset.bezier),
+                    scale: Some(preset.scale),
+                    duration_ms: Some(preset.duration_ms),
+                },
+            },
+        );
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &key_id, partial.clone()),
+            patch_property_op(EditorElementTypeV1::Stat, &stat_id, full.clone()),
+            patch_property_op(EditorElementTypeV1::Key, &missing_id, full.clone()),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let key_animation = &transition.candidate.key_positions["4key"][0]
+            .counter
+            .animation;
+        assert!(!key_animation.enabled);
+        assert_eq!(key_animation.preset_id.as_deref(), Some("builtin-ease-out"));
+        assert_eq!(key_animation.bezier, [0.3, 0.4, 0.5, 0.6]);
+        assert_eq!(key_animation.scale, preset.scale);
+        assert_eq!(key_animation.duration_ms, 777);
+        let stat_animation = &transition.candidate.stat_positions["4key"][0]
+            .position
+            .counter
+            .animation;
+        assert_eq!(
+            stat_animation.preset_id.as_deref(),
+            Some(preset.id.as_str())
+        );
+        assert_eq!(stat_animation.bezier, preset.bezier);
+        assert_eq!(stat_animation.scale, preset.scale);
+        assert_eq!(stat_animation.duration_ms, preset.duration_ms);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let id_only = EditorElementPropertyPatchV1::CounterAnimationPreset(
+            EditorCounterAnimationPresetPropertyPatchV1 {
+                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
+                    preset_id: preset.id.clone(),
+                    apply_preset_id: None,
+                    bezier: None,
+                    scale: None,
+                    duration_ms: None,
+                },
+            },
+        );
+        prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                id_only,
+            )],
+        )
+        .unwrap();
+
+        let stale = EditorElementPropertyPatchV1::CounterAnimationPreset(
+            EditorCounterAnimationPresetPropertyPatchV1 {
+                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
+                    preset_id: preset.id.clone(),
+                    apply_preset_id: None,
+                    bezier: Some(preset.bezier),
+                    scale: Some(preset.scale + 0.01),
+                    duration_ms: Some(preset.duration_ms),
+                },
+            },
+        );
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[
+                ops[0].clone(),
+                patch_property_op(EditorElementTypeV1::Stat, &stat_id, stale),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(
+            validation_code(&error),
+            Some("COUNTER_ANIMATION_PRESET_MISMATCH")
+        );
+        assert_eq!(
+            store.key_positions["4key"][0]
+                .counter
+                .animation
+                .preset_id
+                .as_deref(),
+            Some("builtin-ease-out")
+        );
+
+        let missing_preset = EditorElementPropertyPatchV1::CounterAnimationPreset(
+            EditorCounterAnimationPresetPropertyPatchV1 {
+                counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
+                    preset_id: "user-deleted".to_string(),
+                    apply_preset_id: Some(true),
+                    bezier: None,
+                    scale: None,
+                    duration_ms: None,
+                },
+            },
+        );
+        let error = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                missing_preset,
+            )],
+        )
+        .unwrap_err();
+        assert_eq!(
+            validation_code(&error),
+            Some("COUNTER_ANIMATION_PRESET_NOT_FOUND")
+        );
+
+        for invalid in [
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: None,
+                bezier: Some([f64::NAN, 0.2, 0.8, 0.9]),
+                scale: None,
+                duration_ms: None,
+            },
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: None,
+                bezier: Some([-0.1, 0.2, 0.8, 0.9]),
+                scale: None,
+                duration_ms: None,
+            },
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: None,
+                bezier: None,
+                scale: Some(f64::INFINITY),
+                duration_ms: None,
+            },
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: None,
+                bezier: None,
+                scale: None,
+                duration_ms: Some(0),
+            },
+            EditorCounterAnimationPresetIntentV1 {
+                preset_id: preset.id.clone(),
+                apply_preset_id: None,
+                bezier: None,
+                scale: None,
+                duration_ms: Some(5001),
+            },
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &key_id,
+                    EditorElementPropertyPatchV1::CounterAnimationPreset(
+                        EditorCounterAnimationPresetPropertyPatchV1 {
+                            counter_animation_preset: invalid,
+                        },
+                    ),
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(
+                validation_code(&error),
+                Some("INVALID_COUNTER_ANIMATION_PRESET_VALUE")
+            );
+        }
+
+        for element_type in [EditorElementTypeV1::Graph, EditorElementTypeV1::Knob] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[patch_property_op(
+                    element_type,
+                    uuid::Uuid::new_v4().to_string(),
+                    full.clone(),
+                )],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
         }
     }
 

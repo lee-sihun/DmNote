@@ -54,6 +54,7 @@ import {
   commitBatchGeometryByIds,
   commitElementGeometryById,
   patchActiveImageByTargets,
+  patchCounterAnimationPresetByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
@@ -73,6 +74,7 @@ import type {
 } from '@src/renderer/editor/runtime/elementOps';
 import type {
   EditorElementPropertyPatchV1,
+  EditorCounterAnimationPresetIntentV1,
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
@@ -83,6 +85,7 @@ import type {
   LayerReorderAnchorsWire,
   LayerReorderIntentWire,
 } from './pluginElementActions';
+import { counterAnimationApi } from '@api/modules/resourceApi';
 
 const failure = (requestId: string, errorCode: string): PluginRpcResponse => ({
   protocolVersion: PLUGIN_RPC_PROTOCOL_VERSION,
@@ -96,12 +99,16 @@ const failure = (requestId: string, errorCode: string): PluginRpcResponse => ({
   },
 });
 
-const success = (requestId: string): PluginRpcResponse => ({
+const success = (
+  requestId: string,
+  payload?: Record<string, unknown>,
+): PluginRpcResponse => ({
   protocolVersion: PLUGIN_RPC_PROTOCOL_VERSION,
   requestId,
   authorityGeneration: getPluginAuthorityGeneration(),
   modelRevision: getPluginPanelModelRevision(),
   ok: true,
+  ...(payload ? { payload } : {}),
 });
 
 const asStringArray = (value: unknown): string[] | null =>
@@ -136,6 +143,111 @@ const isCanonicalGestureId = (value: unknown): value is string =>
   typeof value === 'string' &&
   new TextEncoder().encode(value).length <= MAX_GESTURE_ID_BYTES &&
   CANONICAL_UUID_PATTERN.test(value);
+
+const parseCounterAnimationPresetIntent = (
+  value: unknown,
+): EditorCounterAnimationPresetIntentV1 | null => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const intent = value as Record<string, unknown>;
+  const keys = Object.keys(intent);
+  if (
+    !keys.includes('presetId') ||
+    keys.some(
+      (key) =>
+        ![
+          'presetId',
+          'applyPresetId',
+          'bezier',
+          'scale',
+          'durationMs',
+        ].includes(key),
+    ) ||
+    typeof intent.presetId !== 'string' ||
+    intent.presetId.length === 0
+  ) {
+    return null;
+  }
+  if ('applyPresetId' in intent && intent.applyPresetId !== true) return null;
+  if (
+    'bezier' in intent &&
+    (!Array.isArray(intent.bezier) ||
+      intent.bezier.length !== 4 ||
+      !intent.bezier.every(
+        (entry, index) =>
+          typeof entry === 'number' &&
+          Number.isFinite(entry) &&
+          (index === 0 || index === 2
+            ? entry >= 0 && entry <= 1
+            : entry >= -2 && entry <= 2),
+      ))
+  ) {
+    return null;
+  }
+  if (
+    'scale' in intent &&
+    (typeof intent.scale !== 'number' || !Number.isFinite(intent.scale))
+  ) {
+    return null;
+  }
+  if (
+    'durationMs' in intent &&
+    (!Number.isSafeInteger(intent.durationMs) ||
+      (intent.durationMs as number) < 1 ||
+      (intent.durationMs as number) > 5000)
+  ) {
+    return null;
+  }
+  return intent as unknown as EditorCounterAnimationPresetIntentV1;
+};
+
+const parseCounterAnimationUpdateRequest = (
+  payload: Record<string, unknown>,
+):
+  | import('@src/types/key/counterAnimation').CounterAnimationUpdateRequest
+  | null => {
+  if (!hasExactKeys(payload, ['request'])) return null;
+  const value = payload.request;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const request = value as Record<string, unknown>;
+  if (
+    !hasExactKeys(request, ['id', 'name', 'bezier', 'scale', 'durationMs']) ||
+    typeof request.id !== 'string' ||
+    request.id.trim().length === 0 ||
+    typeof request.name !== 'string' ||
+    request.name.trim().length === 0 ||
+    !Array.isArray(request.bezier) ||
+    request.bezier.length !== 4 ||
+    !request.bezier.every(
+      (entry, index) =>
+        typeof entry === 'number' &&
+        Number.isFinite(entry) &&
+        (index === 0 || index === 2
+          ? entry >= 0 && entry <= 1
+          : entry >= -2 && entry <= 2),
+    ) ||
+    typeof request.scale !== 'number' ||
+    !Number.isFinite(request.scale) ||
+    !Number.isSafeInteger(request.durationMs) ||
+    (request.durationMs as number) < 1 ||
+    (request.durationMs as number) > 5000
+  ) {
+    return null;
+  }
+  return request as unknown as import('@src/types/key/counterAnimation').CounterAnimationUpdateRequest;
+};
+
+const parseCounterAnimationDeleteRequest = (
+  payload: Record<string, unknown>,
+): string | null =>
+  hasExactKeys(payload, ['id']) &&
+  typeof payload.id === 'string' &&
+  payload.id.trim().length > 0
+    ? payload.id
+    : null;
 
 const parseLayerDeleteTargets = (
   payload: Record<string, unknown>,
@@ -218,6 +330,9 @@ const parseNativeLayerPropertyTarget = (
     return null;
   }
   const patch = target.patch as Record<string, unknown>;
+  const counterAnimationPreset = parseCounterAnimationPresetIntent(
+    patch.counterAnimationPreset,
+  );
   const patchValid =
     (hasExactKeys(patch, ['hidden']) && typeof patch.hidden === 'boolean') ||
     (hasExactKeys(patch, ['layerName']) &&
@@ -248,6 +363,9 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['activeImage']) &&
       (target.elementType === 'key' || target.elementType === 'knob') &&
       typeof patch.activeImage === 'string') ||
+    (hasExactKeys(patch, ['counterAnimationPreset']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      counterAnimationPreset !== null) ||
     (hasExactKeys(patch, ['useInlineStyles']) &&
       typeof patch.useInlineStyles === 'boolean') ||
     (hasExactKeys(patch, ['fontWeight']) &&
@@ -480,6 +598,11 @@ type NativeLayerPropertyRequest =
       activeImage: string;
     }
   | {
+      kind: 'counterAnimationPresetBatch';
+      targets: Array<{ elementType: 'key' | 'stat'; id: string }>;
+      intent: EditorCounterAnimationPresetIntentV1;
+    }
+  | {
       kind: 'notePropertyBatch';
       ids: string[];
       patch: EditorNotePropertyPatchV1;
@@ -587,6 +710,9 @@ const parseNativeLayerPropertyRequest = (
     typeof patch.activeImage === 'string'
       ? patch.activeImage
       : null;
+  const counterAnimationPreset = hasExactKeys(patch, ['counterAnimationPreset'])
+    ? parseCounterAnimationPresetIntent(patch.counterAnimationPreset)
+    : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
     typeof patch.noteEffectEnabled === 'boolean'
@@ -624,6 +750,7 @@ const parseNativeLayerPropertyRequest = (
     inactiveImage === null &&
     soundPath === null &&
     activeImage === null &&
+    counterAnimationPreset === null &&
     notePropertyPatch === null
   ) {
     return null;
@@ -638,6 +765,8 @@ const parseNativeLayerPropertyRequest = (
       ? 'key'
       : activeImage !== null
       ? 'active-capable'
+      : counterAnimationPreset !== null
+      ? 'counter-capable'
       : notePropertyPatch !== null
       ? 'key'
       : knobRuntimePatch === null
@@ -662,8 +791,12 @@ const parseNativeLayerPropertyRequest = (
       (elementType === 'active-capable' &&
         target.elementType !== 'key' &&
         target.elementType !== 'knob') ||
+      (elementType === 'counter-capable' &&
+        target.elementType !== 'key' &&
+        target.elementType !== 'stat') ||
       (elementType !== null &&
         elementType !== 'active-capable' &&
+        elementType !== 'counter-capable' &&
         target.elementType !== elementType) ||
       typeof target.id !== 'string' ||
       target.id.trim().length === 0 ||
@@ -699,6 +832,16 @@ const parseNativeLayerPropertyRequest = (
       kind: 'activeImageBatch',
       targets: targets as Array<{ elementType: 'key' | 'knob'; id: string }>,
       activeImage,
+    };
+  }
+  if (counterAnimationPreset !== null) {
+    return {
+      kind: 'counterAnimationPresetBatch',
+      targets: targets as Array<{
+        elementType: 'key' | 'stat';
+        id: string;
+      }>,
+      intent: counterAnimationPreset,
     };
   }
   if (notePropertyPatch !== null) {
@@ -1358,6 +1501,66 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
     return;
   }
 
+  if (
+    envelope.operation === PLUGIN_RPC_OPERATIONS.updateCounterAnimationPreset ||
+    envelope.operation === PLUGIN_RPC_OPERATIONS.deleteCounterAnimationPreset
+  ) {
+    const updateRequest =
+      envelope.operation === PLUGIN_RPC_OPERATIONS.updateCounterAnimationPreset
+        ? parseCounterAnimationUpdateRequest(envelope.payload)
+        : null;
+    const deleteId =
+      envelope.operation === PLUGIN_RPC_OPERATIONS.deleteCounterAnimationPreset
+        ? parseCounterAnimationDeleteRequest(envelope.payload)
+        : null;
+    if (updateRequest === null && deleteId === null) {
+      respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
+      return;
+    }
+    const requestGeneration = envelope.authorityGeneration;
+    const generationLive = () =>
+      requestGeneration === getPluginAuthorityGeneration();
+    if (!generationLive()) {
+      respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+      return;
+    }
+    const options = {
+      preflight: () => {
+        if (!generationLive()) {
+          throw new Error('plugin authority generation changed');
+        }
+      },
+    };
+    const persisted = updateRequest
+      ? counterAnimationApi.update(updateRequest, options)
+      : counterAnimationApi.remove(deleteId!, options);
+    void persisted
+      .then((result) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        flushPluginPanelModelSyncNow();
+        respond(
+          success(
+            envelope.requestId,
+            structuredClone(result) as unknown as Record<string, unknown>,
+          ),
+        );
+      })
+      .catch((error) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        console.error('Failed to mutate counter animation preset', error);
+        respond(
+          failure(envelope.requestId, 'COUNTER_ANIMATION_MUTATION_FAILED'),
+        );
+      });
+    return;
+  }
+
   if (envelope.operation === PLUGIN_RPC_OPERATIONS.patchLayerProperty) {
     const request = parseNativeLayerPropertyRequest(envelope.payload);
     if (!request) {
@@ -1380,6 +1583,18 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
     };
     const persisted = (() => {
       if (request.kind === 'single') {
+        if ('counterAnimationPreset' in request.target.patch) {
+          return patchCounterAnimationPresetByTargets(
+            [
+              {
+                elementType: request.target.elementType as 'key' | 'stat',
+                id: request.target.id,
+              },
+            ],
+            request.target.patch.counterAnimationPreset,
+            options,
+          );
+        }
         return patchElementPropertyById(
           request.target.elementType,
           request.target.id,
@@ -1427,6 +1642,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
         return patchActiveImageByTargets(
           request.targets,
           request.activeImage,
+          options,
+        );
+      }
+      if (request.kind === 'counterAnimationPresetBatch') {
+        return patchCounterAnimationPresetByTargets(
+          request.targets,
+          request.intent,
           options,
         );
       }

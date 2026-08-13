@@ -44,6 +44,7 @@ import {
   patchNativeLayerBoundsViaAuthority,
   patchNotePropertiesViaAuthority,
   patchSoundPathViaAuthority,
+  patchCounterAnimationPresetViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -64,6 +65,7 @@ import type {
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
   EditorElementTypeV1,
+  EditorCounterAnimationPresetIntentV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
@@ -93,6 +95,7 @@ import {
   patchFontFamilyByTargets,
   patchInactiveImageById,
   patchSoundPathById,
+  patchCounterAnimationPresetById,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -2113,6 +2116,25 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableCounterAnimationPresetHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (intent: EditorCounterAnimationPresetIntentV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterAnimationPresetViaAuthority(
+                  [{ elementType, id }],
+                  intent,
+                )
+              : patchCounterAnimationPresetById(elementType, id, intent);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter animation preset', error);
+          });
+        }
+      : undefined;
+
   // ============================================================================
   // 다중 선택 헬퍼 함수들
   // ============================================================================
@@ -3672,6 +3694,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? stableSoundPathHandler(selectedKeyElements[0]?.id)
             : undefined
         }
+        onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
         handleGeometryCommit={stableGeometryHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
