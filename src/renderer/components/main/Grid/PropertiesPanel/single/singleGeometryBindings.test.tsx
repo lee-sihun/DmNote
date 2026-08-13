@@ -57,12 +57,20 @@ vi.mock('../PropertyInputs', () => ({
   PropertyRow: ({ children }: { children: React.ReactNode }) => children,
   PropertySection: ({ children }: { children: React.ReactNode }) => children,
   NumberInput: (props: {
-    prefix: string;
+    prefix?: string;
+    suffix?: string;
+    max?: number;
+    min?: number;
     onChange: (value: number) => void;
     onBlur?: (value?: number) => void;
     onPreview?: (value: number) => void;
   }) => {
-    captured.numbers.set(props.prefix, props);
+    captured.numbers.set(
+      !props.prefix && props.suffix === 'px' && props.max === 9999
+        ? 'counter-gap'
+        : props.prefix ?? props.suffix ?? '',
+      props as never,
+    );
     return null;
   },
   TextInput: () => null,
@@ -236,6 +244,40 @@ describe('single geometry input bindings', () => {
     },
   );
 
+  it.each(['key', 'stat'] as const)(
+    '%s counter layout 4 입력은 exact one-leaf callback만 호출한다',
+    (type) => {
+      const layout = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <CounterTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            isStat={type === 'stat'}
+            onKeyUpdate={legacy}
+            onCounterLayoutCommit={layout}
+            t={(key) => key}
+          />,
+        );
+      });
+
+      act(() => captured.dropdowns[0]?.onChange('outside'));
+      act(() => captured.dropdowns[1]?.onChange('right'));
+      act(() => captured.dropdowns[2]?.onChange('between'));
+      const gap = captured.numbers.get('counter-gap');
+      expect(gap).toMatchObject({ min: 0, max: 9999 });
+      act(() => gap?.onChange(9999));
+      expect(layout.mock.calls).toEqual([
+        [{ counterPlacement: 'outside' }],
+        [{ counterAlign: 'right' }],
+        [{ counterAlignMode: 'between' }],
+        [{ counterGap: 9999 }],
+      ]);
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
   it('key StyleTab SoundPicker select와 clear는 exact callback으로 raw path를 전달한다', () => {
     const commit = vi.fn();
     const legacy = vi.fn();
@@ -268,6 +310,66 @@ describe('single geometry input bindings', () => {
 
     expect(commit.mock.calls).toEqual([['  sounds/raw.wav  '], ['']]);
     expect(legacy).not.toHaveBeenCalled();
+  });
+
+  it('key StyleTab soundEnabled 토글은 exact callback만 호출한다', () => {
+    const commit = vi.fn();
+    const legacy = vi.fn();
+    const preview = vi.fn();
+    act(() => {
+      root.render(
+        <StyleTabContent
+          keyIndex={0}
+          keyPosition={{
+            ...createDefaultKeyPosition(),
+            soundEnabled: false,
+          }}
+          keyCode="A"
+          keyInfo={null}
+          onPositionChange={vi.fn()}
+          onKeyUpdate={legacy}
+          onKeyPreview={preview}
+          onSoundEnabledCommit={commit}
+          showSoundControls
+          panelElement={null}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    act(() => captured.checkboxes.at(-1)?.onChange());
+    expect(commit).toHaveBeenCalledWith(true);
+    expect(preview).not.toHaveBeenCalled();
+    expect(legacy).not.toHaveBeenCalled();
+  });
+
+  it('key StyleTab soundEnabled callback이 없으면 preview와 index legacy를 유지한다', () => {
+    const legacy = vi.fn();
+    const preview = vi.fn();
+    act(() => {
+      root.render(
+        <StyleTabContent
+          keyIndex={3}
+          keyPosition={{
+            ...createDefaultKeyPosition(),
+            id: 'key-3',
+            soundEnabled: false,
+          }}
+          keyCode="A"
+          keyInfo={null}
+          onPositionChange={vi.fn()}
+          onKeyUpdate={legacy}
+          onKeyPreview={preview}
+          showSoundControls
+          panelElement={null}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    act(() => captured.checkboxes.at(-1)?.onChange());
+    expect(preview).toHaveBeenCalledWith(3, { soundEnabled: true });
+    expect(legacy).toHaveBeenCalledWith({ index: 3, soundEnabled: true });
   });
 
   it('synthetic key SoundPicker select와 clear는 기존 index writer를 유지한다', () => {
@@ -323,6 +425,7 @@ describe('single geometry input bindings', () => {
     });
 
     expect(captured.sound).toBeNull();
+    expect(captured.checkboxes).toHaveLength(0);
   });
 
   it.each(['key', 'stat'] as const)(

@@ -44,9 +44,11 @@ import {
   patchNativeLayerBoundsViaAuthority,
   patchNotePropertiesViaAuthority,
   patchSoundPathViaAuthority,
+  patchSoundEnabledViaAuthority,
   patchCounterAnimationEnabledViaAuthority,
   patchCounterAnimationPresetViaAuthority,
   patchCounterEnabledViaAuthority,
+  patchCounterLayoutViaAuthority,
   patchUseInlineStylesViaAuthority,
   updatePluginElement,
 } from '@plugins/rpc/pluginElementActions';
@@ -68,6 +70,7 @@ import type {
   EditorNotePropertyPatchV1,
   EditorElementTypeV1,
   EditorCounterAnimationPresetIntentV1,
+  EditorCounterLayoutPropertyPatchV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
@@ -97,9 +100,11 @@ import {
   patchFontFamilyByTargets,
   patchInactiveImageById,
   patchSoundPathById,
+  patchSoundEnabledById,
   patchCounterAnimationEnabledById,
   patchCounterAnimationPresetById,
   patchCounterEnabledById,
+  patchCounterLayoutById,
   patchFontStyleById,
   patchFontStyleByTargets,
   patchGraphColorById,
@@ -2120,6 +2125,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableSoundEnabledHandler = (id: string | undefined) =>
+    id && !isSyntheticElementId(id)
+      ? (soundEnabled: boolean) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchSoundEnabledViaAuthority([id], soundEnabled)
+              : patchSoundEnabledById(id, soundEnabled);
+          void persisted.catch((error) => {
+            console.error('Failed to update sound enabled', error);
+          });
+        }
+      : undefined;
+
   const stableCounterAnimationPresetHandler = (
     elementType: 'key' | 'stat',
     id: string | undefined,
@@ -2170,6 +2188,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               : patchCounterAnimationEnabledById(elementType, id, enabled);
           void persisted.catch((error) => {
             console.error('Failed to update counter animation enabled', error);
+          });
+        }
+      : undefined;
+
+  const stableCounterLayoutHandler = (
+    elementType: 'key' | 'stat',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (patch: EditorCounterLayoutPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchCounterLayoutViaAuthority([{ elementType, id }], patch)
+              : patchCounterLayoutById(elementType, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update counter layout', error);
           });
         }
       : undefined;
@@ -3733,6 +3767,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? stableSoundPathHandler(selectedKeyElements[0]?.id)
             : undefined
         }
+        onSoundEnabledCommit={
+          isSingleKey
+            ? stableSoundEnabledHandler(selectedKeyElements[0]?.id)
+            : undefined
+        }
         onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
@@ -3746,6 +3785,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             : selectedKeyElements[0]?.id,
         )}
         onCounterAnimationEnabledCommit={stableCounterAnimationEnabledHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onCounterLayoutCommit={stableCounterLayoutHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

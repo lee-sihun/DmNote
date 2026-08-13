@@ -9313,6 +9313,156 @@ mod tests {
     }
 
     #[test]
+    fn sound_enabled_batch_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-sound-enabled-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut document = store.editor_get().document;
+        let mut first = document.key_positions["4key"][0].clone();
+        first.sound_enabled = None;
+        first.sound_path = Some("sounds/sibling.wav".to_string());
+        first.sound_volume = Some(137.5);
+        first.inactive_image = Some("idle-sibling.png".to_string());
+        first.active_image = Some("active-sibling.png".to_string());
+        first.counter.enabled = false;
+        let second_id = document.key_positions["4key"][1].id.clone();
+        document.key_positions.get_mut("4key").unwrap()[0] = first.clone();
+        document.key_positions.get_mut("4key").unwrap()[1] = KeyPosition {
+            id: second_id.clone(),
+            sound_enabled: Some(false),
+            ..first.clone()
+        };
+        let setup = store
+            .commit_editor_document(editor_request(
+                0,
+                uuid::Uuid::new_v4().to_string(),
+                EditorPatchV1 {
+                    schema_version: EDITOR_COMMIT_SCHEMA_VERSION_V2,
+                    keys: Some(document.keys),
+                    key_positions: Some(document.key_positions),
+                    ..EditorPatchV1::default()
+                },
+            ))
+            .unwrap();
+        let patch = EditorElementPropertyPatchV1::SoundEnabled(
+            crate::models::EditorSoundEnabledPropertyPatchV1 {
+                sound_enabled: false,
+            },
+        );
+        let targets = [first.id, second_id];
+        let ops = targets
+            .iter()
+            .map(|id| patch_property_op(EditorElementTypeV1::Key, id, patch.clone()))
+            .chain(std::iter::once(patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                patch.clone(),
+            )))
+            .collect::<Vec<_>>();
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(changed.result.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        for position in changed.document.key_positions["4key"].iter().take(2) {
+            assert_eq!(position.sound_enabled, Some(false));
+            assert_eq!(position.sound_path.as_deref(), Some("sounds/sibling.wav"));
+            assert_eq!(position.sound_volume, Some(137.5));
+            assert_eq!(position.inactive_image.as_deref(), Some("idle-sibling.png"));
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+            assert!(!position.counter.enabled);
+        }
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &targets[0],
+            EditorElementPropertyPatchV1::SoundEnabled(
+                crate::models::EditorSoundEnabledPropertyPatchV1 {
+                    sound_enabled: true,
+                },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..2].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert_eq!(undone.key_positions["4key"][0].sound_enabled, None);
+        assert_eq!(undone.key_positions["4key"][1].sound_enabled, Some(false));
+        for position in undone.key_positions["4key"].iter().take(2) {
+            assert_eq!(position.sound_path.as_deref(), Some("sounds/sibling.wav"));
+            assert_eq!(position.sound_volume, Some(137.5));
+        }
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        for position in redone.key_positions["4key"].iter().take(2) {
+            assert_eq!(position.sound_enabled, Some(false));
+            assert_eq!(position.sound_path.as_deref(), Some("sounds/sibling.wav"));
+            assert_eq!(position.sound_volume, Some(137.5));
+        }
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn counter_boolean_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-counter-boolean-history-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -9494,6 +9644,236 @@ mod tests {
                 .preset_id
                 .as_deref(),
             Some("builtin-linear")
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn counter_layout_batch_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-counter-layout-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let stat_ids = [
+            uuid::Uuid::new_v4().to_string(),
+            uuid::Uuid::new_v4().to_string(),
+        ];
+        let setup = legacy_editor_commit(
+            &store,
+            &[EditorField::KeyPositions, EditorField::StatPositions],
+            |data| {
+                let key_positions = data.key_positions.get_mut("4key").unwrap();
+                for position in key_positions.iter_mut().take(2) {
+                    let counter = &mut position.counter;
+                    counter.enabled = false;
+                    counter.placement = crate::models::KeyCounterPlacement::Inside;
+                    counter.align = crate::models::KeyCounterAlign::Bottom;
+                    counter.align_mode = crate::models::KeyCounterAlignMode::Between;
+                    counter.gap = 7;
+                    counter.fill.idle = "fill-sibling".to_string();
+                    counter.stroke.active = "stroke-sibling".to_string();
+                    counter.font_family = Some("font-sibling".to_string());
+                    counter.animation.enabled = false;
+                    counter.animation.preset_id = Some("builtin-linear".to_string());
+                    counter.animation.scale = 1.75;
+                }
+                let stat_positions = key_positions
+                    .iter()
+                    .take(2)
+                    .zip(stat_ids.iter())
+                    .map(|(position, id)| {
+                        let mut position = position.clone();
+                        position.id = id.clone();
+                        StatPosition {
+                            stat_type: StatType::Kps,
+                            position,
+                        }
+                    })
+                    .collect();
+                data.stat_positions
+                    .insert("4key".to_string(), stat_positions);
+            },
+        )
+        .unwrap();
+        let before = store.editor_get().document;
+        let key_ids = before.key_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        let original_counters = [
+            before.key_positions["4key"][0].counter.clone(),
+            before.key_positions["4key"][1].counter.clone(),
+            before.stat_positions["4key"][0].position.counter.clone(),
+            before.stat_positions["4key"][1].position.counter.clone(),
+        ];
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[0],
+                EditorElementPropertyPatchV1::CounterPlacement(
+                    crate::models::EditorCounterPlacementPropertyPatchV1 {
+                        counter_placement: crate::models::KeyCounterPlacement::Outside,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_ids[1],
+                EditorElementPropertyPatchV1::CounterAlign(
+                    crate::models::EditorCounterAlignPropertyPatchV1 {
+                        counter_align: crate::models::KeyCounterAlign::Right,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_ids[0],
+                EditorElementPropertyPatchV1::CounterAlignMode(
+                    crate::models::EditorCounterAlignModePropertyPatchV1 {
+                        counter_align_mode: crate::models::KeyCounterAlignMode::Center,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_ids[1],
+                EditorElementPropertyPatchV1::CounterGap(
+                    crate::models::EditorCounterGapPropertyPatchV1 {
+                        counter_gap: u32::MAX,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::CounterGap(
+                    crate::models::EditorCounterGapPropertyPatchV1 { counter_gap: 9 },
+                ),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            changed.result.changed_fields,
+            [EditorField::KeyPositions, EditorField::StatPositions]
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let changed_counters = [
+            changed.document.key_positions["4key"][0].counter.clone(),
+            changed.document.key_positions["4key"][1].counter.clone(),
+            changed.document.stat_positions["4key"][0]
+                .position
+                .counter
+                .clone(),
+            changed.document.stat_positions["4key"][1]
+                .position
+                .counter
+                .clone(),
+        ];
+        let mut expected_counters = original_counters.clone();
+        expected_counters[0].placement = crate::models::KeyCounterPlacement::Outside;
+        expected_counters[1].align = crate::models::KeyCounterAlign::Right;
+        expected_counters[2].align_mode = crate::models::KeyCounterAlignMode::Center;
+        expected_counters[3].gap = u32::MAX;
+        assert_eq!(changed_counters, expected_counters);
+        assert!(matches!(
+            changed_counters[0].align_mode,
+            crate::models::KeyCounterAlignMode::Between
+        ));
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &key_ids[0],
+            EditorElementPropertyPatchV1::CounterGap(
+                crate::models::EditorCounterGapPropertyPatchV1 { counter_gap: 13 },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..4].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert_eq!(
+            [
+                undone.key_positions["4key"][0].counter.clone(),
+                undone.key_positions["4key"][1].counter.clone(),
+                undone.stat_positions["4key"][0].position.counter.clone(),
+                undone.stat_positions["4key"][1].position.counter.clone(),
+            ],
+            original_counters
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert_eq!(
+            [
+                redone.key_positions["4key"][0].counter.clone(),
+                redone.key_positions["4key"][1].counter.clone(),
+                redone.stat_positions["4key"][0].position.counter.clone(),
+                redone.stat_positions["4key"][1].position.counter.clone(),
+            ],
+            expected_counters
         );
 
         store.flush_and_shutdown().unwrap();

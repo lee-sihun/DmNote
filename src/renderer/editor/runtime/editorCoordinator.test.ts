@@ -3578,6 +3578,44 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('soundEnabled는 key bool top-level leaf만 적용하고 사운드 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000ba';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      soundPath: 'sounds/before.wav',
+      soundEnabled: false,
+      soundVolume: 137,
+      inactiveImage: 'idle.png',
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { soundEnabled: true },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      soundPath: 'sounds/before.wav',
+      soundEnabled: true,
+      soundVolume: 137,
+      inactiveImage: 'idle.png',
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
   it('activeImage는 key의 raw top-level leaf만 적용하고 이미지 형제를 보존한다', async () => {
     const id = '00000000-0000-4000-8000-0000000000b8';
     const base = withStableId(id);
@@ -3706,6 +3744,38 @@ describe('commitSemanticOpsInternal', () => {
       assigned.document.keyPositions['4key'][0].counter.animation.presetId,
     ).toBe('preset-a');
     harness.coordinator.stop();
+  });
+
+  it('counter layout 4 leaf projection은 각 필드만 적용하고 raw siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000cb';
+    for (const [patch, expected] of [
+      [{ counterPlacement: 'outside' as const }, { placement: 'outside' }],
+      [{ counterAlign: 'right' as const }, { align: 'right' }],
+      [{ counterAlignMode: 'center' as const }, { alignMode: 'center' }],
+      [{ counterGap: 4_294_967_295 }, { gap: 4_294_967_295 }],
+    ] as const) {
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        counter: {
+          ...base.keyPositions['4key'][0].counter,
+          placement: 'inside',
+          align: 'top',
+          alignMode: 'between',
+          gap: 3,
+          customSentinel: 'keep-raw',
+        },
+      } as never;
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      await harness.coordinator.commitSemanticOpsInternal([
+        { kind: 'patchElement', elementType: 'key', id, patch },
+      ]);
+      expect(
+        harness.coordinator.getState().lastAck?.keyPositions['4key'][0].counter,
+      ).toMatchObject({ ...expected, customSentinel: 'keep-raw' });
+      harness.coordinator.stop();
+    }
   });
 
   it('note 5 leaf를 한 commit으로 적용하고 무관 note 필드를 보존한다', async () => {

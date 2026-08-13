@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultKeyPosition } from '../model/keys';
+import type { EditorCounterLayoutPropertyPatchV1 } from '@src/types/editor';
 
 const api = vi.hoisted(() => ({
   commitGeneratedPatch: vi.fn(),
@@ -61,11 +62,14 @@ import {
   patchKnobPropertiesByIds,
   patchKnobPropertyById,
   patchKnobAxisIdById,
+  patchSoundEnabledById,
+  patchSoundEnabledByIds,
   patchSoundPathById,
   patchSoundPathByIds,
   patchCounterAnimationEnabledByTargets,
   patchCounterAnimationPresetByTargets,
   patchCounterEnabledByTargets,
+  patchCounterLayoutByTargets,
   patchInactiveImageById,
   patchInactiveImageByTargets,
   patchActiveImageById,
@@ -2514,6 +2518,74 @@ describe('elementOps', () => {
     ]);
   });
 
+  it('soundEnabled는 key bool leaf만 single과 N ops 한 commit으로 보내고 사운드 형제를 보존한다', async () => {
+    const records = [
+      {
+        ...keyAt(ID_A),
+        soundPath: 'sounds/a.wav',
+        soundEnabled: false,
+        soundVolume: 137,
+      },
+      {
+        ...keyAt(ID_B),
+        soundPath: 'sounds/b.wav',
+        soundEnabled: false,
+        soundVolume: 54,
+      },
+    ];
+    useKeyStore.setState({
+      canonicalPositions: { '4key': records },
+      positions: { '4key': structuredClone(records) },
+    });
+
+    await patchSoundEnabledById(ID_A, true);
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { soundEnabled: true },
+        },
+      ],
+      expect.anything(),
+    );
+
+    await patchSoundEnabledByIds([ID_A, ID_B], true);
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [ID_A, ID_B].map((id) => ({
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { soundEnabled: true },
+      })),
+      expect.anything(),
+    );
+    expect(useKeyStore.getState().positions['4key']).toEqual([
+      expect.objectContaining({
+        id: ID_A,
+        soundPath: 'sounds/a.wav',
+        soundEnabled: true,
+        soundVolume: 137,
+      }),
+      expect.objectContaining({
+        id: ID_B,
+        soundPath: 'sounds/b.wav',
+        soundEnabled: true,
+        soundVolume: 54,
+      }),
+    ]);
+  });
+
+  it('soundEnabled batch는 empty, duplicate, synthetic ID를 wire 전에 거절한다', async () => {
+    await expect(patchSoundEnabledByIds([], true)).resolves.toBe(false);
+    await expect(patchSoundEnabledByIds([ID_A, ID_A], true)).resolves.toBe(
+      false,
+    );
+    await expect(patchSoundEnabledByIds(['key-0'], true)).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
   it('soundPath batch는 empty, duplicate, synthetic ID를 wire 전에 거절한다', async () => {
     await expect(patchSoundPathByIds([], 'sounds/a.wav')).resolves.toBe(false);
     await expect(
@@ -2729,6 +2801,87 @@ describe('elementOps', () => {
     ).resolves.toBe(false);
     await expect(
       patchCounterEnabledByTargets([{ elementType: 'key', id: 'key-0' }], true),
+    ).resolves.toBe(false);
+  });
+
+  it('counter layout 4 leaf는 raw counter sibling을 보존해 key/stat N ops 한 commit으로 보낸다', async () => {
+    const statId = '33333333-3333-4333-8333-333333333333';
+    const rawCounter = {
+      ...createDefaultKeyPosition().counter,
+      placement: 'inside' as const,
+      align: 'top' as const,
+      alignMode: 'between' as const,
+      gap: 3,
+      customSentinel: 'keep-raw',
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
+      positions: { '4key': [{ ...keyAt(ID_A), counter: rawCounter }] },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...keyAt(statId),
+            statType: 'kps',
+            counter: structuredClone(rawCounter),
+          },
+        ],
+      },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'stat' as const, id: statId },
+    ];
+
+    const patches: EditorCounterLayoutPropertyPatchV1[] = [
+      { counterPlacement: 'outside' as const },
+      { counterAlign: 'right' as const },
+      { counterAlignMode: 'center' as const },
+      { counterGap: 4_294_967_295 },
+    ];
+    for (const patch of patches) {
+      api.captureEditorDocument.mockReturnValue(documentFromStores());
+      await patchCounterLayoutByTargets(targets, patch);
+      expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+        targets.map(({ elementType, id }) => ({
+          kind: 'patchElement',
+          elementType,
+          id,
+          patch,
+        })),
+        expect.anything(),
+      );
+    }
+    expect(
+      useKeyStore.getState().canonicalPositions['4key'][0].counter,
+    ).toMatchObject({
+      placement: 'outside',
+      align: 'right',
+      alignMode: 'center',
+      gap: 4_294_967_295,
+      customSentinel: 'keep-raw',
+    });
+  });
+
+  it('counter layout batch는 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
+    await expect(
+      patchCounterLayoutByTargets([], { counterGap: 2 }),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterLayoutByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'stat', id: ID_A },
+        ],
+        { counterAlign: 'top' },
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchCounterLayoutByTargets([{ elementType: 'key', id: 'key-0' }], {
+        counterPlacement: 'inside',
+      }),
     ).resolves.toBe(false);
   });
 

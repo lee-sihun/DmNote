@@ -41,10 +41,14 @@ const {
   patchActiveImageMock,
   patchSoundPathMock,
   patchSoundPathViaAuthorityMock,
+  patchSoundEnabledMock,
+  patchSoundEnabledViaAuthorityMock,
   patchCounterEnabledMock,
   patchCounterAnimationEnabledMock,
   patchCounterEnabledViaAuthorityMock,
   patchCounterAnimationEnabledViaAuthorityMock,
+  patchCounterLayoutMock,
+  patchCounterLayoutViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -96,12 +100,16 @@ const {
   patchActiveImageMock: vi.fn(() => Promise.resolve(true)),
   patchSoundPathMock: vi.fn(() => Promise.resolve(true)),
   patchSoundPathViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundEnabledMock: vi.fn(() => Promise.resolve(true)),
+  patchSoundEnabledViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchCounterEnabledMock: vi.fn(() => Promise.resolve(true)),
   patchCounterAnimationEnabledMock: vi.fn(() => Promise.resolve(true)),
   patchCounterEnabledViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchCounterAnimationEnabledViaAuthorityMock: vi.fn(() =>
     Promise.resolve(true),
   ),
+  patchCounterLayoutMock: vi.fn(() => Promise.resolve(true)),
+  patchCounterLayoutViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -144,9 +152,11 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
   patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
   patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
+  patchSoundEnabledViaAuthority: patchSoundEnabledViaAuthorityMock,
   patchCounterEnabledViaAuthority: patchCounterEnabledViaAuthorityMock,
   patchCounterAnimationEnabledViaAuthority:
     patchCounterAnimationEnabledViaAuthorityMock,
+  patchCounterLayoutViaAuthority: patchCounterLayoutViaAuthorityMock,
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
@@ -166,8 +176,10 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchInactiveImageById: patchInactiveImageMock,
   patchActiveImageById: patchActiveImageMock,
   patchSoundPathById: patchSoundPathMock,
+  patchSoundEnabledById: patchSoundEnabledMock,
   patchCounterEnabledById: patchCounterEnabledMock,
   patchCounterAnimationEnabledById: patchCounterAnimationEnabledMock,
+  patchCounterLayoutById: patchCounterLayoutMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -330,10 +342,14 @@ const resetStores = () => {
   patchActiveImageMock.mockClear();
   patchSoundPathMock.mockClear();
   patchSoundPathViaAuthorityMock.mockClear();
+  patchSoundEnabledMock.mockClear();
+  patchSoundEnabledViaAuthorityMock.mockClear();
   patchCounterEnabledMock.mockClear();
   patchCounterAnimationEnabledMock.mockClear();
   patchCounterEnabledViaAuthorityMock.mockClear();
   patchCounterAnimationEnabledViaAuthorityMock.mockClear();
+  patchCounterLayoutMock.mockClear();
+  patchCounterLayoutViaAuthorityMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -1540,6 +1556,91 @@ describe('PropertiesPanel detached preview contract', () => {
     expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
   });
 
+  it.each(['main', 'panel'] as const)(
+    '%s single stable key soundEnabled는 exact ID 경로만 쓴다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const id = 'a7888888-8888-4888-8888-888888888888';
+      const position = { ...createDefaultKeyPosition(), id };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A'] },
+        positions: { '4key': [position] },
+        canonicalPositions: { '4key': [position] },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onSoundEnabledCommit: (value: boolean) => void;
+        }
+      ).onSoundEnabledCommit;
+
+      act(() => commit(true));
+
+      if (windowType === 'panel') {
+        expect(patchSoundEnabledViaAuthorityMock).toHaveBeenCalledWith(
+          [id],
+          true,
+        );
+        expect(patchSoundEnabledMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchSoundEnabledMock).toHaveBeenCalledWith(id, true);
+        expect(patchSoundEnabledViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(previewMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat stable', 'stat', 'a7999999-9999-4999-8999-999999999999'],
+  ] as const)(
+    'single %s soundEnabled는 exact callback을 노출하지 않는다',
+    (_label, type, id) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onSoundEnabledCommit?: (value: boolean) => void;
+        onKeyPreview?: (index: number, patch: Record<string, unknown>) => void;
+        onKeyUpdate?: (patch: Record<string, unknown>) => void;
+      };
+
+      expect(props.onSoundEnabledCommit).toBeUndefined();
+      if (type === 'key') {
+        act(() => {
+          props.onKeyPreview?.(0, { soundEnabled: true });
+          props.onKeyUpdate?.({ index: 0, soundEnabled: true });
+        });
+        expect(keyLegacyUpdateMock).toHaveBeenCalledWith({
+          index: 0,
+          soundEnabled: true,
+        });
+      }
+      expect(patchSoundEnabledMock).not.toHaveBeenCalled();
+      expect(patchSoundEnabledViaAuthorityMock).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     ['main', 'main'],
     ['panel', 'panel'],
@@ -2185,6 +2286,106 @@ describe('PropertiesPanel detached preview contract', () => {
       }
       expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
       expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['main key', 'main', 'key'],
+    ['main stat', 'main', 'stat'],
+    ['panel key', 'panel', 'key'],
+    ['panel stat', 'panel', 'stat'],
+  ] as const)(
+    '%s counter layout callback은 선택 descriptor ID exact writer만 쓴다',
+    (_label, windowType, type) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'a3111111-1111-4111-8111-111111111111'
+          : 'a3222222-2222-4222-8222-222222222222';
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        singleKeyStatPropsMock.mock.lastCall?.[0] as {
+          onCounterLayoutCommit: (patch: { counterGap: number }) => void;
+        }
+      ).onCounterLayoutCommit;
+
+      act(() => commit({ counterGap: 4_294_967_295 }));
+      if (windowType === 'panel') {
+        expect(patchCounterLayoutViaAuthorityMock).toHaveBeenCalledWith(
+          [{ elementType: type, id }],
+          { counterGap: 4_294_967_295 },
+        );
+        expect(patchCounterLayoutMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchCounterLayoutMock).toHaveBeenCalledWith(type, id, {
+          counterGap: 4_294_967_295,
+        });
+        expect(patchCounterLayoutViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(statUpdatePositionsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0'],
+    ['key empty', 'key', ''],
+    ['stat synthetic', 'stat', 'stat-0'],
+    ['stat empty', 'stat', ''],
+  ] as const)(
+    'panel single %s counter layout은 exact callback 없이 legacy다',
+    (_label, type, id) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = singleKeyStatPropsMock.mock.lastCall?.[0] as {
+        onCounterLayoutCommit?: (patch: { counterGap: number }) => void;
+        onKeyUpdate?: (patch: Record<string, unknown>) => void;
+        handleStatUpdate?: (patch: Record<string, unknown>) => void;
+      };
+      expect(props.onCounterLayoutCommit).toBeUndefined();
+      const legacy =
+        type === 'key' ? props.onKeyUpdate : props.handleStatUpdate;
+      act(() =>
+        legacy?.({
+          index: 0,
+          counter: { ...position.counter, gap: 9999 },
+        }),
+      );
+      expect(patchCounterLayoutMock).not.toHaveBeenCalled();
+      expect(patchCounterLayoutViaAuthorityMock).not.toHaveBeenCalled();
+      if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      else expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
     },
   );
 

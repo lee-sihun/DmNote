@@ -485,6 +485,9 @@ const applySemanticOps = (
             if ('axisId' in op.patch) {
               return { ...position, axisId: op.patch.axisId };
             }
+            if ('soundEnabled' in op.patch) {
+              return { ...position, soundEnabled: op.patch.soundEnabled };
+            }
             if ('soundPath' in op.patch) {
               return { ...position, soundPath: op.patch.soundPath };
             }
@@ -520,6 +523,42 @@ const applySemanticOps = (
                     enabled: op.patch.counterAnimationEnabled,
                   },
                 },
+              };
+            }
+            if ('counterPlacement' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, placement: op.patch.counterPlacement },
+              };
+            }
+            if ('counterAlign' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, align: op.patch.counterAlign },
+              };
+            }
+            if ('counterAlignMode' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, alignMode: op.patch.counterAlignMode },
+              };
+            }
+            if ('counterGap' in op.patch) {
+              const counter = position.counter as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                ...position,
+                counter: { ...counter, gap: op.patch.counterGap },
               };
             }
             if ('counterAnimationPreset' in op.patch) {

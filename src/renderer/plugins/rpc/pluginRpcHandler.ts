@@ -57,9 +57,11 @@ import {
   patchCounterAnimationEnabledByTargets,
   patchCounterAnimationPresetByTargets,
   patchCounterEnabledByTargets,
+  patchCounterLayoutByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
+  patchSoundEnabledByIds,
   patchSoundPathByIds,
   patchFontStyleByTargets,
   patchGraphColorsByIds,
@@ -77,6 +79,7 @@ import type {
 import type {
   EditorElementPropertyPatchV1,
   EditorCounterAnimationPresetIntentV1,
+  EditorCounterLayoutPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
@@ -357,6 +360,9 @@ const parseNativeLayerPropertyTarget = (
       Number.isFinite(patch.sensitivity)) ||
     (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean') ||
     (hasExactKeys(patch, ['axisId']) && typeof patch.axisId === 'string') ||
+    (hasExactKeys(patch, ['soundEnabled']) &&
+      target.elementType === 'key' &&
+      typeof patch.soundEnabled === 'boolean') ||
     (hasExactKeys(patch, ['soundPath']) &&
       target.elementType === 'key' &&
       typeof patch.soundPath === 'string') ||
@@ -371,6 +377,24 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['counterAnimationEnabled']) &&
       (target.elementType === 'key' || target.elementType === 'stat') &&
       typeof patch.counterAnimationEnabled === 'boolean') ||
+    (hasExactKeys(patch, ['counterPlacement']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      (patch.counterPlacement === 'inside' ||
+        patch.counterPlacement === 'outside')) ||
+    (hasExactKeys(patch, ['counterAlign']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      ['top', 'bottom', 'left', 'right'].includes(
+        patch.counterAlign as string,
+      )) ||
+    (hasExactKeys(patch, ['counterAlignMode']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      (patch.counterAlignMode === 'center' ||
+        patch.counterAlignMode === 'between')) ||
+    (hasExactKeys(patch, ['counterGap']) &&
+      (target.elementType === 'key' || target.elementType === 'stat') &&
+      Number.isSafeInteger(patch.counterGap) &&
+      (patch.counterGap as number) >= 0 &&
+      (patch.counterGap as number) <= 4_294_967_295) ||
     (hasExactKeys(patch, ['counterAnimationPreset']) &&
       (target.elementType === 'key' || target.elementType === 'stat') &&
       counterAnimationPreset !== null) ||
@@ -596,6 +620,11 @@ type NativeLayerPropertyRequest =
       inactiveImage: string;
     }
   | {
+      kind: 'soundEnabledBatch';
+      ids: string[];
+      soundEnabled: boolean;
+    }
+  | {
       kind: 'soundPathBatch';
       ids: string[];
       soundPath: string;
@@ -614,6 +643,11 @@ type NativeLayerPropertyRequest =
       kind: 'counterBooleanBatch';
       targets: Array<{ elementType: 'key' | 'stat'; id: string }>;
       patch: { counterEnabled: boolean } | { counterAnimationEnabled: boolean };
+    }
+  | {
+      kind: 'counterLayoutBatch';
+      targets: Array<{ elementType: 'key' | 'stat'; id: string }>;
+      patch: EditorCounterLayoutPropertyPatchV1;
     }
   | {
       kind: 'notePropertyBatch';
@@ -718,6 +752,11 @@ const parseNativeLayerPropertyRequest = (
     hasExactKeys(patch, ['soundPath']) && typeof patch.soundPath === 'string'
       ? patch.soundPath
       : null;
+  const soundEnabled =
+    hasExactKeys(patch, ['soundEnabled']) &&
+    typeof patch.soundEnabled === 'boolean'
+      ? patch.soundEnabled
+      : null;
   const activeImage =
     hasExactKeys(patch, ['activeImage']) &&
     typeof patch.activeImage === 'string'
@@ -733,6 +772,32 @@ const parseNativeLayerPropertyRequest = (
       : hasExactKeys(patch, ['counterAnimationEnabled']) &&
         typeof patch.counterAnimationEnabled === 'boolean'
       ? { counterAnimationEnabled: patch.counterAnimationEnabled }
+      : null;
+  const counterLayoutPatch: EditorCounterLayoutPropertyPatchV1 | null =
+    hasExactKeys(patch, ['counterPlacement']) &&
+    (patch.counterPlacement === 'inside' ||
+      patch.counterPlacement === 'outside')
+      ? { counterPlacement: patch.counterPlacement }
+      : hasExactKeys(patch, ['counterAlign']) &&
+        ['top', 'bottom', 'left', 'right'].includes(
+          patch.counterAlign as string,
+        )
+      ? {
+          counterAlign: patch.counterAlign as
+            | 'top'
+            | 'bottom'
+            | 'left'
+            | 'right',
+        }
+      : hasExactKeys(patch, ['counterAlignMode']) &&
+        (patch.counterAlignMode === 'center' ||
+          patch.counterAlignMode === 'between')
+      ? { counterAlignMode: patch.counterAlignMode }
+      : hasExactKeys(patch, ['counterGap']) &&
+        Number.isSafeInteger(patch.counterGap) &&
+        (patch.counterGap as number) >= 0 &&
+        (patch.counterGap as number) <= 4_294_967_295
+      ? { counterGap: patch.counterGap as number }
       : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
@@ -769,9 +834,11 @@ const parseNativeLayerPropertyRequest = (
     fontStylePatch === null &&
     fontFamilyPatch === null &&
     inactiveImage === null &&
+    soundEnabled === null &&
     soundPath === null &&
     activeImage === null &&
     counterBooleanPatch === null &&
+    counterLayoutPatch === null &&
     counterAnimationPreset === null &&
     notePropertyPatch === null
   ) {
@@ -783,11 +850,15 @@ const parseNativeLayerPropertyRequest = (
     fontFamilyPatch !== null ||
     inactiveImage !== null
       ? null
+      : soundEnabled !== null
+      ? 'key'
       : soundPath !== null
       ? 'key'
       : activeImage !== null
       ? 'active-capable'
       : counterBooleanPatch !== null
+      ? 'counter-capable'
+      : counterLayoutPatch !== null
       ? 'counter-capable'
       : counterAnimationPreset !== null
       ? 'counter-capable'
@@ -848,6 +919,9 @@ const parseNativeLayerPropertyRequest = (
   if (inactiveImage !== null) {
     return { kind: 'inactiveImageBatch', targets, inactiveImage };
   }
+  if (soundEnabled !== null) {
+    return { kind: 'soundEnabledBatch', ids, soundEnabled };
+  }
   if (soundPath !== null) {
     return { kind: 'soundPathBatch', ids, soundPath };
   }
@@ -876,6 +950,16 @@ const parseNativeLayerPropertyRequest = (
         id: string;
       }>,
       patch: counterBooleanPatch,
+    };
+  }
+  if (counterLayoutPatch !== null) {
+    return {
+      kind: 'counterLayoutBatch',
+      targets: targets as Array<{
+        elementType: 'key' | 'stat';
+        id: string;
+      }>,
+      patch: counterLayoutPatch,
     };
   }
   if (notePropertyPatch !== null) {
@@ -1617,6 +1701,30 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
     };
     const persisted = (() => {
       if (request.kind === 'single') {
+        if (
+          'counterPlacement' in request.target.patch ||
+          'counterAlign' in request.target.patch ||
+          'counterAlignMode' in request.target.patch ||
+          'counterGap' in request.target.patch
+        ) {
+          return patchCounterLayoutByTargets(
+            [
+              {
+                elementType: request.target.elementType as 'key' | 'stat',
+                id: request.target.id,
+              },
+            ],
+            request.target.patch as EditorCounterLayoutPropertyPatchV1,
+            options,
+          );
+        }
+        if ('soundEnabled' in request.target.patch) {
+          return patchSoundEnabledByIds(
+            [request.target.id],
+            request.target.patch.soundEnabled,
+            options,
+          );
+        }
         if ('counterEnabled' in request.target.patch) {
           return patchCounterEnabledByTargets(
             [
@@ -1693,6 +1801,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           options,
         );
       }
+      if (request.kind === 'soundEnabledBatch') {
+        return patchSoundEnabledByIds(
+          request.ids,
+          request.soundEnabled,
+          options,
+        );
+      }
       if (request.kind === 'soundPathBatch') {
         return patchSoundPathByIds(request.ids, request.soundPath, options);
       }
@@ -1722,6 +1837,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
               request.patch.counterAnimationEnabled,
               options,
             );
+      }
+      if (request.kind === 'counterLayoutBatch') {
+        return patchCounterLayoutByTargets(
+          request.targets,
+          request.patch,
+          options,
+        );
       }
       if (request.kind === 'notePropertyBatch') {
         return patchNotePropertiesByIds(request.ids, request.patch, options);

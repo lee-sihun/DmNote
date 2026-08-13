@@ -23,6 +23,7 @@ import type { CounterAnimationKeyVisual } from '@utils/core/counterAnimationPrev
 import { usePanelNav } from '../PanelNavContext';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { DEFAULT_COUNTER_FONT_SIZE } from '@utils/core/elementDefaults';
+import type { EditorCounterLayoutPropertyPatchV1 } from '@src/types/editor';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-counter:font';
@@ -39,6 +40,7 @@ interface BatchCounterTabContentProps {
   handleBatchCounterUpdate: (updates: Partial<KeyCounterSettings>) => void;
   onCounterEnabledCommit?: (enabled: boolean) => void;
   onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
+  onCounterLayoutCommit?: (patch: EditorCounterLayoutPropertyPatchV1) => void;
   // 컬러 디스플레이 (현재 상태 기준)
   colorState: 'idle' | 'active';
   getCounterColorDisplay: (target: 'fill' | 'stroke') => string;
@@ -64,6 +66,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   handleBatchCounterUpdate,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
+  onCounterLayoutCommit,
   colorState,
   getCounterColorDisplay,
   onFillPickerToggle,
@@ -154,11 +157,14 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
               },
             ]}
             value={batchCounterSettings.placement}
-            onChange={(value) =>
-              handleBatchCounterUpdate({
-                placement: value as 'inside' | 'outside',
-              })
-            }
+            onChange={(value) => {
+              const placement = value as 'inside' | 'outside';
+              if (onCounterLayoutCommit) {
+                onCounterLayoutCommit({ counterPlacement: placement });
+              } else {
+                handleBatchCounterUpdate({ placement });
+              }
+            }}
           />
         </PropertyRow>
 
@@ -179,11 +185,14 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
               },
             ]}
             value={batchCounterSettings.align}
-            onChange={(value) =>
-              handleBatchCounterUpdate({
-                align: value as 'top' | 'bottom' | 'left' | 'right',
-              })
-            }
+            onChange={(value) => {
+              const align = value as 'top' | 'bottom' | 'left' | 'right';
+              if (onCounterLayoutCommit) {
+                onCounterLayoutCommit({ counterAlign: align });
+              } else {
+                handleBatchCounterUpdate({ align });
+              }
+            }}
           />
         </PropertyRow>
 
@@ -203,11 +212,14 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
                 },
               ]}
               value={batchCounterSettings.alignMode ?? 'center'}
-              onChange={(value) =>
-                handleBatchCounterUpdate({
-                  alignMode: value as 'center' | 'between',
-                })
-              }
+              onChange={(value) => {
+                const alignMode = value as 'center' | 'between';
+                if (onCounterLayoutCommit) {
+                  onCounterLayoutCommit({ counterAlignMode: alignMode });
+                } else {
+                  handleBatchCounterUpdate({ alignMode });
+                }
+              }}
             />
           </PropertyRow>
         )}
@@ -216,7 +228,13 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         <PropertyRow label={t('counterSetting.gap') || '간격'}>
           <NumberInput
             value={batchCounterSettings.gap}
-            onChange={(value) => handleBatchCounterUpdate({ gap: value })}
+            onChange={(value) => {
+              if (onCounterLayoutCommit) {
+                onCounterLayoutCommit({ counterGap: value });
+              } else {
+                handleBatchCounterUpdate({ gap: value });
+              }
+            }}
             suffix="px"
             min={0}
             max={9999}

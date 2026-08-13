@@ -111,6 +111,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchSoundEnabled: vi.fn(
+    (
+      _ids?: unknown,
+      _soundEnabled?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   patchCounterAnimationPreset: vi.fn(
     (
       _targets?: unknown,
@@ -129,6 +136,13 @@ const mocks = vi.hoisted(() => ({
     (
       _targets?: unknown,
       _enabled?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
+  patchCounterLayout: vi.fn(
+    (
+      _targets?: unknown,
+      _patch?: unknown,
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
@@ -219,9 +233,11 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchInactiveImageByTargets: mocks.patchInactiveImage,
   patchActiveImageByTargets: mocks.patchActiveImage,
   patchSoundPathByIds: mocks.patchSoundPath,
+  patchSoundEnabledByIds: mocks.patchSoundEnabled,
   patchCounterAnimationPresetByTargets: mocks.patchCounterAnimationPreset,
   patchCounterEnabledByTargets: mocks.patchCounterEnabled,
   patchCounterAnimationEnabledByTargets: mocks.patchCounterAnimationEnabled,
+  patchCounterLayoutByTargets: mocks.patchCounterLayout,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -324,12 +340,16 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchActiveImage.mockResolvedValue(true);
     mocks.patchSoundPath.mockReset();
     mocks.patchSoundPath.mockResolvedValue(true);
+    mocks.patchSoundEnabled.mockReset();
+    mocks.patchSoundEnabled.mockResolvedValue(true);
     mocks.patchCounterAnimationPreset.mockReset();
     mocks.patchCounterAnimationPreset.mockResolvedValue(true);
     mocks.patchCounterEnabled.mockReset();
     mocks.patchCounterEnabled.mockResolvedValue(true);
     mocks.patchCounterAnimationEnabled.mockReset();
     mocks.patchCounterAnimationEnabled.mockResolvedValue(true);
+    mocks.patchCounterLayout.mockReset();
+    mocks.patchCounterLayout.mockResolvedValue(true);
     mocks.updateCounterAnimation.mockReset();
     mocks.updateCounterAnimation.mockResolvedValue({
       preset: { id: 'preset-a' },
@@ -847,6 +867,30 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
 
+  it.each(['single', 'batch'] as const)(
+    'soundEnabled %s은 key ID와 absolute bool을 전용 semantic commit으로 전달한다',
+    async (shape) => {
+      const target = {
+        elementType: 'key',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      } as const;
+      const payload =
+        shape === 'single'
+          ? { target: { ...target, patch: { soundEnabled: true } } }
+          : { targets: [target], patch: { soundEnabled: true } };
+      mocks.requestListener?.(envelope('layers:patchProperty', payload));
+
+      await vi.waitFor(() =>
+        expect(mocks.patchSoundEnabled).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.patchSoundEnabled).toHaveBeenCalledWith([target.id], true, {
+        preflight: expect.any(Function),
+      });
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
+
   it('counter animation preset batch는 key/stat exact intent를 한 semantic commit으로 전달한다', async () => {
     const targets = [
       { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
@@ -931,6 +975,55 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it.each([
+    { counterPlacement: 'outside' },
+    { counterAlign: 'right' },
+    { counterAlignMode: 'between' },
+    { counterGap: 4_294_967_295 },
+  ] as const)(
+    'counter layout batch $patch는 key/stat exact leaf를 전용 helper에 전달한다',
+    async (patch) => {
+      const targets = [
+        { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      ] as const;
+      mocks.requestListener?.(
+        envelope('layers:patchProperty', { targets, patch }),
+      );
+      await vi.waitFor(() =>
+        expect(mocks.patchCounterLayout).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.patchCounterLayout).toHaveBeenCalledWith(targets, patch, {
+        preflight: expect.any(Function),
+      });
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
+
+  it('counter layout single은 slot 직전 generation 변경을 거절한다', async () => {
+    mocks.patchCounterLayout.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { counterAlign: 'left' },
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it.each([
     {
       targets: [{ elementType: 'graph', id: 'a' }],
       patch: { counterAnimationPreset: { presetId: 'a' } },
@@ -971,6 +1064,52 @@ describe('plugin panel persisted element mutations', () => {
       targets: [{ elementType: 'key', id: 'a' }],
       patch: { counterEnabled: true, counterAnimationEnabled: false },
     },
+    {
+      targets: [{ elementType: 'graph', id: 'a' }],
+      patch: { counterPlacement: 'inside' },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterPlacement: 'middle' },
+    },
+    {
+      targets: [{ elementType: 'stat', id: 'a' }],
+      patch: { counterAlign: 'center' },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterAlignMode: 'ends' },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterGap: 4_294_967_296 },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterGap: 1.5 },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'a' }],
+      patch: { counterGap: 4, counterAlign: 'top' },
+    },
+    {
+      targets: [
+        { elementType: 'key', id: 'a' },
+        { elementType: 'stat', id: 'a' },
+      ],
+      patch: { counterGap: 4 },
+    },
+    {
+      targets: [{ elementType: 'key', id: 'key-0' }],
+      patch: { counterGap: 4 },
+    },
+    {
+      targets: Array.from({ length: 4097 }, (_, index) => ({
+        elementType: 'key',
+        id: `counter-layout-${index}`,
+      })),
+      patch: { counterGap: 4 },
+    },
   ])(
     'counter animation invalid exact payload를 executor 전에 거절한다',
     async (payload) => {
@@ -983,6 +1122,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchCounterAnimationPreset).not.toHaveBeenCalled();
       expect(mocks.patchCounterEnabled).not.toHaveBeenCalled();
       expect(mocks.patchCounterAnimationEnabled).not.toHaveBeenCalled();
+      expect(mocks.patchCounterLayout).not.toHaveBeenCalled();
     },
   );
 
@@ -1707,6 +1847,54 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'soundEnabled wrong stat type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { soundEnabled: true },
+      },
+    ],
+    [
+      'soundEnabled non-boolean',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundEnabled: 1 },
+      },
+    ],
+    [
+      'soundEnabled combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { soundEnabled: true, soundPath: 'sounds/key.wav' },
+      },
+    ],
+    [
+      'soundEnabled duplicate target',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable' },
+          { elementType: 'key', id: 'stable' },
+        ],
+        patch: { soundEnabled: true },
+      },
+    ],
+    [
+      'soundEnabled synthetic target',
+      {
+        targets: [{ elementType: 'key', id: 'key-0' }],
+        patch: { soundEnabled: true },
+      },
+    ],
+    [
+      'soundEnabled oversized batch',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'key',
+          id: `stable-sound-enabled-${index}`,
+        })),
+        patch: { soundEnabled: true },
+      },
+    ],
+    [
       'soundPath wrong stat type',
       {
         targets: [{ elementType: 'stat', id: 'stable' }],
@@ -1955,6 +2143,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchInactiveImage).not.toHaveBeenCalled();
       expect(mocks.patchActiveImage).not.toHaveBeenCalled();
       expect(mocks.patchSoundPath).not.toHaveBeenCalled();
+      expect(mocks.patchSoundEnabled).not.toHaveBeenCalled();
       expect(mocks.patchNoteProperties).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
@@ -2664,6 +2853,28 @@ describe('plugin panel persisted element mutations', () => {
       envelope('layers:patchProperty', {
         targets: [{ elementType: 'key', id: 'stable-key' }],
         patch: { soundPath: '  sounds/raw.wav  ' },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('soundEnabled batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchSoundEnabled.mockImplementationOnce(
+      async (_ids, _value, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [{ elementType: 'key', id: 'stable-key' }],
+        patch: { soundEnabled: true },
       }),
     );
 

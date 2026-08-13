@@ -123,6 +123,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onInactiveImageCommit,
   onActiveImageCommit,
   onSoundPathCommit,
+  onSoundEnabledCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -1119,8 +1120,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               checked={keyPosition.soundEnabled ?? false}
               onChange={() => {
                 const nextEnabled = !(keyPosition.soundEnabled ?? false);
-                onKeyPreview?.(keyIndex, { soundEnabled: nextEnabled });
-                onKeyUpdate({ index: keyIndex, soundEnabled: nextEnabled });
+                if (onSoundEnabledCommit) {
+                  onSoundEnabledCommit(nextEnabled);
+                } else {
+                  onKeyPreview?.(keyIndex, { soundEnabled: nextEnabled });
+                  onKeyUpdate({ index: keyIndex, soundEnabled: nextEnabled });
+                }
               }}
             />
           </PropertyRow>

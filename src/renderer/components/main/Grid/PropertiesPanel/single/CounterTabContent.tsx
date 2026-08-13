@@ -46,6 +46,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   onKeyUpdate,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
+  onCounterLayoutCommit,
   onCounterAnimationPresetCommit,
   panelElement,
   t,
@@ -288,9 +289,14 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
               },
             ]}
             value={counterSettings.placement}
-            onChange={(value) =>
-              handleCounterUpdate({ placement: value as 'inside' | 'outside' })
-            }
+            onChange={(value) => {
+              const placement = value as 'inside' | 'outside';
+              if (onCounterLayoutCommit) {
+                onCounterLayoutCommit({ counterPlacement: placement });
+              } else {
+                handleCounterUpdate({ placement });
+              }
+            }}
           />
         </PropertyRow>
 
@@ -311,11 +317,14 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
               },
             ]}
             value={counterSettings.align}
-            onChange={(value) =>
-              handleCounterUpdate({
-                align: value as 'top' | 'bottom' | 'left' | 'right',
-              })
-            }
+            onChange={(value) => {
+              const align = value as 'top' | 'bottom' | 'left' | 'right';
+              if (onCounterLayoutCommit) {
+                onCounterLayoutCommit({ counterAlign: align });
+              } else {
+                handleCounterUpdate({ align });
+              }
+            }}
           />
         </PropertyRow>
 
@@ -335,11 +344,14 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
                 },
               ]}
               value={counterSettings.alignMode ?? 'center'}
-              onChange={(value) =>
-                handleCounterUpdate({
-                  alignMode: value as 'center' | 'between',
-                })
-              }
+              onChange={(value) => {
+                const alignMode = value as 'center' | 'between';
+                if (onCounterLayoutCommit) {
+                  onCounterLayoutCommit({ counterAlignMode: alignMode });
+                } else {
+                  handleCounterUpdate({ alignMode });
+                }
+              }}
             />
           </PropertyRow>
         )}
@@ -348,7 +360,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         <PropertyRow label={t('counterSetting.gap') || '간격'}>
           <NumberInput
             value={counterSettings.gap}
-            onChange={(value) => handleCounterUpdate({ gap: value })}
+            onChange={(value) => {
+              if (onCounterLayoutCommit) {
+                onCounterLayoutCommit({ counterGap: value });
+              } else {
+                handleCounterUpdate({ gap: value });
+              }
+            }}
             suffix="px"
             min={0}
             max={9999}

@@ -2511,6 +2511,15 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::SoundEnabled(
+                    crate::models::EditorSoundEnabledPropertyPatchV1 {
+                        sound_enabled: false,
+                    },
+                ),
+                serde_json::json!({ "soundEnabled": false }),
+            ),
+            (
+                EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::CounterEnabled(
                     crate::models::EditorCounterEnabledPropertyPatchV1 {
                         counter_enabled: false,
@@ -2526,6 +2535,42 @@ mod tests {
                     },
                 ),
                 serde_json::json!({ "counterAnimationEnabled": true }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::CounterPlacement(
+                    crate::models::EditorCounterPlacementPropertyPatchV1 {
+                        counter_placement: crate::models::KeyCounterPlacement::Outside,
+                    },
+                ),
+                serde_json::json!({ "counterPlacement": "outside" }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterAlign(
+                    crate::models::EditorCounterAlignPropertyPatchV1 {
+                        counter_align: crate::models::KeyCounterAlign::Left,
+                    },
+                ),
+                serde_json::json!({ "counterAlign": "left" }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::CounterAlignMode(
+                    crate::models::EditorCounterAlignModePropertyPatchV1 {
+                        counter_align_mode: crate::models::KeyCounterAlignMode::Between,
+                    },
+                ),
+                serde_json::json!({ "counterAlignMode": "between" }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::CounterGap(
+                    crate::models::EditorCounterGapPropertyPatchV1 {
+                        counter_gap: u32::MAX,
+                    },
+                ),
+                serde_json::json!({ "counterGap": u32::MAX }),
             ),
             (
                 EditorElementTypeV1::Stat,
@@ -2656,9 +2701,19 @@ mod tests {
             serde_json::json!({ "soundPath": 1 }),
             serde_json::json!({ "soundPath": "path", "soundEnabled": true }),
             serde_json::json!({ "soundPath": "path", "unexpected": true }),
+            serde_json::json!({ "soundEnabled": null }),
+            serde_json::json!({ "soundEnabled": "true" }),
+            serde_json::json!({ "soundEnabled": true, "unexpected": true }),
             serde_json::json!({ "counterEnabled": null }),
             serde_json::json!({ "counterAnimationEnabled": "true" }),
             serde_json::json!({ "counterEnabled": true, "counterAnimationEnabled": false }),
+            serde_json::json!({ "counterPlacement": "center" }),
+            serde_json::json!({ "counterAlign": "center" }),
+            serde_json::json!({ "counterAlignMode": "outside" }),
+            serde_json::json!({ "counterGap": -1 }),
+            serde_json::json!({ "counterGap": 1.5 }),
+            serde_json::json!({ "counterGap": 4_294_967_296_u64 }),
+            serde_json::json!({ "counterPlacement": "inside", "counterAlign": "top" }),
             serde_json::json!({ "counterAnimationPreset": null }),
             serde_json::json!({ "counterAnimationPreset": {} }),
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "enabled": true } }),

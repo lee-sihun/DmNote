@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AppStoreData, GraphPosition, GraphPositions, GraphType, KeyCounters, KeyMappings, KeyPosition,
-    KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroups, NoteAlignment, SlotMatch,
-    StatPosition, StatPositions, StatType,
+    AppStoreData, GraphPosition, GraphPositions, GraphType, KeyCounterAlign, KeyCounterAlignMode,
+    KeyCounterPlacement, KeyCounters, KeyMappings, KeyPosition, KeyPositions, KeySlot,
+    KnobPosition, KnobPositions, LayerGroups, NoteAlignment, SlotMatch, StatPosition,
+    StatPositions, StatType,
 };
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
@@ -224,8 +225,13 @@ pub enum EditorElementPropertyPatchV1 {
     InactiveImage(EditorInactiveImagePropertyPatchV1),
     ActiveImage(EditorActiveImagePropertyPatchV1),
     SoundPath(EditorSoundPathPropertyPatchV1),
+    SoundEnabled(EditorSoundEnabledPropertyPatchV1),
     CounterEnabled(EditorCounterEnabledPropertyPatchV1),
     CounterAnimationEnabled(EditorCounterAnimationEnabledPropertyPatchV1),
+    CounterPlacement(EditorCounterPlacementPropertyPatchV1),
+    CounterAlign(EditorCounterAlignPropertyPatchV1),
+    CounterAlignMode(EditorCounterAlignModePropertyPatchV1),
+    CounterGap(EditorCounterGapPropertyPatchV1),
     CounterAnimationPreset(EditorCounterAnimationPresetPropertyPatchV1),
     StatType(EditorStatTypePropertyPatchV1),
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
@@ -352,6 +358,12 @@ pub struct EditorSoundPathPropertyPatchV1 {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorSoundEnabledPropertyPatchV1 {
+    pub sound_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorCounterEnabledPropertyPatchV1 {
     pub counter_enabled: bool,
 }
@@ -360,6 +372,30 @@ pub struct EditorCounterEnabledPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorCounterAnimationEnabledPropertyPatchV1 {
     pub counter_animation_enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterPlacementPropertyPatchV1 {
+    pub counter_placement: KeyCounterPlacement,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterAlignPropertyPatchV1 {
+    pub counter_align: KeyCounterAlign,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterAlignModePropertyPatchV1 {
+    pub counter_align_mode: KeyCounterAlignMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorCounterGapPropertyPatchV1 {
+    pub counter_gap: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

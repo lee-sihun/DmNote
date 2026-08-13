@@ -33,6 +33,15 @@ const captured = vi.hoisted(() => ({
     ) => void;
   },
   checkboxes: [] as Array<{ checked: boolean; onChange: () => void }>,
+  dropdowns: [] as Array<{
+    value: string;
+    onChange: (value: string) => void;
+  }>,
+  numbers: [] as Array<{
+    min?: number;
+    max?: number;
+    onChange: (value: number) => void;
+  }>,
 }));
 
 const patches = vi.hoisted(() => ({
@@ -44,12 +53,16 @@ const patches = vi.hoisted(() => ({
   patchActiveImageViaAuthority: vi.fn(async () => true),
   patchSoundPathByIds: vi.fn(async () => true),
   patchSoundPathViaAuthority: vi.fn(async () => true),
+  patchSoundEnabledByIds: vi.fn(async () => true),
+  patchSoundEnabledViaAuthority: vi.fn(async () => true),
   patchCounterAnimationPresetByTargets: vi.fn(async () => true),
   patchCounterAnimationPresetViaAuthority: vi.fn(async () => true),
   patchCounterEnabledByTargets: vi.fn(async () => true),
   patchCounterAnimationEnabledByTargets: vi.fn(async () => true),
   patchCounterEnabledViaAuthority: vi.fn(async () => true),
   patchCounterAnimationEnabledViaAuthority: vi.fn(async () => true),
+  patchCounterLayoutByTargets: vi.fn(async () => true),
+  patchCounterLayoutViaAuthority: vi.fn(async () => true),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
@@ -57,21 +70,25 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchActiveImageByTargets: patches.patchActiveImageByTargets,
   patchInactiveImageByTargets: patches.patchInactiveImageByTargets,
   patchSoundPathByIds: patches.patchSoundPathByIds,
+  patchSoundEnabledByIds: patches.patchSoundEnabledByIds,
   patchCounterAnimationPresetByTargets:
     patches.patchCounterAnimationPresetByTargets,
   patchCounterEnabledByTargets: patches.patchCounterEnabledByTargets,
   patchCounterAnimationEnabledByTargets:
     patches.patchCounterAnimationEnabledByTargets,
+  patchCounterLayoutByTargets: patches.patchCounterLayoutByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
   patchInactiveImageViaAuthority: patches.patchInactiveImageViaAuthority,
   patchSoundPathViaAuthority: patches.patchSoundPathViaAuthority,
+  patchSoundEnabledViaAuthority: patches.patchSoundEnabledViaAuthority,
   patchCounterAnimationPresetViaAuthority:
     patches.patchCounterAnimationPresetViaAuthority,
   patchCounterEnabledViaAuthority: patches.patchCounterEnabledViaAuthority,
   patchCounterAnimationEnabledViaAuthority:
     patches.patchCounterAnimationEnabledViaAuthority,
+  patchCounterLayoutViaAuthority: patches.patchCounterLayoutViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
@@ -106,9 +123,34 @@ vi.mock('@components/main/Modal/content/pickers/ColorPicker', () => ({
 vi.mock('@components/main/common/Checkbox', () => ({
   default: (props: { checked: boolean; onChange: () => void }) => {
     captured.checkboxes.push(props);
+    return <button data-testid="mock-checkbox" onClick={props.onChange} />;
+  },
+}));
+vi.mock('@components/main/common/Dropdown', () => ({
+  default: (props: { value: string; onChange: (value: string) => void }) => {
+    captured.dropdowns.push(props);
     return null;
   },
 }));
+vi.mock(
+  '@components/main/Grid/PropertiesPanel/PropertyInputs',
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import('@components/main/Grid/PropertiesPanel/PropertyInputs')
+    >();
+    return {
+      ...actual,
+      NumberInput: (props: {
+        min?: number;
+        max?: number;
+        onChange: (value: number) => void;
+      }) => {
+        captured.numbers.push(props);
+        return null;
+      },
+    };
+  },
+);
 vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
   default: (props: (typeof captured)['font']) => {
     captured.font = props;
@@ -160,6 +202,29 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
   let host: HTMLDivElement;
   let pageHost: HTMLDivElement;
   let root: Root;
+
+  const clickSoundEnabled = () => {
+    const label = Array.from(host.querySelectorAll('p')).find(
+      (element) => element.textContent === 'propertiesPanel.keySoundEnabled',
+    );
+    const button = label?.parentElement?.querySelector('button');
+    expect(button).not.toBeNull();
+    act(() =>
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+  };
+
+  const latestCounterDropdown = (value: string) =>
+    [...captured.dropdowns].reverse().find((item) => item.value === value);
+
+  const changeCounterGap = (value: number) =>
+    act(() => {
+      const gap = [...captured.numbers]
+        .reverse()
+        .find(({ max }) => max === 9999);
+      expect(gap).toMatchObject({ min: 0, max: 9999 });
+      gap?.onChange(value);
+    });
 
   const selectKey = (id: string) => {
     useKeyStore.setState({
@@ -306,6 +371,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     captured.image = null;
     captured.animation = null;
     captured.checkboxes.length = 0;
+    captured.dropdowns.length = 0;
+    captured.numbers.length = 0;
     selectKey(ID_A);
     host = document.createElement('div');
     pageHost = document.createElement('div');
@@ -496,6 +563,64 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(
       patches.patchCounterAnimationEnabledByTargets,
     ).not.toHaveBeenCalled();
+  });
+
+  it.each(['main', 'panel'] as const)(
+    '%s batch counter layout은 current key/stat에 4 exact leaf를 적용한다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const statA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const statB = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const legacy = vi.fn();
+      act(() => selectCounterTargets(ID_A, statA));
+      renderCounterPanel(legacy);
+      act(() => selectCounterTargets(ID_B, statB));
+      renderCounterPanel(legacy);
+
+      act(() => latestCounterDropdown('inside')?.onChange('outside'));
+      act(() => latestCounterDropdown('bottom')?.onChange('right'));
+      act(() => latestCounterDropdown('center')?.onChange('between'));
+      changeCounterGap(9999);
+      const targets = [
+        { elementType: 'key', id: ID_B },
+        { elementType: 'stat', id: statB },
+      ];
+      const calls = [
+        [targets, { counterPlacement: 'outside' }],
+        [targets, { counterAlign: 'right' }],
+        [targets, { counterAlignMode: 'between' }],
+        [targets, { counterGap: 9999 }],
+      ];
+      if (windowType === 'panel') {
+        expect(patches.patchCounterLayoutViaAuthority.mock.calls).toEqual(
+          calls,
+        );
+        expect(patches.patchCounterLayoutByTargets).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchCounterLayoutByTargets.mock.calls).toEqual(calls);
+        expect(patches.patchCounterLayoutViaAuthority).not.toHaveBeenCalled();
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('batch counter layout relevant synthetic는 4 controls 모두 whole legacy다', () => {
+    const legacy = vi.fn();
+    act(() => selectCounterTargets(ID_A, 'stat-0'));
+    renderCounterPanel(legacy);
+
+    act(() => latestCounterDropdown('inside')?.onChange('outside'));
+    act(() => latestCounterDropdown('bottom')?.onChange('left'));
+    act(() => latestCounterDropdown('center')?.onChange('between'));
+    changeCounterGap(9999);
+    expect(legacy.mock.calls).toEqual([
+      [{ placement: 'outside' }],
+      [{ align: 'left' }],
+      [{ alignMode: 'between' }],
+      [{ gap: 9999 }],
+    ]);
+    expect(patches.patchCounterLayoutByTargets).not.toHaveBeenCalled();
+    expect(patches.patchCounterLayoutViaAuthority).not.toHaveBeenCalled();
   });
 
   type ImagePanelKind = 'mixed' | 'graph' | 'knob';
@@ -846,6 +971,88 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(patches.patchSoundPathByIds).not.toHaveBeenCalled();
     expect(patches.patchSoundPathViaAuthority).not.toHaveBeenCalled();
   });
+
+  it.each(['main', 'panel'] as const)(
+    '%s soundEnabled 토글은 picker binding이 아니라 current key subset만 쓴다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      act(() => selectKey(ID_A));
+      renderPanel({ active: null, renderKey: null });
+      act(() => selectKey(ID_B));
+      renderPanel({ active: null, renderKey: null });
+
+      clickSoundEnabled();
+      if (windowType === 'panel') {
+        expect(patches.patchSoundEnabledViaAuthority).toHaveBeenCalledWith(
+          [ID_B],
+          true,
+        );
+        expect(patches.patchSoundEnabledByIds).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchSoundEnabledByIds).toHaveBeenCalledWith(
+          [ID_B],
+          true,
+        );
+        expect(patches.patchSoundEnabledViaAuthority).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('soundEnabled는 graph/knob synthetic를 무시하고 stable key subset만 쓴다', () => {
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: ID_A, index: 0 },
+        { type: 'graph', id: 'graph-0', index: 0 },
+        { type: 'knob', id: 'knob-0', index: 0 },
+      ],
+    });
+    renderPanel({ active: null, renderKey: null });
+
+    clickSoundEnabled();
+    expect(patches.patchSoundEnabledByIds).toHaveBeenCalledWith([ID_A], true);
+  });
+
+  it.each(['key-0', ''])(
+    'soundEnabled key subset에 %j가 있으면 전체 legacy다',
+    (id) => {
+      const stable = keyAt(ID_A);
+      const unsupported = keyAt(id);
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        canonicalPositions: { '4key': [stable, unsupported] },
+        positions: { '4key': [stable, unsupported] },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: ID_A, index: 0 },
+          { type: 'key', id, index: 1 },
+        ],
+      });
+      const props = panelProps();
+      const legacy = vi.fn();
+      props.handleKeyOnlyStyleChangeComplete = legacy;
+      act(() => {
+        root.render(
+          <PanelNavProvider
+            value={{
+              activePageKey: null,
+              renderPageKey: null,
+              openPage: vi.fn(),
+              closePage: vi.fn(),
+              pageHost,
+            }}
+          >
+            <BatchKeyLikePanel {...props} />
+          </PanelNavProvider>,
+        );
+      });
+
+      clickSoundEnabled();
+      expect(legacy).toHaveBeenCalledWith('soundEnabled', true);
+      expect(patches.patchSoundEnabledByIds).not.toHaveBeenCalled();
+      expect(patches.patchSoundEnabledViaAuthority).not.toHaveBeenCalled();
+    },
+  );
 
   it('BatchStyle FontPicker 선택은 raw top-level fontFamily로 전달한다', () => {
     const handleBatchStyleChangeComplete = vi.fn();

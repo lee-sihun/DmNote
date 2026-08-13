@@ -1675,9 +1675,11 @@ interface SingleKeyStatPanelProps {
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
   onSoundPathCommit?: (soundPath: string) => void;
+  onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
   onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
+  onCounterLayoutCommit?: CounterTabContentProps['onCounterLayoutCommit'];
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
   imageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -1722,9 +1724,11 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onInactiveImageCommit,
   onActiveImageCommit,
   onSoundPathCommit,
+  onSoundEnabledCommit,
   onCounterAnimationPresetCommit,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
+  onCounterLayoutCommit,
   showImagePicker,
   setShowImagePicker,
   imageButtonRef,
@@ -1913,6 +1917,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onInactiveImageCommit={onInactiveImageCommit}
               onActiveImageCommit={onActiveImageCommit}
               onSoundPathCommit={onSoundPathCommit}
+              onSoundEnabledCommit={onSoundEnabledCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}
@@ -1976,6 +1981,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onKeyUpdate={handleKeyLikeUpdate}
               onCounterEnabledCommit={onCounterEnabledCommit}
               onCounterAnimationEnabledCommit={onCounterAnimationEnabledCommit}
+              onCounterLayoutCommit={onCounterLayoutCommit}
               onCounterAnimationPresetCommit={onCounterAnimationPresetCommit}
               panelElement={panelElement}
               t={t}

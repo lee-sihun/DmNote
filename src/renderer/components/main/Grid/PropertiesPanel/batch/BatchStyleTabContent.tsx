@@ -65,6 +65,7 @@ interface BatchStyleTabContentProps {
   // 이 컴포넌트는 선택 변경 시 리마운트되어 open 중 재캡처가 일어난다
   soundBinding?: BatchElementBinding;
   onSoundPathCommit?: (soundPath: string) => void;
+  onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -145,6 +146,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   hideFontControls = false,
   soundBinding = LEGACY_BATCH_ELEMENT_BINDING,
   onSoundPathCommit,
+  onSoundEnabledCommit,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -1205,7 +1207,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                       (pos) => pos.soundEnabled,
                       false,
                     ).value;
-                    soundChangeComplete('soundEnabled', !current);
+                    const nextEnabled = !current;
+                    if (onSoundEnabledCommit) {
+                      onSoundEnabledCommit(nextEnabled);
+                    } else {
+                      soundChangeComplete('soundEnabled', nextEnabled);
+                    }
                   }}
                 />
               </PropertyRow>

@@ -40,14 +40,18 @@ import {
   patchActiveImageByTargets,
   patchCounterAnimationEnabledByTargets,
   patchCounterEnabledByTargets,
+  patchCounterLayoutByTargets,
   patchInactiveImageByTargets,
+  patchSoundEnabledByIds,
   patchSoundPathByIds,
 } from '@src/renderer/editor/runtime/elementOps';
 import {
   patchActiveImageViaAuthority,
   patchCounterAnimationEnabledViaAuthority,
   patchCounterEnabledViaAuthority,
+  patchCounterLayoutViaAuthority,
   patchInactiveImageViaAuthority,
+  patchSoundEnabledViaAuthority,
   patchSoundPathViaAuthority,
 } from '@plugins/rpc/pluginElementActions';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
@@ -430,6 +434,21 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     counterTargets.every(({ id }) => id.length > 0 && !isSyntheticElementId(id))
       ? counterTargets
       : null;
+  const soundTargets = selectedKeyElements.map(({ id }) => id);
+  const stableSoundTargets =
+    soundTargets.length > 0 &&
+    soundTargets.every((id) => id.length > 0 && !isSyntheticElementId(id))
+      ? soundTargets
+      : null;
+  const commitSoundEnabled = stableSoundTargets
+    ? (soundEnabled: boolean) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchSoundEnabledViaAuthority(stableSoundTargets, soundEnabled)
+            : patchSoundEnabledByIds(stableSoundTargets, soundEnabled);
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
   const commitCounterEnabled = stableCounterTargets
     ? (enabled: boolean) => {
         const persisted =
@@ -451,6 +470,17 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 stableCounterTargets,
                 enabled,
               );
+        void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const commitCounterLayout = stableCounterTargets
+    ? (
+        patch: import('@src/types/editor').EditorCounterLayoutPropertyPatchV1,
+      ) => {
+        const persisted =
+          window.__dmn_window_type === 'panel'
+            ? patchCounterLayoutViaAuthority(stableCounterTargets, patch)
+            : patchCounterLayoutByTargets(stableCounterTargets, patch);
         void persisted.catch(reportElementOpError);
       }
     : undefined;
@@ -827,6 +857,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                       handleKeyOnlyStyleChangeComplete('soundPath', soundPath),
                   )
                 }
+                onSoundEnabledCommit={commitSoundEnabled}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
                 shadowActiveState={
@@ -1037,6 +1068,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 handleBatchCounterUpdate={handleBatchCounterUpdate}
                 onCounterEnabledCommit={commitCounterEnabled}
                 onCounterAnimationEnabledCommit={commitCounterAnimationEnabled}
+                onCounterLayoutCommit={commitCounterLayout}
                 colorState={batchCounterColorState}
                 getCounterColorDisplay={getCounterColorDisplay}
                 onFillPickerToggle={() => handleBatchPickerToggle('fill')}

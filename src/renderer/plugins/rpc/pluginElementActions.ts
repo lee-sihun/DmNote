@@ -595,6 +595,26 @@ export const patchSoundPathViaAuthority = (
   });
 };
 
+export const patchSoundEnabledViaAuthority = (
+  ids: readonly string[],
+  soundEnabled: boolean,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: ids.map((id) => ({ elementType: 'key' as const, id })),
+        patch: { soundEnabled },
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
 export const patchCounterAnimationPresetViaAuthority = (
   targets: readonly { elementType: 'key' | 'stat'; id: string }[],
   intent: import('@src/types/editor').EditorCounterAnimationPresetIntentV1,
@@ -648,6 +668,26 @@ export const patchCounterAnimationEnabledViaAuthority = (
   patchCounterBooleanViaAuthority(targets, {
     counterAnimationEnabled: enabled,
   });
+
+export const patchCounterLayoutViaAuthority = (
+  targets: readonly { elementType: 'key' | 'stat'; id: string }[],
+  patch: import('@src/types/editor').EditorCounterLayoutPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch,
+      },
+      authorityGeneration,
+      retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
 
 export const updateCounterAnimationPresetViaAuthority = (
   request: import('@src/types/key/counterAnimation').CounterAnimationUpdateRequest,

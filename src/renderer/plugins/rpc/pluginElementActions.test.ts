@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EditorCounterLayoutPropertyPatchV1 } from '@src/types/editor';
 
 const mocks = vi.hoisted(() => ({
   sendPluginRpc: vi.fn(),
@@ -432,6 +433,31 @@ describe('plugin element panel queue', () => {
     );
   });
 
+  it('soundEnabled batch는 key 대상과 absolute bool을 staleOnly envelope에 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const ids = [
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    ];
+
+    await expect(
+      actions.patchSoundEnabledViaAuthority(ids, true),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      {
+        targets: ids.map((id) => ({ elementType: 'key', id })),
+        patch: { soundEnabled: true },
+      },
+      0,
+      7,
+    );
+  });
+
   it('counter animation preset batch는 exact nested intent를 staleOnly envelope로 보낸다', async () => {
     mocks.sendPluginRpc.mockResolvedValue({
       kind: 'ok',
@@ -537,6 +563,67 @@ describe('plugin element panel queue', () => {
     actions.notePluginMirrorRevision(1);
     await expect(pending).resolves.toBe(false);
     expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+  });
+
+  it('counter layout 4 batch는 exact key/stat target과 default envelope를 보낸다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'stat' as const,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ];
+    const patches: EditorCounterLayoutPropertyPatchV1[] = [
+      { counterPlacement: 'outside' as const },
+      { counterAlign: 'right' as const },
+      { counterAlignMode: 'between' as const },
+      { counterGap: 4_294_967_295 },
+    ];
+
+    for (const patch of patches) {
+      await expect(
+        actions.patchCounterLayoutViaAuthority(targets, patch),
+      ).resolves.toBe(true);
+    }
+    expect(
+      mocks.sendPluginRpc.mock.calls.map((call) => call.slice(0, 2)),
+    ).toEqual(
+      patches.map((patch) => ['layers:patchProperty', { targets, patch }]),
+    );
+  });
+
+  it('counter layout outcome-unknown은 same literal default retry를 한 번만 한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+    const pending = actions.patchCounterLayoutViaAuthority(
+      [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      { counterGap: 4_294_967_295 },
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(1);
+    await expect(pending).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
   });
 
   it('counter animation update/delete는 exact descriptor와 성공 payload를 반환한다', async () => {
@@ -896,6 +983,71 @@ describe('plugin element panel queue', () => {
 
     expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
     expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
+  it('soundEnabled outcome-unknown은 snapshot만 요청하고 값을 재전송하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+
+    await expect(
+      actions.patchSoundEnabledViaAuthority(
+        ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+        true,
+      ),
+    ).resolves.toBe(false);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
+  it.each(['MODEL_REVISION_STALE', 'PLUGIN_MODEL_REVISION_CONFLICT'])(
+    'soundEnabled %s은 fresh snapshot 뒤 same generation과 bool을 한 번 재전송한다',
+    async (errorCode) => {
+      mocks.sendPluginRpc
+        .mockResolvedValueOnce({
+          kind: 'error',
+          errorCode,
+          response: { modelRevision: 1 },
+        })
+        .mockResolvedValueOnce({
+          kind: 'ok',
+          response: { modelRevision: 2 },
+        });
+      const changed = actions.patchSoundEnabledViaAuthority(
+        ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+        true,
+      );
+      await vi.waitFor(() =>
+        expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+      );
+      actions.notePluginMirrorRevision(2);
+
+      await expect(changed).resolves.toBe(true);
+      expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+        mocks.sendPluginRpc.mock.calls[0]?.[1],
+      );
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+    },
+  );
+
+  it('soundEnabled revision stale 대기 중 generation이 바뀌면 재전송하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({
+      kind: 'error',
+      errorCode: 'MODEL_REVISION_STALE',
+      response: { modelRevision: 1 },
+    });
+    const changed = actions.patchSoundEnabledViaAuthority(
+      ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+      true,
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    mocks.authorityGeneration = 8;
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(false);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
   });
 
   it.each(['MODEL_REVISION_STALE', 'PLUGIN_MODEL_REVISION_CONFLICT'])(

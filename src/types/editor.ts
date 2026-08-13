@@ -149,11 +149,16 @@ interface EditorElementPropertyValuesV1 {
   reverse: boolean;
   sensitivity: number;
   axisId: string;
+  soundEnabled: boolean;
   soundPath: string;
   inactiveImage: string;
   activeImage: string;
   counterEnabled: boolean;
   counterAnimationEnabled: boolean;
+  counterPlacement: 'inside' | 'outside';
+  counterAlign: 'top' | 'bottom' | 'left' | 'right';
+  counterAlignMode: 'center' | 'between';
+  counterGap: number;
   counterAnimationPreset: EditorCounterAnimationPresetIntentV1;
   useInlineStyles: boolean;
   fontWeight: number;
@@ -190,6 +195,9 @@ export type EditorKnobAxisPropertyPatchV1 =
 export type EditorSoundPathPropertyPatchV1 =
   EditorPropertyPatchUnionV1<'soundPath'>;
 
+export type EditorSoundEnabledPropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'soundEnabled'>;
+
 export type EditorInactiveImagePropertyPatchV1 =
   EditorPropertyPatchUnionV1<'inactiveImage'>;
 
@@ -209,6 +217,10 @@ export type EditorCounterAnimationPresetPropertyPatchV1 =
 
 export type EditorCounterBooleanPropertyPatchV1 = EditorPropertyPatchUnionV1<
   'counterEnabled' | 'counterAnimationEnabled'
+>;
+
+export type EditorCounterLayoutPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'counterPlacement' | 'counterAlign' | 'counterAlignMode' | 'counterGap'
 >;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -1083,6 +1095,10 @@ export function assertEditorOpsV1(
           op.elementType === 'knob' &&
           typeof op.patch.axisId === 'string') ||
         (patchKeys.length === 1 &&
+          patchKeys[0] === 'soundEnabled' &&
+          op.elementType === 'key' &&
+          typeof op.patch.soundEnabled === 'boolean') ||
+        (patchKeys.length === 1 &&
           patchKeys[0] === 'soundPath' &&
           op.elementType === 'key' &&
           typeof op.patch.soundPath === 'string') ||
@@ -1101,6 +1117,28 @@ export function assertEditorOpsV1(
           patchKeys[0] === 'counterAnimationEnabled' &&
           (op.elementType === 'key' || op.elementType === 'stat') &&
           typeof op.patch.counterAnimationEnabled === 'boolean') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterPlacement' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          (op.patch.counterPlacement === 'inside' ||
+            op.patch.counterPlacement === 'outside')) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterAlign' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          ['top', 'bottom', 'left', 'right'].includes(
+            op.patch.counterAlign as string,
+          )) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterAlignMode' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          (op.patch.counterAlignMode === 'center' ||
+            op.patch.counterAlignMode === 'between')) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'counterGap' &&
+          (op.elementType === 'key' || op.elementType === 'stat') &&
+          Number.isSafeInteger(op.patch.counterGap) &&
+          (op.patch.counterGap as number) >= 0 &&
+          (op.patch.counterGap as number) <= 4_294_967_295) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'counterAnimationPreset' &&
           (op.elementType === 'key' || op.elementType === 'stat') &&

@@ -5,7 +5,10 @@ import type {
   GradientPreviewSurface,
 } from '@stores/grid/useGradientEditStore';
 import type { CommitStrategy } from '@hooks/useOptimisticBooleanCommit';
-import type { EditorCounterAnimationPresetIntentV1 } from '@src/types/editor';
+import type {
+  EditorCounterAnimationPresetIntentV1,
+  EditorCounterLayoutPropertyPatchV1,
+} from '@src/types/editor';
 
 // ============================================================================
 // 탭 상수
@@ -234,6 +237,7 @@ export interface StyleTabContentProps {
   onInactiveImageCommit?: (inactiveImage: string) => void;
   onActiveImageCommit?: (activeImage: string) => void;
   onSoundPathCommit?: (soundPath: string) => void;
+  onSoundEnabledCommit?: (soundEnabled: boolean) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
   panelElement?: HTMLElement | null;
   useCustomCSS?: boolean;
@@ -257,6 +261,7 @@ export interface CounterTabContentProps {
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onCounterEnabledCommit?: (enabled: boolean) => void;
   onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
+  onCounterLayoutCommit?: (patch: EditorCounterLayoutPropertyPatchV1) => void;
   onCounterAnimationPresetCommit?: (
     intent: EditorCounterAnimationPresetIntentV1,
   ) => void;

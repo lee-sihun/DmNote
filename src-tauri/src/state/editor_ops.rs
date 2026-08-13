@@ -780,6 +780,10 @@ pub(crate) fn prepare_editor_ops_transition(
                 patch,
                 EditorElementPropertyPatchV1::CounterEnabled(_)
                     | EditorElementPropertyPatchV1::CounterAnimationEnabled(_)
+                    | EditorElementPropertyPatchV1::CounterPlacement(_)
+                    | EditorElementPropertyPatchV1::CounterAlign(_)
+                    | EditorElementPropertyPatchV1::CounterAlignMode(_)
+                    | EditorElementPropertyPatchV1::CounterGap(_)
             ) {
                 if !matches!(
                     element_type,
@@ -793,6 +797,7 @@ pub(crate) fn prepare_editor_ops_transition(
             } else if matches!(
                 patch,
                 EditorElementPropertyPatchV1::SoundPath(_)
+                    | EditorElementPropertyPatchV1::SoundEnabled(_)
                     | EditorElementPropertyPatchV1::NoteEffectEnabled(_)
                     | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
                     | EditorElementPropertyPatchV1::NoteAutoYCorrection(_)
@@ -1107,6 +1112,15 @@ pub(crate) fn prepare_editor_ops_transition(
                             true
                         }
                     }
+                    EditorElementPropertyPatchV1::SoundEnabled(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.sound_enabled == Some(patch.sound_enabled) {
+                            false
+                        } else {
+                            position.sound_enabled = Some(patch.sound_enabled);
+                            true
+                        }
+                    }
                     EditorElementPropertyPatchV1::CounterEnabled(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
                         if position.counter.enabled == patch.counter_enabled {
@@ -1122,6 +1136,42 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.counter.animation.enabled = patch.counter_animation_enabled;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterPlacement(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.placement == patch.counter_placement {
+                            false
+                        } else {
+                            position.counter.placement = patch.counter_placement.clone();
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterAlign(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.align == patch.counter_align {
+                            false
+                        } else {
+                            position.counter.align = patch.counter_align.clone();
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterAlignMode(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.align_mode == patch.counter_align_mode {
+                            false
+                        } else {
+                            position.counter.align_mode = patch.counter_align_mode.clone();
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::CounterGap(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.counter.gap == patch.counter_gap {
+                            false
+                        } else {
+                            position.counter.gap = patch.counter_gap;
                             true
                         }
                     }
@@ -3293,6 +3343,104 @@ mod tests {
     }
 
     #[test]
+    fn sound_enabled_patch_materializes_false_and_preserves_siblings_atomically() {
+        let mut store = store_with_every_reorder_type();
+        let key_ids = store.key_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        for (index, position) in store
+            .key_positions
+            .get_mut("4key")
+            .unwrap()
+            .iter_mut()
+            .take(2)
+            .enumerate()
+        {
+            position.sound_enabled = if index == 0 { None } else { Some(false) };
+            position.sound_path = Some("sounds/sibling.wav".to_string());
+            position.sound_volume = Some(137.5);
+            position.inactive_image = Some("idle-sibling.png".to_string());
+            position.active_image = Some("active-sibling.png".to_string());
+            position.counter.enabled = false;
+        }
+        let patch = EditorElementPropertyPatchV1::SoundEnabled(
+            crate::models::EditorSoundEnabledPropertyPatchV1 {
+                sound_enabled: false,
+            },
+        );
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &key_ids[0], patch.clone()),
+            patch_property_op(EditorElementTypeV1::Key, &key_ids[1], patch.clone()),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                patch.clone(),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        for position in transition.candidate.key_positions["4key"].iter().take(2) {
+            assert_eq!(position.sound_enabled, Some(false));
+            assert_eq!(position.sound_path.as_deref(), Some("sounds/sibling.wav"));
+            assert_eq!(position.sound_volume, Some(137.5));
+            assert_eq!(position.inactive_image.as_deref(), Some("idle-sibling.png"));
+            assert_eq!(position.active_image.as_deref(), Some("active-sibling.png"));
+            assert!(!position.counter.enabled);
+        }
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        for element_type in [
+            EditorElementTypeV1::Stat,
+            EditorElementTypeV1::Graph,
+            EditorElementTypeV1::Knob,
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        patch.clone(),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store.key_positions["4key"][0].sound_enabled, None);
+        }
+    }
+
+    #[test]
     fn counter_boolean_patches_preserve_nested_siblings_and_reject_wrong_types_atomically() {
         let mut store = store_with_every_reorder_type();
         let key_id = store.key_positions["4key"][0].id.clone();
@@ -3464,6 +3612,167 @@ mod tests {
                     .animation
                     .enabled
             );
+        }
+    }
+
+    #[test]
+    fn counter_layout_patches_change_one_leaf_and_preserve_hidden_siblings_atomically() {
+        let mut store = store_with_every_reorder_type();
+        let key_ids = store.key_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.id.clone())
+            .collect::<Vec<_>>();
+        let mut second_stat = store.stat_positions["4key"][0].clone();
+        second_stat.position.id = uuid::Uuid::new_v4().to_string();
+        store
+            .stat_positions
+            .get_mut("4key")
+            .unwrap()
+            .push(second_stat);
+        let stat_ids = store.stat_positions["4key"]
+            .iter()
+            .take(2)
+            .map(|position| position.position.id.clone())
+            .collect::<Vec<_>>();
+        for counter in store.key_positions.get_mut("4key").unwrap()[..2]
+            .iter_mut()
+            .map(|position| &mut position.counter)
+            .chain(
+                store.stat_positions.get_mut("4key").unwrap()[..2]
+                    .iter_mut()
+                    .map(|position| &mut position.position.counter),
+            )
+        {
+            counter.enabled = false;
+            counter.placement = crate::models::KeyCounterPlacement::Inside;
+            counter.align = crate::models::KeyCounterAlign::Bottom;
+            counter.align_mode = crate::models::KeyCounterAlignMode::Between;
+            counter.gap = 7;
+            counter.fill.idle = "fill-sibling".to_string();
+            counter.stroke.active = "stroke-sibling".to_string();
+            counter.font_family = Some("font-sibling".to_string());
+            counter.animation.enabled = false;
+            counter.animation.preset_id = Some("builtin-linear".to_string());
+            counter.animation.scale = 1.75;
+        }
+        let originals = [
+            store.key_positions["4key"][0].counter.clone(),
+            store.key_positions["4key"][1].counter.clone(),
+            store.stat_positions["4key"][0].position.counter.clone(),
+            store.stat_positions["4key"][1].position.counter.clone(),
+        ];
+        let placement = EditorElementPropertyPatchV1::CounterPlacement(
+            crate::models::EditorCounterPlacementPropertyPatchV1 {
+                counter_placement: crate::models::KeyCounterPlacement::Outside,
+            },
+        );
+        let align = EditorElementPropertyPatchV1::CounterAlign(
+            crate::models::EditorCounterAlignPropertyPatchV1 {
+                counter_align: crate::models::KeyCounterAlign::Right,
+            },
+        );
+        let align_mode = EditorElementPropertyPatchV1::CounterAlignMode(
+            crate::models::EditorCounterAlignModePropertyPatchV1 {
+                counter_align_mode: crate::models::KeyCounterAlignMode::Center,
+            },
+        );
+        let gap = EditorElementPropertyPatchV1::CounterGap(
+            crate::models::EditorCounterGapPropertyPatchV1 {
+                counter_gap: u32::MAX,
+            },
+        );
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &key_ids[0], placement.clone()),
+            patch_property_op(EditorElementTypeV1::Key, &key_ids[1], align.clone()),
+            patch_property_op(EditorElementTypeV1::Stat, &stat_ids[0], align_mode.clone()),
+            patch_property_op(EditorElementTypeV1::Stat, &stat_ids[1], gap.clone()),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                gap.clone(),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let actual = [
+            transition.candidate.key_positions["4key"][0]
+                .counter
+                .clone(),
+            transition.candidate.key_positions["4key"][1]
+                .counter
+                .clone(),
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .counter
+                .clone(),
+            transition.candidate.stat_positions["4key"][1]
+                .position
+                .counter
+                .clone(),
+        ];
+        let mut expected = originals.clone();
+        expected[0].placement = crate::models::KeyCounterPlacement::Outside;
+        expected[1].align = crate::models::KeyCounterAlign::Right;
+        expected[2].align_mode = crate::models::KeyCounterAlignMode::Center;
+        expected[3].gap = u32::MAX;
+        assert_eq!(actual, expected);
+        assert!(matches!(
+            actual[0].align_mode,
+            crate::models::KeyCounterAlignMode::Between
+        ));
+        assert_eq!(
+            transition.changed_fields,
+            [EditorField::KeyPositions, EditorField::StatPositions]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        for (element_type, patch) in [
+            (EditorElementTypeV1::Graph, placement),
+            (EditorElementTypeV1::Knob, align),
+            (EditorElementTypeV1::Graph, align_mode),
+            (EditorElementTypeV1::Knob, gap),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(element_type, uuid::Uuid::new_v4().to_string(), patch),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store.key_positions["4key"][0].counter, originals[0]);
         }
     }
 

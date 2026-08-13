@@ -44,6 +44,7 @@ import type {
   EditorFrozenElementV1,
   EditorElementPropertyPatchV1,
   EditorCounterBooleanPropertyPatchV1,
+  EditorCounterLayoutPropertyPatchV1,
   EditorCounterAnimationPresetIntentV1,
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
@@ -1160,6 +1161,33 @@ export const patchSoundPathById = (
   return patchElementPropertyById('key', id, { soundPath }, options);
 };
 
+export const patchSoundEnabledById = (
+  id: string,
+  soundEnabled: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  return patchElementPropertyById('key', id, { soundEnabled }, options);
+};
+
+export const patchSoundEnabledByIds = (
+  ids: readonly string[],
+  soundEnabled: boolean,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0 || isSyntheticElementId(id)) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    ids.map((id) => ({ type: 'key', id, patch: { soundEnabled } })),
+    options,
+  );
+};
+
 export const patchSoundPathByIds = (
   ids: readonly string[],
   soundPath: string,
@@ -1270,6 +1298,95 @@ const patchCounterBooleanByTargets = (
       throw error;
     });
 };
+
+const counterLayoutPropertyIntents = (
+  targets: readonly CounterAnimationTarget[],
+  patch: EditorCounterLayoutPropertyPatchV1,
+): PropertyIntents => {
+  const document = captureEditorDocument();
+  const propertyIntents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { elementType, id } of targets) {
+    const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
+    const record = document[field] as Record<
+      string,
+      Array<Record<string, unknown> & { id?: string }>
+    >;
+    const current = Object.values(record)
+      .flat()
+      .find((position) => position.id === id);
+    if (
+      !current ||
+      current.counter === null ||
+      typeof current.counter !== 'object' ||
+      Array.isArray(current.counter)
+    ) {
+      continue;
+    }
+    const counter = current.counter as Record<string, unknown>;
+    const nextCounter =
+      'counterPlacement' in patch
+        ? { ...counter, placement: patch.counterPlacement }
+        : 'counterAlign' in patch
+        ? { ...counter, align: patch.counterAlign }
+        : 'counterAlignMode' in patch
+        ? { ...counter, alignMode: patch.counterAlignMode }
+        : { ...counter, gap: patch.counterGap };
+    const byId = propertyIntents.get(elementType) ?? new Map();
+    byId.set(id, { counter: nextCounter });
+    propertyIntents.set(elementType, byId);
+  }
+  return propertyIntents;
+};
+
+export const patchCounterLayoutByTargets = (
+  targets: readonly CounterAnimationTarget[],
+  patch: EditorCounterLayoutPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some(({ id }) => id.length === 0 || isSyntheticElementId(id)) ||
+    new Set(targets.map(({ id }) => id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  const receipt = applyPropertyIntentsEagerly(
+    counterLayoutPropertyIntents(targets, patch),
+  );
+  let enrolled = false;
+  return commitSemanticOps(
+    targets.map(({ elementType, id }) => ({
+      kind: 'patchElement' as const,
+      elementType,
+      id,
+      patch,
+    })),
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchCounterLayoutById = (
+  elementType: 'key' | 'stat',
+  id: string,
+  patch: EditorCounterLayoutPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchCounterLayoutByTargets([{ elementType, id }], patch, options);
 
 export const patchCounterEnabledByTargets = (
   targets: readonly CounterAnimationTarget[],
