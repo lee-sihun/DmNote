@@ -1,7 +1,14 @@
 const imageWarmupCache = new Map<string, Promise<void>>();
+const IMAGE_WARMUP_CACHE_LIMIT = 256;
 
 export function warmupImageSource(src?: string | null): void {
-  if (!src || imageWarmupCache.has(src)) return;
+  if (!src) return;
+  const cached = imageWarmupCache.get(src);
+  if (cached) {
+    imageWarmupCache.delete(src);
+    imageWarmupCache.set(src, cached);
+    return;
+  }
 
   const task = new Promise<void>((resolve) => {
     const img = new Image();
@@ -30,4 +37,9 @@ export function warmupImageSource(src?: string | null): void {
   });
 
   imageWarmupCache.set(src, task);
+  while (imageWarmupCache.size > IMAGE_WARMUP_CACHE_LIMIT) {
+    const oldest = imageWarmupCache.keys().next().value;
+    if (oldest === undefined) break;
+    imageWarmupCache.delete(oldest);
+  }
 }

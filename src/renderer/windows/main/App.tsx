@@ -1,5 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
+  closeCustomDialogOwnedSurface,
+  replaceCustomDialogCallbacks,
+} from './customDialogCallbacks';
+import {
   usePanelWindowStore,
   detachPropertiesPanel,
   hasInlinePropertiesPanelLease,
@@ -504,6 +508,7 @@ export default function App() {
       confirmCallbackRef.current = null;
       cancelCallbackRef.current = null;
       cancel?.();
+      replaceCustomDialogCallbacks(customDialogCallbackRef, {});
     },
     [],
   );
@@ -520,10 +525,16 @@ export default function App() {
       onContentMount?: (element: HTMLElement) => void | (() => void);
     },
   ) => {
-    customDialogCallbackRef.current = {
+    if (colorPickerState.isOpen) {
+      closeCustomDialogOwnedSurface(
+        colorPickerState.referenceElement,
+        closeColorPicker,
+      );
+    }
+    replaceCustomDialogCallbacks(customDialogCallbackRef, {
       onConfirm: options?.onConfirm,
       onCancel: options?.onCancel,
-    };
+    });
     setCustomDialogState({
       isOpen: true,
       html,
@@ -536,11 +547,11 @@ export default function App() {
 
   const closeCustomDialog = () => {
     // 다이얼로그 내부 앵커에 붙은 전역 피커는 다이얼로그와 함께 정리
-    if (
-      colorPickerState.isOpen &&
-      colorPickerState.referenceElement?.closest('[data-plugin-dialog-content]')
-    ) {
-      closeColorPicker();
+    if (colorPickerState.isOpen) {
+      closeCustomDialogOwnedSurface(
+        colorPickerState.referenceElement,
+        closeColorPicker,
+      );
     }
     setCustomDialogState({
       isOpen: false,

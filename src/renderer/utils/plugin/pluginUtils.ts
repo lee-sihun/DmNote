@@ -9,6 +9,8 @@ let handlerIdCounter = 0;
 
 // 플러그인별 핸들러 맵: pluginId -> handlerId -> handler function
 const componentHandlers = new Map<string, Map<string, PluginHandler>>();
+const componentHandlerOwners = new Map<string, string>();
+const componentHandlerTrackers: Array<(handlerId: string) => void> = [];
 
 // window에 동적 키로 핸들러를 등록/삭제하기 위한 헬퍼
 const windowRecord = window as unknown as Record<string, unknown>;
@@ -32,11 +34,36 @@ export function registerComponentHandler(
   }
   const pluginHandlers = componentHandlers.get(pluginId)!;
   pluginHandlers.set(handlerId, handler);
+  componentHandlerOwners.set(handlerId, pluginId);
+  componentHandlerTrackers.at(-1)?.(handlerId);
 
   // 전역에 핸들러 등록
   windowRecord[handlerId] = handler;
 
   return handlerId;
+}
+
+export function withComponentHandlerTracking<T>(
+  track: (handlerId: string) => void,
+  factory: () => T,
+): T {
+  componentHandlerTrackers.push(track);
+  try {
+    return factory();
+  } finally {
+    componentHandlerTrackers.pop();
+  }
+}
+
+export function unregisterComponentHandler(handlerId: string): void {
+  const pluginId = componentHandlerOwners.get(handlerId);
+  if (pluginId) {
+    const pluginHandlers = componentHandlers.get(pluginId);
+    pluginHandlers?.delete(handlerId);
+    if (pluginHandlers?.size === 0) componentHandlers.delete(pluginId);
+    componentHandlerOwners.delete(handlerId);
+  }
+  delete windowRecord[handlerId];
 }
 
 /**
@@ -51,6 +78,7 @@ export function clearComponentHandlers(pluginId: string): void {
   // 전역 핸들러 제거
   for (const handlerId of pluginHandlers.keys()) {
     delete windowRecord[handlerId];
+    componentHandlerOwners.delete(handlerId);
   }
 
   // 플러그인 핸들러 맵 제거

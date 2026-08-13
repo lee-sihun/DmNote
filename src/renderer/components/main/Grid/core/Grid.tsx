@@ -129,6 +129,12 @@ import {
   beginMixedGestureTransaction,
   cancelUncommittedMixedGestureTransaction,
 } from '@plugins/runtime/displayElement/gestureTransaction';
+import {
+  commitStableHandlerSlots,
+  getStableHandlers,
+  type PendingHandlerSlotMap,
+  type StableHandlerSlotMap,
+} from './stableHandlerSlots';
 
 type ToolbarAddRequest = {
   id: number;
@@ -1070,21 +1076,11 @@ const Grid = ({
   // 항상 깨진다. 그러면 값 하나가 바뀌는 프리뷰에도 화면의 모든 요소가 다시 그려진다
   // (실측 키 100개 기준 3.13ms -> 0.35ms, 200개 7.32ms -> 0.62ms).
   // 참조는 고정하고 실제 동작은 매 렌더 최신 구현으로 갈아끼워 값은 항상 최신을 본다
-  const handlerSlotsRef = useRef(
-    new Map<
-      string,
-      {
-        impl: Record<string, (...args: never[]) => unknown>;
-        props: Record<string, (...args: never[]) => unknown>;
-      }
-    >(),
-  );
+  const handlerSlotsRef = useRef<StableHandlerSlotMap>(new Map());
 
   // 최신 구현 교체는 커밋 시점에만. 렌더 중에 바꾸면 React가 그 렌더를 버렸을 때
   // 화면에는 이전 트리가 붙어 있는데 이벤트만 폐기된 렌더의 클로저를 호출한다
-  const pendingImplRef = useRef(
-    new Map<string, Record<string, (...args: never[]) => unknown>>(),
-  );
+  const pendingImplRef = useRef<PendingHandlerSlotMap>(new Map());
   pendingImplRef.current.clear();
 
   const stableHandlers = <
@@ -1092,34 +1088,16 @@ const Grid = ({
   >(
     id: string,
     impl: T,
-  ): T => {
-    pendingImplRef.current.set(id, impl);
-
-    const slots = handlerSlotsRef.current;
-    const found = slots.get(id);
-    // 첫 등록은 커밋 전이라 이벤트가 들어올 수 없다. 바로 채워도 안전하다
-    if (found) return found.props as T;
-
-    const slot = {
-      impl: impl as Record<string, (...args: never[]) => unknown>,
-      props: {} as Record<string, (...args: never[]) => unknown>,
-    };
-    Object.keys(impl).forEach((name) => {
-      slot.props[name] = ((...args: unknown[]) =>
-        (slot.impl[name] as (...a: unknown[]) => unknown)(...args)) as (
-        ...args: never[]
-      ) => unknown;
-    });
-    slots.set(id, slot);
-    return slot.props as T;
-  };
+  ): T =>
+    getStableHandlers(
+      handlerSlotsRef.current,
+      pendingImplRef.current,
+      id,
+      impl,
+    );
 
   useLayoutEffect(() => {
-    const slots = handlerSlotsRef.current;
-    pendingImplRef.current.forEach((impl, id) => {
-      const slot = slots.get(id);
-      if (slot) slot.impl = impl;
-    });
+    commitStableHandlerSlots(handlerSlotsRef.current, pendingImplRef.current);
   });
 
   const renderKeys = () => {
