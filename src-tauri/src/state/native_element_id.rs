@@ -258,6 +258,108 @@ pub(crate) fn rekey_mode_element_ids_for_collections(
     }
 }
 
+fn backfill_collection_mode<T: NativeElement>(
+    collection: &mut HashMap<String, Vec<T>>,
+    mode: &str,
+    seen: &mut HashSet<String>,
+    reserved: &mut HashSet<String>,
+    outcome: &mut BackfillOutcome,
+) {
+    let Some(elements) = collection.get_mut(mode) else {
+        return;
+    };
+    for element in elements {
+        let id = &element.position().id;
+        let valid = is_valid_element_id(id);
+        if valid && seen.insert(id.clone()) {
+            continue;
+        }
+
+        if !id.is_empty() || valid {
+            outcome.repaired = true;
+        }
+        let id = new_unique_id(reserved);
+        seen.insert(id.clone());
+        element.position_mut().id = id;
+        outcome.changed = true;
+    }
+}
+
+// 한 모드의 선택된 컬렉션만 채운다. 대상 밖 요소의 id를 seen에 먼저 담아
+// 대상 안의 중복도 복구되고 새 id가 문서 전체에서 유일하도록 유지한다
+pub(crate) fn backfill_mode_element_ids_for_collections(
+    store: &mut AppStoreData,
+    mode: &str,
+    key_positions: bool,
+    stat_positions: bool,
+    graph_positions: bool,
+    knob_positions: bool,
+) -> BackfillOutcome {
+    let mut seen = HashSet::new();
+    collect_collection_ids_outside_target(&store.key_positions, mode, key_positions, &mut seen);
+    collect_collection_ids_outside_target(&store.stat_positions, mode, stat_positions, &mut seen);
+    collect_collection_ids_outside_target(&store.graph_positions, mode, graph_positions, &mut seen);
+    collect_collection_ids_outside_target(&store.knob_positions, mode, knob_positions, &mut seen);
+    let mut reserved = collect_store_ids(store);
+    let mut outcome = BackfillOutcome::default();
+    if key_positions {
+        backfill_collection_mode(
+            &mut store.key_positions,
+            mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if stat_positions {
+        backfill_collection_mode(
+            &mut store.stat_positions,
+            mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if graph_positions {
+        backfill_collection_mode(
+            &mut store.graph_positions,
+            mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    if knob_positions {
+        backfill_collection_mode(
+            &mut store.knob_positions,
+            mode,
+            &mut seen,
+            &mut reserved,
+            &mut outcome,
+        );
+    }
+    outcome
+}
+
+// 백필 대상(선택된 컬렉션 × 대상 모드) 밖의 id만 모은다
+fn collect_collection_ids_outside_target<T: NativeElement>(
+    collection: &HashMap<String, Vec<T>>,
+    target_mode: &str,
+    targeted: bool,
+    ids: &mut HashSet<String>,
+) {
+    for (mode, elements) in collection {
+        if targeted && mode == target_mode {
+            continue;
+        }
+        for element in elements {
+            if is_valid_element_id(&element.position().id) {
+                ids.insert(element.position().id.clone());
+            }
+        }
+    }
+}
+
 fn validate_supplied_collection_ids<T: NativeElement>(
     collection: &HashMap<String, Vec<T>>,
     require_id: bool,
