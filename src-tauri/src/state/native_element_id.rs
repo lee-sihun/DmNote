@@ -439,6 +439,7 @@ fn adapt_v1_collection<T: NativeElement>(
 
 struct SlotPairedPosition {
     mode: String,
+    index: usize,
     slot: Option<KeySlot>,
     position: KeyPosition,
 }
@@ -456,6 +457,7 @@ fn slot_paired_current_positions(
         for (index, element) in elements.iter().enumerate() {
             pairs.push(SlotPairedPosition {
                 mode: mode.clone(),
+                index,
                 slot: slots.and_then(|slots| slots.get(index)).cloned(),
                 position: element.clone(),
             });
@@ -504,6 +506,42 @@ fn consume_slot_paired_ids(
     }
 }
 
+// 값을 무시하고 같은 모드·같은 index의 슬롯 일치만으로 승계한다. 값 일치를
+// 요구하는 앞 웨이브들이 모두 실패하는 경우 - 슬롯은 그대로인데 위치 값만
+// 바뀐 이동 - 를 담당한다. index를 고정해 중복 슬롯끼리 교차 승계하지 않는다
+fn consume_slot_only_ids(
+    candidate: &mut HashMap<String, Vec<KeyPosition>>,
+    patch_keys: &KeyMappings,
+    current_pairs: &[SlotPairedPosition],
+    consumed_current_ids: &mut HashSet<String>,
+) {
+    for mode in sorted_modes(candidate) {
+        let Some(elements) = candidate.get_mut(&mode) else {
+            continue;
+        };
+        let slots = patch_keys.get(&mode);
+        for (index, element) in elements.iter_mut().enumerate() {
+            if !element.id.is_empty() {
+                continue;
+            }
+            let Some(slot) = slots.and_then(|slots| slots.get(index)) else {
+                continue;
+            };
+            let inherited = current_pairs.iter().find(|pair| {
+                pair.mode == mode
+                    && pair.index == index
+                    && pair.slot.as_ref() == Some(slot)
+                    && !consumed_current_ids.contains(&pair.position.id)
+            });
+            if let Some(pair) = inherited {
+                let id = pair.position.id.clone();
+                consumed_current_ids.insert(id.clone());
+                element.id = id;
+            }
+        }
+    }
+}
+
 // v1 paired patch는 keys[i]-keyPositions[i] 결합이 신원 단서다. 값이 같은
 // 위치가 여럿일 때 값만으로 승계하면 재정렬에서 ID가 다른 키 슬롯에 붙으므로
 // 같은 모드의 (슬롯, 값) 정확 일치부터 소진하고, 모드 이동·재바인딩은
@@ -531,7 +569,8 @@ fn adapt_v1_key_position_ids(
 
     let current_pairs = slot_paired_current_positions(&store.keys, &store.key_positions);
     // 웨이브 순서: 같은 모드 슬롯+값 → 모드 간 슬롯+값(모드 이동) →
-    // 같은 모드 값(재바인딩) → 마지막 전역 값 폴백과 신규 발급
+    // 같은 모드 값(재바인딩) → 같은 모드 index 슬롯(값 변경 이동) →
+    // 마지막 전역 값 폴백과 신규 발급
     for (match_slot, same_mode_only) in [(true, true), (true, false), (false, true)] {
         consume_slot_paired_ids(
             candidate,
@@ -542,7 +581,9 @@ fn adapt_v1_key_position_ids(
             same_mode_only,
         );
     }
+    consume_slot_only_ids(candidate, patch_keys, &current_pairs, consumed_current_ids);
 
+    inherit_ids_by_value_within_mode(&store.key_positions, candidate, consumed_current_ids);
     inherit_ids_by_value(
         &ordered_current_elements(&store.key_positions),
         candidate,
@@ -1154,6 +1195,49 @@ mod tests {
         let positions = &patch.key_positions.unwrap()["mode"];
         assert_eq!(positions[1].id, id_a);
         assert_eq!(positions[0].id, id_b);
+    }
+
+    #[test]
+    fn v1_paired_slot_keeps_id_when_only_the_position_value_changes() {
+        let store = keyed_store(
+            vec![KeySlot::from("A"), KeySlot::from("B")],
+            vec![position(1.0), position(2.0)],
+        );
+        let id_a = store.key_positions["mode"][0].id.clone();
+        let id_b = store.key_positions["mode"][1].id.clone();
+        let mut patch = paired_patch(
+            vec![KeySlot::from("A"), KeySlot::from("B")],
+            vec![position(50.0), position(2.0)],
+        );
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 슬롯이 그대로면 위치 값이 바뀌어도 신원이 유지된다 - 이동은 신원
+        // 회전이 아니다
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_eq!(positions[0].id, id_a);
+        assert_eq!(positions[1].id, id_b);
+    }
+
+    #[test]
+    fn v1_paired_duplicate_slots_keep_their_own_ids_by_index() {
+        let store = keyed_store(
+            vec![KeySlot::from("A"), KeySlot::from("A")],
+            vec![position(1.0), position(2.0)],
+        );
+        let first = store.key_positions["mode"][0].id.clone();
+        let second = store.key_positions["mode"][1].id.clone();
+        let mut patch = paired_patch(
+            vec![KeySlot::from("A"), KeySlot::from("A")],
+            vec![position(10.0), position(20.0)],
+        );
+
+        prepare_commit_patch_element_ids(&store, &mut patch).unwrap();
+
+        // 슬롯이 겹쳐도 index 정렬로 각자 자기 ID를 지킨다
+        let positions = &patch.key_positions.unwrap()["mode"];
+        assert_eq!(positions[0].id, first);
+        assert_eq!(positions[1].id, second);
     }
 
     #[test]
