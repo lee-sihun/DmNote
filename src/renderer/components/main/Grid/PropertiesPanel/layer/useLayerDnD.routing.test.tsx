@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   })),
   captureBaseline: vi.fn(() => null),
   reportElementOpError: vi.fn(),
+  reportElementOpSkipped: vi.fn(),
   setPluginZIndexes: vi.fn(),
   commitPatch: vi.fn(() => Promise.resolve()),
   setKeyPositions: vi.fn(),
@@ -34,7 +35,7 @@ vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   intentPatch: (patch: unknown) =>
     patch === null ? { kind: 'targetLost' } : { kind: 'patch', patch },
   reportElementOpError: mocks.reportElementOpError,
-  reportElementOpSkipped: vi.fn(),
+  reportElementOpSkipped: mocks.reportElementOpSkipped,
 }));
 
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
@@ -281,6 +282,48 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     // 최종 순서 [B, A, plugin] - live 순서 기준 zIndex
     expect(byId.get(ID_B)).toMatchObject({ zIndex: 2 });
     expect(byId.get(ID_A)).toMatchObject({ zIndex: 1 });
+  });
+
+  it('eager 게이트가 닫히면 plugin z도 쓰지 않는다', async () => {
+    mocks.reportElementOpSkipped.mockClear();
+    mocks.applyGestureEagerly.mockImplementationOnce(() => ({
+      matched: false,
+      receipt: null,
+    }));
+    const startItems = [nativeItem(ID_A, 0, 2), nativeItem(ID_B, 1, 1)];
+    const liveItems = [...startItems, pluginItem('plugin-x:one', 0)];
+    await dragItemToEnd(startItems, {
+      layerItems: liveItems,
+      displayItems: toDisplay(liveItems),
+    });
+
+    // native가 하나도 적용되지 않았으므로 plugin만 옮겨진 반쪽 순서가
+    // 영속되면 안 된다
+    expect(mocks.setPluginZIndexes).not.toHaveBeenCalled();
+    expect(mocks.runElementIntent).not.toHaveBeenCalled();
+    expect(mocks.reportElementOpSkipped).toHaveBeenCalledTimes(1);
+  });
+
+  it('편입 후 실패는 plugin z를 이전 값으로 되돌린다', async () => {
+    mocks.runElementIntent.mockImplementation((options: unknown) => {
+      (options as { applyEager: () => unknown }).applyEager();
+      return Promise.reject(new Error('start failed'));
+    });
+    const startItems = [nativeItem(ID_A, 0, 2), nativeItem(ID_B, 1, 1)];
+    const liveItems = [...startItems, pluginItem('plugin-x:one', 0)];
+    await dragItemToEnd(startItems, {
+      layerItems: liveItems,
+      displayItems: toDisplay(liveItems),
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // 쓰기 1회 + 복원 1회, 복원은 드래그 전 z로 되돌린다
+    expect(mocks.setPluginZIndexes).toHaveBeenCalledTimes(2);
+    expect(mocks.setPluginZIndexes.mock.calls[1][0]).toEqual([
+      { fullId: 'plugin-x:one', zIndex: 0 },
+    ]);
   });
 
   it('native 전용 편입 전 실패는 runner가 소유하고 layerGroups는 eager를 건드리지 않는다', async () => {

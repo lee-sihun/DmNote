@@ -428,7 +428,12 @@ export function useLayerDnD({
       'key' | 'stat' | 'graph' | 'knob',
       Map<number, Record<string, unknown>>
     >;
-    pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }>;
+    // beforeZIndex는 편입 후 실패 시 CAS 복원용
+    pluginZIndexUpdates: Array<{
+      fullId: string;
+      zIndex: number;
+      beforeZIndex: number;
+    }>;
   }
 
   // 새 표시 순서를 의도 집합으로 변환 - 안정 id는 id 의도, 합성은 시작
@@ -446,7 +451,11 @@ export function useLayerDnD({
     newItems.forEach((item, idx) => {
       const newZIndex = maxZIndex - idx;
       if (item.type === 'plugin') {
-        sets.pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
+        sets.pluginZIndexUpdates.push({
+          fullId: item.id,
+          zIndex: newZIndex,
+          beforeZIndex: item.zIndex,
+        });
         return;
       }
       const intent: Record<string, unknown> = {
@@ -471,12 +480,13 @@ export function useLayerDnD({
   // 호출 시점 full-record는 대기 중 정산된 격리 plugin 쓰기를 되돌린다.
   // plugin z-index는 별도 authority 쓰기로 editor 커밋과 비원자(기존 의미론)
   const commitDropIntents = (sets: DropIntentSets, skipContext: string) => {
-    if (sets.pluginZIndexUpdates.length > 0) {
-      setPluginElementZIndexes(sets.pluginZIndexUpdates);
-    }
+    const hasPluginZ = sets.pluginZIndexUpdates.length > 0;
     const hasNativeIntent =
       sets.nativeIntents.size > 0 || sets.syntheticIndexIntents.size > 0;
-    if (!hasNativeIntent) return;
+    if (!hasNativeIntent) {
+      if (hasPluginZ) setPluginElementZIndexes(sets.pluginZIndexUpdates);
+      return;
+    }
     const baseline = dndBaselineRef.current;
     const hasSynthetic = sets.syntheticIndexIntents.size > 0;
     // 결합 eager 단일 소유 - preflight 게이트, 양쪽 적용, 최종 봉인이
@@ -487,9 +497,25 @@ export function useLayerDnD({
       propertyIntents: sets.nativeIntents,
     });
     if (!eager.matched) {
+      // native가 하나도 적용되지 않았으므로 plugin 쓰기도 하지 않는다 -
+      // 게이트보다 먼저 쓰면 반쪽 순서가 그대로 영속된다
       reportElementOpSkipped(skipContext);
       return;
     }
+    // plugin z는 별도 authority 쓰기라 editor 커밋과 비원자다(기존 의미론).
+    // 편입 후 실패는 되돌려 반쪽 순서가 남지 않게 한다
+    if (hasPluginZ) {
+      setPluginElementZIndexes(sets.pluginZIndexUpdates);
+    }
+    const restorePluginZ = () => {
+      if (!hasPluginZ) return;
+      setPluginElementZIndexes(
+        sets.pluginZIndexUpdates.map((update) => ({
+          fullId: update.fullId,
+          zIndex: update.beforeZIndex,
+        })),
+      );
+    };
     void runElementIntent({
       applyEager: () => eager.receipt,
       generate: (base) => {
@@ -546,10 +572,14 @@ export function useLayerDnD({
     })
       .then((result) => {
         if (!result.committed && !result.satisfied) {
+          restorePluginZ();
           reportElementOpSkipped(skipContext);
         }
       })
-      .catch(reportElementOpError);
+      .catch((error) => {
+        restorePluginZ();
+        reportElementOpError(error);
+      });
   };
 
   const performMultiDrop = async (
