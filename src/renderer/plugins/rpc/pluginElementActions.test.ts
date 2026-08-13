@@ -238,6 +238,56 @@ describe('plugin element panel queue', () => {
     expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
   });
 
+  it('batch geometry는 high-level descriptor와 enqueue generation만 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const descriptor = {
+      mode: '4key',
+      targets: [
+        {
+          type: 'key' as const,
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+        {
+          type: 'stat' as const,
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        },
+      ],
+      operation: { kind: 'align' as const, direction: 'left' as const },
+    };
+
+    await expect(
+      actions.commitBatchGeometryViaAuthority(descriptor),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:setBatchGeometry',
+      { descriptor },
+      0,
+      7,
+    );
+  });
+
+  it('batch geometry outcome-unknown은 snapshot만 요청하고 상대 intent를 재실행하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+
+    await expect(
+      actions.commitBatchGeometryViaAuthority({
+        mode: '4key',
+        targets: [
+          { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+          { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+        ],
+        operation: { kind: 'spacing', spacing: 2.3 },
+      }),
+    ).resolves.toBe(false);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
   it('fontFamily batch는 혼합 native 대상과 raw literal을 고정한다', async () => {
     mocks.sendPluginRpc.mockResolvedValue({
       kind: 'ok',

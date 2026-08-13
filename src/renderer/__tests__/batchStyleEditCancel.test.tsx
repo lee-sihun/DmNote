@@ -15,11 +15,15 @@ import BatchStyleTabContent from '@components/main/Grid/PropertiesPanel/batch/Ba
 import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNavContext';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 interface CapturedNumberInput {
   min?: number;
   max?: number;
   prefix?: string;
   onChange?: (value: number) => void;
+  onPreview?: (value: number) => void;
+  onBlur?: () => void;
   onCancel?: () => void;
 }
 
@@ -86,9 +90,13 @@ describe('배치 스타일 숫자 필드 취소', () => {
   let host: HTMLDivElement;
   let root: Root;
   let handleBatchSpacing: Mock<BatchSpacingHandler>;
+  let handleBatchAlign: Mock;
+  let handleBatchDistribute: Mock;
+  let handleBatchResize: Mock;
+  let handleBatchStyleChange: Mock;
 
   const renderPanel = () => {
-    const positions = [flatPosition(), flatPosition()];
+    const positions = [flatPosition(), flatPosition(), flatPosition()];
     act(() => {
       root.render(
         <PanelNavProvider
@@ -101,17 +109,17 @@ describe('배치 스타일 숫자 필드 취소', () => {
           }}
         >
           <BatchStyleTabContent
-            selectedCount={2}
+            selectedCount={3}
             shadowActiveState
             getMixedValue={mixedGetter(positions)}
             getKeyOnlyMixedValue={mixedGetter(positions)}
             getSelectedKeysData={() => []}
-            handleBatchAlign={vi.fn()}
-            handleBatchDistribute={vi.fn()}
+            handleBatchAlign={handleBatchAlign}
+            handleBatchDistribute={handleBatchDistribute}
             handleBatchSpacing={handleBatchSpacing}
             batchSpacing={{ isMixed: false, value: 10 }}
-            handleBatchResize={vi.fn()}
-            handleBatchStyleChange={vi.fn()}
+            handleBatchResize={handleBatchResize}
+            handleBatchStyleChange={handleBatchStyleChange}
             handleBatchStyleChangeComplete={vi.fn()}
             handleBatchShadowChangeComplete={vi.fn()}
             handleBatchShadowEnabledChange={vi.fn()}
@@ -131,6 +139,10 @@ describe('배치 스타일 숫자 필드 취소', () => {
     vi.useFakeTimers();
     captured.numberInputs = [];
     handleBatchSpacing = vi.fn<BatchSpacingHandler>();
+    handleBatchAlign = vi.fn();
+    handleBatchDistribute = vi.fn();
+    handleBatchResize = vi.fn();
+    handleBatchStyleChange = vi.fn();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -193,5 +205,56 @@ describe('배치 스타일 숫자 필드 취소', () => {
     act(() => height?.onCancel?.());
 
     expect(cancel).toHaveBeenCalledTimes(2);
+  });
+
+  it('실제 배치 UI는 정렬·분배와 W/H preview·commit 콜백을 그대로 연결한다', () => {
+    renderPanel();
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('[title="propertiesPanel.alignLeft"]')
+        ?.click();
+      host
+        .querySelector<HTMLButtonElement>(
+          '[title="propertiesPanel.distributeV"]',
+        )
+        ?.click();
+    });
+    const width = captured.numberInputs.find((props) => props.prefix === 'W');
+    const height = captured.numberInputs.find((props) => props.prefix === 'H');
+    act(() => {
+      width?.onPreview?.(81);
+      width?.onChange?.(82);
+      height?.onPreview?.(91);
+      height?.onChange?.(92);
+    });
+
+    expect(handleBatchAlign).toHaveBeenCalledWith('left');
+    expect(handleBatchDistribute).toHaveBeenCalledWith('vertical');
+    expect(handleBatchStyleChange.mock.calls).toEqual([
+      ['width', 81],
+      ['height', 91],
+    ]);
+    expect(handleBatchResize.mock.calls).toEqual([
+      ['width', 82],
+      ['height', 92],
+    ]);
+  });
+
+  it('실제 간격 입력은 debounce와 blur에서 같은 gestureId를 유지한다', () => {
+    renderPanel();
+    const spacing = fieldByMax(500);
+
+    act(() => spacing?.onChange?.(12));
+    act(() => vi.advanceTimersByTime(80));
+    act(() => spacing?.onChange?.(14));
+    act(() => spacing?.onBlur?.());
+
+    expect(handleBatchSpacing).toHaveBeenCalledTimes(2);
+    const firstGesture = handleBatchSpacing.mock.calls[0]?.[1]?.gestureId;
+    expect(firstGesture).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(handleBatchSpacing.mock.calls[1]?.[1]?.gestureId).toBe(firstGesture);
   });
 });

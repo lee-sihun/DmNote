@@ -5,6 +5,7 @@ const api = vi.hoisted(() => ({
   commitGeneratedPatch: vi.fn(),
   commitGeneratedSemanticOps: vi.fn(),
   commitSemanticOps: vi.fn(),
+  captureEditorDocument: vi.fn(),
   lastAck: null as EditorDocumentV1 | null,
 }));
 
@@ -13,6 +14,7 @@ vi.mock('./editorStateCoordinator', () => ({
     commitGeneratedPatch: api.commitGeneratedPatch,
     getState: () => ({ lastAck: api.lastAck }),
   },
+  captureEditorDocument: api.captureEditorDocument,
 }));
 
 vi.mock('./editorSemanticOps', () => ({
@@ -28,6 +30,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
   applyZOrderByIds,
+  commitBatchGeometryByIds,
   commitElementGeometryById,
   commitElementBoundsById,
   commitSingleElementBoundsById,
@@ -108,6 +111,7 @@ describe('elementOps', () => {
     slotBase = null;
     generatedPatches.length = 0;
     api.lastAck = null;
+    api.captureEditorDocument.mockImplementation(() => documentFromStores());
     api.commitGeneratedPatch.mockImplementation(
       async (generate: (base: EditorDocumentV1) => EditorPatchV1 | null) => {
         const base = (slotBase ?? documentFromStores)();
@@ -503,6 +507,317 @@ describe('elementOps', () => {
     expect(record?.[0].dx).toBe(5);
     // 병행 크기 변경 보존
     expect(record?.[0].width).toBe(120);
+  });
+
+  it('배치 정렬은 stable ID 전 대상을 N setBounds로 한 번에 생성한다', async () => {
+    const stat = { ...keyAt(ID_B), dx: 50, dy: 10, width: 20, height: 30 };
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [{ ...keyAt(ID_A), dx: 10, dy: 0, width: 10, height: 20 }],
+      },
+      positions: {
+        '4key': [{ ...keyAt(ID_A), dx: 10, dy: 0, width: 10, height: 20 }],
+      },
+    });
+    useStatItemStore.setState({ positions: { '4key': [stat as never] } });
+    api.lastAck = documentFromStores();
+
+    await commitBatchGeometryByIds({
+      mode: '4key',
+      targets: [
+        { type: 'key', id: ID_A },
+        { type: 'stat', id: ID_B },
+      ],
+      operation: { kind: 'align', direction: 'right' },
+    });
+
+    expect(api.commitGeneratedSemanticOps).toHaveBeenCalledOnce();
+    const generate = api.commitGeneratedSemanticOps.mock.calls[0][0];
+    expect(generate(documentFromStores())).toEqual([
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: ID_A,
+        bounds: { dx: 60, dy: 0, width: 10, height: 20 },
+      },
+      {
+        kind: 'setBounds',
+        elementType: 'stat',
+        id: ID_B,
+        bounds: { dx: 50, dy: 10, width: 20, height: 30 },
+      },
+    ]);
+  });
+
+  it('배치 geometry는 slot 최신 base에서 전체 계획을 다시 계산한다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0, width: 10 },
+          { ...keyAt(ID_B), dx: 30, width: 10 },
+        ],
+      },
+      positions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0, width: 10 },
+          { ...keyAt(ID_B), dx: 30, width: 10 },
+        ],
+      },
+    });
+    api.lastAck = documentFromStores();
+    const latest = documentFromStores();
+    latest.keyPositions = {
+      '4key': [
+        { ...keyAt(ID_B), dx: 80, width: 20 },
+        { ...keyAt(ID_A), dx: 10, width: 10 },
+      ],
+    } as never;
+    slotBase = () => latest;
+
+    await commitBatchGeometryByIds({
+      mode: '4key',
+      targets: [
+        { type: 'key', id: ID_A },
+        { type: 'key', id: ID_B },
+      ],
+      operation: { kind: 'align', direction: 'right' },
+    });
+
+    const generate = api.commitGeneratedSemanticOps.mock.calls[0][0];
+    expect(generate(latest)).toEqual([
+      expect.objectContaining({
+        id: ID_A,
+        bounds: expect.objectContaining({ dx: 90 }),
+      }),
+      expect.objectContaining({
+        id: ID_B,
+        bounds: expect.objectContaining({ dx: 80 }),
+      }),
+    ]);
+  });
+
+  it('배치 geometry eager는 lastAck가 아니라 최신 canonical store를 기준으로 한다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 10, width: 10 },
+          { ...keyAt(ID_B), dx: 80, width: 20 },
+        ],
+      },
+      positions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 10, width: 10 },
+          { ...keyAt(ID_B), dx: 80, width: 20 },
+        ],
+      },
+    });
+    const staleAck = documentFromStores();
+    staleAck.keyPositions = {
+      '4key': [
+        { ...keyAt(ID_A), dx: 0, width: 10 },
+        { ...keyAt(ID_B), dx: 30, width: 10 },
+      ],
+    } as never;
+    api.lastAck = staleAck;
+
+    await commitBatchGeometryByIds({
+      mode: '4key',
+      targets: [
+        { type: 'key', id: ID_A },
+        { type: 'key', id: ID_B },
+      ],
+      operation: { kind: 'align', direction: 'right' },
+    });
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([
+      expect.objectContaining({ id: ID_A, dx: 90 }),
+      expect.objectContaining({ id: ID_B, dx: 80 }),
+    ]);
+  });
+
+  it('배치 geometry 대상 하나가 소실되면 전체 null이고 eager를 복원한다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0 },
+          { ...keyAt(ID_B), dx: 30 },
+        ],
+      },
+      positions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0 },
+          { ...keyAt(ID_B), dx: 30 },
+        ],
+      },
+    });
+    api.lastAck = documentFromStores();
+    slotBase = () => {
+      const base = documentFromStores();
+      base.keyPositions = { '4key': [keyAt(ID_A)] } as never;
+      return base;
+    };
+
+    await expect(
+      commitBatchGeometryByIds({
+        mode: '4key',
+        targets: [
+          { type: 'key', id: ID_A },
+          { type: 'key', id: ID_B },
+        ],
+        operation: { kind: 'align', direction: 'right' },
+      }),
+    ).resolves.toBe(false);
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: ID_A, dx: 0 }),
+        expect.objectContaining({ id: ID_B, dx: 30 }),
+      ]),
+    );
+  });
+
+  it('슬롯 base가 이미 원하는 spacing이면 N noChange 의도로 정산하고 eager를 되돌리지 않는다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0, width: 10 },
+          { ...keyAt(ID_B), dx: 30, width: 10 },
+        ],
+      },
+      positions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0, width: 10 },
+          { ...keyAt(ID_B), dx: 30, width: 10 },
+        ],
+      },
+    });
+    slotBase = () => {
+      const base = documentFromStores();
+      base.keyPositions = {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0, width: 10 },
+          { ...keyAt(ID_B), dx: 15, width: 10 },
+        ],
+      } as never;
+      return base;
+    };
+
+    await expect(
+      commitBatchGeometryByIds({
+        mode: '4key',
+        targets: [
+          { type: 'key', id: ID_A },
+          { type: 'key', id: ID_B },
+        ],
+        operation: { kind: 'spacing', spacing: 5 },
+      }),
+    ).resolves.toBe(true);
+
+    const generate = api.commitGeneratedSemanticOps.mock.calls[0][0];
+    expect(generate(slotBase())).toEqual([
+      expect.objectContaining({
+        id: ID_A,
+        bounds: expect.objectContaining({ dx: 0 }),
+      }),
+      expect.objectContaining({
+        id: ID_B,
+        bounds: expect.objectContaining({ dx: 15 }),
+      }),
+    ]);
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual([
+      expect.objectContaining({ id: ID_A, dx: 0 }),
+      expect.objectContaining({ id: ID_B, dx: 15 }),
+    ]);
+  });
+
+  it('호출 시점에 배치 geometry 대상이 없으면 eager나 슬롯 커밋을 시작하지 않는다', async () => {
+    const before = structuredClone(
+      useKeyStore.getState().canonicalPositions['4key'],
+    );
+
+    await expect(
+      commitBatchGeometryByIds({
+        mode: '4key',
+        targets: [
+          { type: 'key', id: ID_A },
+          { type: 'key', id: '33333333-3333-4333-8333-333333333333' },
+        ],
+        operation: { kind: 'align', direction: 'left' },
+      }),
+    ).resolves.toBe(false);
+
+    expect(api.commitGeneratedSemanticOps).not.toHaveBeenCalled();
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual(before);
+  });
+
+  it('호출 시점 spacing이 이미 정확하면 슬롯 커밋 없이 false를 반환한다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0, width: 10 },
+          { ...keyAt(ID_B), dx: 15, width: 10 },
+        ],
+      },
+      positions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0, width: 10 },
+          { ...keyAt(ID_B), dx: 15, width: 10 },
+        ],
+      },
+    });
+    const before = structuredClone(
+      useKeyStore.getState().canonicalPositions['4key'],
+    );
+
+    await expect(
+      commitBatchGeometryByIds({
+        mode: '4key',
+        targets: [
+          { type: 'key', id: ID_A },
+          { type: 'key', id: ID_B },
+        ],
+        operation: { kind: 'spacing', spacing: 5 },
+      }),
+    ).resolves.toBe(false);
+
+    expect(api.commitGeneratedSemanticOps).not.toHaveBeenCalled();
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual(before);
+  });
+
+  it('배치 geometry 편입 전 실패는 전체 eager를 CAS 복원한다', async () => {
+    useKeyStore.setState({
+      canonicalPositions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0, width: 10 },
+          { ...keyAt(ID_B), dx: 30, width: 10 },
+        ],
+      },
+      positions: {
+        '4key': [
+          { ...keyAt(ID_A), dx: 0, width: 10 },
+          { ...keyAt(ID_B), dx: 30, width: 10 },
+        ],
+      },
+    });
+    const before = structuredClone(
+      useKeyStore.getState().canonicalPositions['4key'],
+    );
+    api.commitGeneratedSemanticOps.mockRejectedValueOnce(
+      new Error('preflight failed'),
+    );
+
+    await expect(
+      commitBatchGeometryByIds({
+        mode: '4key',
+        targets: [
+          { type: 'key', id: ID_A },
+          { type: 'key', id: ID_B },
+        ],
+        operation: { kind: 'align', direction: 'right' },
+      }),
+    ).rejects.toThrow('preflight failed');
+
+    expect(useKeyStore.getState().canonicalPositions['4key']).toEqual(before);
   });
 
   it('다중 정산 대상이 전부 사라졌으면 커밋하지 않는다', async () => {

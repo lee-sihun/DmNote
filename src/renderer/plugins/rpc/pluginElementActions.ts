@@ -13,6 +13,7 @@ import {
 } from '@utils/plugin/panelModelSync';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
+import type { BatchGeometryDescriptor } from '@src/renderer/editor/runtime/elementOps';
 import type {
   EditorElementPropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
@@ -33,6 +34,7 @@ export const PLUGIN_RPC_OPERATIONS = {
   reorderLayerSelection: 'layers:reorderSelection',
   patchLayerProperty: 'layers:patchProperty',
   setLayerBounds: 'layers:setBounds',
+  setLayerBatchGeometry: 'layers:setBatchGeometry',
 } as const;
 
 export type LayerDeleteTarget = {
@@ -56,6 +58,8 @@ export interface NativeLayerBoundsTarget {
     | { dx?: never; dy?: never; width?: never; height: number };
   gestureId?: string;
 }
+
+export type NativeLayerBatchGeometryDescriptor = BatchGeometryDescriptor;
 
 export interface LayerReorderAnchorsWire {
   toDisplayIndex: number;
@@ -380,6 +384,26 @@ export const patchNativeLayerBoundsViaAuthority = (
       payload: { target: structuredClone(target) },
       authorityGeneration,
       retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const commitBatchGeometryViaAuthority = (
+  descriptor: NativeLayerBatchGeometryDescriptor,
+  gestureId?: string,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.setLayerBatchGeometry,
+      payload: {
+        descriptor: structuredClone(descriptor),
+        ...(gestureId ? { gestureId } : {}),
+      },
+      authorityGeneration,
+      retryPolicy: 'none',
       resolve,
     });
     void ensureQueueDrain();

@@ -49,6 +49,8 @@ const {
   patchLayerNameMock,
   patchPropertyViaAuthorityMock,
   patchBoundsViaAuthorityMock,
+  patchBatchGeometryViaAuthorityMock,
+  patchBatchGeometryMock,
   patchGeometryMock,
   statUpdatePositionsMock,
   settleCommitMock,
@@ -93,6 +95,8 @@ const {
   patchLayerNameMock: vi.fn(() => Promise.resolve(true)),
   patchPropertyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchBoundsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchBatchGeometryViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchBatchGeometryMock: vi.fn(() => Promise.resolve(true)),
   patchGeometryMock: vi.fn(() => Promise.resolve(true)),
   statUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   settleCommitMock: vi.fn(),
@@ -120,12 +124,14 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchKnobPropertiesViaAuthority: patchKnobPropertiesViaAuthorityMock,
   patchNativeLayerPropertyViaAuthority: patchPropertyViaAuthorityMock,
   patchNativeLayerBoundsViaAuthority: patchBoundsViaAuthorityMock,
+  commitBatchGeometryViaAuthority: patchBatchGeometryViaAuthorityMock,
   patchNotePropertiesViaAuthority: patchNotePropertiesViaAuthorityMock,
   patchUseInlineStylesViaAuthority: patchUseInlineStylesViaAuthorityMock,
   updatePluginElement: vi.fn(),
 }));
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   commitElementGeometryById: patchGeometryMock,
+  commitBatchGeometryByIds: patchBatchGeometryMock,
   patchElementLayerNameById: patchLayerNameMock,
   patchFontStyleById: patchFontStyleMock,
   patchFontStyleByTargets: patchFontStyleTargetsMock,
@@ -300,6 +306,8 @@ const resetStores = () => {
   patchUseInlineStylesViaAuthorityMock.mockClear();
   patchPropertyViaAuthorityMock.mockClear();
   patchBoundsViaAuthorityMock.mockClear();
+  patchBatchGeometryViaAuthorityMock.mockClear();
+  patchBatchGeometryMock.mockClear();
   patchGeometryMock.mockClear();
   graphUpdatePositionsMock.mockClear();
   knobUpdatePositionsMock.mockClear();
@@ -808,6 +816,235 @@ describe('PropertiesPanel detached preview contract', () => {
 
     expect(patchGeometryMock).toHaveBeenCalledWith('graph', id, { dx: 42 }, {});
     expect(settleCommitMock).not.toHaveBeenCalled();
+  });
+
+  it('stable mixed batch geometry는 frozen mode와 선택 ID descriptor를 main helper에 넘긴다', () => {
+    const keyId = '11111111-1111-4111-8111-111111111111';
+    const statId = '22222222-2222-4222-8222-222222222222';
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A'] },
+      positions: {
+        '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id: keyId } as never],
+      },
+      canonicalPositions: {
+        '4key': [{ dx: 0, dy: 0, width: 60, height: 60, id: keyId } as never],
+      },
+    });
+    useStatItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            dx: 100,
+            dy: 0,
+            width: 60,
+            height: 60,
+            id: statId,
+            statType: 'kps',
+          } as never,
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: keyId, index: 0 },
+        { type: 'stat', id: statId, index: 0 },
+      ],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const batchProps = batchPropsMock.mock.lastCall?.[0] as {
+      stableGeometryEnabled: boolean;
+      onStableGeometryCommit: (operation: Record<string, unknown>) => void;
+    };
+
+    act(() =>
+      batchProps.onStableGeometryCommit({
+        kind: 'align',
+        direction: 'left',
+      }),
+    );
+
+    expect(batchProps.stableGeometryEnabled).toBe(true);
+    expect(patchBatchGeometryMock).toHaveBeenCalledWith(
+      {
+        mode: '4key',
+        targets: [
+          { type: 'key', id: keyId },
+          { type: 'stat', id: statId },
+        ],
+        operation: { kind: 'align', direction: 'left' },
+      },
+      {},
+    );
+    expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
+  });
+
+  it('panel stable batch resize는 active preview UUID를 authority와 settle에 결합한다', () => {
+    window.__dmn_window_type = 'panel';
+    const gestureId = '33333333-3333-4333-8333-333333333333';
+    activeGestureIdMock.mockReturnValue(gestureId);
+    const firstId = '11111111-1111-4111-8111-111111111111';
+    const secondId = '22222222-2222-4222-8222-222222222222';
+    const base = useGraphItemStore.getState().positions['4key'][0];
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          { ...base, id: firstId },
+          { ...base, id: secondId },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'graph', id: firstId, index: 0 },
+        { type: 'graph', id: secondId, index: 1 },
+      ],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const batchProps = batchPropsMock.mock.lastCall?.[0] as {
+      onStableGeometryCommit: (operation: Record<string, unknown>) => void;
+    };
+
+    act(() =>
+      batchProps.onStableGeometryCommit({
+        kind: 'resize',
+        dimension: 'width',
+        value: 88,
+      }),
+    );
+
+    expect(patchBatchGeometryViaAuthorityMock).toHaveBeenCalledWith(
+      {
+        mode: '4key',
+        targets: [
+          { type: 'graph', id: firstId },
+          { type: 'graph', id: secondId },
+        ],
+        operation: { kind: 'resize', dimension: 'width', value: 88 },
+      },
+      gestureId,
+    );
+    expect(patchBatchGeometryMock).not.toHaveBeenCalled();
+    expect(settleCommitMock).toHaveBeenCalledWith(
+      patchBatchGeometryViaAuthorityMock.mock.results[0].value,
+    );
+  });
+
+  it('stable batch spacing은 명시 gestureId를 전달하고 false 결과도 settle한다', () => {
+    const gestureId = '44444444-4444-4444-8444-444444444444';
+    patchBatchGeometryMock.mockResolvedValueOnce(false);
+    const firstId = '11111111-1111-4111-8111-111111111111';
+    const secondId = '22222222-2222-4222-8222-222222222222';
+    const base = useGraphItemStore.getState().positions['4key'][0];
+    useGraphItemStore.setState({
+      positions: {
+        '4key': [
+          { ...base, id: firstId, dx: 0 },
+          { ...base, id: secondId, dx: 100 },
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'graph', id: firstId, index: 0 },
+        { type: 'graph', id: secondId, index: 1 },
+      ],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const batchProps = batchPropsMock.mock.lastCall?.[0] as {
+      onStableGeometryCommit: (
+        operation: Record<string, unknown>,
+        options?: { gestureId?: string },
+      ) => void;
+    };
+
+    act(() =>
+      batchProps.onStableGeometryCommit(
+        { kind: 'spacing', spacing: 5 },
+        { gestureId },
+      ),
+    );
+
+    expect(patchBatchGeometryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: { kind: 'spacing', spacing: 5 },
+      }),
+      { gestureId },
+    );
+    expect(settleCommitMock).toHaveBeenCalledWith(
+      patchBatchGeometryMock.mock.results[0].value,
+    );
+  });
+
+  it('stable batch W/H preview는 stale selection index 대신 ID 현재 index를 쓴다', () => {
+    const selectedId = '11111111-1111-4111-8111-111111111111';
+    const otherId = '22222222-2222-4222-8222-222222222222';
+    useKeyStore.setState({
+      keyMappings: { '4key': ['A', 'B'] },
+      positions: {
+        '4key': [
+          { dx: 0, dy: 0, width: 60, height: 60, id: selectedId } as never,
+          { dx: 100, dy: 0, width: 60, height: 60, id: otherId } as never,
+        ],
+      },
+      canonicalPositions: {
+        '4key': [
+          { dx: 0, dy: 0, width: 60, height: 60, id: selectedId } as never,
+          { dx: 100, dy: 0, width: 60, height: 60, id: otherId } as never,
+        ],
+      },
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: selectedId, index: 1 },
+        { type: 'key', id: otherId, index: 0 },
+      ],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+    const batchProps = batchPropsMock.mock.lastCall?.[0] as {
+      onStableGeometryPreview: (operation: Record<string, unknown>) => void;
+    };
+
+    act(() =>
+      batchProps.onStableGeometryPreview({
+        kind: 'resize',
+        dimension: 'height',
+        value: 91,
+      }),
+    );
+
+    expect(previewMock).toHaveBeenCalledWith(
+      '4key',
+      [
+        { index: 0, patch: { height: 91 } },
+        { index: 1, patch: { height: 91 } },
+      ],
+      { domain: 'keyPosition' },
+    );
+  });
+
+  it('synthetic가 하나라도 섞인 batch geometry는 전체 legacy 경로를 유지한다', () => {
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: 'key-0', index: 0 },
+        {
+          type: 'stat',
+          id: '22222222-2222-4222-8222-222222222222',
+          index: 0,
+        },
+      ],
+      selectedGroupIds: [],
+    });
+    mounted = mountPanel(true);
+
+    expect(batchPropsMock.mock.lastCall?.[0]).toMatchObject({
+      stableGeometryEnabled: false,
+    });
+    expect(patchBatchGeometryMock).not.toHaveBeenCalled();
+    expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
   });
 
   it('single graph geometry는 stale index의 position id 대신 선택 descriptor id를 쓴다', () => {

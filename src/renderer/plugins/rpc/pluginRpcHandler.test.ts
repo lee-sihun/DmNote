@@ -31,6 +31,10 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  commitBatchGeometry: vi.fn(
+    (_descriptor?: unknown, _options?: { preflight?: () => void }) =>
+      Promise.resolve(true),
+  ),
   patchGraphTypes: vi.fn(
     (
       _ids?: unknown,
@@ -148,6 +152,7 @@ vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  commitBatchGeometryByIds: mocks.commitBatchGeometry,
   commitElementGeometryById: mocks.commitElementGeometry,
   patchElementPropertyById: mocks.patchElementProperty,
   patchGraphColorsByIds: mocks.patchGraphColors,
@@ -223,6 +228,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchElementProperty.mockResolvedValue(true);
     mocks.commitElementGeometry.mockReset();
     mocks.commitElementGeometry.mockResolvedValue(true);
+    mocks.commitBatchGeometry.mockReset();
+    mocks.commitBatchGeometry.mockResolvedValue(true);
     mocks.patchGraphTypes.mockReset();
     mocks.patchGraphTypes.mockResolvedValue(true);
     mocks.patchGraphColors.mockReset();
@@ -1449,6 +1456,191 @@ describe('plugin panel persisted element mutations', () => {
           id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           patch: { dx: 42 },
           gestureId,
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('batch geometry는 high-level descriptor만 main generated helper에 전달한다', async () => {
+    const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const descriptor = {
+      mode: '4key',
+      targets: [
+        { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      ],
+      operation: { kind: 'spacing', spacing: 2.3 },
+    };
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', { descriptor, gestureId }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitBatchGeometry).toHaveBeenCalledWith(
+      descriptor,
+      expect.objectContaining({
+        gestureId,
+        preflight: expect.any(Function),
+      }),
+    );
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('batch geometry helper의 false는 실행된 no-op 성공으로 응답한다', async () => {
+    mocks.commitBatchGeometry.mockResolvedValueOnce(false);
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', {
+        descriptor: {
+          mode: '4key',
+          targets: [
+            { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+            { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+          ],
+          operation: { kind: 'align', direction: 'left' },
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitBatchGeometry).toHaveBeenCalledOnce();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('batch geometry 완료 전에 generation이 바뀌면 stale로 응답한다', async () => {
+    let resolveCommit!: (value: boolean) => void;
+    mocks.commitBatchGeometry.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCommit = resolve;
+      }),
+    );
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', {
+        descriptor: {
+          mode: '4key',
+          targets: [
+            { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+            { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+          ],
+          operation: { kind: 'align', direction: 'left' },
+        },
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.commitBatchGeometry).toHaveBeenCalledOnce(),
+    );
+    mocks.authorityGeneration = 8;
+    resolveCommit(true);
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it.each([
+    ['top extra', { extra: true }],
+    ['raw bounds', { bounds: [] }],
+    ['raw ops', { ops: [] }],
+    ['index target', { targets: [{ type: 'key', id: 'a', index: 0 }] }],
+    [
+      'duplicate target',
+      {
+        targets: [
+          { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+          { type: 'stat', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        ],
+      },
+    ],
+    ['synthetic target', { targets: [{ type: 'key', id: 'key-0' }] }],
+    ['empty mode', { mode: '' }],
+    ['oversize mode', { mode: '가'.repeat(43) }],
+    ['empty targets', { targets: [] }],
+    [
+      'too many targets',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          type: 'key',
+          id: `stable-${index}`,
+        })),
+      },
+    ],
+    ['bad operation', { operation: { kind: 'align', direction: 'middle' } }],
+    [
+      'operation nested extra',
+      { operation: { kind: 'align', direction: 'left', extra: true } },
+    ],
+    [
+      'resize nonpositive',
+      { operation: { kind: 'resize', dimension: 'width', value: 0 } },
+    ],
+    [
+      'resize nonfinite',
+      { operation: { kind: 'resize', dimension: 'height', value: Number.NaN } },
+    ],
+    [
+      'minimum align',
+      {
+        targets: [{ type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
+      },
+    ],
+    ['bad gesture', { gestureId: 'not-a-uuid' }],
+    ['undefined gesture', { gestureId: undefined }],
+  ])(
+    'batch geometry %s payload는 실행 전에 거절한다',
+    async (_label, override) => {
+      const descriptor = {
+        mode: '4key',
+        targets: [
+          { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+          { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+        ],
+        operation: { kind: 'align', direction: 'left' },
+        ...('mode' in override ? { mode: override.mode } : {}),
+        ...('targets' in override ? { targets: override.targets } : {}),
+        ...('operation' in override ? { operation: override.operation } : {}),
+      };
+      const payload = {
+        descriptor,
+        ...('gestureId' in override ? { gestureId: override.gestureId } : {}),
+        ...('extra' in override ? { extra: override.extra } : {}),
+        ...('bounds' in override ? { bounds: override.bounds } : {}),
+        ...('ops' in override ? { ops: override.ops } : {}),
+      };
+      mocks.requestListener?.(envelope('layers:setBatchGeometry', payload));
+
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.commitBatchGeometry).not.toHaveBeenCalled();
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+    },
+  );
+
+  it('batch geometry는 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.commitBatchGeometry.mockImplementationOnce(
+      async (_descriptor, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', {
+        descriptor: {
+          mode: '4key',
+          targets: [
+            { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+            { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+          ],
+          operation: { kind: 'align', direction: 'left' },
         },
       }),
     );

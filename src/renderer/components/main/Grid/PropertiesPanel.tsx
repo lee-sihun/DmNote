@@ -33,6 +33,7 @@ import {
   type SettingsNormalizationErrorKind,
 } from '@plugins/runtime/settingsSections';
 import {
+  commitBatchGeometryViaAuthority,
   patchGraphColorsViaAuthority,
   patchGraphPropertiesViaAuthority,
   patchGraphTypesViaAuthority,
@@ -83,6 +84,7 @@ import {
   subscribePreviewOverlay,
 } from '@src/renderer/editor/runtime/previewOverlay';
 import {
+  commitBatchGeometryByIds,
   patchElementLayerNameById,
   commitElementGeometryById,
   patchFontFamilyById,
@@ -104,7 +106,14 @@ import {
   patchUseInlineStylesByTargets,
 } from '@src/renderer/editor/runtime/elementOps';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
-import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import type {
+  BatchGeometryDescriptor,
+  BatchGeometryTarget,
+} from '@src/renderer/editor/runtime/elementOps';
+import {
+  isSyntheticElementId,
+  resolveElementById,
+} from '@src/renderer/editor/model/elementIdMap';
 
 // 분리된 컴포넌트들 및 훅
 import {
@@ -477,6 +486,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       null
     );
   })();
+  const stableBatchGeometryTargets: BatchGeometryTarget[] | null =
+    selectedBatchStyleElements.length > 0 &&
+    selectedBatchStyleElements.every(
+      (element) => element.id.length > 0 && !isSyntheticElementId(element.id),
+    )
+      ? selectedBatchStyleElements.map((element) => ({
+          type: element.type as EditorElementTypeV1,
+          id: element.id,
+        }))
+      : null;
 
   const pluginDefinitionViews = usePluginDisplayElementStore(
     (state) => state.definitionViews,
@@ -2283,6 +2302,61 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     onKnobBatchUpdate: handleKnobBatchUpdate,
     onKnobPreview: handleKnobPreview,
     onKnobBatchPreview: handleKnobBatchPreview,
+    stableGeometryEnabled: stableBatchGeometryTargets !== null,
+    onStableGeometryPreview: (operation) => {
+      if (!stableBatchGeometryTargets || operation.kind !== 'resize') return;
+      const byType = new Map<
+        EditorElementTypeV1,
+        Array<{ index: number; patch: Record<string, unknown> }>
+      >();
+      for (const target of stableBatchGeometryTargets) {
+        const locator = resolveElementById(target.type, target.id);
+        if (!locator || locator.mode !== selectedKeyType) return;
+        const entries = byType.get(target.type) ?? [];
+        entries.push({
+          index: locator.index,
+          patch: { [operation.dimension]: operation.value },
+        });
+        byType.set(target.type, entries);
+      }
+      for (const [type, entries] of byType) {
+        editGestureController.preview(selectedKeyType, entries, {
+          domain:
+            type === 'key'
+              ? 'keyPosition'
+              : type === 'stat'
+              ? 'statPosition'
+              : type === 'graph'
+              ? 'graphPosition'
+              : 'knobPosition',
+        });
+      }
+    },
+    onStableGeometryCommit: (operation, options) => {
+      if (!stableBatchGeometryTargets) return;
+      const descriptor: BatchGeometryDescriptor = {
+        mode: selectedKeyType,
+        targets: stableBatchGeometryTargets,
+        operation,
+      };
+      const gestureId =
+        options?.gestureId ??
+        (operation.kind === 'resize'
+          ? editGestureController.activeGestureId() ?? undefined
+          : undefined);
+      const commit =
+        window.__dmn_window_type === 'panel'
+          ? commitBatchGeometryViaAuthority(descriptor, gestureId)
+          : commitBatchGeometryByIds(descriptor, {
+              ...(gestureId ? { gestureId } : {}),
+            });
+      if (operation.kind === 'resize' || operation.kind === 'spacing') {
+        editGestureController.settleCommit(commit);
+      }
+      void commit.catch((error) => {
+        console.error('Failed to commit batch geometry', error);
+      });
+    },
   });
 
   const handleBatchStyleChangeComplete = (

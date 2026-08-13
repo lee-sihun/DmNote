@@ -51,6 +51,7 @@ import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import {
+  commitBatchGeometryByIds,
   commitElementGeometryById,
   patchElementPropertyById,
   patchFontFamilyByTargets,
@@ -61,6 +62,10 @@ import {
   patchKnobPropertiesByIds,
   patchNotePropertiesByIds,
   patchUseInlineStylesByTargets,
+} from '@src/renderer/editor/runtime/elementOps';
+import type {
+  BatchGeometryDescriptor,
+  BatchGeometryTarget,
 } from '@src/renderer/editor/runtime/elementOps';
 import type {
   EditorElementPropertyPatchV1,
@@ -334,6 +339,97 @@ const parseNativeLayerBoundsTarget = (
     return null;
   }
   return target as unknown as NativeLayerBoundsTarget;
+};
+
+const parseBatchGeometryDescriptor = (
+  payload: Record<string, unknown>,
+): { descriptor: BatchGeometryDescriptor; gestureId?: string } | null => {
+  const payloadKeys = Object.keys(payload);
+  if (
+    (payloadKeys.length !== 1 && payloadKeys.length !== 2) ||
+    !('descriptor' in payload) ||
+    payloadKeys.some((key) => !['descriptor', 'gestureId'].includes(key)) ||
+    ('gestureId' in payload && !isCanonicalGestureId(payload.gestureId)) ||
+    payload.descriptor === null ||
+    typeof payload.descriptor !== 'object' ||
+    Array.isArray(payload.descriptor)
+  ) {
+    return null;
+  }
+  const descriptor = payload.descriptor as Record<string, unknown>;
+  if (
+    !hasExactKeys(descriptor, ['mode', 'targets', 'operation']) ||
+    typeof descriptor.mode !== 'string' ||
+    descriptor.mode.length === 0 ||
+    new TextEncoder().encode(descriptor.mode).length > 128 ||
+    !Array.isArray(descriptor.targets) ||
+    descriptor.targets.length === 0 ||
+    descriptor.targets.length > MAX_LAYER_RPC_TARGETS ||
+    descriptor.operation === null ||
+    typeof descriptor.operation !== 'object' ||
+    Array.isArray(descriptor.operation)
+  ) {
+    return null;
+  }
+  const targets: BatchGeometryTarget[] = [];
+  const seen = new Set<string>();
+  for (const value of descriptor.targets) {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      !hasExactKeys(value as Record<string, unknown>, ['type', 'id'])
+    ) {
+      return null;
+    }
+    const target = value as Record<string, unknown>;
+    if (
+      typeof target.type !== 'string' ||
+      !['key', 'stat', 'graph', 'knob'].includes(target.type) ||
+      typeof target.id !== 'string' ||
+      target.id.length === 0 ||
+      isSyntheticElementId(target.id) ||
+      seen.has(target.id)
+    ) {
+      return null;
+    }
+    seen.add(target.id);
+    targets.push(target as unknown as BatchGeometryTarget);
+  }
+  const operation = descriptor.operation as Record<string, unknown>;
+  const validOperation =
+    (hasExactKeys(operation, ['kind', 'direction']) &&
+      operation.kind === 'align' &&
+      ['left', 'centerH', 'right', 'top', 'centerV', 'bottom'].includes(
+        operation.direction as string,
+      )) ||
+    (hasExactKeys(operation, ['kind', 'direction']) &&
+      operation.kind === 'distribute' &&
+      ['horizontal', 'vertical'].includes(operation.direction as string)) ||
+    (hasExactKeys(operation, ['kind', 'spacing']) &&
+      operation.kind === 'spacing' &&
+      typeof operation.spacing === 'number' &&
+      Number.isFinite(operation.spacing)) ||
+    (hasExactKeys(operation, ['kind', 'dimension', 'value']) &&
+      operation.kind === 'resize' &&
+      ['width', 'height'].includes(operation.dimension as string) &&
+      typeof operation.value === 'number' &&
+      Number.isFinite(operation.value) &&
+      operation.value > 0);
+  if (!validOperation) return null;
+  const minimum =
+    operation.kind === 'distribute' ? 3 : operation.kind === 'resize' ? 1 : 2;
+  if (targets.length < minimum) return null;
+  return {
+    descriptor: {
+      mode: descriptor.mode,
+      targets,
+      operation: operation as BatchGeometryDescriptor['operation'],
+    },
+    ...(typeof payload.gestureId === 'string'
+      ? { gestureId: payload.gestureId }
+      : {}),
+  };
 };
 
 type NativeLayerPropertyRequest =
@@ -1296,6 +1392,45 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           return;
         }
         console.error('Failed to set panel native layer bounds', error);
+        respond(failure(envelope.requestId, 'SET_LAYER_BOUNDS_FAILED'));
+      });
+    return;
+  }
+
+  if (envelope.operation === PLUGIN_RPC_OPERATIONS.setLayerBatchGeometry) {
+    const request = parseBatchGeometryDescriptor(envelope.payload);
+    if (!request) {
+      respond(failure(envelope.requestId, 'INVALID_PAYLOAD'));
+      return;
+    }
+    const requestGeneration = envelope.authorityGeneration;
+    const generationLive = () =>
+      requestGeneration === getPluginAuthorityGeneration();
+    if (!generationLive()) {
+      respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+      return;
+    }
+    void commitBatchGeometryByIds(request.descriptor, {
+      ...(request.gestureId ? { gestureId: request.gestureId } : {}),
+      preflight: () => {
+        if (!generationLive()) {
+          throw new Error('plugin authority generation changed');
+        }
+      },
+    })
+      .then(() => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        respond(success(envelope.requestId));
+      })
+      .catch((error) => {
+        if (!generationLive()) {
+          respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
+          return;
+        }
+        console.error('Failed to set panel native batch geometry', error);
         respond(failure(envelope.requestId, 'SET_LAYER_BOUNDS_FAILED'));
       });
     return;

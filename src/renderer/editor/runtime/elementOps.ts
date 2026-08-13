@@ -21,7 +21,14 @@ import {
   commitGeneratedSemanticOps,
   commitSemanticOps,
 } from './editorSemanticOps';
-import { editorCoordinator } from './editorStateCoordinator';
+import {
+  captureEditorDocument,
+  editorCoordinator,
+} from './editorStateCoordinator';
+import {
+  computeBatchGeometryPlan,
+  type BatchGeometryOperation,
+} from './batchGeometryPlan';
 
 import type {
   EditorBoundsV1,
@@ -893,6 +900,143 @@ export const patchStatTypeById = (
 // 확정적으로 착지해 무관 필드 재작성을 되돌린다 - 기하만 실어 그 결합을 끊는다
 export type GeometryField = 'dx' | 'dy' | 'width' | 'height';
 export type GeometryPatch = Partial<Record<GeometryField, number>>;
+
+export interface BatchGeometryTarget {
+  type: NativeElementType;
+  id: string;
+}
+
+export interface BatchGeometryDescriptor {
+  mode: string;
+  targets: readonly BatchGeometryTarget[];
+  operation: BatchGeometryOperation;
+}
+
+const readBatchGeometryElements = (
+  base: EditorDocumentV1,
+  descriptor: BatchGeometryDescriptor,
+) => {
+  const seen = new Set<string>();
+  const elements: Array<{
+    key: string;
+    type: NativeElementType;
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }> = [];
+  for (const target of descriptor.targets) {
+    if (!target.id || seen.has(target.id)) return null;
+    seen.add(target.id);
+    const record = base[FIELD_BY_TYPE[target.type]] as unknown as LooseRecord;
+    const locator = findInRecord(record, target.id);
+    if (!locator || locator.mode !== descriptor.mode) return null;
+    const position = record[locator.mode]?.[locator.index];
+    if (
+      !position ||
+      typeof position.dx !== 'number' ||
+      typeof position.dy !== 'number' ||
+      typeof position.width !== 'number' ||
+      typeof position.height !== 'number'
+    ) {
+      return null;
+    }
+    elements.push({
+      key: target.id,
+      type: target.type,
+      id: target.id,
+      x: position.dx,
+      y: position.dy,
+      width: position.width,
+      height: position.height,
+    });
+  }
+  return elements;
+};
+
+const planBatchGeometry = (
+  base: EditorDocumentV1,
+  descriptor: BatchGeometryDescriptor,
+) => {
+  const elements = readBatchGeometryElements(base, descriptor);
+  if (!elements) return null;
+  const plan = computeBatchGeometryPlan(elements, descriptor.operation);
+  if (!plan) return null;
+  const targetById = new Map(
+    elements.map((element) => [element.id, element] as const),
+  );
+  return {
+    ...plan,
+    ops: plan.bounds.flatMap(({ key, bounds }) => {
+      const target = targetById.get(key);
+      return target
+        ? [
+            {
+              kind: 'setBounds' as const,
+              elementType: target.type,
+              id: target.id,
+              bounds,
+            },
+          ]
+        : [];
+    }),
+  };
+};
+
+export const commitBatchGeometryByIds = (
+  descriptor: BatchGeometryDescriptor,
+  options: { gestureId?: string; preflight?: () => void } = {},
+): Promise<boolean> => {
+  const frozenDescriptor = structuredClone(descriptor);
+  const initialPlan = planBatchGeometry(
+    captureEditorDocument(),
+    frozenDescriptor,
+  );
+  if (!initialPlan || initialPlan.updates.length === 0) {
+    return Promise.resolve(false);
+  }
+  const intents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  const targetById = new Map(
+    frozenDescriptor.targets.map((target) => [target.id, target] as const),
+  );
+  for (const { key, patch } of initialPlan.updates) {
+    const target = targetById.get(key);
+    if (!target) continue;
+    const byId = intents.get(target.type) ?? new Map();
+    byId.set(target.id, patch as Record<string, unknown>);
+    intents.set(target.type, byId);
+  }
+  const receipt =
+    intents.size > 0 ? applyPropertyIntentsEagerly(intents) : null;
+  let enrolled = false;
+  return commitGeneratedSemanticOps(
+    (base) => planBatchGeometry(base, frozenDescriptor)?.ops ?? null,
+    {
+      ...(options.gestureId ? { gestureId: options.gestureId } : {}),
+      ...(options.preflight ? { preflight: options.preflight } : {}),
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) => {
+      if (!outcome) {
+        if (!enrolled) receipt?.rollback();
+        return false;
+      }
+      return outcome.opResults.every(
+        ({ status }) => status !== 'targetMissing',
+      );
+    })
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
 
 export const commitElementGeometryById = (
   type: NativeElementType,
