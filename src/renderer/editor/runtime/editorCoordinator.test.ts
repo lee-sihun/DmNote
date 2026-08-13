@@ -3161,9 +3161,19 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
-  it.each([[{ reverse: true }], [{ sensitivity: 2.5 }]] as const)(
+  it.each([
+    [{ reverse: true }, { sensitivity: 1, reverse: true, axisId: 'HIDA:test' }],
+    [
+      { sensitivity: 2.5 },
+      { sensitivity: 2.5, reverse: false, axisId: 'HIDA:test' },
+    ],
+    [
+      { axisId: '  HIDA:raw  ' },
+      { sensitivity: 1, reverse: false, axisId: '  HIDA:raw  ' },
+    ],
+  ] as const)(
     'knob runtime patch %j는 해당 leaf만 바꾼다',
-    async (patch) => {
+    async (patch, expectedPosition) => {
       const id = '00000000-0000-4000-8000-000000000098';
       const base = makeDocument();
       base.knobPositions = {
@@ -3191,14 +3201,13 @@ describe('commitSemanticOpsInternal', () => {
 
       expect(outcome.document.knobPositions['4key'][0]).toMatchObject({
         id,
-        axisId: 'HIDA:test',
-        ...patch,
+        ...expectedPosition,
       });
       harness.coordinator.stop();
     },
   );
 
-  it('graph와 knob runtime leaf 5개를 한 commit에서 순서대로 적용하고 noChange를 보존한다', async () => {
+  it('graph와 knob runtime leaf 6개를 한 commit에서 순서대로 적용하고 noChange를 보존한다', async () => {
     const graphIds = [
       '00000000-0000-4000-8000-0000000000a1',
       '00000000-0000-4000-8000-0000000000a2',
@@ -3207,6 +3216,7 @@ describe('commitSemanticOpsInternal', () => {
     const knobIds = [
       '00000000-0000-4000-8000-0000000000a4',
       '00000000-0000-4000-8000-0000000000a5',
+      '00000000-0000-4000-8000-0000000000a6',
     ];
     const base = makeDocument();
     base.graphPositions = {
@@ -3261,6 +3271,12 @@ describe('commitSemanticOpsInternal', () => {
         id: knobIds[1],
         patch: { sensitivity: 2.5 },
       },
+      {
+        kind: 'patchElement',
+        elementType: 'knob',
+        id: knobIds[2],
+        patch: { axisId: '  HIDA:raw  ' },
+      },
     ];
     const harness = createHarness(base);
     await harness.coordinator.start();
@@ -3278,6 +3294,11 @@ describe('commitSemanticOpsInternal', () => {
     expect(applied.document.knobPositions['4key']).toEqual([
       expect.objectContaining({ reverse: true, axisId: 'HIDA:test' }),
       expect.objectContaining({ sensitivity: 2.5, axisId: 'HIDA:test' }),
+      expect.objectContaining({
+        axisId: '  HIDA:raw  ',
+        sensitivity: 1,
+        reverse: false,
+      }),
     ]);
 
     harness.transport.commitMock.mockResolvedValueOnce({

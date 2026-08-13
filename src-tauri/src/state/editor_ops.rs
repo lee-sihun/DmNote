@@ -668,6 +668,7 @@ pub(crate) fn prepare_editor_ops_transition(
                 patch,
                 EditorElementPropertyPatchV1::Reverse(_)
                     | EditorElementPropertyPatchV1::Sensitivity(_)
+                    | EditorElementPropertyPatchV1::AxisId(_)
             ) {
                 validate_editor_op_target_type(op_index, EditorElementTypeV1::Knob, *element_type)?;
             } else if matches!(patch, EditorElementPropertyPatchV1::StatType(_)) {
@@ -885,6 +886,24 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             knob.sensitivity = patch.sensitivity;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::AxisId(patch) => {
+                        let knob = candidate
+                            .knob_positions
+                            .get_mut(&location.mode)
+                            .and_then(|positions| positions.get_mut(location.index))
+                            .ok_or_else(|| {
+                                EditorCommitError::validation(
+                                    "ELEMENT_LOCATOR_INVALID",
+                                    "knob property target no longer matches its stable ID",
+                                )
+                            })?;
+                        if knob.axis_id == patch.axis_id {
+                            false
+                        } else {
+                            knob.axis_id.clone_from(&patch.axis_id);
                             true
                         }
                     }
@@ -2031,7 +2050,7 @@ mod tests {
         let graph_ids = (0..3)
             .map(|_| uuid::Uuid::new_v4().to_string())
             .collect::<Vec<_>>();
-        let knob_ids = (0..2)
+        let knob_ids = (0..3)
             .map(|_| uuid::Uuid::new_v4().to_string())
             .collect::<Vec<_>>();
         store.graph_positions.insert(
@@ -2106,11 +2125,18 @@ mod tests {
                 ),
             ),
             patch_property_op(
-                EditorElementTypeV1::Graph,
+                EditorElementTypeV1::Knob,
+                &knob_ids[2],
+                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
+                    axis_id: "  HIDA:raw  ".to_string(),
+                }),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
                 uuid::Uuid::new_v4().to_string(),
-                EditorElementPropertyPatchV1::GraphSpeed(
-                    crate::models::EditorGraphSpeedPropertyPatchV1 { graph_speed: 0 },
-                ),
+                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
+                    axis_id: "missing-axis".to_string(),
+                }),
             ),
         ];
 
@@ -2127,6 +2153,9 @@ mod tests {
         assert_eq!(knobs[0].sensitivity, knob_template.sensitivity);
         assert_eq!(knobs[1].sensitivity, -7.25);
         assert_eq!(knobs[1].axis_id, knob_template.axis_id);
+        assert_eq!(knobs[2].axis_id, "  HIDA:raw  ");
+        assert_eq!(knobs[2].reverse, knob_template.reverse);
+        assert_eq!(knobs[2].sensitivity, knob_template.sensitivity);
         assert_eq!(
             transition.changed_fields,
             [EditorField::GraphPositions, EditorField::KnobPositions]
@@ -2138,6 +2167,7 @@ mod tests {
                 .map(|result| result.status)
                 .collect::<Vec<_>>(),
             [
+                EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
@@ -2156,6 +2186,7 @@ mod tests {
                 .map(|result| result.status)
                 .collect::<Vec<_>>(),
             [
+                EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange,
                 EditorOpResultStatusV1::NoChange,
@@ -2186,6 +2217,9 @@ mod tests {
             EditorElementPropertyPatchV1::Sensitivity(
                 crate::models::EditorSensitivityPropertyPatchV1 { sensitivity: 0.0 },
             ),
+            EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
+                axis_id: String::new(),
+            }),
         ] {
             let error = prepare_editor_ops_transition(
                 &store,

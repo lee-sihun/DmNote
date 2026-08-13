@@ -482,6 +482,9 @@ const applySemanticOps = (
             if ('sensitivity' in op.patch) {
               return { ...position, sensitivity: op.patch.sensitivity };
             }
+            if ('axisId' in op.patch) {
+              return { ...position, axisId: op.patch.axisId };
+            }
             if ('useInlineStyles' in op.patch) {
               return {
                 ...position,

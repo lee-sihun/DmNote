@@ -214,6 +214,7 @@ pub enum EditorElementPropertyPatchV1 {
     GraphSpeed(EditorGraphSpeedPropertyPatchV1),
     Reverse(EditorReversePropertyPatchV1),
     Sensitivity(EditorSensitivityPropertyPatchV1),
+    AxisId(EditorAxisIdPropertyPatchV1),
     UseInlineStyles(EditorUseInlineStylesPropertyPatchV1),
     FontWeight(EditorFontWeightPropertyPatchV1),
     FontItalic(EditorFontItalicPropertyPatchV1),
@@ -281,6 +282,12 @@ pub struct EditorReversePropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorSensitivityPropertyPatchV1 {
     pub sensitivity: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorAxisIdPropertyPatchV1 {
+    pub axis_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

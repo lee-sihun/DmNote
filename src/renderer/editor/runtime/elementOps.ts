@@ -1141,6 +1141,14 @@ export const patchKnobPropertyById = (
   return patchElementPropertyById('knob', id, patch, options);
 };
 
+export const patchKnobAxisIdById = (
+  id: string,
+  axisId: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  return patchElementPropertyById('knob', id, { axisId }, options);
+};
+
 export const patchKnobPropertiesByIds = (
   ids: readonly string[],
   patch: EditorKnobRuntimePropertyPatchV1,

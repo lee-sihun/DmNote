@@ -7860,7 +7860,7 @@ mod tests {
         let graph_ids = (0..3)
             .map(|_| uuid::Uuid::new_v4().to_string())
             .collect::<Vec<_>>();
-        let knob_ids = (0..2)
+        let knob_ids = (0..3)
             .map(|_| uuid::Uuid::new_v4().to_string())
             .collect::<Vec<_>>();
         document.graph_positions.insert(
@@ -7952,11 +7952,18 @@ mod tests {
                 ),
             ),
             patch_property_op(
-                EditorElementTypeV1::Graph,
+                EditorElementTypeV1::Knob,
+                &knob_ids[2],
+                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
+                    axis_id: "  HIDA:raw  ".to_string(),
+                }),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
                 missing_id,
-                EditorElementPropertyPatchV1::GraphSpeed(
-                    crate::models::EditorGraphSpeedPropertyPatchV1 { graph_speed: 0 },
-                ),
+                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
+                    axis_id: "missing-axis".to_string(),
+                }),
             ),
         ];
         let mutation_id = uuid::Uuid::new_v4().to_string();
@@ -7982,6 +7989,7 @@ mod tests {
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
                 EditorOpResultStatusV1::TargetMissing,
             ]
         );
@@ -7992,6 +8000,9 @@ mod tests {
         assert_eq!(graphs[2].graph_speed, u32::MAX);
         assert!(knobs[0].reverse);
         assert_eq!(knobs[1].sensitivity, -7.25);
+        assert_eq!(knobs[2].axis_id, "  HIDA:raw  ");
+        assert!(!knobs[2].reverse);
+        assert_eq!(knobs[2].sensitivity, 1.0);
         assert_eq!(store.history_status().history_revision, 2);
 
         let replay = store.commit_editor_document(request.clone()).unwrap();
@@ -8001,13 +8012,11 @@ mod tests {
 
         let mut reused = request;
         reused.ops = Some(vec![patch_property_op(
-            EditorElementTypeV1::Graph,
-            &graph_ids[0],
-            EditorElementPropertyPatchV1::ShowAvgLine(
-                crate::models::EditorShowAvgLinePropertyPatchV1 {
-                    show_avg_line: true,
-                },
-            ),
+            EditorElementTypeV1::Knob,
+            &knob_ids[2],
+            EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
+                axis_id: "different-axis".to_string(),
+            }),
         )]);
         assert_eq!(
             store.commit_editor_document(reused).unwrap_err().error_code,
@@ -8018,7 +8027,7 @@ mod tests {
             .commit_editor_document(editor_ops_request(
                 changed.result.revision,
                 uuid::Uuid::new_v4().to_string(),
-                ops[..5].to_vec(),
+                ops[..6].to_vec(),
             ))
             .unwrap();
         assert!(no_change.result.changed_fields.is_empty());
@@ -8045,7 +8054,7 @@ mod tests {
                 && graph.position.graph_animation_enabled.is_none()));
         assert!(undone.knob_positions["4key"]
             .iter()
-            .all(|knob| !knob.reverse && knob.sensitivity == 1.0));
+            .all(|knob| !knob.reverse && knob.sensitivity == 1.0 && knob.axis_id == "axis"));
 
         let redo_id = uuid::Uuid::new_v4().to_string();
         let barrier = gate.close(&redo_id).unwrap();
@@ -8069,6 +8078,9 @@ mod tests {
         assert_eq!(redone.graph_positions["4key"][2].graph_speed, u32::MAX);
         assert!(redone.knob_positions["4key"][0].reverse);
         assert_eq!(redone.knob_positions["4key"][1].sensitivity, -7.25);
+        assert_eq!(redone.knob_positions["4key"][2].axis_id, "  HIDA:raw  ");
+        assert!(!redone.knob_positions["4key"][2].reverse);
+        assert_eq!(redone.knob_positions["4key"][2].sensitivity, 1.0);
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

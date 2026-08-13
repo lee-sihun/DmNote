@@ -444,6 +444,13 @@ mod tests {
                 serde_json::json!({ "sensitivity": -7.25 }),
             ),
             (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
+                    axis_id: "  HIDA:raw  ".to_string(),
+                }),
+                serde_json::json!({ "axisId": "  HIDA:raw  " }),
+            ),
+            (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::UseInlineStyles(
                     crate::models::EditorUseInlineStylesPropertyPatchV1 {
@@ -559,6 +566,26 @@ mod tests {
             let wire = serde_json::to_value(request).unwrap();
             assert_eq!(wire["editorOps"][0]["patch"], expected);
             decode_gesture_commit_request(wire).unwrap();
+        }
+
+        let mut invalid_axis_id = graph_color_wire.clone();
+        invalid_axis_id["editorOps"][0]["patch"] = serde_json::json!({ "axisId": false });
+        let error = decode_gesture_commit_request(invalid_axis_id).unwrap_err();
+        assert_eq!(
+            validation_code(error).as_deref(),
+            Some("INVALID_REQUEST_PAYLOAD")
+        );
+        for patch in [
+            serde_json::json!({ "axisId": "axis", "hidden": true }),
+            serde_json::json!({ "axisId": "axis", "unexpected": true }),
+        ] {
+            let mut invalid_axis_id = graph_color_wire.clone();
+            invalid_axis_id["editorOps"][0]["patch"] = patch;
+            let error = decode_gesture_commit_request(invalid_axis_id).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
         }
 
         let mut invalid_graph_color = graph_color_wire;

@@ -60,6 +60,7 @@ import {
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
   patchKnobPropertyById,
+  patchKnobAxisIdById,
   patchNotePropertiesByIds,
   patchNotePropertyById,
   patchStatTypeById,
@@ -2409,6 +2410,40 @@ describe('elementOps', () => {
       patchNotePropertiesByIds([''], { noteGlowEnabled: true }),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('knob axisId는 raw absolute leaf만 한 semantic op로 보낸다', async () => {
+    useKnobItemStore.setState({
+      positions: {
+        '4key': [
+          {
+            ...keyAt(ID_A),
+            axisId: 'old',
+            sensitivity: 1,
+            reverse: false,
+          } as never,
+        ],
+      },
+    });
+
+    await patchKnobAxisIdById(ID_A, '  HIDA:raw  ');
+
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'knob',
+          id: ID_A,
+          patch: { axisId: '  HIDA:raw  ' },
+        },
+      ],
+      expect.anything(),
+    );
+    expect(useKnobItemStore.getState().positions['4key'][0]).toMatchObject({
+      axisId: '  HIDA:raw  ',
+      sensitivity: 1,
+      reverse: false,
+    });
   });
 
   it('note 편입 전 실패는 자기 eager leaf만 복원한다', async () => {

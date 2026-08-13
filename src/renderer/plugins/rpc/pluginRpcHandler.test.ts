@@ -517,6 +517,7 @@ describe('plugin panel persisted element mutations', () => {
     ['평균선', { showAvgLine: false }],
     ['그래프 애니메이션', { graphAnimationEnabled: true }],
     ['그래프 속도', { graphSpeed: 1200 }],
+    ['노브 축', { axisId: '  HIDA:raw  ' }, 'knob'],
     ['인라인 스타일', { useInlineStyles: true }],
     ['글꼴 굵기', { fontWeight: 700 }],
     ['글꼴 기울임', { fontItalic: true }],
@@ -1053,6 +1054,46 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'axisId wrong type',
+      {
+        target: {
+          elementType: 'graph',
+          id: 'stable',
+          patch: { axisId: 'HIDA:test' },
+        },
+      },
+    ],
+    [
+      'axisId non-string',
+      {
+        target: {
+          elementType: 'knob',
+          id: 'stable',
+          patch: { axisId: 1 },
+        },
+      },
+    ],
+    [
+      'axisId combined',
+      {
+        target: {
+          elementType: 'knob',
+          id: 'stable',
+          patch: { axisId: 'HIDA:test', reverse: true },
+        },
+      },
+    ],
+    [
+      'axisId extra',
+      {
+        target: {
+          elementType: 'knob',
+          id: 'stable',
+          patch: { axisId: 'HIDA:test', extra: true },
+        },
+      },
+    ],
+    [
       'graphSpeed fractional',
       {
         targets: [{ elementType: 'graph', id: 'stable' }],
@@ -1328,6 +1369,37 @@ describe('plugin panel persisted element mutations', () => {
     finish();
 
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('axisId는 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchElementProperty.mockImplementationOnce(
+      async (_type, _id, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'knob',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { axisId: '  HIDA:raw  ' },
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.patchElementProperty).toHaveBeenCalledWith(
+      'knob',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      { axisId: '  HIDA:raw  ' },
+      expect.objectContaining({ preflight: expect.any(Function) }),
+    );
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
       ok: false,
       error: { code: 'AUTHORITY_GENERATION_STALE' },

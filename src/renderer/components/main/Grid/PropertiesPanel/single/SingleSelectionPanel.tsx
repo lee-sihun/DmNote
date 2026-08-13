@@ -1,7 +1,10 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
 import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
+import { patchKnobAxisIdById } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import { patchNativeLayerPropertyViaAuthority } from '@plugins/rpc/pluginElementActions';
 import type { ImageFit, KeyPosition, KeySlot } from '@src/types/key/keys';
 import {
   STAT_BASE_OPTIONS,
@@ -870,7 +873,10 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const imageButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showImagePicker, setShowImagePicker] = useState(false);
-  const [capturing, setCapturing] = useState(false);
+  const [axisCaptureTarget, setAxisCaptureTarget] = useState<{
+    id: string | null;
+    index: number;
+  } | null>(null);
   const [classNameDraft, setClassNameDraft] = useState(
     singleKnobPosition.className || '',
   );
@@ -881,7 +887,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   // 회전 감지 바인딩: 노브를 돌리면 가장 많이 움직인 축을 자동 바인딩
   useEffect(() => {
-    if (!capturing) return;
+    if (!axisCaptureTarget) return;
     axisEventBus.initialize();
     const counts = new Map<string, number>();
     let bound = false;
@@ -891,16 +897,28 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       counts.set(axisId, c);
       if (c >= 3) {
         bound = true;
-        handleKnobUpdate({ index: singleKnobIndex, axisId });
-        setCapturing(false);
+        if (axisCaptureTarget.id) {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: 'knob',
+                  id: axisCaptureTarget.id,
+                  patch: { axisId },
+                })
+              : patchKnobAxisIdById(axisCaptureTarget.id, axisId);
+          void persisted.catch(reportElementOpError);
+        } else {
+          handleKnobUpdate({ index: axisCaptureTarget.index, axisId });
+        }
+        setAxisCaptureTarget(null);
       }
     });
-    const timer = window.setTimeout(() => setCapturing(false), 6000);
+    const timer = window.setTimeout(() => setAxisCaptureTarget(null), 6000);
     return () => {
       unsub();
       window.clearTimeout(timer);
     };
-  }, [capturing, singleKnobIndex, handleKnobUpdate]);
+  }, [axisCaptureTarget, handleKnobUpdate]);
 
   const setRef = (node: HTMLDivElement | null) => {
     panelRef.current = node;
@@ -945,14 +963,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
       DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
   });
 
-  // 이 패널은 편집 트리 경계 위에서 피커와 캡처 세션을 소유한다.
-  // 대상이 갈려도 살아남으면 열린 피커가 옛 노브에서 떠 온 색을 그대로 쥐고
-  // 있고, 축 캡처 대기는 다음 회전을 새 노브에 바인딩한다.
-  // 피커를 닫으면 아래 동기화가 새 노브 색을 다시 떠 온다
+  // 피커는 대상 변경 시 닫는다. 축 캡처는 시작 ID/index를 별도로 동결하므로
+  // 재정렬이나 모드 전환 뒤에도 시작 대상을 유지한다
   useEffect(() => {
     setPickerFor(null);
     setShowImagePicker(false);
-    setCapturing(false);
+    setAxisCaptureTarget((current) =>
+      current && !current.id ? null : current,
+    );
   }, [singleKnobIndex, selectedKeyType]);
 
   // 피커가 닫혀있을 때만 외부 prop과 동기화
@@ -1204,14 +1222,27 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
                 <button
                   type="button"
-                  onClick={() => setCapturing((v) => !v)}
+                  onClick={() =>
+                    setAxisCaptureTarget((current) =>
+                      current
+                        ? null
+                        : {
+                            id:
+                              singleKnobPosition.id &&
+                              !isSyntheticElementId(singleKnobPosition.id)
+                                ? singleKnobPosition.id
+                                : null,
+                            index: singleKnobIndex,
+                          },
+                    )
+                  }
                   className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
-                    capturing ? 'shadow-focus-ring' : ''
+                    axisCaptureTarget ? 'shadow-focus-ring' : ''
                   } text-fg text-label`}
                   title={singleKnobPosition.axisId || ''}
                 >
                   <span className="truncate max-w-[120px]">
-                    {capturing
+                    {axisCaptureTarget
                       ? t('propertiesPanel.knobCapturing') || '감지 중…'
                       : singleKnobPosition.axisId
                       ? axisLabel

@@ -236,6 +236,7 @@ const parseNativeLayerPropertyTarget = (
       typeof patch.sensitivity === 'number' &&
       Number.isFinite(patch.sensitivity)) ||
     (hasExactKeys(patch, ['reverse']) && typeof patch.reverse === 'boolean') ||
+    (hasExactKeys(patch, ['axisId']) && typeof patch.axisId === 'string') ||
     (hasExactKeys(patch, ['useInlineStyles']) &&
       typeof patch.useInlineStyles === 'boolean') ||
     (hasExactKeys(patch, ['fontWeight']) &&
@@ -278,7 +279,9 @@ const parseNativeLayerPropertyTarget = (
     hasExactKeys(patch, ['graphAnimationEnabled']) ||
     hasExactKeys(patch, ['graphSpeed']);
   const knobOnlyPatch =
-    hasExactKeys(patch, ['sensitivity']) || hasExactKeys(patch, ['reverse']);
+    hasExactKeys(patch, ['sensitivity']) ||
+    hasExactKeys(patch, ['reverse']) ||
+    hasExactKeys(patch, ['axisId']);
   if (
     !patchValid ||
     (graphOnlyPatch && target.elementType !== 'graph') ||

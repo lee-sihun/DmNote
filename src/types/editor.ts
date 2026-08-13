@@ -148,6 +148,7 @@ interface EditorElementPropertyValuesV1 {
   graphSpeed: number;
   reverse: boolean;
   sensitivity: number;
+  axisId: string;
   useInlineStyles: boolean;
   fontWeight: number;
   fontItalic: boolean;
@@ -176,6 +177,9 @@ export type EditorGraphRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
 export type EditorKnobRuntimePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'reverse' | 'sensitivity'
 >;
+
+export type EditorKnobAxisPropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'axisId'>;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'fontWeight' | 'fontItalic' | 'fontUnderline' | 'fontStrikethrough'
@@ -985,6 +989,10 @@ export function assertEditorOpsV1(
           op.elementType === 'knob' &&
           typeof op.patch.sensitivity === 'number' &&
           Number.isFinite(op.patch.sensitivity)) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'axisId' &&
+          op.elementType === 'knob' &&
+          typeof op.patch.axisId === 'string') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'useInlineStyles' &&
           typeof op.patch.useInlineStyles === 'boolean') ||

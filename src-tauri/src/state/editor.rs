@@ -2424,6 +2424,13 @@ mod tests {
                 serde_json::json!({ "sensitivity": -7.25 }),
             ),
             (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
+                    axis_id: "  HIDA:raw  ".to_string(),
+                }),
+                serde_json::json!({ "axisId": "  HIDA:raw  " }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::UseInlineStyles(
                     crate::models::EditorUseInlineStylesPropertyPatchV1 {
@@ -2560,6 +2567,9 @@ mod tests {
             serde_json::json!({ "graphSpeed": 1.5 }),
             serde_json::json!({ "reverse": "true" }),
             serde_json::json!({ "sensitivity": "1" }),
+            serde_json::json!({ "axisId": false }),
+            serde_json::json!({ "axisId": "axis", "hidden": true }),
+            serde_json::json!({ "axisId": "axis", "unexpected": true }),
             serde_json::json!({ "useInlineStyles": null }),
             serde_json::json!({ "fontWeight": -1 }),
             serde_json::json!({ "fontWeight": 1.5 }),
