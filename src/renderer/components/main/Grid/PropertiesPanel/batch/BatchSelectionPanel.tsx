@@ -11,7 +11,11 @@ import type {
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { ElementShadowSpec } from '@src/types/key/shadows';
-import type { ColorModeValue } from '@src/types/color';
+import {
+  paintPropertyFields,
+  type ColorModeValue,
+  type PaintDescriptorV1,
+} from '@src/types/color';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
@@ -43,6 +47,7 @@ import {
   patchCounterEnabledByTargets,
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
+  patchPaintByTargets,
   patchStylePropertyByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
@@ -57,6 +62,7 @@ import {
   patchCounterEnabledViaAuthority,
   patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority,
+  patchPaintViaAuthority,
   patchStylePropertyViaAuthority,
   patchInactiveImageViaAuthority,
   patchIdleTransparentViaAuthority,
@@ -77,7 +83,10 @@ import {
   isSyntheticElementId,
   resolveElementById,
 } from '@src/renderer/editor/model/elementIdMap';
-import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
+import type {
+  EditorPaintPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+} from '@src/types/editor';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
 
@@ -142,6 +151,64 @@ const createStylePropertyHandlers = (
     },
   };
 };
+
+const paintPatchDetails = (patch: EditorPaintPropertyPatchV1) => {
+  const field = Object.keys(patch)[0] as
+    | 'backgroundPaint'
+    | 'activeBackgroundPaint'
+    | 'borderPaint'
+    | 'activeBorderPaint';
+  const descriptor = patch[field] as PaintDescriptorV1;
+  const { active, background } = paintPropertyFields(field);
+  return {
+    field,
+    descriptor,
+    active,
+    target: background
+      ? ('backgroundColor' as const)
+      : ('borderColor' as const),
+  };
+};
+
+const createPaintCommitHandler =
+  (
+    targets: readonly {
+      elementType: 'key' | 'stat' | 'graph' | 'knob';
+      id: string;
+    }[],
+    legacy: (
+      target: 'backgroundColor' | 'borderColor',
+      state: 'idle' | 'active',
+      value: ColorModeValue,
+    ) => void,
+  ) =>
+  (patch: EditorPaintPropertyPatchV1) => {
+    const details = paintPatchDetails(patch);
+    const relevant = details.active
+      ? targets.filter(
+          ({ elementType }) => elementType === 'key' || elementType === 'knob',
+        )
+      : targets;
+    const stable =
+      relevant.length > 0 &&
+      relevant.every(({ id }) => id.length > 0 && !isSyntheticElementId(id)) &&
+      new Set(relevant.map(({ id }) => id)).size === relevant.length;
+    if (!stable) {
+      legacy(
+        details.target,
+        details.active ? 'active' : 'idle',
+        details.descriptor.gradient
+          ? { mode: 'gradient', spec: details.descriptor.gradient }
+          : { mode: 'solid', color: details.descriptor.color },
+      );
+      return;
+    }
+    const persisted =
+      window.__dmn_window_type === 'panel'
+        ? patchPaintViaAuthority(relevant, patch)
+        : patchPaintByTargets(relevant, patch);
+    void persisted.catch(reportElementOpError);
+  };
 
 const commitBoundInactiveImage = (
   binding: 'element-id' | 'session-mode',
@@ -571,6 +638,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   );
   const { previewStyleProperty, commitStyleProperty } =
     createStylePropertyHandlers(textPropertyTargets, selectedKeyType);
+  const commitPaint = createPaintCommitHandler(
+    textPropertyTargets,
+    handleBatchGradientCommit ?? (() => undefined),
+  );
   const { commitStyleProperty: commitNoteStyleProperty } =
     createStylePropertyHandlers(
       selectedKeyElements.map(({ id }) => ({
@@ -1027,6 +1098,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 onSoundVolumeCommit={commitSoundVolume}
                 onStylePropertyPreview={previewStyleProperty}
                 onStylePropertyCommit={commitStyleProperty}
+                onPaintCommit={commitPaint}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
                 shadowActiveState={
@@ -1542,6 +1614,13 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
       })),
       selectedKeyType,
     );
+  const commitPaint = createPaintCommitHandler(
+    selectedGraphElements.map(({ id }) => ({
+      elementType: 'graph',
+      id,
+    })),
+    handleBatchGradientCommit ?? (() => undefined),
+  );
 
   const graphShapeOptions = [
     { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
@@ -1645,6 +1724,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               selectedCount={selectedGraphElements.length}
               onStylePropertyPreview={previewStyleProperty}
               onStylePropertyCommit={commitStyleProperty}
+              onPaintCommit={commitPaint}
               hideDisplayText
               hideFontControls
               showSoundControls={false}
@@ -1951,6 +2031,13 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
       })),
       selectedKeyType,
     );
+  const commitPaint = createPaintCommitHandler(
+    selectedKnobElements.map(({ id }) => ({
+      elementType: 'knob',
+      id,
+    })),
+    handleBatchGradientCommit ?? (() => undefined),
+  );
 
   const sensitivityState = getMixedValueKnobs(
     (pos) => Number(pos.sensitivity ?? 1),
@@ -2030,6 +2117,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               selectedCount={selectedKnobElements.length}
               onStylePropertyPreview={previewStyleProperty}
               onStylePropertyCommit={commitStyleProperty}
+              onPaintCommit={commitPaint}
               hideDisplayText
               hideFontControls
               showSoundControls={false}

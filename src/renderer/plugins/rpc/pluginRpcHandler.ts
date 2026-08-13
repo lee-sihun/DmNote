@@ -61,6 +61,7 @@ import {
   patchCounterLayoutByTargets,
   patchCounterStrokeByTargets,
   patchCounterTypographyByTargets,
+  patchPaintByTargets,
   patchStylePropertyByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
@@ -88,6 +89,7 @@ import type {
   EditorCounterLayoutPropertyPatchV1,
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
+  EditorPaintPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorFontFamilyPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
@@ -95,6 +97,7 @@ import type {
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
 } from '@src/types/editor';
+import { isEditorPaintPropertyPatchV1 } from '@src/types/editor';
 import type {
   LayerReorderAnchorsWire,
   LayerReorderIntentWire,
@@ -400,8 +403,13 @@ const parseNativeLayerPropertyTarget = (
   const counterAnimationPreset = parseCounterAnimationPresetIntent(
     patch.counterAnimationPreset,
   );
+  const paintPatch = isEditorPaintPropertyPatchV1(patch);
   const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
   const patchValid =
+    (paintPatch &&
+      (!('activeBackgroundPaint' in patch) && !('activeBorderPaint' in patch)
+        ? true
+        : target.elementType === 'key' || target.elementType === 'knob')) ||
     (hasExactKeys(patch, ['hidden']) && typeof patch.hidden === 'boolean') ||
     (hasExactKeys(patch, ['layerName']) &&
       (typeof patch.layerName === 'string' || patch.layerName === null)) ||
@@ -752,6 +760,11 @@ type NativeLayerPropertyRequest =
       patch: EditorFontFamilyPropertyPatchV1;
     }
   | {
+      kind: 'paintBatch';
+      targets: Array<{ elementType: NativeElementType; id: string }>;
+      patch: EditorPaintPropertyPatchV1;
+    }
+  | {
       kind: 'stylePropertyBatch';
       targets: Array<{ elementType: NativeElementType; id: string }>;
       patch: EditorPreviewStylePropertyPatchV1;
@@ -919,6 +932,7 @@ const parseNativeLayerPropertyRequest = (
       ? { fontFamily: patch.fontFamily }
       : null;
   const noteNumericStylePatch = parseNoteNumericStylePropertyPatch(patch);
+  const paintPatch = isEditorPaintPropertyPatchV1(patch) ? patch : null;
   const stylePropertyPatch: EditorPreviewStylePropertyPatchV1 | null =
     hasExactKeys(patch, ['displayText']) &&
     typeof patch.displayText === 'string'
@@ -1093,6 +1107,7 @@ const parseNativeLayerPropertyRequest = (
     useInlineStyles === null &&
     fontStylePatch === null &&
     fontFamilyPatch === null &&
+    paintPatch === null &&
     stylePropertyPatch === null &&
     inactiveImage === null &&
     soundEnabled === null &&
@@ -1121,6 +1136,7 @@ const parseNativeLayerPropertyRequest = (
     useInlineStyles !== null ||
     fontStylePatch !== null ||
     fontFamilyPatch !== null ||
+    paintPatch !== null ||
     stylePropertyPatch !== null ||
     inactiveImage !== null
       ? null
@@ -1183,6 +1199,11 @@ const parseNativeLayerPropertyRequest = (
       (stylePropertyPatch !== null &&
         'noteGlowSize' in stylePropertyPatch &&
         target.elementType !== 'key') ||
+      (paintPatch !== null &&
+        ('activeBackgroundPaint' in paintPatch ||
+          'activeBorderPaint' in paintPatch) &&
+        target.elementType !== 'key' &&
+        target.elementType !== 'knob') ||
       (stylePropertyPatch !== null &&
         ('noteOffsetX' in stylePropertyPatch ||
           'noteOffsetY' in stylePropertyPatch ||
@@ -1216,6 +1237,9 @@ const parseNativeLayerPropertyRequest = (
   }
   if (fontFamilyPatch !== null) {
     return { kind: 'fontFamilyBatch', targets, patch: fontFamilyPatch };
+  }
+  if (paintPatch !== null) {
+    return { kind: 'paintBatch', targets, patch: paintPatch };
   }
   if (stylePropertyPatch !== null) {
     return {
@@ -2052,6 +2076,18 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
     };
     const persisted = (() => {
       if (request.kind === 'single') {
+        if (isEditorPaintPropertyPatchV1(request.target.patch)) {
+          return patchPaintByTargets(
+            [
+              {
+                elementType: request.target.elementType,
+                id: request.target.id,
+              },
+            ],
+            request.target.patch,
+            options,
+          );
+        }
         if (
           'counterPlacement' in request.target.patch ||
           'counterAlign' in request.target.patch ||
@@ -2178,6 +2214,9 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
           request.patch,
           options,
         );
+      }
+      if (request.kind === 'paintBatch') {
+        return patchPaintByTargets(request.targets, request.patch, options);
       }
       if (request.kind === 'stylePropertyBatch') {
         return patchStylePropertyByTargets(request.targets, request.patch, {

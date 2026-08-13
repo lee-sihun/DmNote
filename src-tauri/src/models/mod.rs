@@ -204,6 +204,14 @@ impl PartialEq for GradientSpec {
 }
 
 impl GradientSpec {
+    pub(crate) fn from_canonical_parts(angle: f64, stops: Vec<GradientStop>) -> Self {
+        Self {
+            angle,
+            stops,
+            normalized_on_read: false,
+        }
+    }
+
     fn normalize(&mut self) -> bool {
         let previous_angle = self.angle;
         let previous_stops = self.stops.clone();

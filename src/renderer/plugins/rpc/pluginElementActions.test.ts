@@ -1603,6 +1603,77 @@ describe('plugin element panel queue', () => {
     expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
   });
 
+  it('paint authority는 exact descriptor를 보내고 outcome-unknown을 재실행하지 않는다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({ kind: 'unknown' });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    ];
+    const patch = {
+      backgroundPaint: {
+        color: '#first',
+        gradient: {
+          angle: 45,
+          stops: [
+            { color: '#first', pos: 0 },
+            { color: '#last', pos: 1 },
+          ],
+        },
+      },
+    };
+
+    await expect(actions.patchPaintViaAuthority(targets, patch)).resolves.toBe(
+      false,
+    );
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      { targets, patch },
+      0,
+      7,
+    );
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
+  it.each(['MODEL_REVISION_STALE', 'PLUGIN_MODEL_REVISION_CONFLICT'])(
+    'paint %s은 fresh snapshot 뒤 exact descriptor를 한 번만 재전송한다',
+    async (errorCode) => {
+      mocks.sendPluginRpc
+        .mockResolvedValueOnce({
+          kind: 'error',
+          errorCode,
+          response: { modelRevision: 1 },
+        })
+        .mockResolvedValueOnce({
+          kind: 'ok',
+          response: { modelRevision: 2 },
+        });
+      const changed = actions.patchPaintViaAuthority(
+        [
+          {
+            elementType: 'knob',
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        ],
+        { activeBorderPaint: { color: ' raw ', gradient: null } },
+      );
+      await vi.waitFor(() =>
+        expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+      );
+      actions.notePluginMirrorRevision(2);
+
+      await expect(changed).resolves.toBe(true);
+      expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+        mocks.sendPluginRpc.mock.calls[0]?.[1],
+      );
+      expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+    },
+  );
+
   it.each(['MODEL_REVISION_STALE', 'PLUGIN_MODEL_REVISION_CONFLICT'])(
     'soundEnabled %s은 fresh snapshot 뒤 same generation과 bool을 한 번 재전송한다',
     async (errorCode) => {

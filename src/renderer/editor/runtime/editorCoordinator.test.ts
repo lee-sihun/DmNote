@@ -3539,6 +3539,51 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it.each(['stale', ''])(
+    'idle background paint ack는 gradient 대표색으로 active fallback을 materialize한다 (%j)',
+    async (idleColor) => {
+      const id = '00000000-0000-4000-8000-0000000000a6';
+      const gradient = {
+        angle: 45,
+        stops: [
+          { color: '#first', pos: 0 },
+          { color: '#last', pos: 1 },
+        ],
+      };
+      const base = withStableId(id);
+      base.keyPositions['4key'][0] = {
+        ...base.keyPositions['4key'][0],
+        backgroundColor: idleColor,
+        backgroundGradient: gradient,
+        activeBackgroundColor: undefined,
+        activeBackgroundGradient: undefined,
+        borderColor: '#border-sibling',
+      };
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+
+      const applied = await harness.coordinator.commitSemanticOpsInternal([
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id,
+          patch: {
+            backgroundPaint: { color: '#next', gradient: null },
+          },
+        },
+      ]);
+
+      expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+        backgroundColor: '#next',
+        backgroundGradient: undefined,
+        activeBackgroundColor: '#first',
+        activeBackgroundGradient: gradient,
+        borderColor: '#border-sibling',
+      });
+      harness.coordinator.stop();
+    },
+  );
+
   it('className은 common position leaf만 투영하고 displayText sibling을 보존한다', async () => {
     const id = '00000000-0000-4000-8000-0000000000c5';
     const base = withStableId(id);

@@ -4352,6 +4352,25 @@ mod tests {
         }
     }
 
+    fn paint_descriptor(
+        color: &str,
+        gradient: Option<(f64, &[(&str, f64)])>,
+    ) -> crate::models::EditorPaintDescriptorV1 {
+        crate::models::EditorPaintDescriptorV1 {
+            color: color.to_string(),
+            gradient: gradient.map(|(angle, stops)| crate::models::EditorPaintGradientV1 {
+                angle,
+                stops: stops
+                    .iter()
+                    .map(|(color, pos)| crate::models::EditorPaintGradientStopV1 {
+                        color: (*color).to_string(),
+                        pos: *pos,
+                    })
+                    .collect(),
+            }),
+        }
+    }
+
     fn frozen_key_insert_op(id: impl Into<String>) -> EditorOpV1 {
         EditorOpV1::InsertFrozenElements {
             mode: "4key".to_string(),
@@ -12245,6 +12264,255 @@ mod tests {
             redone.key_positions["5key"][0].note_border_radius,
             Some(4.0)
         );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn paint_descriptor_batch_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-paint-descriptor-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial = store.editor_get().document;
+        let first_id = initial.key_positions["4key"][0].id.clone();
+        let second_id = initial.key_positions["4key"][1].id.clone();
+        let setup = legacy_editor_commit(&store, &[EditorField::KeyPositions], |data| {
+            let first = &mut data.key_positions.get_mut("4key").unwrap()[0];
+            first.background_color = Some("idle-before".to_string());
+            first.background_gradient = None;
+            first.active_background_color = None;
+            first.active_background_gradient = None;
+            first.border_color = Some("first-border-sibling".to_string());
+            let second = &mut data.key_positions.get_mut("4key").unwrap()[1];
+            second.active_border_color = None;
+            second.active_border_gradient = None;
+            second.background_color = Some("second-background-sibling".to_string());
+        })
+        .unwrap();
+        let gradient_stops = [("next-bg", 0.0), ("next-tail", 1.0)];
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &first_id,
+                EditorElementPropertyPatchV1::BackgroundPaint(
+                    crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                        background_paint: paint_descriptor(
+                            "next-bg",
+                            Some((135.0, &gradient_stops)),
+                        ),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &second_id,
+                EditorElementPropertyPatchV1::ActiveBorderPaint(
+                    crate::models::EditorActiveBorderPaintPropertyPatchV1 {
+                        active_border_paint: paint_descriptor("active-border", None),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::BorderPaint(
+                    crate::models::EditorBorderPaintPropertyPatchV1 {
+                        border_paint: paint_descriptor("missing", None),
+                    },
+                ),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(changed.result.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let first = &changed.document.key_positions["4key"][0];
+        assert_eq!(first.background_color.as_deref(), Some("next-bg"));
+        assert_eq!(first.background_gradient.as_ref().unwrap().angle, 135.0);
+        assert_eq!(
+            first.active_background_color.as_deref(),
+            Some("idle-before")
+        );
+        assert_eq!(first.border_color.as_deref(), Some("first-border-sibling"));
+        let second = &changed.document.key_positions["4key"][1];
+        assert_eq!(second.active_border_color.as_deref(), Some("active-border"));
+        assert_eq!(
+            second.background_color.as_deref(),
+            Some("second-background-sibling")
+        );
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &first_id,
+            EditorElementPropertyPatchV1::BackgroundPaint(
+                crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                    background_paint: paint_descriptor("different", None),
+                },
+            ),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops[..2].to_vec(),
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert_eq!(
+            undone.key_positions["4key"][0].background_color.as_deref(),
+            Some("idle-before")
+        );
+        assert!(undone.key_positions["4key"][0]
+            .active_background_color
+            .is_none());
+        assert!(undone.key_positions["4key"][1]
+            .active_border_color
+            .is_none());
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert_eq!(
+            redone.key_positions["4key"][0].background_color.as_deref(),
+            Some("next-bg")
+        );
+        assert_eq!(
+            redone.key_positions["4key"][0]
+                .active_background_color
+                .as_deref(),
+            Some("idle-before")
+        );
+        assert_eq!(
+            redone.key_positions["4key"][1]
+                .active_border_color
+                .as_deref(),
+            Some("active-border")
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn paint_fallback_only_is_applied_and_records_one_history_entry() {
+        let dir = test_directory("editor-paint-fallback-only-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let target_id = store.editor_get().document.key_positions["4key"][0]
+            .id
+            .clone();
+        let setup = legacy_editor_commit(&store, &[EditorField::KeyPositions], |data| {
+            let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
+            position.background_color = Some("same-paint".to_string());
+            position.background_gradient = None;
+            position.active_background_color = None;
+            position.active_background_gradient = None;
+        })
+        .unwrap();
+        let history_before = store.history_status().history_revision;
+        let op = patch_property_op(
+            EditorElementTypeV1::Key,
+            &target_id,
+            EditorElementPropertyPatchV1::BackgroundPaint(
+                crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                    background_paint: paint_descriptor("same-paint", None),
+                },
+            ),
+        );
+
+        let changed = store
+            .commit_editor_document(editor_ops_request(
+                setup.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![op.clone()],
+            ))
+            .unwrap();
+        assert_eq!(changed.result.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            changed.result.op_results.as_ref().unwrap()[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert_eq!(
+            changed.document.key_positions["4key"][0]
+                .background_color
+                .as_deref(),
+            Some("same-paint")
+        );
+        assert_eq!(
+            changed.document.key_positions["4key"][0]
+                .active_background_color
+                .as_deref(),
+            Some("same-paint")
+        );
+        assert_eq!(store.history_status().history_revision, history_before + 1);
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![op],
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert_eq!(
+            no_change.result.op_results.as_ref().unwrap()[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert_eq!(store.history_status().history_revision, history_before + 1);
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

@@ -1,5 +1,9 @@
 import { stableStringify } from '@utils/core/stableStringify';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
+import {
+  inheritedPaintMaterialization,
+  paintPropertyFields,
+} from '@src/types/color';
 
 import {
   EDITOR_COMMIT_SCHEMA_VERSION,
@@ -716,6 +720,60 @@ const applySemanticOps = (
             }
             if ('fontFamily' in op.patch) {
               return { ...position, fontFamily: op.patch.fontFamily };
+            }
+            if (
+              'backgroundPaint' in op.patch ||
+              'activeBackgroundPaint' in op.patch ||
+              'borderPaint' in op.patch ||
+              'activeBorderPaint' in op.patch
+            ) {
+              const field = Object.keys(op.patch)[0] as
+                | 'backgroundPaint'
+                | 'activeBackgroundPaint'
+                | 'borderPaint'
+                | 'activeBorderPaint';
+              const paint = op.patch[field]!;
+              const {
+                active,
+                colorField,
+                gradientField,
+                activeColorField,
+                activeGradientField,
+              } = paintPropertyFields(field);
+              const preservation: Record<string, unknown> = {};
+              if (
+                !active &&
+                (op.elementType === 'key' || op.elementType === 'knob')
+              ) {
+                const inherited = inheritedPaintMaterialization(
+                  {
+                    color:
+                      typeof position[colorField] === 'string'
+                        ? (position[colorField] as string)
+                        : undefined,
+                    gradient: position[gradientField] as never,
+                  },
+                  {
+                    color:
+                      typeof position[activeColorField] === 'string'
+                        ? (position[activeColorField] as string)
+                        : undefined,
+                    gradient: position[activeGradientField] as never,
+                  },
+                );
+                if (inherited) {
+                  preservation[activeColorField] = inherited.color;
+                  if (inherited.gradient) {
+                    preservation[activeGradientField] = inherited.gradient;
+                  }
+                }
+              }
+              return {
+                ...position,
+                ...preservation,
+                [colorField]: paint.color,
+                [gradientField]: paint.gradient ?? undefined,
+              };
             }
             if ('displayText' in op.patch) {
               return { ...position, displayText: op.patch.displayText };

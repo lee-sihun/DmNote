@@ -403,6 +403,29 @@ mod tests {
         );
         decode_gesture_commit_request(graph_color_wire.clone()).unwrap();
 
+        let mut paint = gesture_request(&["plugin-a".to_string()]);
+        paint.editor_ops_version = Some(EDITOR_OPS_VERSION);
+        paint.editor_ops = Some(vec![EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Knob,
+            id: uuid::Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1::ActiveBorderPaint(
+                crate::models::EditorActiveBorderPaintPropertyPatchV1 {
+                    active_border_paint: crate::models::EditorPaintDescriptorV1 {
+                        color: "active".to_string(),
+                        gradient: None,
+                    },
+                },
+            ),
+        }]);
+        let paint_wire = serde_json::to_value(paint).unwrap();
+        assert_eq!(
+            paint_wire["editorOps"][0]["patch"],
+            serde_json::json!({
+                "activeBorderPaint": { "color": "active", "gradient": null }
+            })
+        );
+        decode_gesture_commit_request(paint_wire.clone()).unwrap();
+
         let literal_properties = [
             (
                 EditorElementTypeV1::Graph,
@@ -948,6 +971,24 @@ mod tests {
             let mut invalid_class_name = layer_name_wire.clone();
             invalid_class_name["editorOps"][0]["patch"] = patch;
             let error = decode_gesture_commit_request(invalid_class_name).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
+
+        for patch in [
+            serde_json::json!({ "activeBorderPaint": {} }),
+            serde_json::json!({ "activeBorderPaint": { "color": "active" } }),
+            serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": null, "unexpected": true } }),
+            serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": { "stops": [{ "color": "active", "pos": 0 }, { "color": "tail", "pos": 1 }] } } }),
+            serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": { "angle": 90 } } }),
+            serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": { "angle": 90, "stops": [{ "color": "active", "pos": 0, "unexpected": true }, { "color": "tail", "pos": 1 }] } } }),
+            serde_json::json!({ "activeBorderPaint": { "color": "active", "gradient": null }, "hidden": false }),
+        ] {
+            let mut invalid_paint = paint_wire.clone();
+            invalid_paint["editorOps"][0]["patch"] = patch;
+            let error = decode_gesture_commit_request(invalid_paint).unwrap_err();
             assert_eq!(
                 validation_code(error).as_deref(),
                 Some("INVALID_REQUEST_PAYLOAD")

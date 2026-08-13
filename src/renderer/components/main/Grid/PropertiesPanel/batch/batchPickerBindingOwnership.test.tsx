@@ -98,6 +98,8 @@ const patches = vi.hoisted(() => ({
   patchCounterTypographyViaAuthority: vi.fn(async () => true),
   patchCounterStrokeByTargets: vi.fn(async () => true),
   patchCounterStrokeViaAuthority: vi.fn(async () => true),
+  patchPaintByTargets: vi.fn(async () => true),
+  patchPaintViaAuthority: vi.fn(async () => true),
   patchDisplayTextByTargets: vi.fn(async () => true),
   patchDisplayTextViaAuthority: vi.fn(async () => true),
 }));
@@ -126,6 +128,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterLayoutByTargets: patches.patchCounterLayoutByTargets,
   patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
   patchCounterStrokeByTargets: patches.patchCounterStrokeByTargets,
+  patchPaintByTargets: patches.patchPaintByTargets,
   patchStylePropertyByTargets: patches.patchDisplayTextByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
@@ -146,6 +149,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchCounterTypographyViaAuthority:
     patches.patchCounterTypographyViaAuthority,
   patchCounterStrokeViaAuthority: patches.patchCounterStrokeViaAuthority,
+  patchPaintViaAuthority: patches.patchPaintViaAuthority,
   patchStylePropertyViaAuthority: patches.patchDisplayTextViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
@@ -610,6 +614,94 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         ).not.toHaveBeenCalled();
       }
       expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['main', 'panel'] as const)(
+    'batch mixed active paint는 latest key와 knob subset만 %s authority로 보낸다',
+    async (windowType) => {
+      window.__dmn_window_type = windowType;
+      const legacy = vi.fn();
+      selectImageTargets('mixed', 'a');
+      renderImagePanel('mixed', legacy);
+      const allTargets = selectImageTargets('mixed', 'b');
+      renderImagePanel('mixed', legacy);
+
+      await commitBackgroundPaint('active', 'active-final');
+
+      const targets = allTargets.filter(
+        ({ elementType }) => elementType === 'key' || elementType === 'knob',
+      );
+      const patch = {
+        activeBackgroundPaint: {
+          color: 'active-final',
+          gradient: null,
+        },
+      } as const;
+      if (windowType === 'panel') {
+        expect(patches.patchPaintViaAuthority).toHaveBeenCalledWith(
+          targets,
+          patch,
+        );
+        expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchPaintByTargets).toHaveBeenCalledWith(
+          targets,
+          patch,
+        );
+        expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('batch active paint는 irrelevant synthetic stat/graph를 무시하고 stable key/knob만 쓴다', async () => {
+    const legacy = vi.fn();
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: ID_A, index: 0 },
+        { type: 'stat', id: 'stat-0', index: 0 },
+        { type: 'graph', id: 'graph-0', index: 0 },
+        { type: 'knob', id: ID_B, index: 0 },
+      ],
+    });
+    renderImagePanel('mixed', legacy);
+
+    await commitBackgroundPaint('active', 'active-stable');
+
+    expect(patches.patchPaintByTargets).toHaveBeenCalledWith(
+      [
+        { elementType: 'key', id: ID_A },
+        { elementType: 'knob', id: ID_B },
+      ],
+      {
+        activeBackgroundPaint: {
+          color: 'active-stable',
+          gradient: null,
+        },
+      },
+    );
+    expect(legacy).not.toHaveBeenCalled();
+  });
+
+  it.each(['key-0', 'knob-0'] as const)(
+    'batch active paint relevant %s target은 whole legacy다',
+    async (id) => {
+      const type = id.startsWith('key') ? 'key' : 'knob';
+      const legacy = vi.fn();
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+      });
+      renderImagePanel('mixed', legacy);
+
+      await commitBackgroundPaint('active', 'active-legacy');
+
+      expect(legacy).toHaveBeenCalledWith('backgroundColor', 'active', {
+        mode: 'solid',
+        color: 'active-legacy',
+      });
+      expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
+      expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
     },
   );
 
@@ -1704,6 +1796,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       handleBatchStyleChangeComplete: kind === 'mixed' ? legacy : vi.fn(),
       handleActiveCapableStyleChangeComplete:
         kind === 'mixed' ? legacy : vi.fn(),
+      handleBatchGradientCommit: legacy,
       handleGraphBatchSharedSetting: kind === 'graph' ? legacy : vi.fn(),
       handleKnobBatchSharedSetting: kind === 'knob' ? legacy : vi.fn(),
     };
@@ -1739,6 +1832,99 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       );
     });
   };
+
+  const commitBackgroundPaint = async (
+    state: 'idle' | 'active',
+    color: string,
+  ) => {
+    const label = Array.from(host.querySelectorAll('p')).find(
+      (element) => element.textContent === 'propertiesPanel.backgroundColor',
+    );
+    const button = label?.parentElement?.querySelector<HTMLButtonElement>(
+      'button[aria-haspopup="dialog"]',
+    );
+    expect(button).not.toBeNull();
+    act(() => button?.click());
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 10));
+    });
+    if (state === 'active') {
+      act(() => captured.color?.onStateModeChange?.('active'));
+    }
+    act(() => captured.color?.onColorChange('local-drag'));
+    expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
+    expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
+    act(() => captured.color?.onColorChangeComplete(color));
+  };
+
+  it.each(['main', 'panel'] as const)(
+    'batch mixed paint는 latest current target과 final-only %s authority를 사용한다',
+    async (windowType) => {
+      window.__dmn_window_type = windowType;
+      const legacy = vi.fn();
+      selectImageTargets('mixed', 'a');
+      renderImagePanel('mixed', legacy);
+      const targets = selectImageTargets('mixed', 'b');
+      renderImagePanel('mixed', legacy);
+
+      await commitBackgroundPaint('idle', ' raw final ');
+
+      const args = [
+        targets,
+        { backgroundPaint: { color: ' raw final ', gradient: null } },
+      ] as const;
+      if (windowType === 'panel') {
+        expect(patches.patchPaintViaAuthority).toHaveBeenCalledWith(...args);
+        expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
+      } else {
+        expect(patches.patchPaintByTargets).toHaveBeenCalledWith(...args);
+        expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['graph', 'idle'],
+    ['knob', 'active'],
+  ] as const)(
+    'batch %s-only paint %s actual ColorPicker는 exact targets를 쓴다',
+    async (kind, state) => {
+      const legacy = vi.fn();
+      const targets = selectImageTargets(kind, 'a');
+      renderImagePanel(kind, legacy);
+
+      await commitBackgroundPaint(state, `${kind}-${state}`);
+
+      expect(patches.patchPaintByTargets).toHaveBeenCalledWith(targets, {
+        [state === 'active' ? 'activeBackgroundPaint' : 'backgroundPaint']: {
+          color: `${kind}-${state}`,
+          gradient: null,
+        },
+      });
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key-0', ''])(
+    'batch idle paint relevant %j target은 whole legacy pair commit이다',
+    async (id) => {
+      const legacy = vi.fn();
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id, index: 0 }],
+      });
+      renderImagePanel('mixed', legacy);
+
+      await commitBackgroundPaint('idle', 'legacy-paint');
+
+      expect(legacy).toHaveBeenCalledWith('backgroundColor', 'idle', {
+        mode: 'solid',
+        color: 'legacy-paint',
+      });
+      expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
+      expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['main', 'mixed'],

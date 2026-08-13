@@ -11,6 +11,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorPaintPropertyPatchV1,
 } from '@src/types/editor';
 
 // ============================================================================
@@ -248,6 +249,7 @@ export interface StyleTabContentProps {
   onSoundVolumeCommit?: (soundVolume: number) => void;
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
   panelElement?: HTMLElement | null;
   useCustomCSS?: boolean;

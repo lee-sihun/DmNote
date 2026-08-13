@@ -41,6 +41,7 @@ import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import {
   getActivePairPreservation,
   gradientPairPatch,
+  paintDescriptor,
   gradientToCss,
   type ColorModeValue,
   type GradientSpec,
@@ -131,6 +132,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onSoundVolumeCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onPaintCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -491,6 +493,20 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const handleGradientCommit = (value: ColorModeValue) => {
     if (!gradientTarget) return;
     const prop = resolveColorProperty(gradientTarget);
+    if (onPaintCommit) {
+      const descriptor = paintDescriptor(value);
+      const paintField =
+        effectiveColorState === 'active'
+          ? gradientTarget === 'backgroundColor'
+            ? 'activeBackgroundPaint'
+            : 'activeBorderPaint'
+          : gradientTarget === 'backgroundColor'
+          ? 'backgroundPaint'
+          : 'borderPaint';
+      setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
+      onPaintCommit({ [paintField]: descriptor } as never);
+      return;
+    }
     const patch = gradientPairPatch(
       prop as Parameters<typeof gradientPairPatch>[0],
       value,

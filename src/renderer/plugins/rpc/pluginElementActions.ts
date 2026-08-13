@@ -23,6 +23,7 @@ import type {
   EditorNotePropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
+  EditorPaintPropertyPatchV1,
 } from '@src/types/editor';
 
 import { getPluginAuthorityGeneration, sendPluginRpc } from './pluginRpcClient';
@@ -573,6 +574,26 @@ export const patchStylePropertyViaAuthority = (
       },
       authorityGeneration,
       retryPolicy: 'default',
+      resolve,
+    });
+    void ensureQueueDrain();
+  });
+};
+
+export const patchPaintViaAuthority = (
+  targets: readonly { elementType: NativeElementType; id: string }[],
+  patch: EditorPaintPropertyPatchV1,
+): Promise<boolean> => {
+  const authorityGeneration = getPluginAuthorityGeneration();
+  return new Promise((resolve) => {
+    outboundQueue.push({
+      operation: PLUGIN_RPC_OPERATIONS.patchLayerProperty,
+      payload: {
+        targets: targets.map(({ elementType, id }) => ({ elementType, id })),
+        patch: structuredClone(patch),
+      },
+      authorityGeneration,
+      retryPolicy: 'staleOnly',
       resolve,
     });
     void ensureQueueDrain();

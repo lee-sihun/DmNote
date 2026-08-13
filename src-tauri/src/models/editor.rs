@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AppStoreData, GraphPosition, GraphPositions, GraphType, ImageFit, KeyCounterAlign,
-    KeyCounterAlignMode, KeyCounterPlacement, KeyCounters, KeyMappings, KeyPosition, KeyPositions,
-    KeySlot, KnobPosition, KnobPositions, LayerGroups, NoteAlignment, SlotMatch, StatPosition,
-    StatPositions, StatType,
+    AppStoreData, GradientSpec, GradientStop, GraphPosition, GraphPositions, GraphType, ImageFit,
+    KeyCounterAlign, KeyCounterAlignMode, KeyCounterPlacement, KeyCounters, KeyMappings,
+    KeyPosition, KeyPositions, KeySlot, KnobPosition, KnobPositions, LayerGroups, NoteAlignment,
+    SlotMatch, StatPosition, StatPositions, StatType,
 };
 
 pub const EDITOR_SCHEMA_VERSION: u16 = 1;
@@ -224,6 +224,10 @@ pub enum EditorElementPropertyPatchV1 {
     FontFamily(EditorFontFamilyPropertyPatchV1),
     DisplayText(EditorDisplayTextPropertyPatchV1),
     ClassName(EditorClassNamePropertyPatchV1),
+    BackgroundPaint(EditorBackgroundPaintPropertyPatchV1),
+    ActiveBackgroundPaint(EditorActiveBackgroundPaintPropertyPatchV1),
+    BorderPaint(EditorBorderPaintPropertyPatchV1),
+    ActiveBorderPaint(EditorActiveBorderPaintPropertyPatchV1),
     BorderWidth(EditorBorderWidthPropertyPatchV1),
     BorderRadius(EditorBorderRadiusPropertyPatchV1),
     FontSize(EditorFontSizePropertyPatchV1),
@@ -372,6 +376,76 @@ pub struct EditorDisplayTextPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorClassNamePropertyPatchV1 {
     pub class_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorBackgroundPaintPropertyPatchV1 {
+    pub background_paint: EditorPaintDescriptorV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorActiveBackgroundPaintPropertyPatchV1 {
+    pub active_background_paint: EditorPaintDescriptorV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorBorderPaintPropertyPatchV1 {
+    pub border_paint: EditorPaintDescriptorV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorActiveBorderPaintPropertyPatchV1 {
+    pub active_border_paint: EditorPaintDescriptorV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorPaintDescriptorV1 {
+    pub color: String,
+    #[serde(deserialize_with = "deserialize_required_nullable_paint_gradient")]
+    pub gradient: Option<EditorPaintGradientV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorPaintGradientV1 {
+    pub angle: f64,
+    pub stops: Vec<EditorPaintGradientStopV1>,
+}
+
+impl EditorPaintGradientV1 {
+    pub(crate) fn to_gradient_spec(&self) -> GradientSpec {
+        GradientSpec::from_canonical_parts(
+            self.angle,
+            self.stops
+                .iter()
+                .map(|stop| GradientStop {
+                    color: stop.color.clone(),
+                    pos: stop.pos,
+                })
+                .collect(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorPaintGradientStopV1 {
+    pub color: String,
+    pub pos: f64,
+}
+
+fn deserialize_required_nullable_paint_gradient<'de, D>(
+    deserializer: D,
+) -> Result<Option<EditorPaintGradientV1>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<EditorPaintGradientV1>::deserialize(deserializer)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

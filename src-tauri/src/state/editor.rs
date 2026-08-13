@@ -2381,6 +2381,48 @@ mod tests {
         );
         decode_editor_commit_request(graph_color.clone()).unwrap();
 
+        let paint = serde_json::to_value(ops_request(vec![EditorOpV1::PatchElement {
+            element_type: EditorElementTypeV1::Key,
+            id: Uuid::new_v4().to_string(),
+            patch: EditorElementPropertyPatchV1::BackgroundPaint(
+                crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                    background_paint: crate::models::EditorPaintDescriptorV1 {
+                        color: "first".to_string(),
+                        gradient: Some(crate::models::EditorPaintGradientV1 {
+                            angle: 45.0,
+                            stops: vec![
+                                crate::models::EditorPaintGradientStopV1 {
+                                    color: "first".to_string(),
+                                    pos: 0.0,
+                                },
+                                crate::models::EditorPaintGradientStopV1 {
+                                    color: "last".to_string(),
+                                    pos: 1.0,
+                                },
+                            ],
+                        }),
+                    },
+                },
+            ),
+        }]))
+        .unwrap();
+        assert_eq!(
+            paint["ops"][0]["patch"],
+            serde_json::json!({
+                "backgroundPaint": {
+                    "color": "first",
+                    "gradient": {
+                        "angle": 45.0,
+                        "stops": [
+                            { "color": "first", "pos": 0.0 },
+                            { "color": "last", "pos": 1.0 }
+                        ]
+                    }
+                }
+            })
+        );
+        decode_editor_commit_request(paint.clone()).unwrap();
+
         let literal_properties = [
             (
                 EditorElementTypeV1::Graph,
@@ -2909,6 +2951,14 @@ mod tests {
             serde_json::json!({ "className": 1 }),
             serde_json::json!({ "className": "class", "hidden": true }),
             serde_json::json!({ "className": "class", "unexpected": true }),
+            serde_json::json!({ "backgroundPaint": {} }),
+            serde_json::json!({ "backgroundPaint": { "color": "solid" } }),
+            serde_json::json!({ "backgroundPaint": { "color": "solid", "gradient": null, "unexpected": true } }),
+            serde_json::json!({ "backgroundPaint": { "color": "first", "gradient": { "stops": [{ "color": "first", "pos": 0 }, { "color": "last", "pos": 1 }] } } }),
+            serde_json::json!({ "backgroundPaint": { "color": "first", "gradient": { "angle": 45 } } }),
+            serde_json::json!({ "backgroundPaint": { "color": "first", "gradient": { "angle": 45, "stops": [{ "color": "first", "pos": 0 }, { "color": "last", "pos": 1 }], "unexpected": true } } }),
+            serde_json::json!({ "backgroundPaint": { "color": "first", "gradient": { "angle": 45, "stops": [{ "color": "first", "pos": 0, "unexpected": true }, { "color": "last", "pos": 1 }] } } }),
+            serde_json::json!({ "backgroundPaint": { "color": "first", "gradient": null }, "borderPaint": { "color": "border", "gradient": null } }),
             serde_json::json!({ "borderWidth": null }),
             serde_json::json!({ "borderWidth": "1" }),
             serde_json::json!({ "borderWidth": 1, "fontSize": 14 }),

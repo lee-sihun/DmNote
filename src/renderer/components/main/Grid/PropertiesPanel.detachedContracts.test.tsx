@@ -63,6 +63,8 @@ const {
   patchCounterStrokeMock,
   patchCounterStrokeTargetsMock,
   patchCounterStrokeViaAuthorityMock,
+  patchPaintMock,
+  patchPaintViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -138,6 +140,8 @@ const {
   patchCounterStrokeMock: vi.fn(() => Promise.resolve(true)),
   patchCounterStrokeTargetsMock: vi.fn(() => Promise.resolve(true)),
   patchCounterStrokeViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchPaintMock: vi.fn(() => Promise.resolve(true)),
+  patchPaintViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -179,6 +183,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchFontStyleViaAuthority: patchFontStyleViaAuthorityMock,
   patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
   patchStylePropertyViaAuthority: patchDisplayTextViaAuthorityMock,
+  patchPaintViaAuthority: patchPaintViaAuthorityMock,
   patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
   patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
   patchSoundEnabledViaAuthority: patchSoundEnabledViaAuthorityMock,
@@ -206,6 +211,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontFamilyById: patchFontFamilyMock,
   patchFontFamilyByTargets: patchFontFamilyTargetsMock,
   patchStylePropertyById: patchDisplayTextMock,
+  patchPaintById: patchPaintMock,
   patchInactiveImageById: patchInactiveImageMock,
   patchActiveImageById: patchActiveImageMock,
   patchIdleTransparentById: patchIdleTransparentMock,
@@ -394,6 +400,8 @@ const resetStores = () => {
   patchSoundVolumeViaAuthorityMock.mockClear();
   patchDisplayTextMock.mockClear();
   patchDisplayTextViaAuthorityMock.mockClear();
+  patchPaintMock.mockClear();
+  patchPaintViaAuthorityMock.mockClear();
   patchCounterEnabledMock.mockClear();
   patchCounterAnimationEnabledMock.mockClear();
   patchCounterEnabledViaAuthorityMock.mockClear();
@@ -3413,6 +3421,191 @@ describe('PropertiesPanel detached preview contract', () => {
         expect(knobUpdatePositionsMock).toHaveBeenCalledOnce();
         expect(patchKnobPropertiesMock).not.toHaveBeenCalled();
         expect(patchKnobPropertiesViaAuthorityMock).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each([
+    ['key', singleKeyStatPropsMock],
+    ['stat', singleKeyStatPropsMock],
+    ['graph', singleGraphPropsMock],
+    ['knob', singleKnobPropsMock],
+  ] as const)(
+    'single stable %s paint callback은 main/panel exact writer를 분리한다',
+    (type, propsMock) => {
+      const id = `c1111111-1111-4111-8111-${type.padEnd(12, '1')}`;
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      } else if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...position,
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              },
+            ],
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...position,
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        propsMock.mock.lastCall?.[0] as {
+          onPaintCommit: (patch: Record<string, unknown>) => void;
+        }
+      ).onPaintCommit;
+      const patch = {
+        backgroundPaint: { color: ' raw paint ', gradient: null },
+      } as const;
+
+      act(() => commit(patch));
+      expect(patchPaintMock).toHaveBeenCalledWith(type, id, patch);
+      expect(patchPaintViaAuthorityMock).not.toHaveBeenCalled();
+      if (type === 'key' || type === 'knob') {
+        const activePatch = {
+          activeBorderPaint: { color: ' active paint ', gradient: null },
+        } as const;
+        act(() => commit(activePatch));
+        expect(patchPaintMock).toHaveBeenCalledWith(type, id, activePatch);
+      }
+
+      patchPaintMock.mockClear();
+      window.__dmn_window_type = 'panel';
+      act(() => commit(patch));
+      expect(patchPaintViaAuthorityMock).toHaveBeenCalledWith(
+        [{ elementType: type, id }],
+        patch,
+      );
+      if (type === 'key' || type === 'knob') {
+        const activePatch = {
+          activeBorderPaint: { color: ' panel active ', gradient: null },
+        } as const;
+        act(() => commit(activePatch));
+        expect(patchPaintViaAuthorityMock).toHaveBeenCalledWith(
+          [{ elementType: type, id }],
+          activePatch,
+        );
+      }
+      expect(patchPaintMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0', singleKeyStatPropsMock],
+    ['key empty', 'key', '', singleKeyStatPropsMock],
+    ['stat synthetic', 'stat', 'stat-0', singleKeyStatPropsMock],
+    ['stat empty', 'stat', '', singleKeyStatPropsMock],
+    ['graph synthetic', 'graph', 'graph-0', singleGraphPropsMock],
+    ['graph empty', 'graph', '', singleGraphPropsMock],
+    ['knob synthetic', 'knob', 'knob-0', singleKnobPropsMock],
+    ['knob empty', 'knob', '', singleKnobPropsMock],
+  ] as const)(
+    'single %s paint는 exact callback 없이 whole legacy writer로 폴백한다',
+    (_label, type, id, propsMock) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      } else if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...position,
+                statType: 'kps',
+                graphType: 'line',
+                graphSpeed: 1000,
+                graphColor: '#fff',
+              },
+            ],
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...position,
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = propsMock.mock.lastCall?.[0] as Record<string, unknown>;
+      expect(props.onPaintCommit).toBeUndefined();
+      const legacy =
+        type === 'key'
+          ? (props.onKeyUpdate as (patch: Record<string, unknown>) => void)
+          : type === 'stat'
+          ? (props.handleStatUpdate as (patch: Record<string, unknown>) => void)
+          : type === 'graph'
+          ? (props.handleGraphUpdate as (
+              patch: Record<string, unknown>,
+            ) => void)
+          : (props.handleKnobUpdate as (
+              patch: Record<string, unknown>,
+            ) => void);
+      act(() =>
+        legacy({
+          index: 0,
+          backgroundColor: 'legacy-paint',
+          backgroundGradient: undefined,
+        }),
+      );
+
+      expect(patchPaintMock).not.toHaveBeenCalled();
+      expect(patchPaintViaAuthorityMock).not.toHaveBeenCalled();
+      if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      else if (type === 'stat') {
+        expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
+      } else if (type === 'graph') {
+        expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+      } else {
+        expect(knobUpdatePositionsMock).toHaveBeenCalledOnce();
       }
     },
   );

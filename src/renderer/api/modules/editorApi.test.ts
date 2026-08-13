@@ -476,6 +476,22 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['key', { noteBorderWidth: 20 }],
     ['key', { noteBorderRadius: 1 }],
     ['key', { noteBorderRadius: 100 }],
+    ['key', { backgroundPaint: { color: ' raw ', gradient: null } }],
+    [
+      'knob',
+      {
+        activeBorderPaint: {
+          color: '#first',
+          gradient: {
+            angle: 45,
+            stops: [
+              { color: '#first', pos: 0 },
+              { color: '#last', pos: 1 },
+            ],
+          },
+        },
+      },
+    ],
     ['key', { fontWeight: 4_294_967_295 }],
     ['stat', { fontItalic: false }],
     ['graph', { fontUnderline: true }],
@@ -580,6 +596,64 @@ describe('editorCommitRaw semantic op protocol', () => {
     ['key', { noteBorderRadius: 100.1 }],
     ['key', { noteBorderRadius: null }],
     ['key', { noteOffsetX: 0, noteOffsetY: 0 }],
+    ['stat', { activeBackgroundPaint: { color: '#fff', gradient: null } }],
+    ['graph', { activeBorderPaint: { color: '#fff', gradient: null } }],
+    ['key', { backgroundPaint: { color: '#fff' } }],
+    [
+      'key',
+      {
+        backgroundPaint: {
+          color: '#fff',
+          gradient: null,
+          extra: true,
+        },
+      },
+    ],
+    [
+      'key',
+      {
+        backgroundPaint: {
+          color: '#first',
+          gradient: {
+            angle: -0,
+            stops: [
+              { color: '#first', pos: 0 },
+              { color: '#last', pos: 1 },
+            ],
+          },
+        },
+      },
+    ],
+    [
+      'key',
+      {
+        backgroundPaint: {
+          color: '#first',
+          gradient: {
+            angle: 45,
+            stops: [
+              { color: '#first', pos: -0 },
+              { color: '#last', pos: 1 },
+            ],
+          },
+        },
+      },
+    ],
+    [
+      'key',
+      {
+        backgroundPaint: {
+          color: '#mismatch',
+          gradient: {
+            angle: 45,
+            stops: [
+              { color: '#first', pos: 0 },
+              { color: '#last', pos: 1 },
+            ],
+          },
+        },
+      },
+    ],
     ['graph', { counterEnabled: true }],
     ['knob', { counterAnimationEnabled: false }],
     ['key', { counterEnabled: 1 }],

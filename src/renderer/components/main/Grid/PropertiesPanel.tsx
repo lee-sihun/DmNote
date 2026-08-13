@@ -39,6 +39,7 @@ import {
   patchGraphTypesViaAuthority,
   patchFontFamilyViaAuthority,
   patchStylePropertyViaAuthority,
+  patchPaintViaAuthority,
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
@@ -78,6 +79,7 @@ import type {
   EditorCounterTypographyPropertyPatchV1,
   EditorCounterStrokePropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorPaintPropertyPatchV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
@@ -108,6 +110,7 @@ import {
   patchFontFamilyById,
   patchFontFamilyByTargets,
   patchStylePropertyById,
+  patchPaintById,
   patchInactiveImageById,
   patchIdleImageFitById,
   patchIdleTransparentById,
@@ -2302,6 +2305,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stablePaintCommitHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (patch: EditorPaintPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchPaintViaAuthority([{ elementType: type, id }], patch)
+              : patchPaintById(type, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update paint', error);
+          });
+        }
+      : undefined;
+
   const stableCounterAnimationPresetHandler = (
     elementType: 'key' | 'stat',
     id: string | undefined,
@@ -3904,6 +3923,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
+          onPaintCommit={stablePaintCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           singleScrollRefFor={singleScrollRefFor}
           panelElement={panelElement}
           useCustomCSS={useCustomCSS}
@@ -3951,6 +3974,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             selectedGraphElements[0]?.id,
           )}
           onStylePropertyCommit={stableStylePropertyCommitHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
+          onPaintCommit={stablePaintCommitHandler(
             'graph',
             selectedGraphElements[0]?.id,
           )}
@@ -4066,6 +4093,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? selectedStatElements[0]?.id
             : selectedKeyElements[0]?.id,
           { settleGesture: true },
+        )}
+        onPaintCommit={stablePaintCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
         )}
         onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(
           isSingleStat ? 'stat' : 'key',

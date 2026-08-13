@@ -15,7 +15,10 @@ import {
   type StatItemPositions,
 } from '@src/types/key/statItems';
 import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
-import { canonicalizePositionGradients } from '@src/types/color';
+import {
+  canonicalizePositionGradients,
+  type PaintDescriptorV1,
+} from '@src/types/color';
 
 export const EDITOR_SCHEMA_VERSION = 1 as const;
 
@@ -190,6 +193,10 @@ interface EditorElementPropertyValuesV1 {
   noteWidth: number | null;
   noteBorderWidth: number;
   noteBorderRadius: number;
+  backgroundPaint: PaintDescriptorV1;
+  activeBackgroundPaint: PaintDescriptorV1;
+  borderPaint: PaintDescriptorV1;
+  activeBorderPaint: PaintDescriptorV1;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
@@ -297,6 +304,13 @@ export type EditorPreviewStylePropertyPatchV1 =
       | 'noteBorderWidth'
       | 'noteBorderRadius'
     >;
+
+export type EditorPaintPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  | 'backgroundPaint'
+  | 'activeBackgroundPaint'
+  | 'borderPaint'
+  | 'activeBorderPaint'
+>;
 
 export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteEffectEnabled'
@@ -539,6 +553,75 @@ const assertExactKeys = (
   ) {
     throw new EditorProtocolError(`${label} has unsupported fields`);
   }
+};
+
+export const isEditorPaintDescriptorV1 = (
+  value: unknown,
+): value is PaintDescriptorV1 => {
+  if (!isRecord(value)) return false;
+  if (
+    Object.keys(value).length !== 2 ||
+    !('color' in value) ||
+    !('gradient' in value) ||
+    typeof value.color !== 'string'
+  ) {
+    return false;
+  }
+  if (value.gradient === null) return true;
+  if (!isRecord(value.gradient)) return false;
+  const gradient = value.gradient;
+  if (
+    Object.keys(gradient).length !== 2 ||
+    !('angle' in gradient) ||
+    !('stops' in gradient) ||
+    typeof gradient.angle !== 'number' ||
+    !Number.isFinite(gradient.angle) ||
+    Object.is(gradient.angle, -0) ||
+    gradient.angle < 0 ||
+    gradient.angle >= 360 ||
+    !Array.isArray(gradient.stops) ||
+    gradient.stops.length < 2 ||
+    gradient.stops.length > 8
+  ) {
+    return false;
+  }
+  let previous = -Infinity;
+  for (const stop of gradient.stops) {
+    if (
+      !isRecord(stop) ||
+      Object.keys(stop).length !== 2 ||
+      !('color' in stop) ||
+      !('pos' in stop) ||
+      typeof stop.color !== 'string' ||
+      typeof stop.pos !== 'number' ||
+      !Number.isFinite(stop.pos) ||
+      Object.is(stop.pos, -0) ||
+      stop.pos < 0 ||
+      stop.pos > 1 ||
+      stop.pos < previous
+    ) {
+      return false;
+    }
+    previous = stop.pos;
+  }
+  return gradient.stops[0]?.color === value.color;
+};
+
+export const isEditorPaintPropertyPatchV1 = (
+  value: unknown,
+): value is EditorPaintPropertyPatchV1 => {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.length === 1 &&
+    [
+      'backgroundPaint',
+      'activeBackgroundPaint',
+      'borderPaint',
+      'activeBorderPaint',
+    ].includes(keys[0]) &&
+    isEditorPaintDescriptorV1(value[keys[0]])
+  );
 };
 
 function assertModeRecord(
@@ -1162,6 +1245,11 @@ export function assertEditorOpsV1(
           patchKeys[0] === 'axisId' &&
           op.elementType === 'knob' &&
           typeof op.patch.axisId === 'string') ||
+        (isEditorPaintPropertyPatchV1(op.patch) &&
+          (!('activeBackgroundPaint' in op.patch) &&
+          !('activeBorderPaint' in op.patch)
+            ? true
+            : op.elementType === 'key' || op.elementType === 'knob')) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'displayText' &&
           typeof op.patch.displayText === 'string') ||

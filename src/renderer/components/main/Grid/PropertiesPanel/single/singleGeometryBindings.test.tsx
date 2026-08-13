@@ -86,6 +86,20 @@ const captured = vi.hoisted(() => ({
     onColorChange: (color: string) => void;
     onColorChangeComplete: (color: string) => void;
   },
+  colorInputs: [] as Array<{
+    onModeCommit?: (
+      state: 'idle' | 'active',
+      value:
+        | { mode: 'solid'; color: string }
+        | {
+            mode: 'gradient';
+            spec: {
+              angle: number;
+              stops: Array<{ color: string; pos: number }>;
+            };
+          },
+    ) => void;
+  }>,
   swatches: [] as Array<{ onClick: () => void }>,
   nav: {
     activePageKey: null as string | null,
@@ -134,7 +148,10 @@ vi.mock('../PropertyInputs', async (importOriginal) => {
       captured.texts.push(props);
       return <actual.TextInput {...props} />;
     },
-    ColorInput: () => null,
+    ColorInput: (props: (typeof captured.colorInputs)[number]) => {
+      captured.colorInputs.push(props);
+      return null;
+    },
     FontStyleToggle: (props: NonNullable<(typeof captured)['fontStyle']>) => {
       captured.fontStyle = props;
       return null;
@@ -216,7 +233,19 @@ vi.mock('@hooks/useKeySlotCapture', () => ({
   }),
 }));
 vi.mock('@hooks/pickers/useGradientColorState', () => ({
-  useGradientColorState: () => ({}),
+  useGradientColorState: ({
+    onPreview,
+    onCommit,
+  }: {
+    onPreview?: (value: { mode: 'solid'; color: string }) => void;
+    onCommit: (value: { mode: 'solid'; color: string }) => void;
+  }) => ({
+    pickerColor: '#ffffff',
+    handlePickerColorChange: (color: string, commit: boolean) =>
+      commit
+        ? onCommit({ mode: 'solid', color })
+        : onPreview?.({ mode: 'solid', color }),
+  }),
 }));
 vi.mock('@utils/core/axisEventBus', () => ({
   axisEventBus: { subscribe: () => vi.fn() },
@@ -266,6 +295,7 @@ describe('single geometry input bindings', () => {
     captured.sound = null;
     captured.animation = null;
     captured.color = null;
+    captured.colorInputs.length = 0;
     captured.swatches.length = 0;
     captured.nav.activePageKey = null;
     captured.nav.renderPageKey = null;
@@ -497,6 +527,118 @@ describe('single geometry input bindings', () => {
       expect(legacyCommit).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    ['key', true],
+    ['stat', false],
+  ] as const)(
+    '%s background paint actual ColorPicker는 local drag 뒤 final descriptor만 commit한다',
+    (type, activeReachable) => {
+      const paint = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={0}
+            keyPosition={createDefaultKeyPosition()}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacy}
+            onPaintCommit={paint}
+            shadowActiveState={activeReachable}
+            showSoundControls={false}
+            panelElement={null}
+            t={(key) => key}
+          />,
+        );
+      });
+      act(() => captured.swatches[0]?.onClick());
+      if (activeReachable) {
+        expect(captured.color?.onStateModeChange).toBeTypeOf('function');
+      } else {
+        expect(captured.color?.onStateModeChange).toBeUndefined();
+      }
+      act(() => captured.color?.onColorChange('drag'));
+      expect(paint).not.toHaveBeenCalled();
+      act(() => captured.color?.onColorChangeComplete(' final '));
+      expect(paint).toHaveBeenLastCalledWith({
+        backgroundPaint: { color: ' final ', gradient: null },
+      });
+      if (activeReachable) {
+        act(() => captured.color?.onStateModeChange?.('active'));
+        act(() => captured.color?.onColorChangeComplete(' active '));
+        expect(paint).toHaveBeenLastCalledWith({
+          activeBackgroundPaint: { color: ' active ', gradient: null },
+        });
+      }
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('graph paint는 exact gradient pair를 final callback으로만 전달한다', async () => {
+    const paint = vi.fn();
+    const legacy = vi.fn();
+    act(() => {
+      root.render(
+        <SingleGraphPanel
+          setPanelElement={vi.fn()}
+          singleGraphPosition={{
+            ...createDefaultKeyPosition(),
+            statType: 'kps',
+            graphType: 'line',
+            graphSpeed: 1000,
+            graphColor: '#fff',
+          }}
+          singleGraphIndex={0}
+          selectedKeyType="4key"
+          isRenaming={false}
+          renameInputRef={createRef<HTMLInputElement>()}
+          renameValue=""
+          setRenameValue={vi.fn()}
+          renameCancelledRef={{ current: false }}
+          handleRenameCommit={vi.fn()}
+          handleRenameCancel={vi.fn()}
+          handleRenameStart={vi.fn()}
+          handleGraphUpdate={legacy}
+          onPaintCommit={paint}
+          showGraphImagePicker={false}
+          setShowGraphImagePicker={vi.fn()}
+          graphImageButtonRef={{ current: document.createElement('button') }}
+          graphClassNameDraft=""
+          setGraphClassNameDraft={vi.fn()}
+          singleScrollRefFor={() => vi.fn()}
+          panelElement={null}
+          useCustomCSS={false}
+          t={(key) => key}
+        />,
+      );
+    });
+    const paints = captured.colorInputs.filter(
+      (input) => input.onModeCommit !== undefined,
+    );
+    expect(paints).toHaveLength(2);
+    const gradient = {
+      angle: 45,
+      stops: [
+        { color: '#first', pos: 0 },
+        { color: '#last', pos: 1 },
+      ],
+    };
+    act(() =>
+      paints[0]?.onModeCommit?.('idle', {
+        mode: 'gradient',
+        spec: gradient,
+      }),
+    );
+    expect(paint).toHaveBeenCalledWith({
+      backgroundPaint: {
+        color: '#first',
+        gradient,
+      },
+    });
+    expect(legacy).not.toHaveBeenCalled();
+  });
 
   it.each(['key', 'stat'] as const)(
     '%s synthetic numeric style actual input은 preview와 final 모두 기존 writer를 쓴다',

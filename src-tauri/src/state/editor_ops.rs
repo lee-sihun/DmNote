@@ -6,8 +6,8 @@ use crate::{
         default_counter_animation_builtin_presets, AppStoreData, CounterAnimationPreset,
         EditorBoundsV1, EditorCounterAnimationPresetIntentV1, EditorDocumentV1,
         EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
-        EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1, EditorZUpdateV1,
-        KeyPosition, LayerGroupDef,
+        EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1,
+        EditorPaintDescriptorV1, EditorZUpdateV1, GradientSpec, KeyPosition, LayerGroupDef,
     },
 };
 
@@ -105,6 +105,115 @@ fn validate_counter_animation_preset_patch(
         ));
     }
     Ok(())
+}
+
+fn validate_paint_descriptor(
+    descriptor: &EditorPaintDescriptorV1,
+) -> Result<(), EditorCommitError> {
+    let Some(gradient) = descriptor.gradient.as_ref() else {
+        return Ok(());
+    };
+    if !gradient.angle.is_finite()
+        || !(0.0..360.0).contains(&gradient.angle)
+        || (gradient.angle == 0.0 && gradient.angle.is_sign_negative())
+    {
+        return Err(EditorCommitError::validation(
+            "INVALID_PAINT_GRADIENT",
+            "paint gradient angle must be finite and canonical between 0 and 360",
+        ));
+    }
+    if !(2..=8).contains(&gradient.stops.len()) {
+        return Err(EditorCommitError::validation(
+            "INVALID_PAINT_GRADIENT",
+            "paint gradient must contain between 2 and 8 stops",
+        ));
+    }
+    let mut previous_pos = None;
+    for stop in &gradient.stops {
+        if !stop.pos.is_finite()
+            || !(0.0..=1.0).contains(&stop.pos)
+            || (stop.pos == 0.0 && stop.pos.is_sign_negative())
+        {
+            return Err(EditorCommitError::validation(
+                "INVALID_PAINT_GRADIENT",
+                "paint gradient stop positions must be finite and between 0 and 1",
+            ));
+        }
+        if previous_pos.is_some_and(|previous| stop.pos < previous) {
+            return Err(EditorCommitError::validation(
+                "INVALID_PAINT_GRADIENT",
+                "paint gradient stops must be ordered by position",
+            ));
+        }
+        previous_pos = Some(stop.pos);
+    }
+    if gradient
+        .stops
+        .first()
+        .is_some_and(|stop| stop.color != descriptor.color)
+    {
+        return Err(EditorCommitError::validation(
+            "PAINT_COLOR_GRADIENT_MISMATCH",
+            "paint color must equal the first gradient stop color",
+        ));
+    }
+    Ok(())
+}
+
+fn has_stored_paint_value(color: &Option<String>, gradient: &Option<GradientSpec>) -> bool {
+    color
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+        || gradient.is_some()
+}
+
+fn preserve_active_paint_fallback(position: &mut KeyPosition, background: bool) -> bool {
+    let (idle_color, idle_gradient, active_color, active_gradient) = if background {
+        (
+            position.background_color.clone(),
+            position.background_gradient.clone(),
+            &mut position.active_background_color,
+            &mut position.active_background_gradient,
+        )
+    } else {
+        (
+            position.border_color.clone(),
+            position.border_gradient.clone(),
+            &mut position.active_border_color,
+            &mut position.active_border_gradient,
+        )
+    };
+    if has_stored_paint_value(active_color, active_gradient)
+        || !has_stored_paint_value(&idle_color, &idle_gradient)
+    {
+        return false;
+    }
+
+    let next_color = idle_gradient
+        .as_ref()
+        .and_then(|gradient| gradient.stops.first())
+        .map(|stop| stop.color.clone())
+        .or_else(|| idle_color.filter(|color| !color.trim().is_empty()));
+    let changed = *active_color != next_color || *active_gradient != idle_gradient;
+    *active_color = next_color;
+    *active_gradient = idle_gradient;
+    changed
+}
+
+fn apply_paint_descriptor(
+    color: &mut Option<String>,
+    gradient: &mut Option<GradientSpec>,
+    descriptor: &EditorPaintDescriptorV1,
+) -> bool {
+    let next_color = Some(descriptor.color.clone());
+    let next_gradient = descriptor
+        .gradient
+        .as_ref()
+        .map(|gradient| gradient.to_gradient_spec());
+    let changed = *color != next_color || *gradient != next_gradient;
+    *color = next_color;
+    *gradient = next_gradient;
+    changed
 }
 
 fn insert_location(
@@ -752,6 +861,38 @@ pub(crate) fn prepare_editor_ops_transition(
                 validate_editor_op_target_type(op_index, EditorElementTypeV1::Stat, *element_type)?;
             } else if matches!(
                 patch,
+                EditorElementPropertyPatchV1::ActiveBackgroundPaint(_)
+                    | EditorElementPropertyPatchV1::ActiveBorderPaint(_)
+            ) {
+                if !matches!(
+                    element_type,
+                    EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                ) {
+                    return Err(EditorCommitError::validation(
+                        "ELEMENT_TYPE_MISMATCH",
+                        format!("editor op {op_index} active paint target must be key or knob"),
+                    ));
+                }
+                let descriptor = match patch {
+                    EditorElementPropertyPatchV1::ActiveBackgroundPaint(patch) => {
+                        &patch.active_background_paint
+                    }
+                    EditorElementPropertyPatchV1::ActiveBorderPaint(patch) => {
+                        &patch.active_border_paint
+                    }
+                    _ => unreachable!(),
+                };
+                validate_paint_descriptor(descriptor)?;
+            } else if let Some(descriptor) = match patch {
+                EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
+                    Some(&patch.background_paint)
+                }
+                EditorElementPropertyPatchV1::BorderPaint(patch) => Some(&patch.border_paint),
+                _ => None,
+            } {
+                validate_paint_descriptor(descriptor)?;
+            } else if matches!(
+                patch,
                 EditorElementPropertyPatchV1::ActiveImage(_)
                     | EditorElementPropertyPatchV1::ActiveTransparent(_)
                     | EditorElementPropertyPatchV1::ActiveImageFit(_)
@@ -1266,6 +1407,46 @@ pub(crate) fn prepare_editor_ops_transition(
                             position.class_name = Some(patch.class_name.clone());
                             true
                         }
+                    }
+                    EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        let preserved = matches!(
+                            location.element_type,
+                            EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                        ) && preserve_active_paint_fallback(position, true);
+                        apply_paint_descriptor(
+                            &mut position.background_color,
+                            &mut position.background_gradient,
+                            &patch.background_paint,
+                        ) || preserved
+                    }
+                    EditorElementPropertyPatchV1::ActiveBackgroundPaint(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        apply_paint_descriptor(
+                            &mut position.active_background_color,
+                            &mut position.active_background_gradient,
+                            &patch.active_background_paint,
+                        )
+                    }
+                    EditorElementPropertyPatchV1::BorderPaint(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        let preserved = matches!(
+                            location.element_type,
+                            EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                        ) && preserve_active_paint_fallback(position, false);
+                        apply_paint_descriptor(
+                            &mut position.border_color,
+                            &mut position.border_gradient,
+                            &patch.border_paint,
+                        ) || preserved
+                    }
+                    EditorElementPropertyPatchV1::ActiveBorderPaint(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        apply_paint_descriptor(
+                            &mut position.active_border_color,
+                            &mut position.active_border_gradient,
+                            &patch.active_border_paint,
+                        )
                     }
                     EditorElementPropertyPatchV1::BorderWidth(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -1961,6 +2142,25 @@ mod tests {
             .details
             .as_ref()
             .and_then(|details| details.validation_code.as_deref())
+    }
+
+    fn paint_descriptor(
+        color: &str,
+        gradient: Option<(f64, &[(&str, f64)])>,
+    ) -> crate::models::EditorPaintDescriptorV1 {
+        crate::models::EditorPaintDescriptorV1 {
+            color: color.to_string(),
+            gradient: gradient.map(|(angle, stops)| crate::models::EditorPaintGradientV1 {
+                angle,
+                stops: stops
+                    .iter()
+                    .map(|(color, pos)| crate::models::EditorPaintGradientStopV1 {
+                        color: (*color).to_string(),
+                        pos: *pos,
+                    })
+                    .collect(),
+            }),
+        }
     }
 
     #[test]
@@ -6563,6 +6763,405 @@ mod tests {
                         EditorElementPropertyPatchV1::NoteWidth(
                             crate::models::EditorNoteWidthPropertyPatchV1 {
                                 note_width: Some(20.0),
+                            },
+                        ),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store, original);
+        }
+    }
+
+    #[test]
+    fn paint_descriptors_apply_pairs_preserve_active_fallbacks_and_reject_invalid_plans() {
+        let mut store = store_with_every_reorder_type();
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let graph_id = store.graph_positions["4key"][0].position.id.clone();
+        let knob_id = store.knob_positions["4key"][0].position.id.clone();
+
+        let key = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        key.background_color = Some(" key idle ".to_string());
+        key.background_gradient = None;
+        key.active_background_color = None;
+        key.active_background_gradient = None;
+        key.border_color = Some("key-border-sibling".to_string());
+        key.font_color = Some("key-font-sibling".to_string());
+
+        let stat = &mut store.stat_positions.get_mut("4key").unwrap()[0].position;
+        stat.border_color = Some("stat-old".to_string());
+        stat.border_gradient = None;
+        stat.active_border_color = Some("stat-active-sibling".to_string());
+
+        let graph = &mut store.graph_positions.get_mut("4key").unwrap()[0].position;
+        graph.background_color = None;
+        graph.background_gradient = None;
+        graph.active_background_color = Some("graph-active-sibling".to_string());
+
+        let knob = &mut store.knob_positions.get_mut("4key").unwrap()[0].position;
+        knob.border_color = Some("stale-knob-base".to_string());
+        knob.border_gradient = Some(GradientSpec::from_canonical_parts(
+            90.0,
+            vec![
+                crate::models::GradientStop {
+                    color: "knob-old".to_string(),
+                    pos: 0.0,
+                },
+                crate::models::GradientStop {
+                    color: "knob-end".to_string(),
+                    pos: 1.0,
+                },
+            ],
+        ));
+        knob.active_border_color = Some("   ".to_string());
+        knob.active_border_gradient = None;
+        knob.background_color = Some("knob-background-sibling".to_string());
+
+        let original = store.clone();
+        let gradient_stops = [("new-key", 0.0), ("new-end", 0.5), ("tail", 1.0)];
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::BackgroundPaint(
+                    crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                        background_paint: paint_descriptor(
+                            "new-key",
+                            Some((45.0, &gradient_stops)),
+                        ),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::BorderPaint(
+                    crate::models::EditorBorderPaintPropertyPatchV1 {
+                        border_paint: paint_descriptor("stat-new", None),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Graph,
+                &graph_id,
+                EditorElementPropertyPatchV1::BackgroundPaint(
+                    crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                        background_paint: paint_descriptor("", None),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_id,
+                EditorElementPropertyPatchV1::BorderPaint(
+                    crate::models::EditorBorderPaintPropertyPatchV1 {
+                        border_paint: paint_descriptor("knob-new", None),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::ActiveBackgroundPaint(
+                    crate::models::EditorActiveBackgroundPaintPropertyPatchV1 {
+                        active_background_paint: paint_descriptor("missing", None),
+                    },
+                ),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::GraphPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let key = &transition.candidate.key_positions["4key"][0];
+        assert_eq!(key.background_color.as_deref(), Some("new-key"));
+        assert_eq!(key.background_gradient.as_ref().unwrap().angle, 45.0);
+        assert_eq!(key.active_background_color.as_deref(), Some(" key idle "));
+        assert!(key.active_background_gradient.is_none());
+        assert_eq!(
+            key.border_color,
+            original.key_positions["4key"][0].border_color
+        );
+        assert_eq!(key.font_color, original.key_positions["4key"][0].font_color);
+
+        let stat = &transition.candidate.stat_positions["4key"][0].position;
+        assert_eq!(stat.border_color.as_deref(), Some("stat-new"));
+        assert!(stat.border_gradient.is_none());
+        assert_eq!(
+            stat.active_border_color.as_deref(),
+            Some("stat-active-sibling")
+        );
+
+        let graph = &transition.candidate.graph_positions["4key"][0].position;
+        assert_eq!(graph.background_color.as_deref(), Some(""));
+        assert_eq!(
+            graph.active_background_color.as_deref(),
+            Some("graph-active-sibling")
+        );
+
+        let knob = &transition.candidate.knob_positions["4key"][0].position;
+        assert_eq!(knob.border_color.as_deref(), Some("knob-new"));
+        assert!(knob.border_gradient.is_none());
+        assert_eq!(knob.active_border_color.as_deref(), Some("knob-old"));
+        assert_eq!(
+            knob.active_border_gradient,
+            original.knob_positions["4key"][0].position.border_gradient
+        );
+        assert_eq!(
+            knob.background_color.as_deref(),
+            Some("knob-background-sibling")
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let fallback_only_op = patch_property_op(
+            EditorElementTypeV1::Key,
+            &key_id,
+            EditorElementPropertyPatchV1::BackgroundPaint(
+                crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                    background_paint: paint_descriptor(" key idle ", None),
+                },
+            ),
+        );
+        let fallback_only =
+            prepare_editor_ops_transition(&store, std::slice::from_ref(&fallback_only_op)).unwrap();
+        assert_eq!(
+            fallback_only.op_results[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        assert_eq!(fallback_only.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            fallback_only.candidate.key_positions["4key"][0]
+                .background_color
+                .as_deref(),
+            Some(" key idle ")
+        );
+        assert_eq!(
+            fallback_only.candidate.key_positions["4key"][0]
+                .active_background_color
+                .as_deref(),
+            Some(" key idle ")
+        );
+        let fallback_replay = prepare_editor_ops_transition(
+            &fallback_only.scratch,
+            std::slice::from_ref(&fallback_only_op),
+        )
+        .unwrap();
+        assert_eq!(
+            fallback_replay.op_results[0].status,
+            EditorOpResultStatusV1::NoChange
+        );
+        assert!(fallback_replay.changed_fields.is_empty());
+
+        let key_active_id = store.key_positions["4key"][1].id.clone();
+        let active_ops = [
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                key_active_id,
+                EditorElementPropertyPatchV1::ActiveBackgroundPaint(
+                    crate::models::EditorActiveBackgroundPaintPropertyPatchV1 {
+                        active_background_paint: paint_descriptor("active-key", None),
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_id,
+                EditorElementPropertyPatchV1::ActiveBorderPaint(
+                    crate::models::EditorActiveBorderPaintPropertyPatchV1 {
+                        active_border_paint: paint_descriptor("active-knob", None),
+                    },
+                ),
+            ),
+        ];
+        let active = prepare_editor_ops_transition(&transition.scratch, &active_ops).unwrap();
+        assert_eq!(
+            active.candidate.key_positions["4key"][1]
+                .active_background_color
+                .as_deref(),
+            Some("active-key")
+        );
+        assert_eq!(
+            active.candidate.knob_positions["4key"][0]
+                .position
+                .active_border_color
+                .as_deref(),
+            Some("active-knob")
+        );
+
+        let mut explicit_active_store = store.clone();
+        explicit_active_store.key_positions.get_mut("4key").unwrap()[1].active_background_color =
+            Some("explicit-active".to_string());
+        explicit_active_store.key_positions.get_mut("4key").unwrap()[1]
+            .active_background_gradient = None;
+        explicit_active_store.key_positions.get_mut("4key").unwrap()[1].background_color =
+            Some("old-idle".to_string());
+        let explicit_active = prepare_editor_ops_transition(
+            &explicit_active_store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &explicit_active_store.key_positions["4key"][1].id,
+                EditorElementPropertyPatchV1::BackgroundPaint(
+                    crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                        background_paint: paint_descriptor("new-idle", None),
+                    },
+                ),
+            )],
+        )
+        .unwrap();
+        assert_eq!(
+            explicit_active.candidate.key_positions["4key"][1]
+                .active_background_color
+                .as_deref(),
+            Some("explicit-active")
+        );
+
+        for (descriptor, code) in [
+            (
+                paint_descriptor("a", Some((360.0, &[("a", 0.0), ("b", 1.0)]))),
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                paint_descriptor("a", Some((-0.0, &[("a", 0.0), ("b", 1.0)]))),
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                paint_descriptor("a", Some((90.0, &[("a", 0.5), ("b", 0.25)]))),
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                paint_descriptor("wrong", Some((90.0, &[("a", 0.0), ("b", 1.0)]))),
+                "PAINT_COLOR_GRADIENT_MISMATCH",
+            ),
+            (
+                paint_descriptor("a", Some((90.0, &[("a", 0.0)]))),
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                paint_descriptor(
+                    "a",
+                    Some((
+                        90.0,
+                        &[
+                            ("a", 0.0),
+                            ("b", 0.1),
+                            ("c", 0.2),
+                            ("d", 0.3),
+                            ("e", 0.4),
+                            ("f", 0.5),
+                            ("g", 0.6),
+                            ("h", 0.7),
+                            ("i", 1.0),
+                        ],
+                    )),
+                ),
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                paint_descriptor("a", Some((90.0, &[("a", -0.0), ("b", 1.0)]))),
+                "INVALID_PAINT_GRADIENT",
+            ),
+            (
+                paint_descriptor("a", Some((90.0, &[("a", 0.0), ("b", 1.1)]))),
+                "INVALID_PAINT_GRADIENT",
+            ),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        EditorElementTypeV1::Key,
+                        uuid::Uuid::new_v4().to_string(),
+                        EditorElementPropertyPatchV1::BackgroundPaint(
+                            crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                                background_paint: descriptor,
+                            },
+                        ),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(code));
+            assert_eq!(store, original);
+        }
+
+        let canonical_boundaries = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &store.key_positions["4key"][2].id,
+                EditorElementPropertyPatchV1::BorderPaint(
+                    crate::models::EditorBorderPaintPropertyPatchV1 {
+                        border_paint: paint_descriptor(
+                            "a",
+                            Some((0.0, &[("a", 0.0), ("equal", 0.0), ("b", 1.0)])),
+                        ),
+                    },
+                ),
+            )],
+        )
+        .unwrap();
+        assert_eq!(
+            canonical_boundaries.candidate.key_positions["4key"][2]
+                .border_gradient
+                .as_ref()
+                .unwrap()
+                .stops
+                .len(),
+            3
+        );
+
+        for element_type in [EditorElementTypeV1::Stat, EditorElementTypeV1::Graph] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        EditorElementPropertyPatchV1::ActiveBorderPaint(
+                            crate::models::EditorActiveBorderPaintPropertyPatchV1 {
+                                active_border_paint: paint_descriptor("active", None),
                             },
                         ),
                     ),

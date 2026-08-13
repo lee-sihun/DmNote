@@ -21,6 +21,7 @@ import type { CounterTabContentProps, SizeCommit } from '../types';
 import {
   getActivePairPreservation,
   gradientPairPatch,
+  paintDescriptor,
   gradientToCss,
   type ColorModeValue,
   type GradientSpec,
@@ -73,7 +74,10 @@ import ShadowControls from '../ShadowControls';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import EditSessionBoundary from '../EditSessionBoundary';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
-import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
+import type {
+  EditorPaintPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+} from '@src/types/editor';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -325,6 +329,7 @@ interface SingleGraphPanelProps {
   onIdleTransparentCommit?: (idleTransparent: boolean) => void;
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
@@ -355,6 +360,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   onIdleTransparentCommit,
   onIdleImageFitCommit,
   onStylePropertyCommit,
+  onPaintCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   showGraphImagePicker,
@@ -616,10 +622,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   gradientValue={singleGraphPosition.backgroundGradient ?? null}
                   canvasAnchor={{ kind: 'graph', index: singleGraphIndex }}
                   onModeCommit={(_state, modeValue) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      ...gradientPairPatch('backgroundColor', modeValue),
-                    })
+                    onPaintCommit
+                      ? onPaintCommit({
+                          backgroundPaint: paintDescriptor(modeValue),
+                        })
+                      : handleGraphUpdate({
+                          index: singleGraphIndex,
+                          ...gradientPairPatch('backgroundColor', modeValue),
+                        })
                   }
                   colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
                   panelElement={panelElement}
@@ -643,10 +653,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   gradientValue={singleGraphPosition.borderGradient ?? null}
                   canvasAnchor={{ kind: 'graph', index: singleGraphIndex }}
                   onModeCommit={(_state, modeValue) =>
-                    handleGraphUpdate({
-                      index: singleGraphIndex,
-                      ...gradientPairPatch('borderColor', modeValue),
-                    })
+                    onPaintCommit
+                      ? onPaintCommit({
+                          borderPaint: paintDescriptor(modeValue),
+                        })
+                      : handleGraphUpdate({
+                          index: singleGraphIndex,
+                          ...gradientPairPatch('borderColor', modeValue),
+                        })
                   }
                   colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
                   gradientSurface="border"
@@ -851,6 +865,7 @@ interface SingleKnobPanelProps {
   onIdleImageFitCommit?: (idleImageFit: ImageFit) => void;
   onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
@@ -879,6 +894,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   onIdleImageFitCommit,
   onActiveImageFitCommit,
   onStylePropertyCommit,
+  onPaintCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   panelElement,
@@ -1085,6 +1101,20 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   const handleGradientCommit = (value: ColorModeValue) => {
     if (!pickerFor) return;
     const prop = resolveColorProperty(pickerFor);
+    if (onPaintCommit) {
+      const descriptor = paintDescriptor(value);
+      const paintField =
+        colorState === 'active'
+          ? pickerFor === 'backgroundColor'
+            ? 'activeBackgroundPaint'
+            : 'activeBorderPaint'
+          : pickerFor === 'backgroundColor'
+          ? 'backgroundPaint'
+          : 'borderPaint';
+      setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
+      onPaintCommit({ [paintField]: descriptor } as never);
+      return;
+    }
     const patch = gradientPairPatch(
       prop as Parameters<typeof gradientPairPatch>[0],
       value,
@@ -1720,6 +1750,7 @@ interface SingleKeyStatPanelProps {
   onSoundVolumeCommit?: (soundVolume: number) => void;
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
   onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
@@ -1778,6 +1809,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onSoundVolumeCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onPaintCommit,
   onCounterAnimationPresetCommit,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
@@ -1980,6 +2012,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onSoundVolumeCommit={onSoundVolumeCommit}
               onStylePropertyPreview={onStylePropertyPreview}
               onStylePropertyCommit={onStylePropertyCommit}
+              onPaintCommit={onPaintCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}

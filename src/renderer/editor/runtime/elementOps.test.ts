@@ -58,6 +58,7 @@ import {
   patchFontFamilyByTargets,
   patchStylePropertyById,
   patchStylePropertyByTargets,
+  patchPaintByTargets,
   patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -2589,6 +2590,59 @@ describe('elementOps', () => {
       noteGlowSize: 17.5,
     });
   });
+
+  it.each(['stale', ''])(
+    'idle background paint는 gradient 대표색으로 active fallback을 materialize한다 (%j)',
+    async (idleColor) => {
+      const gradient = {
+        angle: 45,
+        stops: [
+          { color: '#first', pos: 0 },
+          { color: '#last', pos: 1 },
+        ],
+      };
+      const before = {
+        ...keyAt(ID_A),
+        backgroundColor: idleColor,
+        backgroundGradient: gradient,
+        activeBackgroundColor: undefined,
+        activeBackgroundGradient: undefined,
+        borderColor: '#border-sibling',
+      };
+      useKeyStore.setState({
+        canonicalPositions: { '4key': [before] },
+        positions: { '4key': [before] },
+      });
+      api.captureEditorDocument.mockReturnValue(documentFromStores());
+
+      await patchPaintByTargets([{ elementType: 'key', id: ID_A }], {
+        backgroundPaint: { color: '#next', gradient: null },
+      });
+
+      expect(
+        useKeyStore.getState().canonicalPositions['4key'][0],
+      ).toMatchObject({
+        backgroundColor: '#next',
+        backgroundGradient: undefined,
+        activeBackgroundColor: '#first',
+        activeBackgroundGradient: gradient,
+        borderColor: '#border-sibling',
+      });
+      expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+        [
+          {
+            kind: 'patchElement',
+            elementType: 'key',
+            id: ID_A,
+            patch: {
+              backgroundPaint: { color: '#next', gradient: null },
+            },
+          },
+        ],
+        expect.anything(),
+      );
+    },
+  );
 
   it.each([
     ['wrong type', 'stat', { noteOffsetX: 0 }],

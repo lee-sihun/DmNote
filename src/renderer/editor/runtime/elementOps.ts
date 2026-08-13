@@ -51,6 +51,7 @@ import type {
   EditorFontFamilyPropertyPatchV1,
   EditorFontStylePropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorPaintPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -58,12 +59,18 @@ import type {
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
+import { isEditorPaintPropertyPatchV1 } from '@src/types/editor';
 
 import type { NativeElementType } from '../model/elementIdMap';
 import type { KeyPosition, KeySlot } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import {
+  inheritedPaintMaterialization,
+  paintPropertyFields,
+  type PaintPropertyNameV1,
+} from '@src/types/color';
 
 // 메뉴·확인 모달처럼 대상 확정과 실행 사이가 긴 파괴적 액션의 semantic op.
 // 대상은 {type, id}로 받고, eager 반영과 wire 생성 각각이 실행 시점의
@@ -2076,6 +2083,132 @@ export const patchFontFamilyByTargets = (
     options,
   );
 };
+
+type PaintTarget = { elementType: NativeElementType; id: string };
+
+const paintPropertyIntents = (
+  targets: readonly PaintTarget[],
+  patch: EditorPaintPropertyPatchV1,
+): PropertyIntents => {
+  const document = captureEditorDocument();
+  const fieldName = Object.keys(patch)[0] as PaintPropertyNameV1;
+  const descriptor = patch[fieldName]!;
+  const {
+    active,
+    colorField,
+    gradientField,
+    activeColorField,
+    activeGradientField,
+  } = paintPropertyFields(fieldName);
+  const intents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { elementType, id } of targets) {
+    const collection =
+      elementType === 'key'
+        ? document.keyPositions
+        : elementType === 'stat'
+        ? document.statPositions
+        : elementType === 'graph'
+        ? document.graphPositions
+        : document.knobPositions;
+    const current = Object.values(collection)
+      .flat()
+      .find((position) => position.id === id) as
+      | (Record<string, unknown> & { id?: string })
+      | undefined;
+    if (!current) continue;
+    const next: Record<string, unknown> = {
+      [colorField]: descriptor.color,
+      [gradientField]: descriptor.gradient ?? undefined,
+    };
+    if (!active && (elementType === 'key' || elementType === 'knob')) {
+      const inherited = inheritedPaintMaterialization(
+        {
+          color:
+            typeof current[colorField] === 'string'
+              ? (current[colorField] as string)
+              : undefined,
+          gradient: current[gradientField] as never,
+        },
+        {
+          color:
+            typeof current[activeColorField] === 'string'
+              ? (current[activeColorField] as string)
+              : undefined,
+          gradient: current[activeGradientField] as never,
+        },
+      );
+      if (inherited) {
+        next[activeColorField] = inherited.color;
+        if (inherited.gradient) {
+          next[activeGradientField] = inherited.gradient;
+        }
+      }
+    }
+    const byId =
+      intents.get(elementType) ?? new Map<string, Record<string, unknown>>();
+    byId.set(id, next);
+    intents.set(elementType, byId);
+  }
+  return intents;
+};
+
+export const patchPaintByTargets = (
+  targets: readonly PaintTarget[],
+  patch: EditorPaintPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  const active =
+    'activeBackgroundPaint' in patch || 'activeBorderPaint' in patch;
+  if (
+    !isEditorPaintPropertyPatchV1(patch) ||
+    targets.length === 0 ||
+    targets.some(
+      ({ elementType, id }) =>
+        id.length === 0 ||
+        isSyntheticElementId(id) ||
+        (active && elementType !== 'key' && elementType !== 'knob'),
+    ) ||
+    new Set(targets.map(({ id }) => id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  const receipt = applyPropertyIntentsEagerly(
+    paintPropertyIntents(targets, patch),
+  );
+  let enrolled = false;
+  return commitSemanticOps(
+    targets.map(({ elementType, id }) => ({
+      kind: 'patchElement' as const,
+      elementType,
+      id,
+      patch: structuredClone(patch),
+    })),
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchPaintById = (
+  elementType: NativeElementType,
+  id: string,
+  patch: EditorPaintPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchPaintByTargets([{ elementType, id }], patch, options);
 
 export const patchStylePropertyById = (
   type: NativeElementType,

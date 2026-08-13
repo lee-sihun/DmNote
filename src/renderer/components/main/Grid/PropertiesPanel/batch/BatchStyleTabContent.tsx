@@ -1,7 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
-import { resolveStatePair, type ColorModeValue } from '@src/types/color';
+import {
+  paintDescriptor,
+  resolveStatePair,
+  type ColorModeValue,
+} from '@src/types/color';
 import {
   PropertyRow,
   NumberInput,
@@ -41,7 +45,10 @@ import {
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
-import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
+import type {
+  EditorPaintPropertyPatchV1,
+  EditorPreviewStylePropertyPatchV1,
+} from '@src/types/editor';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'batch-style:font';
@@ -70,6 +77,7 @@ interface BatchStyleTabContentProps {
   onSoundVolumeCommit?: (soundVolume: number) => void;
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -154,6 +162,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   onSoundVolumeCommit,
   onStylePropertyPreview,
   onStylePropertyCommit,
+  onPaintCommit,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -827,7 +836,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ).value
             }
             onModeCommit={
-              handleBatchGradientCommit
+              onPaintCommit
+                ? (state, modeValue) =>
+                    onPaintCommit({
+                      [state === 'active'
+                        ? 'activeBackgroundPaint'
+                        : 'backgroundPaint']: paintDescriptor(modeValue),
+                    } as EditorPaintPropertyPatchV1)
+                : handleBatchGradientCommit
                 ? (state, modeValue) =>
                     handleBatchGradientCommit(
                       'backgroundColor',
@@ -896,7 +912,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ).value
             }
             onModeCommit={
-              handleBatchGradientCommit
+              onPaintCommit
+                ? (state, modeValue) =>
+                    onPaintCommit({
+                      [state === 'active'
+                        ? 'activeBorderPaint'
+                        : 'borderPaint']: paintDescriptor(modeValue),
+                    } as EditorPaintPropertyPatchV1)
+                : handleBatchGradientCommit
                 ? (state, modeValue) =>
                     handleBatchGradientCommit('borderColor', state, modeValue)
                 : undefined

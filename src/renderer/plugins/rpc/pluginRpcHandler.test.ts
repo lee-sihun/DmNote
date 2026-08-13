@@ -188,6 +188,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchPaint: vi.fn(
+    (
+      _targets?: unknown,
+      _patch?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   updateCounterAnimation: vi.fn(
     (_request?: unknown, _options?: unknown): Promise<unknown> =>
       Promise.resolve(null),
@@ -286,6 +293,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterLayoutByTargets: mocks.patchCounterLayout,
   patchCounterTypographyByTargets: mocks.patchCounterTypography,
   patchCounterStrokeByTargets: mocks.patchCounterStroke,
+  patchPaintByTargets: mocks.patchPaint,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -410,6 +418,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchCounterTypography.mockResolvedValue(true);
     mocks.patchCounterStroke.mockReset();
     mocks.patchCounterStroke.mockResolvedValue(true);
+    mocks.patchPaint.mockReset();
+    mocks.patchPaint.mockResolvedValue(true);
     mocks.updateCounterAnimation.mockReset();
     mocks.updateCounterAnimation.mockResolvedValue({
       preset: { id: 'preset-a' },
@@ -1529,6 +1539,113 @@ describe('plugin panel persisted element mutations', () => {
     });
     expect(mocks.patchElementProperty).not.toHaveBeenCalled();
   });
+
+  it('paint batch는 exact descriptor와 slot preflight를 전용 helper에 전달한다', async () => {
+    const targets = [
+      { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      { elementType: 'graph', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    ];
+    const patch = {
+      backgroundPaint: {
+        color: '#first',
+        gradient: {
+          angle: 45,
+          stops: [
+            { color: '#first', pos: 0 },
+            { color: '#last', pos: 1 },
+          ],
+        },
+      },
+    };
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', { targets, patch }),
+    );
+    await vi.waitFor(() => expect(mocks.patchPaint).toHaveBeenCalledOnce());
+    expect(mocks.patchPaint).toHaveBeenCalledWith(targets, patch, {
+      preflight: expect.any(Function),
+    });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    [
+      'active wrong type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: {
+          activeBackgroundPaint: { color: '#fff', gradient: null },
+        },
+      },
+    ],
+    [
+      'descriptor extra',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: {
+          backgroundPaint: { color: '#fff', gradient: null, extra: true },
+        },
+      },
+    ],
+    [
+      'negative zero angle',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: {
+          backgroundPaint: {
+            color: '#first',
+            gradient: {
+              angle: -0,
+              stops: [
+                { color: '#first', pos: 0 },
+                { color: '#last', pos: 1 },
+              ],
+            },
+          },
+        },
+      },
+    ],
+    [
+      'base mismatch',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: {
+          backgroundPaint: {
+            color: '#mismatch',
+            gradient: {
+              angle: 45,
+              stops: [
+                { color: '#first', pos: 0 },
+                { color: '#last', pos: 1 },
+              ],
+            },
+          },
+        },
+      },
+    ],
+    [
+      'combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: {
+          backgroundPaint: { color: '#fff', gradient: null },
+          borderPaint: { color: '#000', gradient: null },
+        },
+      },
+    ],
+  ])(
+    'paint invalid %s는 executor를 호출하지 않는다',
+    async (_label, payload) => {
+      mocks.requestListener?.(envelope('layers:patchProperty', payload));
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+      expect(mocks.patchPaint).not.toHaveBeenCalled();
+      expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     {
