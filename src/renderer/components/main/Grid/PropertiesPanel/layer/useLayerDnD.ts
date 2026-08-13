@@ -970,8 +970,15 @@ export function useLayerDnD({
             liveModel.displayItems,
           );
           if (resolvedIndex != null) {
+            // 그룹도 live 모델로 재유도 - 캡처 시점 값을 그대로 쓰면 앵커가
+            // 그 사이 그룹을 떠났을 때 사용자가 넣지 않은 그룹에 편입된다
+            const dropTarget = resolveItemDropTarget(
+              resolvedIndex,
+              new Set(draggedIds),
+              liveModel,
+            );
             performMultiDrop(draggedIds, resolvedIndex, {
-              targetGroupId: target.targetGroupId,
+              targetGroupId: dropTarget.targetGroupId,
               liveModel,
             });
           }
