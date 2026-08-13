@@ -837,6 +837,7 @@ pub(crate) fn prepare_editor_ops_transition(
                     | EditorElementPropertyPatchV1::SoundVolume(_)
                     | EditorElementPropertyPatchV1::NoteEffectEnabled(_)
                     | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
+                    | EditorElementPropertyPatchV1::NoteGlowSize(_)
                     | EditorElementPropertyPatchV1::NoteAutoYCorrection(_)
                     | EditorElementPropertyPatchV1::NoteAlignment(_)
                     | EditorElementPropertyPatchV1::NoteBorderSide(_)
@@ -850,6 +851,18 @@ pub(crate) fn prepare_editor_ops_transition(
                             "SOUND_VOLUME_OUT_OF_RANGE",
                             format!(
                                 "editor op {op_index} sound volume must be finite and between 0 and 200"
+                            ),
+                        ));
+                    }
+                }
+                if let EditorElementPropertyPatchV1::NoteGlowSize(patch) = patch {
+                    if !patch.note_glow_size.is_finite()
+                        || !(0.0..=50.0).contains(&patch.note_glow_size)
+                    {
+                        return Err(EditorCommitError::validation(
+                            "NOTE_GLOW_SIZE_OUT_OF_RANGE",
+                            format!(
+                                "editor op {op_index} note glow size must be finite and between 0 and 50"
                             ),
                         ));
                     }
@@ -1489,6 +1502,15 @@ pub(crate) fn prepare_editor_ops_transition(
                             false
                         } else {
                             position.note_glow_enabled = patch.note_glow_enabled;
+                            true
+                        }
+                    }
+                    EditorElementPropertyPatchV1::NoteGlowSize(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        if position.note_glow_size == patch.note_glow_size {
+                            false
+                        } else {
+                            position.note_glow_size = patch.note_glow_size;
                             true
                         }
                     }
@@ -5977,6 +5999,143 @@ mod tests {
                 && position.note_auto_y_correction
                 && (position.id == legacy_id || position.note_border_side.is_none())
         }));
+    }
+
+    #[test]
+    fn note_glow_size_is_key_only_bounded_and_preserves_note_siblings() {
+        let mut store = base_store();
+        let id = store.key_positions["4key"][0].id.clone();
+        let position = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        position.note_glow_size = 20.0;
+        position.note_glow_enabled = true;
+        position.note_glow_opacity = 71;
+        position.note_glow_color =
+            Some(crate::models::NoteColor::Solid("glow-sibling".to_string()));
+        position.note_color = crate::models::NoteColor::Solid("note-sibling".to_string());
+        position.note_border_width = Some(2.5);
+        let original = position.clone();
+        let patch = EditorElementPropertyPatchV1::NoteGlowSize(
+            crate::models::EditorNoteGlowSizePropertyPatchV1 {
+                note_glow_size: 0.5,
+            },
+        );
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &id, patch.clone()),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                patch.clone(),
+            ),
+        ];
+
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        let changed = &transition.candidate.key_positions["4key"][0];
+        assert_eq!(changed.note_glow_size, 0.5);
+        assert_eq!(changed.note_glow_enabled, original.note_glow_enabled);
+        assert_eq!(changed.note_glow_opacity, original.note_glow_opacity);
+        assert_eq!(changed.note_glow_color, original.note_glow_color);
+        assert_eq!(changed.note_color, original.note_color);
+        assert_eq!(changed.note_border_width, original.note_border_width);
+        assert_eq!(transition.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        for value in [-0.1, 50.1, f64::NAN, f64::INFINITY] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        EditorElementTypeV1::Key,
+                        uuid::Uuid::new_v4().to_string(),
+                        EditorElementPropertyPatchV1::NoteGlowSize(
+                            crate::models::EditorNoteGlowSizePropertyPatchV1 {
+                                note_glow_size: value,
+                            },
+                        ),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("NOTE_GLOW_SIZE_OUT_OF_RANGE"));
+            assert_eq!(store.key_positions["4key"][0], original);
+        }
+
+        let lower = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &id,
+                EditorElementPropertyPatchV1::NoteGlowSize(
+                    crate::models::EditorNoteGlowSizePropertyPatchV1 {
+                        note_glow_size: 0.0,
+                    },
+                ),
+            )],
+        )
+        .unwrap();
+        assert_eq!(lower.candidate.key_positions["4key"][0].note_glow_size, 0.0);
+        let upper = prepare_editor_ops_transition(
+            &store,
+            &[patch_property_op(
+                EditorElementTypeV1::Key,
+                &id,
+                EditorElementPropertyPatchV1::NoteGlowSize(
+                    crate::models::EditorNoteGlowSizePropertyPatchV1 {
+                        note_glow_size: 50.0,
+                    },
+                ),
+            )],
+        )
+        .unwrap();
+        assert_eq!(
+            upper.candidate.key_positions["4key"][0].note_glow_size,
+            50.0
+        );
+
+        for element_type in [
+            EditorElementTypeV1::Stat,
+            EditorElementTypeV1::Graph,
+            EditorElementTypeV1::Knob,
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        element_type,
+                        uuid::Uuid::new_v4().to_string(),
+                        patch.clone(),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store.key_positions["4key"][0], original);
+        }
     }
 
     #[test]

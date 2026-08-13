@@ -184,6 +184,7 @@ interface EditorElementPropertyValuesV1 {
   borderWidth: number;
   borderRadius: number;
   fontSize: number;
+  noteGlowSize: number;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
@@ -282,7 +283,8 @@ export type EditorNumericStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
 
 export type EditorPreviewStylePropertyPatchV1 =
   | EditorTextPropertyPatchV1
-  | EditorNumericStylePropertyPatchV1;
+  | EditorNumericStylePropertyPatchV1
+  | EditorPropertyPatchUnionV1<'noteGlowSize'>;
 
 export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'noteEffectEnabled'
@@ -1172,6 +1174,13 @@ export function assertEditorOpsV1(
           Number.isFinite(op.patch.fontSize) &&
           op.patch.fontSize >= 8 &&
           op.patch.fontSize <= 72) ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'noteGlowSize' &&
+          op.elementType === 'key' &&
+          typeof op.patch.noteGlowSize === 'number' &&
+          Number.isFinite(op.patch.noteGlowSize) &&
+          op.patch.noteGlowSize >= 0 &&
+          op.patch.noteGlowSize <= 50) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'soundEnabled' &&
           op.elementType === 'key' &&

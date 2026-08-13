@@ -96,6 +96,7 @@ vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
 vi.mock('../PropertyInputs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../PropertyInputs')>();
   return {
+    ...actual,
     PropertyRow: ({ children }: { children: React.ReactNode }) => children,
     PropertySection: ({ children }: { children: React.ReactNode }) => children,
     NumberInput: (props: {
@@ -116,6 +117,7 @@ vi.mock('../PropertyInputs', async (importOriginal) => {
       );
       return null;
     },
+    OptionalNumberInput: () => null,
     TextInput: (props: (typeof captured.texts)[number]) => {
       captured.texts.push(props);
       return <actual.TextInput {...props} />;
@@ -209,6 +211,7 @@ vi.mock('@utils/core/axisEventBus', () => ({
 }));
 
 import StyleTabContent from './StyleTabContent';
+import NoteTabContent from './NoteTabContent';
 import CounterTabContent from './CounterTabContent';
 import {
   SingleGraphPanel,
@@ -295,6 +298,63 @@ describe('single geometry input bindings', () => {
       expect(legacy).not.toHaveBeenCalled();
     },
   );
+
+  it('single NoteTab noteGlowSize는 preview와 final exact callback을 분리한다', () => {
+    const preview = vi.fn();
+    const commit = vi.fn();
+    const legacyPreview = vi.fn();
+    const legacyCommit = vi.fn();
+    act(() => {
+      root.render(
+        <NoteTabContent
+          keyIndex={0}
+          keyPosition={{ ...createDefaultKeyPosition(), noteGlowSize: 20 }}
+          onKeyUpdate={legacyCommit}
+          onKeyPreview={legacyPreview}
+          onStylePropertyPreview={preview}
+          onStylePropertyCommit={commit}
+          t={(key) => key}
+        />,
+      );
+    });
+    const glow = captured.numberList.find(
+      (input) => input.min === 0 && input.max === 50,
+    );
+    expect(glow).toMatchObject({ min: 0, max: 50 });
+    act(() => glow?.onPreview?.(20.5));
+    expect(preview).toHaveBeenCalledWith({ noteGlowSize: 20.5 });
+    expect(commit).not.toHaveBeenCalled();
+    act(() => glow?.onChange(21.5));
+    expect(commit).toHaveBeenCalledWith({ noteGlowSize: 21.5 });
+    expect(legacyPreview).not.toHaveBeenCalled();
+    expect(legacyCommit).not.toHaveBeenCalled();
+  });
+
+  it('single NoteTab noteGlowSize callback이 없으면 기존 preview와 whole writer다', () => {
+    const legacyPreview = vi.fn();
+    const legacyCommit = vi.fn();
+    act(() => {
+      root.render(
+        <NoteTabContent
+          keyIndex={3}
+          keyPosition={{ ...createDefaultKeyPosition(), noteGlowSize: 20 }}
+          onKeyUpdate={legacyCommit}
+          onKeyPreview={legacyPreview}
+          t={(key) => key}
+        />,
+      );
+    });
+    const glow = captured.numberList.find(
+      (input) => input.min === 0 && input.max === 50,
+    );
+    act(() => glow?.onPreview?.(20.5));
+    act(() => glow?.onChange(21.5));
+    expect(legacyPreview).toHaveBeenCalledWith(3, { noteGlowSize: 20.5 });
+    expect(legacyCommit).toHaveBeenCalledWith({
+      index: 3,
+      noteGlowSize: 21.5,
+    });
+  });
 
   it.each([
     ['borderWidth', 0, 20, 12.5],
@@ -1926,6 +1986,77 @@ describe('single geometry input bindings', () => {
       [{ index: 0, statType: 'kpsMax' }],
     ]);
   });
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', ''],
+  ] as const)(
+    'SingleKeyStatPanel %s noteGlowSize는 actual NoteTab에서 legacy preview와 writer를 유지한다',
+    (_label, id) => {
+      const legacyPreview = vi.fn();
+      const legacyCommit = vi.fn();
+      act(() => {
+        root.render(
+          <SingleKeyStatPanel
+            setPanelElement={vi.fn()}
+            isSingleStat={false}
+            isSingleKey
+            singleKeyIndex={0}
+            singleStatIndex={null}
+            singleKeyPosition={{
+              ...createDefaultKeyPosition(),
+              id,
+              noteGlowSize: 20,
+            }}
+            singleStatPosition={null}
+            singleKeyCode="A"
+            singleKeySlot="A"
+            singleKeyInfo={null}
+            selectedKeyType="4key"
+            isRenaming={false}
+            renameInputRef={createRef<HTMLInputElement>()}
+            renameValue=""
+            setRenameValue={vi.fn()}
+            renameCancelledRef={{ current: false }}
+            handleRenameCommit={vi.fn()}
+            handleRenameCancel={vi.fn()}
+            handleRenameStart={vi.fn()}
+            activeTab="note"
+            setActiveTab={vi.fn()}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacyCommit}
+            onKeyPreview={legacyPreview}
+            onKeyMappingChange={vi.fn()}
+            handleStatUpdate={vi.fn()}
+            handleStatPreview={vi.fn()}
+            localState={{}}
+            setLocalState={vi.fn()}
+            handleSizeBlur={vi.fn()}
+            showImagePicker={false}
+            setShowImagePicker={vi.fn()}
+            imageButtonRef={createRef<HTMLButtonElement>()}
+            panelElement={null}
+            useCustomCSS={false}
+            singleScrollRefFor={() => vi.fn()}
+            t={(key) => key}
+          />,
+        );
+      });
+      const glow = captured.numberList.find(
+        (input) => input.min === 0 && input.max === 50,
+      );
+      act(() => glow?.onPreview?.(20.5));
+      act(() => glow?.onChange(21.5));
+
+      expect(legacyPreview).toHaveBeenCalledWith(0, {
+        noteGlowSize: 20.5,
+      });
+      expect(legacyCommit).toHaveBeenCalledWith({
+        index: 0,
+        noteGlowSize: 21.5,
+      });
+    },
+  );
 
   it.each(['graph', 'knob'] as const)(
     '%s synthetic 경로는 geometry handler가 없으면 기존 writer를 유지한다',

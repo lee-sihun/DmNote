@@ -2071,7 +2071,17 @@ export const patchStylePropertyById = (
   patch: EditorPreviewStylePropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  if (
+    !id ||
+    isSyntheticElementId(id) ||
+    ('noteGlowSize' in patch &&
+      (type !== 'key' ||
+        !Number.isFinite(patch.noteGlowSize) ||
+        patch.noteGlowSize < 0 ||
+        patch.noteGlowSize > 50))
+  ) {
+    return Promise.resolve(false);
+  }
   return patchElementPropertyById(type, id, patch, options);
 };
 
@@ -2085,7 +2095,12 @@ export const patchStylePropertyByTargets = (
     targets.some(
       (target) => target.id.length === 0 || isSyntheticElementId(target.id),
     ) ||
-    new Set(targets.map((target) => target.id)).size !== targets.length
+    new Set(targets.map((target) => target.id)).size !== targets.length ||
+    ('noteGlowSize' in patch &&
+      (targets.some((target) => target.elementType !== 'key') ||
+        !Number.isFinite(patch.noteGlowSize) ||
+        patch.noteGlowSize < 0 ||
+        patch.noteGlowSize > 50))
   ) {
     return Promise.resolve(false);
   }

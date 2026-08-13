@@ -2491,6 +2491,58 @@ describe('elementOps', () => {
     },
   );
 
+  it('noteGlowSize는 key-only exact leaf와 gesture로 sibling을 보존한다', async () => {
+    const before = {
+      ...keyAt(ID_A),
+      noteGlowSize: 20,
+      noteGlowEnabled: true,
+      noteGlowColor: '#sentinel',
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [before] },
+      positions: { '4key': [before] },
+    });
+    api.captureEditorDocument.mockReturnValue(documentFromStores());
+
+    await patchStylePropertyByTargets(
+      [{ elementType: 'key', id: ID_A }],
+      { noteGlowSize: 20.5 },
+      { gestureId: 'gesture-note-glow' },
+    );
+
+    expect(api.commitSemanticOps).toHaveBeenCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { noteGlowSize: 20.5 },
+        },
+      ],
+      expect.objectContaining({
+        gestureId: 'gesture-note-glow',
+        onEnrolled: expect.any(Function),
+      }),
+    );
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      noteGlowSize: 20.5,
+      noteGlowEnabled: true,
+      noteGlowColor: '#sentinel',
+    });
+  });
+
+  it.each([
+    ['wrong type', [{ elementType: 'stat' as const, id: ID_B }], 20],
+    ['negative', [{ elementType: 'key' as const, id: ID_A }], -0.1],
+    ['over max', [{ elementType: 'key' as const, id: ID_A }], 50.1],
+    ['nonfinite', [{ elementType: 'key' as const, id: ID_A }], Infinity],
+  ])('noteGlowSize %s는 wire 전에 거절한다', async (_label, targets, value) => {
+    await expect(
+      patchStylePropertyByTargets(targets, { noteGlowSize: value }),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
   it('displayText는 invalid target을 wire 전에 거절하고 편입 전 실패를 복원한다', async () => {
     await expect(
       patchStylePropertyByTargets(

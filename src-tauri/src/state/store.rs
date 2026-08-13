@@ -11914,6 +11914,140 @@ mod tests {
     }
 
     #[test]
+    fn note_glow_size_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-note-glow-size-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let target_id = store.editor_get().document.key_positions["4key"][0]
+            .id
+            .clone();
+        let setup = legacy_editor_commit(&store, &[EditorField::KeyPositions], |data| {
+            let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
+            position.note_glow_size = 20.0;
+            position.note_glow_enabled = true;
+            position.note_glow_opacity = 71;
+            position.note_glow_color =
+                Some(crate::models::NoteColor::Solid("glow-sibling".to_string()));
+            position.note_color = crate::models::NoteColor::Solid("note-sibling".to_string());
+            position.note_border_width = Some(2.5);
+        })
+        .unwrap();
+        let patch = |value| {
+            EditorElementPropertyPatchV1::NoteGlowSize(
+                crate::models::EditorNoteGlowSizePropertyPatchV1 {
+                    note_glow_size: value,
+                },
+            )
+        };
+        let ops = vec![
+            patch_property_op(EditorElementTypeV1::Key, &target_id, patch(0.5)),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                patch(0.5),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(changed.result.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let position = &changed.document.key_positions["4key"][0];
+        assert_eq!(position.note_glow_size, 0.5);
+        assert!(position.note_glow_enabled);
+        assert_eq!(position.note_glow_opacity, 71);
+        assert_eq!(
+            position.note_glow_color,
+            Some(crate::models::NoteColor::Solid("glow-sibling".to_string()))
+        );
+        assert_eq!(
+            position.note_color,
+            crate::models::NoteColor::Solid("note-sibling".to_string())
+        );
+        assert_eq!(position.note_border_width, Some(2.5));
+        let history_revision = store.history_status().history_revision;
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &target_id,
+            patch(1.5),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![patch_property_op(
+                    EditorElementTypeV1::Key,
+                    &target_id,
+                    patch(0.5),
+                )],
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_revision);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert_eq!(undone.key_positions["4key"][0].note_glow_size, 20.0);
+        assert!(undone.key_positions["4key"][0].note_glow_enabled);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert_eq!(redone.key_positions["4key"][0].note_glow_size, 0.5);
+        assert!(redone.key_positions["4key"][0].note_glow_enabled);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn note_literal_batch_replays_and_round_trips_one_history_entry() {
         let dir = test_directory("editor-note-literal-history-test");
         std::fs::create_dir_all(&dir).unwrap();

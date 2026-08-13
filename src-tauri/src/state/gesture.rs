@@ -795,6 +795,15 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteGlowSize(
+                    crate::models::EditorNoteGlowSizePropertyPatchV1 {
+                        note_glow_size: 19.75,
+                    },
+                ),
+                serde_json::json!({ "noteGlowSize": 19.75 }),
+            ),
+            (
+                EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteAutoYCorrection(
                     crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
                         note_auto_y_correction: false,
@@ -983,6 +992,10 @@ mod tests {
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "applyPresetId": false } }),
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset", "scale": "1.2" } }),
             serde_json::json!({ "counterAnimationPreset": { "presetId": "preset" }, "hidden": true }),
+            serde_json::json!({ "noteGlowSize": null }),
+            serde_json::json!({ "noteGlowSize": "20" }),
+            serde_json::json!({ "noteGlowSize": 20, "noteGlowEnabled": true }),
+            serde_json::json!({ "noteGlowSize": 20, "unexpected": true }),
         ] {
             let mut invalid_image = layer_name_wire.clone();
             invalid_image["editorOps"][0]["patch"] = patch;

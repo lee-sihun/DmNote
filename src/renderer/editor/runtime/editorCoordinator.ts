@@ -732,6 +732,9 @@ const applySemanticOps = (
             if ('fontSize' in op.patch) {
               return { ...position, fontSize: op.patch.fontSize };
             }
+            if ('noteGlowSize' in op.patch) {
+              return { ...position, noteGlowSize: op.patch.noteGlowSize };
+            }
             if ('noteEffectEnabled' in op.patch) {
               return {
                 ...position,

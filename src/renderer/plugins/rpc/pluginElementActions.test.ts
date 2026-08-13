@@ -193,6 +193,29 @@ describe('plugin element panel queue', () => {
     },
   );
 
+  it('noteGlowSize batch는 key-only exact literal을 gesture 없이 공용 envelope로 보낸다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    ];
+
+    await expect(
+      actions.patchStylePropertyViaAuthority(targets, { noteGlowSize: 20.5 }),
+    ).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      { targets, patch: { noteGlowSize: 20.5 } },
+      0,
+      7,
+    );
+  });
+
   it('native bounds는 exact 단일 축과 enqueue generation을 고정한다', async () => {
     const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
     mocks.sendPluginRpc.mockResolvedValue({
@@ -1317,6 +1340,35 @@ describe('plugin element panel queue', () => {
       ],
       { borderRadius: 99.5 },
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
+  it('noteGlowSize outcome-unknown은 같은 literal을 gesture 없이 한 번만 재전송한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchStylePropertyViaAuthority(
+      [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      { noteGlowSize: 20.5 },
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),

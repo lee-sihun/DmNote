@@ -13,6 +13,7 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import { ColorSwatchButton } from '@components/main/Modal/content/pickers/ColorSwatch';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import { createNoteLiteralHandlers } from '../noteLiteralHandlers';
+import type { EditorPreviewStylePropertyPatchV1 } from '@src/types/editor';
 
 interface SwatchDisplay {
   color?: string;
@@ -33,6 +34,7 @@ interface BatchNoteTabContentProps {
     property: keyof KeyPosition,
     value: KeyPosition[keyof KeyPosition],
   ) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   // 노트/글로우 색상 디스플레이
   getBatchNoteColorDisplay: () => SwatchDisplay;
   getBatchGlowColorDisplay: () => SwatchDisplay;
@@ -54,6 +56,7 @@ interface BatchNoteTabContentProps {
 const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   getMixedValue,
   handleBatchStyleChangeComplete,
+  onStylePropertyCommit,
   getBatchNoteColorDisplay,
   getBatchGlowColorDisplay,
   getBatchBorderColorDisplay,
@@ -410,9 +413,13 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         <PropertyRow label={t('keySetting.noteGlowSize') || '글로우 크기'}>
           <NumberInput
             value={getMixedValue((pos) => pos.noteGlowSize, 20).value}
-            onChange={(value) =>
-              handleBatchStyleChangeComplete('noteGlowSize', value)
-            }
+            onChange={(value) => {
+              if (onStylePropertyCommit) {
+                onStylePropertyCommit({ noteGlowSize: value });
+                return;
+              }
+              handleBatchStyleChangeComplete('noteGlowSize', value);
+            }}
             suffix="px"
             min={0}
             max={50}

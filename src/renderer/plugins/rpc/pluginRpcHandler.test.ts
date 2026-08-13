@@ -938,6 +938,60 @@ describe('plugin panel persisted element mutations', () => {
     },
   );
 
+  it('noteGlowSize batch는 key-only literal을 gesture 없이 공용 style commit으로 전달한다', async () => {
+    const targets = [
+      {
+        elementType: 'key',
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ] as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { noteGlowSize: 20.5 },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchDisplayText).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchDisplayText).toHaveBeenCalledWith(
+      targets,
+      { noteGlowSize: 20.5 },
+      { preflight: expect.any(Function) },
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('noteGlowSize는 slot 직전 generation 변경을 executor에서 거절한다', async () => {
+    mocks.patchDisplayText.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          {
+            elementType: 'key',
+            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          },
+        ],
+        patch: { noteGlowSize: 20.5 },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
   it('inactiveImage batch는 혼합 native 대상과 raw string을 한 semantic commit으로 전달한다', async () => {
     const targets = [
       {
@@ -2326,6 +2380,55 @@ describe('plugin panel persisted element mutations', () => {
       {
         targets: [{ elementType: 'key', id: 'stable' }],
         patch: { fontSize: 12, extra: true },
+      },
+    ],
+    [
+      'noteGlowSize wrong type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { noteGlowSize: 20 },
+      },
+    ],
+    [
+      'noteGlowSize below range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteGlowSize: -0.1 },
+      },
+    ],
+    [
+      'noteGlowSize above range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteGlowSize: 50.1 },
+      },
+    ],
+    [
+      'noteGlowSize nonfinite',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteGlowSize: Number.NaN },
+      },
+    ],
+    [
+      'noteGlowSize combined',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteGlowSize: 20, noteGlowEnabled: true },
+      },
+    ],
+    [
+      'noteGlowSize null',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteGlowSize: null },
+      },
+    ],
+    [
+      'noteGlowSize extra',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { noteGlowSize: 20, extra: true },
       },
     ],
     [

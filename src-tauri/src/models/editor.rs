@@ -254,6 +254,7 @@ pub enum EditorElementPropertyPatchV1 {
     StatType(EditorStatTypePropertyPatchV1),
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
     NoteGlowEnabled(EditorNoteGlowEnabledPropertyPatchV1),
+    NoteGlowSize(EditorNoteGlowSizePropertyPatchV1),
     NoteAutoYCorrection(EditorNoteAutoYCorrectionPropertyPatchV1),
     NoteAlignment(EditorNoteAlignmentPropertyPatchV1),
     NoteBorderSide(EditorNoteBorderSidePropertyPatchV1),
@@ -575,6 +576,12 @@ pub struct EditorNoteEffectEnabledPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorNoteGlowEnabledPropertyPatchV1 {
     pub note_glow_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorNoteGlowSizePropertyPatchV1 {
+    pub note_glow_size: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

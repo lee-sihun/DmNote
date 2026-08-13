@@ -2020,6 +2020,8 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
                 keyPosition={singleKeyPosition!}
                 onKeyUpdate={onKeyUpdate}
                 onKeyPreview={onKeyPreview}
+                onStylePropertyPreview={onStylePropertyPreview}
+                onStylePropertyCommit={onStylePropertyCommit}
                 panelElement={panelElement}
                 t={t}
               />

@@ -522,6 +522,29 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     });
   };
 
+  const renderNotePanel = (
+    legacy: PanelProps['handleBatchKeyOnlyStyleChangeComplete'],
+  ) => {
+    const props = panelProps();
+    props.activeTab = 'note';
+    props.handleBatchKeyOnlyStyleChangeComplete = legacy;
+    act(() => {
+      root.render(
+        <PanelNavProvider
+          value={{
+            activePageKey: null,
+            renderPageKey: null,
+            openPage: vi.fn(),
+            closePage: vi.fn(),
+            pageHost,
+          }}
+        >
+          <BatchKeyLikePanel {...props} />
+        </PanelNavProvider>,
+      );
+    });
+  };
+
   it.each(['main', 'panel'] as const)(
     '%s batch counter picker는 open 시점 key/stat만 한 exact intent로 보낸다',
     (windowType) => {
@@ -572,6 +595,93 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         ).not.toHaveBeenCalled();
       }
       expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['main', 'panel'] as const)(
+    '%s batch noteGlowSize는 current key subset에 gesture 없이 exact commit한다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const keys = [keyAt(ID_A), keyAt(ID_B)];
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        canonicalPositions: { '4key': keys },
+        positions: { '4key': keys },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: ID_A, index: 0 },
+          { type: 'stat', id: 'stat-0', index: 0 },
+          { type: 'graph', id: 'graph-0', index: 0 },
+          { type: 'knob', id: 'knob-0', index: 0 },
+        ],
+      });
+      const legacy = vi.fn();
+      renderNotePanel(legacy);
+      act(() => {
+        useGridSelectionStore.setState({
+          selectedElements: [
+            { type: 'key', id: ID_B, index: 1 },
+            { type: 'stat', id: 'stat-0', index: 0 },
+          ],
+        });
+      });
+      renderNotePanel(legacy);
+      const glow = captured.numbers
+        .filter((input) => input.min === 0 && input.max === 50)
+        .at(-1);
+      act(() => glow?.onChange(20.5));
+
+      const writer =
+        windowType === 'panel'
+          ? patches.patchDisplayTextViaAuthority
+          : patches.patchDisplayTextByTargets;
+      if (windowType === 'panel') {
+        expect(writer).toHaveBeenCalledWith(
+          [{ elementType: 'key', id: ID_B }],
+          { noteGlowSize: 20.5 },
+          undefined,
+        );
+      } else {
+        expect(writer).toHaveBeenCalledWith(
+          [{ elementType: 'key', id: ID_B }],
+          { noteGlowSize: 20.5 },
+          { gestureId: undefined },
+        );
+      }
+      expect(gestures.preview).not.toHaveBeenCalled();
+      expect(gestures.settleCommit).not.toHaveBeenCalled();
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['synthetic', 'key-0'],
+    ['empty', ''],
+  ] as const)(
+    'batch noteGlowSize relevant %s key는 whole legacy다',
+    (_label, id) => {
+      useKeyStore.setState({
+        selectedKeyType: '4key',
+        canonicalPositions: { '4key': [keyAt(id)] },
+        positions: { '4key': [keyAt(id)] },
+      });
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id, index: 0 },
+          { type: 'stat', id: 'stat-0', index: 0 },
+        ],
+      });
+      const legacy = vi.fn();
+      renderNotePanel(legacy);
+      const glow = captured.numbers
+        .filter((input) => input.min === 0 && input.max === 50)
+        .at(-1);
+      act(() => glow?.onChange(20.5));
+
+      expect(legacy).toHaveBeenCalledWith('noteGlowSize', 20.5);
+      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
+      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
     },
   );
 

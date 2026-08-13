@@ -87,6 +87,7 @@ const createStylePropertyHandlers = (
     id: string;
   }[],
   selectedKeyType: string,
+  options: { settleGesture?: boolean } = { settleGesture: true },
 ) => {
   const stableTargets =
     targets.length > 0 &&
@@ -127,12 +128,16 @@ const createStylePropertyHandlers = (
       }
     },
     commitStyleProperty: (patch: EditorPreviewStylePropertyPatchV1) => {
-      const gestureId = editGestureController.activeGestureId() ?? undefined;
+      const gestureId = options.settleGesture
+        ? editGestureController.activeGestureId() ?? undefined
+        : undefined;
       const persisted =
         window.__dmn_window_type === 'panel'
           ? patchStylePropertyViaAuthority(stableTargets, patch, gestureId)
           : patchStylePropertyByTargets(stableTargets, patch, { gestureId });
-      editGestureController.settleCommit(persisted);
+      if (options.settleGesture) {
+        editGestureController.settleCommit(persisted);
+      }
       void persisted.catch(reportElementOpError);
     },
   };
@@ -566,6 +571,15 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   );
   const { previewStyleProperty, commitStyleProperty } =
     createStylePropertyHandlers(textPropertyTargets, selectedKeyType);
+  const { commitStyleProperty: commitNoteStyleProperty } =
+    createStylePropertyHandlers(
+      selectedKeyElements.map(({ id }) => ({
+        elementType: 'key',
+        id,
+      })),
+      selectedKeyType,
+      { settleGesture: false },
+    );
   const soundTargets = selectedKeyElements.map(({ id }) => id);
   const stableSoundTargets =
     soundTargets.length > 0 &&
@@ -1185,6 +1199,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   handleBatchStyleChangeComplete={
                     handleBatchKeyOnlyStyleChangeComplete
                   }
+                  onStylePropertyCommit={commitNoteStyleProperty}
                   getBatchNoteColorDisplay={getBatchNoteColorDisplay}
                   getBatchGlowColorDisplay={getBatchGlowColorDisplay}
                   getBatchBorderColorDisplay={getBatchBorderColorDisplay}

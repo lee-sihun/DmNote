@@ -259,6 +259,8 @@ export interface NoteTabContentProps {
   keyPosition: KeyPosition;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
+  onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
+  onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   panelElement?: HTMLElement | null;
   t: (key: string) => string;
 }

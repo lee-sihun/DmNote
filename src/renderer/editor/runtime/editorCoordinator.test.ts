@@ -4180,6 +4180,42 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('noteGlowSize projection은 required numeric leaf만 바꾼다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000e1';
+    const base = makeDocument();
+    base.keyPositions = {
+      '4key': [
+        {
+          ...createDefaultKeyPosition(),
+          id,
+          noteGlowSize: 20,
+          noteGlowEnabled: true,
+          noteGlowColor: '#sentinel',
+        },
+      ],
+    };
+    base.keys = { '4key': ['A'] };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const outcome = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { noteGlowSize: 20.5 },
+      },
+    ]);
+
+    expect(outcome.opResults).toEqual([{ status: 'applied' }]);
+    expect(outcome.document.keyPositions['4key'][0]).toMatchObject({
+      noteGlowSize: 20.5,
+      noteGlowEnabled: true,
+      noteGlowColor: '#sentinel',
+    });
+    harness.coordinator.stop();
+  });
+
   it('setKeySlot은 최신 paired ID index의 slot만 바꾼다', async () => {
     const id = '00000000-0000-4000-8000-000000000087';
     const otherId = '00000000-0000-4000-8000-000000000086';

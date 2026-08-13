@@ -47,6 +47,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   keyPosition,
   onKeyUpdate,
   onKeyPreview,
+  onStylePropertyPreview,
+  onStylePropertyCommit,
   panelElement,
   t,
 }) => {
@@ -740,10 +742,20 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         <PropertyRow label={t('keySetting.noteGlowSize') || '글로우 크기'}>
           <NumberInput
             value={keyPosition.noteGlowSize ?? 20}
-            onChange={(value) =>
-              handleStyleChangeComplete('noteGlowSize', value)
-            }
-            onPreview={(value) => handleStylePreview('noteGlowSize', value)}
+            onChange={(value) => {
+              if (onStylePropertyCommit) {
+                onStylePropertyCommit({ noteGlowSize: value });
+                return;
+              }
+              handleStyleChangeComplete('noteGlowSize', value);
+            }}
+            onPreview={(value) => {
+              if (onStylePropertyPreview) {
+                onStylePropertyPreview({ noteGlowSize: value });
+                return;
+              }
+              handleStylePreview('noteGlowSize', value);
+            }}
             onCancel={() => editGestureController.cancel()}
             suffix="px"
             min={0}

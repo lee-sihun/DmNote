@@ -388,6 +388,12 @@ const parseNativeLayerPropertyTarget = (
       Number.isFinite(patch.fontSize) &&
       patch.fontSize >= 8 &&
       patch.fontSize <= 72) ||
+    (hasExactKeys(patch, ['noteGlowSize']) &&
+      target.elementType === 'key' &&
+      typeof patch.noteGlowSize === 'number' &&
+      Number.isFinite(patch.noteGlowSize) &&
+      patch.noteGlowSize >= 0 &&
+      patch.noteGlowSize <= 50) ||
     (hasExactKeys(patch, ['soundEnabled']) &&
       target.elementType === 'key' &&
       typeof patch.soundEnabled === 'boolean') ||
@@ -882,6 +888,12 @@ const parseNativeLayerPropertyRequest = (
         patch.fontSize >= 8 &&
         patch.fontSize <= 72
       ? { fontSize: patch.fontSize }
+      : hasExactKeys(patch, ['noteGlowSize']) &&
+        typeof patch.noteGlowSize === 'number' &&
+        Number.isFinite(patch.noteGlowSize) &&
+        patch.noteGlowSize >= 0 &&
+        patch.noteGlowSize <= 50
+      ? { noteGlowSize: patch.noteGlowSize }
       : null;
   const inactiveImage =
     hasExactKeys(patch, ['inactiveImage']) &&
@@ -1110,6 +1122,9 @@ const parseNativeLayerPropertyRequest = (
         'borderRadius' in stylePropertyPatch &&
         stylePropertyPatch.borderRadius > 100 &&
         target.elementType !== 'knob') ||
+      (stylePropertyPatch !== null &&
+        'noteGlowSize' in stylePropertyPatch &&
+        target.elementType !== 'key') ||
       (elementType !== null &&
         elementType !== 'active-capable' &&
         elementType !== 'counter-capable' &&

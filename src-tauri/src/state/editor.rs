@@ -2783,6 +2783,15 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::NoteGlowSize(
+                    crate::models::EditorNoteGlowSizePropertyPatchV1 {
+                        note_glow_size: 20.5,
+                    },
+                ),
+                serde_json::json!({ "noteGlowSize": 20.5 }),
+            ),
+            (
+                EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::NoteAutoYCorrection(
                     crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
                         note_auto_y_correction: false,
@@ -2933,6 +2942,10 @@ mod tests {
             serde_json::json!({ "statType": "invalid" }),
             serde_json::json!({ "noteEffectEnabled": 1 }),
             serde_json::json!({ "noteGlowEnabled": null }),
+            serde_json::json!({ "noteGlowSize": null }),
+            serde_json::json!({ "noteGlowSize": "20" }),
+            serde_json::json!({ "noteGlowSize": 20, "noteGlowEnabled": true }),
+            serde_json::json!({ "noteGlowSize": 20, "unexpected": true }),
             serde_json::json!({ "noteAutoYCorrection": "false" }),
             serde_json::json!({ "noteAlignment": "bottom" }),
             serde_json::json!({ "noteBorderSide": "diagonal" }),
