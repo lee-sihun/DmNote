@@ -48,6 +48,7 @@ import {
   patchCounterLayoutByTargets,
   patchCounterTypographyByTargets,
   patchPaintByTargets,
+  patchShadowByTargets,
   patchStylePropertyByTargets,
   patchInactiveImageByTargets,
   patchIdleTransparentByTargets,
@@ -63,6 +64,7 @@ import {
   patchCounterLayoutViaAuthority,
   patchCounterTypographyViaAuthority,
   patchPaintViaAuthority,
+  patchShadowViaAuthority,
   patchStylePropertyViaAuthority,
   patchInactiveImageViaAuthority,
   patchIdleTransparentViaAuthority,
@@ -86,6 +88,7 @@ import {
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
@@ -207,6 +210,44 @@ const createPaintCommitHandler =
       window.__dmn_window_type === 'panel'
         ? patchPaintViaAuthority(relevant, patch)
         : patchPaintByTargets(relevant, patch);
+    void persisted.catch(reportElementOpError);
+  };
+
+const createShadowCommitHandler =
+  (
+    targets: readonly {
+      elementType: 'key' | 'stat' | 'knob';
+      id: string;
+    }[],
+    legacyChange: (
+      state: 'idle' | 'active',
+      patch: Partial<ElementShadowSpec>,
+    ) => void,
+    legacyEnabled: (enabled: boolean) => void,
+  ) =>
+  (patch: EditorShadowPropertyPatchV1) => {
+    const relevant =
+      'activeShadow' in patch
+        ? targets.filter(({ elementType }) => elementType !== 'stat')
+        : targets;
+    const stable =
+      relevant.length > 0 &&
+      relevant.every(({ id }) => id.length > 0 && !isSyntheticElementId(id)) &&
+      new Set(relevant.map(({ id }) => id)).size === relevant.length;
+    if (!stable) {
+      if ('shadowEnabled' in patch) {
+        legacyEnabled(patch.shadowEnabled);
+      } else if ('activeShadow' in patch) {
+        legacyChange('active', patch.activeShadow);
+      } else {
+        legacyChange('idle', patch.shadow);
+      }
+      return;
+    }
+    const persisted =
+      window.__dmn_window_type === 'panel'
+        ? patchShadowViaAuthority(relevant, patch)
+        : patchShadowByTargets(relevant, patch);
     void persisted.catch(reportElementOpError);
   };
 
@@ -641,6 +682,25 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const commitPaint = createPaintCommitHandler(
     textPropertyTargets,
     handleBatchGradientCommit ?? (() => undefined),
+  );
+  const shadowTargets = [
+    ...selectedKeyElements.map(({ id }) => ({
+      elementType: 'key' as const,
+      id,
+    })),
+    ...selectedStatElements.map(({ id }) => ({
+      elementType: 'stat' as const,
+      id,
+    })),
+    ...selectedKnobElements.map(({ id }) => ({
+      elementType: 'knob' as const,
+      id,
+    })),
+  ];
+  const commitShadow = createShadowCommitHandler(
+    shadowTargets,
+    handleBatchShadowChangeComplete,
+    handleBatchShadowEnabledChange ?? (() => undefined),
   );
   const { commitStyleProperty: commitNoteStyleProperty } =
     createStylePropertyHandlers(
@@ -1099,6 +1159,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 onStylePropertyPreview={previewStyleProperty}
                 onStylePropertyCommit={commitStyleProperty}
                 onPaintCommit={commitPaint}
+                onShadowCommit={commitShadow}
                 showSoundControls={selectedKeyElements.length > 0}
                 showShadowControls={!hasGraphSelection}
                 shadowActiveState={
@@ -2038,6 +2099,14 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
     })),
     handleBatchGradientCommit ?? (() => undefined),
   );
+  const commitShadow = createShadowCommitHandler(
+    selectedKnobElements.map(({ id }) => ({
+      elementType: 'knob',
+      id,
+    })),
+    handleBatchShadowChangeComplete,
+    handleBatchShadowEnabledChange ?? (() => undefined),
+  );
 
   const sensitivityState = getMixedValueKnobs(
     (pos) => Number(pos.sensitivity ?? 1),
@@ -2118,6 +2187,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               onStylePropertyPreview={previewStyleProperty}
               onStylePropertyCommit={commitStyleProperty}
               onPaintCommit={commitPaint}
+              onShadowCommit={commitShadow}
               hideDisplayText
               hideFontControls
               showSoundControls={false}

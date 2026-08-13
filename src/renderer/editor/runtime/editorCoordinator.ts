@@ -4,6 +4,12 @@ import {
   inheritedPaintMaterialization,
   paintPropertyFields,
 } from '@src/types/color';
+import { projectElementShadowPatch } from '@src/types/key/shadows';
+import {
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+} from '@utils/core/elementDefaults';
+import { isEditorShadowPropertyPatchV1 } from '@src/types/editor';
 
 import {
   EDITOR_COMMIT_SCHEMA_VERSION,
@@ -773,6 +779,18 @@ const applySemanticOps = (
                 ...preservation,
                 [colorField]: paint.color,
                 [gradientField]: paint.gradient ?? undefined,
+              };
+            }
+            if (isEditorShadowPropertyPatchV1(op.patch)) {
+              return {
+                ...position,
+                ...projectElementShadowPatch({
+                  position: position as never,
+                  elementType: op.elementType as 'key' | 'stat' | 'knob',
+                  patch: op.patch,
+                  defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+                  defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+                }),
               };
             }
             if ('displayText' in op.patch) {

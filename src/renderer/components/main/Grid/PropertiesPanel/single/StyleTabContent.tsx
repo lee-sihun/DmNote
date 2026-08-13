@@ -59,10 +59,11 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
-import { resolveElementShadow } from '@src/types/key/shadows';
+import { resolveElementShadowForPosition } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
+import type { EditorShadowPropertyPatchV1 } from '@src/types/editor';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
 const FONT_PAGE_KEY = 'single-style:font';
@@ -133,6 +134,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onStylePropertyPreview,
   onStylePropertyCommit,
   onPaintCommit,
+  onShadowCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -232,25 +234,20 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       }
     },
   });
-  const hasIdleImage = Boolean(keyPosition.inactiveImage?.trim());
-  const hasActiveImage = Boolean(
-    keyPosition.activeImage?.trim() || keyPosition.inactiveImage?.trim(),
-  );
-  const idleShadow = resolveElementShadow({
+  const shadowElementType = shadowActiveState ? 'key' : 'stat';
+  const idleShadow = resolveElementShadowForPosition({
+    position: keyPosition,
+    elementType: shadowElementType,
     active: false,
-    shadow: keyPosition.shadow,
-    activeShadow: keyPosition.activeShadow,
     defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
     defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-    suppressDefault: hasIdleImage,
   });
-  const activeShadow = resolveElementShadow({
+  const activeShadow = resolveElementShadowForPosition({
+    position: keyPosition,
+    elementType: shadowElementType,
     active: true,
-    shadow: keyPosition.shadow,
-    activeShadow: keyPosition.activeShadow,
     defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
     defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-    suppressDefault: hasActiveImage,
   });
 
   // 통합 피커 상태
@@ -1066,13 +1063,23 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         idleShadow={idleShadow}
         activeShadow={activeShadow}
         showActiveState={shadowActiveState}
-        onChange={(state, shadow) =>
+        onChange={(state, shadow, patch) => {
+          if (onShadowCommit) {
+            onShadowCommit({
+              [state === 'active' ? 'activeShadow' : 'shadow']: patch,
+            } as EditorShadowPropertyPatchV1);
+            return;
+          }
           onKeyUpdate({
             index: keyIndex,
             [state === 'active' ? 'activeShadow' : 'shadow']: shadow,
-          })
-        }
-        onEnabledChange={(enabled) =>
+          });
+        }}
+        onEnabledChange={(enabled) => {
+          if (onShadowCommit) {
+            onShadowCommit({ shadowEnabled: enabled });
+            return;
+          }
           onKeyUpdate({
             index: keyIndex,
             shadow: { ...idleShadow, enabled },
@@ -1080,8 +1087,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             ...(shadowActiveState
               ? { activeShadow: { ...activeShadow, enabled } }
               : {}),
-          })
-        }
+          });
+        }}
         panelElement={panelElement}
         t={t}
       />

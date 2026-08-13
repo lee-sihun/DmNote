@@ -59,6 +59,7 @@ import {
   patchStylePropertyById,
   patchStylePropertyByTargets,
   patchPaintByTargets,
+  patchShadowByTargets,
   patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
@@ -2503,7 +2504,7 @@ describe('elementOps', () => {
       canonicalPositions: { '4key': [before] },
       positions: { '4key': [before] },
     });
-    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    api.captureEditorDocument.mockImplementation(documentFromStores);
 
     await patchStylePropertyByTargets(
       [{ elementType: 'key', id: ID_A }],
@@ -2559,7 +2560,7 @@ describe('elementOps', () => {
       canonicalPositions: { '4key': [before] },
       positions: { '4key': [before] },
     });
-    api.captureEditorDocument.mockReturnValue(documentFromStores());
+    api.captureEditorDocument.mockImplementation(documentFromStores);
     const patches = [
       { noteOffsetX: null },
       { noteOffsetY: 0 },
@@ -2641,6 +2642,96 @@ describe('elementOps', () => {
         ],
         expect.anything(),
       );
+    },
+  );
+
+  it('shadow partial과 master는 fresh siblings와 stat active 부재를 보존한다', async () => {
+    const key = {
+      ...keyAt(ID_A),
+      inactiveImage: 'image.png',
+      shadow: undefined,
+      activeShadow: undefined,
+      borderColor: '#sibling',
+    };
+    const stat = {
+      ...keyAt(ID_B),
+      statType: 'kps' as const,
+      shadow: undefined,
+      activeShadow: undefined,
+      borderColor: '#stat-sibling',
+    };
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [key] },
+      positions: { '4key': [key] },
+    });
+    useStatItemStore.setState({ positions: { '4key': [stat] } });
+    api.captureEditorDocument.mockImplementation(documentFromStores);
+
+    await patchShadowByTargets([{ elementType: 'key', id: ID_A }], {
+      shadow: { blur: 22 },
+    });
+    await patchShadowByTargets(
+      [
+        { elementType: 'key', id: ID_A },
+        { elementType: 'stat', id: ID_B },
+      ],
+      { shadowEnabled: false },
+    );
+
+    expect(useKeyStore.getState().canonicalPositions['4key'][0]).toMatchObject({
+      shadow: {
+        enabled: false,
+        color: 'rgba(0, 0, 0, 0.28)',
+        offsetX: 0,
+        offsetY: 4,
+        blur: 22,
+      },
+      activeShadow: {
+        enabled: false,
+        color: 'rgba(0, 0, 0, 0.32)',
+        offsetX: 0,
+        offsetY: 3,
+        blur: 8,
+      },
+      borderColor: '#sibling',
+    });
+    expect(useStatItemStore.getState().positions['4key'][0]).toMatchObject({
+      shadow: { enabled: false },
+      borderColor: '#stat-sibling',
+    });
+    expect(
+      useStatItemStore.getState().positions['4key'][0].activeShadow,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    [
+      'graph',
+      [{ elementType: 'graph' as const, id: ID_A }],
+      { shadow: { blur: 1 } },
+    ],
+    [
+      'active stat',
+      [{ elementType: 'stat' as const, id: ID_B }],
+      { activeShadow: { blur: 1 } },
+    ],
+    [
+      'empty color',
+      [{ elementType: 'key' as const, id: ID_A }],
+      { shadow: { color: '' } },
+    ],
+    [
+      'range',
+      [{ elementType: 'key' as const, id: ID_A }],
+      { shadow: { offsetX: 101 } },
+    ],
+  ] as const)(
+    'shadow %s는 wire 전에 거절한다',
+    async (_label, targets, patch) => {
+      await expect(
+        patchShadowByTargets(targets as never, patch as never),
+      ).resolves.toBe(false);
+      expect(api.commitSemanticOps).not.toHaveBeenCalled();
     },
   );
 

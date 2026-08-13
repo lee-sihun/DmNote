@@ -38,7 +38,7 @@ import {
   DEFAULT_ELEMENT_SHADOW_SPEC,
   DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
 } from '@utils/core/elementDefaults';
-import { resolveElementShadow } from '@src/types/key/shadows';
+import { resolveElementShadowForPosition } from '@src/types/key/shadows';
 import type {
   PluginSettingSchema,
   PluginMessages,
@@ -76,6 +76,7 @@ import EditSessionBoundary from '../EditSessionBoundary';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
   EditorPaintPropertyPatchV1,
+  EditorShadowPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
 } from '@src/types/editor';
 
@@ -866,6 +867,7 @@ interface SingleKnobPanelProps {
   onActiveImageFitCommit?: (activeImageFit: ImageFit) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
@@ -895,6 +897,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   onActiveImageFitCommit,
   onStylePropertyCommit,
   onPaintCommit,
+  onShadowCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   panelElement,
@@ -1192,33 +1195,19 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         singleKnobPosition.height || 60,
       ) / 2,
     );
-  const knobHasIdleImage = Boolean(singleKnobPosition.inactiveImage?.trim());
-  const knobHasActiveImage = Boolean(
-    singleKnobPosition.activeImage?.trim() ||
-      singleKnobPosition.inactiveImage?.trim(),
-  );
-  const suppressKnobDefaultShadow = (singleKnobPosition.borderWidth ?? 0) > 0;
-  const knobIdleShadow = resolveElementShadow({
+  const knobIdleShadow = resolveElementShadowForPosition({
+    position: singleKnobPosition,
+    elementType: 'knob',
     active: false,
-    shadow: singleKnobPosition.shadow,
-    activeShadow: singleKnobPosition.activeShadow,
     defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
     defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-    suppressDefault:
-      knobHasIdleImage ||
-      singleKnobPosition.idleTransparent === true ||
-      suppressKnobDefaultShadow,
   });
-  const knobActiveShadow = resolveElementShadow({
+  const knobActiveShadow = resolveElementShadowForPosition({
+    position: singleKnobPosition,
+    elementType: 'knob',
     active: true,
-    shadow: singleKnobPosition.shadow,
-    activeShadow: singleKnobPosition.activeShadow,
     defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
     defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-    suppressDefault:
-      knobHasActiveImage ||
-      singleKnobPosition.activeTransparent === true ||
-      suppressKnobDefaultShadow,
   });
 
   return (
@@ -1554,19 +1543,29 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             <ShadowControls
               idleShadow={knobIdleShadow}
               activeShadow={knobActiveShadow}
-              onChange={(state, shadow) =>
+              onChange={(state, shadow, patch) => {
+                if (onShadowCommit) {
+                  onShadowCommit({
+                    [state === 'active' ? 'activeShadow' : 'shadow']: patch,
+                  } as EditorShadowPropertyPatchV1);
+                  return;
+                }
                 handleKnobUpdate({
                   index: singleKnobIndex,
                   [state === 'active' ? 'activeShadow' : 'shadow']: shadow,
-                })
-              }
-              onEnabledChange={(enabled) =>
+                });
+              }}
+              onEnabledChange={(enabled) => {
+                if (onShadowCommit) {
+                  onShadowCommit({ shadowEnabled: enabled });
+                  return;
+                }
                 handleKnobUpdate({
                   index: singleKnobIndex,
                   shadow: { ...knobIdleShadow, enabled },
                   activeShadow: { ...knobActiveShadow, enabled },
-                })
-              }
+                });
+              }}
               panelElement={panelElement}
               t={t}
             />
@@ -1751,6 +1750,7 @@ interface SingleKeyStatPanelProps {
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   onCounterAnimationPresetCommit?: CounterTabContentProps['onCounterAnimationPresetCommit'];
   onCounterEnabledCommit?: CounterTabContentProps['onCounterEnabledCommit'];
   onCounterAnimationEnabledCommit?: CounterTabContentProps['onCounterAnimationEnabledCommit'];
@@ -1810,6 +1810,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   onStylePropertyPreview,
   onStylePropertyCommit,
   onPaintCommit,
+  onShadowCommit,
   onCounterAnimationPresetCommit,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
@@ -2013,6 +2014,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onStylePropertyPreview={onStylePropertyPreview}
               onStylePropertyCommit={onStylePropertyCommit}
               onPaintCommit={onPaintCommit}
+              onShadowCommit={onShadowCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}

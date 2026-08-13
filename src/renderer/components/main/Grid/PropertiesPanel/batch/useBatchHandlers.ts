@@ -13,7 +13,7 @@ import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import {
-  resolveElementShadow,
+  resolveElementShadowForPosition,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -617,25 +617,12 @@ export function useBatchHandlers({
     active: boolean,
     kind: 'key' | 'knob',
   ): ElementShadowSpec => {
-    const hasImage = Boolean(
-      active
-        ? position.activeImage?.trim() || position.inactiveImage?.trim()
-        : position.inactiveImage?.trim(),
-    );
-    const suppressDefault =
-      hasImage ||
-      (kind === 'knob' &&
-        ((active
-          ? position.activeTransparent === true
-          : position.idleTransparent === true) ||
-          (position.borderWidth ?? 0) > 0));
-    return resolveElementShadow({
+    return resolveElementShadowForPosition({
+      position,
+      elementType: kind,
       active,
-      shadow: position.shadow,
-      activeShadow: position.activeShadow,
       defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
       defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-      suppressDefault,
     });
   };
 

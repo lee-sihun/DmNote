@@ -67,6 +67,14 @@ const captured = vi.hoisted(() => ({
     onUnderlineChange: (value: boolean) => void;
     onStrikethroughChange: (value: boolean) => void;
   }>,
+  shadows: [] as Array<{
+    onChange: (
+      state: 'idle' | 'active',
+      shadow: ReturnType<typeof shadowSpec>,
+      patch: Partial<ReturnType<typeof shadowSpec>>,
+    ) => void;
+    onEnabledChange: (enabled: boolean) => void;
+  }>,
 }));
 
 const patches = vi.hoisted(() => ({
@@ -100,6 +108,8 @@ const patches = vi.hoisted(() => ({
   patchCounterStrokeViaAuthority: vi.fn(async () => true),
   patchPaintByTargets: vi.fn(async () => true),
   patchPaintViaAuthority: vi.fn(async () => true),
+  patchShadowByTargets: vi.fn(async () => true),
+  patchShadowViaAuthority: vi.fn(async () => true),
   patchDisplayTextByTargets: vi.fn(async () => true),
   patchDisplayTextViaAuthority: vi.fn(async () => true),
 }));
@@ -129,6 +139,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterTypographyByTargets: patches.patchCounterTypographyByTargets,
   patchCounterStrokeByTargets: patches.patchCounterStrokeByTargets,
   patchPaintByTargets: patches.patchPaintByTargets,
+  patchShadowByTargets: patches.patchShadowByTargets,
   patchStylePropertyByTargets: patches.patchDisplayTextByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
@@ -150,6 +161,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
     patches.patchCounterTypographyViaAuthority,
   patchCounterStrokeViaAuthority: patches.patchCounterStrokeViaAuthority,
   patchPaintViaAuthority: patches.patchPaintViaAuthority,
+  patchShadowViaAuthority: patches.patchShadowViaAuthority,
   patchStylePropertyViaAuthority: patches.patchDisplayTextViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
@@ -239,7 +251,10 @@ vi.mock('@components/main/Modal/content/pickers/FontPicker', () => ({
   },
 }));
 vi.mock('@components/main/Grid/PropertiesPanel/ShadowControls', () => ({
-  default: () => null,
+  default: (props: (typeof captured.shadows)[number]) => {
+    captured.shadows.push(props);
+    return null;
+  },
 }));
 vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
   editGestureController: {
@@ -277,6 +292,14 @@ const ID_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ID_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 const keyAt = (id: string) => ({ ...createDefaultKeyPosition(), id });
+
+const shadowSpec = () => ({
+  enabled: true,
+  color: '#0008',
+  offsetX: 0,
+  offsetY: 4,
+  blur: 10,
+});
 
 type PanelProps = React.ComponentProps<typeof BatchKeyLikePanel>;
 
@@ -481,6 +504,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     captured.numbers.length = 0;
     captured.optionalNumbers.length = 0;
     captured.fontStyles.length = 0;
+    captured.shadows.length = 0;
     selectKey(ID_A);
     host = document.createElement('div');
     pageHost = document.createElement('div');
@@ -1797,6 +1821,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       handleActiveCapableStyleChangeComplete:
         kind === 'mixed' ? legacy : vi.fn(),
       handleBatchGradientCommit: legacy,
+      handleBatchShadowChangeComplete: legacy,
+      handleBatchShadowEnabledChange: legacy,
       handleGraphBatchSharedSetting: kind === 'graph' ? legacy : vi.fn(),
       handleKnobBatchSharedSetting: kind === 'knob' ? legacy : vi.fn(),
     };
@@ -1832,6 +1858,110 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       );
     });
   };
+
+  const commitShadow = (
+    state: 'idle' | 'active',
+    patch: Partial<ReturnType<typeof shadowSpec>>,
+  ) => {
+    const controls = captured.shadows.at(-1);
+    expect(controls).toBeDefined();
+    act(() => controls?.onChange(state, { ...shadowSpec(), ...patch }, patch));
+  };
+
+  const selectShadowTargets = (suffix: 'a' | 'b') => {
+    const ids =
+      suffix === 'a'
+        ? [
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3',
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4',
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5',
+          ]
+        : [
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3',
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4',
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5',
+          ];
+    const types = ['key', 'stat', 'knob'] as const;
+    useGridSelectionStore.setState({
+      selectedElements: types.map((type, index) => ({
+        type,
+        id: ids[index],
+        index: 0,
+      })),
+    });
+    return types.map((elementType, index) => ({
+      elementType,
+      id: ids[index],
+    }));
+  };
+
+  it('batch graph가 포함되면 shadow controls는 비도달이다', () => {
+    const legacy = vi.fn();
+    selectImageTargets('mixed', 'a');
+    renderImagePanel('mixed', legacy);
+
+    expect(captured.shadows).toHaveLength(0);
+    expect(patches.patchShadowByTargets).not.toHaveBeenCalled();
+    expect(patches.patchShadowViaAuthority).not.toHaveBeenCalled();
+  });
+
+  it.each(['main', 'panel'] as const)(
+    'batch shadow는 latest current key/stat/knob targets에 %s exact partial을 보낸다',
+    (windowType) => {
+      window.__dmn_window_type = windowType;
+      const legacy = vi.fn();
+      selectShadowTargets('a');
+      renderImagePanel('mixed', legacy);
+      const targets = selectShadowTargets('b');
+      renderImagePanel('mixed', legacy);
+      commitShadow('idle', { blur: 22.5 });
+
+      const writer =
+        windowType === 'panel'
+          ? patches.patchShadowViaAuthority
+          : patches.patchShadowByTargets;
+      expect(writer).toHaveBeenCalledWith(targets, { shadow: { blur: 22.5 } });
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('batch active shadow는 key/knob만 쓰고 synthetic stat은 무관하다', () => {
+    const legacy = vi.fn();
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: ID_A, index: 0 },
+        { type: 'stat', id: 'stat-0', index: 0 },
+        { type: 'knob', id: ID_B, index: 0 },
+      ],
+    });
+    renderImagePanel('mixed', legacy);
+    commitShadow('active', { color: ' raw active ' });
+
+    expect(patches.patchShadowByTargets).toHaveBeenCalledWith(
+      [
+        { elementType: 'key', id: ID_A },
+        { elementType: 'knob', id: ID_B },
+      ],
+      { activeShadow: { color: ' raw active ' } },
+    );
+    expect(legacy).not.toHaveBeenCalled();
+  });
+
+  it.each(['key-0', ''])(
+    'batch shadow relevant %j target은 whole legacy다',
+    (id) => {
+      const legacy = vi.fn();
+      useGridSelectionStore.setState({
+        selectedElements: [{ type: 'key', id, index: 0 }],
+      });
+      renderImagePanel('mixed', legacy);
+      commitShadow('idle', { offsetX: 12 });
+
+      expect(legacy).toHaveBeenCalledWith('idle', { offsetX: 12 });
+      expect(patches.patchShadowByTargets).not.toHaveBeenCalled();
+      expect(patches.patchShadowViaAuthority).not.toHaveBeenCalled();
+    },
+  );
 
   const commitBackgroundPaint = async (
     state: 'idle' | 'active',

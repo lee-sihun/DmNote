@@ -52,6 +52,7 @@ import type {
   EditorFontStylePropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
+  EditorShadowPropertyPatchV1,
   EditorGraphRuntimePropertyPatchV1,
   EditorKnobRuntimePropertyPatchV1,
   EditorNotePropertyPatchV1,
@@ -59,7 +60,10 @@ import type {
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
-import { isEditorPaintPropertyPatchV1 } from '@src/types/editor';
+import {
+  isEditorPaintPropertyPatchV1,
+  isEditorShadowPropertyPatchV1,
+} from '@src/types/editor';
 
 import type { NativeElementType } from '../model/elementIdMap';
 import type { KeyPosition, KeySlot } from '@src/types/key/keys';
@@ -71,6 +75,11 @@ import {
   paintPropertyFields,
   type PaintPropertyNameV1,
 } from '@src/types/color';
+import { projectElementShadowPatch } from '@src/types/key/shadows';
+import {
+  DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+  DEFAULT_ELEMENT_SHADOW_SPEC,
+} from '@utils/core/elementDefaults';
 
 // 메뉴·확인 모달처럼 대상 확정과 실행 사이가 긴 파괴적 액션의 semantic op.
 // 대상은 {type, id}로 받고, eager 반영과 wire 생성 각각이 실행 시점의
@@ -2209,6 +2218,103 @@ export const patchPaintById = (
   options: { preflight?: () => void } = {},
 ): Promise<boolean> =>
   patchPaintByTargets([{ elementType, id }], patch, options);
+
+type ShadowTarget = {
+  elementType: NativeElementType;
+  id: string;
+};
+
+const shadowPropertyIntents = (
+  targets: readonly ShadowTarget[],
+  patch: EditorShadowPropertyPatchV1,
+): PropertyIntents => {
+  const document = captureEditorDocument();
+  const intents = new Map<
+    NativeElementType,
+    Map<string, Record<string, unknown>>
+  >();
+  for (const { elementType, id } of targets) {
+    if (elementType === 'graph') continue;
+    const collection =
+      elementType === 'key'
+        ? document.keyPositions
+        : elementType === 'stat'
+        ? document.statPositions
+        : document.knobPositions;
+    const current = Object.values(collection)
+      .flat()
+      .find((position) => position.id === id) as
+      | (Record<string, unknown> & { id?: string })
+      | undefined;
+    if (!current) continue;
+    const next = projectElementShadowPatch({
+      position: current as never,
+      elementType,
+      patch,
+      defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
+      defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
+    });
+    const byId =
+      intents.get(elementType) ?? new Map<string, Record<string, unknown>>();
+    byId.set(id, next);
+    intents.set(elementType, byId);
+  }
+  return intents;
+};
+
+export const patchShadowByTargets = (
+  targets: readonly ShadowTarget[],
+  patch: EditorShadowPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    !isEditorShadowPropertyPatchV1(patch) ||
+    targets.length === 0 ||
+    targets.some(
+      ({ elementType, id }) =>
+        id.length === 0 ||
+        isSyntheticElementId(id) ||
+        elementType === 'graph' ||
+        ('activeShadow' in patch && elementType === 'stat'),
+    ) ||
+    new Set(targets.map(({ id }) => id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  const receipt = applyPropertyIntentsEagerly(
+    shadowPropertyIntents(targets, patch),
+  );
+  let enrolled = false;
+  return commitSemanticOps(
+    targets.map(({ elementType, id }) => ({
+      kind: 'patchElement' as const,
+      elementType,
+      id,
+      patch: structuredClone(patch),
+    })),
+    {
+      preflight: options.preflight,
+      onEnrolled: () => {
+        enrolled = true;
+      },
+    },
+  )
+    .then((outcome) =>
+      outcome.opResults.some((result) => result.status !== 'targetMissing'),
+    )
+    .catch((error) => {
+      if (!enrolled) receipt?.rollback();
+      throw error;
+    });
+};
+
+export const patchShadowById = (
+  elementType: 'key' | 'stat' | 'knob',
+  id: string,
+  patch: EditorShadowPropertyPatchV1,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> =>
+  patchShadowByTargets([{ elementType, id }], patch, options);
 
 export const patchStylePropertyById = (
   type: NativeElementType,

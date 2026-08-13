@@ -15,6 +15,7 @@ import {
   type StatItemPositions,
 } from '@src/types/key/statItems';
 import type { LayerGroupDef, LayerGroups } from '@src/types/layerGroups';
+import type { ElementShadowValuePatch } from '@src/types/key/shadows';
 import {
   canonicalizePositionGradients,
   type PaintDescriptorV1,
@@ -197,6 +198,9 @@ interface EditorElementPropertyValuesV1 {
   activeBackgroundPaint: PaintDescriptorV1;
   borderPaint: PaintDescriptorV1;
   activeBorderPaint: PaintDescriptorV1;
+  shadow: ElementShadowValuePatch;
+  activeShadow: ElementShadowValuePatch;
+  shadowEnabled: boolean;
   noteEffectEnabled: boolean;
   noteAutoYCorrection: boolean;
   noteGlowEnabled: boolean;
@@ -310,6 +314,10 @@ export type EditorPaintPropertyPatchV1 = EditorPropertyPatchUnionV1<
   | 'activeBackgroundPaint'
   | 'borderPaint'
   | 'activeBorderPaint'
+>;
+
+export type EditorShadowPropertyPatchV1 = EditorPropertyPatchUnionV1<
+  'shadow' | 'activeShadow' | 'shadowEnabled'
 >;
 
 export type EditorNotePropertyPatchV1 = EditorPropertyPatchUnionV1<
@@ -621,6 +629,47 @@ export const isEditorPaintPropertyPatchV1 = (
       'activeBorderPaint',
     ].includes(keys[0]) &&
     isEditorPaintDescriptorV1(value[keys[0]])
+  );
+};
+
+export const isEditorShadowValuePatchV1 = (
+  value: unknown,
+): value is ElementShadowValuePatch => {
+  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+  if ('color' in value) {
+    return typeof value.color === 'string' && value.color.length > 0;
+  }
+  if ('offsetX' in value || 'offsetY' in value) {
+    const offset = 'offsetX' in value ? value.offsetX : value.offsetY;
+    return (
+      typeof offset === 'number' &&
+      Number.isFinite(offset) &&
+      offset >= -100 &&
+      offset <= 100
+    );
+  }
+  return (
+    'blur' in value &&
+    typeof value.blur === 'number' &&
+    Number.isFinite(value.blur) &&
+    value.blur >= 0 &&
+    value.blur <= 100
+  );
+};
+
+export const isEditorShadowPropertyPatchV1 = (
+  value: unknown,
+): value is EditorShadowPropertyPatchV1 => {
+  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+  if ('shadowEnabled' in value) {
+    return typeof value.shadowEnabled === 'boolean';
+  }
+  return (
+    (('shadow' in value && !('activeShadow' in value)) ||
+      ('activeShadow' in value && !('shadow' in value))) &&
+    isEditorShadowValuePatchV1(
+      'shadow' in value ? value.shadow : value.activeShadow,
+    )
   );
 };
 
@@ -1250,6 +1299,11 @@ export function assertEditorOpsV1(
           !('activeBorderPaint' in op.patch)
             ? true
             : op.elementType === 'key' || op.elementType === 'knob')) ||
+        (isEditorShadowPropertyPatchV1(op.patch) &&
+          op.elementType !== 'graph' &&
+          (!('activeShadow' in op.patch) ||
+            op.elementType === 'key' ||
+            op.elementType === 'knob')) ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'displayText' &&
           typeof op.patch.displayText === 'string') ||

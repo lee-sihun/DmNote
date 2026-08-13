@@ -7,7 +7,9 @@ use crate::{
         EditorBoundsV1, EditorCounterAnimationPresetIntentV1, EditorDocumentV1,
         EditorElementPropertyPatchV1, EditorElementTypeV1, EditorField, EditorFrozenElementV1,
         EditorGroupUpdateV1, EditorOpResultStatusV1, EditorOpResultV1, EditorOpV1,
-        EditorPaintDescriptorV1, EditorZUpdateV1, GradientSpec, KeyPosition, LayerGroupDef,
+        EditorPaintDescriptorV1, EditorShadowLeafPatchV1, EditorZUpdateV1, ElementShadowSpec,
+        GradientSpec, KeyPosition, LayerGroupDef, SHADOW_BLUR_MAX, SHADOW_BLUR_MIN,
+        SHADOW_OFFSET_MAX, SHADOW_OFFSET_MIN,
     },
 };
 
@@ -213,6 +215,170 @@ fn apply_paint_descriptor(
     let changed = *color != next_color || *gradient != next_gradient;
     *color = next_color;
     *gradient = next_gradient;
+    changed
+}
+
+fn validate_shadow_leaf(patch: &EditorShadowLeafPatchV1) -> Result<(), EditorCommitError> {
+    match patch {
+        EditorShadowLeafPatchV1::Color(patch) if patch.color.is_empty() => {
+            Err(EditorCommitError::validation(
+                "INVALID_ELEMENT_SHADOW",
+                "shadow color must be a non-empty string",
+            ))
+        }
+        EditorShadowLeafPatchV1::OffsetX(patch)
+            if !patch.offset_x.is_finite()
+                || !(SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(&patch.offset_x) =>
+        {
+            Err(EditorCommitError::validation(
+                "INVALID_ELEMENT_SHADOW",
+                "shadow offset X must be finite and between -100 and 100",
+            ))
+        }
+        EditorShadowLeafPatchV1::OffsetY(patch)
+            if !patch.offset_y.is_finite()
+                || !(SHADOW_OFFSET_MIN..=SHADOW_OFFSET_MAX).contains(&patch.offset_y) =>
+        {
+            Err(EditorCommitError::validation(
+                "INVALID_ELEMENT_SHADOW",
+                "shadow offset Y must be finite and between -100 and 100",
+            ))
+        }
+        EditorShadowLeafPatchV1::Blur(patch)
+            if !patch.blur.is_finite()
+                || !(SHADOW_BLUR_MIN..=SHADOW_BLUR_MAX).contains(&patch.blur) =>
+        {
+            Err(EditorCommitError::validation(
+                "INVALID_ELEMENT_SHADOW",
+                "shadow blur must be finite and between 0 and 100",
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
+fn default_shadow_spec(
+    position: &KeyPosition,
+    element_type: EditorElementTypeV1,
+    active: bool,
+) -> ElementShadowSpec {
+    let has_image = if active {
+        position
+            .active_image
+            .as_deref()
+            .is_some_and(|path| !path.trim().is_empty())
+            || position
+                .inactive_image
+                .as_deref()
+                .is_some_and(|path| !path.trim().is_empty())
+    } else {
+        position
+            .inactive_image
+            .as_deref()
+            .is_some_and(|path| !path.trim().is_empty())
+    };
+    let knob_suppressed = element_type == EditorElementTypeV1::Knob
+        && (if active {
+            position.active_transparent
+        } else {
+            position.idle_transparent
+        } || position.border_width.unwrap_or(0.0) > 0.0);
+    ElementShadowSpec {
+        enabled: !(has_image || knob_suppressed),
+        color: if active {
+            "rgba(0, 0, 0, 0.32)".to_string()
+        } else {
+            "rgba(0, 0, 0, 0.28)".to_string()
+        },
+        offset_x: 0.0,
+        offset_y: if active { 3.0 } else { 4.0 },
+        blur: if active { 8.0 } else { 10.0 },
+    }
+}
+
+fn apply_shadow_leaf(shadow: &mut ElementShadowSpec, patch: &EditorShadowLeafPatchV1) -> bool {
+    match patch {
+        EditorShadowLeafPatchV1::Color(patch) => {
+            if shadow.color == patch.color {
+                false
+            } else {
+                shadow.color.clone_from(&patch.color);
+                true
+            }
+        }
+        EditorShadowLeafPatchV1::OffsetX(patch) => {
+            if shadow.offset_x == patch.offset_x {
+                false
+            } else {
+                shadow.offset_x = patch.offset_x;
+                true
+            }
+        }
+        EditorShadowLeafPatchV1::OffsetY(patch) => {
+            if shadow.offset_y == patch.offset_y {
+                false
+            } else {
+                shadow.offset_y = patch.offset_y;
+                true
+            }
+        }
+        EditorShadowLeafPatchV1::Blur(patch) => {
+            if shadow.blur == patch.blur {
+                false
+            } else {
+                shadow.blur = patch.blur;
+                true
+            }
+        }
+    }
+}
+
+fn patch_shadow(
+    position: &mut KeyPosition,
+    element_type: EditorElementTypeV1,
+    active: bool,
+    patch: &EditorShadowLeafPatchV1,
+) -> bool {
+    let seeded = if active {
+        position.active_shadow.is_none()
+    } else {
+        position.shadow.is_none()
+    };
+    let default = seeded.then(|| default_shadow_spec(position, element_type, active));
+    let shadow = if active {
+        position
+            .active_shadow
+            .get_or_insert_with(|| default.unwrap())
+    } else {
+        position.shadow.get_or_insert_with(|| default.unwrap())
+    };
+    apply_shadow_leaf(shadow, patch) || seeded
+}
+
+fn patch_shadow_enabled(
+    position: &mut KeyPosition,
+    element_type: EditorElementTypeV1,
+    enabled: bool,
+) -> bool {
+    let idle_seeded = position.shadow.is_none();
+    let idle_default = idle_seeded.then(|| default_shadow_spec(position, element_type, false));
+    let idle = position.shadow.get_or_insert_with(|| idle_default.unwrap());
+    let mut changed = idle_seeded || idle.enabled != enabled;
+    idle.enabled = enabled;
+
+    if matches!(
+        element_type,
+        EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+    ) {
+        let active_seeded = position.active_shadow.is_none();
+        let active_default =
+            active_seeded.then(|| default_shadow_spec(position, element_type, true));
+        let active = position
+            .active_shadow
+            .get_or_insert_with(|| active_default.unwrap());
+        changed |= active_seeded || active.enabled != enabled;
+        active.enabled = enabled;
+    }
     changed
 }
 
@@ -859,6 +1025,39 @@ pub(crate) fn prepare_editor_ops_transition(
                 validate_editor_op_target_type(op_index, EditorElementTypeV1::Knob, *element_type)?;
             } else if matches!(patch, EditorElementPropertyPatchV1::StatType(_)) {
                 validate_editor_op_target_type(op_index, EditorElementTypeV1::Stat, *element_type)?;
+            } else if matches!(patch, EditorElementPropertyPatchV1::ActiveShadow(_)) {
+                if !matches!(
+                    element_type,
+                    EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                ) {
+                    return Err(EditorCommitError::validation(
+                        "ELEMENT_TYPE_MISMATCH",
+                        format!("editor op {op_index} active shadow target must be key or knob"),
+                    ));
+                }
+                let EditorElementPropertyPatchV1::ActiveShadow(patch) = patch else {
+                    unreachable!();
+                };
+                validate_shadow_leaf(&patch.active_shadow)?;
+            } else if matches!(
+                patch,
+                EditorElementPropertyPatchV1::Shadow(_)
+                    | EditorElementPropertyPatchV1::ShadowEnabled(_)
+            ) {
+                if !matches!(
+                    element_type,
+                    EditorElementTypeV1::Key
+                        | EditorElementTypeV1::Stat
+                        | EditorElementTypeV1::Knob
+                ) {
+                    return Err(EditorCommitError::validation(
+                        "ELEMENT_TYPE_MISMATCH",
+                        format!("editor op {op_index} shadow target must be key, stat, or knob"),
+                    ));
+                }
+                if let EditorElementPropertyPatchV1::Shadow(patch) = patch {
+                    validate_shadow_leaf(&patch.shadow)?;
+                }
             } else if matches!(
                 patch,
                 EditorElementPropertyPatchV1::ActiveBackgroundPaint(_)
@@ -1407,6 +1606,18 @@ pub(crate) fn prepare_editor_ops_transition(
                             position.class_name = Some(patch.class_name.clone());
                             true
                         }
+                    }
+                    EditorElementPropertyPatchV1::Shadow(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        patch_shadow(position, location.element_type, false, &patch.shadow)
+                    }
+                    EditorElementPropertyPatchV1::ActiveShadow(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        patch_shadow(position, location.element_type, true, &patch.active_shadow)
+                    }
+                    EditorElementPropertyPatchV1::ShadowEnabled(patch) => {
+                        let position = position_at_mut(&mut candidate, location)?;
+                        patch_shadow_enabled(position, location.element_type, patch.shadow_enabled)
                     }
                     EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
                         let position = position_at_mut(&mut candidate, location)?;
@@ -2161,6 +2372,24 @@ mod tests {
                     .collect(),
             }),
         }
+    }
+
+    fn shadow_leaf_color(color: &str) -> EditorShadowLeafPatchV1 {
+        EditorShadowLeafPatchV1::Color(crate::models::EditorShadowColorLeafPatchV1 {
+            color: color.to_string(),
+        })
+    }
+
+    fn shadow_leaf_offset_x(offset_x: f64) -> EditorShadowLeafPatchV1 {
+        EditorShadowLeafPatchV1::OffsetX(crate::models::EditorShadowOffsetXLeafPatchV1 { offset_x })
+    }
+
+    fn shadow_leaf_offset_y(offset_y: f64) -> EditorShadowLeafPatchV1 {
+        EditorShadowLeafPatchV1::OffsetY(crate::models::EditorShadowOffsetYLeafPatchV1 { offset_y })
+    }
+
+    fn shadow_leaf_blur(blur: f64) -> EditorShadowLeafPatchV1 {
+        EditorShadowLeafPatchV1::Blur(crate::models::EditorShadowBlurLeafPatchV1 { blur })
     }
 
     #[test]
@@ -7165,6 +7394,329 @@ mod tests {
                             },
                         ),
                     ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some("ELEMENT_TYPE_MISMATCH"));
+            assert_eq!(store, original);
+        }
+    }
+
+    #[test]
+    fn shadow_masks_seed_current_defaults_preserve_siblings_and_reject_invalid_plans() {
+        let mut store = store_with_every_reorder_type();
+        let key_id = store.key_positions["4key"][0].id.clone();
+        let stat_id = store.stat_positions["4key"][0].position.id.clone();
+        let knob_id = store.knob_positions["4key"][0].position.id.clone();
+
+        let key = &mut store.key_positions.get_mut("4key").unwrap()[0];
+        key.inactive_image = Some(" image.png ".to_string());
+        key.shadow = None;
+        key.active_shadow = Some(ElementShadowSpec {
+            enabled: true,
+            color: "key-active-sibling".to_string(),
+            offset_x: 7.5,
+            offset_y: -8.5,
+            blur: 19.5,
+        });
+        let stat = &mut store.stat_positions.get_mut("4key").unwrap()[0].position;
+        stat.shadow = Some(ElementShadowSpec {
+            enabled: false,
+            color: "stat-color-sibling".to_string(),
+            offset_x: 1.5,
+            offset_y: 2.5,
+            blur: 3.5,
+        });
+        stat.active_shadow = Some(ElementShadowSpec {
+            enabled: true,
+            color: "stat-active-sentinel".to_string(),
+            offset_x: 10.0,
+            offset_y: 11.0,
+            blur: 12.0,
+        });
+        let knob = &mut store.knob_positions.get_mut("4key").unwrap()[0].position;
+        knob.shadow = None;
+        knob.active_shadow = None;
+        knob.idle_transparent = true;
+        knob.active_transparent = false;
+        knob.border_width = Some(2.0);
+        knob.inactive_image = None;
+        knob.active_image = Some("active.png".to_string());
+        let original = store.clone();
+
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
+                    shadow: shadow_leaf_color("new-shadow"),
+                }),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
+                    shadow: shadow_leaf_offset_x(-100.0),
+                }),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_id,
+                EditorElementPropertyPatchV1::ShadowEnabled(
+                    crate::models::EditorShadowEnabledPropertyPatchV1 {
+                        shadow_enabled: true,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                uuid::Uuid::new_v4().to_string(),
+                EditorElementPropertyPatchV1::ActiveShadow(
+                    crate::models::EditorActiveShadowPropertyPatchV1 {
+                        active_shadow: shadow_leaf_blur(100.0),
+                    },
+                ),
+            ),
+        ];
+        let transition = prepare_editor_ops_transition(&store, &ops).unwrap();
+        assert_eq!(
+            transition.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            transition
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+        let key = transition.candidate.key_positions["4key"][0]
+            .shadow
+            .as_ref()
+            .unwrap();
+        assert!(!key.enabled);
+        assert_eq!(key.color, "new-shadow");
+        assert_eq!((key.offset_x, key.offset_y, key.blur), (0.0, 4.0, 10.0));
+        assert_eq!(
+            transition.candidate.key_positions["4key"][0].active_shadow,
+            original.key_positions["4key"][0].active_shadow
+        );
+        let stat = transition.candidate.stat_positions["4key"][0]
+            .position
+            .shadow
+            .as_ref()
+            .unwrap();
+        assert_eq!(stat.offset_x, -100.0);
+        assert!(!stat.enabled);
+        assert_eq!(stat.color, "stat-color-sibling");
+        assert_eq!((stat.offset_y, stat.blur), (2.5, 3.5));
+        assert_eq!(
+            transition.candidate.stat_positions["4key"][0]
+                .position
+                .active_shadow,
+            original.stat_positions["4key"][0].position.active_shadow
+        );
+        let knob = &transition.candidate.knob_positions["4key"][0].position;
+        let idle = knob.shadow.as_ref().unwrap();
+        let active = knob.active_shadow.as_ref().unwrap();
+        assert!(idle.enabled && active.enabled);
+        assert_eq!(idle.color, "rgba(0, 0, 0, 0.28)");
+        assert_eq!((idle.offset_x, idle.offset_y, idle.blur), (0.0, 4.0, 10.0));
+        assert_eq!(active.color, "rgba(0, 0, 0, 0.32)");
+        assert_eq!(
+            (active.offset_x, active.offset_y, active.blur),
+            (0.0, 3.0, 8.0)
+        );
+
+        let replay = prepare_editor_ops_transition(&transition.scratch, &ops).unwrap();
+        assert!(replay.changed_fields.is_empty());
+        assert_eq!(
+            replay
+                .op_results
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::NoChange,
+                EditorOpResultStatusV1::TargetMissing,
+            ]
+        );
+
+        let mut stat_master_store = store.clone();
+        stat_master_store.stat_positions.get_mut("4key").unwrap()[0]
+            .position
+            .shadow = None;
+        let stat_active_before = stat_master_store.stat_positions["4key"][0]
+            .position
+            .active_shadow
+            .clone();
+        let stat_master = prepare_editor_ops_transition(
+            &stat_master_store,
+            &[patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::ShadowEnabled(
+                    crate::models::EditorShadowEnabledPropertyPatchV1 {
+                        shadow_enabled: false,
+                    },
+                ),
+            )],
+        )
+        .unwrap();
+        assert!(
+            !stat_master.candidate.stat_positions["4key"][0]
+                .position
+                .shadow
+                .as_ref()
+                .unwrap()
+                .enabled
+        );
+        assert_eq!(
+            stat_master.candidate.stat_positions["4key"][0]
+                .position
+                .active_shadow,
+            stat_active_before
+        );
+
+        for (element_type, active, configure) in [
+            (EditorElementTypeV1::Key, false, "idle-image"),
+            (EditorElementTypeV1::Key, true, "active-image"),
+            (EditorElementTypeV1::Knob, false, "idle-transparent"),
+            (EditorElementTypeV1::Knob, true, "active-transparent"),
+            (EditorElementTypeV1::Knob, false, "idle-border"),
+            (EditorElementTypeV1::Knob, true, "active-border"),
+        ] {
+            let mut seeded_store = store_with_every_reorder_type();
+            let (id, position) = match element_type {
+                EditorElementTypeV1::Key => {
+                    let position = &mut seeded_store.key_positions.get_mut("4key").unwrap()[0];
+                    (position.id.clone(), position)
+                }
+                EditorElementTypeV1::Knob => {
+                    let position =
+                        &mut seeded_store.knob_positions.get_mut("4key").unwrap()[0].position;
+                    (position.id.clone(), position)
+                }
+                _ => unreachable!(),
+            };
+            position.shadow = None;
+            position.active_shadow = None;
+            position.inactive_image = None;
+            position.active_image = None;
+            position.idle_transparent = false;
+            position.active_transparent = false;
+            position.border_width = None;
+            match configure {
+                "idle-image" => position.inactive_image = Some("idle.png".to_string()),
+                "active-image" => position.active_image = Some("active.png".to_string()),
+                "idle-transparent" => position.idle_transparent = true,
+                "active-transparent" => position.active_transparent = true,
+                "idle-border" | "active-border" => position.border_width = Some(1.0),
+                _ => unreachable!(),
+            }
+            let patch = if active {
+                EditorElementPropertyPatchV1::ActiveShadow(
+                    crate::models::EditorActiveShadowPropertyPatchV1 {
+                        active_shadow: shadow_leaf_blur(8.0),
+                    },
+                )
+            } else {
+                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
+                    shadow: shadow_leaf_blur(10.0),
+                })
+            };
+            let op = patch_property_op(element_type, id, patch);
+            let seeded =
+                prepare_editor_ops_transition(&seeded_store, std::slice::from_ref(&op)).unwrap();
+            assert_eq!(
+                seeded.op_results[0].status,
+                EditorOpResultStatusV1::Applied,
+                "{configure}"
+            );
+            let position = match element_type {
+                EditorElementTypeV1::Key => &seeded.candidate.key_positions["4key"][0],
+                EditorElementTypeV1::Knob => &seeded.candidate.knob_positions["4key"][0].position,
+                _ => unreachable!(),
+            };
+            let shadow = if active {
+                position.active_shadow.as_ref().unwrap()
+            } else {
+                position.shadow.as_ref().unwrap()
+            };
+            assert!(!shadow.enabled, "{configure}");
+            let replay = prepare_editor_ops_transition(&seeded.scratch, &[op]).unwrap();
+            assert_eq!(
+                replay.op_results[0].status,
+                EditorOpResultStatusV1::NoChange,
+                "{configure}"
+            );
+        }
+
+        for (patch, code) in [
+            (shadow_leaf_color(""), "INVALID_ELEMENT_SHADOW"),
+            (shadow_leaf_offset_x(100.1), "INVALID_ELEMENT_SHADOW"),
+            (shadow_leaf_offset_y(f64::NAN), "INVALID_ELEMENT_SHADOW"),
+            (shadow_leaf_blur(-0.1), "INVALID_ELEMENT_SHADOW"),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(
+                        EditorElementTypeV1::Key,
+                        uuid::Uuid::new_v4().to_string(),
+                        EditorElementPropertyPatchV1::Shadow(
+                            crate::models::EditorShadowPropertyPatchV1 { shadow: patch },
+                        ),
+                    ),
+                ],
+            )
+            .unwrap_err();
+            assert_eq!(validation_code(&error), Some(code));
+            assert_eq!(store, original);
+        }
+
+        for (element_type, patch) in [
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
+                    shadow: shadow_leaf_blur(4.0),
+                }),
+            ),
+            (
+                EditorElementTypeV1::Graph,
+                EditorElementPropertyPatchV1::ShadowEnabled(
+                    crate::models::EditorShadowEnabledPropertyPatchV1 {
+                        shadow_enabled: false,
+                    },
+                ),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::ActiveShadow(
+                    crate::models::EditorActiveShadowPropertyPatchV1 {
+                        active_shadow: shadow_leaf_offset_y(1.0),
+                    },
+                ),
+            ),
+        ] {
+            let error = prepare_editor_ops_transition(
+                &store,
+                &[
+                    ops[0].clone(),
+                    patch_property_op(element_type, uuid::Uuid::new_v4().to_string(), patch),
                 ],
             )
             .unwrap_err();

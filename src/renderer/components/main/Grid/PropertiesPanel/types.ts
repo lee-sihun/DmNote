@@ -12,6 +12,7 @@ import type {
   EditorCounterStrokePropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
+  EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
 
 // ============================================================================
@@ -250,6 +251,7 @@ export interface StyleTabContentProps {
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
   panelElement?: HTMLElement | null;
   useCustomCSS?: boolean;

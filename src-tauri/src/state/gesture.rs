@@ -543,6 +543,35 @@ mod tests {
             ),
             (
                 EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
+                    shadow: crate::models::EditorShadowLeafPatchV1::Blur(
+                        crate::models::EditorShadowBlurLeafPatchV1 { blur: 8.5 },
+                    ),
+                }),
+                serde_json::json!({ "shadow": { "blur": 8.5 } }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::ActiveShadow(
+                    crate::models::EditorActiveShadowPropertyPatchV1 {
+                        active_shadow: crate::models::EditorShadowLeafPatchV1::OffsetY(
+                            crate::models::EditorShadowOffsetYLeafPatchV1 { offset_y: -3.25 },
+                        ),
+                    },
+                ),
+                serde_json::json!({ "activeShadow": { "offsetY": -3.25 } }),
+            ),
+            (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::ShadowEnabled(
+                    crate::models::EditorShadowEnabledPropertyPatchV1 {
+                        shadow_enabled: true,
+                    },
+                ),
+                serde_json::json!({ "shadowEnabled": true }),
+            ),
+            (
+                EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::BorderWidth(
                     crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 0.5 },
                 ),
@@ -971,6 +1000,24 @@ mod tests {
             let mut invalid_class_name = layer_name_wire.clone();
             invalid_class_name["editorOps"][0]["patch"] = patch;
             let error = decode_gesture_commit_request(invalid_class_name).unwrap_err();
+            assert_eq!(
+                validation_code(error).as_deref(),
+                Some("INVALID_REQUEST_PAYLOAD")
+            );
+        }
+
+        for patch in [
+            serde_json::json!({ "shadow": {} }),
+            serde_json::json!({ "shadow": { "offsetX": 1, "blur": 2 } }),
+            serde_json::json!({ "shadow": { "color": "shadow", "unexpected": true } }),
+            serde_json::json!({ "activeShadow": null }),
+            serde_json::json!({ "activeShadow": { "offsetY": "1" } }),
+            serde_json::json!({ "shadowEnabled": "true" }),
+            serde_json::json!({ "shadow": { "blur": 1 }, "hidden": false }),
+        ] {
+            let mut invalid_shadow = layer_name_wire.clone();
+            invalid_shadow["editorOps"][0]["patch"] = patch;
+            let error = decode_gesture_commit_request(invalid_shadow).unwrap_err();
             assert_eq!(
                 validation_code(error).as_deref(),
                 Some("INVALID_REQUEST_PAYLOAD")

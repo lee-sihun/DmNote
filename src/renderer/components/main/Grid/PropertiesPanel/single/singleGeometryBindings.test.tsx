@@ -101,6 +101,15 @@ const captured = vi.hoisted(() => ({
     ) => void;
   }>,
   swatches: [] as Array<{ onClick: () => void }>,
+  shadows: [] as Array<{
+    showActiveState?: boolean;
+    onChange: (
+      state: 'idle' | 'active',
+      shadow: ReturnType<typeof shadowSpec>,
+      patch: Partial<ReturnType<typeof shadowSpec>>,
+    ) => void;
+    onEnabledChange: (enabled: boolean) => void;
+  }>,
   nav: {
     activePageKey: null as string | null,
     renderPageKey: null as string | null,
@@ -213,7 +222,12 @@ vi.mock('@components/main/Modal/content/pickers/ColorSwatch', () => ({
 vi.mock('@components/main/Modal/PopupExit', () => ({
   default: ({ children }: { children?: React.ReactNode }) => children,
 }));
-vi.mock('../ShadowControls', () => ({ default: () => null }));
+vi.mock('../ShadowControls', () => ({
+  default: (props: (typeof captured.shadows)[number]) => {
+    captured.shadows.push(props);
+    return null;
+  },
+}));
 vi.mock('../EditSessionBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -261,6 +275,14 @@ import {
 } from './SingleSelectionPanel';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
+const shadowSpec = () => ({
+  enabled: true,
+  color: '#0008',
+  offsetX: 0,
+  offsetY: 4,
+  blur: 10,
+});
+
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const setInputValue = (input: HTMLInputElement, value: string) => {
@@ -297,6 +319,7 @@ describe('single geometry input bindings', () => {
     captured.color = null;
     captured.colorInputs.length = 0;
     captured.swatches.length = 0;
+    captured.shadows.length = 0;
     captured.nav.activePageKey = null;
     captured.nav.renderPageKey = null;
     captured.nav.pageHost = null;
@@ -304,6 +327,98 @@ describe('single geometry input bindings', () => {
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
+  });
+
+  it.each([
+    ['key', true],
+    ['stat', false],
+  ] as const)(
+    '%s shadow actual control은 exact partial/master callback을 쓴다',
+    (type, active) => {
+      const commit = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          <StyleTabContent
+            keyIndex={0}
+            keyPosition={{
+              ...createDefaultKeyPosition(),
+              shadow: shadowSpec(),
+              activeShadow: shadowSpec(),
+            }}
+            keyCode={type === 'key' ? 'A' : null}
+            keyInfo={null}
+            onPositionChange={vi.fn()}
+            onKeyUpdate={legacy}
+            onShadowCommit={commit}
+            shadowActiveState={active}
+            showSoundControls={false}
+            t={(key) => key}
+          />,
+        );
+      });
+      const controls = captured.shadows.at(-1)!;
+      act(() => {
+        controls.onChange('idle', { ...shadowSpec(), blur: 22 }, { blur: 22 });
+        controls.onEnabledChange(false);
+      });
+      expect(commit.mock.calls).toEqual([
+        [{ shadow: { blur: 22 } }],
+        [{ shadowEnabled: false }],
+      ]);
+      expect(legacy).not.toHaveBeenCalled();
+      expect(controls.showActiveState).toBe(active);
+    },
+  );
+
+  it('knob shadow actual control은 active partial/master callback을 쓴다', () => {
+    const commit = vi.fn();
+    const legacy = vi.fn();
+    act(() => {
+      root.render(
+        <SingleKnobPanel
+          setPanelElement={vi.fn()}
+          singleKnobPosition={{
+            ...createDefaultKeyPosition(),
+            axisId: 'HIDA:test',
+            sensitivity: 1,
+            reverse: false,
+            shadow: shadowSpec(),
+            activeShadow: shadowSpec(),
+          }}
+          singleKnobIndex={0}
+          selectedKeyType="4key"
+          isRenaming={false}
+          renameInputRef={createRef<HTMLInputElement>()}
+          renameValue=""
+          setRenameValue={vi.fn()}
+          renameCancelledRef={{ current: false }}
+          handleRenameCommit={vi.fn()}
+          handleRenameCancel={vi.fn()}
+          handleRenameStart={vi.fn()}
+          handleKnobUpdate={legacy}
+          singleScrollRefFor={() => vi.fn()}
+          panelElement={null}
+          useCustomCSS={false}
+          t={(key) => key}
+          onShadowCommit={commit}
+        />,
+      );
+    });
+    const controls = captured.shadows.at(-1)!;
+    act(() => {
+      controls.onChange(
+        'active',
+        { ...shadowSpec(), color: ' raw ' },
+        { color: ' raw ' },
+      );
+      controls.onEnabledChange(true);
+    });
+    expect(commit.mock.calls).toEqual([
+      [{ activeShadow: { color: ' raw ' } }],
+      [{ shadowEnabled: true }],
+    ]);
+    expect(legacy).not.toHaveBeenCalled();
   });
 
   it.each(['key', 'stat'] as const)(

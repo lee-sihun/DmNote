@@ -2543,6 +2543,37 @@ mod tests {
                 serde_json::json!({ "className": "  raw class  " }),
             ),
             (
+                EditorElementTypeV1::Stat,
+                EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
+                    shadow: crate::models::EditorShadowLeafPatchV1::OffsetX(
+                        crate::models::EditorShadowOffsetXLeafPatchV1 { offset_x: -12.5 },
+                    ),
+                }),
+                serde_json::json!({ "shadow": { "offsetX": -12.5 } }),
+            ),
+            (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::ActiveShadow(
+                    crate::models::EditorActiveShadowPropertyPatchV1 {
+                        active_shadow: crate::models::EditorShadowLeafPatchV1::Color(
+                            crate::models::EditorShadowColorLeafPatchV1 {
+                                color: " raw-shadow ".to_string(),
+                            },
+                        ),
+                    },
+                ),
+                serde_json::json!({ "activeShadow": { "color": " raw-shadow " } }),
+            ),
+            (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::ShadowEnabled(
+                    crate::models::EditorShadowEnabledPropertyPatchV1 {
+                        shadow_enabled: false,
+                    },
+                ),
+                serde_json::json!({ "shadowEnabled": false }),
+            ),
+            (
                 EditorElementTypeV1::Key,
                 EditorElementPropertyPatchV1::BorderWidth(
                     crate::models::EditorBorderWidthPropertyPatchV1 { border_width: 0.5 },
@@ -2951,6 +2982,13 @@ mod tests {
             serde_json::json!({ "className": 1 }),
             serde_json::json!({ "className": "class", "hidden": true }),
             serde_json::json!({ "className": "class", "unexpected": true }),
+            serde_json::json!({ "shadow": {} }),
+            serde_json::json!({ "shadow": { "offsetX": 1, "blur": 2 } }),
+            serde_json::json!({ "shadow": { "color": "shadow", "unexpected": true } }),
+            serde_json::json!({ "activeShadow": null }),
+            serde_json::json!({ "activeShadow": { "offsetY": "1" } }),
+            serde_json::json!({ "shadowEnabled": "false" }),
+            serde_json::json!({ "shadow": { "blur": 1 }, "shadowEnabled": true }),
             serde_json::json!({ "backgroundPaint": {} }),
             serde_json::json!({ "backgroundPaint": { "color": "solid" } }),
             serde_json::json!({ "backgroundPaint": { "color": "solid", "gradient": null, "unexpected": true } }),

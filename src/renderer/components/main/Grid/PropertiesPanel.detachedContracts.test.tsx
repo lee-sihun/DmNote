@@ -65,6 +65,8 @@ const {
   patchCounterStrokeViaAuthorityMock,
   patchPaintMock,
   patchPaintViaAuthorityMock,
+  patchShadowMock,
+  patchShadowViaAuthorityMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -142,6 +144,8 @@ const {
   patchCounterStrokeViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchPaintMock: vi.fn(() => Promise.resolve(true)),
   patchPaintViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchShadowMock: vi.fn(() => Promise.resolve(true)),
+  patchShadowViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -184,6 +188,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchFontFamilyViaAuthority: patchFontFamilyViaAuthorityMock,
   patchStylePropertyViaAuthority: patchDisplayTextViaAuthorityMock,
   patchPaintViaAuthority: patchPaintViaAuthorityMock,
+  patchShadowViaAuthority: patchShadowViaAuthorityMock,
   patchInactiveImageViaAuthority: patchInactiveImageViaAuthorityMock,
   patchSoundPathViaAuthority: patchSoundPathViaAuthorityMock,
   patchSoundEnabledViaAuthority: patchSoundEnabledViaAuthorityMock,
@@ -212,6 +217,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontFamilyByTargets: patchFontFamilyTargetsMock,
   patchStylePropertyById: patchDisplayTextMock,
   patchPaintById: patchPaintMock,
+  patchShadowById: patchShadowMock,
   patchInactiveImageById: patchInactiveImageMock,
   patchActiveImageById: patchActiveImageMock,
   patchIdleTransparentById: patchIdleTransparentMock,
@@ -402,6 +408,8 @@ const resetStores = () => {
   patchDisplayTextViaAuthorityMock.mockClear();
   patchPaintMock.mockClear();
   patchPaintViaAuthorityMock.mockClear();
+  patchShadowMock.mockClear();
+  patchShadowViaAuthorityMock.mockClear();
   patchCounterEnabledMock.mockClear();
   patchCounterAnimationEnabledMock.mockClear();
   patchCounterEnabledViaAuthorityMock.mockClear();
@@ -3604,6 +3612,138 @@ describe('PropertiesPanel detached preview contract', () => {
         expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
       } else if (type === 'graph') {
         expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+      } else {
+        expect(knobUpdatePositionsMock).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it.each([
+    ['key', singleKeyStatPropsMock],
+    ['stat', singleKeyStatPropsMock],
+    ['knob', singleKnobPropsMock],
+  ] as const)(
+    'single stable %s shadow callback은 main/panel exact writer를 분리한다',
+    (type, propsMock) => {
+      const id = `d1111111-1111-4111-8111-${type.padEnd(12, '1')}`;
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...position,
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const commit = (
+        propsMock.mock.lastCall?.[0] as {
+          onShadowCommit: (patch: Record<string, unknown>) => void;
+        }
+      ).onShadowCommit;
+      const patch = { shadow: { offsetX: 12.5 } } as const;
+
+      act(() => commit(patch));
+      expect(patchShadowMock).toHaveBeenCalledWith(type, id, patch);
+      expect(patchShadowViaAuthorityMock).not.toHaveBeenCalled();
+      patchShadowMock.mockClear();
+      window.__dmn_window_type = 'panel';
+      act(() => commit({ shadowEnabled: false }));
+      expect(patchShadowViaAuthorityMock).toHaveBeenCalledWith(
+        [{ elementType: type, id }],
+        { shadowEnabled: false },
+      );
+      expect(patchShadowMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['key synthetic', 'key', 'key-0', singleKeyStatPropsMock],
+    ['key empty', 'key', '', singleKeyStatPropsMock],
+    ['stat synthetic', 'stat', 'stat-0', singleKeyStatPropsMock],
+    ['stat empty', 'stat', '', singleKeyStatPropsMock],
+    ['knob synthetic', 'knob', 'knob-0', singleKnobPropsMock],
+    ['knob empty', 'knob', '', singleKnobPropsMock],
+  ] as const)(
+    'single %s shadow는 exact callback 없이 whole legacy writer로 폴백한다',
+    (_label, type, id, propsMock) => {
+      const position = { ...createDefaultKeyPosition(), id };
+      if (type === 'key') {
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] },
+          canonicalPositions: { '4key': [position] },
+        });
+      } else if (type === 'stat') {
+        useStatItemStore.setState({
+          positions: { '4key': [{ ...position, statType: 'kps' }] },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [
+              {
+                ...position,
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = propsMock.mock.lastCall?.[0] as Record<string, unknown>;
+      expect(props.onShadowCommit).toBeUndefined();
+      const legacy =
+        type === 'key'
+          ? (props.onKeyUpdate as (patch: Record<string, unknown>) => void)
+          : type === 'stat'
+          ? (props.handleStatUpdate as (patch: Record<string, unknown>) => void)
+          : (props.handleKnobUpdate as (
+              patch: Record<string, unknown>,
+            ) => void);
+      act(() =>
+        legacy({
+          index: 0,
+          shadow: {
+            enabled: false,
+            color: '#0008',
+            offsetX: 0,
+            offsetY: 4,
+            blur: 10,
+          },
+        }),
+      );
+      expect(patchShadowMock).not.toHaveBeenCalled();
+      expect(patchShadowViaAuthorityMock).not.toHaveBeenCalled();
+      if (type === 'key') expect(keyLegacyUpdateMock).toHaveBeenCalledOnce();
+      else if (type === 'stat') {
+        expect(statUpdatePositionsMock).toHaveBeenCalledOnce();
       } else {
         expect(knobUpdatePositionsMock).toHaveBeenCalledOnce();
       }

@@ -4371,6 +4371,12 @@ mod tests {
         }
     }
 
+    fn shadow_leaf_blur(blur: f64) -> crate::models::EditorShadowLeafPatchV1 {
+        crate::models::EditorShadowLeafPatchV1::Blur(crate::models::EditorShadowBlurLeafPatchV1 {
+            blur,
+        })
+    }
+
     fn frozen_key_insert_op(id: impl Into<String>) -> EditorOpV1 {
         EditorOpV1::InsertFrozenElements {
             mode: "4key".to_string(),
@@ -12513,6 +12519,371 @@ mod tests {
             EditorOpResultStatusV1::NoChange
         );
         assert_eq!(store.history_status().history_revision, history_before + 1);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn shadow_enabled_master_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-shadow-enabled-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let key_id = store.editor_get().document.key_positions["4key"][0]
+            .id
+            .clone();
+        let stat_id = uuid::Uuid::new_v4().to_string();
+        let knob_id = uuid::Uuid::new_v4().to_string();
+        let stat_active_sentinel = crate::models::ElementShadowSpec {
+            enabled: true,
+            color: "stat-active-sentinel".to_string(),
+            offset_x: 1.0,
+            offset_y: 2.0,
+            blur: 3.0,
+        };
+        let setup = legacy_editor_commit(
+            &store,
+            &[
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::KnobPositions,
+            ],
+            |data| {
+                let key = &mut data.key_positions.get_mut("4key").unwrap()[0];
+                key.inactive_image = Some("idle.png".to_string());
+                key.active_image = Some("active.png".to_string());
+                key.shadow = None;
+                key.active_shadow = None;
+                let mut stat_position = key.clone();
+                stat_position.id = stat_id.clone();
+                stat_position.shadow = None;
+                stat_position.active_shadow = Some(stat_active_sentinel.clone());
+                let mut knob_position = key.clone();
+                knob_position.id = knob_id.clone();
+                knob_position.inactive_image = None;
+                knob_position.active_image = None;
+                knob_position.idle_transparent = true;
+                knob_position.active_transparent = true;
+                knob_position.border_width = Some(2.0);
+                knob_position.shadow = None;
+                knob_position.active_shadow = None;
+                data.stat_positions.insert(
+                    "4key".to_string(),
+                    vec![StatPosition {
+                        stat_type: StatType::Kps,
+                        position: stat_position,
+                    }],
+                );
+                data.knob_positions.insert(
+                    "4key".to_string(),
+                    vec![KnobPosition {
+                        axis_id: "axis".to_string(),
+                        sensitivity: 1.0,
+                        reverse: false,
+                        position: knob_position,
+                    }],
+                );
+            },
+        )
+        .unwrap();
+        let ops = vec![
+            patch_property_op(
+                EditorElementTypeV1::Key,
+                &key_id,
+                EditorElementPropertyPatchV1::ShadowEnabled(
+                    crate::models::EditorShadowEnabledPropertyPatchV1 {
+                        shadow_enabled: true,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Stat,
+                &stat_id,
+                EditorElementPropertyPatchV1::ShadowEnabled(
+                    crate::models::EditorShadowEnabledPropertyPatchV1 {
+                        shadow_enabled: false,
+                    },
+                ),
+            ),
+            patch_property_op(
+                EditorElementTypeV1::Knob,
+                &knob_id,
+                EditorElementPropertyPatchV1::ShadowEnabled(
+                    crate::models::EditorShadowEnabledPropertyPatchV1 {
+                        shadow_enabled: true,
+                    },
+                ),
+            ),
+        ];
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, ops.clone());
+        let history_before = store.history_status().history_revision;
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(
+            changed.result.changed_fields,
+            [
+                EditorField::KeyPositions,
+                EditorField::StatPositions,
+                EditorField::KnobPositions,
+            ]
+        );
+        assert_eq!(
+            changed
+                .result
+                .op_results
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|result| result.status)
+                .collect::<Vec<_>>(),
+            [
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+                EditorOpResultStatusV1::Applied,
+            ]
+        );
+        let key = &changed.document.key_positions["4key"][0];
+        assert!(key.shadow.as_ref().unwrap().enabled);
+        assert!(key.active_shadow.as_ref().unwrap().enabled);
+        assert_eq!(key.shadow.as_ref().unwrap().color, "rgba(0, 0, 0, 0.28)");
+        assert_eq!(
+            key.active_shadow.as_ref().unwrap().color,
+            "rgba(0, 0, 0, 0.32)"
+        );
+        let stat = &changed.document.stat_positions["4key"][0].position;
+        assert!(!stat.shadow.as_ref().unwrap().enabled);
+        assert_eq!(stat.active_shadow, Some(stat_active_sentinel.clone()));
+        let knob = &changed.document.knob_positions["4key"][0].position;
+        assert!(knob.shadow.as_ref().unwrap().enabled);
+        assert!(knob.active_shadow.as_ref().unwrap().enabled);
+        assert_eq!(knob.shadow.as_ref().unwrap().color, "rgba(0, 0, 0, 0.28)");
+        assert_eq!(
+            knob.active_shadow.as_ref().unwrap().color,
+            "rgba(0, 0, 0, 0.32)"
+        );
+        assert_eq!(store.history_status().history_revision, history_before + 1);
+
+        let replay = store.commit_editor_document(request).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_before + 1);
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                ops,
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_before + 1);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert!(undone.key_positions["4key"][0].shadow.is_none());
+        assert!(undone.key_positions["4key"][0].active_shadow.is_none());
+        assert!(undone.stat_positions["4key"][0].position.shadow.is_none());
+        assert!(undone.knob_positions["4key"][0].position.shadow.is_none());
+        assert!(undone.knob_positions["4key"][0]
+            .position
+            .active_shadow
+            .is_none());
+        assert_eq!(
+            undone.stat_positions["4key"][0].position.active_shadow,
+            Some(stat_active_sentinel.clone())
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert!(
+            redone.key_positions["4key"][0]
+                .shadow
+                .as_ref()
+                .unwrap()
+                .enabled
+        );
+        assert!(
+            redone.key_positions["4key"][0]
+                .active_shadow
+                .as_ref()
+                .unwrap()
+                .enabled
+        );
+        assert!(
+            !redone.stat_positions["4key"][0]
+                .position
+                .shadow
+                .as_ref()
+                .unwrap()
+                .enabled
+        );
+        assert_eq!(
+            redone.stat_positions["4key"][0].position.active_shadow,
+            Some(stat_active_sentinel)
+        );
+        assert!(
+            redone.knob_positions["4key"][0]
+                .position
+                .shadow
+                .as_ref()
+                .unwrap()
+                .enabled
+        );
+        assert!(
+            redone.knob_positions["4key"][0]
+                .position
+                .active_shadow
+                .as_ref()
+                .unwrap()
+                .enabled
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn shadow_mask_replays_and_round_trips_one_history_entry() {
+        let dir = test_directory("editor-shadow-mask-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let target_id = store.editor_get().document.key_positions["4key"][0]
+            .id
+            .clone();
+        let setup = legacy_editor_commit(&store, &[EditorField::KeyPositions], |data| {
+            let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
+            position.shadow = None;
+            position.active_shadow = Some(crate::models::ElementShadowSpec {
+                enabled: true,
+                color: "active-sibling".to_string(),
+                offset_x: 1.0,
+                offset_y: 2.0,
+                blur: 3.0,
+            });
+        })
+        .unwrap();
+        let op = patch_property_op(
+            EditorElementTypeV1::Key,
+            &target_id,
+            EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
+                shadow: shadow_leaf_blur(10.0),
+            }),
+        );
+        let mutation_id = uuid::Uuid::new_v4().to_string();
+        let request = editor_ops_request(setup.result.revision, &mutation_id, vec![op.clone()]);
+        let history_before = store.history_status().history_revision;
+
+        let changed = store.commit_editor_document(request.clone()).unwrap();
+        assert_eq!(changed.result.changed_fields, [EditorField::KeyPositions]);
+        assert_eq!(
+            changed.result.op_results.as_ref().unwrap()[0].status,
+            EditorOpResultStatusV1::Applied
+        );
+        let position = &changed.document.key_positions["4key"][0];
+        let shadow = position.shadow.as_ref().unwrap();
+        assert_eq!(shadow.blur, 10.0);
+        assert_eq!(shadow.color, "rgba(0, 0, 0, 0.28)");
+        assert_eq!(
+            position.active_shadow.as_ref().unwrap().color,
+            "active-sibling"
+        );
+        assert_eq!(store.history_status().history_revision, history_before + 1);
+
+        let replay = store.commit_editor_document(request.clone()).unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.result, changed.result);
+        assert_eq!(store.history_status().history_revision, history_before + 1);
+
+        let mut reused = request;
+        reused.ops = Some(vec![patch_property_op(
+            EditorElementTypeV1::Key,
+            &target_id,
+            EditorElementPropertyPatchV1::Shadow(crate::models::EditorShadowPropertyPatchV1 {
+                shadow: shadow_leaf_blur(11.0),
+            }),
+        )]);
+        assert_eq!(
+            store.commit_editor_document(reused).unwrap_err().error_code,
+            EditorCommitErrorCode::MutationIdReused
+        );
+
+        let no_change = store
+            .commit_editor_document(editor_ops_request(
+                changed.result.revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![op],
+            ))
+            .unwrap();
+        assert!(no_change.result.changed_fields.is_empty());
+        assert!(no_change.event.is_none());
+        assert_eq!(store.history_status().history_revision, history_before + 1);
+
+        let gate = store.history_gate();
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Undo,
+                &undo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let undone = store.editor_get().document;
+        assert!(undone.key_positions["4key"][0].shadow.is_none());
+        assert_eq!(
+            undone.key_positions["4key"][0]
+                .active_shadow
+                .as_ref()
+                .unwrap()
+                .color,
+            "active-sibling"
+        );
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(
+                HistoryDirection::Redo,
+                &redo_id,
+                &store.snapshot().key_counters,
+                || {},
+            )
+            .unwrap();
+        drop(barrier);
+        let redone = store.editor_get().document;
+        assert_eq!(
+            redone.key_positions["4key"][0]
+                .shadow
+                .as_ref()
+                .unwrap()
+                .blur,
+            10.0
+        );
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

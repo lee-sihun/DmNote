@@ -40,7 +40,7 @@ import {
 import { usePanelNav } from '../PanelNavContext';
 import ShadowControls from '../ShadowControls';
 import {
-  resolveElementShadow,
+  resolveElementShadowForPosition,
   type ElementShadowSpec,
 } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
@@ -48,6 +48,7 @@ import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
+  EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
 
 // 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
@@ -78,6 +79,7 @@ interface BatchStyleTabContentProps {
   onStylePropertyPreview?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onStylePropertyCommit?: (patch: EditorPreviewStylePropertyPatchV1) => void;
   onPaintCommit?: (patch: EditorPaintPropertyPatchV1) => void;
+  onShadowCommit?: (patch: EditorShadowPropertyPatchV1) => void;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
   showSoundControls?: boolean;
@@ -163,6 +165,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   onStylePropertyPreview,
   onStylePropertyCommit,
   onPaintCommit,
+  onShadowCommit,
   showSoundControls = false,
   showShadowControls = true,
   shadowActiveState = true,
@@ -259,25 +262,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   };
 
   const resolvedShadowFor = (position: KeyPosition, active: boolean) => {
-    const hasImage = Boolean(
-      active
-        ? position.activeImage?.trim() || position.inactiveImage?.trim()
-        : position.inactiveImage?.trim(),
-    );
-    const suppressDefault =
-      hasImage ||
-      (shadowKind === 'knob' &&
-        ((active
-          ? position.activeTransparent === true
-          : position.idleTransparent === true) ||
-          (position.borderWidth ?? 0) > 0));
-    return resolveElementShadow({
+    return resolveElementShadowForPosition({
+      position,
+      elementType: shadowKind,
       active,
-      shadow: position.shadow,
-      activeShadow: position.activeShadow,
       defaultShadow: DEFAULT_ELEMENT_SHADOW_SPEC,
       defaultActiveShadow: DEFAULT_ELEMENT_ACTIVE_SHADOW_SPEC,
-      suppressDefault,
     });
   };
 
@@ -334,10 +324,20 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     _shadow: ElementShadowSpec,
     patch: Partial<ElementShadowSpec>,
   ) => {
+    if (onShadowCommit) {
+      onShadowCommit({
+        [state === 'active' ? 'activeShadow' : 'shadow']: patch,
+      } as EditorShadowPropertyPatchV1);
+      return;
+    }
     handleBatchShadowChangeComplete?.(state, patch);
   };
 
   const handleShadowEnabledChange = (enabled: boolean) => {
+    if (onShadowCommit) {
+      onShadowCommit({ shadowEnabled: enabled });
+      return;
+    }
     handleBatchShadowEnabledChange?.(enabled);
   };
 

@@ -40,6 +40,7 @@ import {
   patchFontFamilyViaAuthority,
   patchStylePropertyViaAuthority,
   patchPaintViaAuthority,
+  patchShadowViaAuthority,
   patchFontStyleViaAuthority,
   patchKnobPropertiesViaAuthority,
   patchNativeLayerPropertyViaAuthority,
@@ -80,6 +81,7 @@ import type {
   EditorCounterStrokePropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
   EditorPaintPropertyPatchV1,
+  EditorShadowPropertyPatchV1,
 } from '@src/types/editor';
 import type { SizeCommit } from './PropertiesPanel/types';
 import type {
@@ -111,6 +113,7 @@ import {
   patchFontFamilyByTargets,
   patchStylePropertyById,
   patchPaintById,
+  patchShadowById,
   patchInactiveImageById,
   patchIdleImageFitById,
   patchIdleTransparentById,
@@ -2321,6 +2324,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableShadowCommitHandler = (
+    type: 'key' | 'stat' | 'knob',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (patch: EditorShadowPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchShadowViaAuthority([{ elementType: type, id }], patch)
+              : patchShadowById(type, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update shadow', error);
+          });
+        }
+      : undefined;
+
   const stableCounterAnimationPresetHandler = (
     elementType: 'key' | 'stat',
     id: string | undefined,
@@ -3927,6 +3946,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
+          onShadowCommit={stableShadowCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           singleScrollRefFor={singleScrollRefFor}
           panelElement={panelElement}
           useCustomCSS={useCustomCSS}
@@ -4095,6 +4118,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           { settleGesture: true },
         )}
         onPaintCommit={stablePaintCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onShadowCommit={stableShadowCommitHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
             ? selectedStatElements[0]?.id

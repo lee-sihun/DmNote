@@ -195,6 +195,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchShadow: vi.fn(
+    (
+      _targets?: unknown,
+      _patch?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   updateCounterAnimation: vi.fn(
     (_request?: unknown, _options?: unknown): Promise<unknown> =>
       Promise.resolve(null),
@@ -294,6 +301,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchCounterTypographyByTargets: mocks.patchCounterTypography,
   patchCounterStrokeByTargets: mocks.patchCounterStroke,
   patchPaintByTargets: mocks.patchPaint,
+  patchShadowByTargets: mocks.patchShadow,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -420,6 +428,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchCounterStroke.mockResolvedValue(true);
     mocks.patchPaint.mockReset();
     mocks.patchPaint.mockResolvedValue(true);
+    mocks.patchShadow.mockReset();
+    mocks.patchShadow.mockResolvedValue(true);
     mocks.updateCounterAnimation.mockReset();
     mocks.updateCounterAnimation.mockResolvedValue({
       preset: { id: 'preset-a' },
@@ -509,6 +519,121 @@ describe('plugin panel persisted element mutations', () => {
         expectedPatch,
       );
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    },
+  );
+
+  it('shadow batch는 exact one-leaf와 slot preflight를 전용 helper에 전달한다', async () => {
+    const targets = [
+      { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+      { elementType: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    ];
+    const patch = { shadow: { color: '  raw shadow  ' } };
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', { targets, patch }),
+    );
+    await vi.waitFor(() => expect(mocks.patchShadow).toHaveBeenCalledOnce());
+    expect(mocks.patchShadow).toHaveBeenCalledWith(targets, patch, {
+      preflight: expect.any(Function),
+    });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('shadow single은 exact target과 slot preflight를 전용 helper에 전달한다', async () => {
+    const target = {
+      elementType: 'knob',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      patch: { activeShadow: { blur: 22.5 } },
+    };
+    mocks.requestListener?.(envelope('layers:patchProperty', { target }));
+    await vi.waitFor(() => expect(mocks.patchShadow).toHaveBeenCalledOnce());
+    expect(mocks.patchShadow).toHaveBeenCalledWith(
+      [{ elementType: target.elementType, id: target.id }],
+      target.patch,
+      { preflight: expect.any(Function) },
+    );
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
+  it('shadow single은 slot 직전 generation 변경을 거절한다', async () => {
+    mocks.patchShadow.mockImplementationOnce(
+      async (_targets, _patch, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        target: {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          patch: { shadowEnabled: false },
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+    expect(mocks.patchElementProperty).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'graph',
+      {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { shadow: { blur: 1 } },
+      },
+    ],
+    [
+      'active stat',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { activeShadow: { blur: 1 } },
+      },
+    ],
+    [
+      'empty color',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { shadow: { color: '' } },
+      },
+    ],
+    [
+      'range',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { shadow: { offsetX: 101 } },
+      },
+    ],
+    [
+      'combined inner',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { shadow: { blur: 1, color: '#000' } },
+      },
+    ],
+    [
+      'combined outer',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { shadow: { blur: 1 }, shadowEnabled: true },
+      },
+    ],
+  ])(
+    'shadow invalid %s는 executor를 호출하지 않는다',
+    async (_label, payload) => {
+      mocks.requestListener?.(envelope('layers:patchProperty', payload));
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+      expect(mocks.patchShadow).not.toHaveBeenCalled();
+      expect(mocks.patchElementProperty).not.toHaveBeenCalled();
     },
   );
 

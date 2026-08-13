@@ -3584,6 +3584,49 @@ describe('commitSemanticOpsInternal', () => {
     },
   );
 
+  it('shadow ack는 None seed와 master state matrix를 투영하고 siblings를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000b6';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      id,
+      inactiveImage: 'image.png',
+      shadow: undefined,
+      activeShadow: undefined,
+      borderColor: '#sibling',
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([
+      {
+        kind: 'patchElement',
+        elementType: 'key',
+        id,
+        patch: { shadowEnabled: true },
+      },
+    ]);
+
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      shadow: {
+        enabled: true,
+        color: 'rgba(0, 0, 0, 0.28)',
+        offsetX: 0,
+        offsetY: 4,
+        blur: 10,
+      },
+      activeShadow: {
+        enabled: true,
+        color: 'rgba(0, 0, 0, 0.32)',
+        offsetX: 0,
+        offsetY: 3,
+        blur: 8,
+      },
+      borderColor: '#sibling',
+    });
+    harness.coordinator.stop();
+  });
+
   it('className은 common position leaf만 투영하고 displayText sibling을 보존한다', async () => {
     const id = '00000000-0000-4000-8000-0000000000c5';
     const base = withStableId(id);

@@ -224,6 +224,9 @@ pub enum EditorElementPropertyPatchV1 {
     FontFamily(EditorFontFamilyPropertyPatchV1),
     DisplayText(EditorDisplayTextPropertyPatchV1),
     ClassName(EditorClassNamePropertyPatchV1),
+    Shadow(EditorShadowPropertyPatchV1),
+    ActiveShadow(EditorActiveShadowPropertyPatchV1),
+    ShadowEnabled(EditorShadowEnabledPropertyPatchV1),
     BackgroundPaint(EditorBackgroundPaintPropertyPatchV1),
     ActiveBackgroundPaint(EditorActiveBackgroundPaintPropertyPatchV1),
     BorderPaint(EditorBorderPaintPropertyPatchV1),
@@ -376,6 +379,57 @@ pub struct EditorDisplayTextPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorClassNamePropertyPatchV1 {
     pub class_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorShadowPropertyPatchV1 {
+    pub shadow: EditorShadowLeafPatchV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorActiveShadowPropertyPatchV1 {
+    pub active_shadow: EditorShadowLeafPatchV1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorShadowEnabledPropertyPatchV1 {
+    pub shadow_enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EditorShadowLeafPatchV1 {
+    Color(EditorShadowColorLeafPatchV1),
+    OffsetX(EditorShadowOffsetXLeafPatchV1),
+    OffsetY(EditorShadowOffsetYLeafPatchV1),
+    Blur(EditorShadowBlurLeafPatchV1),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorShadowColorLeafPatchV1 {
+    pub color: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorShadowOffsetXLeafPatchV1 {
+    pub offset_x: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorShadowOffsetYLeafPatchV1 {
+    pub offset_y: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorShadowBlurLeafPatchV1 {
+    pub blur: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
