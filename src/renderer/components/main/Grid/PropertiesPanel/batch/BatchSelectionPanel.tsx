@@ -35,12 +35,15 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
+import type { ElementIdSelection } from '@src/renderer/editor/runtime/elementPatch';
 import {
-  applyElementPatchesById,
-  type ElementIdSelection,
-} from '@src/renderer/editor/runtime/elementPatch';
-import { patchInactiveImageByTargets } from '@src/renderer/editor/runtime/elementOps';
-import { patchInactiveImageViaAuthority } from '@plugins/rpc/pluginElementActions';
+  patchActiveImageByTargets,
+  patchInactiveImageByTargets,
+} from '@src/renderer/editor/runtime/elementOps';
+import {
+  patchActiveImageViaAuthority,
+  patchInactiveImageViaAuthority,
+} from '@plugins/rpc/pluginElementActions';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
   captureBatchElementBinding,
@@ -70,6 +73,27 @@ const commitBoundInactiveImage = (
     window.__dmn_window_type === 'panel'
       ? patchInactiveImageViaAuthority(targets, inactiveImage)
       : patchInactiveImageByTargets(targets, inactiveImage);
+  void persisted.catch(reportElementOpError);
+};
+
+const commitBoundActiveImage = (
+  binding: 'element-id' | 'session-mode',
+  selection: ElementIdSelection,
+  activeImage: string,
+  legacy: () => void,
+) => {
+  if (binding !== 'element-id') {
+    legacy();
+    return;
+  }
+  const targets = (['key', 'knob'] as const).flatMap((elementType) =>
+    (selection[elementType] ?? []).map((id) => ({ elementType, id })),
+  );
+  if (targets.length === 0) return;
+  const persisted =
+    window.__dmn_window_type === 'panel'
+      ? patchActiveImageViaAuthority(targets, activeImage)
+      : patchActiveImageByTargets(targets, activeImage);
   void persisted.catch(reportElementOpError);
 };
 
@@ -1072,18 +1096,16 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 );
               }}
               onActiveImageChange={(imageUrl: string) => {
-                if (batchImageBinding.binding === 'element-id') {
-                  // active 이미지는 key·knob만 지원 (기존 writer와 동일 범위)
-                  applyElementPatchesById(
-                    {
-                      key: batchImageBinding.selection.key,
-                      knob: batchImageBinding.selection.knob,
-                    },
-                    () => ({ activeImage: imageUrl }),
-                  ).catch(reportElementOpError);
-                  return;
-                }
-                handleActiveCapableStyleChangeComplete('activeImage', imageUrl);
+                commitBoundActiveImage(
+                  batchImageBinding.binding,
+                  batchImageBinding.selection,
+                  imageUrl,
+                  () =>
+                    handleActiveCapableStyleChangeComplete(
+                      'activeImage',
+                      imageUrl,
+                    ),
+                );
               }}
               onIdleTransparentChange={(value: boolean) => {
                 handleBatchStyleChangeComplete('idleTransparent', value);
@@ -1103,7 +1125,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 );
               }}
               onActiveImageReset={() => {
-                handleActiveCapableStyleChangeComplete('activeImage', '');
+                commitBoundActiveImage(
+                  batchImageBinding.binding,
+                  batchImageBinding.selection,
+                  '',
+                  () =>
+                    handleActiveCapableStyleChangeComplete('activeImage', ''),
+                );
               }}
               onClose={() => setShowBatchImagePicker(false)}
               showActiveState={
@@ -1483,15 +1511,6 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                   handleGraphBatchSharedSetting({ inactiveImage: imageUrl }),
               );
             }}
-            onActiveImageChange={(imageUrl: string) => {
-              if (graphImageBinding.binding === 'element-id') {
-                applyElementPatchesById(graphImageBinding.selection, () => ({
-                  activeImage: imageUrl,
-                })).catch(reportElementOpError);
-                return;
-              }
-              handleGraphBatchSharedSetting({ activeImage: imageUrl });
-            }}
             onIdleTransparentChange={(value: boolean) => {
               handleGraphBatchSharedSetting({ idleTransparent: value });
             }}
@@ -1505,9 +1524,6 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 '',
                 () => handleGraphBatchSharedSetting({ inactiveImage: '' }),
               );
-            }}
-            onActiveImageReset={() => {
-              handleGraphBatchSharedSetting({ activeImage: '' });
             }}
             onClose={() => setShowBatchImagePicker(false)}
           />
@@ -1806,13 +1822,12 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               );
             }}
             onActiveImageChange={(imageUrl: string) => {
-              if (knobImageBinding.binding === 'element-id') {
-                applyElementPatchesById(knobImageBinding.selection, () => ({
-                  activeImage: imageUrl,
-                })).catch(reportElementOpError);
-                return;
-              }
-              handleKnobBatchSharedSetting({ activeImage: imageUrl });
+              commitBoundActiveImage(
+                knobImageBinding.binding,
+                knobImageBinding.selection,
+                imageUrl,
+                () => handleKnobBatchSharedSetting({ activeImage: imageUrl }),
+              );
             }}
             onIdleTransparentChange={(value: boolean) => {
               handleKnobBatchSharedSetting({ idleTransparent: value });
@@ -1829,7 +1844,12 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               );
             }}
             onActiveImageReset={() => {
-              handleKnobBatchSharedSetting({ activeImage: '' });
+              commitBoundActiveImage(
+                knobImageBinding.binding,
+                knobImageBinding.selection,
+                '',
+                () => handleKnobBatchSharedSetting({ activeImage: '' }),
+              );
             }}
             onClose={() => setShowBatchImagePicker(false)}
           />

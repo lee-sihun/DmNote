@@ -63,6 +63,8 @@ import {
   patchKnobAxisIdById,
   patchInactiveImageById,
   patchInactiveImageByTargets,
+  patchActiveImageById,
+  patchActiveImageByTargets,
   patchNotePropertiesByIds,
   patchNotePropertyById,
   patchStatTypeById,
@@ -2519,6 +2521,74 @@ describe('elementOps', () => {
       patchInactiveImageByTargets(
         [{ elementType: 'knob', id: 'knob-0' }],
         'picked.png',
+      ),
+    ).resolves.toBe(false);
+    expect(api.commitSemanticOps).not.toHaveBeenCalled();
+  });
+
+  it('activeImage는 key/knob raw string을 한 commit으로 보내고 형제를 보존한다', async () => {
+    const knobId = '66666666-6666-4666-8666-666666666666';
+    const knob = {
+      ...keyAt(knobId),
+      axisId: '',
+      sensitivity: 1,
+      reverse: false,
+      inactiveImage: 'idle.png',
+      activeImage: 'before.png',
+    } as never;
+    useKnobItemStore.setState({ positions: { '4key': [knob] } });
+
+    await patchActiveImageById('key', ID_A, '  /tmp/raw active.png  ');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      [
+        {
+          kind: 'patchElement',
+          elementType: 'key',
+          id: ID_A,
+          patch: { activeImage: '  /tmp/raw active.png  ' },
+        },
+      ],
+      expect.anything(),
+    );
+
+    const targets = [
+      { elementType: 'key' as const, id: ID_A },
+      { elementType: 'knob' as const, id: knobId },
+    ];
+    await patchActiveImageByTargets(targets, '');
+    expect(api.commitSemanticOps).toHaveBeenLastCalledWith(
+      targets.map(({ elementType, id }) => ({
+        kind: 'patchElement',
+        elementType,
+        id,
+        patch: { activeImage: '' },
+      })),
+      expect.anything(),
+    );
+    expect(useKnobItemStore.getState().positions['4key'][0]).toMatchObject({
+      inactiveImage: 'idle.png',
+      activeImage: '',
+      sensitivity: 1,
+    });
+  });
+
+  it('activeImage batch는 empty, duplicate, synthetic target을 wire 전에 거절한다', async () => {
+    await expect(patchActiveImageByTargets([], 'active.png')).resolves.toBe(
+      false,
+    );
+    await expect(
+      patchActiveImageByTargets(
+        [
+          { elementType: 'key', id: ID_A },
+          { elementType: 'knob', id: ID_A },
+        ],
+        'active.png',
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      patchActiveImageByTargets(
+        [{ elementType: 'knob', id: 'knob-0' }],
+        'active.png',
       ),
     ).resolves.toBe(false);
     expect(api.commitSemanticOps).not.toHaveBeenCalled();

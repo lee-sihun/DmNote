@@ -773,9 +773,6 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 ? onInactiveImageCommit(imageUrl)
                 : applyToGraphById({ inactiveImage: imageUrl })
             }
-            onActiveImageChange={(imageUrl: string) =>
-              applyToGraphById({ activeImage: imageUrl })
-            }
             onIdleTransparentChange={(value: boolean) =>
               handleGraphUpdate({
                 index: singleGraphIndex,
@@ -808,12 +805,6 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     inactiveImage: '',
                   })
             }
-            onActiveImageReset={() =>
-              handleGraphUpdate({
-                index: singleGraphIndex,
-                activeImage: '',
-              })
-            }
             onClose={() => setShowGraphImagePicker(false)}
           />
         ) : null}
@@ -843,6 +834,7 @@ interface SingleKnobPanelProps {
     data: Partial<KnobItemPosition> & { index: number },
   ) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
+  onActiveImageCommit?: (activeImage: string) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
@@ -865,6 +857,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   handleRenameStart,
   handleKnobUpdate,
   onInactiveImageCommit,
+  onActiveImageCommit,
   handleGeometryCommit,
   singleScrollRefFor,
   panelElement,
@@ -1530,6 +1523,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             panelElement={panelRef.current}
             completionBinding={
               onInactiveImageCommit ||
+              onActiveImageCommit ||
               (singleKnobPosition.id &&
                 !isSyntheticElementId(singleKnobPosition.id))
                 ? 'element-id'
@@ -1555,7 +1549,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 : applyToKnobById({ inactiveImage: imageUrl })
             }
             onActiveImageChange={(imageUrl: string) =>
-              applyToKnobById({ activeImage: imageUrl })
+              onActiveImageCommit
+                ? onActiveImageCommit(imageUrl)
+                : applyToKnobById({ activeImage: imageUrl })
             }
             onIdleTransparentChange={(value: boolean) =>
               handleKnobUpdate({
@@ -1590,7 +1586,9 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   })
             }
             onActiveImageReset={() =>
-              handleKnobUpdate({ index: singleKnobIndex, activeImage: '' })
+              onActiveImageCommit
+                ? onActiveImageCommit('')
+                : handleKnobUpdate({ index: singleKnobIndex, activeImage: '' })
             }
             onClose={() => setShowImagePicker(false)}
           />
@@ -1675,6 +1673,7 @@ interface SingleKeyStatPanelProps {
   handleSizeBlur: (committed?: SizeCommit) => void;
   handleGeometryCommit?: (field: GeometryField, value: number) => void;
   onInactiveImageCommit?: (inactiveImage: string) => void;
+  onActiveImageCommit?: (activeImage: string) => void;
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;
   imageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -1717,6 +1716,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   handleSizeBlur,
   handleGeometryCommit,
   onInactiveImageCommit,
+  onActiveImageCommit,
   showImagePicker,
   setShowImagePicker,
   imageButtonRef,
@@ -1903,6 +1903,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               showImagePicker={showImagePicker}
               onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
               onInactiveImageCommit={onInactiveImageCommit}
+              onActiveImageCommit={onActiveImageCommit}
               imageButtonRef={imageButtonRef}
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}

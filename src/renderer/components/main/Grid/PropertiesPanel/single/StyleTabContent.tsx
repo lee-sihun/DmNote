@@ -121,6 +121,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   showImagePicker = false,
   onToggleImagePicker,
   onInactiveImageCommit,
+  onActiveImageCommit,
   imageButtonRef,
   panelElement,
   useCustomCSS = false,
@@ -633,6 +634,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   };
 
   const handleActiveImageChange = (imageUrl: string) => {
+    if (onActiveImageCommit) {
+      onActiveImageCommit(imageUrl);
+      return;
+    }
     applyToBoundElement({ activeImage: imageUrl });
   };
 
@@ -656,6 +661,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   };
 
   const handleActiveImageReset = () => {
+    if (onActiveImageCommit) {
+      onActiveImageCommit('');
+      return;
+    }
     onKeyPreview?.(keyIndex, { activeImage: '' });
     onKeyUpdate({ index: keyIndex, activeImage: '' });
   };
@@ -1166,6 +1175,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             panelElement={panelElement}
             completionBinding={
               onInactiveImageCommit ||
+              onActiveImageCommit ||
               (isIndividualMode &&
                 keyPosition.id &&
                 !isSyntheticElementId(keyPosition.id))

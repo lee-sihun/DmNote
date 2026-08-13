@@ -1183,6 +1183,40 @@ export const patchInactiveImageByTargets = (
   );
 };
 
+export const patchActiveImageById = (
+  type: 'key' | 'knob',
+  id: string,
+  activeImage: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  return patchElementPropertyById(type, id, { activeImage }, options);
+};
+
+export const patchActiveImageByTargets = (
+  targets: readonly { elementType: 'key' | 'knob'; id: string }[],
+  activeImage: string,
+  options: { preflight?: () => void } = {},
+): Promise<boolean> => {
+  if (
+    targets.length === 0 ||
+    targets.some(
+      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+    ) ||
+    new Set(targets.map((target) => target.id)).size !== targets.length
+  ) {
+    return Promise.resolve(false);
+  }
+  return patchElementPropertiesByIds(
+    targets.map(({ elementType, id }) => ({
+      type: elementType,
+      id,
+      patch: { activeImage },
+    })),
+    options,
+  );
+};
+
 export const patchKnobPropertiesByIds = (
   ids: readonly string[],
   patch: EditorKnobRuntimePropertyPatchV1,

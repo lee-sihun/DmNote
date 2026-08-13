@@ -20,6 +20,8 @@ const captured = vi.hoisted(() => ({
     completionBinding?: CompletionBinding;
     onIdleImageChange: (imageUrl: string) => void;
     onIdleImageReset: () => void;
+    onActiveImageChange?: (imageUrl: string) => void;
+    onActiveImageReset?: () => void;
   },
 }));
 
@@ -28,13 +30,17 @@ const patches = vi.hoisted(() => ({
   applyElementPatchById: vi.fn(async () => true),
   patchInactiveImageByTargets: vi.fn(async () => true),
   patchInactiveImageViaAuthority: vi.fn(async () => true),
+  patchActiveImageByTargets: vi.fn(async () => true),
+  patchActiveImageViaAuthority: vi.fn(async () => true),
 }));
 
 vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  patchActiveImageByTargets: patches.patchActiveImageByTargets,
   patchInactiveImageByTargets: patches.patchInactiveImageByTargets,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
+  patchActiveImageViaAuthority: patches.patchActiveImageViaAuthority,
   patchInactiveImageViaAuthority: patches.patchInactiveImageViaAuthority,
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
@@ -334,6 +340,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       ...props,
       showBatchImagePicker: true,
       handleBatchStyleChangeComplete: kind === 'mixed' ? legacy : vi.fn(),
+      handleActiveCapableStyleChangeComplete:
+        kind === 'mixed' ? legacy : vi.fn(),
       handleGraphBatchSharedSetting: kind === 'graph' ? legacy : vi.fn(),
       handleKnobBatchSharedSetting: kind === 'knob' ? legacy : vi.fn(),
     };
@@ -411,6 +419,16 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     },
   );
 
+  it('graph-only batch ImagePicker는 active writer를 노출하지 않는다', () => {
+    selectImageTargets('graph', 'a');
+    renderImagePanel('graph', vi.fn());
+
+    expect(captured.image?.onActiveImageChange).toBeUndefined();
+    expect(captured.image?.onActiveImageReset).toBeUndefined();
+    expect(captured.image?.onIdleImageChange).toBeTypeOf('function');
+    expect(captured.image?.onIdleImageReset).toBeTypeOf('function');
+  });
+
   it.each(['mixed', 'graph', 'knob'] as const)(
     '%s batch ImagePicker에 synthetic ID가 있으면 load와 reset 전체가 legacy다',
     (kind) => {
@@ -436,6 +454,75 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         expect(legacy.mock.calls).toEqual([
           [{ inactiveImage: 'legacy.png' }],
           [{ inactiveImage: '' }],
+        ]);
+      }
+    },
+  );
+
+  it.each([
+    ['main', 'mixed'],
+    ['main', 'knob'],
+    ['panel', 'mixed'],
+    ['panel', 'knob'],
+  ] as const)(
+    '%s %s batch active image load와 reset은 open 시점 key/knob ID만 쓴다',
+    (windowType, kind) => {
+      window.__dmn_window_type = windowType;
+      const targetsA = selectImageTargets(kind, 'a').filter(
+        (target): target is { elementType: 'key' | 'knob'; id: string } =>
+          target.elementType === 'key' || target.elementType === 'knob',
+      );
+      const legacy = vi.fn();
+      renderImagePanel(kind, legacy);
+
+      selectImageTargets(kind, 'b');
+      renderImagePanel(kind, legacy);
+      act(() => {
+        captured.image?.onActiveImageChange('  active.png  ');
+        captured.image?.onActiveImageReset();
+      });
+
+      const selectedWriter =
+        windowType === 'panel'
+          ? patches.patchActiveImageViaAuthority
+          : patches.patchActiveImageByTargets;
+      const otherWriter =
+        windowType === 'panel'
+          ? patches.patchActiveImageByTargets
+          : patches.patchActiveImageViaAuthority;
+      expect(selectedWriter.mock.calls).toEqual([
+        [targetsA, '  active.png  '],
+        [targetsA, ''],
+      ]);
+      expect(otherWriter).not.toHaveBeenCalled();
+      expect(legacy).not.toHaveBeenCalled();
+      expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['mixed', 'knob'] as const)(
+    '%s batch active image는 synthetic가 하나라도 있으면 load와 reset 전체가 legacy다',
+    (kind) => {
+      window.__dmn_window_type = 'panel';
+      selectImageTargets(kind, 'synthetic');
+      const legacy = vi.fn();
+      renderImagePanel(kind, legacy);
+      act(() => {
+        captured.image?.onActiveImageChange('legacy-active.png');
+        captured.image?.onActiveImageReset();
+      });
+
+      expect(patches.patchActiveImageByTargets).not.toHaveBeenCalled();
+      expect(patches.patchActiveImageViaAuthority).not.toHaveBeenCalled();
+      if (kind === 'mixed') {
+        expect(legacy.mock.calls).toEqual([
+          ['activeImage', 'legacy-active.png'],
+          ['activeImage', ''],
+        ]);
+      } else {
+        expect(legacy.mock.calls).toEqual([
+          [{ activeImage: 'legacy-active.png' }],
+          [{ activeImage: '' }],
         ]);
       }
     },

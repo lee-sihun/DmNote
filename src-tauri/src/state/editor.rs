@@ -2492,6 +2492,15 @@ mod tests {
                 serde_json::json!({ "inactiveImage": "  raw/path.png  " }),
             ),
             (
+                EditorElementTypeV1::Key,
+                EditorElementPropertyPatchV1::ActiveImage(
+                    crate::models::EditorActiveImagePropertyPatchV1 {
+                        active_image: "  raw/active.png  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "activeImage": "  raw/active.png  " }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::StatType(
                     crate::models::EditorStatTypePropertyPatchV1 {
@@ -2589,6 +2598,9 @@ mod tests {
             serde_json::json!({ "inactiveImage": null }),
             serde_json::json!({ "inactiveImage": "path", "hidden": false }),
             serde_json::json!({ "inactiveImage": "path", "unexpected": true }),
+            serde_json::json!({ "activeImage": null }),
+            serde_json::json!({ "activeImage": "path", "hidden": false }),
+            serde_json::json!({ "activeImage": "path", "unexpected": true }),
             serde_json::json!({ "statType": "invalid" }),
             serde_json::json!({ "noteEffectEnabled": 1 }),
             serde_json::json!({ "noteGlowEnabled": null }),

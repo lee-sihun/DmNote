@@ -153,6 +153,7 @@ describe('plugin element panel queue', () => {
     ['글꼴 패밀리', { fontFamily: '  Raw Family  ' }, 'stat'],
     ['노브 축', { axisId: '  HIDA:raw  ' }, 'knob'],
     ['대기 이미지', { inactiveImage: '  Raw Image.png  ' }, 'graph'],
+    ['활성 이미지', { activeImage: '  Raw Active.png  ' }, 'key'],
   ] as const)(
     '%s literal과 enqueue 시점 generation을 고정한다',
     async (_label, patch, elementType) => {
@@ -377,6 +378,34 @@ describe('plugin element panel queue', () => {
     );
   });
 
+  it('activeImage batch는 key와 knob 대상 및 raw literal을 고정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValue({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+    const targets = [
+      {
+        elementType: 'key' as const,
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'knob' as const,
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ];
+
+    await expect(
+      actions.patchActiveImageViaAuthority(targets, '  Raw Active.png  '),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'layers:patchProperty',
+      { targets, patch: { activeImage: '  Raw Active.png  ' } },
+      0,
+      7,
+    );
+  });
+
   it('인라인 스타일 batch는 혼합 native 대상과 공통 literal을 한 요청으로 고정한다', async () => {
     mocks.sendPluginRpc.mockResolvedValue({
       kind: 'ok',
@@ -589,6 +618,39 @@ describe('plugin element panel queue', () => {
         },
       ],
       '  Raw Image.png  ',
+    );
+    await vi.waitFor(() =>
+      expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),
+    );
+    actions.notePluginMirrorRevision(2);
+
+    await expect(changed).resolves.toBe(true);
+    expect(mocks.sendPluginRpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[1]).toEqual(
+      mocks.sendPluginRpc.mock.calls[0]?.[1],
+    );
+    expect(mocks.sendPluginRpc.mock.calls[1]?.[3]).toBe(7);
+  });
+
+  it('activeImage batch outcome-unknown은 같은 generation과 raw literal을 한 번만 재전송한다', async () => {
+    mocks.sendPluginRpc
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({
+        kind: 'ok',
+        response: { modelRevision: 2 },
+      });
+    const changed = actions.patchActiveImageViaAuthority(
+      [
+        {
+          elementType: 'key',
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+        {
+          elementType: 'knob',
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        },
+      ],
+      '  Raw Active.png  ',
     );
     await vi.waitFor(() =>
       expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce(),

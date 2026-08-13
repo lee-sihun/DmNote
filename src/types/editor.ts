@@ -150,6 +150,7 @@ interface EditorElementPropertyValuesV1 {
   sensitivity: number;
   axisId: string;
   inactiveImage: string;
+  activeImage: string;
   useInlineStyles: boolean;
   fontWeight: number;
   fontItalic: boolean;
@@ -184,6 +185,9 @@ export type EditorKnobAxisPropertyPatchV1 =
 
 export type EditorInactiveImagePropertyPatchV1 =
   EditorPropertyPatchUnionV1<'inactiveImage'>;
+
+export type EditorActiveImagePropertyPatchV1 =
+  EditorPropertyPatchUnionV1<'activeImage'>;
 
 export type EditorFontStylePropertyPatchV1 = EditorPropertyPatchUnionV1<
   'fontWeight' | 'fontItalic' | 'fontUnderline' | 'fontStrikethrough'
@@ -1000,6 +1004,10 @@ export function assertEditorOpsV1(
         (patchKeys.length === 1 &&
           patchKeys[0] === 'inactiveImage' &&
           typeof op.patch.inactiveImage === 'string') ||
+        (patchKeys.length === 1 &&
+          patchKeys[0] === 'activeImage' &&
+          (op.elementType === 'key' || op.elementType === 'knob') &&
+          typeof op.patch.activeImage === 'string') ||
         (patchKeys.length === 1 &&
           patchKeys[0] === 'useInlineStyles' &&
           typeof op.patch.useInlineStyles === 'boolean') ||

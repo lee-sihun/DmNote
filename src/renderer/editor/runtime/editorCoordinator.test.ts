@@ -3495,6 +3495,44 @@ describe('commitSemanticOpsInternal', () => {
     harness.coordinator.stop();
   });
 
+  it('activeImage는 key의 raw top-level leaf만 적용하고 이미지 형제를 보존한다', async () => {
+    const id = '00000000-0000-4000-8000-0000000000b8';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0] = {
+      ...base.keyPositions['4key'][0],
+      inactiveImage: 'idle.png',
+      activeImage: 'before.png',
+      activeImageFit: 'contain',
+      activeTransparent: true,
+    };
+    const op: EditorOpV1 = {
+      kind: 'patchElement',
+      elementType: 'key',
+      id,
+      patch: { activeImage: '  /tmp/raw active.png  ' },
+    };
+    const harness = createHarness(base);
+    await harness.coordinator.start();
+
+    const applied = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(applied.document.keyPositions['4key'][0]).toMatchObject({
+      inactiveImage: 'idle.png',
+      activeImage: '  /tmp/raw active.png  ',
+      activeImageFit: 'contain',
+      activeTransparent: true,
+    });
+
+    harness.transport.commitMock.mockResolvedValueOnce({
+      revision: harness.transport.canonical.revision,
+      changedFields: [],
+      opResults: [{ status: 'noChange' }],
+    });
+    const noChange = await harness.coordinator.commitSemanticOpsInternal([op]);
+    expect(noChange.opResults).toEqual([{ status: 'noChange' }]);
+    expect(noChange.document).toEqual(applied.document);
+    harness.coordinator.stop();
+  });
+
   it('note 5 leaf를 한 commit으로 적용하고 무관 note 필드를 보존한다', async () => {
     const ids = [
       '00000000-0000-4000-8000-0000000000d1',

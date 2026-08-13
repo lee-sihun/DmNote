@@ -53,6 +53,7 @@ import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap'
 import {
   commitBatchGeometryByIds,
   commitElementGeometryById,
+  patchActiveImageByTargets,
   patchElementPropertyById,
   patchFontFamilyByTargets,
   patchInactiveImageByTargets,
@@ -240,6 +241,9 @@ const parseNativeLayerPropertyTarget = (
     (hasExactKeys(patch, ['axisId']) && typeof patch.axisId === 'string') ||
     (hasExactKeys(patch, ['inactiveImage']) &&
       typeof patch.inactiveImage === 'string') ||
+    (hasExactKeys(patch, ['activeImage']) &&
+      (target.elementType === 'key' || target.elementType === 'knob') &&
+      typeof patch.activeImage === 'string') ||
     (hasExactKeys(patch, ['useInlineStyles']) &&
       typeof patch.useInlineStyles === 'boolean') ||
     (hasExactKeys(patch, ['fontWeight']) &&
@@ -462,6 +466,11 @@ type NativeLayerPropertyRequest =
       inactiveImage: string;
     }
   | {
+      kind: 'activeImageBatch';
+      targets: Array<{ elementType: 'key' | 'knob'; id: string }>;
+      activeImage: string;
+    }
+  | {
       kind: 'notePropertyBatch';
       ids: string[];
       patch: EditorNotePropertyPatchV1;
@@ -560,6 +569,11 @@ const parseNativeLayerPropertyRequest = (
     typeof patch.inactiveImage === 'string'
       ? patch.inactiveImage
       : null;
+  const activeImage =
+    hasExactKeys(patch, ['activeImage']) &&
+    typeof patch.activeImage === 'string'
+      ? patch.activeImage
+      : null;
   const notePropertyPatch: EditorNotePropertyPatchV1 | null =
     hasExactKeys(patch, ['noteEffectEnabled']) &&
     typeof patch.noteEffectEnabled === 'boolean'
@@ -595,6 +609,7 @@ const parseNativeLayerPropertyRequest = (
     fontStylePatch === null &&
     fontFamilyPatch === null &&
     inactiveImage === null &&
+    activeImage === null &&
     notePropertyPatch === null
   ) {
     return null;
@@ -605,6 +620,8 @@ const parseNativeLayerPropertyRequest = (
     fontFamilyPatch !== null ||
     inactiveImage !== null
       ? null
+      : activeImage !== null
+      ? 'active-capable'
       : notePropertyPatch !== null
       ? 'key'
       : knobRuntimePatch === null
@@ -626,7 +643,12 @@ const parseNativeLayerPropertyRequest = (
     if (
       typeof target.elementType !== 'string' ||
       !['key', 'stat', 'graph', 'knob'].includes(target.elementType) ||
-      (elementType !== null && target.elementType !== elementType) ||
+      (elementType === 'active-capable' &&
+        target.elementType !== 'key' &&
+        target.elementType !== 'knob') ||
+      (elementType !== null &&
+        elementType !== 'active-capable' &&
+        target.elementType !== elementType) ||
       typeof target.id !== 'string' ||
       target.id.trim().length === 0 ||
       isSyntheticElementId(target.id) ||
@@ -652,6 +674,13 @@ const parseNativeLayerPropertyRequest = (
   }
   if (inactiveImage !== null) {
     return { kind: 'inactiveImageBatch', targets, inactiveImage };
+  }
+  if (activeImage !== null) {
+    return {
+      kind: 'activeImageBatch',
+      targets: targets as Array<{ elementType: 'key' | 'knob'; id: string }>,
+      activeImage,
+    };
   }
   if (notePropertyPatch !== null) {
     return { kind: 'notePropertyBatch', ids, patch: notePropertyPatch };
@@ -1369,6 +1398,13 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
         return patchInactiveImageByTargets(
           request.targets,
           request.inactiveImage,
+          options,
+        );
+      }
+      if (request.kind === 'activeImageBatch') {
+        return patchActiveImageByTargets(
+          request.targets,
+          request.activeImage,
           options,
         );
       }

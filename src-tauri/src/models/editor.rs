@@ -222,6 +222,7 @@ pub enum EditorElementPropertyPatchV1 {
     FontStrikethrough(EditorFontStrikethroughPropertyPatchV1),
     FontFamily(EditorFontFamilyPropertyPatchV1),
     InactiveImage(EditorInactiveImagePropertyPatchV1),
+    ActiveImage(EditorActiveImagePropertyPatchV1),
     StatType(EditorStatTypePropertyPatchV1),
     NoteEffectEnabled(EditorNoteEffectEnabledPropertyPatchV1),
     NoteGlowEnabled(EditorNoteGlowEnabledPropertyPatchV1),
@@ -331,6 +332,12 @@ pub struct EditorFontFamilyPropertyPatchV1 {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorInactiveImagePropertyPatchV1 {
     pub inactive_image: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorActiveImagePropertyPatchV1 {
+    pub active_image: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

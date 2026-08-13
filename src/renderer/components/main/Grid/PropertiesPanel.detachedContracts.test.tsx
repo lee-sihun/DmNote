@@ -37,6 +37,7 @@ const {
   patchFontFamilyViaAuthorityMock,
   patchInactiveImageMock,
   patchInactiveImageViaAuthorityMock,
+  patchActiveImageMock,
   patchKnobPropertiesMock,
   patchKnobPropertiesViaAuthorityMock,
   patchKnobPropertyMock,
@@ -85,6 +86,7 @@ const {
   patchFontFamilyViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchInactiveImageMock: vi.fn(() => Promise.resolve(true)),
   patchInactiveImageViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
+  patchActiveImageMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertiesViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchKnobPropertyMock: vi.fn(() => Promise.resolve(true)),
@@ -143,6 +145,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontFamilyById: patchFontFamilyMock,
   patchFontFamilyByTargets: patchFontFamilyTargetsMock,
   patchInactiveImageById: patchInactiveImageMock,
+  patchActiveImageById: patchActiveImageMock,
   patchGraphColorById: patchGraphColorMock,
   patchGraphColorsByIds: patchGraphColorsMock,
   patchGraphPropertiesByIds: patchGraphPropertiesMock,
@@ -302,6 +305,7 @@ const resetStores = () => {
   patchFontFamilyViaAuthorityMock.mockClear();
   patchInactiveImageMock.mockClear();
   patchInactiveImageViaAuthorityMock.mockClear();
+  patchActiveImageMock.mockClear();
   patchKnobPropertiesMock.mockClear();
   patchKnobPropertiesViaAuthorityMock.mockClear();
   patchKnobPropertyMock.mockClear();
@@ -1348,6 +1352,76 @@ describe('PropertiesPanel detached preview contract', () => {
       expect(patchGraphColorMock).not.toHaveBeenCalled();
       expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
       expect(graphUpdatePositionsMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['main', 'key'],
+    ['main', 'knob'],
+    ['panel', 'key'],
+    ['panel', 'knob'],
+  ] as const)(
+    '%s single stable %s activeImage load와 reset은 exact key/knob 경로만 쓴다',
+    (windowType, type) => {
+      window.__dmn_window_type = windowType;
+      const id =
+        type === 'key'
+          ? 'a9999999-9999-4999-8999-999999999991'
+          : 'a9999999-9999-4999-8999-999999999992';
+      if (type === 'key') {
+        const position = { dx: 0, dy: 0, width: 60, height: 60, id };
+        useKeyStore.setState({
+          keyMappings: { '4key': ['A'] },
+          positions: { '4key': [position] as never },
+          canonicalPositions: { '4key': [position] as never },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': [
+              { ...useKnobItemStore.getState().positions['4key'][0], id },
+            ],
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: [{ type, id, index: 0 }],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props =
+        type === 'knob'
+          ? singleKnobPropsMock.mock.lastCall?.[0]
+          : singleKeyStatPropsMock.mock.lastCall?.[0];
+      const commit = (props as { onActiveImageCommit: (value: string) => void })
+        .onActiveImageCommit;
+
+      act(() => {
+        commit('  active.png  ');
+        commit('');
+      });
+
+      if (windowType === 'panel') {
+        expect(patchPropertyViaAuthorityMock).toHaveBeenNthCalledWith(1, {
+          elementType: type,
+          id,
+          patch: { activeImage: '  active.png  ' },
+        });
+        expect(patchPropertyViaAuthorityMock).toHaveBeenNthCalledWith(2, {
+          elementType: type,
+          id,
+          patch: { activeImage: '' },
+        });
+        expect(patchActiveImageMock).not.toHaveBeenCalled();
+      } else {
+        expect(patchActiveImageMock.mock.calls).toEqual([
+          [type, id, '  active.png  '],
+          [type, id, ''],
+        ]);
+        expect(patchPropertyViaAuthorityMock).not.toHaveBeenCalled();
+      }
+      expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
     },
   );
 

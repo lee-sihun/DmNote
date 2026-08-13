@@ -87,6 +87,7 @@ import {
   commitBatchGeometryByIds,
   patchElementLayerNameById,
   commitElementGeometryById,
+  patchActiveImageById,
   patchFontFamilyById,
   patchFontFamilyByTargets,
   patchInactiveImageById,
@@ -2077,6 +2078,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableActiveImageHandler = (
+    type: 'key' | 'knob',
+    id: string | undefined,
+  ) =>
+    id && !isSyntheticElementId(id)
+      ? (activeImage: string) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch: { activeImage },
+                })
+              : patchActiveImageById(type, id, activeImage);
+          void persisted.catch((error) => {
+            console.error('Failed to update active image', error);
+          });
+        }
+      : undefined;
+
   // ============================================================================
   // 다중 선택 헬퍼 함수들
   // ============================================================================
@@ -3522,6 +3543,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             'knob',
             selectedKnobElements[0]?.id,
           )}
+          onActiveImageCommit={stableActiveImageHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           handleGeometryCommit={stableGeometryHandler(
             'knob',
             selectedKnobElements[0]?.id,
@@ -3622,6 +3647,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? selectedStatElements[0]?.id
             : selectedKeyElements[0]?.id,
         )}
+        onActiveImageCommit={
+          isSingleKey
+            ? stableActiveImageHandler('key', selectedKeyElements[0]?.id)
+            : undefined
+        }
         handleGeometryCommit={stableGeometryHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat

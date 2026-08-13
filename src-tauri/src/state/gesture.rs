@@ -510,6 +510,15 @@ mod tests {
                 serde_json::json!({ "inactiveImage": "" }),
             ),
             (
+                EditorElementTypeV1::Knob,
+                EditorElementPropertyPatchV1::ActiveImage(
+                    crate::models::EditorActiveImagePropertyPatchV1 {
+                        active_image: "  active.png  ".to_string(),
+                    },
+                ),
+                serde_json::json!({ "activeImage": "  active.png  " }),
+            ),
+            (
                 EditorElementTypeV1::Stat,
                 EditorElementPropertyPatchV1::StatType(
                     crate::models::EditorStatTypePropertyPatchV1 {
@@ -617,6 +626,9 @@ mod tests {
             serde_json::json!({ "inactiveImage": null }),
             serde_json::json!({ "inactiveImage": "path", "hidden": false }),
             serde_json::json!({ "inactiveImage": "path", "unexpected": true }),
+            serde_json::json!({ "activeImage": null }),
+            serde_json::json!({ "activeImage": "path", "hidden": false }),
+            serde_json::json!({ "activeImage": "path", "unexpected": true }),
         ] {
             let mut invalid_image = layer_name_wire.clone();
             invalid_image["editorOps"][0]["patch"] = patch;

@@ -97,6 +97,13 @@ const mocks = vi.hoisted(() => ({
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
+  patchActiveImage: vi.fn(
+    (
+      _targets?: unknown,
+      _activeImage?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   authorityGeneration: 7,
   elements: [] as Array<Record<string, unknown>>,
 }));
@@ -174,6 +181,7 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchFontStyleByTargets: mocks.patchFontStyle,
   patchFontFamilyByTargets: mocks.patchFontFamily,
   patchInactiveImageByTargets: mocks.patchInactiveImage,
+  patchActiveImageByTargets: mocks.patchActiveImage,
   patchGraphPropertiesByIds: mocks.patchGraphProperties,
   patchGraphTypesByIds: mocks.patchGraphTypes,
   patchKnobPropertiesByIds: mocks.patchKnobProperties,
@@ -265,6 +273,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.patchFontFamily.mockResolvedValue(true);
     mocks.patchInactiveImage.mockReset();
     mocks.patchInactiveImage.mockResolvedValue(true);
+    mocks.patchActiveImage.mockReset();
+    mocks.patchActiveImage.mockResolvedValue(true);
     mocks.patchNoteProperties.mockReset();
     mocks.patchNoteProperties.mockResolvedValue(true);
     mocks.authorityGeneration = 7;
@@ -535,6 +545,7 @@ describe('plugin panel persisted element mutations', () => {
     ['글꼴 취소선', { fontStrikethrough: true }],
     ['글꼴 패밀리', { fontFamily: '  Raw Family  ' }],
     ['대기 이미지', { inactiveImage: '  Raw Image.png  ' }],
+    ['활성 이미지', { activeImage: '  Raw Active.png  ' }, 'key'],
     ['노트 효과', { noteEffectEnabled: false }, 'key'],
     ['노트 Y 보정', { noteAutoYCorrection: true }, 'key'],
     ['노트 글로우', { noteGlowEnabled: false }, 'key'],
@@ -710,6 +721,36 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.patchInactiveImage).toHaveBeenCalledWith(
       targets,
       '  Raw Image.png  ',
+      { preflight: expect.any(Function) },
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('activeImage batch는 key와 knob 대상만 raw string으로 한 commit에 전달한다', async () => {
+    const targets = [
+      {
+        elementType: 'key',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      {
+        elementType: 'knob',
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      },
+    ] as const;
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets,
+        patch: { activeImage: '  Raw Active.png  ' },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(mocks.patchActiveImage).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.patchActiveImage).toHaveBeenCalledWith(
+      targets,
+      '  Raw Active.png  ',
       { preflight: expect.any(Function) },
     );
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
@@ -1254,6 +1295,61 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'activeImage wrong stat type',
+      {
+        targets: [{ elementType: 'stat', id: 'stable' }],
+        patch: { activeImage: 'active.png' },
+      },
+    ],
+    [
+      'activeImage wrong graph type',
+      {
+        targets: [{ elementType: 'graph', id: 'stable' }],
+        patch: { activeImage: 'active.png' },
+      },
+    ],
+    [
+      'activeImage non-string',
+      {
+        targets: [{ elementType: 'key', id: 'stable' }],
+        patch: { activeImage: null },
+      },
+    ],
+    [
+      'activeImage combined',
+      {
+        targets: [{ elementType: 'knob', id: 'stable' }],
+        patch: { activeImage: 'active.png', inactiveImage: 'idle.png' },
+      },
+    ],
+    [
+      'activeImage duplicate target',
+      {
+        targets: [
+          { elementType: 'key', id: 'stable' },
+          { elementType: 'knob', id: 'stable' },
+        ],
+        patch: { activeImage: 'active.png' },
+      },
+    ],
+    [
+      'activeImage synthetic target',
+      {
+        targets: [{ elementType: 'knob', id: 'knob-0' }],
+        patch: { activeImage: 'active.png' },
+      },
+    ],
+    [
+      'activeImage oversized batch',
+      {
+        targets: Array.from({ length: 4097 }, (_, index) => ({
+          elementType: 'key',
+          id: `stable-active-${index}`,
+        })),
+        patch: { activeImage: 'active.png' },
+      },
+    ],
+    [
       'fontWeight fractional',
       {
         targets: [{ elementType: 'key', id: 'stable' }],
@@ -1435,6 +1531,7 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.patchFontStyle).not.toHaveBeenCalled();
       expect(mocks.patchFontFamily).not.toHaveBeenCalled();
       expect(mocks.patchInactiveImage).not.toHaveBeenCalled();
+      expect(mocks.patchActiveImage).not.toHaveBeenCalled();
       expect(mocks.patchNoteProperties).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
@@ -2097,6 +2194,31 @@ describe('plugin panel persisted element mutations', () => {
           { elementType: 'knob', id: 'stable-knob' },
         ],
         patch: { inactiveImage: '  Raw Image.png  ' },
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
+  it('activeImage 혼합 batch도 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.patchActiveImage.mockImplementationOnce(
+      async (_targets, _value, options) => {
+        mocks.authorityGeneration = 8;
+        options?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:patchProperty', {
+        targets: [
+          { elementType: 'key', id: 'stable-key' },
+          { elementType: 'knob', id: 'stable-knob' },
+        ],
+        patch: { activeImage: '  Raw Active.png  ' },
       }),
     );
 

@@ -19,6 +19,8 @@ const captured = vi.hoisted(() => ({
     completionBinding?: string;
     onIdleImageChange: (value: string) => void;
     onIdleImageReset: () => void;
+    onActiveImageChange?: (value: string) => void;
+    onActiveImageReset?: () => void;
   },
 }));
 const elementPatch = vi.hoisted(() => ({
@@ -148,6 +150,187 @@ describe('single geometry input bindings', () => {
       expect(captured.image?.completionBinding).toBe('element-id');
       expect(commit.mock.calls).toEqual([['  picked.png  '], ['']]);
       expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['key', 'knob'] as const)(
+    '%s ImagePicker active load와 reset은 exact callback만 호출한다',
+    (type) => {
+      const commit = vi.fn();
+      const legacy = vi.fn();
+      act(() => {
+        root.render(
+          type === 'key' ? (
+            <StyleTabContent
+              keyIndex={0}
+              keyPosition={createDefaultKeyPosition()}
+              keyCode="A"
+              keyInfo={null}
+              onPositionChange={vi.fn()}
+              onKeyUpdate={legacy}
+              onActiveImageCommit={commit}
+              showImagePicker
+              onToggleImagePicker={vi.fn()}
+              imageButtonRef={{ current: document.createElement('button') }}
+              shadowActiveState
+              showSoundControls={false}
+              panelElement={null}
+              t={(key) => key}
+            />
+          ) : (
+            <SingleKnobPanel
+              setPanelElement={vi.fn()}
+              singleKnobPosition={{
+                ...createDefaultKeyPosition(),
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={0}
+              selectedKeyType="4key"
+              isRenaming={false}
+              renameInputRef={createRef<HTMLInputElement>()}
+              renameValue=""
+              setRenameValue={vi.fn()}
+              renameCancelledRef={{ current: false }}
+              handleRenameCommit={vi.fn()}
+              handleRenameCancel={vi.fn()}
+              handleRenameStart={vi.fn()}
+              handleKnobUpdate={legacy}
+              onActiveImageCommit={commit}
+              singleScrollRefFor={() => vi.fn()}
+              panelElement={null}
+              useCustomCSS={false}
+              t={(key) => key}
+            />
+          ),
+        );
+      });
+      if (type === 'knob') {
+        const configure = [...container.querySelectorAll('button')].find(
+          (button) => button.textContent === 'propertiesPanel.configure',
+        );
+        act(() => configure?.click());
+      }
+
+      act(() => {
+        captured.image?.onActiveImageChange('  active.png  ');
+        captured.image?.onActiveImageReset();
+      });
+
+      expect(captured.image?.completionBinding).toBe('element-id');
+      expect(commit.mock.calls).toEqual([['  active.png  '], ['']]);
+      expect(legacy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('graph ImagePicker는 active writer를 노출하지 않는다', () => {
+    act(() => {
+      root.render(
+        <SingleGraphPanel
+          setPanelElement={vi.fn()}
+          singleGraphPosition={{
+            ...createDefaultKeyPosition(),
+            statType: 'kps',
+            graphType: 'line',
+            graphSpeed: 1000,
+            graphColor: '#fff',
+          }}
+          singleGraphIndex={0}
+          selectedKeyType="4key"
+          isRenaming={false}
+          renameInputRef={createRef<HTMLInputElement>()}
+          renameValue=""
+          setRenameValue={vi.fn()}
+          renameCancelledRef={{ current: false }}
+          handleRenameCommit={vi.fn()}
+          handleRenameCancel={vi.fn()}
+          handleRenameStart={vi.fn()}
+          handleGraphUpdate={vi.fn()}
+          showGraphImagePicker
+          setShowGraphImagePicker={vi.fn()}
+          graphImageButtonRef={{ current: document.createElement('button') }}
+          graphClassNameDraft=""
+          setGraphClassNameDraft={vi.fn()}
+          singleScrollRefFor={() => vi.fn()}
+          panelElement={null}
+          useCustomCSS={false}
+          t={(key) => key}
+        />,
+      );
+    });
+
+    expect(captured.image?.onActiveImageChange).toBeUndefined();
+    expect(captured.image?.onActiveImageReset).toBeUndefined();
+    expect(captured.image?.onIdleImageChange).toBeTypeOf('function');
+    expect(captured.image?.onIdleImageReset).toBeTypeOf('function');
+  });
+
+  it.each(['key', 'knob'] as const)(
+    '%s idless active ImagePicker load와 reset은 기존 writer만 쓴다',
+    (type) => {
+      const legacy = vi.fn();
+      const idless = { ...createDefaultKeyPosition(), id: undefined };
+      act(() => {
+        root.render(
+          type === 'key' ? (
+            <StyleTabContent
+              keyIndex={0}
+              keyPosition={idless}
+              keyCode="A"
+              keyInfo={null}
+              onPositionChange={vi.fn()}
+              onKeyUpdate={legacy}
+              showImagePicker
+              onToggleImagePicker={vi.fn()}
+              imageButtonRef={{ current: document.createElement('button') }}
+              shadowActiveState
+              showSoundControls={false}
+              panelElement={null}
+              t={(key) => key}
+            />
+          ) : (
+            <SingleKnobPanel
+              setPanelElement={vi.fn()}
+              singleKnobPosition={{
+                ...idless,
+                axisId: 'HIDA:test',
+                sensitivity: 1,
+                reverse: false,
+              }}
+              singleKnobIndex={0}
+              selectedKeyType="4key"
+              isRenaming={false}
+              renameInputRef={createRef<HTMLInputElement>()}
+              renameValue=""
+              setRenameValue={vi.fn()}
+              renameCancelledRef={{ current: false }}
+              handleRenameCommit={vi.fn()}
+              handleRenameCancel={vi.fn()}
+              handleRenameStart={vi.fn()}
+              handleKnobUpdate={legacy}
+              singleScrollRefFor={() => vi.fn()}
+              panelElement={null}
+              useCustomCSS={false}
+              t={(key) => key}
+            />
+          ),
+        );
+      });
+      if (type === 'knob') {
+        const configure = [...container.querySelectorAll('button')].find(
+          (button) => button.textContent === 'propertiesPanel.configure',
+        );
+        act(() => configure?.click());
+      }
+      act(() => {
+        captured.image?.onActiveImageChange?.('legacy-active.png');
+        captured.image?.onActiveImageReset?.();
+      });
+
+      expect(captured.image?.completionBinding).toBe('session-mode');
+      expect(elementPatch.applyElementPatchById).not.toHaveBeenCalled();
+      expect(legacy).toHaveBeenCalledTimes(2);
     },
   );
 
