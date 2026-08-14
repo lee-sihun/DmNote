@@ -9,20 +9,11 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { setElementGroupsByTargets } from '@src/renderer/editor/runtime/elementOps';
 import { setElementGroupsViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
-import {
-  isSyntheticElementId,
-  resolveElementById,
-} from '@src/renderer/editor/model/elementIdMap';
-import {
-  applyGroupIdToSelectedElements,
-  buildNextLayerGroupName,
-  normalizeLayerGroupsForMode,
-  resolveSingleGroupIdFromSelection,
-} from '@utils/layerGroupUtils';
+import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import { buildNextLayerGroupName } from '@utils/layerGroupUtils';
 import type { EditorElementGroupTargetV1 } from '@src/types/editor';
 
 const stableGroupTargets = (
@@ -37,9 +28,8 @@ const stableGroupTargets = (
       : [],
   );
   if (targets.length === 0) return [];
-  return targets.every(
-    ({ id }) => isNativeElementId(id) && !isSyntheticElementId(id),
-  ) && new Set(targets.map(({ id }) => id)).size === targets.length
+  return targets.every(({ id }) => isNativeElementId(id)) &&
+    new Set(targets.map(({ id }) => id)).size === targets.length
     ? targets
     : null;
 };
@@ -74,115 +64,27 @@ export async function groupSelectedElements(
 
   const stableTargets = stableGroupTargets(selectedElements);
   if (stableTargets?.length === 0) return false;
-  if (stableTargets) {
-    const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-    const groupIds = new Set(
-      stableTargets
-        .map((target) => currentGroupId(selectedKeyType, target))
-        .filter((id): id is string => typeof id === 'string' && id.length > 0),
-    );
-    const existingId = groupIds.size === 1 ? [...groupIds][0] : undefined;
-    const targetGroup = existingId
-      ? ({ kind: 'existing', id: existingId } as const)
-      : ({
-          kind: 'create',
-          id: crypto.randomUUID(),
-          name: buildNextLayerGroupName(
-            newGroupLabel,
-            currentLayerGroups[selectedKeyType] ?? [],
-          ),
-        } as const);
-    return window.__dmn_window_type === 'panel'
-      ? setElementGroupsViaAuthority(
-          selectedKeyType,
-          stableTargets,
-          targetGroup,
-        )
-      : setElementGroupsByTargets(selectedKeyType, stableTargets, targetGroup);
-  }
-
-  // 커밋 base는 canonical - rendered에는 다른 세션의 미커밋 프리뷰가 섞일 수 있음
-  const { canonicalPositions: positions } = useKeyStore.getState();
-  const statPos = useStatItemStore.getState().positions;
-  const graphPos = useGraphItemStore.getState().positions;
-  const knobPos = useKnobItemStore.getState().positions;
+  if (!stableTargets) return false;
   const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-  const modeGroups = currentLayerGroups[selectedKeyType] || [];
-
-  const singleGroupId = resolveSingleGroupIdFromSelection(
-    selectedKeyType,
-    selectedElements,
-    positions,
-    statPos,
-    graphPos,
-    knobPos,
+  const groupIds = new Set(
+    stableTargets
+      .map((target) => currentGroupId(selectedKeyType, target))
+      .filter((id): id is string => typeof id === 'string' && id.length > 0),
   );
-
-  let targetGroupId = singleGroupId;
-  let nextLayerGroups = currentLayerGroups;
-  let createdGroup = false;
-
-  if (!targetGroupId) {
-    targetGroupId = crypto.randomUUID();
-    const groupName = buildNextLayerGroupName(newGroupLabel, modeGroups);
-    nextLayerGroups = {
-      ...currentLayerGroups,
-      [selectedKeyType]: [
-        ...modeGroups,
-        { id: targetGroupId, name: groupName },
-      ],
-    };
-    createdGroup = true;
-  }
-
-  const grouped = applyGroupIdToSelectedElements({
-    mode: selectedKeyType,
-    selectedElements,
-    keyPositions: positions,
-    statPositions: statPos,
-    graphPositions: graphPos,
-    knobPositions: knobPos,
-    targetGroupId,
-  });
-
-  const normalized = normalizeLayerGroupsForMode({
-    mode: selectedKeyType,
-    keyPositions: grouped.keyPositions,
-    statPositions: grouped.statPositions,
-    graphPositions: grouped.graphPositions,
-    knobPositions: grouped.knobPositions,
-    layerGroups: nextLayerGroups,
-  });
-
-  const hasChange =
-    grouped.changed ||
-    normalized.positionsChanged ||
-    createdGroup ||
-    normalized.groupsChanged;
-  if (!hasChange) return false;
-
-  // 스토어 반영
-  useKeyStore.getState().setPositions(normalized.keyPositions);
-  useStatItemStore.getState().setPositions(normalized.statPositions);
-  useGraphItemStore.getState().setPositions(normalized.graphPositions);
-  useKnobItemStore.getState().setPositions(normalized.knobPositions);
-  if (createdGroup || normalized.groupsChanged) {
-    useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-  }
-
-  // 참조와 그룹 정의를 같은 revision으로 저장
-  await editorCoordinator
-    .commitPatch({
-      schemaVersion: 1,
-      keyPositions: normalized.keyPositions,
-      statPositions: normalized.statPositions,
-      graphPositions: normalized.graphPositions,
-      knobPositions: normalized.knobPositions,
-      layerGroups: normalized.layerGroups,
-    })
-    .catch(() => {});
-
-  return true;
+  const existingId = groupIds.size === 1 ? [...groupIds][0] : undefined;
+  const targetGroup = existingId
+    ? ({ kind: 'existing', id: existingId } as const)
+    : ({
+        kind: 'create',
+        id: crypto.randomUUID(),
+        name: buildNextLayerGroupName(
+          newGroupLabel,
+          currentLayerGroups[selectedKeyType] ?? [],
+        ),
+      } as const);
+  return window.__dmn_window_type === 'panel'
+    ? setElementGroupsViaAuthority(selectedKeyType, stableTargets, targetGroup)
+    : setElementGroupsByTargets(selectedKeyType, stableTargets, targetGroup);
 }
 
 /**
@@ -197,59 +99,8 @@ export async function ungroupSelectedElements(
 
   const stableTargets = stableGroupTargets(selectedElements);
   if (stableTargets?.length === 0) return false;
-  if (stableTargets) {
-    return window.__dmn_window_type === 'panel'
-      ? setElementGroupsViaAuthority(selectedKeyType, stableTargets, null)
-      : setElementGroupsByTargets(selectedKeyType, stableTargets, null);
-  }
-
-  const { canonicalPositions: positions } = useKeyStore.getState();
-  const statPos = useStatItemStore.getState().positions;
-  const graphPos = useGraphItemStore.getState().positions;
-  const knobPos = useKnobItemStore.getState().positions;
-  const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-
-  const ungrouped = applyGroupIdToSelectedElements({
-    mode: selectedKeyType,
-    selectedElements,
-    keyPositions: positions,
-    statPositions: statPos,
-    graphPositions: graphPos,
-    knobPositions: knobPos,
-    targetGroupId: undefined,
-  });
-
-  const normalized = normalizeLayerGroupsForMode({
-    mode: selectedKeyType,
-    keyPositions: ungrouped.keyPositions,
-    statPositions: ungrouped.statPositions,
-    graphPositions: ungrouped.graphPositions,
-    knobPositions: ungrouped.knobPositions,
-    layerGroups: currentLayerGroups,
-  });
-
-  const hasChange = ungrouped.changed || normalized.groupsChanged;
-  if (!hasChange) return false;
-
-  // 스토어 반영
-  useKeyStore.getState().setPositions(normalized.keyPositions);
-  useStatItemStore.getState().setPositions(normalized.statPositions);
-  useGraphItemStore.getState().setPositions(normalized.graphPositions);
-  useKnobItemStore.getState().setPositions(normalized.knobPositions);
-  if (normalized.groupsChanged) {
-    useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-  }
-
-  await editorCoordinator
-    .commitPatch({
-      schemaVersion: 1,
-      keyPositions: normalized.keyPositions,
-      statPositions: normalized.statPositions,
-      graphPositions: normalized.graphPositions,
-      knobPositions: normalized.knobPositions,
-      layerGroups: normalized.layerGroups,
-    })
-    .catch(() => {});
-
-  return true;
+  if (!stableTargets) return false;
+  return window.__dmn_window_type === 'panel'
+    ? setElementGroupsViaAuthority(selectedKeyType, stableTargets, null)
+    : setElementGroupsByTargets(selectedKeyType, stableTargets, null);
 }

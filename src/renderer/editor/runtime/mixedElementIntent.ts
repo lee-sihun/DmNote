@@ -11,7 +11,7 @@ import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
 import type {
-  EditorDocumentV1,
+  CanonicalEditorDocumentV1,
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
@@ -30,7 +30,7 @@ export const runMixedElementIntent = async (options: {
   gestureId: string;
   pluginIds: readonly string[];
   applyEager: () => ElementIntentReceipt | null;
-  generate: (base: EditorDocumentV1) => EditorPatchV1 | null;
+  generate: (base: CanonicalEditorDocumentV1) => EditorPatchV1 | null;
   skipContext: string;
   // 의도적으로 editor를 생략하는 호출자(plugin만 커밋)는 skip 관측 생략
   expectNull?: boolean;
@@ -170,7 +170,7 @@ export const runMixedGestureElementIntent = async (options: {
   // eager는 호출 직전 이미 적용됨 - receipt만 전달
   receipt: ElementIntentReceipt | null;
   generate: (context: {
-    base: EditorDocumentV1;
+    base: CanonicalEditorDocumentV1;
     pluginProjection: readonly PluginDisplayElementInternal[];
   }) => MixedIntentGeneration;
   skipContext: string;

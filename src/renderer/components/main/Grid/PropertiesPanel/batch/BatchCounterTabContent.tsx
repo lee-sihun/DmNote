@@ -6,7 +6,7 @@ import { patchCounterAnimationPresetByTargets } from '@src/renderer/editor/runti
 import { patchCounterAnimationPresetViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import {
-  LEGACY_BATCH_ELEMENT_BINDING,
+  EMPTY_BATCH_ELEMENT_BINDING,
   type BatchElementBinding,
 } from '@hooks/pickers/useBatchElementBinding';
 import {
@@ -39,8 +39,6 @@ interface BatchCounterTabContentProps {
   batchCounterSettings: KeyCounterSettings;
   // 첫 번째 선택 키의 시각 정보 (프리뷰용)
   keyVisual?: CounterAnimationKeyVisual;
-  // 핸들러
-  handleBatchCounterUpdate: (updates: Partial<KeyCounterSettings>) => void;
   onCounterEnabledCommit?: (enabled: boolean) => void;
   onCounterAnimationEnabledCommit?: (enabled: boolean) => void;
   onCounterLayoutCommit?: (patch: EditorCounterLayoutPropertyPatchV1) => void;
@@ -69,7 +67,6 @@ interface BatchCounterTabContentProps {
 const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   batchCounterSettings,
   keyVisual,
-  handleBatchCounterUpdate,
   onCounterEnabledCommit,
   onCounterAnimationEnabledCommit,
   onCounterLayoutCommit,
@@ -82,7 +79,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   batchCounterStrokeButtonRef,
   isFillPickerOpen,
   isStrokePickerOpen,
-  animationBinding = LEGACY_BATCH_ELEMENT_BINDING,
+  animationBinding = EMPTY_BATCH_ELEMENT_BINDING,
   t,
 }) => {
   // 인-패널 내비게이션 (폰트/애니메이션 서브 페이지)
@@ -95,27 +92,23 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   const handleAnimationUpdate = (
     nextAnimation: KeyCounterSettings['animation'],
   ) => {
-    if (animationBinding.binding === 'element-id') {
-      const targets = (['key', 'stat'] as const).flatMap((elementType) =>
-        (animationBinding.selection[elementType] ?? []).map((id) => ({
-          elementType,
-          id,
-        })),
-      );
-      if (targets.length === 0) return;
-      const intent = createCounterAnimationPresetIntent(
-        batchCounterSettings.animation,
-        nextAnimation,
-        'batch',
-      );
-      const persisted =
-        window.__dmn_window_type === 'panel'
-          ? patchCounterAnimationPresetViaAuthority(targets, intent)
-          : patchCounterAnimationPresetByTargets(targets, intent);
-      void persisted.catch(reportElementOpError);
-      return;
-    }
-    handleBatchCounterUpdate({ animation: nextAnimation });
+    const targets = (['key', 'stat'] as const).flatMap((elementType) =>
+      (animationBinding.selection[elementType] ?? []).map((id) => ({
+        elementType,
+        id,
+      })),
+    );
+    if (targets.length === 0) return;
+    const intent = createCounterAnimationPresetIntent(
+      batchCounterSettings.animation,
+      nextAnimation,
+      'batch',
+    );
+    const persisted =
+      window.__dmn_window_type === 'panel'
+        ? patchCounterAnimationPresetViaAuthority(targets, intent)
+        : patchCounterAnimationPresetByTargets(targets, intent);
+    void persisted.catch(reportElementOpError);
   };
 
   const getDisplayColor = (color: string): string => {
@@ -138,11 +131,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             checked={batchCounterSettings.enabled}
             onChange={() => {
               const enabled = !batchCounterSettings.enabled;
-              if (onCounterEnabledCommit) {
-                onCounterEnabledCommit(enabled);
-                return;
-              }
-              handleBatchCounterUpdate({ enabled });
+              onCounterEnabledCommit?.(enabled);
             }}
           />
         </div>
@@ -166,11 +155,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             value={batchCounterSettings.placement}
             onChange={(value) => {
               const placement = value as 'inside' | 'outside';
-              if (onCounterLayoutCommit) {
-                onCounterLayoutCommit({ counterPlacement: placement });
-              } else {
-                handleBatchCounterUpdate({ placement });
-              }
+              onCounterLayoutCommit?.({ counterPlacement: placement });
             }}
           />
         </PropertyRow>
@@ -194,11 +179,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             value={batchCounterSettings.align}
             onChange={(value) => {
               const align = value as 'top' | 'bottom' | 'left' | 'right';
-              if (onCounterLayoutCommit) {
-                onCounterLayoutCommit({ counterAlign: align });
-              } else {
-                handleBatchCounterUpdate({ align });
-              }
+              onCounterLayoutCommit?.({ counterAlign: align });
             }}
           />
         </PropertyRow>
@@ -221,11 +202,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
               value={batchCounterSettings.alignMode ?? 'center'}
               onChange={(value) => {
                 const alignMode = value as 'center' | 'between';
-                if (onCounterLayoutCommit) {
-                  onCounterLayoutCommit({ counterAlignMode: alignMode });
-                } else {
-                  handleBatchCounterUpdate({ alignMode });
-                }
+                onCounterLayoutCommit?.({ counterAlignMode: alignMode });
               }}
             />
           </PropertyRow>
@@ -236,11 +213,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           <NumberInput
             value={batchCounterSettings.gap}
             onChange={(value) => {
-              if (onCounterLayoutCommit) {
-                onCounterLayoutCommit({ counterGap: value });
-              } else {
-                handleBatchCounterUpdate({ gap: value });
-              }
+              onCounterLayoutCommit?.({ counterGap: value });
             }}
             suffix="px"
             min={0}
@@ -310,11 +283,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           <NumberInput
             value={batchCounterSettings.fontSize ?? DEFAULT_COUNTER_FONT_SIZE}
             onChange={(value) => {
-              if (onCounterTypographyCommit) {
-                onCounterTypographyCommit({ counterFontSize: value });
-                return;
-              }
-              handleBatchCounterUpdate({ fontSize: value });
+              onCounterTypographyCommit?.({ counterFontSize: value });
             }}
             suffix="px"
             min={8}
@@ -331,36 +300,20 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             isUnderline={batchCounterSettings.fontUnderline ?? false}
             isStrikethrough={batchCounterSettings.fontStrikethrough ?? false}
             onBoldChange={(value) => {
-              if (onCounterTypographyCommit) {
-                onCounterTypographyCommit({
-                  counterFontWeight: value ? 700 : 400,
-                });
-                return;
-              }
-              handleBatchCounterUpdate({ fontWeight: value ? 700 : 400 });
+              onCounterTypographyCommit?.({
+                counterFontWeight: value ? 700 : 400,
+              });
             }}
             onItalicChange={(value) => {
-              if (onCounterTypographyCommit) {
-                onCounterTypographyCommit({ counterFontItalic: value });
-                return;
-              }
-              handleBatchCounterUpdate({ fontItalic: value });
+              onCounterTypographyCommit?.({ counterFontItalic: value });
             }}
             onUnderlineChange={(value) => {
-              if (onCounterTypographyCommit) {
-                onCounterTypographyCommit({ counterFontUnderline: value });
-                return;
-              }
-              handleBatchCounterUpdate({ fontUnderline: value });
+              onCounterTypographyCommit?.({ counterFontUnderline: value });
             }}
             onStrikethroughChange={(value) => {
-              if (onCounterTypographyCommit) {
-                onCounterTypographyCommit({
-                  counterFontStrikethrough: value,
-                });
-                return;
-              }
-              handleBatchCounterUpdate({ fontStrikethrough: value });
+              onCounterTypographyCommit?.({
+                counterFontStrikethrough: value,
+              });
             }}
           />
         </PropertyRow>
@@ -377,13 +330,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             checked={batchCounterSettings.animation.enabled}
             onChange={() => {
               const enabled = !batchCounterSettings.animation.enabled;
-              if (onCounterAnimationEnabledCommit) {
-                onCounterAnimationEnabledCommit(enabled);
-                return;
-              }
-              handleBatchCounterUpdate({
-                animation: { ...batchCounterSettings.animation, enabled },
-              });
+              onCounterAnimationEnabledCommit?.(enabled);
             }}
           />
         </div>
@@ -412,11 +359,11 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             open
             selectedFont={batchCounterSettings.fontFamily || null}
             onFontSelect={(fontFamily) => {
-              if (fontFamily !== null && onCounterTypographyCommit) {
-                onCounterTypographyCommit({ counterFontFamily: fontFamily });
-                return;
+              if (fontFamily !== null) {
+                onCounterTypographyCommit?.({
+                  counterFontFamily: fontFamily,
+                });
               }
-              handleBatchCounterUpdate({ fontFamily });
             }}
             pageTitle={t('counterSetting.font') || '폰트'}
             onBack={closePage}

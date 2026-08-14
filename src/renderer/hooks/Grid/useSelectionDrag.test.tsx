@@ -84,8 +84,6 @@ const Harness = ({
     elementId: 'key-0',
     elementWidth: 60,
     elementHeight: 60,
-    elementType: 'key',
-    elementIndex: 0,
     selectedElements: [{ id: 'key-0', type: 'key', index: 0 }],
     getOtherElements: () => [],
     onMultiDragStart,
@@ -113,7 +111,6 @@ const PluginPairHarness = () => {
     elementId: 'plugin-a',
     elementWidth: 100,
     elementHeight: 100,
-    elementType: 'plugin',
     selectedElements: [
       { id: 'plugin-a', type: 'plugin' },
       { id: 'plugin-b', type: 'plugin' },
@@ -153,7 +150,6 @@ const MovingPluginPairHarness = ({
     elementId: 'plugin-a',
     elementWidth: 100,
     elementHeight: 100,
-    elementType: 'plugin',
     selectedElements: [
       { id: 'plugin-a', type: 'plugin' },
       { id: 'plugin-b', type: 'plugin' },

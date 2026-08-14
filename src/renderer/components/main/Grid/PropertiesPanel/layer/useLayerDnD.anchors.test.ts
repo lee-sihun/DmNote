@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  generateModeScopedIntentPatch,
-  resolveDropIndexFromAnchors,
-} from './useLayerDnD';
-
-import type { EditorDocumentV1 } from '@src/types/editor';
+import { resolveDropIndexFromAnchors } from './useLayerDnD';
 
 const layer = (id: string) =>
   ({ displayType: 'layer' as const, item: { id } } as never);
@@ -207,39 +202,5 @@ describe('resolveDropIndexFromAnchors', () => {
         [],
       ),
     ).toBe(0);
-  });
-});
-
-describe('generateModeScopedIntentPatch', () => {
-  const base = {
-    schemaVersion: 1,
-    keys: {},
-    keyPositions: {
-      '4key': [{ id: 'in-mode', zIndex: 0 }],
-      '8key': [{ id: 'moved-away', zIndex: 0 }],
-    },
-    statPositions: {},
-    graphPositions: {},
-    knobPositions: {},
-    layerGroups: {},
-  } as unknown as EditorDocumentV1;
-
-  it('선택 모드의 요소에만 적용한다', () => {
-    const patch = generateModeScopedIntentPatch(
-      base,
-      new Map([['key', new Map([['in-mode', { zIndex: 7 }]])]]),
-      '4key',
-    );
-    expect(patch?.keyPositions?.['4key'][0]).toMatchObject({ zIndex: 7 });
-    expect(patch?.keyPositions?.['8key'][0]).toMatchObject({ zIndex: 0 });
-  });
-
-  it('대기 중 다른 모드로 이동한 요소는 skip한다', () => {
-    const patch = generateModeScopedIntentPatch(
-      base,
-      new Map([['key', new Map([['moved-away', { zIndex: 7 }]])]]),
-      '4key',
-    );
-    expect(patch).toBeNull();
   });
 });

@@ -149,7 +149,7 @@ describe('selection sync drain', () => {
     stop();
   });
 
-  it('수신 선택에서 삭제된 안정 id는 버린다', () => {
+  it('문서보다 먼저 도착한 안정 id는 index 없이 보존한다', () => {
     mocks.keyPositions = { '4key': [{ id: UUID_B }] };
     const stop = selectionSync.initSelectionSync();
 
@@ -157,11 +157,13 @@ describe('selection sync drain', () => {
       responseFor([{ elementType: 'key', index: 0, fullId: UUID_A }], 5),
     );
 
-    expect(mocks.selectionState!.selectedElements).toEqual([]);
+    expect(mocks.selectionState!.selectedElements).toEqual([
+      { type: 'key', id: UUID_A },
+    ]);
     stop();
   });
 
-  it('합성 id(무ID 구형)는 wire 표현을 유지한다', () => {
+  it('원격 합성 ID는 현재 문서에서 재해석할 수 없으면 버린다', () => {
     mocks.keyPositions = { '4key': [{}] };
     const stop = selectionSync.initSelectionSync();
 
@@ -169,9 +171,7 @@ describe('selection sync drain', () => {
       responseFor([{ elementType: 'key', index: 0, fullId: 'key-0' }], 5),
     );
 
-    expect(mocks.selectionState!.selectedElements).toEqual([
-      { type: 'key', id: 'key-0', index: 0 },
-    ]);
+    expect(mocks.selectionState!.selectedElements).toEqual([]);
     stop();
   });
 

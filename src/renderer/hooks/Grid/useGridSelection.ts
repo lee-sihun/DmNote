@@ -18,16 +18,8 @@ import {
   type ClipboardItem,
 } from '@stores/grid/useGridSelectionStore';
 import { PASTE_OFFSET } from './constants';
-import type {
-  KeyMappings,
-  KeyPositions,
-  KeyPosition,
-  KeySlot,
-} from '@src/types/key/keys';
+import type { KeyMappings, KeySlot } from '@src/types/key/keys';
 import { cloneSlot } from '@utils/keySlot';
-import type { StatItemPosition } from '@src/types/key/statItems';
-import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   buildNextLayerGroupName,
@@ -41,7 +33,6 @@ import {
   combineReceipts,
   createPropertyReceipt,
   generatePropertyIntentPatch,
-  reportElementOpError,
   reportElementOpSkipped,
   type ElementIntentReceipt,
   type PropertyIntents,
@@ -53,9 +44,16 @@ import {
   runMixedGestureElementIntent,
 } from '@src/renderer/editor/runtime/mixedElementIntent';
 import { stableStringify } from '@utils/core/stableStringify';
-import type { EditorInsertFrozenElementsOpV1 } from '@src/types/editor';
+import type {
+  CanonicalEditorDocumentV1,
+  CanonicalKeyPosition,
+  CanonicalStatItemPosition,
+  CanonicalGraphItemPosition,
+  CanonicalKnobItemPosition,
+  EditorInsertFrozenElementsOpV1,
+} from '@src/types/editor';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
-import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
@@ -69,7 +67,7 @@ interface UseGridSelectionParams {
   selectedElements: SelectedElement[];
   selectedKeyType: string;
   keyMappings: KeyMappings;
-  positions: KeyPositions;
+  positions: CanonicalEditorDocumentV1['keyPositions'];
 }
 
 interface UseGridSelectionReturn {
@@ -128,8 +126,7 @@ export function useGridSelection({
       currentSelection.some((element) => element.type !== 'plugin') &&
       pluginIds.length > 0;
     // 안정 id native 선택은 기하 의도 커밋 - full-record 캡처는 배타
-    // mutation 직후에 착지해 무관 필드 재작성을 되돌린다. 합성 id가 하나라도
-    // 있으면 전체 legacy 폴백 (혼합 플러그인 트랜잭션도 기존 경로 유지)
+    // mutation 직후에 착지해 무관 필드 재작성을 되돌린다
     const nativeTargets = currentSelection
       .filter(
         (element): element is (typeof currentSelection)[number] =>
@@ -142,27 +139,12 @@ export function useGridSelection({
     const allStableIds =
       nativeTargets.length > 0 &&
       nativeTargets.every(
-        (target) => target.id.length > 0 && !isSyntheticElementId(target.id),
+        (target) => target.id.length > 0 && isNativeElementId(target.id),
       );
     // plugin-only 선택은 editor 의도가 없다 - editor 무커밋
     if (nativeTargets.length > 0) {
       if (!allStableIds) {
-        // 합성 선택 정산은 시작 fingerprint 배관이 없어 fail-closed 무커밋.
-        // v1 어댑터가 로드 시 id를 backfill하므로 실도달 불가 경로
-        if (gestureId && isMixed) {
-          // plugin 변경은 시작된 mixed 트랜잭션으로 커밋하되 editor는 생략
-          reportElementOpSkipped('synthetic selection settlement');
-          void runMixedElementIntent({
-            gestureId,
-            pluginIds,
-            applyEager: () => null,
-            generate: () => null,
-            skipContext: 'synthetic selection settlement',
-            expectNull: true,
-          }).catch(reportElementOpError);
-        } else {
-          reportElementOpSkipped('synthetic selection settlement');
-        }
+        reportElementOpSkipped('invalid native selection settlement');
       } else if (gestureId && isMixed) {
         // 이동 정산은 dx·dy만 동결 - width·height까지 실으면 병행 리사이즈를
         // 되돌린다. wire는 슬롯 generator가 최신 base에 id 의도를 재적용
@@ -217,7 +199,7 @@ export function useGridSelection({
                 : 'knobPositions';
             const collections = lastAck[field] as Record<
               string,
-              Array<{ id?: string } & Record<string, unknown>>
+              Array<{ id: string } & Record<string, unknown>>
             >;
             for (const list of Object.values(collections)) {
               for (const position of list) {
@@ -284,18 +266,19 @@ export function useGridSelection({
       usePluginDisplayElementStore.getState().elements;
 
     // 키 위치 배치 업데이트
-    const keyUpdates = selectedElements.filter(
-      (el) => el.type === 'key' && el.index !== undefined,
-    );
+    const keyUpdates = selectedElements.filter((el) => el.type === 'key');
     if (keyUpdates.length > 0) {
       const newPositions = { ...currentPositions };
       const tabPositions = [...(newPositions[selectedKeyType] || [])];
 
       keyUpdates.forEach((el) => {
-        if (el.index === undefined) return;
-        const currentPos = tabPositions[el.index];
+        const index = tabPositions.findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return;
+        const currentPos = tabPositions[index];
         if (currentPos) {
-          tabPositions[el.index] = {
+          tabPositions[index] = {
             ...currentPos,
             dx: currentPos.dx + deltaX,
             dy: currentPos.dy + deltaY,
@@ -308,19 +291,20 @@ export function useGridSelection({
     }
 
     // 통계 요소 배치 업데이트
-    const statUpdates = selectedElements.filter(
-      (el) => el.type === 'stat' && el.index !== undefined,
-    );
+    const statUpdates = selectedElements.filter((el) => el.type === 'stat');
     if (statUpdates.length > 0) {
       const currentStatPositions = useStatItemStore.getState().positions;
       const newStatPositions = { ...currentStatPositions };
       const tabPositions = [...(newStatPositions[selectedKeyType] || [])];
 
       statUpdates.forEach((el) => {
-        if (el.index === undefined) return;
-        const currentPos = tabPositions[el.index];
+        const index = tabPositions.findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return;
+        const currentPos = tabPositions[index];
         if (currentPos) {
-          tabPositions[el.index] = {
+          tabPositions[index] = {
             ...currentPos,
             dx: currentPos.dx + deltaX,
             dy: currentPos.dy + deltaY,
@@ -333,19 +317,20 @@ export function useGridSelection({
     }
 
     // 그래프 요소 배치 업데이트
-    const graphUpdates = selectedElements.filter(
-      (el) => el.type === 'graph' && el.index !== undefined,
-    );
+    const graphUpdates = selectedElements.filter((el) => el.type === 'graph');
     if (graphUpdates.length > 0) {
       const currentGraphPositions = useGraphItemStore.getState().positions;
       const newGraphPositions = { ...currentGraphPositions };
       const tabPositions = [...(newGraphPositions[selectedKeyType] || [])];
 
       graphUpdates.forEach((el) => {
-        if (el.index === undefined) return;
-        const currentPos = tabPositions[el.index];
+        const index = tabPositions.findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return;
+        const currentPos = tabPositions[index];
         if (currentPos) {
-          tabPositions[el.index] = {
+          tabPositions[index] = {
             ...currentPos,
             dx: currentPos.dx + deltaX,
             dy: currentPos.dy + deltaY,
@@ -358,19 +343,20 @@ export function useGridSelection({
     }
 
     // 노브 요소 배치 업데이트
-    const knobUpdates = selectedElements.filter(
-      (el) => el.type === 'knob' && el.index !== undefined,
-    );
+    const knobUpdates = selectedElements.filter((el) => el.type === 'knob');
     if (knobUpdates.length > 0) {
       const currentKnobPositions = useKnobItemStore.getState().positions;
       const newKnobPositions = { ...currentKnobPositions };
       const tabPositions = [...(newKnobPositions[selectedKeyType] || [])];
 
       knobUpdates.forEach((el) => {
-        if (el.index === undefined) return;
-        const currentPos = tabPositions[el.index];
+        const index = tabPositions.findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return;
+        const currentPos = tabPositions[index];
         if (currentPos) {
-          tabPositions[el.index] = {
+          tabPositions[index] = {
             ...currentPos,
             dx: currentPos.dx + deltaX,
             dy: currentPos.dy + deltaY,
@@ -424,10 +410,9 @@ export function useGridSelection({
   };
 
   // 선택된 요소들 삭제 함수 (배치 삭제)
-  // 선택된 요소들 삭제 (배치): 대상은 호출 시점 동결(안정 id 전역 재해석,
-  // 합성은 invocation baseline), eager는 봉인 구조 receipt, wire는 슬롯
-  // base에서 재생성. full-record 캡처 커밋 금지 - 대기 중 정산된 다른
-  // 커밋을 되돌린다. destructive라 fingerprint 불일치는 전체 중단
+  // 대상은 호출 시점의 canonical id로 동결하고 eager는 봉인 구조 receipt,
+  // wire는 슬롯 base에서 재생성. full-record 캡처 커밋 금지 - 대기 중
+  // 정산된 다른 커밋을 되돌린다
   const deleteSelectedElements = async () => {
     await deleteFrozenSelection(selectedElements, selectedKeyType);
   };
@@ -453,9 +438,12 @@ export function useGridSelection({
     const clipboardItems: ClipboardItem[] = [];
 
     for (const element of selectedElements) {
-      if (element.type === 'key' && element.index !== undefined) {
-        const keyCode = currentMappings[element.index];
-        const position = currentPositions[element.index];
+      if (element.type === 'key') {
+        const index = currentPositions.findIndex(
+          (position) => position.id === element.id,
+        );
+        const keyCode = index >= 0 ? currentMappings[index] : undefined;
+        const position = index >= 0 ? currentPositions[index] : undefined;
         if (keyCode && position) {
           clipboardItems.push({
             type: 'key',
@@ -463,24 +451,30 @@ export function useGridSelection({
             position: { ...position },
           });
         }
-      } else if (element.type === 'stat' && element.index !== undefined) {
-        const position = currentStatPositions[element.index];
+      } else if (element.type === 'stat') {
+        const position = currentStatPositions.find(
+          (candidate) => candidate.id === element.id,
+        );
         if (position) {
           clipboardItems.push({
             type: 'stat',
             position: { ...position },
           });
         }
-      } else if (element.type === 'graph' && element.index !== undefined) {
-        const position = currentGraphPositions[element.index];
+      } else if (element.type === 'graph') {
+        const position = currentGraphPositions.find(
+          (candidate) => candidate.id === element.id,
+        );
         if (position) {
           clipboardItems.push({
             type: 'graph',
             position: { ...position },
           });
         }
-      } else if (element.type === 'knob' && element.index !== undefined) {
-        const position = currentKnobPositions[element.index];
+      } else if (element.type === 'knob') {
+        const position = currentKnobPositions.find(
+          (candidate) => candidate.id === element.id,
+        );
         if (position) {
           clipboardItems.push({
             type: 'knob',
@@ -584,10 +578,13 @@ export function useGridSelection({
     };
 
     // 신규 native payload 동결
-    const keysToAdd: { keyCode: KeySlot; position: KeyPosition }[] = [];
-    const statsToAdd: { position: StatItemPosition }[] = [];
-    const graphsToAdd: { position: GraphItemPosition }[] = [];
-    const knobsToAdd: { position: KnobItemPosition }[] = [];
+    const keysToAdd: {
+      keyCode: KeySlot;
+      position: CanonicalKeyPosition;
+    }[] = [];
+    const statsToAdd: { position: CanonicalStatItemPosition }[] = [];
+    const graphsToAdd: { position: CanonicalGraphItemPosition }[] = [];
+    const knobsToAdd: { position: CanonicalKnobItemPosition }[] = [];
     const pluginPayloads: Omit<PluginDisplayElementInternal, 'fullId'>[] = [];
     for (const item of currentClipboard) {
       if (item.type === 'key') {
@@ -719,10 +716,10 @@ export function useGridSelection({
 
     interface PasteDocView {
       keys: Record<string, KeySlot[]>;
-      keyPositions: Record<string, KeyPosition[]>;
-      statPositions: Record<string, StatItemPosition[]>;
-      graphPositions: Record<string, GraphItemPosition[]>;
-      knobPositions: Record<string, KnobItemPosition[]>;
+      keyPositions: CanonicalEditorDocumentV1['keyPositions'];
+      statPositions: CanonicalEditorDocumentV1['statPositions'];
+      graphPositions: CanonicalEditorDocumentV1['graphPositions'];
+      knobPositions: CanonicalEditorDocumentV1['knobPositions'];
       layerGroups: Record<string, Array<{ id: string; name: string }>>;
     }
 
@@ -761,7 +758,7 @@ export function useGridSelection({
         ] as const;
         for (const field of fields) {
           for (const [ownMode, list] of Object.entries(view[field])) {
-            const index = (list as Array<{ id?: string }>).findIndex(
+            const index = (list as Array<{ id: string }>).findIndex(
               (position) => position.id === id,
             );
             if (index !== -1) return { field, mode: ownMode, index };
@@ -781,7 +778,7 @@ export function useGridSelection({
       let missingFrozenNativeParts = 0;
       let frozenGroupConflict = false;
       for (const entry of keysToAdd) {
-        const existing = findNativeById(entry.position.id!);
+        const existing = findNativeById(entry.position.id);
         if (existing) {
           const position = (
             view[existing.field][existing.mode] as Array<
@@ -805,18 +802,18 @@ export function useGridSelection({
           ...(nextKeyPositions[mode] ?? []),
           entry.position,
         ];
-        appendedNativeIds.add(entry.position.id!);
+        appendedNativeIds.add(entry.position.id);
         missingFrozenNativeParts += 1;
         appended = true;
       }
-      const appendSimple = <T extends { id?: string }>(
+      const appendSimple = <T extends { id: string }>(
         record: Record<string, T[]>,
         entries: Array<{ position: T }>,
         field: keyof PasteDocView,
       ): Record<string, T[]> => {
         let next = record;
         for (const entry of entries) {
-          const existing = findNativeById(entry.position.id!);
+          const existing = findNativeById(entry.position.id);
           if (existing) {
             const position = (
               view[existing.field][existing.mode] as Array<
@@ -834,7 +831,7 @@ export function useGridSelection({
             continue;
           }
           next = { ...next, [mode]: [...(next[mode] ?? []), entry.position] };
-          appendedNativeIds.add(entry.position.id!);
+          appendedNativeIds.add(entry.position.id);
           missingFrozenNativeParts += 1;
           appended = true;
         }
@@ -919,10 +916,10 @@ export function useGridSelection({
       );
       // 붙여넣기 블록 내부 순서는 동결 payload 순서 유지
       const pastedOrdered = [
-        ...keysToAdd.map((entry) => entry.position.id!),
-        ...statsToAdd.map((entry) => entry.position.id!),
-        ...graphsToAdd.map((entry) => entry.position.id!),
-        ...knobsToAdd.map((entry) => entry.position.id!),
+        ...keysToAdd.map((entry) => entry.position.id),
+        ...statsToAdd.map((entry) => entry.position.id),
+        ...graphsToAdd.map((entry) => entry.position.id),
+        ...knobsToAdd.map((entry) => entry.position.id),
         ...frozenPluginElements.map((element) => element.fullId),
       ]
         .map((id) => pastedById.get(id))
@@ -980,17 +977,15 @@ export function useGridSelection({
     const buildFrozenInsertOp = (
       view: PasteDocView,
       plan: ReturnType<typeof computePaste>,
-    ):
-      | { kind: 'ops'; op: EditorInsertFrozenElementsOpV1 | null }
-      | { kind: 'legacy' } => {
+    ): { kind: 'ops'; op: EditorInsertFrozenElementsOpV1 | null } => {
       const mode = selectedKeyType;
       const frozenNativeIds = new Set([
-        ...keysToAdd.map((entry) => entry.position.id!),
-        ...statsToAdd.map((entry) => entry.position.id!),
-        ...graphsToAdd.map((entry) => entry.position.id!),
-        ...knobsToAdd.map((entry) => entry.position.id!),
+        ...keysToAdd.map((entry) => entry.position.id),
+        ...statsToAdd.map((entry) => entry.position.id),
+        ...graphsToAdd.map((entry) => entry.position.id),
+        ...knobsToAdd.map((entry) => entry.position.id),
       ]);
-      const finalById = <T extends { id?: string }>(
+      const finalById = <T extends { id: string }>(
         record: Record<string, T[]>,
       ) =>
         new Map(
@@ -1004,30 +999,30 @@ export function useGridSelection({
         ...keysToAdd.map((entry) => ({
           elementType: 'key' as const,
           slot: entry.keyCode,
-          position: finalKeys.get(entry.position.id!) ?? entry.position,
+          position: finalKeys.get(entry.position.id) ?? entry.position,
         })),
         ...statsToAdd.map((entry) => ({
           elementType: 'stat' as const,
-          position: finalStats.get(entry.position.id!) ?? entry.position,
+          position: finalStats.get(entry.position.id) ?? entry.position,
         })),
         ...graphsToAdd.map((entry) => ({
           elementType: 'graph' as const,
-          position: finalGraphs.get(entry.position.id!) ?? entry.position,
+          position: finalGraphs.get(entry.position.id) ?? entry.position,
         })),
         ...knobsToAdd.map((entry) => ({
           elementType: 'knob' as const,
-          position: finalKnobs.get(entry.position.id!) ?? entry.position,
+          position: finalKnobs.get(entry.position.id) ?? entry.position,
         })),
       ];
       const zUpdates: EditorInsertFrozenElementsOpV1['zUpdates'] = [];
       const collectZUpdates = (
         elementType: 'key' | 'stat' | 'graph' | 'knob',
-        current: Array<{ id?: string }>,
-        final: Map<string | undefined, { id?: string; zIndex?: number }>,
+        current: Array<{ id: string }>,
+        final: Map<string, { id: string; zIndex?: number }>,
       ) => {
         for (const position of current) {
           const id = position.id;
-          if (!id || isSyntheticElementId(id)) return false;
+          if (!id || !isNativeElementId(id)) return false;
           if (frozenNativeIds.has(id)) continue;
           const zIndex = final.get(id)?.zIndex;
           if (!Number.isSafeInteger(zIndex)) return false;
@@ -1044,7 +1039,9 @@ export function useGridSelection({
           finalGraphs,
         ) &&
         collectZUpdates('knob', view.knobPositions[mode] ?? [], finalKnobs);
-      if (!stable) return { kind: 'legacy' };
+      if (!stable) {
+        throw new ElementIntentAbort('paste source document is not canonical');
+      }
       if (plan.frozenGroupConflict) {
         throw new ElementIntentAbort('paste group id collision');
       }
@@ -1216,35 +1213,17 @@ export function useGridSelection({
               },
               plan,
             );
-            if (insert.kind === 'ops') {
-              if (insert.op) {
-                return {
-                  kind: 'ops',
-                  ops: [insert.op],
-                  desiredPluginProjection: plan.desiredProjection,
-                };
-              }
-              if (!plan.appended) return { kind: 'satisfied' };
+            if (insert.op) {
               return {
-                kind: 'patch',
-                patch: null,
+                kind: 'ops',
+                ops: [insert.op],
                 desiredPluginProjection: plan.desiredProjection,
               };
             }
             if (!plan.appended) return { kind: 'satisfied' };
             return {
               kind: 'patch',
-              patch: {
-                schemaVersion: 1,
-                keys: plan.keys as never,
-                keyPositions: plan.zPatch.keyPositions as never,
-                statPositions: plan.zPatch.statPositions as never,
-                graphPositions: plan.zPatch.graphPositions as never,
-                knobPositions: plan.zPatch.knobPositions as never,
-                ...(plan.groupsChanged
-                  ? { layerGroups: plan.layerGroups as never }
-                  : {}),
-              },
+              patch: null,
               desiredPluginProjection: plan.desiredProjection,
             };
           },
@@ -1262,7 +1241,7 @@ export function useGridSelection({
         const newSelectedElements: SelectedElement[] = [];
         const collect = (
           type: 'key' | 'stat' | 'graph' | 'knob',
-          record: Record<string, Array<{ id?: string }>>,
+          record: Record<string, Array<{ id: string }>>,
           ids: readonly string[],
         ) => {
           const list = record[selectedKeyType] ?? [];
@@ -1276,22 +1255,22 @@ export function useGridSelection({
         collect(
           'key',
           useKeyStore.getState().canonicalPositions as never,
-          keysToAdd.map((entry) => entry.position.id!),
+          keysToAdd.map((entry) => entry.position.id),
         );
         collect(
           'stat',
           useStatItemStore.getState().positions as never,
-          statsToAdd.map((entry) => entry.position.id!),
+          statsToAdd.map((entry) => entry.position.id),
         );
         collect(
           'graph',
           useGraphItemStore.getState().positions as never,
-          graphsToAdd.map((entry) => entry.position.id!),
+          graphsToAdd.map((entry) => entry.position.id),
         );
         collect(
           'knob',
           useKnobItemStore.getState().positions as never,
-          knobsToAdd.map((entry) => entry.position.id!),
+          knobsToAdd.map((entry) => entry.position.id),
         );
         const presentPluginIds = new Set(
           usePluginDisplayElementStore

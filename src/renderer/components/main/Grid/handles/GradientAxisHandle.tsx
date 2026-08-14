@@ -180,10 +180,9 @@ const GradientAxisOverlay = ({
     setDragStop(null);
   }, [session]);
 
-  if (!session) return null;
-
   // 앵커 → 월드 bounds 해석
   const resolveBounds = (): Bounds | null => {
+    if (!session) return null;
     const { anchor } = session;
     if (anchor.kind === 'batch') {
       let minX = Infinity;
@@ -191,23 +190,23 @@ const GradientAxisOverlay = ({
       let maxX = -Infinity;
       let maxY = -Infinity;
       for (const el of selectedElements) {
-        if (el.index === undefined) continue;
         if (
           session.stateMode === 'active' &&
           !supportsActiveVisualState(el.type)
         ) {
           continue;
         }
-        const pos =
+        const collection =
           el.type === 'key'
-            ? positions[selectedKeyType]?.[el.index]
+            ? positions[selectedKeyType]
             : el.type === 'stat'
-            ? statPositions[selectedKeyType]?.[el.index]
+            ? statPositions[selectedKeyType]
             : el.type === 'graph'
-            ? graphPositions?.[selectedKeyType]?.[el.index]
+            ? graphPositions?.[selectedKeyType]
             : el.type === 'knob'
-            ? knobPositions?.[selectedKeyType]?.[el.index]
+            ? knobPositions?.[selectedKeyType]
             : undefined;
+        const pos = collection?.find((position) => position.id === el.id);
         if (!pos) continue;
         const w = pos.width || (el.type === 'graph' ? 200 : 60);
         const h = pos.height || (el.type === 'graph' ? 100 : 60);
@@ -220,14 +219,15 @@ const GradientAxisOverlay = ({
       return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
 
-    const pos =
+    const collection =
       anchor.kind === 'key'
-        ? positions[selectedKeyType]?.[anchor.index]
+        ? positions[selectedKeyType]
         : anchor.kind === 'stat'
-        ? statPositions[selectedKeyType]?.[anchor.index]
+        ? statPositions[selectedKeyType]
         : anchor.kind === 'graph'
-        ? graphPositions?.[selectedKeyType]?.[anchor.index]
-        : knobPositions?.[selectedKeyType]?.[anchor.index];
+        ? graphPositions?.[selectedKeyType]
+        : knobPositions?.[selectedKeyType];
+    const pos = collection?.find((position) => position.id === anchor.id);
     if (!pos) return null;
     return {
       x: pos.dx,
@@ -238,7 +238,20 @@ const GradientAxisOverlay = ({
   };
 
   const bounds = resolveBounds();
-  if (!bounds) return null;
+  const missingSingleSessionKey =
+    session && session.anchor.kind !== 'batch' && !bounds
+      ? session.sessionKey
+      : null;
+
+  useEffect(() => {
+    if (!missingSingleSessionKey) return;
+    const store = useGradientEditStore.getState();
+    if (store.session?.sessionKey === missingSingleSessionKey) {
+      store.setSession(null);
+    }
+  }, [missingSingleSessionKey]);
+
+  if (!session || !bounds) return null;
 
   const cx = (bounds.x + bounds.width / 2) * zoom + panX;
   const cy = (bounds.y + bounds.height / 2) * zoom + panY;

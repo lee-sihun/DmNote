@@ -49,10 +49,12 @@ import type {
   EditorCommitRequest,
   EditorCommitResult,
   EditorCommittedV1,
+  CanonicalEditorDocumentV1,
   EditorDocumentV1,
   EditorElementTypeV1,
   EditorField,
   EditorGetResult,
+  CanonicalEditorGetResult,
   EditorGestureCommitContext,
   EditorOpResultV1,
   EditorOpV1,
@@ -73,9 +75,9 @@ export type EditorConflictReason = 'overlap' | 'rebaseLimit';
 export type EditorConflictResolution = 'keepLocal' | 'acceptCanonical';
 
 export interface EditorConflictState {
-  lastAck: EditorDocumentV1;
-  pendingLocal: EditorDocumentV1;
-  canonical: EditorDocumentV1;
+  lastAck: CanonicalEditorDocumentV1;
+  pendingLocal: CanonicalEditorDocumentV1;
+  canonical: CanonicalEditorDocumentV1;
   canonicalRevision: number;
   localFields: EditorField[];
   overlappingFields: EditorField[];
@@ -95,8 +97,8 @@ export interface EditorCoordinatorState {
   revision: number | null;
   dirty: boolean;
   inFlightMutationId: string | null;
-  lastAck: EditorDocumentV1 | null;
-  pendingLocal: EditorDocumentV1 | null;
+  lastAck: CanonicalEditorDocumentV1 | null;
+  pendingLocal: CanonicalEditorDocumentV1 | null;
   conflict: EditorConflictState | null;
   error: unknown;
   failureKind: 'transient' | 'permanent' | null;
@@ -107,7 +109,7 @@ export type EditorReadyUnsubscribe = (() => void) & { ready: Promise<void> };
 // 직렬 슬롯 안에서 최신 base로 patch를 재생성하는 게스처 커밋 입력.
 // null = editorChanges 없음 (plugin transaction은 실행)
 export type EditorPatchGenerator = (
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
 ) => EditorPatchV1 | null;
 
 export interface EditorGestureOpsMutation {
@@ -116,7 +118,7 @@ export interface EditorGestureOpsMutation {
 }
 
 type EditorGestureMutationGenerator = (
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
 ) => EditorPatchV1 | EditorGestureOpsMutation | null;
 
 export type EditorGestureMutation =
@@ -149,8 +151,11 @@ interface EditorVisibilityTarget extends EditorEventTarget {
 
 export interface EditorCoordinatorOptions {
   transport: EditorCoordinatorTransport;
-  readDocument(): EditorDocumentV1;
-  applyDocument(document: EditorDocumentV1, reason: EditorApplyReason): void;
+  readDocument(): CanonicalEditorDocumentV1;
+  applyDocument(
+    document: CanonicalEditorDocumentV1,
+    reason: EditorApplyReason,
+  ): void;
   createMutationId?: () => string;
   focusTarget?: EditorEventTarget | null;
   visibilityTarget?: EditorVisibilityTarget | null;
@@ -166,7 +171,7 @@ export interface EditorSyncOptions {
 }
 
 export interface EditorSemanticCommitOutcome {
-  document: EditorDocumentV1;
+  document: CanonicalEditorDocumentV1;
   opResults: EditorOpResultV1[];
 }
 
@@ -177,7 +182,7 @@ export interface EditorSemanticCommitMeta {
 }
 
 export type EditorSemanticOpsGenerator = (
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
 ) => readonly EditorOpV1[] | null;
 
 export class EditorReadOnlyError extends Error {
@@ -190,8 +195,8 @@ export class EditorReadOnlyError extends Error {
 interface InFlightCommit {
   mutationId: string;
   baseRevision: number;
-  baseDocument: EditorDocumentV1;
-  target: EditorDocumentV1;
+  baseDocument: CanonicalEditorDocumentV1;
+  target: CanonicalEditorDocumentV1;
   localFields: EditorField[];
   requestFields: EditorField[];
   gestureIds: string[];
@@ -218,8 +223,8 @@ const fieldsOverlap = (
 
 const unresolvedLocalFields = (
   localFields: readonly EditorField[],
-  pendingLocal: EditorDocumentV1,
-  canonical: EditorDocumentV1,
+  pendingLocal: CanonicalEditorDocumentV1,
+  canonical: CanonicalEditorDocumentV1,
 ): EditorField[] =>
   localFields.filter(
     (field) =>
@@ -293,10 +298,10 @@ const fieldsForSemanticOp = (op: EditorOpV1): EditorField[] => {
 };
 
 const applySemanticOps = (
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
   ops: readonly EditorOpV1[],
   results?: readonly EditorOpResultV1[],
-): EditorDocumentV1 => {
+): CanonicalEditorDocumentV1 => {
   const next = clone(base);
   ops.forEach((op, opIndex) => {
     const result = results?.[opIndex];
@@ -396,7 +401,7 @@ const applySemanticOps = (
         const field = SEMANTIC_POSITION_FIELDS[update.elementType];
         const record = next[field] as Record<
           string,
-          Array<Record<string, unknown> & { id?: string }>
+          Array<Record<string, unknown> & { id: string }>
         >;
         const positions = record[op.mode] ?? [];
         const index = positions.findIndex(
@@ -432,13 +437,12 @@ const applySemanticOps = (
         const field = SEMANTIC_POSITION_FIELDS[elementType];
         const record = next[field] as Record<
           string,
-          Array<Record<string, unknown> & { id?: string }>
+          Array<Record<string, unknown> & { id: string }>
         >;
         next[field] = {
           ...record,
           [op.mode]: (record[op.mode] ?? []).map((position) => {
             const id = position.id;
-            if (!id) return position;
             const zUpdate = zById.get(id);
             const groupUpdate = groupById.get(id);
             if (
@@ -512,7 +516,7 @@ const applySemanticOps = (
       const field = SEMANTIC_POSITION_FIELDS[op.elementType];
       const record = next[field] as Record<
         string,
-        Array<Record<string, unknown> & { id?: string }>
+        Array<Record<string, unknown> & { id: string }>
       >;
       for (const [mode, positions] of Object.entries(record)) {
         const index = positions.findIndex((position) => position.id === op.id);
@@ -1033,10 +1037,10 @@ export function createEditorPatch(
 }
 
 export function applyEditorPatch(
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
   patch: EditorPatchV1,
-): EditorDocumentV1 {
-  assertEditorDocument(base, 'base editor document');
+): CanonicalEditorDocumentV1 {
+  assertCanonicalEditorDocument(base, 'base editor document');
   assertEditorPatch(patch);
 
   const next = clone(base);
@@ -1045,21 +1049,37 @@ export function applyEditorPatch(
       Object.assign(next, { [field]: clone(patch[field]) });
     }
   });
-  assertEditorDocument(next, 'patched editor document');
+  assertCanonicalEditorDocument(next, 'patched editor document');
   return next;
 }
 
+const applyIsolatedPluginPatch = (
+  base: CanonicalEditorDocumentV1,
+  patch: EditorPatchV1,
+): EditorDocumentV1 => {
+  assertCanonicalEditorDocument(base, 'isolated plugin base document');
+  assertEditorPatch(patch);
+  const next: EditorDocumentV1 = clone(base);
+  EDITOR_FIELDS.forEach((field) => {
+    if (patch[field] !== undefined) {
+      Object.assign(next, { [field]: clone(patch[field]) });
+    }
+  });
+  assertEditorDocument(next, 'isolated plugin target document');
+  return next;
+};
+
 export function rebaseEditorDocument(
-  canonical: EditorDocumentV1,
-  pendingLocal: EditorDocumentV1,
+  canonical: CanonicalEditorDocumentV1,
+  pendingLocal: CanonicalEditorDocumentV1,
   localFields: readonly EditorField[],
-): EditorDocumentV1 {
+): CanonicalEditorDocumentV1 {
   return applyEditorPatch(canonical, patchForFields(pendingLocal, localFields));
 }
 
 export class EditorSaveCoordinator {
   private readonly transport: EditorCoordinatorTransport;
-  private readonly readDocument: () => EditorDocumentV1;
+  private readonly readDocument: () => CanonicalEditorDocumentV1;
   private readonly applyDocument: EditorCoordinatorOptions['applyDocument'];
   private readonly createMutationId: () => string;
   private readonly focusTarget: EditorEventTarget | null;
@@ -1075,8 +1095,8 @@ export class EditorSaveCoordinator {
 
   private phase: EditorCoordinatorPhase = 'idle';
   private revision: number | null = null;
-  private lastAck: EditorDocumentV1 | null = null;
-  private pendingLocal: EditorDocumentV1 | null = null;
+  private lastAck: CanonicalEditorDocumentV1 | null = null;
+  private pendingLocal: CanonicalEditorDocumentV1 | null = null;
   private pendingFields: EditorField[] = [];
   private pendingRequestFields: EditorField[] = [];
   private inFlight: InFlightCommit | null = null;
@@ -1088,7 +1108,7 @@ export class EditorSaveCoordinator {
   private stopped = false;
   private initializing = false;
 
-  private startPromise: Promise<EditorGetResult> | null = null;
+  private startPromise: Promise<CanonicalEditorGetResult> | null = null;
   private drainPromise: Promise<void> | null = null;
   private syncPromise: Promise<void> | null = null;
   private eventQueue: Promise<void> = Promise.resolve();
@@ -1157,7 +1177,7 @@ export class EditorSaveCoordinator {
     return () => this.listeners.delete(listener);
   }
 
-  start(): Promise<EditorGetResult> {
+  start(): Promise<CanonicalEditorGetResult> {
     if (this.stopped) {
       return Promise.reject(new Error('editor coordinator is stopped'));
     }
@@ -1181,8 +1201,8 @@ export class EditorSaveCoordinator {
   }
 
   async commitEditorState(
-    document?: EditorDocumentV1,
-  ): Promise<EditorDocumentV1> {
+    document?: CanonicalEditorDocumentV1,
+  ): Promise<CanonicalEditorDocumentV1> {
     this.assertWritable();
     await this.waitForGestureCommits();
     await this.start();
@@ -1199,12 +1219,12 @@ export class EditorSaveCoordinator {
   }
 
   private async queueSnapshot(
-    snapshot: EditorDocumentV1,
+    snapshot: CanonicalEditorDocumentV1,
     newIntentFields: readonly EditorField[],
     requestFields: readonly EditorField[],
     gestureId?: string,
     onEnrolled?: () => void,
-  ): Promise<EditorDocumentV1> {
+  ): Promise<CanonicalEditorDocumentV1> {
     if (gestureId) {
       this.replacePendingGestureIds([...this.pendingGestureIds, gestureId]);
     }
@@ -1254,7 +1274,7 @@ export class EditorSaveCoordinator {
   async commitPatch(
     changes: EditorPatchV1,
     meta?: { gestureId?: string },
-  ): Promise<EditorDocumentV1> {
+  ): Promise<CanonicalEditorDocumentV1> {
     this.assertWritable();
     await this.waitForGestureCommits();
     await this.start();
@@ -1267,7 +1287,7 @@ export class EditorSaveCoordinator {
     changes: EditorPatchV1,
     gestureId?: string,
     onEnrolled?: () => void,
-  ): Promise<EditorDocumentV1> {
+  ): Promise<CanonicalEditorDocumentV1> {
     // gradient canonical 정규화를 assert 앞에 — optimistic·diff·invoke가 같은 값 사용
     const canonicalChanges = canonicalizeEditorGradients(changes);
     assertEditorPatch(canonicalChanges);
@@ -1304,9 +1324,9 @@ export class EditorSaveCoordinator {
   // 직렬 슬롯 안에서 최신 base를 받아 patch를 생성한다. null 반환은 무커밋
   // (mutation·낙관 적용·revision 전진 전부 없음)
   commitGeneratedPatch(
-    generate: (base: EditorDocumentV1) => EditorPatchV1 | null,
+    generate: (base: CanonicalEditorDocumentV1) => EditorPatchV1 | null,
     meta?: { gestureId?: string; onEnrolled?: () => void },
-  ): Promise<EditorDocumentV1> {
+  ): Promise<CanonicalEditorDocumentV1> {
     this.assertWritable();
     return this.enqueueSerialized(async () => {
       await this.start();
@@ -1563,7 +1583,7 @@ export class EditorSaveCoordinator {
     }
   }
 
-  private async syncSemanticCanonical(): Promise<EditorGetResult> {
+  private async syncSemanticCanonical(): Promise<CanonicalEditorGetResult> {
     const result = await this.transport.get();
     assertEditorGetResult(result);
     if (result.revision >= this.requireRevision()) {
@@ -1642,7 +1662,7 @@ export class EditorSaveCoordinator {
   commitIsolatedPluginPatch(
     changes: EditorPatchV1,
     options: { multiKey: boolean },
-  ): Promise<EditorDocumentV1> {
+  ): Promise<CanonicalEditorDocumentV1> {
     this.assertWritable();
     return this.enqueueSerialized(() =>
       this.commitIsolatedPluginPatchInner(changes, options),
@@ -1652,7 +1672,7 @@ export class EditorSaveCoordinator {
   private async commitIsolatedPluginPatchInner(
     changes: EditorPatchV1,
     options: { multiKey: boolean },
-  ): Promise<EditorDocumentV1> {
+  ): Promise<CanonicalEditorDocumentV1> {
     await this.start();
     await this.drainUntilSettled();
     await this.eventQueue;
@@ -1663,7 +1683,7 @@ export class EditorSaveCoordinator {
     const canonicalChanges = canonicalizeEditorGradients(changes);
     assertEditorPatch(canonicalChanges);
     const baseDocument = clone(this.requireLastAck());
-    const target = applyEditorPatch(baseDocument, canonicalChanges);
+    const target = applyIsolatedPluginPatch(baseDocument, canonicalChanges);
     const requestFields = EDITOR_FIELDS.filter(
       (field) => canonicalChanges[field] !== undefined,
     );
@@ -1675,7 +1695,7 @@ export class EditorSaveCoordinator {
       mutationId,
       baseRevision,
       baseDocument,
-      target: clone(target),
+      target: clone(baseDocument),
       localFields: getChangedEditorFields(baseDocument, target),
       requestFields,
       gestureIds: [],
@@ -1765,7 +1785,7 @@ export class EditorSaveCoordinator {
       prepare?: () => Promise<void>;
       reconcileRetryableEditorIntent?: () => boolean;
     },
-  ): Promise<EditorDocumentV1> {
+  ): Promise<CanonicalEditorDocumentV1> {
     this.assertWritable();
     const previous = this.gestureCommitTail;
     // 앞선 gesture 실패가 다음 gesture로 전파되지 않게 양쪽 경로 모두 실행
@@ -1788,7 +1808,7 @@ export class EditorSaveCoordinator {
     return run;
   }
 
-  async retryPending(): Promise<EditorDocumentV1> {
+  async retryPending(): Promise<CanonicalEditorDocumentV1> {
     this.assertWritable();
     await this.waitForGestureCommits();
     await this.start();
@@ -1807,7 +1827,7 @@ export class EditorSaveCoordinator {
 
   async resolveConflict(
     resolution: EditorConflictResolution,
-  ): Promise<EditorDocumentV1> {
+  ): Promise<CanonicalEditorDocumentV1> {
     if (resolution === 'keepLocal') this.assertWritable();
     await this.waitForGestureCommits();
     if (this.drainPromise) {
@@ -1871,7 +1891,7 @@ export class EditorSaveCoordinator {
     }
   }
 
-  async flush(): Promise<EditorDocumentV1> {
+  async flush(): Promise<CanonicalEditorDocumentV1> {
     await this.waitForGestureCommits();
     if (this.isReadOnly()) {
       await this.start();
@@ -1894,7 +1914,7 @@ export class EditorSaveCoordinator {
     this.notify();
   }
 
-  private async initialize(): Promise<EditorGetResult> {
+  private async initialize(): Promise<CanonicalEditorGetResult> {
     this.phase = 'initializing';
     this.error = null;
     this.failureKind = null;
@@ -2085,7 +2105,7 @@ export class EditorSaveCoordinator {
       prepare?: () => Promise<void>;
       reconcileRetryableEditorIntent?: () => boolean;
     },
-  ): Promise<EditorDocumentV1> {
+  ): Promise<CanonicalEditorDocumentV1> {
     await this.start();
     await this.drainUntilSettled();
     await this.eventQueue;
@@ -2334,7 +2354,7 @@ export class EditorSaveCoordinator {
   }
 
   private assertSemanticChangedFields(
-    base: EditorDocumentV1,
+    base: CanonicalEditorDocumentV1,
     ops: readonly EditorOpV1[],
     opResults: readonly EditorOpResultV1[],
     result: EditorCommitResult,
@@ -2559,11 +2579,11 @@ export class EditorSaveCoordinator {
   }
 
   private applyExternalCanonical(
-    canonical: EditorDocumentV1,
+    canonical: CanonicalEditorDocumentV1,
     changedFields: readonly EditorField[],
     canonicalRevision: number,
     reason: Extract<EditorApplyReason, 'event' | 'resync'>,
-    previousCanonical?: EditorDocumentV1,
+    previousCanonical?: CanonicalEditorDocumentV1,
   ): void {
     const comparisonBase = this.conflict?.lastAck ?? previousCanonical;
     const pending = this.getLatestPendingDocument();
@@ -2631,7 +2651,7 @@ export class EditorSaveCoordinator {
     return this.inFlight;
   }
 
-  private getLatestCommitBase(): EditorDocumentV1 {
+  private getLatestCommitBase(): CanonicalEditorDocumentV1 {
     if (this.conflict) return clone(this.conflict.pendingLocal);
     if (this.pendingLocal) return clone(this.pendingLocal);
     const optimistic = this.optimisticInFlight();
@@ -2639,7 +2659,7 @@ export class EditorSaveCoordinator {
     return clone(this.requireLastAck());
   }
 
-  private getLatestPendingDocument(): EditorDocumentV1 | null {
+  private getLatestPendingDocument(): CanonicalEditorDocumentV1 | null {
     return (
       this.conflict?.pendingLocal ??
       this.pendingLocal ??
@@ -2649,8 +2669,8 @@ export class EditorSaveCoordinator {
   }
 
   private getLatestPendingFields(
-    comparisonBase: EditorDocumentV1,
-    pending: EditorDocumentV1,
+    comparisonBase: CanonicalEditorDocumentV1,
+    pending: CanonicalEditorDocumentV1,
   ): EditorField[] {
     if (this.conflict) return [...this.conflict.localFields];
     if (this.pendingLocal) return [...this.pendingFields];
@@ -2660,7 +2680,7 @@ export class EditorSaveCoordinator {
   }
 
   private preservePending(
-    document: EditorDocumentV1,
+    document: CanonicalEditorDocumentV1,
     localFields: readonly EditorField[],
     requestFields: readonly EditorField[] = [],
   ): void {
@@ -2770,7 +2790,7 @@ export class EditorSaveCoordinator {
     return this.revision;
   }
 
-  private requireLastAck(): EditorDocumentV1 {
+  private requireLastAck(): CanonicalEditorDocumentV1 {
     if (!this.lastAck) {
       throw new Error('editor coordinator has not initialized a document');
     }

@@ -62,7 +62,7 @@ describe('grid group structural routes', () => {
         '4key',
         [
           { type: 'key', id: ID_A, index: 99 },
-          { type: 'plugin', id: 'plugin-a:item', index: 0 },
+          { type: 'plugin', id: 'plugin-a:item' },
         ],
         'New Group',
       ),
@@ -82,7 +82,7 @@ describe('grid group structural routes', () => {
     await expect(
       ungroupSelectedElements('4key', [
         { type: 'key', id: ID_A, index: 5 },
-        { type: 'plugin', id: 'plugin-a:item', index: 0 },
+        { type: 'plugin', id: 'plugin-a:item' },
       ]),
     ).resolves.toBe(true);
 
@@ -117,28 +117,22 @@ describe('grid group structural routes', () => {
     );
   });
 
-  it('synthetic native selection은 whole-record legacy를 유지한다', async () => {
+  it('invalid native selection은 fail-closed로 writer를 호출하지 않는다', async () => {
     seedKey('group-a');
     await expect(
       ungroupSelectedElements('4key', [{ type: 'key', id: 'key-0', index: 0 }]),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
 
     expect(mocks.setElementGroups).not.toHaveBeenCalled();
     expect(mocks.setElementGroupsViaAuthority).not.toHaveBeenCalled();
-    expect(mocks.commitPatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        schemaVersion: 1,
-        keyPositions: expect.any(Object),
-        layerGroups: expect.any(Object),
-      }),
-    );
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
   it('plugin-only와 empty selection은 native writer를 호출하지 않는다', async () => {
     await expect(
       groupSelectedElements(
         '4key',
-        [{ type: 'plugin', id: 'plugin-a:item', index: 0 }],
+        [{ type: 'plugin', id: 'plugin-a:item' }],
         'New Group',
       ),
     ).resolves.toBe(false);

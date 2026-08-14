@@ -10,6 +10,7 @@ import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 const apiMocks = vi.hoisted(() => ({
   resetMode: vi.fn(),
   update: vi.fn(),
+  rebindKeySlotById: vi.fn(async (_id: string, _slot: unknown) => true),
 }));
 
 vi.mock('@api/modules/keysApi', () => ({
@@ -19,11 +20,9 @@ vi.mock('@api/modules/keysApi', () => ({
   },
 }));
 
-vi.mock('@src/renderer/editor/runtime/persistState', () => ({
-  persistPositionsWithSync: vi.fn(),
-  persistMappingsAndPositions: vi.fn(),
-  persistPositions: vi.fn(),
-  persistPositionsWithFlag: vi.fn(),
+vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+  rebindKeySlotById: (id: string, slot: unknown) =>
+    apiMocks.rebindKeySlotById(id, slot),
 }));
 
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
@@ -49,6 +48,11 @@ type KeyManager = ReturnType<typeof useKeyManager>;
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('키 삭제 선택 정리', () => {
+  const keyIds = [
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+    '33333333-3333-4333-8333-333333333333',
+  ];
   const originalApi = window.api;
   const resetMode = apiMocks.resetMode;
   let root: Root;
@@ -82,9 +86,16 @@ describe('키 삭제 선택 정리', () => {
       keyMappings: { '4key': ['A', 'B', 'C'] },
       positions: {
         '4key': [
-          createDefaultKeyPosition(),
-          createDefaultKeyPosition(),
-          createDefaultKeyPosition(),
+          { ...createDefaultKeyPosition(), id: keyIds[0] },
+          { ...createDefaultKeyPosition(), id: keyIds[1] },
+          { ...createDefaultKeyPosition(), id: keyIds[2] },
+        ],
+      },
+      canonicalPositions: {
+        '4key': [
+          { ...createDefaultKeyPosition(), id: keyIds[0] },
+          { ...createDefaultKeyPosition(), id: keyIds[1] },
+          { ...createDefaultKeyPosition(), id: keyIds[2] },
         ],
       },
       isBootstrapped: false,
@@ -101,37 +112,10 @@ describe('키 삭제 선택 정리', () => {
     window.api = originalApi;
   });
 
-  it('실제 삭제 핸들러가 삭제된 키의 grid 선택을 제거한다', () => {
-    useGridSelectionStore
-      .getState()
-      .setSelectedElements([{ type: 'key', id: 'key-0', index: 0 }]);
-    act(() => root.render(<Harness />));
-
-    act(() => latest().handleDeleteKey(0));
-
-    expect(useGridSelectionStore.getState().selectedElements).toEqual([]);
-    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['B', 'C']);
-  });
-
-  it('삭제 뒤 키 인덱스를 당기고 다른 요소 선택은 보존한다', () => {
-    useGridSelectionStore.getState().setSelectedElements([
-      { type: 'key', id: 'key-2', index: 2 },
-      { type: 'stat', id: 'stat-0', index: 0 },
-    ]);
-    act(() => root.render(<Harness />));
-
-    act(() => latest().handleDeleteKey(0));
-
-    expect(useGridSelectionStore.getState().selectedElements).toEqual([
-      { type: 'key', id: 'key-1', index: 1 },
-      { type: 'stat', id: 'stat-0', index: 0 },
-    ]);
-  });
-
   it('현재 탭 리셋 성공 시 grid 선택을 해제한다', async () => {
     useGridSelectionStore
       .getState()
-      .setSelectedElements([{ type: 'key', id: 'key-0', index: 0 }]);
+      .setSelectedElements([{ type: 'key', id: keyIds[0], index: 0 }]);
     act(() => root.render(<Harness />));
 
     await act(async () => latest().handleResetCurrentMode());
@@ -141,7 +125,7 @@ describe('키 삭제 선택 정리', () => {
 
   it('현재 탭 리셋 실패 시 grid 선택을 보존한다', async () => {
     resetMode.mockResolvedValueOnce({ success: false });
-    const selection = [{ type: 'key' as const, id: 'key-0', index: 0 }];
+    const selection = [{ type: 'key' as const, id: keyIds[0], index: 0 }];
     useGridSelectionStore.getState().setSelectedElements(selection);
     act(() => root.render(<Harness />));
 
@@ -150,5 +134,17 @@ describe('키 삭제 선택 정리', () => {
     expect(useGridSelectionStore.getState().selectedElements).toEqual(
       selection,
     );
+  });
+
+  it('키 매핑은 canonical ID로만 저장하고 잘못된 index에서 후퇴하지 않는다', () => {
+    act(() => root.render(<Harness />));
+
+    act(() => latest().handleKeyMappingChange(1, 'Z'));
+    expect(apiMocks.rebindKeySlotById).toHaveBeenCalledWith(keyIds[1], 'Z');
+
+    apiMocks.rebindKeySlotById.mockClear();
+    act(() => latest().handleKeyMappingChange(99, 'X'));
+    expect(apiMocks.rebindKeySlotById).not.toHaveBeenCalled();
+    expect(apiMocks.update).not.toHaveBeenCalled();
   });
 });

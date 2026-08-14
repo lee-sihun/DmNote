@@ -38,6 +38,7 @@ import { useLayerDnD } from './useLayerDnD';
 import { useOptimisticBooleanCommit } from '@hooks/useOptimisticBooleanCommit';
 
 function layerItemToSelectedElement(item: LayerItem): SelectedElement {
+  if (item.type === 'plugin') return { type: 'plugin', id: item.id };
   return {
     type: item.type,
     id: item.id,

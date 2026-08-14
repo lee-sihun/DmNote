@@ -4,6 +4,10 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import Dropdown from '@components/main/common/Dropdown';
 import {
   SettingCard,
@@ -54,6 +58,7 @@ import type {
 } from '@api/modules/resourceApi';
 import type { ObsStatus } from '@src/types/obs';
 import { DEFAULT_OBS_PORT } from '@src/types/obs';
+import { assertCanonicalEditorDocument } from '@src/types/editor';
 
 // 설정 미리보기 영상
 const PREVIEW_SOURCES: Record<string, string> = {
@@ -877,11 +882,21 @@ const Settings = ({
       try {
         const result: KeysResetAllResponse = await keysApi.resetAll();
         if (result) {
+          const candidate = {
+            schemaVersion: 1 as const,
+            keys: result.keys,
+            keyPositions: result.positions,
+            statPositions: useStatItemStore.getState().positions,
+            graphPositions: useGraphItemStore.getState().positions,
+            knobPositions: useKnobItemStore.getState().positions,
+            layerGroups: useLayerGroupStore.getState().layerGroups,
+          };
+          assertCanonicalEditorDocument(candidate, 'keys_reset_all response');
           // 리셋 직후 메모리 상태도 바로 초기값으로 변경
           useKeyStore.setState({
             keyMappings: result.keys,
-            positions: result.positions,
-            canonicalPositions: result.positions,
+            positions: candidate.keyPositions,
+            canonicalPositions: candidate.keyPositions,
             customTabs: result.customTabs,
             selectedKeyType: result.selectedKeyType,
           });

@@ -3,12 +3,9 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { reconcileSelectionAfterIndexedElementDeletion } from '@stores/grid/useGridSelectionStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
-import {
-  isSyntheticElementId,
-  resolveElementById,
-} from '../model/elementIdMap';
+import { resolveElementById } from '../model/elementIdMap';
 import { isNativeElementId } from '../model/elementId';
 import {
   cloneKeyPositionForDuplicate,
@@ -44,8 +41,8 @@ import {
 } from './batchGeometryPlan';
 
 import type {
+  CanonicalEditorDocumentV1,
   EditorBoundsV1,
-  EditorDocumentV1,
   EditorFrozenElementV1,
   EditorElementPropertyPatchV1,
   EditorCounterBooleanPropertyPatchV1,
@@ -110,7 +107,7 @@ import {
 
 type LooseRecord = Record<
   string,
-  Array<{ id?: string } & Record<string, unknown>>
+  Array<{ id: string } & Record<string, unknown>>
 >;
 
 const findInRecord = (
@@ -141,7 +138,7 @@ export const deleteElementById = (
   type: NativeElementType,
   id: string,
 ): Promise<boolean> => {
-  if (!id) return Promise.resolve(false);
+  if (!isNativeElementId(id)) return Promise.resolve(false);
 
   const applyEager = (): ElementIntentReceipt | null => {
     const locator = resolveElementById(type, id);
@@ -190,7 +187,7 @@ export const deleteElementById = (
     // 선택 보정은 현재 모드 배열 기준 - 다른 모드로 이동한 대상의 index로
     // 현재 모드의 무관한 선택을 지우면 안 된다
     if (locator.mode === useKeyStore.getState().selectedKeyType) {
-      reconcileSelectionAfterIndexedElementDeletion(type, locator.index);
+      useGridSelectionStore.getState().deselectElement(id);
     }
 
     const keyState = useKeyStore.getState();
@@ -340,7 +337,10 @@ export interface FrozenKeyDuplicate {
   position: KeyPosition;
 }
 
-const documentHasElementId = (document: EditorDocumentV1, id: string) =>
+const documentHasElementId = (
+  document: CanonicalEditorDocumentV1,
+  id: string,
+) =>
   [
     document.keyPositions,
     document.statPositions,
@@ -349,7 +349,7 @@ const documentHasElementId = (document: EditorDocumentV1, id: string) =>
   ].some((record) => findInRecord(record as unknown as LooseRecord, id));
 
 const documentHasExactFrozenElement = (
-  document: EditorDocumentV1,
+  document: CanonicalEditorDocumentV1,
   mode: string,
   element: EditorFrozenElementV1,
 ) => {
@@ -384,7 +384,7 @@ const insertFrozenElement = (
 ): Promise<boolean> => {
   const element = structuredClone(source);
   const id = element.position.id;
-  if (!mode || typeof id !== 'string' || !id || isSyntheticElementId(id)) {
+  if (!mode || typeof id !== 'string' || !id || !isNativeElementId(id)) {
     return Promise.resolve(false);
   }
   if (documentHasElementId(captureEditorDocument(), id)) {
@@ -496,14 +496,20 @@ export const addKeyAt = (mode: string, dx: number, dy: number) =>
     position: createDefaultKeyPosition(dx, dy),
   });
 
-export const addStatAt = (mode: string, position: StatItemPosition) =>
-  insertFrozenElement(mode, { elementType: 'stat', position });
+export const addStatAt = (
+  mode: string,
+  position: StatItemPosition & { id: string },
+) => insertFrozenElement(mode, { elementType: 'stat', position });
 
-export const addGraphAt = (mode: string, position: GraphItemPosition) =>
-  insertFrozenElement(mode, { elementType: 'graph', position });
+export const addGraphAt = (
+  mode: string,
+  position: GraphItemPosition & { id: string },
+) => insertFrozenElement(mode, { elementType: 'graph', position });
 
-export const addKnobAt = (mode: string, position: KnobItemPosition) =>
-  insertFrozenElement(mode, { elementType: 'knob', position });
+export const addKnobAt = (
+  mode: string,
+  position: KnobItemPosition & { id: string },
+) => insertFrozenElement(mode, { elementType: 'knob', position });
 
 const groupForMode = (mode: string, groupId: string | undefined) =>
   groupId &&
@@ -604,7 +610,7 @@ const Z_ORDER_FIELDS = [
 ] as const;
 
 const zOrderRecords = (
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
 ): Record<(typeof Z_ORDER_FIELDS)[number], LooseRecord> => ({
   keyPositions: base.keyPositions as unknown as LooseRecord,
   statPositions: base.statPositions as unknown as LooseRecord,
@@ -623,7 +629,7 @@ const FIELD_BY_TYPE: Record<
 };
 
 const computeZOrderPatch = (
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
   targets: readonly ZOrderTarget[],
   direction: 'front' | 'back',
   externalZIndexes: readonly number[],
@@ -676,16 +682,15 @@ const computeZOrderPatch = (
   return { patch, applied: located.length };
 };
 
-const storeDocumentSnapshot = (): EditorDocumentV1 =>
-  ({
-    schemaVersion: 1,
-    keys: useKeyStore.getState().keyMappings,
-    keyPositions: useKeyStore.getState().canonicalPositions,
-    statPositions: useStatItemStore.getState().positions,
-    graphPositions: useGraphItemStore.getState().positions,
-    knobPositions: useKnobItemStore.getState().positions,
-    layerGroups: {},
-  } as unknown as EditorDocumentV1);
+const storeDocumentSnapshot = (): CanonicalEditorDocumentV1 => ({
+  schemaVersion: 1,
+  keys: useKeyStore.getState().keyMappings,
+  keyPositions: useKeyStore.getState().canonicalPositions,
+  statPositions: useStatItemStore.getState().positions,
+  graphPositions: useGraphItemStore.getState().positions,
+  knobPositions: useKnobItemStore.getState().positions,
+  layerGroups: {},
+});
 
 export const applyZOrderByIds = (
   targets: readonly ZOrderTarget[],
@@ -741,7 +746,7 @@ export const rebindKeySlotById = (
   positionId: string,
   newSlot: KeySlot,
 ): Promise<boolean> => {
-  if (!positionId) return Promise.resolve(false);
+  if (!isNativeElementId(positionId)) return Promise.resolve(false);
 
   const applyEager = (): ElementIntentReceipt | null => {
     const locator = resolveElementById('key', positionId);
@@ -799,7 +804,7 @@ export const patchElementPropertyById = (
   patch: EditorElementPropertyPatchV1,
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id) return Promise.resolve(false);
+  if (!isNativeElementId(id)) return Promise.resolve(false);
   const eagerPatch =
     'layerName' in patch
       ? { layerName: patch.layerName ?? undefined }
@@ -846,7 +851,10 @@ const patchElementPropertiesByIds = (
   targets: readonly ElementPropertyPatchTarget[],
   options: { gestureId?: string; preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (targets.length === 0 || targets.some((target) => !target.id)) {
+  if (
+    targets.length === 0 ||
+    targets.some((target) => !isNativeElementId(target.id))
+  ) {
     return Promise.resolve(false);
   }
   const mutableIntents = new Map<
@@ -924,7 +932,7 @@ export const setLayerGroupHidden = (
         position.groupId !== groupId ||
         typeof position.id !== 'string' ||
         position.id.length === 0 ||
-        isSyntheticElementId(position.id)
+        !isNativeElementId(position.id)
       ) {
         continue;
       }
@@ -936,7 +944,7 @@ export const setLayerGroupHidden = (
   }
   applyPropertyIntentsEagerly(eagerIntents);
   const reconcileEager = (
-    base: EditorDocumentV1,
+    base: CanonicalEditorDocumentV1,
     currentMemberIds?: ReadonlySet<string>,
   ) => {
     createPropertyReceipt(
@@ -972,7 +980,7 @@ export const setLayerGroupHidden = (
           if (
             typeof position.id !== 'string' ||
             position.id.length === 0 ||
-            isSyntheticElementId(position.id)
+            !isNativeElementId(position.id)
           ) {
             unsupported = true;
             continue;
@@ -1045,7 +1053,7 @@ export const setLayerGroupHiddenLegacy = (
       : type === 'graph'
       ? useGraphItemStore.getState().positions
       : useKnobItemStore.getState().positions) as unknown as LooseRecord;
-  const reconcile = (base: EditorDocumentV1) => {
+  const reconcile = (base: CanonicalEditorDocumentV1) => {
     for (const [type, expected] of expectedByType) {
       if (currentTypeRecord(type) !== expected) continue;
       writeTypeRecord(
@@ -1360,7 +1368,7 @@ export const patchSoundPathById = (
   soundPath: string,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
   return patchElementPropertyById('key', id, { soundPath }, options);
 };
 
@@ -1369,7 +1377,7 @@ export const patchSoundEnabledById = (
   soundEnabled: boolean,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
   return patchElementPropertyById('key', id, { soundEnabled }, options);
 };
 
@@ -1380,7 +1388,7 @@ export const patchSoundEnabledByIds = (
 ): Promise<boolean> => {
   if (
     ids.length === 0 ||
-    ids.some((id) => id.length === 0 || isSyntheticElementId(id)) ||
+    ids.some((id) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(ids).size !== ids.length
   ) {
     return Promise.resolve(false);
@@ -1398,7 +1406,7 @@ export const patchSoundVolumeById = (
 ): Promise<boolean> => {
   if (
     !id ||
-    isSyntheticElementId(id) ||
+    !isNativeElementId(id) ||
     !Number.isFinite(soundVolume) ||
     soundVolume < 0 ||
     soundVolume > 200
@@ -1415,7 +1423,7 @@ export const patchSoundVolumeByIds = (
 ): Promise<boolean> => {
   if (
     ids.length === 0 ||
-    ids.some((id) => id.length === 0 || isSyntheticElementId(id)) ||
+    ids.some((id) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(ids).size !== ids.length ||
     !Number.isFinite(soundVolume) ||
     soundVolume < 0 ||
@@ -1436,7 +1444,7 @@ export const patchSoundPathByIds = (
 ): Promise<boolean> => {
   if (
     ids.length === 0 ||
-    ids.some((id) => id.length === 0 || isSyntheticElementId(id)) ||
+    ids.some((id) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(ids).size !== ids.length
   ) {
     return Promise.resolve(false);
@@ -1465,7 +1473,7 @@ const counterBooleanPropertyIntents = (
     const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
     const record = document[field] as Record<
       string,
-      Array<Record<string, unknown> & { id?: string }>
+      Array<Record<string, unknown> & { id: string }>
     >;
     const current = Object.values(record)
       .flat()
@@ -1508,7 +1516,7 @@ const patchCounterBooleanByTargets = (
 ): Promise<boolean> => {
   if (
     targets.length === 0 ||
-    targets.some(({ id }) => id.length === 0 || isSyntheticElementId(id)) ||
+    targets.some(({ id }) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
   ) {
     return Promise.resolve(false);
@@ -1553,7 +1561,7 @@ const counterLayoutPropertyIntents = (
     const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
     const record = document[field] as Record<
       string,
-      Array<Record<string, unknown> & { id?: string }>
+      Array<Record<string, unknown> & { id: string }>
     >;
     const current = Object.values(record)
       .flat()
@@ -1589,7 +1597,7 @@ export const patchCounterLayoutByTargets = (
 ): Promise<boolean> => {
   if (
     targets.length === 0 ||
-    targets.some(({ id }) => id.length === 0 || isSyntheticElementId(id)) ||
+    targets.some(({ id }) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
   ) {
     return Promise.resolve(false);
@@ -1642,7 +1650,7 @@ const counterTypographyPropertyIntents = (
     const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
     const record = document[field] as Record<
       string,
-      Array<Record<string, unknown> & { id?: string }>
+      Array<Record<string, unknown> & { id: string }>
     >;
     const current = Object.values(record)
       .flat()
@@ -1715,7 +1723,7 @@ export const patchCounterTypographyByTargets = (
   if (
     !isCounterTypographyPatch(patch) ||
     targets.length === 0 ||
-    targets.some(({ id }) => id.length === 0 || isSyntheticElementId(id)) ||
+    targets.some(({ id }) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
   ) {
     return Promise.resolve(false);
@@ -1768,7 +1776,7 @@ const counterStrokePropertyIntents = (
     const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
     const record = document[field] as Record<
       string,
-      Array<Record<string, unknown> & { id?: string }>
+      Array<Record<string, unknown> & { id: string }>
     >;
     const current = Object.values(record)
       .flat()
@@ -1816,7 +1824,7 @@ export const patchCounterStrokeByTargets = (
       : !('counterStrokeIdle' in patch) ||
         typeof patch.counterStrokeIdle !== 'string') ||
     targets.length === 0 ||
-    targets.some(({ id }) => id.length === 0 || isSyntheticElementId(id)) ||
+    targets.some(({ id }) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
   ) {
     return Promise.resolve(false);
@@ -1907,7 +1915,7 @@ const counterAnimationPropertyIntents = (
     const field = elementType === 'key' ? 'keyPositions' : 'statPositions';
     const record = document[field] as Record<
       string,
-      Array<Record<string, unknown> & { id?: string }>
+      Array<Record<string, unknown> & { id: string }>
     >;
     const current = Object.values(record)
       .flat()
@@ -1954,7 +1962,7 @@ export const patchCounterAnimationPresetByTargets = (
 ): Promise<boolean> => {
   if (
     targets.length === 0 ||
-    targets.some(({ id }) => id.length === 0 || isSyntheticElementId(id)) ||
+    targets.some(({ id }) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
   ) {
     return Promise.resolve(false);
@@ -2000,7 +2008,7 @@ export const patchInactiveImageById = (
   inactiveImage: string,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
   return patchElementPropertyById(type, id, { inactiveImage }, options);
 };
 
@@ -2012,7 +2020,7 @@ export const patchInactiveImageByTargets = (
   if (
     targets.length === 0 ||
     targets.some(
-      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+      (target) => target.id.length === 0 || !isNativeElementId(target.id),
     ) ||
     new Set(targets.map((target) => target.id)).size !== targets.length
   ) {
@@ -2034,7 +2042,7 @@ export const patchActiveImageById = (
   activeImage: string,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
   return patchElementPropertyById(type, id, { activeImage }, options);
 };
 
@@ -2046,7 +2054,7 @@ export const patchActiveImageByTargets = (
   if (
     targets.length === 0 ||
     targets.some(
-      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+      (target) => target.id.length === 0 || !isNativeElementId(target.id),
     ) ||
     new Set(targets.map((target) => target.id)).size !== targets.length
   ) {
@@ -2068,7 +2076,7 @@ export const patchIdleTransparentById = (
   idleTransparent: boolean,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
   return patchElementPropertyById(type, id, { idleTransparent }, options);
 };
 
@@ -2080,7 +2088,7 @@ export const patchIdleTransparentByTargets = (
   if (
     targets.length === 0 ||
     targets.some(
-      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+      (target) => target.id.length === 0 || !isNativeElementId(target.id),
     ) ||
     new Set(targets.map((target) => target.id)).size !== targets.length
   ) {
@@ -2102,7 +2110,7 @@ export const patchActiveTransparentById = (
   activeTransparent: boolean,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
   return patchElementPropertyById(type, id, { activeTransparent }, options);
 };
 
@@ -2114,7 +2122,7 @@ export const patchActiveTransparentByTargets = (
   if (
     targets.length === 0 ||
     targets.some(
-      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+      (target) => target.id.length === 0 || !isNativeElementId(target.id),
     ) ||
     new Set(targets.map((target) => target.id)).size !== targets.length
   ) {
@@ -2138,7 +2146,7 @@ export const patchIdleImageFitById = (
   idleImageFit: ImageFit,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
   return patchElementPropertyById(type, id, { idleImageFit }, options);
 };
 
@@ -2148,7 +2156,7 @@ export const patchActiveImageFitById = (
   activeImageFit: ImageFit,
   options: { preflight?: () => void } = {},
 ): Promise<boolean> => {
-  if (!id || isSyntheticElementId(id)) return Promise.resolve(false);
+  if (!id || !isNativeElementId(id)) return Promise.resolve(false);
   return patchElementPropertyById(type, id, { activeImageFit }, options);
 };
 
@@ -2295,7 +2303,7 @@ const paintPropertyIntents = (
     const current = Object.values(collection)
       .flat()
       .find((position) => position.id === id) as
-      | (Record<string, unknown> & { id?: string })
+      | (Record<string, unknown> & { id: string })
       | undefined;
     if (!current) continue;
     const next: Record<string, unknown> = {
@@ -2347,7 +2355,7 @@ export const patchPaintByTargets = (
     targets.some(
       ({ elementType, id }) =>
         id.length === 0 ||
-        isSyntheticElementId(id) ||
+        !isNativeElementId(id) ||
         (active && elementType !== 'key' && elementType !== 'knob'),
     ) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
@@ -2427,7 +2435,7 @@ export const patchCounterFillByTargets = (
     targets.some(
       ({ elementType, id }) =>
         !id ||
-        isSyntheticElementId(id) ||
+        !isNativeElementId(id) ||
         (elementType !== 'key' && elementType !== 'stat') ||
         (active && elementType !== 'key'),
     ) ||
@@ -2513,7 +2521,7 @@ export const patchFontColorByTargets = (
     targets.some(
       ({ elementType, id }) =>
         !id ||
-        isSyntheticElementId(id) ||
+        !isNativeElementId(id) ||
         (active && elementType !== 'key' && elementType !== 'knob'),
     ) ||
     new Set(targets.map(({ id }) => id)).size !== targets.length
@@ -2580,7 +2588,7 @@ const shadowPropertyIntents = (
     const current = Object.values(collection)
       .flat()
       .find((position) => position.id === id) as
-      | (Record<string, unknown> & { id?: string })
+      | (Record<string, unknown> & { id: string })
       | undefined;
     if (!current) continue;
     const next = projectElementShadowPatch({
@@ -2609,7 +2617,7 @@ export const patchShadowByTargets = (
     targets.some(
       ({ elementType, id }) =>
         id.length === 0 ||
-        isSyntheticElementId(id) ||
+        !isNativeElementId(id) ||
         elementType === 'graph' ||
         ('activeShadow' in patch && elementType === 'stat'),
     ) ||
@@ -2676,7 +2684,7 @@ export const patchNotePaintByIds = (
   if (
     !isNotePaintPropertyPatchV1(patch) ||
     ids.length === 0 ||
-    ids.some((id) => id.length === 0 || isSyntheticElementId(id)) ||
+    ids.some((id) => id.length === 0 || !isNativeElementId(id)) ||
     new Set(ids).size !== ids.length
   ) {
     return Promise.resolve(false);
@@ -2750,7 +2758,7 @@ export const patchStylePropertyById = (
         patch.noteBorderRadius > 100));
   if (
     !id ||
-    isSyntheticElementId(id) ||
+    !isNativeElementId(id) ||
     ('noteGlowSize' in patch &&
       (type !== 'key' ||
         !Number.isFinite(patch.noteGlowSize) ||
@@ -2801,7 +2809,7 @@ export const patchStylePropertyByTargets = (
   if (
     targets.length === 0 ||
     targets.some(
-      (target) => target.id.length === 0 || isSyntheticElementId(target.id),
+      (target) => target.id.length === 0 || !isNativeElementId(target.id),
     ) ||
     new Set(targets.map((target) => target.id)).size !== targets.length ||
     ('noteGlowSize' in patch &&
@@ -2876,7 +2884,7 @@ export interface BatchGeometryDescriptor {
 }
 
 const readBatchGeometryElements = (
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
   descriptor: BatchGeometryDescriptor,
 ) => {
   const seen = new Set<string>();
@@ -2890,7 +2898,7 @@ const readBatchGeometryElements = (
     height: number;
   }> = [];
   for (const target of descriptor.targets) {
-    if (!target.id || seen.has(target.id)) return null;
+    if (!isNativeElementId(target.id) || seen.has(target.id)) return null;
     seen.add(target.id);
     const record = base[FIELD_BY_TYPE[target.type]] as unknown as LooseRecord;
     const locator = findInRecord(record, target.id);
@@ -2919,7 +2927,7 @@ const readBatchGeometryElements = (
 };
 
 const planBatchGeometry = (
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
   descriptor: BatchGeometryDescriptor,
 ) => {
   const elements = readBatchGeometryElements(base, descriptor);
@@ -3009,7 +3017,7 @@ export const commitElementGeometryById = (
 ): Promise<boolean> => {
   const entries = Object.entries(patch) as Array<[GeometryField, number]>;
   if (
-    id.length === 0 ||
+    !isNativeElementId(id) ||
     entries.length === 0 ||
     entries.some(
       ([field, value]) =>
@@ -3143,19 +3151,27 @@ export const commitElementBoundsById = (
 ): Promise<boolean> => {
   const ops: EditorOpV1[] = [];
   const boundsKeys = new Set(['dx', 'dy', 'width', 'height']);
+  const seenIds = new Set<string>();
   for (const [elementType, byId] of intents) {
     for (const [id, patch] of byId) {
       if (
+        !isNativeElementId(id) ||
+        seenIds.has(id) ||
         Object.keys(patch).some((key) => !boundsKeys.has(key)) ||
         typeof patch.dx !== 'number' ||
         typeof patch.dy !== 'number' ||
         typeof patch.width !== 'number' ||
-        typeof patch.height !== 'number'
+        typeof patch.height !== 'number' ||
+        !Number.isFinite(patch.dx) ||
+        !Number.isFinite(patch.dy) ||
+        !Number.isFinite(patch.width) ||
+        !Number.isFinite(patch.height) ||
+        patch.width <= 0 ||
+        patch.height <= 0
       ) {
-        return Promise.reject(
-          new TypeError('bounds intent must contain four numeric fields'),
-        );
+        return Promise.resolve(false);
       }
+      seenIds.add(id);
       ops.push({
         kind: 'setBounds',
         elementType,
@@ -3194,6 +3210,17 @@ export const commitSingleElementBoundsById = (
   bounds: EditorBoundsV1,
   gestureId?: string,
 ): Promise<boolean> => {
+  if (
+    !isNativeElementId(id) ||
+    !Number.isFinite(bounds.dx) ||
+    !Number.isFinite(bounds.dy) ||
+    !Number.isFinite(bounds.width) ||
+    !Number.isFinite(bounds.height) ||
+    bounds.width <= 0 ||
+    bounds.height <= 0
+  ) {
+    return Promise.resolve(false);
+  }
   const intents: PropertyIntents = new Map([
     [type, new Map([[id, { ...bounds }]])],
   ]);

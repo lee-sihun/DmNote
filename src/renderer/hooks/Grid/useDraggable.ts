@@ -31,7 +31,7 @@ interface UseDraggableOptions {
   zoom?: number;
   panX?: number;
   panY?: number;
-  elementId?: string;
+  elementId: string;
   elementWidth?: number;
   elementHeight?: number;
   getOtherElements?: ((excludeId: string) => ElementBounds[]) | null;
@@ -75,7 +75,7 @@ export const useDraggable = ({
   panX = 0, // 팬 X 오프셋
   panY = 0, // 팬 Y 오프셋
   // 스마트 가이드 관련 옵션
-  elementId = '', // 요소 식별자
+  elementId, // 요소 식별자
   elementWidth = 60, // 요소 너비
   elementHeight = 60, // 요소 높이
   getOtherElements = null, // 다른 요소들의 bounds를 반환하는 함수

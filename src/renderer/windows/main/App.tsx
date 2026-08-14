@@ -148,25 +148,9 @@ export default function App() {
   const primaryButtonRef = useRef(null);
 
   const {
-    selectedKey,
-    setSelectedKey,
     keyMappings,
     positions,
-    handlePositionChange,
-    handleKeyUpdate,
-    handleKeyPreview,
-    handleKeyBatchPreview,
-    handleKeyStyleUpdate,
-    handleKeyBatchStyleUpdate,
     handleKeyMappingChange,
-    handleNoteColorUpdate,
-    handleNoteColorPreview,
-    handleCounterSettingsPreview,
-    handleDeleteKey,
-    handleMoveToFront,
-    handleMoveToBack,
-    handleMoveForward,
-    handleMoveBackward,
     handleResetCurrentMode,
     handleUndo,
     handleRedo,
@@ -182,8 +166,6 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
   const panelWindowStatus = usePanelWindowStore((state) => state.status);
-  const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
-    useState(false);
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
   const { value: visualSettingsOpen, toggle: toggleSettingsView } =
     useOptimisticBooleanCommit({
@@ -191,7 +173,6 @@ export default function App() {
       onCommit: (next) => {
         if (next) {
           selectedKeyTypeAtSettingsOpenRef.current = selectedKeyType;
-          if (selectedKey) setSkipModalAnimationOnReturn(true);
         } else if (
           selectedKeyTypeAtSettingsOpenRef.current !== selectedKeyType
         ) {
@@ -714,29 +695,12 @@ export default function App() {
             onMouseLeave={() => setGridAreaHovered(false)}
           >
             <Grid
-              selectedKey={selectedKey}
-              setSelectedKey={setSelectedKey}
               keyMappings={keyMappings}
               positions={positions}
-              onPositionChange={handlePositionChange}
-              onKeyUpdate={handleKeyUpdate}
-              onKeyPreview={handleKeyPreview}
-              onNoteColorUpdate={handleNoteColorUpdate}
-              onNoteColorPreview={handleNoteColorPreview}
-              onCounterPreview={handleCounterSettingsPreview}
-              onKeyDelete={handleDeleteKey}
-              onMoveToFront={handleMoveToFront}
-              onMoveToBack={handleMoveToBack}
-              onMoveForward={handleMoveForward}
-              onMoveBackward={handleMoveBackward}
               color={color}
               activeTool={activeTool}
               showConfirm={showConfirm}
               showAlert={showAlert}
-              shouldSkipModalAnimation={skipModalAnimationOnReturn}
-              onModalAnimationConsumed={() =>
-                setSkipModalAnimationOnReturn(false)
-              }
               onUndo={handleUndo}
               onRedo={handleRedo}
               toolbarAddRequest={toolbarAddRequest}
@@ -746,14 +710,6 @@ export default function App() {
             />
             {hasInlinePropertiesPanelLease(panelWindowStatus) && (
               <PropertiesPanel
-                onPositionChange={handlePositionChange}
-                onKeyUpdate={(data) => {
-                  const { index, ...updates } = data;
-                  handleKeyStyleUpdate(index, updates);
-                }}
-                onKeyBatchUpdate={handleKeyBatchStyleUpdate}
-                onKeyPreview={handleKeyPreview}
-                onKeyBatchPreview={handleKeyBatchPreview}
                 onKeyMappingChange={handleKeyMappingChange}
                 detachAction="detach"
                 onDetachAction={() => void detachPropertiesPanel()}

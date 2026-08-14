@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import type { SizeCommit, StyleTabContentProps } from '../types';
+import type { StyleTabContentProps } from '../types';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
   slotMembers,
@@ -23,12 +23,6 @@ import {
 import { createFontStyleToggleHandlers } from '../fontStyleToggleHandlers';
 import { usePanelNav } from '../PanelNavContext';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import {
-  isSyntheticElementId,
-  resolveElementByIdAcross,
-} from '@src/renderer/editor/model/elementIdMap';
-import { applyElementPatchById } from '@src/renderer/editor/runtime/elementPatch';
-import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
@@ -39,8 +33,6 @@ import { ColorSwatchButton } from '../../../Modal/content/pickers/ColorSwatch';
 import ShadowControls from '../ShadowControls';
 import { useGradientColorState } from '@hooks/pickers/useGradientColorState';
 import {
-  getActivePairPreservation,
-  gradientPairPatch,
   paintDescriptor,
   gradientToCss,
   type ColorModeValue,
@@ -62,7 +54,6 @@ import {
 import { resolveElementShadowForPosition } from '@src/types/key/shadows';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { AXIS_FIELD_WIDTH } from '@utils/cardRecipes';
-import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
   EditorFontColorPropertyPatchV1,
   EditorShadowPropertyPatchV1,
@@ -103,8 +94,6 @@ interface StyleTabContentInternalProps extends StyleTabContentProps {
   onLocalDyChange?: (value: number) => void;
   onLocalWidthChange?: (value: number) => void;
   onLocalHeightChange?: (value: number) => void;
-  onSizeBlur?: (committed?: SizeCommit) => void;
-  onGeometryCommit?: (field: GeometryField, value: number) => void;
 }
 
 const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
@@ -112,9 +101,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   keyPosition,
   keyCode: _keyCode,
   keyInfo,
-  onPositionChange,
-  onKeyUpdate,
-  onKeyPreview,
+  onGeometryPreview,
+  onGeometryCommit,
+  onElementPropertyCommit,
   onKeyMappingChange,
   keySlot,
   mappingControl,
@@ -153,8 +142,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onLocalDyChange,
   onLocalWidthChange,
   onLocalHeightChange,
-  onSizeBlur,
-  onGeometryCommit,
 }) => {
   const DEFAULT_KEY_BACKGROUND_COLOR = DEFAULT_ELEMENT_BG;
   const DEFAULT_KEY_BORDER_COLOR = DEFAULT_ELEMENT_BORDER;
@@ -435,45 +422,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     const prop = resolveColorProperty(target);
     setLocalColors((prev) => ({ ...prev, [prop]: color }));
 
-    if (target === 'fontColor' && onFontColorCommit) {
-      onFontColorCommit(
+    if (target === 'fontColor') {
+      onFontColorCommit?.(
         (prop === 'activeFontColor'
           ? { activeFontColor: color }
           : { fontColor: color }) as EditorFontColorPropertyPatchV1,
       );
-      return;
     }
-
-    const updates: Partial<KeyPosition> = {
-      [prop]: color,
-    } as Partial<KeyPosition>;
-
-    // idle 편집 전 사용자 저장값 기준 active 모습 보존
-    if (shadowActiveState && effectiveColorState !== 'active') {
-      const activeProp = activeColorPropertyFor(target);
-      const preservation = getActivePairPreservation(
-        {
-          color: keyPosition[target],
-          gradient: storedGradientOf(target),
-        },
-        {
-          color: keyPosition[activeProp],
-          gradient: storedGradientOf(activeProp),
-        },
-      );
-      if (preservation?.color !== undefined) {
-        updates[activeProp] = preservation.color;
-      }
-      if (target !== 'fontColor' && preservation?.gradient !== undefined) {
-        const activeSibling =
-          target === 'backgroundColor'
-            ? 'activeBackgroundGradient'
-            : 'activeBorderGradient';
-        updates[activeSibling] = preservation.gradient;
-      }
-    }
-
-    onKeyUpdate({ index: keyIndex, ...updates });
   };
 
   // ── 그라데이션 배선 (배경·테두리 전용, 글꼴 색상은 단색 유지) ──
@@ -503,58 +458,17 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const handleGradientCommit = (value: ColorModeValue) => {
     if (!gradientTarget) return;
     const prop = resolveColorProperty(gradientTarget);
-    if (onPaintCommit) {
-      const descriptor = paintDescriptor(value);
-      const paintField =
-        effectiveColorState === 'active'
-          ? gradientTarget === 'backgroundColor'
-            ? 'activeBackgroundPaint'
-            : 'activeBorderPaint'
-          : gradientTarget === 'backgroundColor'
-          ? 'backgroundPaint'
-          : 'borderPaint';
-      setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
-      onPaintCommit({ [paintField]: descriptor } as never);
-      return;
-    }
-    const patch = gradientPairPatch(
-      prop as Parameters<typeof gradientPairPatch>[0],
-      value,
-    ) as Partial<KeyPosition>;
-
-    const baseColor = patch[prop];
-    if (typeof baseColor === 'string') {
-      setLocalColors((prev) => ({ ...prev, [prop]: baseColor }));
-    }
-
-    const updates: Partial<KeyPosition> = { ...patch };
-
-    // idle 편집 전 사용자 저장값 기준 active 쌍 보존
-    if (shadowActiveState && effectiveColorState !== 'active') {
-      const activeProp = activeColorPropertyFor(gradientTarget);
-      const preservation = getActivePairPreservation(
-        {
-          color: keyPosition[gradientTarget],
-          gradient: storedGradientOf(gradientTarget),
-        },
-        {
-          color: keyPosition[activeProp],
-          gradient: storedGradientOf(activeProp),
-        },
-      );
-      if (preservation?.color !== undefined) {
-        updates[activeProp] = preservation.color;
-      }
-      if (preservation?.gradient !== undefined) {
-        const activeSibling =
-          gradientTarget === 'backgroundColor'
-            ? 'activeBackgroundGradient'
-            : 'activeBorderGradient';
-        updates[activeSibling] = preservation.gradient;
-      }
-    }
-
-    onKeyUpdate({ index: keyIndex, ...updates });
+    const descriptor = paintDescriptor(value);
+    const paintField =
+      effectiveColorState === 'active'
+        ? gradientTarget === 'backgroundColor'
+          ? 'activeBackgroundPaint'
+          : 'activeBorderPaint'
+        : gradientTarget === 'backgroundColor'
+        ? 'backgroundPaint'
+        : 'borderPaint';
+    setLocalColors((prev) => ({ ...prev, [prop]: descriptor.color }));
+    onPaintCommit?.({ [paintField]: descriptor } as never);
   };
 
   const gradientState = useGradientColorState({
@@ -566,11 +480,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       : {},
     fallbackColor: '#ffffff',
     // 요소 종류·키 모드 포함 — 형식 왕복 기억이 다른 대상과 교차하지 않게
-    contextKey: `${
-      canvasAnchor?.kind ?? 'key'
-    }:${selectedKeyType}:${keyIndex}:${
-      pickerFor ?? 'none'
-    }:${effectiveColorState}`,
+    contextKey: `${canvasAnchor?.kind ?? 'key'}:${selectedKeyType}:${
+      canvasAnchor?.kind === 'batch' ? 'batch' : canvasAnchor?.id
+    }:${pickerFor ?? 'none'}:${effectiveColorState}`,
     canvasAnchor: gradientTarget ? canvasAnchor : undefined,
     canvasSurface: gradientTarget === 'borderColor' ? 'border' : 'background',
     canvasState: effectiveColorState,
@@ -583,41 +495,25 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     if (onLocalDxChange) {
       onLocalDxChange(value);
     }
-    if (onGeometryCommit) {
-      onGeometryCommit('dx', value);
-    } else {
-      onPositionChange(keyIndex, value, localDy ?? keyPosition.dy);
-    }
+    onGeometryCommit?.('dx', value);
   };
 
   const handlePositionYChange = (value: number) => {
     if (onLocalDyChange) {
       onLocalDyChange(value);
     }
-    if (onGeometryCommit) {
-      onGeometryCommit('dy', value);
-    } else {
-      onPositionChange(keyIndex, localDx ?? keyPosition.dx, value);
-    }
+    onGeometryCommit?.('dy', value);
   };
 
   // 크기 변경 핸들러
   const handleWidthChange = (value: number) => {
-    if (onLocalWidthChange) {
-      onLocalWidthChange(value);
-      onKeyPreview?.(keyIndex, { width: value });
-    } else {
-      onKeyUpdate({ index: keyIndex, width: value });
-    }
+    onLocalWidthChange?.(value);
+    onGeometryCommit?.('width', value);
   };
 
   const handleHeightChange = (value: number) => {
-    if (onLocalHeightChange) {
-      onLocalHeightChange(value);
-      onKeyPreview?.(keyIndex, { height: value });
-    } else {
-      onKeyUpdate({ index: keyIndex, height: value });
-    }
+    onLocalHeightChange?.(value);
+    onGeometryCommit?.('height', value);
   };
 
   // 타이핑 중 스타일 프리뷰
@@ -641,7 +537,15 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       );
       return;
     }
-    onKeyPreview?.(keyIndex, { [property]: value });
+    if (
+      (property === 'dx' ||
+        property === 'dy' ||
+        property === 'width' ||
+        property === 'height') &&
+      typeof value === 'number'
+    ) {
+      onGeometryPreview?.(property, value);
+    }
   };
 
   const handleStyleChangeComplete = (
@@ -664,139 +568,58 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       );
       return;
     }
-    onKeyUpdate({ index: keyIndex, [property]: value });
-  };
-
-  // 작업 시작(=이 렌더) 시점의 소속 컬렉션. in-flight 클로저에 함께 캡처된다.
-  // 이 패널은 writer가 key/stat 어느 쪽인지 모르므로 시작 시점 소속으로 고정한다
-  const boundElementType = keyPosition.id
-    ? resolveElementByIdAcross(['key', 'stat'], keyPosition.id)?.type ?? null
-    : null;
-
-  // 비동기 완료 전용 적용자. 파일 대화상자·모달을 기다리는 사이 배열 재정렬이나
-  // 모드 전환이 일어나도 id로 현재 (mode, index)를 다시 찾아 그 요소에 적용한다.
-  // 삭제됐거나 type이 옮겨졌으면 자산만 남기고 연결은 조용히 중단한다
-  const applyToBoundElement = (patch: Omit<Partial<KeyPosition>, 'id'>) => {
-    const id = keyPosition.id;
-    if (!id || isSyntheticElementId(id)) {
-      // id 없는 구형 데이터는 기존 index 경로 유지
-      onKeyPreview?.(keyIndex, patch);
-      onKeyUpdate({ index: keyIndex, ...patch });
-      return;
-    }
-    // id가 있는데 시작 시점 조회가 실패했으면 옛 index 폴백 대신 중단
-    if (!boundElementType) return;
-    applyElementPatchById(boundElementType, id, () => patch).catch(
-      reportElementOpError,
-    );
+    onElementPropertyCommit?.({ [property]: value } as never);
   };
 
   // 이미지 변경 핸들러
   const handleIdleImageChange = (imageUrl: string) => {
-    if (onInactiveImageCommit) {
-      onInactiveImageCommit(imageUrl);
-      return;
-    }
-    applyToBoundElement({ inactiveImage: imageUrl });
+    onInactiveImageCommit?.(imageUrl);
   };
 
   const handleActiveImageChange = (imageUrl: string) => {
-    if (onActiveImageCommit) {
-      onActiveImageCommit(imageUrl);
-      return;
-    }
-    applyToBoundElement({ activeImage: imageUrl });
+    onActiveImageCommit?.(imageUrl);
   };
 
   const handleIdleTransparentChange = (checked: boolean) => {
-    if (onIdleTransparentCommit) {
-      onIdleTransparentCommit(checked);
-      return;
-    }
-    onKeyPreview?.(keyIndex, { idleTransparent: checked });
-    onKeyUpdate({ index: keyIndex, idleTransparent: checked });
+    onIdleTransparentCommit?.(checked);
   };
 
   const handleActiveTransparentChange = (checked: boolean) => {
-    if (onActiveTransparentCommit) {
-      onActiveTransparentCommit(checked);
-      return;
-    }
-    onKeyPreview?.(keyIndex, { activeTransparent: checked });
-    onKeyUpdate({ index: keyIndex, activeTransparent: checked });
+    onActiveTransparentCommit?.(checked);
   };
 
   const handleIdleImageReset = () => {
-    if (onInactiveImageCommit) {
-      onInactiveImageCommit('');
-      return;
-    }
-    onKeyPreview?.(keyIndex, { inactiveImage: '' });
-    onKeyUpdate({ index: keyIndex, inactiveImage: '' });
+    onInactiveImageCommit?.('');
   };
 
   const handleActiveImageReset = () => {
-    if (onActiveImageCommit) {
-      onActiveImageCommit('');
-      return;
-    }
-    onKeyPreview?.(keyIndex, { activeImage: '' });
-    onKeyUpdate({ index: keyIndex, activeImage: '' });
+    onActiveImageCommit?.('');
   };
 
   const handleIdleImageFitChange = (fit: ImageFit) => {
-    if (onIdleImageFitCommit) {
-      onIdleImageFitCommit(fit);
-      return;
-    }
-    onKeyPreview?.(keyIndex, { idleImageFit: fit });
-    onKeyUpdate({ index: keyIndex, idleImageFit: fit });
+    onIdleImageFitCommit?.(fit);
   };
 
   const handleActiveImageFitChange = (fit: ImageFit) => {
-    if (onActiveImageFitCommit) {
-      onActiveImageFitCommit(fit);
-      return;
-    }
-    onKeyPreview?.(keyIndex, { activeImageFit: fit });
-    onKeyUpdate({ index: keyIndex, activeImageFit: fit });
+    onActiveImageFitCommit?.(fit);
   };
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
-    if (onStylePropertyPreview) {
-      onStylePropertyPreview({ displayText: value });
-      return;
-    }
-    onKeyPreview?.(keyIndex, { displayText: value });
+    onStylePropertyPreview?.({ displayText: value });
   };
 
   const handleDisplayTextBlur = (value: string) => {
-    if (onStylePropertyCommit) {
-      onStylePropertyCommit({ displayText: value });
-      return;
-    }
-    onKeyUpdate({
-      index: keyIndex,
-      displayText: value,
-    });
+    onStylePropertyCommit?.({ displayText: value });
   };
 
   // 클래스명 핸들러
   const handleClassNameChange = (value: string) => {
-    if (onStylePropertyPreview) {
-      onStylePropertyPreview({ className: value });
-      return;
-    }
-    onKeyPreview?.(keyIndex, { className: value });
+    onStylePropertyPreview?.({ className: value });
   };
 
   const handleClassNameBlur = (value: string) => {
-    if (onStylePropertyCommit) {
-      onStylePropertyCommit({ className: value });
-      return;
-    }
-    onKeyUpdate({ index: keyIndex, className: value });
+    onStylePropertyCommit?.({ className: value });
   };
 
   // 이미지 피커 열림 상태 (외부 또는 내부)
@@ -943,12 +766,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 : localWidth ?? keyPosition.width ?? 60
             }
             onChange={handleWidthChange}
-            onBlur={(width) => {
-              if (onGeometryCommit) {
-                if (width !== undefined) onGeometryCommit('width', width);
-                return;
-              }
-              onSizeBlur?.({ width });
+            onPreview={(width) => {
+              onLocalWidthChange?.(width);
+              onGeometryPreview?.('width', width);
             }}
             onCancel={() => editGestureController.cancel()}
             prefix="W"
@@ -965,12 +785,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                 : localHeight ?? keyPosition.height ?? 60
             }
             onChange={handleHeightChange}
-            onBlur={(height) => {
-              if (onGeometryCommit) {
-                if (height !== undefined) onGeometryCommit('height', height);
-                return;
-              }
-              onSizeBlur?.({ height });
+            onPreview={(height) => {
+              onLocalHeightChange?.(height);
+              onGeometryPreview?.('height', height);
             }}
             onCancel={() => editGestureController.cancel()}
             prefix="H"
@@ -1076,31 +893,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         idleShadow={idleShadow}
         activeShadow={activeShadow}
         showActiveState={shadowActiveState}
-        onChange={(state, shadow, patch) => {
-          if (onShadowCommit) {
-            onShadowCommit({
-              [state === 'active' ? 'activeShadow' : 'shadow']: patch,
-            } as EditorShadowPropertyPatchV1);
-            return;
-          }
-          onKeyUpdate({
-            index: keyIndex,
-            [state === 'active' ? 'activeShadow' : 'shadow']: shadow,
-          });
+        onChange={(state, _shadow, patch) => {
+          onShadowCommit?.({
+            [state === 'active' ? 'activeShadow' : 'shadow']: patch,
+          } as EditorShadowPropertyPatchV1);
         }}
         onEnabledChange={(enabled) => {
-          if (onShadowCommit) {
-            onShadowCommit({ shadowEnabled: enabled });
-            return;
-          }
-          onKeyUpdate({
-            index: keyIndex,
-            shadow: { ...idleShadow, enabled },
-            // 눌림 상태가 없는 요소는 activeShadow를 기록하지 않음
-            ...(shadowActiveState
-              ? { activeShadow: { ...activeShadow, enabled } }
-              : {}),
-          });
+          onShadowCommit?.({ shadowEnabled: enabled });
         }}
         panelElement={panelElement}
         t={t}
@@ -1227,12 +1026,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               checked={keyPosition.soundEnabled ?? false}
               onChange={() => {
                 const nextEnabled = !(keyPosition.soundEnabled ?? false);
-                if (onSoundEnabledCommit) {
-                  onSoundEnabledCommit(nextEnabled);
-                } else {
-                  onKeyPreview?.(keyIndex, { soundEnabled: nextEnabled });
-                  onKeyUpdate({ index: keyIndex, soundEnabled: nextEnabled });
-                }
+                onSoundEnabledCommit?.(nextEnabled);
               }}
             />
           </PropertyRow>
@@ -1288,15 +1082,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             open={showImagePicker}
             referenceRef={imageButtonRef}
             panelElement={panelElement}
-            completionBinding={
-              onInactiveImageCommit ||
-              onActiveImageCommit ||
-              (isIndividualMode &&
-                keyPosition.id &&
-                !isSyntheticElementId(keyPosition.id))
-                ? 'element-id'
-                : 'session-mode'
-            }
+            completionBinding="element-id"
             idleImage={keyPosition.inactiveImage || ''}
             activeImage={keyPosition.activeImage || ''}
             idleTransparent={keyPosition.idleTransparent ?? false}
@@ -1391,20 +1177,11 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         createPortal(
           <SoundPicker
             open
-            completionBinding={
-              onSoundPathCommit ||
-              (keyPosition.id && !isSyntheticElementId(keyPosition.id))
-                ? 'element-id'
-                : 'session-mode'
-            }
+            completionBinding="element-id"
             selectedSound={keyPosition.soundPath || null}
             onSoundSelect={(soundPath) => {
               const nextPath = soundPath || '';
-              if (onSoundPathCommit) {
-                onSoundPathCommit(nextPath);
-                return;
-              }
-              applyToBoundElement({ soundPath: nextPath });
+              onSoundPathCommit?.(nextPath);
             }}
             previewVolume={keyPosition.soundVolume ?? 100}
             pageTitle={t('propertiesPanel.keySound') || '키 사운드'}

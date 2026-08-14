@@ -419,10 +419,7 @@ fn frontend_lifecycle_restore_labels(target_windows: &HashSet<String>) -> Vec<&'
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SelectionSessionElement {
     pub element_type: String,
-    #[serde(default)]
-    pub index: Option<u32>,
-    #[serde(default)]
-    pub full_id: Option<String>,
+    pub full_id: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -762,27 +759,34 @@ fn validate_selection_session(snapshot: &SelectionSessionSnapshot) -> Result<(),
             "mode exceeds the {MAX_SELECTION_MODE_BYTES} byte limit"
         ));
     }
+    let mut seen_element_ids = HashSet::new();
     for (index, element) in snapshot.selected_elements.iter().enumerate() {
-        if element.element_type.len() > MAX_SELECTION_ELEMENT_TYPE_BYTES {
-            return Err(format!(
-                "selectedElements[{index}].elementType exceeds the {MAX_SELECTION_ELEMENT_TYPE_BYTES} byte limit"
-            ));
-        }
-        if element
-            .full_id
-            .as_ref()
-            .is_some_and(|full_id| full_id.len() > MAX_SELECTION_FULL_ID_BYTES)
+        if element.element_type.len() > MAX_SELECTION_ELEMENT_TYPE_BYTES
+            || !matches!(
+                element.element_type.as_str(),
+                "key" | "stat" | "graph" | "knob" | "plugin"
+            )
         {
-            return Err(format!(
-                "selectedElements[{index}].fullId exceeds the {MAX_SELECTION_FULL_ID_BYTES} byte limit"
-            ));
+            return Err(format!("selectedElements[{index}].elementType is invalid"));
+        }
+        if element.full_id.is_empty()
+            || element.full_id.len() > MAX_SELECTION_FULL_ID_BYTES
+            || (element.element_type != "plugin"
+                && !crate::state::native_element_id::is_valid_element_id(&element.full_id))
+        {
+            return Err(format!("selectedElements[{index}].fullId is invalid"));
+        }
+        if !seen_element_ids.insert(element.full_id.as_str()) {
+            return Err(format!("selectedElements[{index}].fullId is duplicated"));
         }
     }
+    let mut seen_group_ids = HashSet::new();
     for (index, group_id) in snapshot.selected_group_ids.iter().enumerate() {
-        if group_id.len() > MAX_SELECTION_GROUP_ID_BYTES {
-            return Err(format!(
-                "selectedGroupIds[{index}] exceeds the {MAX_SELECTION_GROUP_ID_BYTES} byte limit"
-            ));
+        if group_id.is_empty()
+            || group_id.len() > MAX_SELECTION_GROUP_ID_BYTES
+            || !seen_group_ids.insert(group_id.as_str())
+        {
+            return Err(format!("selectedGroupIds[{index}] is invalid"));
         }
     }
     Ok(())
@@ -2512,7 +2516,7 @@ impl AppState {
                             // 키음은 물리 다운당 1회: press 기여 슬롯을 병합해
                             // 사운드 활성 첫 슬롯 설정 사용 (오디오 중첩 방지)
                             if is_down && message.device == crate::ipc::InputDeviceKind::Keyboard {
-                                if let Some((sound_canonical, sound_slot_indices)) =
+                                if let Some((_sound_canonical, sound_slot_indices)) =
                                     crate::keyboard::manager::collect_sound_dispatch(&outcome.events)
                                 {
                                     if let Some((sound_path, per_key_volume)) = app_state
@@ -2548,7 +2552,7 @@ impl AppState {
                                             log::debug!(
                                                 "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} volume={:.3} path={}",
                                                 outcome.mode,
-                                                sound_canonical,
+                                                _sound_canonical,
                                                 per_key_volume,
                                                 sound_path
                                             );
@@ -2580,7 +2584,7 @@ impl AppState {
                                             log::debug!(
                                                 "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} source=soundpack",
                                                 outcome.mode,
-                                                sound_canonical
+                                                _sound_canonical
                                             );
                                         }
                                     }
@@ -5545,8 +5549,7 @@ mod tests {
             SelectionSessionSnapshot {
                 selected_elements: vec![SelectionSessionElement {
                     element_type: "key".to_string(),
-                    index: Some(2),
-                    full_id: Some("key-2".to_string()),
+                    full_id: "00000000-0000-4000-8000-000000000002".to_string(),
                 }],
                 selected_group_ids: vec!["group-1".to_string()],
                 mode: "4key".to_string(),
@@ -5567,8 +5570,7 @@ mod tests {
             selected_elements: vec![
                 SelectionSessionElement {
                     element_type: "key".to_string(),
-                    index: None,
-                    full_id: None,
+                    full_id: "00000000-0000-4000-8000-000000000002".to_string(),
                 };
                 MAX_SELECTION_ELEMENTS + 1
             ],
@@ -5580,16 +5582,14 @@ mod tests {
             SelectionSessionSnapshot {
                 selected_elements: vec![SelectionSessionElement {
                     element_type: "x".repeat(MAX_SELECTION_ELEMENT_TYPE_BYTES + 1),
-                    index: None,
-                    full_id: None,
+                    full_id: "00000000-0000-4000-8000-000000000002".to_string(),
                 }],
                 ..SelectionSessionSnapshot::default()
             },
             SelectionSessionSnapshot {
                 selected_elements: vec![SelectionSessionElement {
                     element_type: "key".to_string(),
-                    index: None,
-                    full_id: Some("x".repeat(MAX_SELECTION_FULL_ID_BYTES + 1)),
+                    full_id: "x".repeat(MAX_SELECTION_FULL_ID_BYTES + 1),
                 }],
                 ..SelectionSessionSnapshot::default()
             },

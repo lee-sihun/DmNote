@@ -317,7 +317,10 @@ describe('useGridResize plugin gesture lifecycle', () => {
 
   it('혼합 그룹 resize는 중복 commit 없이 공유 gesture를 종료 callback에 전달한다', async () => {
     mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
-    const selected = [keySelection(), pluginSelection('plugin-a:one')];
+    const selected = [
+      stableKeySelection(STABLE_A),
+      pluginSelection('plugin-a:one'),
+    ];
     await renderHarness(selected);
 
     await act(async () => {
@@ -338,13 +341,47 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(mocks.beginMixedGesture).toHaveBeenCalledWith(pluginGestureIds[0], [
       'plugin-a',
     ]);
-    // wire patch는 호출 시점 full-record가 아니라 슬롯 generator로 전달된다
     expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
       pluginGestureIds[0],
-      expect.any(Function),
+      {
+        opsVersion: 1,
+        ops: [
+          {
+            kind: 'setBounds',
+            elementType: 'key',
+            id: STABLE_A,
+            bounds: { dx: 10, dy: 20, width: 80, height: 80 },
+          },
+        ],
+      },
       ['plugin-a'],
       expect.anything(),
     );
+  });
+
+  it('혼합 그룹의 native ID가 비정규면 plugin까지 함께 fail-close한다', async () => {
+    mocks.elements = [{ fullId: 'plugin-a:one', pluginId: 'plugin-a' }];
+    const selected = [keySelection(), pluginSelection('plugin-a:one')];
+    await renderHarness(selected);
+
+    await act(async () => {
+      api.handleResizeStart();
+      api.handleGroupResize({
+        groupBounds: { x: 10, y: 20, width: 200, height: 80 },
+        elementBounds: selected.map((element, index) => ({
+          element,
+          bounds: { x: 10 + index * 100, y: 20, width: 80, height: 80 },
+        })),
+        handle: { id: 'e', dx: 1, dy: 0 },
+      });
+      api.handleGroupResizeComplete();
+    });
+
+    expect(mocks.commitGroupBounds).not.toHaveBeenCalled();
+    expect(mocks.commitSingleBounds).not.toHaveBeenCalled();
+    expect(mocks.commitMixedGesture).not.toHaveBeenCalled();
+    expect(mocks.updateElement).not.toHaveBeenCalled();
+    expect(mocks.sendBridge).not.toHaveBeenCalled();
   });
 
   it('혼합 그룹 resize 중 선택이 바뀌어도 시작 구성으로 정산한다', async () => {
@@ -424,7 +461,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
       });
     });
     // 대기 중 선택 교체 (외부 재정렬·분리 패널 동기화)
-    await renderHarness([keySelection()]);
+    await renderHarness([stableKeySelection(STABLE_B)]);
     await act(async () => {
       api.handleGroupResizeComplete();
     });
@@ -505,9 +542,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(getOtherElements).toHaveBeenLastCalledWith(STABLE_A);
   });
 
-  it('시작 baseline이 없는 합성 단일 resize는 eager와 wire 모두 무커밋한다', async () => {
-    // coordinator lastAck가 null - 합성 index 의도는 시작 증명 없이는
-    // 어떤 경로로도 커밋되지 않는다 (wire 부활 금지)
+  it('합성 native 단일 resize는 로컬과 wire를 모두 무커밋한다', async () => {
     await renderHarness([keySelection()]);
 
     await act(async () => {

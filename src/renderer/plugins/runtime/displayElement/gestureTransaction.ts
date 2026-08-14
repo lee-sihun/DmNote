@@ -31,7 +31,7 @@ import type {
   EditorPatchGenerator,
 } from '@src/renderer/editor/runtime/editorCoordinator';
 import type {
-  EditorDocumentV1,
+  CanonicalEditorDocumentV1,
   EditorOpV1,
   EditorPatchV1,
 } from '@src/types/editor';
@@ -165,7 +165,7 @@ export const commitMixedGestureIntent = (options: {
     elements: readonly PluginDisplayElementInternal[],
   ) => readonly string[];
   generate: (context: {
-    base: EditorDocumentV1;
+    base: CanonicalEditorDocumentV1;
     pluginProjection: readonly PluginDisplayElementInternal[];
   }) => MixedIntentGeneration;
   onEnrolled?: () => void;

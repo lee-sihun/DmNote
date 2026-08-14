@@ -25,8 +25,6 @@ interface UseSelectionDragOptions {
   elementId: string;
   elementWidth: number;
   elementHeight: number;
-  elementType: string;
-  elementIndex?: number;
   selectedElements: SelectedElementLike[];
   getOtherElements: (excludeId: string) => ElementBounds[];
   getSelectedElementIds?: (element: SelectedElementLike) => string[];
@@ -51,8 +49,6 @@ export const useSelectionDrag = ({
   elementId,
   elementWidth,
   elementHeight,
-  elementType,
-  elementIndex,
   selectedElements,
   getOtherElements,
   getSelectedElementIds = (element) => [element.id],
@@ -149,13 +145,7 @@ export const useSelectionDrag = ({
         if (selectedElements.length > 1) {
           const selectedBounds = selectedElements
             .map((selectedElement) => {
-              // index 보조 비교는 index가 실재할 때만 — 플러그인처럼 index가 없는
-              // 요소끼리 undefined === undefined로 전부 현재 요소로 오인되는 것 방지
-              const isCurrentElement =
-                selectedElement.id === elementId ||
-                (elementIndex !== undefined &&
-                  selectedElement.type === elementType &&
-                  selectedElement.index === elementIndex);
+              const isCurrentElement = selectedElement.id === elementId;
               if (isCurrentElement) return draggedBounds;
 
               const found = getSelectedElementIds(selectedElement)

@@ -3,14 +3,9 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 
-import type { KeyPosition } from '@src/types/key/keys';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 
 export type NativeElementType = 'key' | 'stat' | 'graph' | 'knob';
-
-// 무ID 구형 요소의 합성 신원(`${type}-${index}`). 안정 ID처럼 다루면
-// 조회가 항상 실패해 legacy 폴백까지 막힌다
-export const isSyntheticElementId = (id: string): boolean =>
-  /^(key|stat|graph|knob)-\d+$/.test(id);
 
 export interface ElementLocator {
   type: NativeElementType;
@@ -18,7 +13,12 @@ export interface ElementLocator {
   index: number;
 }
 
-type PositionsRecord = Record<string, readonly KeyPosition[]> | undefined;
+type CanonicalPosition =
+  | CanonicalEditorDocumentV1['keyPositions'][string][number]
+  | CanonicalEditorDocumentV1['statPositions'][string][number]
+  | CanonicalEditorDocumentV1['graphPositions'][string][number]
+  | CanonicalEditorDocumentV1['knobPositions'][string][number];
+type PositionsRecord = Record<string, readonly CanonicalPosition[]> | undefined;
 
 // 권위 컬렉션만 읽는다. 키의 렌더 positions는 canonical + 프리뷰 합성이라
 // 조회 기준으로 쓰면 프리뷰 재합성 타이밍에 따라 결과가 흔들린다
@@ -46,10 +46,7 @@ const indexRecord = (
   if (!source) return byId;
   for (const [mode, positions] of Object.entries(source)) {
     positions.forEach((position, index) => {
-      const id = position?.id;
-      if (typeof id === 'string' && id.length > 0) {
-        byId.set(id, { type, mode, index });
-      }
+      byId.set(position.id, { type, mode, index });
     });
   }
   return byId;

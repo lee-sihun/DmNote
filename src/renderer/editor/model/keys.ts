@@ -23,7 +23,10 @@ import { cloneSlot } from '@utils/keySlot';
 // 기본 키 포지션 생성
 // ----------------------------------------------------------------------------
 
-export function createDefaultKeyPosition(dx = 0, dy = 0): KeyPosition {
+export function createDefaultKeyPosition(
+  dx = 0,
+  dy = 0,
+): KeyPosition & { id: string } {
   return {
     id: newElementId(),
     dx,
@@ -49,7 +52,7 @@ export function createDefaultKeyPosition(dx = 0, dy = 0): KeyPosition {
     noteAutoYCorrection: true,
     className: '',
     counter: createDefaultCounterSettings(),
-  } as KeyPosition;
+  } as KeyPosition & { id: string };
 }
 
 // ----------------------------------------------------------------------------
@@ -119,7 +122,7 @@ export function cloneKeyPositionForDuplicate(
   sourcePosition: KeyPosition,
   targetDx: number,
   targetDy: number,
-): KeyPosition {
+): KeyPosition & { id: string } {
   const clonedNoteColor =
     sourcePosition.noteColor &&
     typeof sourcePosition.noteColor === 'object' &&
@@ -241,11 +244,11 @@ export function updateKeyStyle(
 }
 
 /** 배치 키 스타일 업데이트 후 새 positions 반환 */
-export function batchUpdateKeyStyle(
-  positions: KeyPositions,
+export function batchUpdateKeyStyle<T extends KeyPositions>(
+  positions: T,
   mode: string,
   updates: Array<{ index: number } & Partial<KeyPosition>>,
-): KeyPositions {
+): T {
   if (updates.length === 0) return positions;
 
   const current = positions[mode] || [];
@@ -264,7 +267,7 @@ export function batchUpdateKeyStyle(
       const update = updateMap.get(i);
       return update ? { ...pos, ...update } : pos;
     }),
-  };
+  } as T;
 }
 
 // ----------------------------------------------------------------------------

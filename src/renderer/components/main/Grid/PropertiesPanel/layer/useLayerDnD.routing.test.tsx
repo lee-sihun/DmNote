@@ -11,11 +11,6 @@ const mocks = vi.hoisted(() => ({
     (_options: unknown): Promise<unknown> =>
       Promise.resolve({ committed: true }),
   ),
-  applyGestureEagerly: vi.fn(() => ({
-    matched: true,
-    receipt: { rollback: vi.fn() },
-  })),
-  captureBaseline: vi.fn(() => null),
   reportElementOpError: vi.fn(),
   reportElementOpSkipped: vi.fn(),
   setPluginZIndexes: vi.fn(),
@@ -30,10 +25,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   runElementIntent: mocks.runElementIntent,
-  applyGestureIntentsEagerly: mocks.applyGestureEagerly,
-  captureIndexIntentBaseline: mocks.captureBaseline,
-  generateIndexIntentPatch: vi.fn(() => null),
-  indexBaselineMatches: vi.fn(() => true),
   intentPatch: (patch: unknown) =>
     patch === null ? { kind: 'targetLost' } : { kind: 'patch', patch },
   reportElementOpError: mocks.reportElementOpError,
@@ -245,12 +236,6 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       (options as { applyEager: () => unknown }).applyEager();
       return Promise.resolve({ committed: true });
     });
-    mocks.applyGestureEagerly.mockClear();
-    mocks.captureBaseline.mockClear();
-    mocks.applyGestureEagerly.mockImplementation(() => ({
-      matched: true,
-      receipt: { rollback: vi.fn() },
-    }));
     mocks.reportElementOpError.mockClear();
     mocks.reportElementOpSkipped.mockClear();
     mocks.setPluginZIndexes.mockClear();
@@ -418,8 +403,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     });
   };
 
-  it('합성 항목 드래그의 baseline은 paired keys를 포함해 캡처한다', async () => {
-    // 합성 id 항목 - 드래그 시작 시 baseline 캡처가 발화
+  it('main 합성 항목 드래그도 semantic과 legacy writer를 모두 막는다', async () => {
     const syntheticItem: LayerItem = {
       type: 'key',
       id: 'key-0',
@@ -435,10 +419,13 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       displayItems: toDisplay(startItems),
     });
 
-    expect(mocks.captureBaseline).toHaveBeenCalledWith(
-      null,
-      '4key',
-      expect.arrayContaining(['keys', 'keyPositions', 'layerGroups']),
+    expect(mocks.reorderViaAuthority).not.toHaveBeenCalled();
+    expect(mocks.commitLayerDropIntent).not.toHaveBeenCalled();
+    expect(mocks.runElementIntent).not.toHaveBeenCalled();
+    expect(mocks.setPluginZIndexes).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+    expect(mocks.reportElementOpSkipped).toHaveBeenCalledWith(
+      'layer drop (invalid native id)',
     );
   });
 
@@ -465,7 +452,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     expect(mocks.setPluginZIndexes).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
     expect(mocks.reportElementOpSkipped).toHaveBeenCalledWith(
-      'panel synthetic layer drop',
+      'layer drop (invalid native id)',
     );
   });
 
@@ -495,7 +482,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     expect(mocks.setPluginZIndexes).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
     expect(mocks.reportElementOpSkipped).toHaveBeenCalledWith(
-      'panel synthetic group drop',
+      'group drop (invalid native id)',
     );
   });
 
@@ -652,8 +639,7 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
     });
 
     // X 잔류를 앵커가 모르는 채 해석하면 [X, A, Y] 오배치 - 무커밋이어야 한다
-    expect(mocks.runElementIntent).not.toHaveBeenCalled();
-    expect(mocks.applyGestureEagerly).not.toHaveBeenCalled();
+    expect(mocks.commitLayerDropIntent).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
@@ -683,12 +669,11 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       200,
     );
 
-    expect(mocks.runElementIntent).not.toHaveBeenCalled();
-    expect(mocks.applyGestureEagerly).not.toHaveBeenCalled();
+    expect(mocks.commitLayerDropIntent).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
-  it('드롭 대상 그룹이 mouseup 전에 삭제되면 무커밋한다', async () => {
+  it('드롭 대상 그룹 소실 판정을 stable semantic helper에 위임한다', async () => {
     const itemA = nativeItem(ID_A, 0, 3, 'G');
     const itemX = nativeItem(ID_X, 1, 2);
     const itemM1 = nativeItem(ID_M1, 2, 1, 'H');
@@ -722,8 +707,9 @@ describe('useLayerDnD 커밋 경로 라우팅', () => {
       126,
     );
 
-    expect(mocks.runElementIntent).not.toHaveBeenCalled();
-    expect(mocks.applyGestureEagerly).not.toHaveBeenCalled();
+    expect(mocks.commitLayerDropIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'group', mode: '4key', groupId: 'G' }),
+    );
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 });

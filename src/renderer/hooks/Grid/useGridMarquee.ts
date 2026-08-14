@@ -4,23 +4,19 @@
 
 import { useEffect, useRef } from 'react';
 import {
-  selectionElementId,
   useGridSelectionStore,
   isElementInMarquee,
   getMarqueeRect,
   type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
-import type { KeyPositions } from '@src/types/key/keys';
-import type { StatItemPositions } from '@src/types/key/statItems';
-import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 
 interface UseGridMarqueeParams {
-  positions: KeyPositions;
-  statPositions: StatItemPositions;
-  graphPositions: GraphItemPositions;
-  knobPositions: KnobItemPositions;
+  positions: CanonicalEditorDocumentV1['keyPositions'];
+  statPositions: CanonicalEditorDocumentV1['statPositions'];
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'];
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'];
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   clientToGridCoords: (
@@ -131,7 +127,7 @@ export function useGridMarquee({
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
             type: 'key',
-            id: selectionElementId('key', pos, index),
+            id: pos.id,
             index,
           });
         }
@@ -150,7 +146,7 @@ export function useGridMarquee({
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
             type: 'stat',
-            id: selectionElementId('stat', pos, index),
+            id: pos.id,
             index,
           });
         }
@@ -169,7 +165,7 @@ export function useGridMarquee({
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
             type: 'graph',
-            id: selectionElementId('graph', pos, index),
+            id: pos.id,
             index,
           });
         }
@@ -188,7 +184,7 @@ export function useGridMarquee({
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
             type: 'knob',
-            id: selectionElementId('knob', pos, index),
+            id: pos.id,
             index,
           });
         }

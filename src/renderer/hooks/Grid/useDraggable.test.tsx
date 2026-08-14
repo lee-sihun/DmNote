@@ -68,6 +68,7 @@ const Harness = ({
   const draggable = useDraggable({
     initialX: 0,
     initialY: 0,
+    elementId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     onDragStart,
     onPositionChange,
   });

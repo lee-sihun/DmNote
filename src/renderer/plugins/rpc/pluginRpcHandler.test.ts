@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const RPC_KEY_ID = '10000000-0000-4000-8000-000000000001';
+const RPC_GRAPH_ID = '10000000-0000-4000-8000-000000000003';
+const RPC_KNOB_ID = '10000000-0000-4000-8000-000000000004';
+
 const mocks = vi.hoisted(() => ({
   requestListener: undefined as
     | ((envelope: Record<string, unknown>) => void)
@@ -636,7 +640,7 @@ describe('plugin panel persisted element mutations', () => {
     [
       'graph',
       {
-        targets: [{ elementType: 'graph', id: 'stable' }],
+        targets: [{ elementType: 'graph', id: RPC_GRAPH_ID }],
         patch: { shadow: { blur: 1 } },
       },
     ],
@@ -2807,7 +2811,7 @@ describe('plugin panel persisted element mutations', () => {
     [
       'sensitivity nonfinite',
       {
-        targets: [{ elementType: 'knob', id: 'stable' }],
+        targets: [{ elementType: 'knob', id: RPC_KNOB_ID }],
         patch: { sensitivity: Number.POSITIVE_INFINITY },
       },
     ],
@@ -4618,7 +4622,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
-        targets: [{ elementType: 'graph', id: 'stable' }],
+        targets: [{ elementType: 'graph', id: RPC_GRAPH_ID }],
         patch: { graphColor: '#ffffff' },
       }),
     );
@@ -4640,7 +4644,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
-        targets: [{ elementType: 'knob', id: 'stable' }],
+        targets: [{ elementType: 'knob', id: RPC_KNOB_ID }],
         patch: { reverse: true },
       }),
     );
@@ -4663,8 +4667,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [
-          { elementType: 'key', id: 'stable-key' },
-          { elementType: 'knob', id: 'stable-knob' },
+          { elementType: 'key', id: RPC_KEY_ID },
+          { elementType: 'knob', id: RPC_KNOB_ID },
         ],
         patch: { useInlineStyles: true },
       }),
@@ -4688,8 +4692,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [
-          { elementType: 'key', id: 'stable-key' },
-          { elementType: 'graph', id: 'stable-graph' },
+          { elementType: 'key', id: RPC_KEY_ID },
+          { elementType: 'graph', id: RPC_GRAPH_ID },
         ],
         patch: { fontWeight: 700 },
       }),
@@ -4713,8 +4717,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [
-          { elementType: 'key', id: 'stable-key' },
-          { elementType: 'graph', id: 'stable-graph' },
+          { elementType: 'key', id: RPC_KEY_ID },
+          { elementType: 'graph', id: RPC_GRAPH_ID },
         ],
         patch: { fontFamily: '  Raw Family  ' },
       }),
@@ -4738,8 +4742,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [
-          { elementType: 'key', id: 'stable-key' },
-          { elementType: 'knob', id: 'stable-knob' },
+          { elementType: 'key', id: RPC_KEY_ID },
+          { elementType: 'knob', id: RPC_KNOB_ID },
         ],
         patch: { inactiveImage: '  Raw Image.png  ' },
       }),
@@ -4763,8 +4767,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [
-          { elementType: 'key', id: 'stable-key' },
-          { elementType: 'knob', id: 'stable-knob' },
+          { elementType: 'key', id: RPC_KEY_ID },
+          { elementType: 'knob', id: RPC_KNOB_ID },
         ],
         patch: { activeImage: '  Raw Active.png  ' },
       }),
@@ -4787,7 +4791,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
-        targets: [{ elementType: 'knob', id: 'stable-knob' }],
+        targets: [{ elementType: 'knob', id: RPC_KNOB_ID }],
         patch: { displayText: 'Knob' },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
@@ -4811,8 +4815,8 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
         targets: [
-          { elementType: 'key', id: 'stable-key' },
-          { elementType: 'graph', id: 'stable-graph' },
+          { elementType: 'key', id: RPC_KEY_ID },
+          { elementType: 'graph', id: RPC_GRAPH_ID },
         ],
         patch: { idleTransparent: true },
       }),
@@ -4835,7 +4839,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
-        targets: [{ elementType: 'key', id: 'stable-key' }],
+        targets: [{ elementType: 'key', id: RPC_KEY_ID }],
         patch: { soundPath: '  sounds/raw.wav  ' },
       }),
     );
@@ -4857,7 +4861,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
-        targets: [{ elementType: 'key', id: 'stable-key' }],
+        targets: [{ elementType: 'key', id: RPC_KEY_ID }],
         patch: { soundEnabled: true },
       }),
     );
@@ -4879,7 +4883,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
-        targets: [{ elementType: 'key', id: 'stable-key' }],
+        targets: [{ elementType: 'key', id: RPC_KEY_ID }],
         patch: { soundVolume: 100 },
         gestureId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       }),
@@ -4902,7 +4906,7 @@ describe('plugin panel persisted element mutations', () => {
     );
     mocks.requestListener?.(
       envelope('layers:patchProperty', {
-        targets: [{ elementType: 'key', id: 'stable-key' }],
+        targets: [{ elementType: 'key', id: RPC_KEY_ID }],
         patch: { noteAlignment: 'right' },
       }),
     );

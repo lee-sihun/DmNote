@@ -1,42 +1,19 @@
-import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import {
-  applyGestureIntentsEagerly,
-  applyIndexIntentsEagerly,
-  captureIndexIntentBaseline,
-  generateIndexIntentPatch,
-  generatePropertyIntentPatch,
-  indexBaselineMatches,
-  intentPatch,
+  applyPropertyIntentsEagerly,
   reportElementOpError,
   reportElementOpSkipped,
-  runElementIntent,
   type ElementIntentReceipt,
-  type IndexBaselineField,
-  type IndexIntentBaseline,
-  type IndexIntents,
   type PropertyIntents,
 } from '@src/renderer/editor/runtime/elementIntent';
-import type {
-  EditorDocumentV1,
-  EditorOpV1,
-  EditorPatchV1,
-} from '@src/types/editor';
-import {
-  runMixedElementBoundsIntent,
-  runMixedElementIntent,
-} from '@src/renderer/editor/runtime/mixedElementIntent';
+import type { EditorOpV1 } from '@src/types/editor';
+import { runMixedElementBoundsIntent } from '@src/renderer/editor/runtime/mixedElementIntent';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
-import { applyEditorPatch } from '@src/renderer/editor/runtime/editorCoordinator';
 import {
   commitElementBoundsById,
   commitSingleElementBoundsById,
 } from '@src/renderer/editor/runtime/elementOps';
 import { useEffect, useRef, useState } from 'react';
-import { useKeyStore } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -45,7 +22,6 @@ import {
   calculateSnapPoints,
   calculateSizeSnap,
 } from '@utils/grid/smartGuides';
-import { selectionElementId } from '@stores/grid/useGridSelectionStore';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import type { ElementBounds } from '@utils/grid/smartGuides';
@@ -97,7 +73,6 @@ interface UseGridResizeOptions {
  */
 export function useGridResize({
   selectedElements,
-  selectedKeyType,
   getOtherElements,
 }: UseGridResizeOptions) {
   const resizeStartRef = useRef(false);
@@ -107,12 +82,9 @@ export function useGridResize({
   const [previewBounds, setPreviewBounds] = useState<ResizeBounds | null>(null);
   // 최종 적용할 bounds를 저장 (드래그 종료 시 사용)
   const finalBoundsRef = useRef<ResizeBounds | null>(null);
-  const frozenResizeTargetsRef = useRef<
-    Array<{ type: string; id: string; index?: number }>
-  >([]);
-  // 합성 id 대상용 시작 시점 구조 fingerprint - 완료 시점 캡처는 시작과
-  // 완료 사이 정산된 외부 재정렬을 통과시킨다
-  const syntheticBaselineRef = useRef<IndexIntentBaseline | null>(null);
+  const frozenResizeTargetsRef = useRef<Array<{ type: string; id: string }>>(
+    [],
+  );
 
   // 그룹 리사이즈용 상태
   const [previewGroupBounds, setPreviewGroupBounds] =
@@ -142,97 +114,6 @@ export function useGridResize({
           );
         }
       });
-  };
-
-  // 합성 대상이 있으면 시작 시점 lastAck에서 관련 컬렉션 fingerprint 동결
-  const captureSyntheticBaseline = (
-    elements: ReadonlyArray<{ type: string; id: string }>,
-  ): IndexIntentBaseline | null => {
-    const syntheticTypes = new Set(
-      elements
-        .filter(
-          (element) =>
-            element.type !== 'plugin' &&
-            (element.id.length === 0 || isSyntheticElementId(element.id)),
-        )
-        .map((element) => element.type as 'key' | 'stat' | 'graph' | 'knob'),
-    );
-    if (syntheticTypes.size === 0) return null;
-    const fields: IndexBaselineField[] = [];
-    for (const type of syntheticTypes) {
-      if (type === 'key') {
-        fields.push('keyPositions', 'keys');
-      } else if (type === 'stat') {
-        fields.push('statPositions');
-      } else if (type === 'graph') {
-        fields.push('graphPositions');
-      } else {
-        fields.push('knobPositions');
-      }
-    }
-    return captureIndexIntentBaseline(
-      editorCoordinator.getState().lastAck,
-      selectedKeyType,
-      fields,
-    );
-  };
-
-  const boundsFieldsOf = (bounds: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }): Record<string, number> => ({
-    dx: bounds.x,
-    dy: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-  });
-
-  // 안정 id 의도 + 합성 index 의도를 슬롯 base에서 결합 재생성.
-  // 합성이 있으면 base fingerprint가 시작과 정확히 일치해야 하고,
-  // 불일치 시 편집 전체 무커밋(null)
-  const generateCombinedBoundsPatch = (
-    base: EditorDocumentV1,
-    stableIntents: PropertyIntents,
-    syntheticIntents: IndexIntents,
-    baseline: IndexIntentBaseline | null,
-  ): EditorPatchV1 | null => {
-    const hasSynthetic = syntheticIntents.size > 0;
-    if (hasSynthetic) {
-      if (
-        !baseline ||
-        !indexBaselineMatches(
-          baseline,
-          base as unknown as Record<string, unknown>,
-        )
-      ) {
-        return null;
-      }
-    }
-    let patch: EditorPatchV1 | null = null;
-    let working = base;
-    if (stableIntents.size > 0) {
-      const stablePatch = generatePropertyIntentPatch(working, stableIntents);
-      if (stablePatch) {
-        patch = stablePatch;
-        working = applyEditorPatch(working, stablePatch);
-      }
-    }
-    if (hasSynthetic && baseline) {
-      const syntheticPatch = generateIndexIntentPatch(
-        working,
-        baseline,
-        syntheticIntents,
-        { skipFingerprint: true },
-      );
-      if (syntheticPatch) {
-        patch = patch
-          ? { ...patch, ...syntheticPatch, schemaVersion: 1 }
-          : syntheticPatch;
-      }
-    }
-    return patch;
   };
 
   // plugin-only·혼합 완료의 오버레이 동기화 - editor 커밋과 분리
@@ -273,9 +154,7 @@ export function useGridResize({
     frozenResizeTargetsRef.current = selectedElements.map((element) => ({
       type: element.type,
       id: element.id,
-      index: element.index,
     }));
-    syntheticBaselineRef.current = captureSyntheticBaseline(selectedElements);
     beginPluginResizeSessions(gestureId);
     if (
       pluginResizeTokensRef.current.size > 0 &&
@@ -600,86 +479,6 @@ export function useGridResize({
     finalBoundsRef.current = previewData;
   };
 
-  const handleKeyResizePreview = (
-    index: number,
-    newBounds: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      handle?: ResizeHandle;
-    },
-  ) => {
-    handleElementResizePreview(
-      selectionElementId(
-        'key',
-        useKeyStore.getState().canonicalPositions[selectedKeyType]?.[index],
-        index,
-      ),
-      newBounds,
-    );
-  };
-
-  const handleStatResizePreview = (
-    index: number,
-    newBounds: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      handle?: ResizeHandle;
-    },
-  ) => {
-    handleElementResizePreview(
-      selectionElementId(
-        'stat',
-        useStatItemStore.getState().positions[selectedKeyType]?.[index],
-        index,
-      ),
-      newBounds,
-    );
-  };
-
-  const handleGraphResizePreview = (
-    index: number,
-    newBounds: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      handle?: ResizeHandle;
-    },
-  ) => {
-    handleElementResizePreview(
-      selectionElementId(
-        'graph',
-        useGraphItemStore.getState().positions[selectedKeyType]?.[index],
-        index,
-      ),
-      newBounds,
-    );
-  };
-
-  const handleKnobResizePreview = (
-    index: number,
-    newBounds: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      handle?: ResizeHandle;
-    },
-  ) => {
-    handleElementResizePreview(
-      selectionElementId(
-        'knob',
-        useKnobItemStore.getState().positions[selectedKeyType]?.[index],
-        index,
-      ),
-      newBounds,
-    );
-  };
-
   // 플러그인 요소 리사이즈 처리 (스마트 가이드 포함) - 프리뷰 모드
   const handlePluginResizePreview = (
     fullId: string,
@@ -989,28 +788,18 @@ export function useGridResize({
   }) => {
     if (selectedElements.length !== 1) return;
 
-    const element = selectedElements[0];
     const frozenTarget = frozenResizeTargetsRef.current[0];
     if (
       frozenResizeTargetsRef.current.length === 1 &&
       frozenTarget &&
       frozenTarget.type !== 'plugin' &&
-      frozenTarget.id.length > 0 &&
-      !isSyntheticElementId(frozenTarget.id)
+      isNativeElementId(frozenTarget.id)
     ) {
       handleElementResizePreview(frozenTarget.id, newBounds);
       return;
     }
-    if (element.type === 'key' && element.index !== undefined) {
-      handleKeyResizePreview(element.index, newBounds);
-    } else if (element.type === 'stat' && element.index !== undefined) {
-      handleStatResizePreview(element.index, newBounds);
-    } else if (element.type === 'graph' && element.index !== undefined) {
-      handleGraphResizePreview(element.index, newBounds);
-    } else if (element.type === 'knob' && element.index !== undefined) {
-      handleKnobResizePreview(element.index, newBounds);
-    } else if (element.type === 'plugin') {
-      handlePluginResizePreview(element.id, newBounds);
+    if (frozenTarget?.type === 'plugin') {
+      handlePluginResizePreview(frozenTarget.id, newBounds);
     }
   };
 
@@ -1028,6 +817,13 @@ export function useGridResize({
     const finalBounds = finalBoundsRef.current;
     const frozenTargets = frozenResizeTargetsRef.current;
     frozenResizeTargetsRef.current = [];
+    if (
+      frozenTargets.length === 1 &&
+      frozenTargets[0].type !== 'plugin' &&
+      !isNativeElementId(frozenTargets[0].id)
+    ) {
+      reportElementOpSkipped('resize settlement (invalid native id)');
+    }
     if (finalBounds && frozenTargets.length === 1) {
       const element = frozenTargets[0] as {
         type: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
@@ -1035,11 +831,7 @@ export function useGridResize({
         index?: number;
       };
 
-      if (
-        element.type !== 'plugin' &&
-        element.id.length > 0 &&
-        !isSyntheticElementId(element.id)
-      ) {
+      if (element.type !== 'plugin' && isNativeElementId(element.id)) {
         // 시작 시 동결한 안정 id에 최종 bounds를 하나의 의도로 커밋 -
         // eager·wire·receipt를 같은 의도가 소유한다 (live 선택 재조회 금지)
         void commitSingleElementBoundsById(
@@ -1053,37 +845,8 @@ export function useGridResize({
           },
           resizeGestureIdRef.current ?? undefined,
         ).catch(reportElementOpError);
-      } else if (element.type !== 'plugin' && element.index !== undefined) {
-        // 합성 id: 시작 fingerprint가 증명될 때만 index 적용 - full-record
-        // 캡처 커밋은 대기 중 정산된 다른 커밋을 되돌린다. eager 불일치는
-        // 전체 intent fail-closed (wire로 부활 금지)
-        const baseline = syntheticBaselineRef.current;
-        const indexIntents: IndexIntents = new Map([
-          [
-            element.type,
-            new Map([[element.index, boundsFieldsOf(finalBounds)]]),
-          ],
-        ]);
-        const eager = applyIndexIntentsEagerly(baseline, indexIntents);
-        if (!eager.matched) {
-          reportElementOpSkipped('synthetic resize settlement');
-        } else {
-          const gestureId = resizeGestureIdRef.current ?? undefined;
-          void runElementIntent({
-            applyEager: () => eager.receipt,
-            generate: (base) =>
-              intentPatch(
-                generateIndexIntentPatch(base, baseline, indexIntents),
-              ),
-            ...(gestureId ? { gestureId } : {}),
-          })
-            .then((result) => {
-              if (!result.committed && !result.satisfied) {
-                reportElementOpSkipped('synthetic resize settlement');
-              }
-            })
-            .catch(reportElementOpError);
-        }
+      } else if (element.type !== 'plugin') {
+        reportElementOpSkipped('resize settlement (invalid native id)');
       } else if (element.type === 'plugin') {
         // 플러그인 요소에 최종 크기 적용
         const pluginStore = usePluginDisplayElementStore.getState();
@@ -1103,12 +866,10 @@ export function useGridResize({
 
     // 정산은 시작 시 동결한 구성으로 여기서 완결 - 완료 시점 live 선택을
     // 읽는 외부 콜백 금지. plugin이 움직였으면 오버레이만 동기화
-    // (plugin-only는 editor 무커밋 계약). 합성 native 단일은 위에서 시작
-    // fingerprint 증명 아래 index 러너로 정산했다
+    // (plugin-only는 editor 무커밋 계약)
     if (frozenTargets.some((target) => target.type === 'plugin')) {
       syncPluginElementsToOverlay();
     }
-    syntheticBaselineRef.current = null;
     endPluginResizeSessions();
   };
 
@@ -1132,7 +893,6 @@ export function useGridResize({
       | {
           kind: 'intents';
           stableIntents: PropertyIntents;
-          syntheticIntents: IndexIntents;
           receipt: ElementIntentReceipt | null;
         }
       | { kind: 'failClosed' }
@@ -1152,17 +912,14 @@ export function useGridResize({
       // 추가 스냅 적용 시 프리뷰와 최종 위치가 달라지는 문제 발생
 
       // 시작 시 동결된 entries(elementBounds)의 안정 id에 최종 bounds 의도
-      // 구성. 플러그인 없고 전원 안정 id면 전용 의도 커밋이 eager와 wire를
-      // 함께 소유, 혼합·합성 포함이면 eager receipt를 결합해 두고 wire는
-      // 슬롯 generator가 소유한다
+      // 구성. native-only는 전용 의도 커밋이 eager와 wire를 함께 소유하고,
+      // plugin 혼합은 eager receipt와 슬롯 generator가 각 경계를 소유한다
       const stableBoundsIntents = new Map<
         'key' | 'stat' | 'graph' | 'knob',
         Map<string, Record<string, number>>
       >();
       const isStableEntry = (element: { type: string; id: string }): boolean =>
-        element.type !== 'plugin' &&
-        element.id.length > 0 &&
-        !isSyntheticElementId(element.id);
+        element.type !== 'plugin' && isNativeElementId(element.id);
       for (const { element, bounds } of finalData.elementBounds) {
         if (!isStableEntry(element)) continue;
         const type = element.type as 'key' | 'stat' | 'graph' | 'knob';
@@ -1178,53 +935,32 @@ export function useGridResize({
       const pluginInvolved = finalData.elementBounds.some(
         ({ element }) => element.type === 'plugin',
       );
+      const hasInvalidNative = finalData.elementBounds.some(
+        ({ element }) =>
+          element.type !== 'plugin' && !isNativeElementId(element.id),
+      );
       const allStable = finalData.elementBounds.every(({ element }) =>
         element.type === 'plugin' ? true : isStableEntry(element),
       );
-      groupPluginInvolved = pluginInvolved;
+      groupPluginInvolved = pluginInvolved && !hasInvalidNative;
       groupHasNative = finalData.elementBounds.some(
         ({ element }) => element.type !== 'plugin',
       );
-      // 합성 entries는 시작 fingerprint 아래 index 의도로 - full-record
-      // 캡처·직접 스토어 쓰기 금지 (대기 중 정산 커밋을 되돌린다)
-      const syntheticIndexIntents = new Map<
-        'key' | 'stat' | 'graph' | 'knob',
-        Map<number, Record<string, number>>
-      >();
-      for (const { element, bounds } of finalData.elementBounds) {
-        if (element.type === 'plugin' || isStableEntry(element)) continue;
-        if (element.index === undefined) continue;
-        const type = element.type as 'key' | 'stat' | 'graph' | 'knob';
-        const byIndex = syntheticIndexIntents.get(type) ?? new Map();
-        byIndex.set(element.index, boundsFieldsOf(bounds));
-        syntheticIndexIntents.set(type, byIndex);
-      }
 
-      if (!pluginInvolved && allStable && stableBoundsIntents.size > 0) {
+      if (hasInvalidNative) {
+        groupSettlement = { kind: 'failClosed' };
+      } else if (!pluginInvolved && allStable && stableBoundsIntents.size > 0) {
         groupHandledNatively = true;
         void commitElementBoundsById(
           stableBoundsIntents,
           resizeGestureIdRef.current ?? undefined,
         ).catch(reportElementOpError);
       } else {
-        // 결합 eager 단일 소유 - preflight 게이트, 양쪽 적용, 최종 봉인이
-        // 한 호출 안. 불일치면 stable 포함 아무것도 적용하지 않고 정산
-        // 전체 fail-closed (혼합이면 plugin 변경만 커밋)
-        const eager = applyGestureIntentsEagerly({
-          baseline: syntheticBaselineRef.current,
-          indexIntents: syntheticIndexIntents,
-          propertyIntents: stableBoundsIntents,
-        });
-        if (!eager.matched) {
-          groupSettlement = { kind: 'failClosed' };
-        } else {
-          groupSettlement = {
-            kind: 'intents',
-            stableIntents: stableBoundsIntents,
-            syntheticIntents: syntheticIndexIntents,
-            receipt: eager.receipt,
-          };
-        }
+        groupSettlement = {
+          kind: 'intents',
+          stableIntents: stableBoundsIntents,
+          receipt: applyPropertyIntentsEagerly(stableBoundsIntents),
+        };
       }
 
       // 플러그인 요소들 업데이트
@@ -1232,14 +968,16 @@ export function useGridResize({
         ({ element }) => element.type === 'plugin',
       );
 
-      for (const { element, bounds } of pluginUpdates) {
-        pluginStore.updateElement(element.id, {
-          position: { x: bounds.x, y: bounds.y },
-          measuredSize: {
-            width: bounds.width,
-            height: bounds.height,
-          },
-        });
+      if (!hasInvalidNative) {
+        for (const { element, bounds } of pluginUpdates) {
+          pluginStore.updateElement(element.id, {
+            position: { x: bounds.x, y: bounds.y },
+            measuredSize: {
+              width: bounds.width,
+              height: bounds.height,
+            },
+          });
+        }
       }
     }
 
@@ -1260,19 +998,8 @@ export function useGridResize({
       groupSettlement &&
       groupSettlement.kind === 'failClosed'
     ) {
-      // eager 게이트 불일치 - editor 무커밋. 혼합이면 시작된 mixed
-      // 트랜잭션으로 plugin 변경만 정산
+      // native ID 검증 실패 - 편집 전체 무커밋
       reportElementOpSkipped('group resize settlement');
-      if (groupPluginInvolved && settlementGestureId) {
-        void runMixedElementIntent({
-          gestureId: settlementGestureId,
-          pluginIds: [...pluginResizeTokensRef.current.keys()],
-          applyEager: () => null,
-          generate: () => null,
-          skipContext: 'group resize settlement',
-          expectNull: true,
-        }).catch(reportElementOpError);
-      }
     } else if (
       !groupHandledNatively &&
       groupHasNative &&
@@ -1280,66 +1007,35 @@ export function useGridResize({
       groupSettlement.kind === 'intents'
     ) {
       const settlement = groupSettlement;
-      const baseline = syntheticBaselineRef.current;
-      const generate = (base: EditorDocumentV1): EditorPatchV1 | null =>
-        generateCombinedBoundsPatch(
-          base,
-          settlement.stableIntents,
-          settlement.syntheticIntents,
-          baseline,
-        );
       if (groupPluginInvolved && settlementGestureId) {
         const frozenPluginIds = [...pluginResizeTokensRef.current.keys()];
-        if (settlement.syntheticIntents.size === 0) {
-          const ops: EditorOpV1[] = [];
-          for (const [elementType, byId] of settlement.stableIntents) {
-            for (const [id, bounds] of byId) {
-              ops.push({
-                kind: 'setBounds',
-                elementType,
-                id,
-                bounds: {
-                  dx: bounds.dx as number,
-                  dy: bounds.dy as number,
-                  width: bounds.width as number,
-                  height: bounds.height as number,
-                },
-              });
-            }
+        const ops: EditorOpV1[] = [];
+        for (const [elementType, byId] of settlement.stableIntents) {
+          for (const [id, bounds] of byId) {
+            ops.push({
+              kind: 'setBounds',
+              elementType,
+              id,
+              bounds: {
+                dx: bounds.dx as number,
+                dy: bounds.dy as number,
+                width: bounds.width as number,
+                height: bounds.height as number,
+              },
+            });
           }
-          void runMixedElementBoundsIntent({
-            gestureId: settlementGestureId,
-            pluginIds: frozenPluginIds,
-            ops,
-            receipt: settlement.receipt,
-          }).catch(reportElementOpError);
-        } else {
-          void runMixedElementIntent({
-            gestureId: settlementGestureId,
-            pluginIds: frozenPluginIds,
-            applyEager: () => settlement.receipt,
-            generate,
-            skipContext: 'mixed group resize settlement',
-          }).catch(reportElementOpError);
         }
-      } else {
-        void runElementIntent({
-          applyEager: () => settlement.receipt,
-          generate: (base) => intentPatch(generate(base)),
-          ...(settlementGestureId ? { gestureId: settlementGestureId } : {}),
-        })
-          .then((result) => {
-            if (!result.committed && !result.satisfied) {
-              reportElementOpSkipped('group resize settlement');
-            }
-          })
-          .catch(reportElementOpError);
+        void runMixedElementBoundsIntent({
+          gestureId: settlementGestureId,
+          pluginIds: frozenPluginIds,
+          ops,
+          receipt: settlement.receipt,
+        }).catch(reportElementOpError);
       }
     }
     if (groupPluginInvolved) {
       syncPluginElementsToOverlay();
     }
-    syntheticBaselineRef.current = null;
     endPluginResizeSessions();
   };
 

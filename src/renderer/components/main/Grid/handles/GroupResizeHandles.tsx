@@ -20,15 +20,13 @@ import {
   createRafLatestScheduler,
   type ContinuousInputStrategy,
 } from '@utils/animation/rafLatestScheduler';
-import type { KeyPositions } from '@src/types/key/keys';
-import type { StatItemPositions } from '@src/types/key/statItems';
-import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   isElementResizable,
   getElementBounds,
   calculateGroupBounds,
+  elementBoundsChanged,
   type Bounds,
   type SelectedElement,
   type ElementBounds,
@@ -60,10 +58,10 @@ interface HandleProps {
 
 interface GroupResizeHandlesProps {
   selectedElements: SelectedElement[];
-  positions: KeyPositions;
-  statPositions: StatItemPositions;
-  graphPositions: GraphItemPositions;
-  knobPositions: KnobItemPositions;
+  positions: CanonicalEditorDocumentV1['keyPositions'];
+  statPositions: CanonicalEditorDocumentV1['statPositions'];
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'];
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'];
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   zoom?: number;
@@ -724,21 +722,10 @@ const GroupResizeHandles = ({
         elementBounds: newElementBounds,
         handle,
       };
-      const changed = newElementBounds.some(({ element, bounds }) => {
-        const initial = startElementBounds.find(
-          (entry) =>
-            entry.element.id === element.id &&
-            entry.element.type === element.type &&
-            entry.element.index === element.index,
-        );
-        return (
-          !initial ||
-          bounds.x !== initial.bounds.x ||
-          bounds.y !== initial.bounds.y ||
-          bounds.width !== initial.bounds.width ||
-          bounds.height !== initial.bounds.height
-        );
-      });
+      const changed = elementBoundsChanged(
+        startElementBounds,
+        newElementBounds,
+      );
       if (!resizeStarted && changed) {
         resizeStarted = true;
         onGroupResizeStart?.(handle);

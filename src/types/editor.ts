@@ -135,10 +135,10 @@ export interface EditorDeleteElementOpV1 {
 }
 
 export type EditorFrozenElementV1 =
-  | { elementType: 'key'; slot: KeySlot; position: KeyPosition }
-  | { elementType: 'stat'; position: StatItemPosition }
-  | { elementType: 'graph'; position: GraphItemPosition }
-  | { elementType: 'knob'; position: KnobItemPosition };
+  | { elementType: 'key'; slot: KeySlot; position: CanonicalKeyPosition }
+  | { elementType: 'stat'; position: CanonicalStatItemPosition }
+  | { elementType: 'graph'; position: CanonicalGraphItemPosition }
+  | { elementType: 'knob'; position: CanonicalKnobItemPosition };
 
 export interface EditorFrozenZUpdateV1 {
   elementType: EditorElementTypeV1;
@@ -490,6 +490,11 @@ export interface EditorGetResult {
   document: EditorDocumentV1;
 }
 
+export interface CanonicalEditorGetResult
+  extends Omit<EditorGetResult, 'document'> {
+  document: CanonicalEditorDocumentV1;
+}
+
 export interface EditorCommittedV1 {
   schemaVersion: typeof EDITOR_SCHEMA_VERSION;
   revision: number;
@@ -783,7 +788,10 @@ const normalizePositionForValidation = (value: unknown): unknown => {
   );
 };
 
-const assertPosition = (value: unknown, label: string): void => {
+const assertPosition: (
+  value: unknown,
+  label: string,
+) => asserts value is KeyPosition = (value: unknown, label: string) => {
   if (
     !keyPositionSchema.safeParse(normalizePositionForValidation(value)).success
   ) {
@@ -847,41 +855,47 @@ const assertFrozenPositionZIndex = (value: unknown, label: string): void => {
   }
 };
 
-const assertStatPosition = (value: unknown, label: string): void => {
+const assertStatPosition: (
+  value: unknown,
+  label: string,
+) => asserts value is StatItemPosition = (value: unknown, label: string) => {
   assertPosition(value, label);
-  if (
-    !isRecord(value) ||
-    typeof value.statType !== 'string' ||
-    !STAT_TYPES.has(value.statType)
-  ) {
+  const raw = value as KeyPosition & Record<string, unknown>;
+  if (typeof raw.statType !== 'string' || !STAT_TYPES.has(raw.statType)) {
     throw new EditorProtocolError(`${label}.statType is invalid`);
   }
 };
 
-const assertGraphPosition = (value: unknown, label: string): void => {
+const assertGraphPosition: (
+  value: unknown,
+  label: string,
+) => asserts value is GraphItemPosition = (value: unknown, label: string) => {
   assertStatPosition(value, label);
+  const raw = value as StatItemPosition & Record<string, unknown>;
   if (
-    !isRecord(value) ||
-    typeof value.graphType !== 'string' ||
-    !GRAPH_TYPES.has(value.graphType) ||
-    typeof value.graphColor !== 'string' ||
-    typeof value.graphSpeed !== 'number' ||
-    !Number.isSafeInteger(value.graphSpeed) ||
-    value.graphSpeed < 0 ||
-    value.graphSpeed > 4_294_967_295
+    typeof raw.graphType !== 'string' ||
+    !GRAPH_TYPES.has(raw.graphType) ||
+    typeof raw.graphColor !== 'string' ||
+    typeof raw.graphSpeed !== 'number' ||
+    !Number.isSafeInteger(raw.graphSpeed) ||
+    raw.graphSpeed < 0 ||
+    raw.graphSpeed > 4_294_967_295
   ) {
     throw new EditorProtocolError(`${label} has invalid graph fields`);
   }
 };
 
-const assertKnobPosition = (value: unknown, label: string): void => {
+const assertKnobPosition: (
+  value: unknown,
+  label: string,
+) => asserts value is KnobItemPosition = (value: unknown, label: string) => {
   assertPosition(value, label);
+  const raw = value as KeyPosition & Record<string, unknown>;
   if (
-    !isRecord(value) ||
-    typeof value.axisId !== 'string' ||
-    typeof value.reverse !== 'boolean' ||
-    typeof value.sensitivity !== 'number' ||
-    !Number.isFinite(value.sensitivity)
+    typeof raw.axisId !== 'string' ||
+    typeof raw.reverse !== 'boolean' ||
+    typeof raw.sensitivity !== 'number' ||
+    !Number.isFinite(raw.sensitivity)
   ) {
     throw new EditorProtocolError(`${label} has invalid knob fields`);
   }
@@ -1137,7 +1151,9 @@ export function assertEditorFields(
   }
 }
 
-export function assertEditorGetResult(value: EditorGetResult): void {
+export function assertEditorGetResult(
+  value: EditorGetResult,
+): asserts value is CanonicalEditorGetResult {
   if (!value) {
     throw new EditorProtocolError('editor_get returned an empty result');
   }
@@ -1196,6 +1212,9 @@ function assertEditorFrozenElement(
     }
     assertExactPosition(value.position, [], `${label}.position`);
     assertPosition(value.position, `${label}.position`);
+    if (!isNativeElementId(value.position.id)) {
+      throw new EditorProtocolError(`${label}.position.id is invalid`);
+    }
     assertFrozenPositionZIndex(value.position, `${label}.position`);
     return;
   }
@@ -1203,6 +1222,9 @@ function assertEditorFrozenElement(
   if (value.elementType === 'stat') {
     assertExactPosition(value.position, ['statType'], `${label}.position`);
     assertStatPosition(value.position, `${label}.position`);
+    if (!isNativeElementId(value.position.id)) {
+      throw new EditorProtocolError(`${label}.position.id is invalid`);
+    }
     assertFrozenPositionZIndex(value.position, `${label}.position`);
     return;
   }
@@ -1213,6 +1235,9 @@ function assertEditorFrozenElement(
       `${label}.position`,
     );
     assertGraphPosition(value.position, `${label}.position`);
+    if (!isNativeElementId(value.position.id)) {
+      throw new EditorProtocolError(`${label}.position.id is invalid`);
+    }
     assertFrozenPositionZIndex(value.position, `${label}.position`);
     return;
   }
@@ -1223,6 +1248,9 @@ function assertEditorFrozenElement(
       `${label}.position`,
     );
     assertKnobPosition(value.position, `${label}.position`);
+    if (!isNativeElementId(value.position.id)) {
+      throw new EditorProtocolError(`${label}.position.id is invalid`);
+    }
     assertFrozenPositionZIndex(value.position, `${label}.position`);
     return;
   }
@@ -1263,8 +1291,7 @@ export function assertEditorOpsV1(
       assertExactKeys(op, ['kind', 'elementType', 'id', 'bounds'], opLabel);
       if (
         !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
-        typeof op.id !== 'string' ||
-        op.id.length === 0
+        !isNativeElementId(op.id)
       ) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);
       }
@@ -1276,8 +1303,7 @@ export function assertEditorOpsV1(
       assertExactKeys(op, ['kind', 'elementType', 'id'], opLabel);
       if (
         !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
-        typeof op.id !== 'string' ||
-        op.id.length === 0
+        !isNativeElementId(op.id)
       ) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);
       }
@@ -1288,8 +1314,7 @@ export function assertEditorOpsV1(
       assertExactKeys(op, ['kind', 'elementType', 'id', 'patch'], opLabel);
       if (
         !['key', 'stat', 'graph', 'knob'].includes(op.elementType as string) ||
-        typeof op.id !== 'string' ||
-        op.id.length === 0 ||
+        !isNativeElementId(op.id) ||
         !isRecord(op.patch)
       ) {
         throw new EditorProtocolError(`${opLabel} target is invalid`);

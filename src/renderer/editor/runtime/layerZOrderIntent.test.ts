@@ -7,8 +7,9 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 
-import type { EditorDocumentV1 } from '@src/types/editor';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
 const mocks = vi.hoisted(() => ({
   runMixed: vi.fn(),
@@ -38,6 +39,7 @@ const KEY_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const STAT_A = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const position = (id: string, zIndex: number, dx = 0) => ({
+  ...createDefaultKeyPosition(),
   id,
   zIndex,
   dx,
@@ -49,12 +51,17 @@ const position = (id: string, zIndex: number, dx = 0) => ({
 const documentWith = (options?: {
   keys?: ReturnType<typeof position>[];
   stats?: ReturnType<typeof position>[];
-}): EditorDocumentV1 =>
+}): CanonicalEditorDocumentV1 =>
   ({
     schemaVersion: 1,
     keys: { '4key': (options?.keys ?? []).map((_, index) => String(index)) },
     keyPositions: { '4key': options?.keys ?? [] },
-    statPositions: { '4key': options?.stats ?? [] },
+    statPositions: {
+      '4key': (options?.stats ?? []).map((item) => ({
+        ...item,
+        statType: 'kps' as const,
+      })),
+    },
     graphPositions: {},
     knobPositions: {},
     layerGroups: {},
@@ -77,7 +84,7 @@ const plugin = (
     tabId,
   } as never);
 
-const install = (document: EditorDocumentV1) => {
+const install = (document: CanonicalEditorDocumentV1) => {
   useKeyStore.setState({
     keyMappings: document.keys,
     canonicalPositions: document.keyPositions,

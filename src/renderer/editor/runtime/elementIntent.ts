@@ -9,7 +9,10 @@ import { stableStringify } from '@utils/core/stableStringify';
 import { enqueueEditorCompatibilityOperation } from './editorCompatibilityQueue';
 import { editorCoordinator } from './editorStateCoordinator';
 
-import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+import type {
+  CanonicalEditorDocumentV1,
+  EditorPatchV1,
+} from '@src/types/editor';
 
 import type { NativeElementType } from '../model/elementIdMap';
 
@@ -47,7 +50,7 @@ export interface ElementIntentResult {
   committed: boolean;
   // satisfied = 커밋 없이 의도 달성 (호출자 성공 판정용)
   satisfied: boolean;
-  document: EditorDocumentV1 | null;
+  document: CanonicalEditorDocumentV1 | null;
 }
 
 // destructive 의도의 전체 중단 sentinel - generator 평가는 coordinator의
@@ -68,7 +71,7 @@ export const isElementIntentAbort = (
 
 export const runElementIntent = async (options: {
   applyEager: () => ElementIntentReceipt | null;
-  generate: (base: EditorDocumentV1) => ElementIntentGeneration;
+  generate: (base: CanonicalEditorDocumentV1) => ElementIntentGeneration;
   gestureId?: string;
 }): Promise<ElementIntentResult> => {
   const receipt = options.applyEager();
@@ -116,7 +119,7 @@ export const runElementIntent = async (options: {
 
 type LooseRecord = Record<
   string,
-  Array<{ id?: string } & Record<string, unknown>>
+  Array<{ id: string } & Record<string, unknown>>
 >;
 
 export type PropertyIntents = ReadonlyMap<
@@ -255,7 +258,7 @@ export const applyPropertyIntentsEagerly = (
 
 // 최신 base에서 속성 의도를 재적용하는 표준 generator
 export const generatePropertyIntentPatch = (
-  base: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
   intents: PropertyIntents,
 ): EditorPatchV1 | null => {
   const FIELD_BY_TYPE: Record<
@@ -304,276 +307,13 @@ export const reportElementOpSkipped = (context: string): void => {
   console.warn('Element operation skipped (fail-closed)', context);
 };
 
-// ---------------------------------------------------------------------------
-// 합성 index 의도: 안정 id가 없는 요소는 게스처 시작 시점의 컬렉션 구조
-// fingerprint와 index를 함께 동결하고, 이후 모든 적용(eager·wire 생성)을
-// "구조가 시작과 정확히 같다"는 증명 아래에서만 수행한다. 완료 시점 캡처는
-// 시작과 완료 사이에 정산된 외부 재정렬을 통과시키므로 금지
-// ---------------------------------------------------------------------------
-
-export type IndexBaselineField =
+export type SealedSliceField =
   | 'keys'
   | 'keyPositions'
   | 'statPositions'
   | 'graphPositions'
   | 'knobPositions'
   | 'layerGroups';
-
-export interface IndexIntentBaseline {
-  mode: string;
-  fields: readonly IndexBaselineField[];
-  // 시작 시점 mode 한정 스냅샷 - fingerprint 비교와 receipt before 값의 원천
-  slices: Partial<Record<IndexBaselineField, unknown>>;
-  fingerprint: string;
-}
-
-const POSITION_FIELD_BY_TYPE: Record<
-  NativeElementType,
-  Extract<
-    IndexBaselineField,
-    'keyPositions' | 'statPositions' | 'graphPositions' | 'knobPositions'
-  >
-> = {
-  key: 'keyPositions',
-  stat: 'statPositions',
-  graph: 'graphPositions',
-  knob: 'knobPositions',
-};
-
-const sliceOf = (
-  document: Record<string, unknown>,
-  field: IndexBaselineField,
-  mode: string,
-): unknown => (document[field] as Record<string, unknown> | undefined)?.[mode];
-
-const fingerprintOf = (
-  slices: Partial<Record<IndexBaselineField, unknown>>,
-  fields: readonly IndexBaselineField[],
-): string =>
-  stableStringify(fields.map((field) => [field, slices[field] ?? null]));
-
-// 게스처 시작 시점에 coordinator lastAck 문서로 호출한다.
-// document가 없으면(start 전) baseline 없음 - 합성 경로는 무커밋 fail-closed
-export const captureIndexIntentBaseline = (
-  document: unknown,
-  mode: string,
-  fields: readonly IndexBaselineField[],
-): IndexIntentBaseline | null => {
-  if (!document || typeof document !== 'object') return null;
-  const slices: Partial<Record<IndexBaselineField, unknown>> = {};
-  for (const field of fields) {
-    slices[field] = structuredClone(
-      sliceOf(document as Record<string, unknown>, field, mode),
-    );
-  }
-  return {
-    mode,
-    fields,
-    slices,
-    fingerprint: fingerprintOf(slices, fields),
-  };
-};
-
-export type IndexIntents = ReadonlyMap<
-  NativeElementType,
-  ReadonlyMap<number, Record<string, unknown>>
->;
-
-export const indexBaselineMatches = (
-  baseline: IndexIntentBaseline,
-  document: Record<string, unknown>,
-): boolean => {
-  const slices: Partial<Record<IndexBaselineField, unknown>> = {};
-  for (const field of baseline.fields) {
-    slices[field] = sliceOf(document, field, baseline.mode);
-  }
-  return fingerprintOf(slices, baseline.fields) === baseline.fingerprint;
-};
-
-// 스토어 측 문서 뷰 - baseline의 모든 필드(keys·layerGroups 포함)를
-// 표현해야 한다. 일부만 비교하면 key pair·그룹 구조 변경이 eager를 통과한다
-const storeDocumentView = (): Record<string, unknown> => ({
-  keys: useKeyStore.getState().keyMappings,
-  keyPositions: useKeyStore.getState().canonicalPositions,
-  statPositions: useStatItemStore.getState().positions,
-  graphPositions: useGraphItemStore.getState().positions,
-  knobPositions: useKnobItemStore.getState().positions,
-  layerGroups: useLayerGroupStore.getState().layerGroups,
-});
-
-const storeFingerprintOf = (baseline: IndexIntentBaseline): string => {
-  const document = storeDocumentView();
-  const slices: Partial<Record<IndexBaselineField, unknown>> = {};
-  for (const field of baseline.fields) {
-    slices[field] = sliceOf(document, field, baseline.mode);
-  }
-  return fingerprintOf(slices, baseline.fields);
-};
-
-export interface IndexEagerResult {
-  // false = 시작 구조와 스토어 불일치 또는 baseline 부재 - 호출자는 이
-  // intent 전체(eager·wire)를 fail-closed 무커밋해야 한다
-  matched: boolean;
-  receipt: ElementIntentReceipt | null;
-}
-
-interface IndexEagerEntry {
-  type: NativeElementType;
-  index: number;
-  field: string;
-  before: unknown;
-}
-
-// index 쓰기만 수행 - fingerprint 봉인은 호출자가 모든 eager를 마친 뒤 한다
-const applyIndexWrites = (
-  baseline: IndexIntentBaseline,
-  intents: IndexIntents,
-): IndexEagerEntry[] => {
-  const entries: IndexEagerEntry[] = [];
-  for (const [type, byIndex] of intents) {
-    const record = readRecord(type);
-    const list = record[baseline.mode];
-    if (!list) continue;
-    let touched = false;
-    const nextList = list.map((position, index) => {
-      const patch = byIndex.get(index);
-      if (!patch) return position;
-      touched = true;
-      const baselineList = baseline.slices[POSITION_FIELD_BY_TYPE[type]] as
-        | Array<Record<string, unknown>>
-        | undefined;
-      for (const field of Object.keys(patch)) {
-        entries.push({
-          type,
-          index,
-          field,
-          before: baselineList?.[index]?.[field],
-        });
-      }
-      return { ...position, ...patch, id: position.id };
-    });
-    if (touched) {
-      writeRecord(type, { ...record, [baseline.mode]: nextList });
-    }
-  }
-  return entries;
-};
-
-// 봉인 시점의 스토어 상태와 정확히 같을 때만 복원 - 값 CAS는 재정렬 후
-// 우연히 같은 값을 가진 다른 요소를 오염시킬 수 있어 신원 증명이 못 된다
-const sealIndexReceipt = (
-  baseline: IndexIntentBaseline,
-  entries: IndexEagerEntry[],
-): ElementIntentReceipt => {
-  const sealedFingerprint = storeFingerprintOf(baseline);
-  return {
-    rollback: () => {
-      if (storeFingerprintOf(baseline) !== sealedFingerprint) return;
-      const byType = new Map<NativeElementType, IndexEagerEntry[]>();
-      for (const entry of entries) {
-        const group = byType.get(entry.type) ?? [];
-        group.push(entry);
-        byType.set(entry.type, group);
-      }
-      for (const [type, group] of byType) {
-        const record = readRecord(type);
-        const list = record[baseline.mode];
-        if (!list) continue;
-        const nextList = list.map((position, index) => {
-          const owned = group.filter((entry) => entry.index === index);
-          if (owned.length === 0) return position;
-          let restored = position;
-          for (const entry of owned) {
-            restored = { ...restored, [entry.field]: entry.before };
-          }
-          return restored;
-        });
-        writeRecord(type, { ...record, [baseline.mode]: nextList });
-      }
-    },
-  };
-};
-
-// 게스처 eager 단일 소유: preflight 게이트 → stable id eager → 합성 index
-// eager → 최종 상태에서 fingerprint 한 번 봉인 → 결합 receipt.
-// 봉인을 중간에 하면 뒤따르는 stable eager가 같은 슬라이스를 바꿔 합성
-// receipt의 신원 검사가 자기 자신을 외부 개입으로 오판한다.
-// rollback은 index(봉인 상태 증명 필요)가 먼저, stable CAS가 나중
-export const applyGestureIntentsEagerly = (options: {
-  baseline: IndexIntentBaseline | null;
-  indexIntents: IndexIntents;
-  propertyIntents?: PropertyIntents;
-}): IndexEagerResult => {
-  const hasIndex = options.indexIntents.size > 0;
-  if (hasIndex) {
-    const baseline = options.baseline;
-    if (!baseline || storeFingerprintOf(baseline) !== baseline.fingerprint) {
-      return { matched: false, receipt: null };
-    }
-  }
-  const propertyReceipt =
-    options.propertyIntents && options.propertyIntents.size > 0
-      ? applyPropertyIntentsEagerly(options.propertyIntents)
-      : null;
-  let indexReceipt: ElementIntentReceipt | null = null;
-  if (hasIndex && options.baseline) {
-    const entries = applyIndexWrites(options.baseline, options.indexIntents);
-    if (entries.length > 0) {
-      indexReceipt = sealIndexReceipt(options.baseline, entries);
-    }
-  }
-  return {
-    matched: true,
-    // 역순 롤백: index 먼저(봉인 상태 그대로일 때), stable CAS 나중
-    receipt: combineReceipts(propertyReceipt, indexReceipt),
-  };
-};
-
-// 순수 합성 경로용 - 결합 applier의 property 없는 특수형
-export const applyIndexIntentsEagerly = (
-  baseline: IndexIntentBaseline | null,
-  intents: IndexIntents,
-): IndexEagerResult =>
-  applyGestureIntentsEagerly({ baseline, indexIntents: intents });
-
-// 슬롯 base가 시작 baseline과 정확히 일치할 때만 index 적용 patch를 생성.
-// 불일치·baseline 부재는 null - 호출자는 targetLost(무커밋)로 다룬다
-export const generateIndexIntentPatch = (
-  base: EditorDocumentV1,
-  baseline: IndexIntentBaseline | null,
-  intents: IndexIntents,
-  // 결합 generator가 base에서 fingerprint를 이미 검증하고 자기 의도를
-  // 먼저 적용한 문서를 넘길 때만 true - 단독 사용 금지
-  options?: { skipFingerprint?: boolean },
-): EditorPatchV1 | null => {
-  if (!baseline) return null;
-  if (
-    !options?.skipFingerprint &&
-    !indexBaselineMatches(baseline, base as unknown as Record<string, unknown>)
-  ) {
-    return null;
-  }
-  const patch: EditorPatchV1 = { schemaVersion: 1 };
-  let touchedAny = false;
-  for (const [type, byIndex] of intents) {
-    const field = POSITION_FIELD_BY_TYPE[type];
-    const record = base[field] as unknown as LooseRecord;
-    const list = record[baseline.mode];
-    if (!list) continue;
-    let touched = false;
-    const nextList = list.map((position, index) => {
-      const intentPatchFields = byIndex.get(index);
-      if (!intentPatchFields) return position;
-      touched = true;
-      return { ...position, ...intentPatchFields, id: position.id };
-    });
-    if (touched) {
-      patch[field] = { ...record, [baseline.mode]: nextList } as never;
-      touchedAny = true;
-    }
-  }
-  return touchedAny ? patch : null;
-};
 
 // ---------------------------------------------------------------------------
 // 봉인 구조 변경 receipt: 삭제·paste처럼 배열 구조 자체가 바뀌는 eager는
@@ -583,7 +323,7 @@ export const generateIndexIntentPatch = (
 // ---------------------------------------------------------------------------
 
 export const readFieldRecord = (
-  field: IndexBaselineField,
+  field: SealedSliceField,
 ): Record<string, unknown> =>
   (field === 'keys'
     ? useKeyStore.getState().keyMappings
@@ -598,7 +338,7 @@ export const readFieldRecord = (
     : useLayerGroupStore.getState().layerGroups) as Record<string, unknown>;
 
 export const writeFieldModeSlices = (
-  field: IndexBaselineField,
+  field: SealedSliceField,
   slices: ReadonlyMap<string, unknown>,
 ): void => {
   const merged = { ...readFieldRecord(field) };
@@ -626,7 +366,7 @@ export const writeFieldModeSlices = (
 
 export const editorSliceFingerprint = (
   modes: readonly string[],
-  fields: readonly IndexBaselineField[],
+  fields: readonly SealedSliceField[],
 ): string =>
   stableStringify(
     fields.map((field) => {
@@ -638,10 +378,10 @@ export const editorSliceFingerprint = (
 // mutate(스토어 eager 적용)를 감싸 before 캡처와 봉인을 한 소유 단위로 묶는다
 export const applySealedSliceMutation = (options: {
   modes: readonly string[];
-  fields: readonly IndexBaselineField[];
+  fields: readonly SealedSliceField[];
   mutate: () => void;
 }): ElementIntentReceipt => {
-  const before = new Map<IndexBaselineField, Map<string, unknown>>();
+  const before = new Map<SealedSliceField, Map<string, unknown>>();
   for (const field of options.fields) {
     const record = readFieldRecord(field);
     const byMode = new Map<string, unknown>();

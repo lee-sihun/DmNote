@@ -11,7 +11,7 @@ import { generatePropertyIntentPatch } from './elementIntent';
 import type {
   EditorCommitRequest,
   EditorCommitResult,
-  EditorDocumentV1,
+  CanonicalEditorDocumentV1,
   EditorGetResult,
 } from '@src/types/editor';
 import type {
@@ -21,7 +21,7 @@ import type {
 
 const ID_K = '11111111-1111-4111-8111-111111111111';
 
-const makeDocument = (): EditorDocumentV1 => ({
+const makeDocument = (): CanonicalEditorDocumentV1 => ({
   schemaVersion: 1,
   keys: { '4key': ['A'] },
   keyPositions: { '4key': [{ ...createDefaultKeyPosition(), id: ID_K }] },
@@ -32,11 +32,11 @@ const makeDocument = (): EditorDocumentV1 => ({
 });
 
 class FakeTransport implements EditorCoordinatorTransport {
-  canonical: EditorGetResult;
+  canonical: { revision: number; document: CanonicalEditorDocumentV1 };
   readonly commitMock =
     vi.fn<(request: EditorCommitRequest) => Promise<EditorCommitResult>>();
 
-  constructor(document: EditorDocumentV1) {
+  constructor(document: CanonicalEditorDocumentV1) {
     this.canonical = { revision: 0, document: structuredClone(document) };
     this.commitMock.mockImplementation(async (request) => {
       if (!request.changes) {

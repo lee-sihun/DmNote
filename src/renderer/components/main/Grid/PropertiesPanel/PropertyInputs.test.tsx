@@ -1693,7 +1693,10 @@ describe('ColorInput detached gradient guidance', () => {
           isOpen
           onToggle={() => {}}
           onModeCommit={() => {}}
-          canvasAnchor={{ kind: 'key', index: 0 }}
+          canvasAnchor={{
+            kind: 'key',
+            id: '11111111-1111-4111-8111-111111111111',
+          }}
         />,
       ),
     );

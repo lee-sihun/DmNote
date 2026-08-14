@@ -16,27 +16,15 @@ import {
 } from '@src/renderer/editor/runtime/elementOps';
 import type { FrozenKeyDuplicate } from '@src/renderer/editor/runtime/elementOps';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
-import {
-  graphItemsApi,
-  knobItemsApi,
-  statItemsApi,
-} from '@api/modules/itemsApi';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { reconcileSelectionAfterIndexedElementDeletion } from '@stores/grid/useGridSelectionStore';
 import type { KeySlot, KeyPosition } from '@src/types/key/keys';
-import type {
-  StatItemPosition,
-  StatItemPositions,
-} from '@src/types/key/statItems';
-import type {
-  GraphItemPosition,
-  GraphItemPositions,
-} from '@src/types/key/graphItems';
-import type { KnobItemPosition, KnobItemPositions } from '@src/types/key/knobs';
+import type { StatItemPosition } from '@src/types/key/statItems';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 import type {
   KeyCounterSettings,
   CounterAnimationBezier,
@@ -97,75 +85,6 @@ function getMaxZIndex(mode: string): number {
   );
 }
 
-function getMinZIndex(mode: string): number {
-  const {
-    keyZIndexes,
-    statZIndexes,
-    graphZIndexes,
-    knobZIndexes,
-    pluginZIndexes,
-  } = collectAllZIndexes(mode);
-  return Math.min(
-    0,
-    ...keyZIndexes,
-    ...statZIndexes,
-    ...graphZIndexes,
-    ...knobZIndexes,
-    ...pluginZIndexes,
-  );
-}
-
-// Stat positions persist 헬퍼
-async function persistStatPositions(
-  nextPositions: StatItemPositions,
-  errorMessage?: string,
-): Promise<void> {
-  const store = useStatItemStore.getState();
-  store.setLocalUpdateInProgress(true);
-  store.setPositions(nextPositions);
-  try {
-    await statItemsApi.updatePositions(nextPositions);
-  } catch (error) {
-    console.error(errorMessage || 'Failed to update stat items', error);
-  } finally {
-    store.setLocalUpdateInProgress(false);
-  }
-}
-
-// Graph positions persist 헬퍼
-async function persistGraphPositions(
-  nextPositions: GraphItemPositions,
-  errorMessage?: string,
-): Promise<void> {
-  const store = useGraphItemStore.getState();
-  store.setLocalUpdateInProgress(true);
-  store.setPositions(nextPositions);
-  try {
-    await graphItemsApi.updatePositions(nextPositions);
-  } catch (error) {
-    console.error(errorMessage || 'Failed to update graph items', error);
-  } finally {
-    store.setLocalUpdateInProgress(false);
-  }
-}
-
-// Knob positions persist 헬퍼
-async function persistKnobPositions(
-  nextPositions: KnobItemPositions,
-  errorMessage?: string,
-): Promise<void> {
-  const store = useKnobItemStore.getState();
-  store.setLocalUpdateInProgress(true);
-  store.setPositions(nextPositions);
-  try {
-    await knobItemsApi.updatePositions(nextPositions);
-  } catch (error) {
-    console.error(errorMessage || 'Failed to update knob items', error);
-  } finally {
-    store.setLocalUpdateInProgress(false);
-  }
-}
-
 export interface CanvasActions {
   addKeyAtPosition: (dx: number, dy: number) => void;
   placeDuplicateKey: (
@@ -174,11 +93,6 @@ export interface CanvasActions {
     dy: number,
   ) => void;
   // Stat 액션
-  deleteStatAtIndex: (index: number) => void;
-  moveStatToFront: (index: number) => void;
-  moveStatToBack: (index: number) => void;
-  moveStatForward: (index: number) => Promise<void>;
-  moveStatBackward: (index: number) => Promise<void>;
   addStatAtPosition: (dx: number, dy: number) => void;
   beginDuplicateStat: (sourceIndex: number) => DuplicateState | null;
   placeDuplicateStat: (
@@ -187,11 +101,6 @@ export interface CanvasActions {
     dy: number,
   ) => void;
   // Graph 액션
-  deleteGraphAtIndex: (index: number) => void;
-  moveGraphToFront: (index: number) => void;
-  moveGraphToBack: (index: number) => void;
-  moveGraphForward: (index: number) => Promise<void>;
-  moveGraphBackward: (index: number) => Promise<void>;
   addGraphAtPosition: (dx: number, dy: number) => void;
   beginDuplicateGraph: (sourceIndex: number) => DuplicateState | null;
   placeDuplicateGraph: (
@@ -200,11 +109,6 @@ export interface CanvasActions {
     dy: number,
   ) => void;
   // Knob 액션
-  deleteKnobAtIndex: (index: number) => void;
-  moveKnobToFront: (index: number) => void;
-  moveKnobToBack: (index: number) => void;
-  moveKnobForward: (index: number) => Promise<void>;
-  moveKnobBackward: (index: number) => Promise<void>;
   addKnobAtPosition: (dx: number, dy: number) => void;
   beginDuplicateKnob: (sourceIndex: number) => DuplicateState | null;
   placeDuplicateKnob: (
@@ -212,10 +116,6 @@ export interface CanvasActions {
     dx: number,
     dy: number,
   ) => void;
-  // persist 헬퍼 (Grid에서 직접 사용)
-  persistStatPositions: typeof persistStatPositions;
-  persistGraphPositions: typeof persistGraphPositions;
-  persistKnobPositions: typeof persistKnobPositions;
 }
 
 export interface DuplicateState {
@@ -306,92 +206,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       reportElementOpError,
     );
   };
-  const deleteStatAtIndex = (indexToDelete: number) => {
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[indexToDelete]) return;
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
-    };
-    persistStatPositions(nextPositions, 'Failed to delete stat item');
-    reconcileSelectionAfterIndexedElementDeletion('stat', indexToDelete);
-  };
-
-  const moveStatToFront = (index: number) => {
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[index]) return;
-
-    const maxZ = getMaxZIndex(selectedKeyType);
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: maxZ + 1 } : p,
-      ),
-    };
-    persistStatPositions(nextPositions, 'Failed to move stat item to front');
-  };
-
-  const moveStatForward = async (index: number) => {
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-
-    const currentZIndex = target.zIndex ?? index;
-    const updatedPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: currentZIndex + 1 } : p,
-      ),
-    };
-    await persistStatPositions(
-      updatedPositions,
-      'Failed to move stat item forward',
-    );
-  };
-
-  const moveStatBackward = async (index: number) => {
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-
-    const currentZIndex = target.zIndex ?? index;
-    const updatedPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: currentZIndex - 1 } : p,
-      ),
-    };
-    await persistStatPositions(
-      updatedPositions,
-      'Failed to move stat item backward',
-    );
-  };
-
-  const moveStatToBack = (index: number) => {
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[index]) return;
-
-    const minZ = getMinZIndex(selectedKeyType);
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: minZ - 1 } : p,
-      ),
-    };
-    persistStatPositions(nextPositions, 'Failed to move stat item to back');
-  };
-
   const beginDuplicateStat = (sourceIndex: number): DuplicateState | null => {
     const current = useStatItemStore.getState().positions;
     const position = current?.[selectedKeyType]?.[sourceIndex] || null;
@@ -449,92 +263,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     ).catch(reportElementOpError);
   };
 
-  const deleteGraphAtIndex = (indexToDelete: number) => {
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[indexToDelete]) return;
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
-    };
-    persistGraphPositions(nextPositions, 'Failed to delete graph item');
-    reconcileSelectionAfterIndexedElementDeletion('graph', indexToDelete);
-  };
-
-  const moveGraphToFront = (index: number) => {
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[index]) return;
-
-    const maxZ = getMaxZIndex(selectedKeyType);
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: maxZ + 1 } : p,
-      ),
-    };
-    persistGraphPositions(nextPositions, 'Failed to move graph item to front');
-  };
-
-  const moveGraphForward = async (index: number) => {
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-
-    const currentZIndex = target.zIndex ?? index;
-    const updatedPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: currentZIndex + 1 } : p,
-      ),
-    };
-    await persistGraphPositions(
-      updatedPositions,
-      'Failed to move graph item forward',
-    );
-  };
-
-  const moveGraphBackward = async (index: number) => {
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-
-    const currentZIndex = target.zIndex ?? index;
-    const updatedPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: currentZIndex - 1 } : p,
-      ),
-    };
-    await persistGraphPositions(
-      updatedPositions,
-      'Failed to move graph item backward',
-    );
-  };
-
-  const moveGraphToBack = (index: number) => {
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[index]) return;
-
-    const minZ = getMinZIndex(selectedKeyType);
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: minZ - 1 } : p,
-      ),
-    };
-    persistGraphPositions(nextPositions, 'Failed to move graph item to back');
-  };
-
   const beginDuplicateGraph = (sourceIndex: number): DuplicateState | null => {
     const current = useGraphItemStore.getState().positions;
     const position = current?.[selectedKeyType]?.[sourceIndex] || null;
@@ -564,7 +292,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
   };
 
   const addStatAtPosition = (dx: number, dy: number) => {
-    const position: StatItemPosition = {
+    const position: StatItemPosition & { id: string } = {
       id: newElementId(),
       statType: 'kps',
       dx,
@@ -595,7 +323,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
   };
 
   const addGraphAtPosition = (dx: number, dy: number) => {
-    const position: GraphItemPosition = {
+    const position: GraphItemPosition & { id: string } = {
       id: newElementId(),
       statType: 'kps',
       graphType: 'line',
@@ -639,82 +367,6 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     void addGraphAt(selectedKeyType, position).catch(reportElementOpError);
   };
 
-  const deleteKnobAtIndex = (indexToDelete: number) => {
-    const current = useKnobItemStore.getState().positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[indexToDelete]) return;
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
-    };
-    persistKnobPositions(nextPositions, 'Failed to delete knob item');
-    reconcileSelectionAfterIndexedElementDeletion('knob', indexToDelete);
-  };
-
-  const moveKnobToFront = (index: number) => {
-    const current = useKnobItemStore.getState().positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[index]) return;
-    const maxZ = getMaxZIndex(selectedKeyType);
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: maxZ + 1 } : p,
-      ),
-    };
-    persistKnobPositions(nextPositions, 'Failed to move knob item to front');
-  };
-
-  const moveKnobForward = async (index: number) => {
-    const current = useKnobItemStore.getState().positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-    const currentZIndex = target.zIndex ?? index;
-    const updatedPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: currentZIndex + 1 } : p,
-      ),
-    };
-    await persistKnobPositions(
-      updatedPositions,
-      'Failed to move knob item forward',
-    );
-  };
-
-  const moveKnobBackward = async (index: number) => {
-    const current = useKnobItemStore.getState().positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-    const currentZIndex = target.zIndex ?? index;
-    const updatedPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: currentZIndex - 1 } : p,
-      ),
-    };
-    await persistKnobPositions(
-      updatedPositions,
-      'Failed to move knob item backward',
-    );
-  };
-
-  const moveKnobToBack = (index: number) => {
-    const current = useKnobItemStore.getState().positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[index]) return;
-    const minZ = getMinZIndex(selectedKeyType);
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: minZ - 1 } : p,
-      ),
-    };
-    persistKnobPositions(nextPositions, 'Failed to move knob item to back');
-  };
-
   const beginDuplicateKnob = (sourceIndex: number): DuplicateState | null => {
     const current = useKnobItemStore.getState().positions;
     const position = current?.[selectedKeyType]?.[sourceIndex] || null;
@@ -743,7 +395,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
   };
 
   const addKnobAtPosition = (dx: number, dy: number) => {
-    const position: KnobItemPosition = {
+    const position: KnobItemPosition & { id: string } = {
       id: newElementId(),
       axisId: '',
       sensitivity: 1,
@@ -781,32 +433,14 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
   return {
     addKeyAtPosition,
     placeDuplicateKey,
-    deleteStatAtIndex,
-    moveStatToFront,
-    moveStatToBack,
-    moveStatForward,
-    moveStatBackward,
     addStatAtPosition,
     beginDuplicateStat,
     placeDuplicateStat,
-    deleteGraphAtIndex,
-    moveGraphToFront,
-    moveGraphToBack,
-    moveGraphForward,
-    moveGraphBackward,
     addGraphAtPosition,
     beginDuplicateGraph,
     placeDuplicateGraph,
-    deleteKnobAtIndex,
-    moveKnobToFront,
-    moveKnobToBack,
-    moveKnobForward,
-    moveKnobBackward,
     addKnobAtPosition,
     beginDuplicateKnob,
     placeDuplicateKnob,
-    persistStatPositions,
-    persistGraphPositions,
-    persistKnobPositions,
   };
 }

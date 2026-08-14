@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
-import type { ElementIdSelection } from '@src/renderer/editor/runtime/elementPatch';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type { CompletionBinding } from '@src/renderer/contexts/EditSessionScope';
+
+export interface ElementIdSelection {
+  key?: readonly string[];
+  stat?: readonly string[];
+  graph?: readonly string[];
+  knob?: readonly string[];
+}
 
 // 배치 피커의 비동기 완료가 결합할 시작 시점 대상
 export interface BatchElementBinding {
@@ -11,8 +17,8 @@ export interface BatchElementBinding {
   selection: ElementIdSelection;
 }
 
-export const LEGACY_BATCH_ELEMENT_BINDING: BatchElementBinding = {
-  binding: 'session-mode',
+export const EMPTY_BATCH_ELEMENT_BINDING: BatchElementBinding = {
+  binding: 'element-id',
   selection: {},
 };
 
@@ -28,19 +34,21 @@ const NATIVE_ELEMENT_TYPES: readonly NativeElementType[] = [
 ];
 
 // 선택 요소의 안정 ID를 그대로 캡처한다. index는 스냅샷 한정 locator라
-// 신원 재추론에 쓰지 않는다 (stale index가 다른 요소를 결합하는 오염 방지).
-// 합성 폴백 ID('key-0' 등, backfill 전 구형 데이터)가 하나라도 있으면 배치
-// 전체를 legacy index 경로로 보낸다 - 반쪽 적용 금지
+// 신원 재추론에 쓰지 않는다
 export const captureBatchElementBinding = (
   groups: SelectionGroups,
 ): BatchElementBinding => {
   const selection: { [K in NativeElementType]?: string[] } = {};
+  const seen = new Set<string>();
   for (const type of NATIVE_ELEMENT_TYPES) {
     const elements = groups[type];
     if (!elements || elements.length === 0) continue;
     const ids: string[] = [];
     for (const element of elements) {
-      if (!isNativeElementId(element.id)) return LEGACY_BATCH_ELEMENT_BINDING;
+      if (!isNativeElementId(element.id) || seen.has(element.id)) {
+        return EMPTY_BATCH_ELEMENT_BINDING;
+      }
+      seen.add(element.id);
       ids.push(element.id);
     }
     selection[type] = ids;
@@ -58,7 +66,7 @@ export const useBatchElementBinding = (
   capture: () => BatchElementBinding,
 ): BatchElementBinding => {
   const [bound, setBound] = useState<BatchElementBinding>(
-    LEGACY_BATCH_ELEMENT_BINDING,
+    EMPTY_BATCH_ELEMENT_BINDING,
   );
   const wasOpen = useRef(false);
   useEffect(() => {

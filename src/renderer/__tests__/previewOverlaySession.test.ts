@@ -11,13 +11,17 @@ import {
 } from '@src/renderer/editor/runtime/previewOverlay';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 import { runExclusiveLegacyMutation } from '@src/renderer/editor/runtime/legacyEditorMutation';
+import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import { previewApi } from '@api/modules/previewApi';
 
-import type { KeyPositions } from '@src/types/key/keys';
-import type { StatItemPositions } from '@src/types/key/statItems';
-import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PreviewEnvelope } from '@src/types/preview';
+
+const KEY_ID_A = '00000000-0000-4000-8000-000000000101';
+const KEY_ID_B = '00000000-0000-4000-8000-000000000102';
+const STAT_ID_A = '00000000-0000-4000-8000-000000000201';
+const GRAPH_ID_A = '00000000-0000-4000-8000-000000000301';
+const KNOB_ID_A = '00000000-0000-4000-8000-000000000401';
 
 const { commitPatchMock, commitGeneratedPatchMock, generatedPatches } =
   vi.hoisted(() => ({
@@ -45,50 +49,49 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   },
 }));
 
-const basePosition = (dx: number, id?: string) => ({
-  ...(id ? { id } : {}),
+const basePosition = (dx: number, id: string) => ({
+  ...createDefaultKeyPosition(),
+  id,
   dx,
   dy: 0,
   width: 60,
   height: 60,
-  activeImage: '',
-  inactiveImage: '',
 });
 
-const canonicalFixture = (): KeyPositions =>
+const canonicalFixture = (): CanonicalEditorDocumentV1['keyPositions'] =>
   ({
-    '4key': [basePosition(0, 'key-id-a'), basePosition(70, 'key-id-b')],
-  } as unknown as KeyPositions);
+    '4key': [basePosition(0, KEY_ID_A), basePosition(70, KEY_ID_B)],
+  } as CanonicalEditorDocumentV1['keyPositions']);
 
-const statFixture = (): StatItemPositions =>
+const statFixture = (): CanonicalEditorDocumentV1['statPositions'] =>
   ({
-    '4key': [{ ...basePosition(0, 'stat-id-a'), statType: 'kps' }],
-  } as unknown as StatItemPositions);
+    '4key': [{ ...basePosition(0, STAT_ID_A), statType: 'kps' }],
+  } as CanonicalEditorDocumentV1['statPositions']);
 
-const graphFixture = (): GraphItemPositions =>
+const graphFixture = (): CanonicalEditorDocumentV1['graphPositions'] =>
   ({
     '4key': [
       {
-        ...basePosition(0, 'graph-id-a'),
+        ...basePosition(0, GRAPH_ID_A),
         statType: 'kps',
         graphType: 'line',
         graphSpeed: 1,
         graphColor: '#ffffff',
       },
     ],
-  } as unknown as GraphItemPositions);
+  } as CanonicalEditorDocumentV1['graphPositions']);
 
-const knobFixture = (): KnobItemPositions =>
+const knobFixture = (): CanonicalEditorDocumentV1['knobPositions'] =>
   ({
     '4key': [
       {
-        ...basePosition(0, 'knob-id-a'),
+        ...basePosition(0, KNOB_ID_A),
         axisId: 'HIDA:test',
         sensitivity: 1,
         reverse: false,
       },
     ],
-  } as unknown as KnobItemPositions);
+  } as CanonicalEditorDocumentV1['knobPositions']);
 
 const resetPositionStores = () => {
   useKeyStore.setState({
@@ -548,7 +551,7 @@ describe('editGestureController', () => {
       knobPositions?: Record<string, Array<Record<string, unknown>>>;
     };
     expect(patch.keyPositions?.['4key'][0]).toMatchObject({
-      id: 'key-id-a',
+      id: KEY_ID_A,
       width: 90,
     });
     expect(patch.statPositions?.['4key'][0]).toMatchObject({ width: 100 });
@@ -584,10 +587,47 @@ describe('editGestureController', () => {
     };
     // 시작 시점 index 0 = key-id-a, 재정렬 후에는 index 1
     expect(patch.keyPositions?.['4key'][1]).toMatchObject({
-      id: 'key-id-a',
+      id: KEY_ID_A,
       width: 90,
     });
     expect(patch.keyPositions?.['4key'][0].width).toBe(60);
+  });
+
+  it('활성 gesture 중 reorder돼도 preview와 commit이 시작 ID를 따라간다', async () => {
+    editGestureController.preview('4key', [{ index: 0, patch: { width: 80 } }]);
+
+    const [a, b] = useKeyStore.getState().canonicalPositions['4key'];
+    useKeyStore.setState({
+      canonicalPositions: { '4key': [b, a] } as never,
+      positions: { '4key': [b, a] } as never,
+    });
+    editGestureController.preview('4key', [{ index: 0, patch: { width: 95 } }]);
+    await flushPromises();
+
+    expect(useKeyStore.getState().positions['4key'][0]).toMatchObject({
+      id: KEY_ID_B,
+      width: 60,
+    });
+    expect(useKeyStore.getState().positions['4key'][1]).toMatchObject({
+      id: KEY_ID_A,
+      width: 95,
+    });
+    expect(
+      vi.mocked(previewApi.publish).mock.calls.at(-1)?.[0].targets,
+    ).toEqual([1]);
+
+    await editGestureController.commitPendingAsync();
+    const patch = generatedPatches[0] as {
+      keyPositions?: Record<string, Array<Record<string, unknown>>>;
+    };
+    expect(patch.keyPositions?.['4key'][0]).toMatchObject({
+      id: KEY_ID_B,
+      width: 60,
+    });
+    expect(patch.keyPositions?.['4key'][1]).toMatchObject({
+      id: KEY_ID_A,
+      width: 95,
+    });
   });
 
   it('정산 대기 중 대상이 삭제되면 커밋하지 않는다', async () => {

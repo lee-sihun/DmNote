@@ -93,7 +93,7 @@ describe('배치 스타일 숫자 필드 취소', () => {
   let handleBatchAlign: Mock;
   let handleBatchDistribute: Mock;
   let handleBatchResize: Mock;
-  let handleBatchStyleChange: Mock;
+  let handleBatchResizePreview: Mock;
 
   const renderPanel = () => {
     const positions = [flatPosition(), flatPosition(), flatPosition()];
@@ -119,10 +119,7 @@ describe('배치 스타일 숫자 필드 취소', () => {
             handleBatchSpacing={handleBatchSpacing}
             batchSpacing={{ isMixed: false, value: 10 }}
             handleBatchResize={handleBatchResize}
-            handleBatchStyleChange={handleBatchStyleChange}
-            handleBatchStyleChangeComplete={vi.fn()}
-            handleBatchShadowChangeComplete={vi.fn()}
-            handleBatchShadowEnabledChange={vi.fn()}
+            handleBatchResizePreview={handleBatchResizePreview}
             showBatchImagePicker={false}
             onToggleBatchImagePicker={vi.fn()}
             batchImageButtonRef={React.createRef<HTMLButtonElement>()}
@@ -142,7 +139,7 @@ describe('배치 스타일 숫자 필드 취소', () => {
     handleBatchAlign = vi.fn();
     handleBatchDistribute = vi.fn();
     handleBatchResize = vi.fn();
-    handleBatchStyleChange = vi.fn();
+    handleBatchResizePreview = vi.fn();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -231,7 +228,7 @@ describe('배치 스타일 숫자 필드 취소', () => {
 
     expect(handleBatchAlign).toHaveBeenCalledWith('left');
     expect(handleBatchDistribute).toHaveBeenCalledWith('vertical');
-    expect(handleBatchStyleChange.mock.calls).toEqual([
+    expect(handleBatchResizePreview.mock.calls).toEqual([
       ['width', 81],
       ['height', 91],
     ]);

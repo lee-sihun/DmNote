@@ -28,8 +28,9 @@ import { editorApi } from './modules/editorApi';
 import './modules/shared';
 
 import type { DMNoteAPI } from '@src/types/plugin/api';
+import type { HostInternalApi } from './hostGlobalApi';
 
-export const internalApi: DMNoteAPI = {
+export const internalApi = {
   app: appApi,
   window: windowApi,
   settings: settingsApi,
@@ -53,4 +54,4 @@ export const internalApi: DMNoteAPI = {
   plugin: pluginApi,
   ui: uiApi as unknown as DMNoteAPI['ui'],
   editor: editorApi,
-};
+} satisfies HostInternalApi;

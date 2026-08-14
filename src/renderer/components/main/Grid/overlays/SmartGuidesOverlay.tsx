@@ -1,6 +1,5 @@
 import React from 'react';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
-import { selectionElementId } from '@stores/grid/useGridSelectionStore';
 import { calculateGuideLineExtent } from '@utils/grid/smartGuides';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
@@ -47,7 +46,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
 
     // 키 요소 bounds
     const keyPositions = positions[selectedKeyType] || [];
-    keyPositions.forEach((pos, index) => {
+    keyPositions.forEach((pos) => {
       if (pos.hidden) return;
       bounds.push(
         calculateBounds(
@@ -55,7 +54,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
           pos.dy,
           pos.width || 60,
           pos.height || 60,
-          selectionElementId('key', pos, index),
+          pos.id,
         ),
       );
     });

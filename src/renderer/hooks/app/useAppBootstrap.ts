@@ -53,7 +53,7 @@ import {
   releaseHistoryEditorFlushLock,
   resetHistoryEditorFlushLock,
 } from '@src/renderer/editor/runtime/historyEditorFlushLock';
-import type { BootstrapPayload } from '@src/types/app';
+import type { CanonicalBootstrapPayload } from '@src/types/app';
 import type { CustomTab, KeyCounters } from '@src/types/key/keys';
 import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/editorCoordinator';
 import {
@@ -125,7 +125,7 @@ function clonePlugins(source?: CustomJs | null): JsPlugin[] {
 
 // bootstrap payload → 설정 스토어 스냅샷 구성 (초기 적용/재동기화 공용)
 function buildSettingsSnapshot(
-  bootstrap: BootstrapPayload,
+  bootstrap: CanonicalBootstrapPayload,
   tabNoteOverrides: TabNoteOverrides,
 ): SettingsStateSnapshot {
   return {
@@ -637,7 +637,7 @@ export function useAppBootstrap() {
     // 변경이 overlay 키 이벤트 effect 재실행(키 하이라이트 리셋) 등 시각적
     // 부작용을 유발하는 것을 방지
     const applyResyncSnapshot = (
-      bootstrap: BootstrapPayload,
+      bootstrap: CanonicalBootstrapPayload,
       counterContext: CounterResyncContext,
     ) => {
       initDefaults(bootstrap.defaults);

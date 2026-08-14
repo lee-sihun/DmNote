@@ -23,12 +23,14 @@ const SPEC: GradientSpec = {
     { color: '#0000ff', pos: 1 },
   ],
 };
+const ELEMENT_A_ID = '11111111-1111-4111-8111-111111111111';
+const ELEMENT_B_ID = '22222222-2222-4222-8222-222222222222';
 
 const makeSession = (
   sessionKey: string,
   overrides: Partial<GradientEditSession> = {},
 ): GradientEditSession => ({
-  anchor: { kind: 'key', index: 0 },
+  anchor: { kind: 'key', id: ELEMENT_A_ID },
   sessionKey,
   surface: 'background',
   stateMode: 'idle',
@@ -87,20 +89,21 @@ describe('useGradientPreviewSpec 대상 격리', () => {
 
   const Probe = ({
     kind,
-    index,
+    id,
     surface,
     inBatch = false,
   }: {
     kind: 'key' | 'stat' | 'graph' | 'knob';
-    index: number;
+    id: string;
     surface: GradientPreviewSurface;
     inBatch?: boolean;
   }) => {
-    const spec = useGradientPreviewSpec(kind, index, surface, inBatch);
-    const session = useGradientPreviewSession(kind, index, inBatch);
+    const spec = useGradientPreviewSpec(kind, id, surface, inBatch);
+    const session = useGradientPreviewSession(kind, id, inBatch);
     return (
       <div
         data-testid="probe"
+        data-element-id={id}
         data-angle={spec ? spec.angle : 'none'}
         data-state-mode={session?.stateMode ?? 'none'}
       />
@@ -131,40 +134,67 @@ describe('useGradientPreviewSpec 대상 격리', () => {
     act(() => {
       useGradientEditStore
         .getState()
-        .setSession(makeSession('A', { anchor: { kind: 'key', index: 2 } }));
-      root.render(<Probe kind="key" index={2} surface="background" />);
+        .setSession(
+          makeSession('A', { anchor: { kind: 'key', id: ELEMENT_A_ID } }),
+        );
+      root.render(<Probe kind="key" id={ELEMENT_A_ID} surface="background" />);
     });
     expect(probeAngle()).toBe('90');
     expect(probeStateMode()).toBe('idle');
 
     // 표면 불일치
     act(() => {
-      root.render(<Probe kind="key" index={2} surface="border" />);
+      root.render(<Probe kind="key" id={ELEMENT_A_ID} surface="border" />);
     });
     expect(probeAngle()).toBe('none');
 
-    // 인덱스 불일치
+    // ID 불일치
     act(() => {
-      root.render(<Probe kind="key" index={3} surface="background" />);
+      root.render(<Probe kind="key" id={ELEMENT_B_ID} surface="background" />);
     });
     expect(probeAngle()).toBe('none');
 
     // 종류 불일치
     act(() => {
-      root.render(<Probe kind="stat" index={2} surface="background" />);
+      root.render(<Probe kind="stat" id={ELEMENT_A_ID} surface="background" />);
     });
     expect(probeAngle()).toBe('none');
+  });
+
+  it('같은 종류 요소가 재정렬돼도 ID가 일치하는 요소에만 spec을 전달한다', () => {
+    act(() => {
+      useGradientEditStore
+        .getState()
+        .setSession(
+          makeSession('A', { anchor: { kind: 'key', id: ELEMENT_A_ID } }),
+        );
+      root.render(
+        <>
+          <Probe kind="key" id={ELEMENT_B_ID} surface="background" />
+          <Probe kind="key" id={ELEMENT_A_ID} surface="background" />
+        </>,
+      );
+    });
+
+    expect(
+      (host.querySelector(`[data-element-id="${ELEMENT_B_ID}"]`) as HTMLElement)
+        .dataset.angle,
+    ).toBe('none');
+    expect(
+      (host.querySelector(`[data-element-id="${ELEMENT_A_ID}"]`) as HTMLElement)
+        .dataset.angle,
+    ).toBe('90');
   });
 
   it('입력 세션의 상태도 대상 요소에 함께 전달한다', () => {
     act(() => {
       useGradientEditStore.getState().setSession(
         makeSession('active', {
-          anchor: { kind: 'key', index: 2 },
+          anchor: { kind: 'key', id: ELEMENT_A_ID },
           stateMode: 'active',
         }),
       );
-      root.render(<Probe kind="key" index={2} surface="background" />);
+      root.render(<Probe kind="key" id={ELEMENT_A_ID} surface="background" />);
     });
 
     expect(probeAngle()).toBe('90');
@@ -176,13 +206,20 @@ describe('useGradientPreviewSpec 대상 격리', () => {
       useGradientEditStore
         .getState()
         .setSession(makeSession('batch', { anchor: { kind: 'batch' } }));
-      root.render(<Probe kind="key" index={0} surface="background" inBatch />);
+      root.render(
+        <Probe kind="key" id={ELEMENT_A_ID} surface="background" inBatch />,
+      );
     });
     expect(probeAngle()).toBe('90');
 
     act(() => {
       root.render(
-        <Probe kind="key" index={0} surface="background" inBatch={false} />,
+        <Probe
+          kind="key"
+          id={ELEMENT_A_ID}
+          surface="background"
+          inBatch={false}
+        />,
       );
     });
     expect(probeAngle()).toBe('none');
@@ -197,25 +234,31 @@ describe('useGradientPreviewSpec 대상 격리', () => {
           stateMode: 'active',
         }),
       );
-      root.render(<Probe kind="key" index={0} surface="background" inBatch />);
+      root.render(
+        <Probe kind="key" id={ELEMENT_A_ID} surface="background" inBatch />,
+      );
     });
     expect(probeAngle()).toBe('90');
     expect(probeStateMode()).toBe('active');
 
     act(() => {
-      root.render(<Probe kind="knob" index={0} surface="background" inBatch />);
+      root.render(
+        <Probe kind="knob" id={ELEMENT_A_ID} surface="background" inBatch />,
+      );
     });
     expect(probeAngle()).toBe('90');
 
     act(() => {
-      root.render(<Probe kind="stat" index={0} surface="background" inBatch />);
+      root.render(
+        <Probe kind="stat" id={ELEMENT_A_ID} surface="background" inBatch />,
+      );
     });
     expect(probeAngle()).toBe('none');
     expect(probeStateMode()).toBe('none');
 
     act(() => {
       root.render(
-        <Probe kind="graph" index={0} surface="background" inBatch />,
+        <Probe kind="graph" id={ELEMENT_A_ID} surface="background" inBatch />,
       );
     });
     expect(probeAngle()).toBe('none');
@@ -227,13 +270,15 @@ describe('useGradientPreviewSpec 대상 격리', () => {
       useGradientEditStore
         .getState()
         .setSession(makeSession('batch-idle', { anchor: { kind: 'batch' } }));
-      root.render(<Probe kind="stat" index={0} surface="background" inBatch />);
+      root.render(
+        <Probe kind="stat" id={ELEMENT_A_ID} surface="background" inBatch />,
+      );
     });
     expect(probeAngle()).toBe('90');
 
     act(() => {
       root.render(
-        <Probe kind="graph" index={0} surface="background" inBatch />,
+        <Probe kind="graph" id={ELEMENT_A_ID} surface="background" inBatch />,
       );
     });
     expect(probeAngle()).toBe('90');

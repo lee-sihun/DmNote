@@ -11,6 +11,7 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { PREVIEW_SCHEMA_VERSION, type PreviewDomain } from '@src/types/preview';
+import { isNativeElementId } from '../model/elementId';
 
 import { previewOverlay } from './previewOverlay';
 import {
@@ -42,23 +43,23 @@ interface ActiveGesture {
   lifecycle: GestureSessionLifecycle;
   mode: string;
   seq: number;
-  // 도메인 → 요소 id → 게스처 동안 누적된 전체 patch.
-  // 정산 의도는 index가 아니라 id로 보존한다 - index로 두면 정산이 큐를
-  // 기다리는 동안 재정렬된 다른 요소에 적용된다. id가 없는 구형 요소만
-  // index sentinel로 남긴다
+  // 도메인 → 요소 id → 게스처 동안 누적된 전체 patch
   appliedPatches: Map<PreviewDomain, Map<string, Record<string, unknown>>>;
-  // 도메인 → target index → 다음 flush에 실릴 patch (프리뷰 wire는 index 표현 유지).
+  // 도메인 → 요소 id → 다음 flush에 실릴 patch (프리뷰 wire는 index 표현 유지).
   // 대상별로 모아야 같은 대상의 옛 값이 덮어써진다. patch 내용으로 묶으면
   // 값이 연속으로 바뀌는 편집(드래그, 방향키 꾹 누르기)에서 중간값마다 그룹이 하나씩 생기고,
   // in-flight 하나가 도는 동안 쌓인 그룹이 전부 순차 발행돼 이미 무의미해진 값까지 IPC를 탄다
-  pendingPatches: Map<PreviewDomain, Map<number, Record<string, unknown>>>;
+  pendingPatches: Map<PreviewDomain, Map<string, Record<string, unknown>>>;
+  // 호출부가 넘기는 index는 locator hint일 뿐이다. 게스처 첫 입력에서 ID를
+  // 동결하고 이후 reorder에도 같은 ID의 현재 index를 다시 찾는다
+  frozenTargets: Map<PreviewDomain, Map<number, string>>;
   flushScheduled: boolean;
   publishInFlight: boolean;
 }
 
 type PositionsRecordLike = Record<
   string,
-  Array<{ id?: string } & Record<string, unknown>>
+  Array<{ id: string } & Record<string, unknown>>
 >;
 
 const authorityRecordFor = (domain: PreviewDomain): PositionsRecordLike =>
@@ -70,18 +71,31 @@ const authorityRecordFor = (domain: PreviewDomain): PositionsRecordLike =>
     ? useGraphItemStore.getState().positions
     : useKnobItemStore.getState().positions) as PositionsRecordLike;
 
-const INDEX_SENTINEL = 'index:';
-
-// 프리뷰 시점 index가 아직 뜨거울 때 id로 승격
-const intentKeyFor = (
+const currentIndexForId = (
   domain: PreviewDomain,
   mode: string,
+  id: string,
+): number =>
+  (authorityRecordFor(domain)[mode] ?? []).findIndex(
+    (position) => position.id === id,
+  );
+
+const frozenTargetFor = (
+  gesture: ActiveGesture,
+  domain: PreviewDomain,
   index: number,
-): string => {
-  const id = authorityRecordFor(domain)[mode]?.[index]?.id;
-  return typeof id === 'string' && id.length > 0
-    ? id
-    : `${INDEX_SENTINEL}${index}`;
+): string | null => {
+  let targets = gesture.frozenTargets.get(domain);
+  if (!targets) {
+    targets = new Map();
+    gesture.frozenTargets.set(domain, targets);
+  }
+  const frozen = targets.get(index);
+  if (frozen) return frozen;
+  const id = authorityRecordFor(domain)[gesture.mode]?.[index]?.id;
+  if (typeof id !== 'string' || !isNativeElementId(id)) return null;
+  targets.set(index, id);
+  return id;
 };
 
 let active: ActiveGesture | null = null;
@@ -113,19 +127,22 @@ const takeNextGroup = (gesture: ActiveGesture) => {
       continue;
     }
 
-    const [firstIndex, patch] = first.value;
+    const [firstId, patch] = first.value;
     const patchKey = JSON.stringify(patch);
-    const groupTargets = [firstIndex];
-    targets.delete(firstIndex);
+    const firstIndex = currentIndexForId(domain, gesture.mode, firstId);
+    const groupTargets = firstIndex >= 0 ? [firstIndex] : [];
+    targets.delete(firstId);
 
-    for (const [index, candidate] of targets) {
+    for (const [id, candidate] of targets) {
       if (JSON.stringify(candidate) === patchKey) {
-        groupTargets.push(index);
-        targets.delete(index);
+        const index = currentIndexForId(domain, gesture.mode, id);
+        if (index >= 0) groupTargets.push(index);
+        targets.delete(id);
       }
     }
 
     if (targets.size === 0) gesture.pendingPatches.delete(domain);
+    if (groupTargets.length === 0) continue;
     return { domain, targets: groupTargets, patch };
   }
 
@@ -188,6 +205,7 @@ export const editGestureController = {
         seq: 0,
         appliedPatches: new Map(),
         pendingPatches: new Map(),
+        frozenTargets: new Map(),
         flushScheduled: false,
         publishInFlight: false,
       };
@@ -199,16 +217,19 @@ export const editGestureController = {
       active.appliedPatches.set(domain, domainPatches);
     }
     for (const entry of entries) {
-      const intentKey = intentKeyFor(domain, mode, entry.index);
+      const intentKey = frozenTargetFor(active, domain, entry.index);
+      if (!intentKey) continue;
+      const currentIndex = currentIndexForId(domain, mode, intentKey);
+      if (currentIndex < 0) continue;
       const applied = domainPatches.get(intentKey);
       domainPatches.set(
         intentKey,
         applied ? { ...applied, ...entry.patch } : { ...entry.patch },
       );
-      previewOverlay.applyLocalPatch(
+      previewOverlay.applyLocalPatchByIds(
         active.sessionId,
         mode,
-        [entry.index],
+        [intentKey],
         entry.patch,
         domain,
       );
@@ -217,9 +238,9 @@ export const editGestureController = {
         pending = new Map();
         active.pendingPatches.set(domain, pending);
       }
-      const queued = pending.get(entry.index);
+      const queued = pending.get(intentKey);
       pending.set(
-        entry.index,
+        intentKey,
         queued ? { ...queued, ...entry.patch } : { ...entry.patch },
       );
     }
@@ -283,6 +304,7 @@ export const editGestureController = {
     active = null;
     releaseGestureSession(gesture.lifecycle);
     gesture.pendingPatches.clear();
+    gesture.frozenTargets.clear();
     previewOverlay.endSession(gesture.sessionId);
     previewApi.cancel(gesture.sessionId).catch(() => {});
   },
@@ -299,8 +321,6 @@ export const editGestureController = {
       return drainEditorWrites();
     }
 
-    // 의도 확정: sentinel(구형 무ID)은 현재 canonical에서 한 번 더 id 승격을
-    // 시도하고, 여전히 없으면 대상 소실로 보고 버린다 (fail-closed)
     const intents = new Map<
       PreviewDomain,
       Map<string, Record<string, unknown>>
@@ -309,15 +329,7 @@ export const editGestureController = {
       if (patches.size === 0) continue;
       const resolved = new Map<string, Record<string, unknown>>();
       for (const [key, patch] of patches) {
-        if (!key.startsWith(INDEX_SENTINEL)) {
-          resolved.set(key, { ...(resolved.get(key) ?? {}), ...patch });
-          continue;
-        }
-        const index = Number(key.slice(INDEX_SENTINEL.length));
-        const id = authorityRecordFor(domain)[gesture.mode]?.[index]?.id;
-        if (typeof id === 'string' && id.length > 0) {
-          resolved.set(id, { ...(resolved.get(id) ?? {}), ...patch });
-        }
+        resolved.set(key, { ...(resolved.get(key) ?? {}), ...patch });
       }
       if (resolved.size > 0) intents.set(domain, resolved);
     }
@@ -361,10 +373,20 @@ export const editGestureController = {
 
 // 선택 대상 변경 시 진행 중 게스처 취소 (barrier)
 if (typeof window !== 'undefined') {
-  let lastSelectedElements = useGridSelectionStore.getState().selectedElements;
+  const identityFingerprint = () =>
+    useGridSelectionStore
+      .getState()
+      .selectedElements.map((element) => `${element.type}:${element.id}`)
+      .sort()
+      .join('|');
+  let lastSelectionFingerprint = identityFingerprint();
   useGridSelectionStore.subscribe((state) => {
-    if (state.selectedElements !== lastSelectedElements) {
-      lastSelectedElements = state.selectedElements;
+    const nextFingerprint = state.selectedElements
+      .map((element) => `${element.type}:${element.id}`)
+      .sort()
+      .join('|');
+    if (nextFingerprint !== lastSelectionFingerprint) {
+      lastSelectionFingerprint = nextFingerprint;
       editGestureController.cancel();
     }
   });

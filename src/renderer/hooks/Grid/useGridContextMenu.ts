@@ -125,7 +125,7 @@ export function useGridContextMenu({
             keyCode: slotCanonical(
               keyMappings[selectedKeyType]?.[contextIndex] ?? '',
             ),
-            id: keyPosition.id ?? '',
+            id: keyPosition.id,
             index: contextIndex,
             position: keyPosition,
             mode: selectedKeyType,

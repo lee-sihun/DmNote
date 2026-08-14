@@ -3,12 +3,9 @@
  * LayerTabContent에서 사용하는 layerItems / displayItems 생성
  */
 
-import { selectionElementId } from '@stores/grid/useGridSelectionStore';
 import { slotDisplayName } from '@utils/keySlot';
-import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
-import type { StatItemPositions } from '@src/types/key/statItems';
-import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { KeyMappings } from '@src/types/key/keys';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginPanelElementView } from '@src/types/plugin/api';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { LayerItem, DisplayItem } from '../types';
@@ -20,11 +17,11 @@ import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
 
 interface BuildLayerItemsParams {
   selectedKeyType: string;
-  positions: KeyPositions;
+  positions: CanonicalEditorDocumentV1['keyPositions'];
   keyMappings: KeyMappings;
-  statPositions: StatItemPositions;
-  graphPositions: GraphItemPositions;
-  knobPositions: KnobItemPositions;
+  statPositions: CanonicalEditorDocumentV1['statPositions'];
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'];
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'];
   pluginElements: PluginPanelElementView[];
 }
 
@@ -47,7 +44,7 @@ export function buildLayerItems({
     const defaultName = slotDisplayName(slot) || `Key ${index + 1}`;
     items.push({
       type: 'key',
-      id: selectionElementId('key', pos, index),
+      id: pos.id,
       index,
       name: pos.layerName || defaultName,
       zIndex: pos.zIndex ?? index,
@@ -69,7 +66,7 @@ export function buildLayerItems({
         : 'KPS';
     items.push({
       type: 'stat',
-      id: selectionElementId('stat', pos, index),
+      id: pos.id,
       index,
       name: pos.layerName || defaultName,
       zIndex: pos.zIndex ?? index,
@@ -91,7 +88,7 @@ export function buildLayerItems({
         : 'KPS Graph';
     items.push({
       type: 'graph',
-      id: selectionElementId('graph', pos, index),
+      id: pos.id,
       index,
       name: pos.layerName || defaultName,
       zIndex: pos.zIndex ?? index,
@@ -105,7 +102,7 @@ export function buildLayerItems({
   currentKnobPositions.forEach((pos, index) => {
     items.push({
       type: 'knob',
-      id: selectionElementId('knob', pos, index),
+      id: pos.id,
       index,
       name: pos.layerName || `Knob ${index + 1}`,
       zIndex: pos.zIndex ?? index,

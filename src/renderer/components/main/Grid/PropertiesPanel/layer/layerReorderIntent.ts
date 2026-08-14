@@ -22,9 +22,11 @@ import {
   isPluginVisibleInMode,
 } from '@utils/layerGroupUtils';
 import { buildDisplayItems } from './layerPanelModel';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { assertCanonicalEditorDocument } from '@src/types/editor';
 
 import type {
-  EditorDocumentV1,
+  CanonicalEditorDocumentV1,
   EditorReorderElementsOpV1,
 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
@@ -239,7 +241,7 @@ const reorderAtDisplayIndex = (
 
 const modelFrom = (
   mode: string,
-  document: EditorDocumentV1,
+  document: CanonicalEditorDocumentV1,
   pluginElements: readonly PluginDisplayElementInternal[],
   collapsedGroupIds: readonly string[],
 ): { items: LayerItem[]; display: DisplayItem[] } => {
@@ -270,9 +272,10 @@ const modelFrom = (
 
 const resolvePlan = (
   descriptor: LayerDropIntent,
-  document: EditorDocumentV1,
+  document: CanonicalEditorDocumentV1,
   pluginElements: readonly PluginDisplayElementInternal[],
 ): ReorderPlan => {
+  assertCanonicalEditorDocument(document, 'layer reorder document');
   const model = modelFrom(
     descriptor.mode,
     document,
@@ -335,8 +338,8 @@ const opFromPlan = (
   const maxZIndex = plan.orderedItems.length - 1;
   plan.orderedItems.forEach((item, index) => {
     if (item.type === 'plugin') return;
-    if (!item.id || /^(key|stat|graph|knob)-\d+$/.test(item.id)) {
-      throw new ElementIntentAbort('synthetic reorder target');
+    if (!isNativeElementId(item.id)) {
+      throw new ElementIntentAbort('invalid native reorder target');
     }
     zUpdates.push({
       elementType: item.type,
@@ -437,7 +440,7 @@ const applyPluginZIndexesEagerly = (
   };
 };
 
-const localDocument = (): EditorDocumentV1 => ({
+const localDocument = (): CanonicalEditorDocumentV1 => ({
   schemaVersion: 1,
   keys: useKeyStore.getState().keyMappings,
   keyPositions: useKeyStore.getState().canonicalPositions,

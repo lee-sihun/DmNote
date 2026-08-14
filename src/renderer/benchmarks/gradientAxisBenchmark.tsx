@@ -9,6 +9,8 @@ import {
 import type { GradientSpec } from '@src/types/color';
 
 const SESSION_KEY = 'benchmark:key:0:backgroundColor:idle';
+const benchmarkId = (index: number) =>
+  `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
 
 export const GRADIENT_BENCHMARK_SPEC: GradientSpec = {
   angle: 90,
@@ -19,7 +21,11 @@ export const GRADIENT_BENCHMARK_SPEC: GradientSpec = {
 };
 
 const GradientPreviewNode = ({ index }: { index: number }) => {
-  const preview = useGradientPreviewSpec('key', index, 'background');
+  const preview = useGradientPreviewSpec(
+    'key',
+    benchmarkId(index),
+    'background',
+  );
   return (
     <div
       style={{
@@ -43,14 +49,14 @@ export const GradientAxisBenchmarkSurface = ({
   itemCount,
   onRender = () => undefined,
 }: GradientAxisBenchmarkSurfaceProps) => {
-  const preview = useGradientPreviewSpec('key', 0, 'background');
+  const preview = useGradientPreviewSpec('key', benchmarkId(0), 'background');
   const apply = useCallback((spec: GradientSpec) => {
     useGradientEditStore.getState().patchSession(SESSION_KEY, { spec });
   }, []);
 
   useEffect(() => {
     useGradientEditStore.getState().setSession({
-      anchor: { kind: 'key', index: 0 },
+      anchor: { kind: 'key', id: benchmarkId(0) },
       sessionKey: SESSION_KEY,
       surface: 'background',
       stateMode: 'idle',
@@ -67,6 +73,7 @@ export const GradientAxisBenchmarkSurface = ({
 
   const positions = {
     benchmark: Array.from({ length: itemCount }, (_, index) => ({
+      id: benchmarkId(index),
       dx: 100 + (index % 20),
       dy: 100 + Math.floor(index / 20),
       width: 200,

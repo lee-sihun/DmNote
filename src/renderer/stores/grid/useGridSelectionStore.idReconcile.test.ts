@@ -2,24 +2,32 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   invalidateSelectionForChangedIndexedElementArrays,
-  selectionElementId,
   useGridSelectionStore,
+  type IndexedElementArrays,
 } from './useGridSelectionStore';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
-import type { KeyPosition } from '@src/types/key/keys';
+import type { CanonicalKeyPosition } from '@src/types/editor';
 
-const arraysOf = (keyPositions: KeyPosition[]) => ({
+const arraysOf = (
+  keyPositions: CanonicalKeyPosition[],
+): IndexedElementArrays => ({
   keyMappings: keyPositions.map(() => 'A'),
   keyPositions,
-  stat: [] as unknown[],
-  graph: [] as unknown[],
-  knob: [] as unknown[],
+  stat: [],
+  graph: [],
+  knob: [],
 });
 
 describe('id 기반 선택 재조정', () => {
-  const a = createDefaultKeyPosition();
-  const b = createDefaultKeyPosition();
+  const a = {
+    ...createDefaultKeyPosition(),
+    id: '11111111-1111-4111-8111-111111111111',
+  };
+  const b = {
+    ...createDefaultKeyPosition(),
+    id: '22222222-2222-4222-8222-222222222222',
+  };
 
   beforeEach(() => {
     useGridSelectionStore.setState({ selectedElements: [] });
@@ -28,9 +36,7 @@ describe('id 기반 선택 재조정', () => {
   it('재정렬되면 선택이 같은 요소를 따라간다 (index 갱신, id 유지)', () => {
     useGridSelectionStore
       .getState()
-      .setSelectedElements([
-        { type: 'key', id: selectionElementId('key', a, 0), index: 0 },
-      ]);
+      .setSelectedElements([{ type: 'key', id: a.id, index: 0 }]);
 
     invalidateSelectionForChangedIndexedElementArrays(
       arraysOf([a, b]),
@@ -44,8 +50,8 @@ describe('id 기반 선택 재조정', () => {
 
   it('요소가 삭제되면 그 선택만 풀린다', () => {
     useGridSelectionStore.getState().setSelectedElements([
-      { type: 'key', id: a.id!, index: 0 },
-      { type: 'key', id: b.id!, index: 1 },
+      { type: 'key', id: a.id, index: 0 },
+      { type: 'key', id: b.id, index: 1 },
     ]);
 
     invalidateSelectionForChangedIndexedElementArrays(
@@ -62,7 +68,7 @@ describe('id 기반 선택 재조정', () => {
   it('변화가 없으면 선택 참조를 보존한다', () => {
     useGridSelectionStore
       .getState()
-      .setSelectedElements([{ type: 'key', id: a.id!, index: 0 }]);
+      .setSelectedElements([{ type: 'key', id: a.id, index: 0 }]);
     const reference = useGridSelectionStore.getState().selectedElements;
 
     invalidateSelectionForChangedIndexedElementArrays(

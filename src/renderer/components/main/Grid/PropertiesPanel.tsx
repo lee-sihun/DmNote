@@ -5,11 +5,6 @@ import React, {
   useRef,
   useSyncExternalStore,
 } from 'react';
-import {
-  graphItemsApi,
-  knobItemsApi,
-  statItemsApi,
-} from '@api/modules/itemsApi';
 import { useTranslation } from '@contexts/useTranslation';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -88,17 +83,16 @@ import type {
   EditorPaintPropertyPatchV1,
   EditorShadowPropertyPatchV1,
   EditorNotePaintPropertyPatchV1,
+  EditorElementPropertyPatchV1,
+  CanonicalKeyPosition,
+  CanonicalKnobItemPosition,
 } from '@src/types/editor';
-import type { SizeCommit } from './PropertiesPanel/types';
 import type {
   PluginSettingSchema,
   PluginMessages,
   PluginDefinitionInternal,
 } from '@src/types/plugin/api';
-import {
-  createDefaultCounterSettings,
-  normalizeCounterSettings,
-} from '@src/types/key/keys';
+import { normalizeCounterSettings } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import { useLenis } from '@hooks/useLenis';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
@@ -116,7 +110,6 @@ import {
   patchActiveImageById,
   patchActiveImageFitById,
   patchActiveTransparentById,
-  patchFontFamilyById,
   patchFontFamilyByTargets,
   patchStylePropertyById,
   patchPaintById,
@@ -136,33 +129,24 @@ import {
   patchCounterStrokeById,
   patchCounterStrokeByTargets,
   patchCounterFillById,
-  patchCounterFillByTargets,
   patchFontColorById,
-  patchFontStyleById,
   patchFontStyleByTargets,
-  patchGraphColorById,
   patchGraphColorsByIds,
   patchGraphPropertiesByIds,
-  patchGraphPropertyById,
-  patchGraphTypeById,
   patchGraphTypesByIds,
   patchKnobPropertiesByIds,
-  patchKnobPropertyById,
   patchNotePropertiesByIds,
-  patchNotePropertyById,
-  patchStatTypeById,
-  patchUseInlineStylesById,
   patchUseInlineStylesByTargets,
+  patchElementPropertyById,
 } from '@src/renderer/editor/runtime/elementOps';
 import type { GeometryField } from '@src/renderer/editor/runtime/elementOps';
 import type {
   BatchGeometryDescriptor,
   BatchGeometryTarget,
 } from '@src/renderer/editor/runtime/elementOps';
-import {
-  isSyntheticElementId,
-  resolveElementById,
-} from '@src/renderer/editor/model/elementIdMap';
+import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
+import { computeBatchGeometryPlan } from '@src/renderer/editor/runtime/batchGeometryPlan';
 
 // 분리된 컴포넌트들 및 훅
 import {
@@ -195,6 +179,7 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
+import { projectNotePaintPatch } from '@src/types/key/notePaint';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -288,116 +273,104 @@ const getKnobRuntimePropertyPatch = (
   return null;
 };
 
-const getUseInlineStylesPatch = (
-  updates: Partial<KeyPosition>,
-): boolean | null => {
+const getUseInlineStylesPatch = (updates: object): boolean | null => {
+  const values = updates as Record<string, unknown>;
   const keys = Object.keys(updates);
   return keys.length === 1 &&
     keys[0] === 'useInlineStyles' &&
-    typeof updates.useInlineStyles === 'boolean'
-    ? updates.useInlineStyles
+    typeof values.useInlineStyles === 'boolean'
+    ? values.useInlineStyles
     : null;
 };
 
 const getFontStylePatch = (
-  updates: Partial<KeyPosition>,
+  updates: object,
 ): EditorFontStylePropertyPatchV1 | null => {
+  const values = updates as Record<string, unknown>;
   const keys = Object.keys(updates);
   if (keys.length !== 1) return null;
   if (
     keys[0] === 'fontWeight' &&
-    Number.isSafeInteger(updates.fontWeight) &&
-    (updates.fontWeight as number) >= 0 &&
-    (updates.fontWeight as number) <= 4_294_967_295
+    Number.isSafeInteger(values.fontWeight) &&
+    (values.fontWeight as number) >= 0 &&
+    (values.fontWeight as number) <= 4_294_967_295
   ) {
-    return { fontWeight: updates.fontWeight as number };
+    return { fontWeight: values.fontWeight as number };
   }
-  if (keys[0] === 'fontItalic' && typeof updates.fontItalic === 'boolean') {
-    return { fontItalic: updates.fontItalic };
+  if (keys[0] === 'fontItalic' && typeof values.fontItalic === 'boolean') {
+    return { fontItalic: values.fontItalic };
   }
   if (
     keys[0] === 'fontUnderline' &&
-    typeof updates.fontUnderline === 'boolean'
+    typeof values.fontUnderline === 'boolean'
   ) {
-    return { fontUnderline: updates.fontUnderline };
+    return { fontUnderline: values.fontUnderline };
   }
   if (
     keys[0] === 'fontStrikethrough' &&
-    typeof updates.fontStrikethrough === 'boolean'
+    typeof values.fontStrikethrough === 'boolean'
   ) {
-    return { fontStrikethrough: updates.fontStrikethrough };
+    return { fontStrikethrough: values.fontStrikethrough };
   }
   return null;
 };
 
-const getFontStylePatchFromProperty = (
-  property: keyof KeyPosition,
-  value: KeyPosition[keyof KeyPosition],
-): EditorFontStylePropertyPatchV1 | null => {
-  return getFontStylePatch({ [property]: value });
-};
-
 const getFontFamilyPatch = (
-  updates: Partial<KeyPosition>,
+  updates: object,
 ): EditorFontFamilyPropertyPatchV1 | null => {
+  const values = updates as Record<string, unknown>;
   const keys = Object.keys(updates);
   return keys.length === 1 &&
     keys[0] === 'fontFamily' &&
-    typeof updates.fontFamily === 'string'
-    ? { fontFamily: updates.fontFamily }
+    typeof values.fontFamily === 'string'
+    ? { fontFamily: values.fontFamily }
     : null;
 };
 
-const getFontFamilyPatchFromProperty = (
-  property: keyof KeyPosition,
-  value: KeyPosition[keyof KeyPosition],
-): EditorFontFamilyPropertyPatchV1 | null => {
-  return getFontFamilyPatch({ [property]: value });
-};
-
 const getNotePropertyPatch = (
-  updates: Partial<KeyPosition>,
+  updates: object,
 ): EditorNotePropertyPatchV1 | null => {
+  const values = updates as Record<string, unknown>;
   const keys = Object.keys(updates);
   if (keys.length !== 1) return null;
   if (
     keys[0] === 'noteEffectEnabled' &&
-    typeof updates.noteEffectEnabled === 'boolean'
+    typeof values.noteEffectEnabled === 'boolean'
   ) {
-    return { noteEffectEnabled: updates.noteEffectEnabled };
+    return { noteEffectEnabled: values.noteEffectEnabled };
   }
   if (
     keys[0] === 'noteAutoYCorrection' &&
-    typeof updates.noteAutoYCorrection === 'boolean'
+    typeof values.noteAutoYCorrection === 'boolean'
   ) {
-    return { noteAutoYCorrection: updates.noteAutoYCorrection };
+    return { noteAutoYCorrection: values.noteAutoYCorrection };
   }
   if (
     keys[0] === 'noteGlowEnabled' &&
-    typeof updates.noteGlowEnabled === 'boolean'
+    typeof values.noteGlowEnabled === 'boolean'
   ) {
-    return { noteGlowEnabled: updates.noteGlowEnabled };
+    return { noteGlowEnabled: values.noteGlowEnabled };
   }
   if (
     keys[0] === 'noteAlignment' &&
-    ['left', 'center', 'right'].includes(updates.noteAlignment as string)
+    ['left', 'center', 'right'].includes(values.noteAlignment as string)
   ) {
-    return { noteAlignment: updates.noteAlignment! };
+    return {
+      noteAlignment: values.noteAlignment as 'left' | 'center' | 'right',
+    };
   }
   if (
     keys[0] === 'noteBorderSide' &&
-    ['all', 'vertical', 'horizontal'].includes(updates.noteBorderSide as string)
+    ['all', 'vertical', 'horizontal'].includes(values.noteBorderSide as string)
   ) {
-    return { noteBorderSide: updates.noteBorderSide! };
+    return {
+      noteBorderSide: values.noteBorderSide as
+        | 'all'
+        | 'vertical'
+        | 'horizontal',
+    };
   }
   return null;
-};
-
-const getNotePropertyPatchFromProperty = (
-  property: keyof KeyPosition,
-  value: KeyPosition[keyof KeyPosition],
-): EditorNotePropertyPatchV1 | null => {
-  return getNotePropertyPatch({ [property]: value });
 };
 
 // ============================================================================
@@ -405,16 +378,6 @@ const getNotePropertyPatchFromProperty = (
 // ============================================================================
 
 interface PropertiesPanelProps {
-  onPositionChange: (index: number, dx: number, dy: number) => void;
-  onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
-  onKeyBatchUpdate?: (
-    updates: Array<{ index: number } & Partial<KeyPosition>>,
-    options?: { deferSave?: boolean },
-  ) => void;
-  onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
-  onKeyBatchPreview?: (
-    updates: Array<{ index: number } & Partial<KeyPosition>>,
-  ) => void;
   onKeyMappingChange?: (index: number, newKey: string) => void;
   // 분리 창 전환 액션 - 메인은 detach, 분리 창은 reattach
   detachAction?: 'detach' | 'reattach';
@@ -430,15 +393,10 @@ interface PropertiesPanelProps {
 // ============================================================================
 
 const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
-  onPositionChange,
-  onKeyUpdate,
   detachAction,
   onDetachAction,
   frameVariant = 'inline',
   selectionSyncReady = true,
-  onKeyBatchUpdate,
-  onKeyPreview,
-  onKeyBatchPreview,
   onKeyMappingChange,
 }) => {
   const { t, i18n } = useTranslation();
@@ -538,7 +496,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const stableBatchGeometryTargets: BatchGeometryTarget[] | null =
     selectedBatchStyleElements.length > 0 &&
     selectedBatchStyleElements.every(
-      (element) => element.id.length > 0 && !isSyntheticElementId(element.id),
+      (element) => element.id.length > 0 && isNativeElementId(element.id),
     )
       ? selectedBatchStyleElements.map((element) => ({
           type: element.type as EditorElementTypeV1,
@@ -604,14 +562,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   })();
 
   // 단일 키 선택인 경우의 데이터
-  const singleKeyIndex =
-    selectedKeyElements.length === 1 ? selectedKeyElements[0].index : null;
+  const singleKeyId =
+    selectedKeyElements.length === 1 ? selectedKeyElements[0].id : null;
+  const singleKeyIndex = singleKeyId
+    ? (positions[selectedKeyType] ?? []).findIndex(
+        (position) => position.id === singleKeyId,
+      )
+    : -1;
   const singleKeyPosition =
-    singleKeyIndex !== null
-      ? positions[selectedKeyType]?.[singleKeyIndex]
-      : null;
+    singleKeyIndex >= 0 ? positions[selectedKeyType]?.[singleKeyIndex] : null;
   const singleKeySlot =
-    singleKeyIndex !== null
+    singleKeyIndex >= 0
       ? keyMappings[selectedKeyType]?.[singleKeyIndex] ?? null
       : null;
   const singleKeyCode =
@@ -628,22 +589,37 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       : null;
 
   // 단일 통계 요소 선택인 경우의 데이터
-  const singleStatIndex =
-    selectedStatElements.length === 1 ? selectedStatElements[0].index : null;
+  const singleStatId =
+    selectedStatElements.length === 1 ? selectedStatElements[0].id : null;
+  const singleStatIndex = singleStatId
+    ? (statItemPositions[selectedKeyType] ?? []).findIndex(
+        (position) => position.id === singleStatId,
+      )
+    : -1;
   const singleStatPosition: StatItemPosition | null =
-    singleStatIndex !== null
+    singleStatIndex >= 0
       ? statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null
       : null;
-  const singleGraphIndex =
-    selectedGraphElements.length === 1 ? selectedGraphElements[0].index : null;
+  const singleGraphId =
+    selectedGraphElements.length === 1 ? selectedGraphElements[0].id : null;
+  const singleGraphIndex = singleGraphId
+    ? (graphItemPositions[selectedKeyType] ?? []).findIndex(
+        (position) => position.id === singleGraphId,
+      )
+    : -1;
   const singleGraphPosition: GraphItemPosition | null =
-    singleGraphIndex !== null
+    singleGraphIndex >= 0
       ? graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null
       : null;
-  const singleKnobIndex =
-    selectedKnobElements.length === 1 ? selectedKnobElements[0].index : null;
+  const singleKnobId =
+    selectedKnobElements.length === 1 ? selectedKnobElements[0].id : null;
+  const singleKnobIndex = singleKnobId
+    ? (knobItemPositions[selectedKeyType] ?? []).findIndex(
+        (position) => position.id === singleKnobId,
+      )
+    : -1;
   const singleKnobPosition: KnobItemPosition | null =
-    singleKnobIndex != null
+    singleKnobIndex >= 0
       ? knobItemPositions[selectedKeyType]?.[singleKnobIndex] ?? null
       : null;
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
@@ -662,17 +638,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     for (const element of selectedElements) {
       let currentGroupId: string | undefined;
-      if (element.type === 'key' && typeof element.index === 'number') {
-        currentGroupId = keyModePositions[element.index]?.groupId;
-      } else if (element.type === 'stat' && typeof element.index === 'number') {
-        currentGroupId = statModePositions[element.index]?.groupId;
-      } else if (
-        element.type === 'graph' &&
-        typeof element.index === 'number'
-      ) {
-        currentGroupId = graphModePositions[element.index]?.groupId;
-      } else if (element.type === 'knob' && typeof element.index === 'number') {
-        currentGroupId = knobModePositions[element.index]?.groupId;
+      if (element.type === 'key') {
+        currentGroupId = keyModePositions.find(
+          (position) => position.id === element.id,
+        )?.groupId;
+      } else if (element.type === 'stat') {
+        currentGroupId = statModePositions.find(
+          (position) => position.id === element.id,
+        )?.groupId;
+      } else if (element.type === 'graph') {
+        currentGroupId = graphModePositions.find(
+          (position) => position.id === element.id,
+        )?.groupId;
+      } else if (element.type === 'knob') {
+        currentGroupId = knobModePositions.find(
+          (position) => position.id === element.id,
+        )?.groupId;
       } else {
         return null;
       }
@@ -999,7 +980,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       selectedElement && selectedElement.type !== 'plugin'
         ? { elementType: selectedElement.type, id: selectedElement.id }
         : null;
-    if (stableTarget && !isSyntheticElementId(stableTarget.id)) {
+    if (stableTarget && isNativeElementId(stableTarget.id)) {
       const target = {
         ...stableTarget,
         patch: { layerName: newLayerName },
@@ -1016,67 +997,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       } catch (error) {
         console.error('Failed to rename layer', error);
-      }
-      return;
-    }
-
-    const legacyLayerName = newLayerName ?? undefined;
-
-    if (singleKeyIndex !== null && singleKeyPosition) {
-      onKeyUpdate({
-        index: singleKeyIndex,
-        layerName: legacyLayerName,
-      } as Partial<KeyPosition> & { index: number });
-    } else if (singleStatIndex !== null && singleStatPosition) {
-      const mode = selectedKeyType;
-      const current = useStatItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list[singleStatIndex]) {
-        const nextList = list.map((pos, i) =>
-          i === singleStatIndex ? { ...pos, layerName: legacyLayerName } : pos,
-        );
-        const nextPositions = { ...current, [mode]: nextList };
-        useStatItemStore.getState().setLocalUpdateInProgress(true);
-        useStatItemStore.getState().setPositions(nextPositions);
-        try {
-          await statItemsApi.updatePositions(nextPositions);
-        } finally {
-          useStatItemStore.getState().setLocalUpdateInProgress(false);
-        }
-      }
-    } else if (singleGraphIndex !== null && singleGraphPosition) {
-      const mode = selectedKeyType;
-      const current = useGraphItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list[singleGraphIndex]) {
-        const nextList = list.map((pos, i) =>
-          i === singleGraphIndex ? { ...pos, layerName: legacyLayerName } : pos,
-        );
-        const nextPositions = { ...current, [mode]: nextList };
-        useGraphItemStore.getState().setLocalUpdateInProgress(true);
-        useGraphItemStore.getState().setPositions(nextPositions);
-        try {
-          await graphItemsApi.updatePositions(nextPositions);
-        } finally {
-          useGraphItemStore.getState().setLocalUpdateInProgress(false);
-        }
-      }
-    } else if (singleKnobIndex !== null && singleKnobPosition) {
-      const mode = selectedKeyType;
-      const current = useKnobItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list[singleKnobIndex]) {
-        const nextList = list.map((pos, i) =>
-          i === singleKnobIndex ? { ...pos, layerName: legacyLayerName } : pos,
-        );
-        const nextPositions = { ...current, [mode]: nextList };
-        useKnobItemStore.getState().setLocalUpdateInProgress(true);
-        useKnobItemStore.getState().setPositions(nextPositions);
-        try {
-          await knobItemsApi.updatePositions(nextPositions);
-        } finally {
-          useKnobItemStore.getState().setLocalUpdateInProgress(false);
-        }
       }
     }
   };
@@ -1517,551 +1437,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleTogglePanel();
   });
 
-  const handleStatUpdate = (
-    data: Partial<StatItemPosition> & { index: number },
-  ) => {
-    const { index, ...updates } = data;
-    const updateKeys = Object.keys(updates);
-    const statType = updates.statType;
-    const fontStylePatch = getFontStylePatch(updates);
-    const fontFamilyPatch = getFontFamilyPatch(updates);
-    const useInlineStyles = getUseInlineStylesPatch(updates);
-    const selectedStat =
-      selectedStatElements.length === 1 ? selectedStatElements[0] : null;
-    if (
-      updateKeys.length === 1 &&
-      updateKeys[0] === 'statType' &&
-      statType !== undefined &&
-      ['kps', 'kpsAvg', 'kpsMax', 'total'].includes(statType) &&
-      selectedStat &&
-      selectedStat.id.length > 0 &&
-      !isSyntheticElementId(selectedStat.id)
-    ) {
-      const patch = { statType };
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'stat',
-              id: selectedStat.id,
-              patch,
-            })
-          : patchStatTypeById(selectedStat.id, patch);
-      void commit.catch((error) => {
-        console.error('Failed to update stat type', error);
-      });
-      return;
-    }
-    if (
-      fontStylePatch &&
-      selectedStat &&
-      selectedStat.id.length > 0 &&
-      !isSyntheticElementId(selectedStat.id)
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'stat',
-              id: selectedStat.id,
-              patch: fontStylePatch,
-            })
-          : patchFontStyleById('stat', selectedStat.id, fontStylePatch);
-      void commit.catch((error) => {
-        console.error('Failed to update stat font style', error);
-      });
-      return;
-    }
-    if (
-      fontFamilyPatch &&
-      selectedStat &&
-      selectedStat.id.length > 0 &&
-      !isSyntheticElementId(selectedStat.id)
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'stat',
-              id: selectedStat.id,
-              patch: fontFamilyPatch,
-            })
-          : patchFontFamilyById(
-              'stat',
-              selectedStat.id,
-              fontFamilyPatch.fontFamily,
-            );
-      void commit.catch((error) => {
-        console.error('Failed to update stat font family', error);
-      });
-      return;
-    }
-    if (
-      useInlineStyles !== null &&
-      selectedStat &&
-      selectedStat.id.length > 0 &&
-      !isSyntheticElementId(selectedStat.id)
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'stat',
-              id: selectedStat.id,
-              patch: { useInlineStyles },
-            })
-          : patchUseInlineStylesById('stat', selectedStat.id, useInlineStyles);
-      void commit.catch((error) => {
-        console.error('Failed to update stat inline style priority', error);
-      });
-      return;
-    }
-    const mode = selectedKeyType;
-    const current = useStatItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setPositions(nextPositions);
-    const persisted = statItemsApi.updatePositions(nextPositions);
-    editGestureController.settleCommit(persisted);
-    void persisted
-      .catch((error) => {
-        console.error('Failed to update stat item', error);
-      })
-      .finally(() => {
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
-
-  const handleStatPreview = (
-    index: number,
-    updates: Partial<StatItemPosition>,
-  ) => {
-    const mode = selectedKeyType;
-    const current = useStatItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
-
-    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
-      domain: 'statPosition',
-    });
-  };
-
-  const handleStatBatchPreview = (
-    updates: Array<{ index: number } & Partial<StatItemPosition>>,
-  ) => {
-    if (updates.length === 0) return;
-
-    const mode = selectedKeyType;
-    const current = useStatItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
-
-    const entries = updates.flatMap(({ index, ...patch }) =>
-      list[index] ? [{ index, patch: { ...patch } }] : [],
-    );
-    editGestureController.preview(mode, entries, {
-      domain: 'statPosition',
-    });
-  };
-
-  const handleStatBatchUpdate = (
-    updates: Array<{ index: number } & Partial<StatItemPosition>>,
-    options?: { deferSave?: boolean },
-  ) => {
-    if (updates.length === 0) return;
-
-    const mode = selectedKeyType;
-    const current = useStatItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
-
-    const updateMap = new Map<number, Partial<StatItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
-    });
-    const nextPositions = { ...current, [mode]: nextList };
-
-    if (options?.deferSave) {
-      useStatItemStore.getState().setPositions(nextPositions);
-      return;
-    }
-
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setPositions(nextPositions);
-    statItemsApi
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to batch update stat items', error);
-      })
-      .finally(() => {
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
-
-  const handleGraphUpdate = (
-    data: Partial<GraphItemPosition> & { index: number },
-  ) => {
-    const { index, ...updates } = data;
-    const updateKeys = Object.keys(updates);
-    const graphType = updates.graphType;
-    const graphColor = updates.graphColor;
-    const runtimePatch = getGraphRuntimePropertyPatch(updates);
-    const useInlineStyles = getUseInlineStylesPatch(updates);
-    const selectedGraph =
-      selectedGraphElements.length === 1 ? selectedGraphElements[0] : null;
-    if (
-      updateKeys.length === 1 &&
-      updateKeys[0] === 'graphType' &&
-      (graphType === 'line' || graphType === 'bar') &&
-      selectedGraph &&
-      selectedGraph.id.length > 0 &&
-      !isSyntheticElementId(selectedGraph.id)
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'graph',
-              id: selectedGraph.id,
-              patch: { graphType },
-            })
-          : patchGraphTypeById(selectedGraph.id, graphType);
-      void commit.catch((error) => {
-        console.error('Failed to update graph type', error);
-      });
-      return;
-    }
-    if (
-      useInlineStyles !== null &&
-      selectedGraph &&
-      selectedGraph.id.length > 0 &&
-      !isSyntheticElementId(selectedGraph.id)
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'graph',
-              id: selectedGraph.id,
-              patch: { useInlineStyles },
-            })
-          : patchUseInlineStylesById(
-              'graph',
-              selectedGraph.id,
-              useInlineStyles,
-            );
-      void commit.catch((error) => {
-        console.error('Failed to update graph inline style priority', error);
-      });
-      return;
-    }
-    if (
-      runtimePatch &&
-      selectedGraph &&
-      selectedGraph.id.length > 0 &&
-      !isSyntheticElementId(selectedGraph.id)
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'graph',
-              id: selectedGraph.id,
-              patch: runtimePatch,
-            })
-          : patchGraphPropertyById(selectedGraph.id, runtimePatch);
-      void commit.catch((error) => {
-        console.error('Failed to update graph property', error);
-      });
-      return;
-    }
-    if (
-      updateKeys.length === 1 &&
-      updateKeys[0] === 'graphColor' &&
-      typeof graphColor === 'string' &&
-      selectedGraph &&
-      selectedGraph.id.length > 0 &&
-      !isSyntheticElementId(selectedGraph.id)
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'graph',
-              id: selectedGraph.id,
-              patch: { graphColor },
-            })
-          : patchGraphColorById(selectedGraph.id, graphColor);
-      void commit.catch((error) => {
-        console.error('Failed to update graph color', error);
-      });
-      return;
-    }
-    const mode = selectedKeyType;
-    const current = useGraphItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setPositions(nextPositions);
-    graphItemsApi
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to update graph item', error);
-      })
-      .finally(() => {
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
-
-  const handleKnobUpdate = (
-    data: Partial<KnobItemPosition> & { index: number },
-  ) => {
-    const { index, ...updates } = data;
-    const runtimePatch = getKnobRuntimePropertyPatch(updates);
-    const useInlineStyles = getUseInlineStylesPatch(updates);
-    const selectedKnob =
-      selectedKnobElements.length === 1 ? selectedKnobElements[0] : null;
-    if (
-      runtimePatch &&
-      selectedKnob &&
-      selectedKnob.id.length > 0 &&
-      !isSyntheticElementId(selectedKnob.id)
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'knob',
-              id: selectedKnob.id,
-              patch: runtimePatch,
-            })
-          : patchKnobPropertyById(selectedKnob.id, runtimePatch);
-      void commit.catch((error) => {
-        console.error('Failed to update knob property', error);
-      });
-      return;
-    }
-    if (
-      useInlineStyles !== null &&
-      selectedKnob &&
-      selectedKnob.id.length > 0 &&
-      !isSyntheticElementId(selectedKnob.id)
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'knob',
-              id: selectedKnob.id,
-              patch: { useInlineStyles },
-            })
-          : patchUseInlineStylesById('knob', selectedKnob.id, useInlineStyles);
-      void commit.catch((error) => {
-        console.error('Failed to update knob inline style priority', error);
-      });
-      return;
-    }
-    const mode = selectedKeyType;
-    const current = useKnobItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
-
-    const nextList = list.map((pos, i) =>
-      i === index ? ({ ...pos, ...updates } as KnobItemPosition) : pos,
-    );
-    const nextPositions = { ...current, [mode]: nextList };
-
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setPositions(nextPositions);
-    knobItemsApi
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to update knob item', error);
-      })
-      .finally(() => {
-        useKnobItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
-
-  const handleKnobPreview = (
-    index: number,
-    updates: Partial<KnobItemPosition>,
-  ) => {
-    const mode = selectedKeyType;
-    const current = useKnobItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
-
-    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
-      domain: 'knobPosition',
-    });
-  };
-
-  const handleKnobBatchPreview = (
-    updates: Array<{ index: number } & Partial<KnobItemPosition>>,
-  ) => {
-    if (updates.length === 0) return;
-
-    const mode = selectedKeyType;
-    const current = useKnobItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
-
-    const entries = updates.flatMap(({ index, ...patch }) =>
-      list[index] ? [{ index, patch: { ...patch } }] : [],
-    );
-    editGestureController.preview(mode, entries, {
-      domain: 'knobPosition',
-    });
-  };
-
   const handleKnobBatchUpdate = (
     updates: Array<{ index: number } & Partial<KnobItemPosition>>,
-    options?: { deferSave?: boolean },
+    _options?: { deferSave?: boolean },
   ) => {
-    if (updates.length === 0) return;
-
-    const mode = selectedKeyType;
-    const current = useKnobItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
-
-    const updateMap = new Map<number, Partial<KnobItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as KnobItemPosition) : pos;
-    });
-    const nextPositions = { ...current, [mode]: nextList };
-
-    if (options?.deferSave) {
-      useKnobItemStore.getState().setPositions(nextPositions);
-      return;
-    }
-
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setPositions(nextPositions);
-    knobItemsApi
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to batch update knob items', error);
-      })
-      .finally(() => {
-        useKnobItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
-
-  const handleGraphPreview = (
-    index: number,
-    updates: Partial<GraphItemPosition>,
-  ) => {
-    const mode = selectedKeyType;
-    const current = useGraphItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (!list[index]) return;
-
-    editGestureController.preview(mode, [{ index, patch: { ...updates } }], {
-      domain: 'graphPosition',
-    });
-  };
-
-  const handleGraphBatchPreview = (
-    updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-  ) => {
-    if (updates.length === 0) return;
-
-    const mode = selectedKeyType;
-    const current = useGraphItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
-
-    const entries = updates.flatMap(({ index, ...patch }) =>
-      list[index] ? [{ index, patch: { ...patch } }] : [],
-    );
-    editGestureController.preview(mode, entries, {
-      domain: 'graphPosition',
-    });
+    void updates;
   };
 
   const handleGraphBatchUpdate = (
     updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-    options?: { deferSave?: boolean },
+    _options?: { deferSave?: boolean },
   ) => {
-    if (updates.length === 0) return;
-
-    const mode = selectedKeyType;
-    const current = useGraphItemStore.getState().positions;
-    const list = current[mode] || [];
-    if (list.length === 0) return;
-
-    const updateMap = new Map<number, Partial<GraphItemPosition>>();
-    for (const { index, ...rest } of updates) {
-      if (list[index]) {
-        updateMap.set(index, rest);
-      }
-    }
-    if (updateMap.size === 0) return;
-
-    const nextList = list.map((pos, i) => {
-      const update = updateMap.get(i);
-      return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
-    });
-    const nextPositions = { ...current, [mode]: nextList };
-
-    if (options?.deferSave) {
-      useGraphItemStore.getState().setPositions(nextPositions);
-      return;
-    }
-
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setPositions(nextPositions);
-    graphItemsApi
-      .updatePositions(nextPositions)
-      .catch((error) => {
-        console.error('Failed to batch update graph items', error);
-      })
-      .finally(() => {
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      });
-  };
-
-  // 크기 변경 완료 (blur 시 저장).
-  // 방금 확정된 값은 입력에서 직접 받는다. onChange가 예약한 localState는
-  // 같은 blur 이벤트 안에서 아직 이전 값이라 밀린 스텝이 유실된다
-  const handleSizeBlur = (committed?: SizeCommit) => {
-    if (singleKeyIndex === null && singleStatIndex === null) return;
-    const width = committed?.width ?? localState.width;
-    const height = committed?.height ?? localState.height;
-    const updates: Partial<KeyPosition> = {};
-    if (width !== undefined) updates.width = width;
-    if (height !== undefined) updates.height = height;
-    if (Object.keys(updates).length > 0) {
-      if (singleKeyIndex !== null) {
-        onKeyUpdate({ index: singleKeyIndex, ...updates });
-      } else if (singleStatIndex !== null) {
-        handleStatUpdate({
-          index: singleStatIndex,
-          ...(updates as Partial<StatItemPosition>),
-        });
-      }
-    }
+    void updates;
   };
 
   const commitSingleGeometry = (
@@ -2094,16 +1481,61 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: EditorElementTypeV1,
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (field: GeometryField, value: number) =>
           commitSingleGeometry(type, id, field, value)
+      : undefined;
+
+  const stableGeometryPreviewHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (field: GeometryField, value: number) => {
+          const locator = resolveElementById(type, id);
+          if (!locator) return;
+          editGestureController.preview(
+            locator.mode,
+            [{ index: locator.index, patch: geometryAxisPatch(field, value) }],
+            {
+              domain:
+                type === 'key'
+                  ? 'keyPosition'
+                  : type === 'stat'
+                  ? 'statPosition'
+                  : type === 'graph'
+                  ? 'graphPosition'
+                  : 'knobPosition',
+            },
+          );
+        }
+      : undefined;
+
+  const stableElementPropertyCommitHandler = (
+    type: EditorElementTypeV1,
+    id: string | undefined,
+  ) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorElementPropertyPatchV1) => {
+          const persisted =
+            window.__dmn_window_type === 'panel'
+              ? patchNativeLayerPropertyViaAuthority({
+                  elementType: type,
+                  id,
+                  patch,
+                })
+              : patchElementPropertyById(type, id, patch);
+          void persisted.catch((error) => {
+            console.error('Failed to update element property', error);
+          });
+        }
       : undefined;
 
   const stableInactiveImageHandler = (
     type: EditorElementTypeV1,
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (inactiveImage: string) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2123,7 +1555,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: 'key' | 'knob',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (activeImage: string) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2143,7 +1575,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: EditorElementTypeV1,
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (idleTransparent: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2163,7 +1595,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: 'key' | 'knob',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (activeTransparent: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2183,7 +1615,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: EditorElementTypeV1,
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (idleImageFit: ImageFit) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2203,7 +1635,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: 'key' | 'knob',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (activeImageFit: ImageFit) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2220,7 +1652,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       : undefined;
 
   const stableSoundPathHandler = (id: string | undefined) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (soundPath: string) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2233,7 +1665,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       : undefined;
 
   const stableSoundEnabledHandler = (id: string | undefined) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (soundEnabled: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2246,7 +1678,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       : undefined;
 
   const stableSoundVolumeHandler = (id: string | undefined) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (soundVolume: number) => {
           const gestureId =
             editGestureController.activeGestureId() ?? undefined;
@@ -2265,7 +1697,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: EditorElementTypeV1,
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorPreviewStylePropertyPatchV1) => {
           const locator = resolveElementById(type, id);
           if (!locator) return;
@@ -2291,7 +1723,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     id: string | undefined,
     options: { settleGesture?: boolean } = {},
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorPreviewStylePropertyPatchV1) => {
           const gestureId = options.settleGesture
             ? editGestureController.activeGestureId() ?? undefined
@@ -2317,7 +1749,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: EditorElementTypeV1,
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorPaintPropertyPatchV1) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2333,7 +1765,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: 'key' | 'stat',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorFontColorPropertyPatchV1) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2349,7 +1781,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     type: 'key' | 'stat' | 'knob',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorShadowPropertyPatchV1) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2362,7 +1794,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       : undefined;
 
   const stableNotePaintCommitHandler = (id: string | undefined) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorNotePaintPropertyPatchV1) => {
           const gestureId =
             editGestureController.activeGestureId() ?? undefined;
@@ -2377,11 +1809,24 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       : undefined;
 
+  const stableNotePaintPreviewHandler = (id: string | undefined) =>
+    id && isNativeElementId(id)
+      ? (patch: EditorNotePaintPropertyPatchV1) => {
+          const locator = resolveElementById('key', id);
+          if (!locator) return;
+          editGestureController.preview(
+            locator.mode,
+            [{ index: locator.index, patch: projectNotePaintPatch(patch) }],
+            { domain: 'keyPosition' },
+          );
+        }
+      : undefined;
+
   const stableCounterAnimationPresetHandler = (
     elementType: 'key' | 'stat',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (intent: EditorCounterAnimationPresetIntentV1) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2400,7 +1845,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     elementType: 'key' | 'stat',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (enabled: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2416,7 +1861,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     elementType: 'key' | 'stat',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (enabled: boolean) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2435,7 +1880,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     elementType: 'key' | 'stat',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorCounterLayoutPropertyPatchV1) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2451,7 +1896,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     elementType: 'key' | 'stat',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorCounterTypographyPropertyPatchV1) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2467,7 +1912,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     elementType: 'key' | 'stat',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorCounterStrokePropertyPatchV1) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2483,7 +1928,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     elementType: 'key' | 'stat',
     id: string | undefined,
   ) =>
-    id && !isSyntheticElementId(id)
+    id && isNativeElementId(id)
       ? (patch: EditorCounterFillPropertyPatchV1) => {
           const persisted =
             window.__dmn_window_type === 'panel'
@@ -2502,8 +1947,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const getSelectedKeysData = () => {
     return selectedKeyLikeElements
       .map((el) => {
-        const index = el.index!;
         if (el.type === 'key') {
+          const index = (positions[selectedKeyType] ?? []).findIndex(
+            (position) => position.id === el.id,
+          );
+          if (index < 0) return null;
           const position = positions[selectedKeyType]?.[index];
           const slot = keyMappings[selectedKeyType]?.[index] ?? null;
           const keyCode = slot != null ? slotCanonical(slot) : null;
@@ -2519,6 +1967,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               : null;
           return { index, position, keyCode, keyInfo };
         }
+        const index = (statItemPositions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return null;
         const position = statItemPositions[selectedKeyType]?.[index];
         const statLabel =
           (position?.displayText || '').trim() ||
@@ -2526,13 +1978,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const keyInfo = { globalKey: statLabel, displayName: statLabel };
         return { index, position, keyCode: null, keyInfo };
       })
-      .filter((data) => data.position !== undefined);
+      .filter(
+        (data): data is NonNullable<typeof data> =>
+          data !== null && data.position !== undefined,
+      );
   };
 
   const getSelectedGraphsData = () => {
     return selectedGraphElements
       .map((el) => {
-        const index = el.index!;
+        const index = (graphItemPositions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return null;
         const position = graphItemPositions[selectedKeyType]?.[index];
         const graphLabel = `${getStatTypeLabel(
           position?.statType ?? null,
@@ -2540,26 +1998,38 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
         return { index, position, keyCode: null, keyInfo };
       })
-      .filter((data) => data.position !== undefined);
+      .filter(
+        (data): data is NonNullable<typeof data> =>
+          data !== null && data.position !== undefined,
+      );
   };
 
   const getSelectedKnobsData = () => {
     return selectedKnobElements
       .map((el) => {
-        const index = el.index!;
+        const index = (knobItemPositions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return null;
         const position = knobItemPositions[selectedKeyType]?.[index];
         const knobLabel = (position?.displayText || '').trim() || 'Knob';
         const keyInfo = { globalKey: knobLabel, displayName: knobLabel };
         return { index, position, keyCode: null, keyInfo };
       })
-      .filter((data) => data.position !== undefined);
+      .filter(
+        (data): data is NonNullable<typeof data> =>
+          data !== null && data.position !== undefined,
+      );
   };
 
   const getSelectedBatchStyleData = () => {
     return selectedBatchStyleElements
       .map((el) => {
-        const index = el.index!;
         if (el.type === 'key') {
+          const index = (positions[selectedKeyType] ?? []).findIndex(
+            (position) => position.id === el.id,
+          );
+          if (index < 0) return null;
           const position = positions[selectedKeyType]?.[index];
           const slot = keyMappings[selectedKeyType]?.[index] ?? null;
           const keyCode = slot != null ? slotCanonical(slot) : null;
@@ -2576,6 +2046,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           return { index, position, keyCode, keyInfo };
         }
         if (el.type === 'stat') {
+          const index = (statItemPositions[selectedKeyType] ?? []).findIndex(
+            (position) => position.id === el.id,
+          );
+          if (index < 0) return null;
           const position = statItemPositions[selectedKeyType]?.[index];
           const statLabel =
             (position?.displayText || '').trim() ||
@@ -2584,11 +2058,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           return { index, position, keyCode: null, keyInfo };
         }
         if (el.type === 'knob') {
+          const index = (knobItemPositions[selectedKeyType] ?? []).findIndex(
+            (position) => position.id === el.id,
+          );
+          if (index < 0) return null;
           const position = knobItemPositions[selectedKeyType]?.[index];
           const knobLabel = (position?.displayText || '').trim() || 'Knob';
           const keyInfo = { globalKey: knobLabel, displayName: knobLabel };
           return { index, position, keyCode: null, keyInfo };
         }
+        const index = (graphItemPositions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
+        if (index < 0) return null;
         const position = graphItemPositions[selectedKeyType]?.[index];
         const graphLabel = `${getStatTypeLabel(
           position?.statType ?? null,
@@ -2596,7 +2078,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
         return { index, position, keyCode: null, keyInfo };
       })
-      .filter((data) => data.position !== undefined);
+      .filter(
+        (data): data is NonNullable<typeof data> =>
+          data !== null && data.position !== undefined,
+      );
   };
 
   const getMixedValue = <T,>(
@@ -2695,12 +2180,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // ============================================================================
 
   const {
-    handleBatchStyleChange,
-    handleBatchStyleChangeComplete: handleLegacyBatchStyleChangeComplete,
-    handleBatchShadowChangeComplete,
-    handleBatchShadowEnabledChange,
-    handleKeyOnlyStyleChangeComplete,
-    handleActiveCapableStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
     handleBatchSpacing,
@@ -2708,12 +2187,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchSpacingCommit,
     getBatchSpacingValue,
     handleBatchResize,
-    handleBatchCounterUpdate,
-    handleBatchNoteColorChange,
-    handleBatchNoteColorChangeComplete,
-    handleBatchGlowColorChange,
-    handleBatchGlowColorChangeComplete,
-    handleBatchGradientCommit,
+    handleBatchResizePreview,
   } = useBatchHandlers({
     selectedKeyLikeElements: selectedBatchStyleElements as {
       type: 'key' | 'stat' | 'graph' | 'knob';
@@ -2724,37 +2198,58 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     statPositions: statItemPositions,
     graphPositions: graphItemPositions,
     selectedKeyType,
-    onKeyUpdate,
-    onKeyBatchUpdate,
-    onKeyPreview,
-    onKeyBatchPreview,
-    onStatUpdate: handleStatUpdate,
-    onStatBatchUpdate: handleStatBatchUpdate,
-    onStatPreview: handleStatPreview,
-    onStatBatchPreview: handleStatBatchPreview,
-    onGraphUpdate: handleGraphUpdate,
-    onGraphBatchUpdate: handleGraphBatchUpdate,
-    onGraphPreview: handleGraphPreview,
-    onGraphBatchPreview: handleGraphBatchPreview,
     knobPositions: knobItemPositions,
-    onKnobUpdate: handleKnobUpdate,
-    onKnobBatchUpdate: handleKnobBatchUpdate,
-    onKnobPreview: handleKnobPreview,
-    onKnobBatchPreview: handleKnobBatchPreview,
-    stableGeometryEnabled: stableBatchGeometryTargets !== null,
     onStableGeometryPreview: (operation) => {
-      if (!stableBatchGeometryTargets || operation.kind !== 'resize') return;
-      const byType = new Map<
-        EditorElementTypeV1,
-        Array<{ index: number; patch: Record<string, unknown> }>
+      if (!stableBatchGeometryTargets) return;
+      const targetsByKey = new Map<
+        string,
+        {
+          type: EditorElementTypeV1;
+          locator: { index: number };
+          position: KeyPosition;
+        }
       >();
       for (const target of stableBatchGeometryTargets) {
         const locator = resolveElementById(target.type, target.id);
         if (!locator || locator.mode !== selectedKeyType) return;
+        const record =
+          target.type === 'key'
+            ? positions
+            : target.type === 'stat'
+            ? statItemPositions
+            : target.type === 'graph'
+            ? graphItemPositions
+            : knobItemPositions;
+        const position = record[selectedKeyType]?.[locator.index];
+        if (!position || position.id !== target.id) return;
+        targetsByKey.set(`${target.type}:${target.id}`, {
+          type: target.type,
+          locator,
+          position,
+        });
+      }
+      const plan = computeBatchGeometryPlan(
+        [...targetsByKey].map(([key, { position }]) => ({
+          key,
+          x: position.dx,
+          y: position.dy,
+          width: position.width,
+          height: position.height,
+        })),
+        operation,
+      );
+      if (!plan) return;
+      const byType = new Map<
+        EditorElementTypeV1,
+        Array<{ index: number; patch: Record<string, unknown> }>
+      >();
+      for (const update of plan.updates) {
+        const target = targetsByKey.get(update.key);
+        if (!target) return;
         const entries = byType.get(target.type) ?? [];
         entries.push({
-          index: locator.index,
-          patch: { [operation.dimension]: operation.value },
+          index: target.locator.index,
+          patch: update.patch,
         });
         byType.set(target.type, entries);
       }
@@ -2798,33 +2293,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     },
   });
 
-  const handleBatchStyleChangeComplete = (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
+  const handleBatchElementPropertyCommit = (
+    patch: EditorElementPropertyPatchV1,
   ) => {
-    const fontStylePatch = getFontStylePatchFromProperty(property, value);
-    const fontFamilyPatch = getFontFamilyPatchFromProperty(property, value);
-    const useInlineStyles =
-      property === 'useInlineStyles' && typeof value === 'boolean'
-        ? value
-        : null;
-    if (!fontStylePatch && !fontFamilyPatch && useInlineStyles === null) {
-      handleLegacyBatchStyleChangeComplete(property, value);
-      return;
-    }
+    const fontStylePatch = getFontStylePatch(patch);
+    const fontFamilyPatch = getFontFamilyPatch(patch);
+    const useInlineStyles = getUseInlineStylesPatch(patch);
+    if (!fontStylePatch && !fontFamilyPatch && useInlineStyles === null) return;
     const targets = selectedBatchStyleElements.map((element) => ({
       elementType: element.type as EditorElementTypeV1,
       id: element.id,
     }));
     if (
       targets.length === 0 ||
-      targets.some(
-        (target) => target.id.length === 0 || isSyntheticElementId(target.id),
-      )
-    ) {
-      handleLegacyBatchStyleChangeComplete(property, value);
+      targets.some((target) => !isNativeElementId(target.id))
+    )
       return;
-    }
     const commit =
       fontStylePatch !== null
         ? window.__dmn_window_type === 'panel'
@@ -2842,66 +2326,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     });
   };
 
-  const handleKeyUpdateForPanel = (
-    data: Partial<KeyPosition> & { index: number },
+  const handleBatchNoteElementPropertyCommit = (
+    patch: EditorElementPropertyPatchV1,
   ) => {
-    const { index: _index, ...updates } = data;
-    const fontStylePatch = getFontStylePatch(updates);
-    const fontFamilyPatch = getFontFamilyPatch(updates);
-    const notePropertyPatch = getNotePropertyPatch(updates);
-    const useInlineStyles = getUseInlineStylesPatch(updates);
-    const selectedKey =
-      selectedKeyElements.length === 1 ? selectedKeyElements[0] : null;
-    if (
-      (!fontStylePatch &&
-        !fontFamilyPatch &&
-        !notePropertyPatch &&
-        useInlineStyles === null) ||
-      !selectedKey ||
-      selectedKey.id.length === 0 ||
-      isSyntheticElementId(selectedKey.id)
-    ) {
-      onKeyUpdate(data);
-      return;
-    }
+    const notePatch = getNotePropertyPatch(patch);
+    if (!notePatch) return;
+    const ids = selectedKeyElements.map((element) => element.id);
+    if (ids.length === 0 || ids.some((id) => !isNativeElementId(id))) return;
     const commit =
-      notePropertyPatch !== null
-        ? window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'key',
-              id: selectedKey.id,
-              patch: notePropertyPatch,
-            })
-          : patchNotePropertyById(selectedKey.id, notePropertyPatch)
-        : fontStylePatch !== null
-        ? window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'key',
-              id: selectedKey.id,
-              patch: fontStylePatch,
-            })
-          : patchFontStyleById('key', selectedKey.id, fontStylePatch)
-        : fontFamilyPatch !== null
-        ? window.__dmn_window_type === 'panel'
-          ? patchNativeLayerPropertyViaAuthority({
-              elementType: 'key',
-              id: selectedKey.id,
-              patch: fontFamilyPatch,
-            })
-          : patchFontFamilyById(
-              'key',
-              selectedKey.id,
-              fontFamilyPatch.fontFamily,
-            )
-        : window.__dmn_window_type === 'panel'
-        ? patchNativeLayerPropertyViaAuthority({
-            elementType: 'key',
-            id: selectedKey.id,
-            patch: { useInlineStyles: useInlineStyles! },
-          })
-        : patchUseInlineStylesById('key', selectedKey.id, useInlineStyles!);
+      window.__dmn_window_type === 'panel'
+        ? patchNotePropertiesViaAuthority(ids, notePatch)
+        : patchNotePropertiesByIds(ids, notePatch);
     void commit.catch((error) => {
-      console.error('Failed to update key style property', error);
+      console.error('Failed to batch update note property', error);
     });
   };
 
@@ -2909,11 +2346,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const getSelectedKeyOnlyPositions = () => {
     return selectedKeyElements
       .map((el) => {
-        const index = el.index ?? -1;
+        const index = (positions[selectedKeyType] ?? []).findIndex(
+          (position) => position.id === el.id,
+        );
         const position = positions[selectedKeyType]?.[index];
         return position ? { index, position } : null;
       })
-      .filter((v): v is { index: number; position: KeyPosition } => v !== null);
+      .filter(
+        (
+          v,
+        ): v is {
+          index: number;
+          position: CanonicalKeyPosition;
+        } => v !== null,
+      );
   };
 
   // 눌림 가능(키·노브) 집계 — active 상태 표시가 통계만 제외하고 노브는 포함
@@ -2922,8 +2368,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ({ position }) => position,
     );
     const knobData = selectedKnobElements
-      .map((el) => knobItemPositions?.[selectedKeyType]?.[el.index ?? -1])
-      .filter((v): v is KnobItemPosition => v != null);
+      .map((el) =>
+        knobItemPositions?.[selectedKeyType]?.find(
+          (position) => position.id === el.id,
+        ),
+      )
+      .filter((v): v is CanonicalKnobItemPosition => v != null);
     return [...keyData, ...knobData];
   };
 
@@ -2965,100 +2415,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return { isMixed, value: firstValue };
   };
 
-  const dispatchKeyOnlyBatchUpdates = (
-    updates: Array<{ index: number } & Partial<KeyPosition>>,
-    kind: 'preview' | 'commit',
-  ) => {
-    if (updates.length === 0) return;
-    if (kind === 'preview') {
-      if (onKeyBatchPreview) {
-        onKeyBatchPreview(updates);
-        return;
-      }
-      if (onKeyPreview) {
-        updates.forEach(({ index, ...rest }) => onKeyPreview(index, rest));
-        return;
-      }
-      return;
-    }
-
-    if (onKeyBatchUpdate) {
-      onKeyBatchUpdate(updates);
-      return;
-    }
-    updates.forEach((update) => onKeyUpdate(update));
-  };
-
-  const handleBatchKeyOnlyStyleChangeComplete = (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => {
-    const notePropertyPatch = getNotePropertyPatchFromProperty(property, value);
-    const targets = selectedKeyElements.map((element) => element.id);
-    if (
-      notePropertyPatch &&
-      targets.length > 0 &&
-      targets.every((id) => id.length > 0 && !isSyntheticElementId(id))
-    ) {
-      const commit =
-        window.__dmn_window_type === 'panel'
-          ? patchNotePropertiesViaAuthority(targets, notePropertyPatch)
-          : patchNotePropertiesByIds(targets, notePropertyPatch);
-      void commit.catch((error) => {
-        console.error('Failed to batch update note property', error);
-      });
-      return;
-    }
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      [property]: value,
-    })) as Array<{ index: number } & Partial<KeyPosition>>;
-    dispatchKeyOnlyBatchUpdates(updates, 'commit');
-  };
-
-  const handleBatchKeyOnlyStyleChange = (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      [property]: value,
-    })) as Array<{ index: number } & Partial<KeyPosition>>;
-    dispatchKeyOnlyBatchUpdates(updates, 'preview');
-  };
-
-  const handleBatchNoteColorChangeKeysOnly = (value: NoteColor) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      noteColor: value,
-    }));
-    dispatchKeyOnlyBatchUpdates(updates, 'preview');
-  };
-
-  const handleBatchNoteColorChangeCompleteKeysOnly = (value: NoteColor) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      noteColor: value,
-    }));
-    dispatchKeyOnlyBatchUpdates(updates, 'commit');
-  };
-
-  const handleBatchGlowColorChangeKeysOnly = (value: NoteColor) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      noteGlowColor: value,
-    }));
-    dispatchKeyOnlyBatchUpdates(updates, 'preview');
-  };
-
-  const handleBatchGlowColorChangeCompleteKeysOnly = (value: NoteColor) => {
-    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-      index,
-      noteGlowColor: value,
-    }));
-    dispatchKeyOnlyBatchUpdates(updates, 'commit');
-  };
-
   const handleGraphBatchSharedSetting = (
     updates: Partial<GraphItemPosition>,
   ) => {
@@ -3072,7 +2428,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       updateKeys[0] === 'graphType' &&
       (graphType === 'line' || graphType === 'bar') &&
       stableGraphIds.length > 0 &&
-      stableGraphIds.every((id) => id.length > 0 && !isSyntheticElementId(id))
+      stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
       const commit =
         window.__dmn_window_type === 'panel'
@@ -3086,7 +2442,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (
       runtimePatch &&
       stableGraphIds.length > 0 &&
-      stableGraphIds.every((id) => id.length > 0 && !isSyntheticElementId(id))
+      stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
       const commit =
         window.__dmn_window_type === 'panel'
@@ -3102,7 +2458,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       updateKeys[0] === 'graphColor' &&
       typeof graphColor === 'string' &&
       stableGraphIds.length > 0 &&
-      stableGraphIds.every((id) => id.length > 0 && !isSyntheticElementId(id))
+      stableGraphIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
       const commit =
         window.__dmn_window_type === 'panel'
@@ -3127,7 +2483,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (
       runtimePatch &&
       stableKnobIds.length > 0 &&
-      stableKnobIds.every((id) => id.length > 0 && !isSyntheticElementId(id))
+      stableKnobIds.every((id) => id.length > 0 && isNativeElementId(id))
     ) {
       const commit =
         window.__dmn_window_type === 'panel'
@@ -3517,31 +2873,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         [key]: solidColor,
       }));
     }
-
-    const isGradientNoteLikeColor =
-      !!newColor &&
-      typeof newColor === 'object' &&
-      newColor.type === 'gradient';
-
-    if (
-      isGradientNoteLikeColor &&
-      (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor')
-    ) {
-      return;
-    }
-
-    if (batchPickerFor === 'noteColor') {
-      handleBatchNoteColorChangeKeysOnly(newColor);
-    } else if (batchPickerFor === 'glowColor') {
-      handleBatchGlowColorChangeKeysOnly(newColor);
-    } else if (batchPickerFor === 'borderColor') {
-      // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화, 알파는 noteBorderOpacity로 분리
-      const raw = typeof newColor === 'string' ? newColor : undefined;
-      const solidColor = toRgbHexColor(raw);
-      const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
-      handleBatchKeyOnlyStyleChange('noteBorderColor', solidColor);
-      handleBatchKeyOnlyStyleChange('noteBorderOpacity', opacity);
-    }
   };
 
   const completeBatchPickerColorChange = (
@@ -3584,58 +2915,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }));
     }
 
-    const keysData = getSelectedKeysData();
-    const keyOnlyPositions = getSelectedKeyOnlyPositions();
-    const firstCounterPosition =
-      effectiveBatchCounterColorState === 'active'
-        ? keyOnlyPositions[0]?.position
-        : keysData[0]?.position;
-    const firstCounter = firstCounterPosition
-      ? normalizeCounterSettings(firstCounterPosition.counter)
-      : createDefaultCounterSettings();
-
     if (batchPickerFor === 'noteColor') {
-      if (onNotePaintCommit) {
-        onNotePaintCommit({ notePaint: { color: newColor } });
-      } else {
-        handleBatchNoteColorChangeCompleteKeysOnly(newColor);
-      }
+      onNotePaintCommit?.({ notePaint: { color: newColor } });
     } else if (batchPickerFor === 'glowColor') {
-      if (onNotePaintCommit) {
-        onNotePaintCommit({ noteGlowPaint: { color: newColor } });
-      } else {
-        handleBatchGlowColorChangeCompleteKeysOnly(newColor);
-      }
+      onNotePaintCommit?.({ noteGlowPaint: { color: newColor } });
     } else if (batchPickerFor === 'borderColor') {
       // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화(이슈 #73), 알파는 noteBorderOpacity로 분리
       const raw = typeof newColor === 'string' ? newColor : undefined;
       const solidColor = toRgbHexColor(raw);
       const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
-      if (onNotePaintCommit) {
-        onNotePaintCommit({
-          noteBorderPaint: { color: solidColor, opacity },
-        });
-      } else {
-        handleBatchKeyOnlyStyleChangeComplete('noteBorderColor', solidColor);
-        handleBatchKeyOnlyStyleChangeComplete('noteBorderOpacity', opacity);
-      }
+      onNotePaintCommit?.({
+        noteBorderPaint: { color: solidColor, opacity },
+      });
     } else if (batchPickerFor === 'fill') {
-      const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-      if (effectiveBatchCounterColorState === 'active') {
-        handleBatchCounterUpdate(
-          {
-            fill: { ...firstCounter.fill, active: fillColor },
-          },
-          { activeStateOnly: true, colorState: 'active' },
-        );
-      } else {
-        handleBatchCounterUpdate(
-          {
-            fill: { ...firstCounter.fill, idle: fillColor },
-          },
-          { colorState: 'idle' },
-        );
-      }
+      return;
     } else if (batchPickerFor === 'stroke') {
       const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const active = effectiveBatchCounterColorState === 'active';
@@ -3653,33 +2946,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ];
       const stableTargets =
         targets.length > 0 &&
-        targets.every(({ id }) => id.length > 0 && !isSyntheticElementId(id));
-      if (stableTargets) {
-        const patch: EditorCounterStrokePropertyPatchV1 = active
-          ? { counterStrokeActive: strokeColor }
-          : { counterStrokeIdle: strokeColor };
-        const persisted =
-          window.__dmn_window_type === 'panel'
-            ? patchCounterStrokeViaAuthority(targets, patch)
-            : patchCounterStrokeByTargets(targets, patch);
-        void persisted.catch((error) => {
-          console.error('Failed to update batch counter stroke', error);
-        });
-      } else if (active) {
-        handleBatchCounterUpdate(
-          {
-            stroke: { ...firstCounter.stroke, active: strokeColor },
-          },
-          { activeStateOnly: true, colorState: 'active' },
-        );
-      } else {
-        handleBatchCounterUpdate(
-          {
-            stroke: { ...firstCounter.stroke, idle: strokeColor },
-          },
-          { colorState: 'idle' },
-        );
-      }
+        targets.every(({ id }) => id.length > 0 && isNativeElementId(id));
+      if (!stableTargets) return;
+      const patch: EditorCounterStrokePropertyPatchV1 = active
+        ? { counterStrokeActive: strokeColor }
+        : { counterStrokeIdle: strokeColor };
+      const persisted =
+        window.__dmn_window_type === 'panel'
+          ? patchCounterStrokeViaAuthority(targets, patch)
+          : patchCounterStrokeByTargets(targets, patch);
+      void persisted.catch((error) => {
+        console.error('Failed to update batch counter stroke', error);
+      });
     }
   };
   const handleBatchPickerColorChangeComplete = (newColor: NoteColor) =>
@@ -3742,21 +3020,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchSpacingCommit={handleBatchSpacingCommit}
           getBatchSpacingValue={getBatchSpacingValue}
           handleBatchResize={handleBatchResize}
-          handleBatchStyleChange={handleBatchStyleChange}
-          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-          handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
-          handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
-          handleBatchGradientCommit={handleBatchGradientCommit}
-          handleKeyOnlyStyleChangeComplete={handleKeyOnlyStyleChangeComplete}
-          handleBatchCounterUpdate={handleBatchCounterUpdate}
-          handleBatchNoteColorChange={handleBatchNoteColorChange}
-          handleBatchNoteColorChangeComplete={
-            handleBatchNoteColorChangeComplete
-          }
-          handleBatchGlowColorChange={handleBatchGlowColorChange}
-          handleBatchGlowColorChangeComplete={
-            handleBatchGlowColorChangeComplete
-          }
+          handleBatchResizePreview={handleBatchResizePreview}
+          onElementPropertyCommit={handleBatchElementPropertyCommit}
+          onNoteElementPropertyCommit={handleBatchNoteElementPropertyCommit}
           handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
           getMixedValue={getMixedValue}
           getMixedValueBatch={getMixedValueBatch}
@@ -3764,28 +3030,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
           getMixedValueKeysOnly={getMixedValueKeysOnly}
           getMixedValueActiveCapable={getMixedValueActiveCapable}
-          handleActiveCapableStyleChangeComplete={
-            handleActiveCapableStyleChangeComplete
-          }
           getSelectedKeysData={getSelectedKeysData}
           getSelectedGraphsData={getSelectedGraphsData}
           getSelectedBatchStyleData={getSelectedBatchStyleData}
           getSelectedKeyOnlyPositions={getSelectedKeyOnlyPositions}
-          handleBatchKeyOnlyStyleChangeComplete={
-            handleBatchKeyOnlyStyleChangeComplete
-          }
-          handleBatchNoteColorChangeKeysOnly={
-            handleBatchNoteColorChangeKeysOnly
-          }
-          handleBatchNoteColorChangeCompleteKeysOnly={
-            handleBatchNoteColorChangeCompleteKeysOnly
-          }
-          handleBatchGlowColorChangeKeysOnly={
-            handleBatchGlowColorChangeKeysOnly
-          }
-          handleBatchGlowColorChangeCompleteKeysOnly={
-            handleBatchGlowColorChangeCompleteKeysOnly
-          }
           batchScrollRefFor={batchScrollRefFor}
           batchNoteColorButtonRef={batchNoteColorButtonRef}
           batchGlowColorButtonRef={batchGlowColorButtonRef}
@@ -3814,7 +3062,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchFillPickerColorChangeComplete={
             handleBatchFillPickerColorChangeComplete
           }
-          handleBatchKeyOnlyStyleChange={handleBatchKeyOnlyStyleChange}
           getBatchPickerColor={getBatchPickerColor}
           getBatchPickerRef={getBatchPickerRef}
           batchColorPickerInteractiveRefs={batchColorPickerInteractiveRefs}
@@ -3853,11 +3100,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchSpacingCommit={handleBatchSpacingCommit}
           getBatchSpacingValue={getBatchSpacingValue}
           handleBatchResize={handleBatchResize}
-          handleBatchStyleChange={handleBatchStyleChange}
-          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-          handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
-          handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
-          handleBatchGradientCommit={handleBatchGradientCommit}
+          handleBatchResizePreview={handleBatchResizePreview}
+          onElementPropertyCommit={handleBatchElementPropertyCommit}
           handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
           getMixedValueKnobs={getMixedValueKnobs}
           getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
@@ -3901,9 +3145,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleBatchSpacingCommit={handleBatchSpacingCommit}
           getBatchSpacingValue={getBatchSpacingValue}
           handleBatchResize={handleBatchResize}
-          handleBatchStyleChange={handleBatchStyleChange}
-          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-          handleBatchGradientCommit={handleBatchGradientCommit}
+          handleBatchResizePreview={handleBatchResizePreview}
+          onElementPropertyCommit={handleBatchElementPropertyCommit}
           handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
           getMixedValueGraphs={getMixedValueGraphs}
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
@@ -3969,7 +3212,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <SingleKnobPanel
           setPanelElement={setPanelElement}
           singleKnobPosition={singleKnobPosition}
-          singleKnobIndex={singleKnobIndex!}
           selectedKeyType={selectedKeyType}
           isRenaming={isRenaming}
           renameInputRef={renameInputRef}
@@ -3979,7 +3221,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCommit={handleRenameCommit}
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
-          handleKnobUpdate={handleKnobUpdate}
+          onElementPropertyCommit={stableElementPropertyCommitHandler(
+            'knob',
+            selectedKnobElements[0]?.id,
+          )}
           onInactiveImageCommit={stableInactiveImageHandler(
             'knob',
             selectedKnobElements[0]?.id,
@@ -4039,7 +3284,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <SingleGraphPanel
           setPanelElement={setPanelElement}
           singleGraphPosition={singleGraphPosition}
-          singleGraphIndex={singleGraphIndex!}
           selectedKeyType={selectedKeyType}
           isRenaming={isRenaming}
           renameInputRef={renameInputRef}
@@ -4049,7 +3293,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCommit={handleRenameCommit}
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
-          handleGraphUpdate={handleGraphUpdate}
+          onElementPropertyCommit={stableElementPropertyCommitHandler(
+            'graph',
+            selectedGraphElements[0]?.id,
+          )}
           onInactiveImageCommit={stableInactiveImageHandler(
             'graph',
             selectedGraphElements[0]?.id,
@@ -4117,15 +3364,21 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleRenameStart={handleRenameStart}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onPositionChange={onPositionChange}
-        onKeyUpdate={handleKeyUpdateForPanel}
-        onKeyPreview={onKeyPreview}
         onKeyMappingChange={onKeyMappingChange}
-        handleStatUpdate={handleStatUpdate}
-        handleStatPreview={handleStatPreview}
         localState={localState}
         setLocalState={setLocalState}
-        handleSizeBlur={handleSizeBlur}
+        handleGeometryPreview={stableGeometryPreviewHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
+        onElementPropertyCommit={stableElementPropertyCommitHandler(
+          isSingleStat ? 'stat' : 'key',
+          isSingleStat
+            ? selectedStatElements[0]?.id
+            : selectedKeyElements[0]?.id,
+        )}
         onInactiveImageCommit={stableInactiveImageHandler(
           isSingleStat ? 'stat' : 'key',
           isSingleStat
@@ -4208,6 +3461,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         onNotePaintCommit={
           isSingleKey
             ? stableNotePaintCommitHandler(selectedKeyElements[0]?.id)
+            : undefined
+        }
+        onNotePaintPreview={
+          isSingleKey
+            ? stableNotePaintPreviewHandler(selectedKeyElements[0]?.id)
             : undefined
         }
         onCounterAnimationPresetCommit={stableCounterAnimationPresetHandler(

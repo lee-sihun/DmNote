@@ -1,32 +1,37 @@
 import { create } from 'zustand';
-import type { CustomTab, KeyMappings, KeyPositions } from '@src/types/key/keys';
+import type { CustomTab, KeyMappings } from '@src/types/key/keys';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import { setKeyMode } from '@api/modules/keyModeApi';
+
+type CanonicalKeyPositions = CanonicalEditorDocumentV1['keyPositions'];
 
 interface KeyStoreState {
   selectedKeyType: string;
   customTabs: CustomTab[];
   keyMappings: KeyMappings;
   // 렌더 상태 = canonical + 활성 프리뷰 합성
-  positions: KeyPositions;
+  positions: CanonicalKeyPositions;
   // 권위 상태, 프리뷰 불가침 (커밋·flush·히스토리 캡처 기준)
-  canonicalPositions: KeyPositions;
+  canonicalPositions: CanonicalKeyPositions;
   isBootstrapped: boolean;
   // 삭제 작업 중 백엔드 이벤트 무시용 플래그
   isLocalUpdateInProgress: boolean;
   setSelectedKeyType: (mode: string) => void;
   setCustomTabs: (tabs: CustomTab[]) => void;
   setKeyMappings: (mappings: KeyMappings) => void;
-  setPositions: (positions: KeyPositions) => void;
+  setPositions: (positions: CanonicalKeyPositions) => void;
   setBootstrapped: (value: boolean) => void;
   setKeyMappingsAndPositions: (
     mappings: KeyMappings,
-    positions: KeyPositions,
+    positions: CanonicalKeyPositions,
   ) => void;
   setLocalUpdateInProgress: (value: boolean) => void;
 }
 
 // 프리뷰 오버레이 모듈이 등록하는 rendered 합성기, 없으면 canonical 그대로
-type RenderedPositionsComposer = (canonical: KeyPositions) => KeyPositions;
+type RenderedPositionsComposer = (
+  canonical: CanonicalKeyPositions,
+) => CanonicalKeyPositions;
 let renderedComposer: RenderedPositionsComposer | null = null;
 
 export const registerRenderedPositionsComposer = (
@@ -35,7 +40,7 @@ export const registerRenderedPositionsComposer = (
   renderedComposer = composer;
 };
 
-export const composeRenderedPositions = (canonical: KeyPositions) =>
+export const composeRenderedPositions = (canonical: CanonicalKeyPositions) =>
   renderedComposer ? renderedComposer(canonical) : canonical;
 
 let modeRequestGeneration = 0;
@@ -44,8 +49,8 @@ export const useKeyStore = create<KeyStoreState>((set, get) => ({
   selectedKeyType: '4key',
   customTabs: [],
   keyMappings: {} as KeyMappings,
-  positions: {} as KeyPositions,
-  canonicalPositions: {} as KeyPositions,
+  positions: {},
+  canonicalPositions: {},
   isBootstrapped: false,
   isLocalUpdateInProgress: false,
   setSelectedKeyType: (mode) => {

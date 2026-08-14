@@ -4,12 +4,11 @@
  */
 
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import type { KeyPositions } from '@src/types/key/keys';
-import type { StatItemPositions } from '@src/types/key/statItems';
-import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
-import type { SelectableElementType } from '@stores/grid/useGridSelectionStore';
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+
+export type { SelectedElement };
 
 // ===== 타입 정의 =====
 
@@ -20,15 +19,28 @@ export interface Bounds {
   height: number;
 }
 
-export interface SelectedElement {
-  id: string;
-  type: SelectableElementType;
-  index?: number;
-}
-
 export interface ElementBounds {
   element: SelectedElement;
   bounds: Bounds;
+}
+
+export function elementBoundsChanged(
+  initialBounds: ElementBounds[],
+  nextBounds: ElementBounds[],
+): boolean {
+  return nextBounds.some(({ element, bounds }) => {
+    const initial = initialBounds.find(
+      (entry) =>
+        entry.element.id === element.id && entry.element.type === element.type,
+    );
+    return (
+      !initial ||
+      bounds.x !== initial.bounds.x ||
+      bounds.y !== initial.bounds.y ||
+      bounds.width !== initial.bounds.width ||
+      bounds.height !== initial.bounds.height
+    );
+  });
 }
 
 /**
@@ -36,10 +48,10 @@ export interface ElementBounds {
  */
 export function isElementResizable(
   element: SelectedElement,
-  _positions: KeyPositions,
-  _statPositions: StatItemPositions,
-  _graphPositions: GraphItemPositions,
-  _knobPositions: KnobItemPositions,
+  _positions: CanonicalEditorDocumentV1['keyPositions'],
+  _statPositions: CanonicalEditorDocumentV1['statPositions'],
+  _graphPositions: CanonicalEditorDocumentV1['graphPositions'],
+  _knobPositions: CanonicalEditorDocumentV1['knobPositions'],
   _selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
 ): boolean {
@@ -72,15 +84,17 @@ export function isElementResizable(
  */
 export function getElementBounds(
   element: SelectedElement,
-  positions: KeyPositions,
-  statPositions: StatItemPositions,
-  graphPositions: GraphItemPositions,
-  knobPositions: KnobItemPositions,
+  positions: CanonicalEditorDocumentV1['keyPositions'],
+  statPositions: CanonicalEditorDocumentV1['statPositions'],
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'],
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'],
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
 ): Bounds | null {
-  if (element.type === 'key' && element.index !== undefined) {
-    const pos = positions[selectedKeyType]?.[element.index];
+  if (element.type === 'key') {
+    const pos = positions[selectedKeyType]?.find(
+      (candidate) => candidate.id === element.id,
+    );
     if (!pos) return null;
     return {
       x: pos.dx,
@@ -88,8 +102,10 @@ export function getElementBounds(
       width: pos.width || 60,
       height: pos.height || 60,
     };
-  } else if (element.type === 'stat' && element.index !== undefined) {
-    const pos = statPositions?.[selectedKeyType]?.[element.index];
+  } else if (element.type === 'stat') {
+    const pos = statPositions?.[selectedKeyType]?.find(
+      (candidate) => candidate.id === element.id,
+    );
     if (!pos) return null;
     return {
       x: pos.dx,
@@ -97,8 +113,10 @@ export function getElementBounds(
       width: pos.width || 60,
       height: pos.height || 60,
     };
-  } else if (element.type === 'graph' && element.index !== undefined) {
-    const pos = graphPositions?.[selectedKeyType]?.[element.index];
+  } else if (element.type === 'graph') {
+    const pos = graphPositions?.[selectedKeyType]?.find(
+      (candidate) => candidate.id === element.id,
+    );
     if (!pos) return null;
     return {
       x: pos.dx,
@@ -106,8 +124,10 @@ export function getElementBounds(
       width: pos.width || 200,
       height: pos.height || 100,
     };
-  } else if (element.type === 'knob' && element.index !== undefined) {
-    const pos = knobPositions?.[selectedKeyType]?.[element.index];
+  } else if (element.type === 'knob') {
+    const pos = knobPositions?.[selectedKeyType]?.find(
+      (candidate) => candidate.id === element.id,
+    );
     if (!pos) return null;
     return {
       x: pos.dx,
@@ -135,10 +155,10 @@ export function getElementBounds(
  */
 export function calculateGroupBounds(
   selectedElements: SelectedElement[],
-  positions: KeyPositions,
-  statPositions: StatItemPositions,
-  graphPositions: GraphItemPositions,
-  knobPositions: KnobItemPositions,
+  positions: CanonicalEditorDocumentV1['keyPositions'],
+  statPositions: CanonicalEditorDocumentV1['statPositions'],
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'],
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'],
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
 ): (Bounds & { elementBounds: ElementBounds[] }) | null {
@@ -199,10 +219,10 @@ export function calculateGroupBounds(
  */
 export function getNonResizableElementIds(
   selectedElements: SelectedElement[],
-  positions: KeyPositions,
-  statPositions: StatItemPositions,
-  graphPositions: GraphItemPositions,
-  knobPositions: KnobItemPositions,
+  positions: CanonicalEditorDocumentV1['keyPositions'],
+  statPositions: CanonicalEditorDocumentV1['statPositions'],
+  graphPositions: CanonicalEditorDocumentV1['graphPositions'],
+  knobPositions: CanonicalEditorDocumentV1['knobPositions'],
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
 ): string[] {

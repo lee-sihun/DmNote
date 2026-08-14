@@ -4,6 +4,7 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { assertCanonicalEditorDocument } from '@src/types/editor';
 import {
   applyPropertyIntentsEagerly,
   combineReceipts,
@@ -18,9 +19,10 @@ import {
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
 import { boxesOverlap } from '../model/zOrder';
+import { isNativeElementId } from '../model/elementId';
 
 import type {
-  EditorDocumentV1,
+  CanonicalEditorDocumentV1,
   EditorElementTypeV1,
   EditorReorderElementsOpV1,
 } from '@src/types/editor';
@@ -57,7 +59,7 @@ interface ZOrderPlan {
   pluginZ: Map<string, number>;
 }
 
-const localDocument = (): EditorDocumentV1 => ({
+const localDocument = (): CanonicalEditorDocumentV1 => ({
   schemaVersion: 1,
   keys: useKeyStore.getState().keyMappings,
   keyPositions: useKeyStore.getState().canonicalPositions,
@@ -68,7 +70,7 @@ const localDocument = (): EditorDocumentV1 => ({
 });
 
 const nativeEntries = (
-  document: EditorDocumentV1,
+  document: CanonicalEditorDocumentV1,
   mode: string,
 ): NativeEntry[] => {
   const records = [
@@ -80,7 +82,7 @@ const nativeEntries = (
   return records.flatMap(([type, record]) =>
     (record[mode] ?? []).map((position, index) => ({
       type,
-      id: position.id ?? '',
+      id: position.id,
       zIndex: position.zIndex ?? index,
       position,
     })),
@@ -98,7 +100,7 @@ const resolvePlan = (
   mode: string,
   targets: readonly StableLayerTarget[],
   action: ZOrderAction,
-  document: EditorDocumentV1,
+  document: CanonicalEditorDocumentV1,
   pluginProjection: readonly PluginDisplayElementInternal[],
 ): ZOrderPlan => {
   const native = nativeEntries(document, mode);
@@ -111,7 +113,11 @@ const resolvePlan = (
   );
   const seen = new Set<string>();
   targets.forEach((target) => {
-    if (!target.id || seen.has(target.id))
+    if (
+      (target.type !== 'plugin' && !isNativeElementId(target.id)) ||
+      (target.type === 'plugin' && target.id.length === 0) ||
+      seen.has(target.id)
+    )
       throw new ElementIntentAbort('z-order target invalid');
     seen.add(target.id);
     if (target.type === 'plugin') {
@@ -352,7 +358,10 @@ export const commitStableLayerZOrder = async (options: {
           options.mode,
           options.targets,
           options.action,
-          base,
+          (() => {
+            assertCanonicalEditorDocument(base, 'layer z-order base');
+            return base;
+          })(),
           pluginProjection,
         );
         const op = opFromPlan(options.mode, plan);

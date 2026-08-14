@@ -8,11 +8,12 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 
 import { useGridKeyboard } from './useGridKeyboard';
 import { useGridSelection } from './useGridSelection';
 
-import type { KeyPosition } from '@src/types/key/keys';
+import type { CanonicalKeyPosition } from '@src/types/editor';
 
 const { commitPatchMock, rotateSessionMock, sendBridgeMessageMock } =
   vi.hoisted(() => ({
@@ -77,31 +78,33 @@ const STABLE_IDS = [
   'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
 ];
 
-const position = (index = 0): KeyPosition =>
+const position = (index = 0): CanonicalKeyPosition =>
   ({
     id: STABLE_IDS[index],
     dx: 0,
     dy: 0,
     width: 40,
     height: 40,
-  } as KeyPosition);
+  } as CanonicalKeyPosition);
 
 interface HarnessProps {
   includePlugin?: boolean;
   selectedIndex?: number;
+  locatorIndex?: number;
   continuousInputStrategy?: 'sync' | 'frame';
 }
 
 const Harness = ({
   includePlugin = false,
   selectedIndex = 0,
+  locatorIndex = selectedIndex,
   continuousInputStrategy = 'sync',
 }: HarnessProps) => {
-  const selectedElements = [
+  const selectedElements: SelectedElement[] = [
     {
       type: 'key' as const,
       id: STABLE_IDS[selectedIndex],
-      index: selectedIndex,
+      index: locatorIndex,
     },
     ...(includePlugin
       ? [{ type: 'plugin' as const, id: 'plugin-a:element' }]
@@ -231,6 +234,18 @@ describe('useGridKeyboard arrow history burst', () => {
 
     expect(committedGestureIds()).toEqual([firstGestureId, secondGestureId]);
     expect(randomUUIDMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('같은 ID의 locator index만 바뀌면 기존 gesture를 유지한다', async () => {
+    pressArrow('ArrowRight');
+    vi.advanceTimersByTime(100);
+    await act(async () => {
+      root.render(<Harness locatorIndex={1} />);
+    });
+    pressArrow('ArrowRight');
+
+    expect(committedGestureIds()).toEqual([firstGestureId, firstGestureId]);
+    expect(randomUUIDMock).toHaveBeenCalledOnce();
   });
 
   it('혼합 선택 방향키 이동은 editor와 plugin에 같은 gesture를 전달한다', async () => {

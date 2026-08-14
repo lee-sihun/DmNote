@@ -16,7 +16,6 @@ import {
   useGridSelectionStore,
   SelectedElement,
   isElementInMarquee,
-  selectionElementId,
 } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
@@ -492,13 +491,9 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       element.measuredSize?.width ?? element.estimatedSize?.width ?? 200,
     elementHeight:
       element.measuredSize?.height ?? element.estimatedSize?.height ?? 150,
-    elementType: 'plugin',
     selectedElements,
     getOtherElements,
-    getSelectedElementIds: (selectedElement) =>
-      selectedElement.type === 'key'
-        ? [selectedElement.id, `key-${selectedElement.index}`]
-        : [selectedElement.id],
+    getSelectedElementIds: (selectedElement) => [selectedElement.id],
     onMultiDragStart,
     onMultiDrag,
     onMultiDragEnd,
@@ -1257,7 +1252,7 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
         if (isElementInMarquee(elementBounds, rangeRect)) {
           newSelectedElements.push({
             type: 'key',
-            id: selectionElementId('key', pos, i),
+            id: pos.id,
             index: i,
           });
         }

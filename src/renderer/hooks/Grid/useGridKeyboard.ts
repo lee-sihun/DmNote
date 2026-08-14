@@ -64,7 +64,7 @@ export function useGridKeyboard({
   const arrowGestureId = useRef<string | null>(null);
   const lastArrowSelectionSignature = useRef<string | null>(null);
   const selectionSignature = JSON.stringify(
-    selectedElements.map(({ type, id, index }) => ({ type, id, index })),
+    selectedElements.map(({ type, id }) => ({ type, id })),
   );
   const macOS = isMac();
   const pendingArrowMove = useRef<{

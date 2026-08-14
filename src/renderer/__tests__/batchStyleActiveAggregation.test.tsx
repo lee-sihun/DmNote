@@ -4,8 +4,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { ElementShadowSpec } from '@src/types/key/shadows';
-import BatchStyleTabContent from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
-import { BatchGraphOnlyPanel } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
+import ActualBatchStyleTabContent from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
+import { BatchGraphOnlyPanel as ActualBatchGraphOnlyPanel } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
 import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNavContext';
 import { editGestureController } from '@src/renderer/editor/runtime/editGestureController';
 
@@ -76,6 +76,37 @@ const mixedGetter = (positions: KeyPosition[]) =>
       ),
     };
   };
+
+type CompatStyleProps = Omit<
+  React.ComponentProps<typeof ActualBatchStyleTabContent>,
+  'handleBatchResizePreview'
+> &
+  Record<string, unknown>;
+
+type CompatGraphProps = Omit<
+  React.ComponentProps<typeof ActualBatchGraphOnlyPanel>,
+  'handleBatchResizePreview'
+> &
+  Record<string, unknown>;
+
+const BatchStyleTabContent = ({
+  handleBatchStyleChange: _handleBatchStyleChange,
+  handleBatchStyleChangeComplete: _handleBatchStyleChangeComplete,
+  handleBatchShadowChangeComplete: _handleBatchShadowChangeComplete,
+  handleBatchShadowEnabledChange: _handleBatchShadowEnabledChange,
+  ...props
+}: CompatStyleProps) => (
+  <ActualBatchStyleTabContent handleBatchResizePreview={vi.fn()} {...props} />
+);
+
+const BatchGraphOnlyPanel = ({
+  handleBatchStyleChange: _handleBatchStyleChange,
+  handleBatchStyleChangeComplete: _handleBatchStyleChangeComplete,
+  handleBatchGradientCommit: _handleBatchGradientCommit,
+  ...props
+}: CompatGraphProps) => (
+  <ActualBatchGraphOnlyPanel handleBatchResizePreview={vi.fn()} {...props} />
+);
 
 describe('혼합 선택 active 그림자 집계', () => {
   let host: HTMLDivElement;

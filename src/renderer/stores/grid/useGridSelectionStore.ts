@@ -4,7 +4,7 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import { stableStringify } from '@utils/core/stableStringify';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 
 export type SelectableElementType =
   | 'key'
@@ -20,28 +20,26 @@ export type IndexedSelectableElementType = Exclude<
 
 export interface IndexedElementArrays {
   keyMappings: readonly unknown[];
-  keyPositions: readonly unknown[];
-  stat: readonly unknown[];
-  graph: readonly unknown[];
-  knob: readonly unknown[];
+  keyPositions: readonly CanonicalEditorDocumentV1['keyPositions'][string][number][];
+  stat: readonly CanonicalEditorDocumentV1['statPositions'][string][number][];
+  graph: readonly CanonicalEditorDocumentV1['graphPositions'][string][number][];
+  knob: readonly CanonicalEditorDocumentV1['knobPositions'][string][number][];
 }
 
-export interface SelectedElement {
-  type: SelectableElementType;
-  // 네이티브 요소는 position.id(UUID). backfill 전 데이터만 "type-{index}" 폴백.
-  // plugin은 fullId
+interface NativeSelectedElement {
+  type: IndexedSelectableElementType;
   id: string;
   // canonical에서 파생된 locator 캐시. 신원이 아니다 - 문서 적용 시 id로 재계산된다
   index?: number;
 }
 
-// 선택 id 생성의 단일 지점. 신원은 요소 안의 UUID이고, 합성 문자열은
-// id가 아직 없는 구형 데이터를 위한 폴백일 뿐이다
-export const selectionElementId = (
-  type: IndexedSelectableElementType,
-  position: { id?: string } | undefined,
-  index: number,
-): string => position?.id || `${type}-${index}`;
+interface PluginSelectedElement {
+  type: 'plugin';
+  id: string;
+  index?: never;
+}
+
+export type SelectedElement = NativeSelectedElement | PluginSelectedElement;
 
 // 클립보드에 저장되는 키 데이터
 export interface ClipboardKeyData {
@@ -300,132 +298,43 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   },
 }));
 
-export function reconcileSelectionAfterIndexedElementDeletion(
-  elementType: IndexedSelectableElementType,
-  indexToDelete: number,
-) {
-  const selection = useGridSelectionStore.getState();
-  let changed = false;
-  const selectedElements = selection.selectedElements.flatMap((element) => {
-    if (element.type !== elementType || typeof element.index !== 'number') {
-      return [element];
-    }
-    if (element.index === indexToDelete) {
-      changed = true;
-      return [];
-    }
-    if (element.index < indexToDelete) return [element];
-
-    // 신원(id)은 그대로, locator(index)만 한 칸 당긴다.
-    // UUID id는 유지되고 합성 폴백 id만 새 index로 재작성된다
-    changed = true;
-    const index = element.index - 1;
-    const id =
-      element.id === `${elementType}-${element.index}`
-        ? `${elementType}-${index}`
-        : element.id;
-    return [{ ...element, id, index }];
-  });
-
-  if (changed) selection.setSelectedElements(selectedElements);
-}
-
 export function invalidateSelectionForChangedIndexedElementArrays(
-  current: IndexedElementArrays,
+  _current: IndexedElementArrays,
   next: IndexedElementArrays,
 ) {
-  // id는 신원이지 값이 아니다. 이 경계 탐지는 "값이 같으면 같은 요소"라는
-  // 단계 5 이전의 근사를 유지하므로 id를 지문에서 뺀다 - 넣으면 값이 동일한
-  // 요소의 id 재발급만으로 앞쪽 선택이 무효화된다
-  const withoutElementId = (item: unknown): unknown => {
-    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
-      return item;
-    }
-    const { id: _id, ...rest } = item as { id?: unknown };
-    return rest;
-  };
-
-  const firstDifferentIndex = (
-    currentItems: readonly unknown[],
-    nextItems: readonly unknown[],
-  ) => {
-    const sharedLength = Math.min(currentItems.length, nextItems.length);
-    for (let index = 0; index < sharedLength; index += 1) {
-      if (
-        stableStringify(withoutElementId(currentItems[index])) !==
-        stableStringify(withoutElementId(nextItems[index]))
-      ) {
-        return index;
-      }
-    }
-    return sharedLength;
-  };
-
-  const boundaries = new Map<IndexedSelectableElementType, number>();
-  if (current.keyMappings.length !== next.keyMappings.length) {
-    boundaries.set(
-      'key',
-      firstDifferentIndex(current.keyMappings, next.keyMappings),
-    );
-  }
-  if (current.keyPositions.length !== next.keyPositions.length) {
-    const positionBoundary = firstDifferentIndex(
-      current.keyPositions,
-      next.keyPositions,
-    );
-    boundaries.set(
-      'key',
-      Math.min(boundaries.get('key') ?? positionBoundary, positionBoundary),
-    );
-  }
-  for (const elementType of ['stat', 'graph', 'knob'] as const) {
-    if (current[elementType].length !== next[elementType].length) {
-      boundaries.set(
-        elementType,
-        firstDifferentIndex(current[elementType], next[elementType]),
-      );
-    }
-  }
   const selection = useGridSelectionStore.getState();
   if (selection.selectedElements.length === 0) return;
 
   const nextPositionsFor = (
     type: IndexedSelectableElementType,
-  ): readonly { id?: string }[] =>
-    (type === 'key' ? next.keyPositions : next[type]) as readonly {
-      id?: string;
-    }[];
+  ): readonly { id: string }[] =>
+    type === 'key' ? next.keyPositions : next[type];
 
   let changed = false;
-  const selectedElements = selection.selectedElements.flatMap((element) => {
-    if (element.type === 'plugin') return [element];
+  const selectedElements = selection.selectedElements.reduce<SelectedElement[]>(
+    (resolved, element) => {
+      if (element.type === 'plugin') {
+        resolved.push(element);
+        return resolved;
+      }
 
-    // 신원 id를 가진 선택은 id로 재조정한다: 살아 있으면 index만 갱신,
-    // 사라졌으면 제거. 재정렬돼도 선택은 같은 요소를 따라간다
-    if (element.id !== `${element.type}-${element.index}`) {
       const newIndex = nextPositionsFor(element.type).findIndex(
         (position) => position?.id === element.id,
       );
       if (newIndex === -1) {
         changed = true;
-        return [];
+        return resolved;
       }
       if (newIndex !== element.index) {
         changed = true;
-        return [{ ...element, index: newIndex }];
+        resolved.push({ ...element, index: newIndex });
+        return resolved;
       }
-      return [element];
-    }
-
-    // 합성 id 폴백 (backfill 전 데이터): 기존 경계 휴리스틱 유지
-    const boundary = boundaries.get(element.type);
-    if (boundary === undefined) return [element];
-    if (typeof element.index === 'number' && element.index < boundary) {
-      return [element];
-    }
-    changed = true;
-    return [];
-  });
+      resolved.push(element);
+      return resolved;
+    },
+    [],
+  );
 
   if (changed) selection.setSelectedElements(selectedElements);
 }

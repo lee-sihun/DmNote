@@ -3,20 +3,11 @@
  * 아이템/그룹 드래그, 드롭 타깃 계산, 순서 재배치
  */
 
-import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import {
-  applyGestureIntentsEagerly,
-  captureIndexIntentBaseline,
-  generateIndexIntentPatch,
-  indexBaselineMatches,
-  intentPatch,
   reportElementOpError,
   reportElementOpSkipped,
-  runElementIntent,
-  type IndexIntentBaseline,
 } from '@src/renderer/editor/runtime/elementIntent';
-import { applyEditorPatch } from '@src/renderer/editor/runtime/editorCoordinator';
-import { setPluginElementZIndexes } from '@plugins/rpc/pluginElementActions';
 import {
   reorderLayerSelectionViaAuthority,
   type LayerReorderIntentWire,
@@ -24,15 +15,9 @@ import {
 import { useState, useRef } from 'react';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
-import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import type { LayerItem, DisplayItem } from '../types';
 import { createRafLatestScheduler } from '@utils/animation/rafLatestScheduler';
-import {
-  commitLayerDropIntent,
-  resolveDropIndexFromAnchors,
-  type DropAnchors,
-} from './layerReorderIntent';
+import { commitLayerDropIntent, type DropAnchors } from './layerReorderIntent';
 
 export { resolveDropIndexFromAnchors } from './layerReorderIntent';
 
@@ -70,50 +55,6 @@ const commitLayerDropFromCurrentWindow = (
 // ============================================================================
 // 파라미터 타입
 // ============================================================================
-
-// 모드 한정 의도 재적용 - 레이어 순서는 mode-local이라 다른 모드로 이동한
-// 요소에 zIndex·groupId를 쓰면 안 된다
-export const generateModeScopedIntentPatch = (
-  base: import('@src/types/editor').EditorDocumentV1,
-  intents: ReadonlyMap<
-    'key' | 'stat' | 'graph' | 'knob',
-    ReadonlyMap<string, Record<string, unknown>>
-  >,
-  mode: string,
-): import('@src/types/editor').EditorPatchV1 | null => {
-  const FIELD_BY_TYPE = {
-    key: 'keyPositions',
-    stat: 'statPositions',
-    graph: 'graphPositions',
-    knob: 'knobPositions',
-  } as const;
-  const patch: import('@src/types/editor').EditorPatchV1 = {
-    schemaVersion: 1,
-  };
-  let touchedAny = false;
-  for (const [type, byId] of intents) {
-    const field = FIELD_BY_TYPE[type];
-    const record = base[field] as Record<
-      string,
-      Array<{ id?: string } & Record<string, unknown>>
-    >;
-    let touched = 0;
-    const modeList = record[mode] ?? [];
-    const nextList = modeList.map((position) => {
-      const id = position.id;
-      if (typeof id !== 'string') return position;
-      const intent = byId.get(id);
-      if (!intent) return position;
-      touched += 1;
-      return { ...position, ...intent, id };
-    });
-    if (touched > 0) {
-      patch[field] = { ...record, [mode]: nextList } as never;
-      touchedAny = true;
-    }
-  }
-  return touchedAny ? patch : null;
-};
 
 interface UseLayerDnDParams {
   selectedKeyType: string;
@@ -169,9 +110,6 @@ export function useLayerDnD({
     // 앵커 후보에서 제외한 id들 - mouseup의 이동 집합과 대조해 축소 감지
     excludedIds: string[];
   } | null>(null);
-  // 합성 id 항목용 드래그 시작 시점 구조 fingerprint - index 적용은 시작과
-  // 슬롯 base가 정확히 같다는 증명 아래에서만 허용
-  const dndBaselineRef = useRef<IndexIntentBaseline | null>(null);
 
   // ──────────────────────────────────────────────────────────────────────────
   // 아이템 드롭 타깃 계산
@@ -344,425 +282,6 @@ export function useLayerDnD({
     };
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // 다중 아이템 드롭 처리
-  // ──────────────────────────────────────────────────────────────────────────
-
-  // 앵커 소실 정책: 양생존·인접이면 사이, 하나 생존이면 그 기준, 양소실
-  // 또는 비인접이면 무커밋. 그룹 헤더 앵커는 그룹이 살아 있을 때만.
-  // 대상 그룹이 삭제됐으면 무커밋
-  // 드래그 시작 시점 baseline 캡처 - 현재 목록에 합성 native가 있을 때만
-  const captureDnDBaseline = (): void => {
-    const hasSynthetic = layerItemsRef.current.some(
-      (item) =>
-        item.type !== 'plugin' &&
-        (item.id.length === 0 || isSyntheticElementId(item.id)),
-    );
-    dndBaselineRef.current = hasSynthetic
-      ? captureIndexIntentBaseline(
-          editorCoordinator.getState().lastAck,
-          selectedKeyType,
-          [
-            'keys',
-            'keyPositions',
-            'statPositions',
-            'graphPositions',
-            'knobPositions',
-            'layerGroups',
-          ],
-        )
-      : null;
-  };
-
-  interface DropIntentSets {
-    nativeIntents: Map<
-      'key' | 'stat' | 'graph' | 'knob',
-      Map<string, Record<string, unknown>>
-    >;
-    syntheticIndexIntents: Map<
-      'key' | 'stat' | 'graph' | 'knob',
-      Map<number, Record<string, unknown>>
-    >;
-    pluginZIndexUpdates: Array<{ fullId: string; zIndex: number }>;
-  }
-
-  // 새 표시 순서를 의도 집합으로 변환 - 안정 id는 id 의도, 합성은 시작
-  // index 의도(시작 fingerprint 증명 필요), plugin은 별도 authority 쓰기
-  const buildDropIntentSets = (
-    newItems: LayerItem[],
-    intentFieldsFor?: (item: LayerItem) => Record<string, unknown>,
-  ): DropIntentSets => {
-    const maxZIndex = newItems.length - 1;
-    const sets: DropIntentSets = {
-      nativeIntents: new Map(),
-      syntheticIndexIntents: new Map(),
-      pluginZIndexUpdates: [],
-    };
-    newItems.forEach((item, idx) => {
-      const newZIndex = maxZIndex - idx;
-      if (item.type === 'plugin') {
-        sets.pluginZIndexUpdates.push({ fullId: item.id, zIndex: newZIndex });
-        return;
-      }
-      const intent: Record<string, unknown> = {
-        zIndex: newZIndex,
-        ...(intentFieldsFor ? intentFieldsFor(item) : {}),
-      };
-      if (item.id.length > 0 && !isSyntheticElementId(item.id)) {
-        const byId = sets.nativeIntents.get(item.type) ?? new Map();
-        byId.set(item.id, intent);
-        sets.nativeIntents.set(item.type, byId);
-      } else if (item.index !== undefined) {
-        const byIndex = sets.syntheticIndexIntents.get(item.type) ?? new Map();
-        byIndex.set(item.index, intent);
-        sets.syntheticIndexIntents.set(item.type, byIndex);
-      }
-    });
-    return sets;
-  };
-
-  // 드롭 커밋 단일 소유: eager receipt와 wire 생성 전부 러너 계약으로.
-  // plugin-only는 editor 무커밋, wire patch는 슬롯 base에서 재생성한다 -
-  // 호출 시점 full-record는 대기 중 정산된 격리 plugin 쓰기를 되돌린다.
-  // plugin z-index는 별도 authority 쓰기로 editor 커밋과 비원자(기존 의미론)
-  const commitDropIntents = (sets: DropIntentSets, skipContext: string) => {
-    if (sets.pluginZIndexUpdates.length > 0) {
-      setPluginElementZIndexes(sets.pluginZIndexUpdates);
-    }
-    const hasNativeIntent =
-      sets.nativeIntents.size > 0 || sets.syntheticIndexIntents.size > 0;
-    if (!hasNativeIntent) return;
-    const baseline = dndBaselineRef.current;
-    const hasSynthetic = sets.syntheticIndexIntents.size > 0;
-    // 결합 eager 단일 소유 - preflight 게이트, 양쪽 적용, 최종 봉인이
-    // 한 호출 안에서 일어난다. 불일치면 아무것도 적용하지 않고 fail-closed
-    const eager = applyGestureIntentsEagerly({
-      baseline,
-      indexIntents: sets.syntheticIndexIntents,
-      propertyIntents: sets.nativeIntents,
-    });
-    if (!eager.matched) {
-      reportElementOpSkipped(skipContext);
-      return;
-    }
-    void runElementIntent({
-      applyEager: () => eager.receipt,
-      generate: (base) => {
-        if (
-          hasSynthetic &&
-          (!baseline ||
-            !indexBaselineMatches(
-              baseline,
-              base as unknown as Record<string, unknown>,
-            ))
-        ) {
-          return { kind: 'targetLost' };
-        }
-        let working = base;
-        if (sets.nativeIntents.size > 0) {
-          const propertyPatch = generateModeScopedIntentPatch(
-            working,
-            sets.nativeIntents,
-            selectedKeyType,
-          );
-          if (!propertyPatch) return { kind: 'targetLost' };
-          working = applyEditorPatch(working, propertyPatch);
-        }
-        if (hasSynthetic && baseline) {
-          const syntheticPatch = generateIndexIntentPatch(
-            working,
-            baseline,
-            sets.syntheticIndexIntents,
-            { skipFingerprint: true },
-          );
-          if (syntheticPatch) {
-            working = applyEditorPatch(working, syntheticPatch);
-          }
-        }
-        const renormalized = normalizeLayerGroupsForMode({
-          mode: selectedKeyType,
-          keyPositions: working.keyPositions as never,
-          statPositions: working.statPositions as never,
-          graphPositions: working.graphPositions as never,
-          knobPositions: working.knobPositions as never,
-          layerGroups: working.layerGroups as never,
-        });
-        return intentPatch({
-          schemaVersion: 1,
-          keyPositions: renormalized.keyPositions as never,
-          statPositions: renormalized.statPositions as never,
-          graphPositions: renormalized.graphPositions as never,
-          knobPositions: renormalized.knobPositions as never,
-          ...(renormalized.groupsChanged
-            ? { layerGroups: renormalized.layerGroups as never }
-            : {}),
-        });
-      },
-    })
-      .then((result) => {
-        if (!result.committed && !result.satisfied) {
-          reportElementOpSkipped(skipContext);
-        }
-      })
-      .catch(reportElementOpError);
-  };
-
-  const performMultiDrop = async (
-    draggedIds: string[],
-    toDisplayIndex: number,
-    dropContext?: {
-      targetGroupId: string | undefined;
-      preserveFullGroups?: boolean;
-      liveModel?: { layerItems: LayerItem[]; displayItems: DisplayItem[] };
-    },
-  ) => {
-    // 순서 계산 입력도 authoritative 재구성 목록 - effect 지연 ref 금지
-    const liveModel = dropContext?.liveModel ?? buildLiveLayerModel();
-    const items = [...liveModel.layerItems];
-    const currentDisplay = liveModel.displayItems;
-    // 대상 그룹이 mouseup까지 살아있는지 최종 검증 - 삭제됐으면 ghost
-    // groupId 커밋 대신 무커밋 (anchors 해석을 안 거치는 호출 경로 방어)
-    if (dropContext?.targetGroupId) {
-      const targetAlive =
-        currentDisplay.some(
-          (di) =>
-            di.displayType === 'group-header' &&
-            di.groupId === dropContext.targetGroupId,
-        ) || items.some((item) => item.groupId === dropContext.targetGroupId);
-      if (!targetAlive) return;
-    }
-    const draggedIdSet = new Set(draggedIds);
-
-    const draggedItems = items.filter((item) => draggedIdSet.has(item.id));
-    const remainingItems = items.filter((item) => !draggedIdSet.has(item.id));
-
-    if (draggedItems.length === 0) return;
-
-    // 그룹별 멤버 맵
-    const groupMemberIds = new Map<string, Set<string>>();
-    for (const item of items) {
-      if (item.groupId) {
-        let memberSet = groupMemberIds.get(item.groupId);
-        if (!memberSet) {
-          memberSet = new Set();
-          groupMemberIds.set(item.groupId, memberSet);
-        }
-        memberSet.add(item.id);
-      }
-    }
-
-    const isFullGroupDragged = (groupId: string): boolean => {
-      const members = groupMemberIds.get(groupId);
-      if (!members) return false;
-      for (const id of members) {
-        if (!draggedIdSet.has(id)) return false;
-      }
-      return true;
-    };
-
-    // 필터 타겟 인덱스 계산
-    let offset = 0;
-    for (let i = 0; i < toDisplayIndex && i < currentDisplay.length; i++) {
-      const di = currentDisplay[i];
-      if (di.displayType === 'layer' && draggedIdSet.has(di.item.id)) {
-        offset++;
-      } else if (
-        di.displayType === 'group-header' &&
-        isFullGroupDragged(di.groupId)
-      ) {
-        offset++;
-      }
-    }
-    const filteredTargetIndex = toDisplayIndex - offset;
-
-    // 필터 디스플레이 목록
-    const filteredDisplay = currentDisplay.filter((di) => {
-      if (di.displayType === 'layer' && draggedIdSet.has(di.item.id))
-        return false;
-      if (di.displayType === 'group-header' && isFullGroupDragged(di.groupId))
-        return false;
-      return true;
-    });
-
-    // remainingItems를 display 순서로 재정렬
-    const orderedRemaining: LayerItem[] = [];
-    const addedIds = new Set<string>();
-    for (const di of filteredDisplay) {
-      if (di.displayType === 'layer') {
-        const item = remainingItems.find((ri) => ri.id === di.item.id);
-        if (item && !addedIds.has(item.id)) {
-          orderedRemaining.push(item);
-          addedIds.add(item.id);
-        }
-      } else if (di.displayType === 'group-header') {
-        for (const item of remainingItems) {
-          if (item.groupId === di.groupId && !addedIds.has(item.id)) {
-            orderedRemaining.push(item);
-            addedIds.add(item.id);
-          }
-        }
-      }
-    }
-    for (const item of remainingItems) {
-      if (!addedIds.has(item.id)) {
-        orderedRemaining.push(item);
-        addedIds.add(item.id);
-      }
-    }
-
-    // 삽입 위치 결정
-    let insertionIndex = orderedRemaining.length;
-    if (filteredTargetIndex < filteredDisplay.length) {
-      const targetDI = filteredDisplay[filteredTargetIndex];
-      if (targetDI.displayType === 'layer') {
-        const idx = orderedRemaining.findIndex(
-          (i) => i.id === targetDI.item.id,
-        );
-        if (idx !== -1) insertionIndex = idx;
-      } else if (targetDI.displayType === 'group-header') {
-        const firstChild = orderedRemaining.find(
-          (i) => i.groupId === targetDI.groupId,
-        );
-        if (firstChild) {
-          const idx = orderedRemaining.indexOf(firstChild);
-          if (idx !== -1) insertionIndex = idx;
-        }
-      }
-    }
-
-    // 새 groupId 결정
-    let newGroupId: string | undefined;
-    if (dropContext) {
-      newGroupId = dropContext.targetGroupId;
-    } else {
-      const prevItem = orderedRemaining[insertionIndex - 1];
-      const nextItem = orderedRemaining[insertionIndex];
-      if (
-        prevItem?.groupId &&
-        nextItem?.groupId &&
-        prevItem.groupId === nextItem.groupId
-      ) {
-        newGroupId = prevItem.groupId;
-      } else if (prevItem?.groupId && !nextItem?.groupId) {
-        newGroupId = prevItem.groupId;
-      } else {
-        newGroupId = undefined;
-      }
-    }
-
-    // 전체 그룹 드래그 시 groupId 보존
-    const preserveGroupIds = new Set<string>();
-    if (dropContext?.preserveFullGroups) {
-      for (const item of draggedItems) {
-        if (item.groupId && isFullGroupDragged(item.groupId)) {
-          preserveGroupIds.add(item.id);
-        }
-      }
-    }
-
-    // 드래그 아이템에 groupId 적용
-    const updatedDraggedItems = draggedItems.map((item) => {
-      if (item.type === 'plugin') return item;
-      if (preserveGroupIds.has(item.id)) return item;
-      return { ...item, groupId: newGroupId };
-    });
-
-    // 새 순서 구성
-    const newItems = [
-      ...orderedRemaining.slice(0, insertionIndex),
-      ...updatedDraggedItems,
-      ...orderedRemaining.slice(insertionIndex),
-    ];
-
-    // 변경 여부 확인
-    const orderChanged = newItems.some(
-      (item, idx) => item.id !== items[idx]?.id,
-    );
-    const groupChanged = draggedItems.some(
-      (orig, i) => orig.groupId !== updatedDraggedItems[i].groupId,
-    );
-    if (!orderChanged && !groupChanged) return;
-
-    // 새 표시 순서를 의도로 변환 - 안정 id는 id 매칭, 합성은 시작
-    // fingerprint가 증명될 때만 index 적용. full-record 캡처 커밋 금지
-    const sets = buildDropIntentSets(newItems, (item) =>
-      draggedIdSet.has(item.id) && !preserveGroupIds.has(item.id)
-        ? { groupId: newGroupId }
-        : {},
-    );
-    commitDropIntents(sets, 'layer drop settlement');
-  };
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 그룹 드롭 처리
-  // ──────────────────────────────────────────────────────────────────────────
-
-  const performGroupDrop = async (
-    groupId: string,
-    targetDisplayIndex: number,
-    liveModelInput?: { layerItems: LayerItem[]; displayItems: DisplayItem[] },
-  ) => {
-    const liveModel = liveModelInput ?? buildLiveLayerModel();
-    const items = [...liveModel.layerItems];
-    const currentDisplay = liveModel.displayItems;
-
-    const groupChildren = items.filter((item) => item.groupId === groupId);
-    const remainingItems = items.filter((item) => item.groupId !== groupId);
-
-    if (groupChildren.length === 0) return;
-
-    let offset = 0;
-    for (let i = 0; i < targetDisplayIndex && i < currentDisplay.length; i++) {
-      const di = currentDisplay[i];
-      if (di.displayType === 'group-header' && di.groupId === groupId) offset++;
-      else if (di.displayType === 'layer' && di.item.groupId === groupId)
-        offset++;
-    }
-    const filteredTargetIndex = targetDisplayIndex - offset;
-
-    const filteredDisplay = currentDisplay.filter((di) => {
-      if (di.displayType === 'group-header' && di.groupId === groupId)
-        return false;
-      if (di.displayType === 'layer' && di.item.groupId === groupId)
-        return false;
-      return true;
-    });
-
-    let insertionIndex = remainingItems.length;
-
-    if (filteredTargetIndex < filteredDisplay.length) {
-      const targetDI = filteredDisplay[filteredTargetIndex];
-      if (targetDI.displayType === 'layer') {
-        const idx = remainingItems.findIndex((i) => i.id === targetDI.item.id);
-        if (idx !== -1) insertionIndex = idx;
-      } else if (targetDI.displayType === 'group-header') {
-        const firstChild = remainingItems.find(
-          (i) => i.groupId === targetDI.groupId,
-        );
-        if (firstChild) {
-          const idx = remainingItems.indexOf(firstChild);
-          if (idx !== -1) insertionIndex = idx;
-        }
-      }
-    }
-
-    const newItems = [
-      ...remainingItems.slice(0, insertionIndex),
-      ...groupChildren,
-      ...remainingItems.slice(insertionIndex),
-    ];
-
-    const orderChanged = newItems.some(
-      (item, idx) => item.id !== items[idx]?.id,
-    );
-    if (!orderChanged) return;
-
-    // 새 표시 순서를 의도로 변환 (그룹 이동은 zIndex만)
-    const sets = buildDropIntentSets(newItems);
-    commitDropIntents(sets, 'group drop settlement');
-  };
-
-  // ──────────────────────────────────────────────────────────────────────────
   // 아이템 드래그 시작
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -800,8 +319,6 @@ export function useLayerDnD({
         if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
         isDraggingRef.current = true;
         didDragRef.current = true;
-        captureDnDBaseline();
-
         const currentSel = useGridSelectionStore.getState().selectedElements;
         const isInSelection = currentSel.some((el) => el.id === item.id);
         if (isInSelection && currentSel.length > 1) {
@@ -929,12 +446,10 @@ export function useLayerDnD({
           // authoritative 재구성 목록에서 앵커를 재해석 - effect 지연 ref는
           // 외부 재정렬을 한 렌더 늦게 본다. 소실·역전·비인접이면 무커밋
           const liveModel = buildLiveLayerModel();
-          const hasSynthetic = liveModel.layerItems.some(
-            (item) =>
-              item.type !== 'plugin' &&
-              (item.id.length === 0 || isSyntheticElementId(item.id)),
+          const hasInvalidNative = liveModel.layerItems.some(
+            (item) => item.type !== 'plugin' && !isNativeElementId(item.id),
           );
-          if (!hasSynthetic) {
+          if (!hasInvalidNative) {
             void commitLayerDropFromCurrentWindow({
               kind: 'items',
               mode: selectedKeyType,
@@ -945,20 +460,8 @@ export function useLayerDnD({
                 ...useLayerGroupStore.getState().collapsedGroups,
               ],
             }).catch(reportElementOpError);
-          } else if (window.__dmn_window_type !== 'panel') {
-            const resolvedIndex = resolveDropIndexFromAnchors(
-              target,
-              new Set(draggedIds),
-              liveModel.displayItems,
-            );
-            if (resolvedIndex != null) {
-              performMultiDrop(draggedIds, resolvedIndex, {
-                targetGroupId: target.targetGroupId,
-                liveModel,
-              });
-            }
           } else {
-            reportElementOpSkipped('panel synthetic layer drop');
+            reportElementOpSkipped('layer drop (invalid native id)');
           }
         }
       }
@@ -1016,7 +519,6 @@ export function useLayerDnD({
         if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
         isDraggingRef.current = true;
         didDragRef.current = true;
-        captureDnDBaseline();
         setDraggedGroupId(groupId);
         setIsDragging(true);
       }
@@ -1157,21 +659,10 @@ export function useLayerDnD({
           const excludedShrank = groupDragStateRef.current.excludedIds.some(
             (id) => liveIdSet.has(id) && !movingSet.has(id),
           );
-          const targetIdx = excludedShrank
-            ? null
-            : anchors
-            ? resolveDropIndexFromAnchors(
-                anchors,
-                movingSet,
-                liveModel.displayItems,
-              )
-            : groupDragStateRef.current.currentOverIndex;
-          const hasSynthetic = liveModel.layerItems.some(
-            (item) =>
-              item.type !== 'plugin' &&
-              (item.id.length === 0 || isSyntheticElementId(item.id)),
+          const hasInvalidNative = liveModel.layerItems.some(
+            (item) => item.type !== 'plugin' && !isNativeElementId(item.id),
           );
-          if (!excludedShrank && anchors && !hasSynthetic) {
+          if (!excludedShrank && anchors && !hasInvalidNative) {
             void commitLayerDropFromCurrentWindow({
               kind: 'group',
               mode: selectedKeyType,
@@ -1182,29 +673,8 @@ export function useLayerDnD({
                 ...useLayerGroupStore.getState().collapsedGroups,
               ],
             }).catch(reportElementOpError);
-          } else if (
-            targetIdx !== null &&
-            hasSynthetic &&
-            window.__dmn_window_type !== 'panel'
-          ) {
-            if (extraIds.length > 0) {
-              // live index를 live 모델로 재해석 - 지연 ref display로 풀면
-              // 옛 이웃 기준 targetGroupId가 나온다
-              const dropTarget = resolveItemDropTarget(
-                targetIdx,
-                movingSet,
-                liveModel,
-              );
-              performMultiDrop(movingIds, targetIdx, {
-                targetGroupId: dropTarget.targetGroupId,
-                preserveFullGroups: true,
-                liveModel,
-              });
-            } else {
-              performGroupDrop(groupId, targetIdx, liveModel);
-            }
-          } else if (hasSynthetic && window.__dmn_window_type === 'panel') {
-            reportElementOpSkipped('panel synthetic group drop');
+          } else if (hasInvalidNative) {
+            reportElementOpSkipped('group drop (invalid native id)');
           }
         }
       }

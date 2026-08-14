@@ -4,10 +4,10 @@
  * 반영 중 재-publish를 막아 에코 루프 차단
  */
 import {
-  isSyntheticElementId,
   resolveElementById,
   type NativeElementType,
 } from '../model/elementIdMap';
+import { isNativeElementId } from '../model/elementId';
 
 import {
   selectionSessionApi,
@@ -16,6 +16,7 @@ import {
   type SelectionSessionSnapshot,
 } from '@api/modules/selectionSessionApi';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { stableStringify } from '@utils/core/stableStringify';
 
@@ -50,7 +51,10 @@ const currentFingerprint = (): string => {
   const selection = useGridSelectionStore.getState();
   const mode = useKeyStore.getState().selectedKeyType;
   return stableStringify({
-    selectedElements: selection.selectedElements,
+    selectedElements: selection.selectedElements.map(({ type, id }) => ({
+      type,
+      id,
+    })),
     selectedGroupIds: selection.selectedGroupIds,
     mode,
   });
@@ -130,33 +134,32 @@ const applyRemote = (snapshot: SelectionSessionSnapshot): void => {
   if (snapshot.selectionRevision <= appliedRevision) return;
   appliedRevision = snapshot.selectionRevision;
 
-  // wire index는 발신 창 스냅샷 기준 - 이 창의 배열과 어긋날 수 있다.
-  // 안정 id는 현재 문서에서 재해석하고 삭제된 id는 버린다. 합성 id
-  // (구형 무ID 요소의 `${type}-${index}`)만 기존 표현을 유지한다
-  const NATIVE_SELECTION_TYPES: ReadonlySet<string> = new Set([
-    'key',
-    'stat',
-    'graph',
-    'knob',
-  ]);
-
+  // 안정 ID를 현재 문서에서 재해석한다. 아직 문서에 없는 유효 ID는
+  // 이벤트 순서 역전을 위해 보존하고 다음 canonical 적용에서 재결합한다
   const currentMode = useKeyStore.getState().selectedKeyType;
-  const remoteElements = fromWireElements(snapshot.selectedElements).flatMap(
-    (element) => {
-      if (!NATIVE_SELECTION_TYPES.has(element.type)) return [element];
-      const locator = resolveElementById(
-        element.type as NativeElementType,
-        element.id,
-      );
-      if (locator) {
-        if (locator.mode !== currentMode) return [];
-        return [{ ...element, index: locator.index }];
-      }
-      return isSyntheticElementId(element.id) ? [element] : [];
-    },
-  );
+  const remoteElements = fromWireElements(snapshot.selectedElements).reduce<
+    SelectedElement[]
+  >((resolved, element) => {
+    if (element.type === 'plugin') {
+      resolved.push(element);
+      return resolved;
+    }
+    if (!isNativeElementId(element.id)) return resolved;
+    const locator = resolveElementById(
+      element.type as NativeElementType,
+      element.id,
+    );
+    if (locator?.mode === currentMode) {
+      resolved.push({ ...element, index: locator.index });
+    } else if (!locator) {
+      // committed 문서보다 selection 이벤트가 먼저 도착할 수 있다
+      // wire index는 버리고 ID만 보존해 다음 canonical 적용에서 재결합한다
+      resolved.push({ type: element.type, id: element.id });
+    }
+    return resolved;
+  }, []);
   const fingerprint = stableStringify({
-    selectedElements: remoteElements,
+    selectedElements: remoteElements.map(({ type, id }) => ({ type, id })),
     selectedGroupIds: snapshot.selectedGroupIds,
     mode: snapshot.mode,
   });

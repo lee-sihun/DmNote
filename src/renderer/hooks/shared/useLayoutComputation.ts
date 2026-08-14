@@ -2,11 +2,7 @@ import {
   DEFAULT_NOTE_BORDER_RADIUS,
   DEFAULT_NOTE_SETTINGS,
 } from '@constants/overlayDefaults';
-import { FALLBACK_POSITION } from '@components/shared/OverlayScene';
-import type { KeyPosition } from '@src/types/key/keys';
-import type { StatItemPosition } from '@src/types/key/statItems';
-import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type { KnobItemPosition } from '@src/types/key/knobs';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 // 레이아웃이 읽을 수 있는 플러그인 필드는 투영 타입으로 제한 —
 // 필드 추가 시 selectPluginLayoutElements·pluginLayoutElementsEqual 동반 수정 필요
@@ -15,10 +11,10 @@ import type { PluginLayoutElement } from '@utils/plugin/pluginLayoutElements';
 interface LayoutInput {
   // canonical 슬롯 식별자 배열 (slotCanonical 결과, 원본 KeySlot 아님)
   currentKeys: string[];
-  currentPositions: KeyPosition[];
-  currentStatPositions: StatItemPosition[];
-  currentGraphPositions: GraphItemPosition[];
-  currentKnobPositions: KnobItemPosition[];
+  currentPositions: CanonicalEditorDocumentV1['keyPositions'][string];
+  currentStatPositions: CanonicalEditorDocumentV1['statPositions'][string];
+  currentGraphPositions: CanonicalEditorDocumentV1['graphPositions'][string];
+  currentKnobPositions: CanonicalEditorDocumentV1['knobPositions'][string];
   trackHeight: number;
   noteSettings: NoteSettings;
   selectedKeyType?: string;
@@ -213,7 +209,8 @@ export function computeLayout(input: LayoutInput) {
   // WebGL 트랙 계산
   const webglTracks = currentKeys
     .map((key, index) => {
-      const originalPosition = currentPositions[index] ?? FALLBACK_POSITION;
+      const originalPosition = currentPositions[index];
+      if (!originalPosition) return null;
       if (originalPosition.hidden) return null;
       const position = displayPositions[index] ?? originalPosition;
       const useAutoCorrection = position.noteAutoYCorrection !== false;

@@ -6,7 +6,9 @@ import {
 } from '@utils/layerGroupUtils';
 
 import {
+  EDITOR_FIELDS,
   EditorProtocolError,
+  assertCanonicalEditorDocument,
   assertEditorGetResult,
   assertSafeEditorRevision,
   isEditorCommitError,
@@ -29,6 +31,7 @@ import type {
   EditorCommitRequest,
   EditorCommitResult,
   EditorCommittedV1,
+  CanonicalEditorDocumentV1,
   EditorDocumentV1,
   EditorGetResult,
   EditorNotePropertyPatchV1,
@@ -60,10 +63,14 @@ const deferred = <T>(): Deferred<T> => {
   return { promise, resolve, reject };
 };
 
-const makeDocument = (key = 'A'): EditorDocumentV1 => ({
+const DEFAULT_KEY_ID = '11111111-1111-4111-8111-111111111111';
+
+const makeDocument = (key = 'A'): CanonicalEditorDocumentV1 => ({
   schemaVersion: 1,
   keys: { '4key': [key] },
-  keyPositions: { '4key': [createDefaultKeyPosition()] },
+  keyPositions: {
+    '4key': [{ ...createDefaultKeyPosition(), id: DEFAULT_KEY_ID }],
+  },
   statPositions: {},
   graphPositions: {},
   knobPositions: {},
@@ -71,9 +78,9 @@ const makeDocument = (key = 'A'): EditorDocumentV1 => ({
 });
 
 const withGroups = (
-  document: EditorDocumentV1,
+  document: CanonicalEditorDocumentV1,
   id: string,
-): EditorDocumentV1 => ({
+): CanonicalEditorDocumentV1 => ({
   ...structuredClone(document),
   layerGroups: { '4key': [{ id, name: id }] },
 });
@@ -99,13 +106,13 @@ const validationError = (): EditorCommitError => ({
 });
 
 class FakeTransport implements EditorCoordinatorTransport {
-  canonical: EditorGetResult;
+  canonical: { revision: number; document: CanonicalEditorDocumentV1 };
   readonly getMock = vi.fn<() => Promise<EditorGetResult>>();
   readonly commitMock =
     vi.fn<(request: EditorCommitRequest) => Promise<EditorCommitResult>>();
   private listener: ((event: EditorCommittedV1) => void) | null = null;
 
-  constructor(document: EditorDocumentV1, revision = 0) {
+  constructor(document: CanonicalEditorDocumentV1, revision = 0) {
     this.canonical = { revision, document: structuredClone(document) };
     this.getMock.mockImplementation(async () =>
       structuredClone(this.canonical),
@@ -170,8 +177,8 @@ class FakeTransport implements EditorCoordinatorTransport {
 const eventFor = (
   revision: number,
   mutationId: string,
-  base: EditorDocumentV1,
-  next: EditorDocumentV1,
+  base: CanonicalEditorDocumentV1,
+  next: CanonicalEditorDocumentV1,
 ): EditorCommittedV1 => ({
   schemaVersion: 1,
   revision,
@@ -182,7 +189,7 @@ const eventFor = (
 });
 
 const createHarness = (
-  initial: EditorDocumentV1,
+  initial: CanonicalEditorDocumentV1,
   options: Partial<
     Pick<
       EditorCoordinatorOptions,
@@ -198,7 +205,7 @@ const createHarness = (
   const transport = new FakeTransport(initial);
   let local = structuredClone(initial);
   const applications: Array<{
-    document: EditorDocumentV1;
+    document: CanonicalEditorDocumentV1;
     reason: EditorApplyReason;
   }> = [];
   let mutationSequence = 0;
@@ -224,16 +231,16 @@ const createHarness = (
     transport,
     applications,
     getLocal: () => structuredClone(local),
-    setLocal: (document: EditorDocumentV1) => {
+    setLocal: (document: CanonicalEditorDocumentV1) => {
       local = structuredClone(document);
     },
   };
 };
 
 const applyOpsForTest = (
-  document: EditorDocumentV1,
+  document: CanonicalEditorDocumentV1,
   ops: readonly EditorOpV1[],
-): EditorDocumentV1 => {
+): CanonicalEditorDocumentV1 => {
   const next = structuredClone(document);
   const fields = {
     key: 'keyPositions',
@@ -832,7 +839,14 @@ describe('EditorSaveCoordinator', () => {
         throw new Error('expected an isolated patch');
       }
       const before = harness.transport.canonical.document;
-      const next = applyEditorPatch(before, request.changes);
+      const next = structuredClone(before) as EditorDocumentV1;
+      for (const field of EDITOR_FIELDS) {
+        if (request.changes[field] !== undefined) {
+          Object.assign(next, {
+            [field]: structuredClone(request.changes[field]),
+          });
+        }
+      }
       for (const [mode, positions] of Object.entries(next.keyPositions)) {
         positions.forEach((position, index) => {
           if (position.id) return;
@@ -843,6 +857,7 @@ describe('EditorSaveCoordinator', () => {
               : `00000000-0000-4000-8000-${String(++issued).padStart(12, '0')}`;
         });
       }
+      assertCanonicalEditorDocument(next, 'adapted plugin document');
       const changedFields = getChangedEditorFields(before, next);
       if (changedFields.length > 0) harness.transport.canonical.revision += 1;
       harness.transport.canonical.document = next;
@@ -1268,9 +1283,7 @@ describe('EditorSaveCoordinator', () => {
     expect(harness.getLocal().keyPositions['4key'][0].id).toBe(idBefore);
 
     // 정리: 격리 커밋을 adapted canonical로 완료시킨다
-    const adapted = structuredClone(
-      harness.transport.canonical.document,
-    ) as EditorDocumentV1;
+    const adapted = structuredClone(harness.transport.canonical.document);
     adapted.keyPositions['4key'][0].dx = moved['4key'][0].dx;
     harness.transport.canonical = {
       revision: harness.transport.canonical.revision + 1,
@@ -2705,7 +2718,7 @@ describe('commitGeneratedPatch', () => {
     });
   };
 
-  const imageRecordFrom = (base: EditorDocumentV1) => {
+  const imageRecordFrom = (base: CanonicalEditorDocumentV1) => {
     const record = structuredClone(base.keyPositions);
     record['4key'] = record['4key'].map((position, index) =>
       index === 0 ? { ...position, inactiveImage: 'generated.png' } : position,
@@ -2731,7 +2744,7 @@ describe('commitGeneratedPatch', () => {
         }),
     );
 
-    const generatorSpy = vi.fn((latest: EditorDocumentV1) => ({
+    const generatorSpy = vi.fn((latest: CanonicalEditorDocumentV1) => ({
       schemaVersion: 1 as const,
       keyPositions: imageRecordFrom(latest),
     }));
@@ -2768,7 +2781,7 @@ describe('commitGeneratedPatch', () => {
       { multiKey: false },
     );
 
-    const generatorSpy = vi.fn((latest: EditorDocumentV1) => ({
+    const generatorSpy = vi.fn((latest: CanonicalEditorDocumentV1) => ({
       schemaVersion: 1 as const,
       keyPositions: imageRecordFrom(latest),
     }));
@@ -2854,7 +2867,7 @@ describe('commitGeneratedPatch', () => {
         }),
     );
 
-    const generatorSpy = vi.fn((latest: EditorDocumentV1) => {
+    const generatorSpy = vi.fn((latest: CanonicalEditorDocumentV1) => {
       const found = latest.keyPositions['4key']?.some(
         (position) => position.id === targetId,
       );
@@ -3124,7 +3137,7 @@ describe('commitGeneratedPatch', () => {
 });
 
 describe('commitSemanticOpsInternal', () => {
-  const withStableId = (id: string): EditorDocumentV1 => {
+  const withStableId = (id: string): CanonicalEditorDocumentV1 => {
     const document = makeDocument();
     document.keyPositions['4key'][0] = {
       ...document.keyPositions['4key'][0],
@@ -5430,7 +5443,7 @@ describe('commitSemanticOpsInternal', () => {
       height: 91,
     });
     harness.transport.canonical = { revision: 1, document: canonical };
-    const generate = vi.fn((document: EditorDocumentV1) => {
+    const generate = vi.fn((document: CanonicalEditorDocumentV1) => {
       const current = document.keyPositions['4key'][0];
       return [
         {
@@ -5505,7 +5518,7 @@ describe('commitSemanticOpsInternal', () => {
     harness.transport.commitMock.mockRejectedValueOnce(revisionConflict());
     const missing = makeDocument('B');
     harness.transport.canonical = { revision: 1, document: missing };
-    const generate = vi.fn((document: EditorDocumentV1) =>
+    const generate = vi.fn((document: CanonicalEditorDocumentV1) =>
       document.keyPositions['4key'].some((position) => position.id === id)
         ? [setBoundsOp(id)]
         : null,

@@ -1,10 +1,26 @@
-import type { DMNoteAPI } from '@src/types/plugin/api';
+import type { DMNoteAPI, ReadyUnsubscribe } from '@src/types/plugin/api';
+import type { CanonicalBootstrapPayload } from '@src/types/app';
+import type {
+  CanonicalEditorGetResult,
+  EditorCommittedV1,
+} from '@src/types/editor';
+
+export type HostInternalApi = Omit<DMNoteAPI, 'app' | 'editor'> & {
+  app: Omit<DMNoteAPI['app'], 'bootstrap'> & HostGlobalApi['app'];
+  editor: Omit<DMNoteAPI['editor'], 'get' | 'onCommitted'> &
+    HostGlobalApi['editor'];
+};
 
 export interface HostGlobalApi {
-  app: Pick<DMNoteAPI['app'], 'bootstrap'>;
+  app: {
+    bootstrap(): Promise<CanonicalBootstrapPayload>;
+  };
   window: Pick<DMNoteAPI['window'], 'type'>;
   settings: Pick<DMNoteAPI['settings'], 'get' | 'onChanged'>;
-  editor: Pick<DMNoteAPI['editor'], 'get' | 'onCommitted'>;
+  editor: {
+    get(): Promise<CanonicalEditorGetResult>;
+    onCommitted(listener: (event: EditorCommittedV1) => void): ReadyUnsubscribe;
+  };
   keys: Pick<
     DMNoteAPI['keys'],
     | 'get'
@@ -58,7 +74,7 @@ export interface HostGlobalApi {
   ui: DMNoteAPI['ui'];
 }
 
-export const createHostGlobalApi = (api: DMNoteAPI): HostGlobalApi => ({
+export const createHostGlobalApi = (api: HostInternalApi): HostGlobalApi => ({
   app: {
     bootstrap: api.app.bootstrap,
   },

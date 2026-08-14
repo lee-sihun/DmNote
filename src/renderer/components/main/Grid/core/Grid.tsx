@@ -6,11 +6,6 @@ import React, {
   useSyncExternalStore,
 } from 'react';
 import { keysApi } from '@api/modules/keysApi';
-import {
-  graphItemsApi,
-  knobItemsApi,
-  statItemsApi,
-} from '@api/modules/itemsApi';
 
 declare global {
   interface Window {
@@ -20,21 +15,14 @@ declare global {
 import { useTranslation } from '@contexts/useTranslation';
 import DraggableKey from '@components/shared/Key';
 import { commitElementPosition } from '@src/renderer/hooks/Grid/elementPositionCommit';
-import {
-  applyZOrderByIds,
-  deleteElementById,
-  type ZOrderTarget,
-} from '@src/renderer/editor/runtime/elementOps';
+import { deleteElementById } from '@src/renderer/editor/runtime/elementOps';
 import {
   commitStableLayerZOrder,
   orderStableZTargetsForBatch,
 } from '@src/renderer/editor/runtime/layerZOrderIntent';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
-import {
-  isSyntheticElementId,
-  resolveElementById,
-} from '@src/renderer/editor/model/elementIdMap';
-import GridKeySettingModal from './GridKeySettingModal';
+import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
 import ListPopup from '../../Modal/ListPopup';
@@ -59,7 +47,10 @@ import ResizeHandles from '../handles/ResizeHandles';
 import GradientAxisOverlay from '../handles/GradientAxisHandle';
 import { useGradientEditStore } from '@stores/grid/useGradientEditStore';
 import GroupResizeHandles from '../handles/GroupResizeHandles';
-import { isElementResizable } from '../handles/groupResizeUtils';
+import {
+  getElementBounds,
+  isElementResizable,
+} from '../handles/groupResizeUtils';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
@@ -67,7 +58,6 @@ import KnobItem from '../layers/KnobItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
-  selectionElementId,
   type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
@@ -86,17 +76,12 @@ import {
 import { createDefaultCounterSettings } from '@src/types/key/keys';
 import type {
   KeyMappings,
-  KeyPositions,
   KeyPosition,
-  KeySlot,
-  NoteColor,
   KeyCounterSettings,
   CounterAnimationBezier,
-  ImageFit,
 } from '@src/types/key/keys';
 import { slotCanonical, slotDisplayName } from '@utils/keySlot';
 import type { StatItemPosition } from '@src/types/key/statItems';
-import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   DEFAULT_ELEMENT_BG,
@@ -124,7 +109,6 @@ import {
 import {
   beginPluginInstancesEditSession,
   endPluginInstancesEditSession,
-  rotatePluginInstancesEditSession,
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import {
   beginMixedGestureTransaction,
@@ -142,37 +126,6 @@ type ToolbarAddRequest = {
   type: 'key' | 'stat' | 'graph' | 'knob';
 } | null;
 
-interface SelectedKeyInfo {
-  key: KeySlot;
-  index: number;
-}
-
-type KeyPreviewUpdates = Partial<{
-  activeImage: string;
-  inactiveImage: string;
-  soundPath: string;
-  soundVolume: number;
-  activeTransparent: boolean;
-  idleTransparent: boolean;
-  width: number;
-  height: number;
-  className: string;
-  backgroundColor: string;
-  activeBackgroundColor: string;
-  borderColor: string;
-  activeBorderColor: string;
-  borderWidth: number;
-  borderRadius: number;
-  fontSize: number;
-  fontColor: string;
-  activeFontColor: string;
-  idleImageFit: ImageFit;
-  activeImageFit: ImageFit;
-  imageFit: ImageFit;
-  useInlineStyles: boolean;
-  displayText: string;
-}>;
-
 interface GridProps {
   showConfirm: (
     message: string,
@@ -185,50 +138,10 @@ interface GridProps {
     },
   ) => void;
   showAlert: (message: string, confirmText?: string) => void;
-  selectedKey: SelectedKeyInfo | null;
-  setSelectedKey: (key: SelectedKeyInfo | null) => void;
   keyMappings: KeyMappings;
-  positions: KeyPositions;
-  onPositionChange: (
-    index: number,
-    dx: number,
-    dy: number,
-    elementId?: string,
-  ) => void;
-  onKeyUpdate: (data: Omit<SaveData, 'counter'>) => void;
-  onKeyPreview: (index: number, updates: KeyPreviewUpdates) => void;
-  onNoteColorUpdate: (
-    index: number,
-    noteColor: NoteColor,
-    noteOpacity: number,
-    noteGlowEnabled: boolean,
-    noteGlowSize: number,
-    noteGlowOpacity: number,
-    noteGlowColor: NoteColor,
-    noteAutoYCorrection: boolean,
-    noteEffectEnabled: boolean,
-  ) => void;
-  onNoteColorPreview: (
-    index: number,
-    noteColor: NoteColor,
-    noteOpacity: number,
-    noteGlowEnabled: boolean,
-    noteGlowSize: number,
-    noteGlowOpacity: number,
-    noteGlowColor: NoteColor,
-    noteAutoYCorrection: boolean,
-    noteEffectEnabled: boolean,
-  ) => void;
-  onCounterPreview: (index: number, payload: KeyCounterSettings) => void;
-  onKeyDelete: (index: number) => void;
-  onMoveToFront: (index: number) => void | Promise<void>;
-  onMoveToBack: (index: number) => void | Promise<void>;
-  onMoveForward: (index: number) => void | Promise<void>;
-  onMoveBackward: (index: number) => void | Promise<void>;
+  positions: ReturnType<typeof useKeyStore.getState>['positions'];
   color: string;
   activeTool: string;
-  shouldSkipModalAnimation: boolean;
-  onModalAnimationConsumed: (() => void) | undefined;
   onUndo: () => void;
   onRedo: () => void;
   toolbarAddRequest: ToolbarAddRequest;
@@ -248,25 +161,10 @@ function getStatTypeLabel(type: string): string {
 const Grid = ({
   showConfirm,
   showAlert,
-  selectedKey,
-  setSelectedKey,
   keyMappings,
   positions,
-  onPositionChange,
-  onKeyUpdate,
-  onKeyPreview,
-  onNoteColorUpdate: _onNoteColorUpdate,
-  onNoteColorPreview,
-  onCounterPreview,
-  onKeyDelete,
-  onMoveToFront,
-  onMoveToBack,
-  onMoveForward,
-  onMoveBackward,
   color,
   activeTool,
-  shouldSkipModalAnimation,
-  onModalAnimationConsumed,
   onUndo,
   onRedo,
   toolbarAddRequest,
@@ -363,19 +261,6 @@ const Grid = ({
     (state) => state.elements,
   );
   const selectedDragGestureIdRef = useRef<string | null>(null);
-
-  const rotatePluginElementSessions = (fullIds: string[]) => {
-    const selectedPluginIds = new Set(fullIds);
-    const pluginIds = new Set(
-      usePluginDisplayElementStore
-        .getState()
-        .elements.filter((element) => selectedPluginIds.has(element.fullId))
-        .map((element) => element.pluginId),
-    );
-    pluginIds.forEach((pluginId) => {
-      rotatePluginInstancesEditSession(pluginId);
-    });
-  };
 
   const beginSelectedPluginInstancesDrag = () => {
     const gestureId = crypto.randomUUID();
@@ -498,28 +383,12 @@ const Grid = ({
   const handleSelectedMoveForward = async () => {
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
-    if (
-      selected.type === 'plugin' ||
-      ((selected.type === 'key' ||
-        selected.type === 'stat' ||
-        selected.type === 'graph' ||
-        selected.type === 'knob') &&
-        selected.id.length > 0 &&
-        !isSyntheticElementId(selected.id))
-    ) {
+    if (selected.type === 'plugin' || isNativeElementId(selected.id)) {
       await commitStableLayerZOrder({
         mode: selectedKeyType,
         targets: [{ type: selected.type, id: selected.id }],
         action: 'forward',
       });
-    } else if (selected.type === 'key') {
-      await onMoveForward(selected.index);
-    } else if (selected.type === 'stat') {
-      await moveStatForward(selected.index);
-    } else if (selected.type === 'graph') {
-      await moveGraphForward(selected.index);
-    } else if (selected.type === 'knob') {
-      await moveKnobForward(selected.index);
     }
     syncSelectedElementsToOverlay();
   };
@@ -527,28 +396,12 @@ const Grid = ({
   const handleSelectedMoveBackward = async () => {
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
-    if (
-      selected.type === 'plugin' ||
-      ((selected.type === 'key' ||
-        selected.type === 'stat' ||
-        selected.type === 'graph' ||
-        selected.type === 'knob') &&
-        selected.id.length > 0 &&
-        !isSyntheticElementId(selected.id))
-    ) {
+    if (selected.type === 'plugin' || isNativeElementId(selected.id)) {
       await commitStableLayerZOrder({
         mode: selectedKeyType,
         targets: [{ type: selected.type, id: selected.id }],
         action: 'backward',
       });
-    } else if (selected.type === 'key') {
-      await onMoveBackward(selected.index);
-    } else if (selected.type === 'stat') {
-      await moveStatBackward(selected.index);
-    } else if (selected.type === 'graph') {
-      await moveGraphBackward(selected.index);
-    } else if (selected.type === 'knob') {
-      await moveKnobBackward(selected.index);
     }
     syncSelectedElementsToOverlay();
   };
@@ -615,14 +468,14 @@ const Grid = ({
 
       selectedElements.forEach((el) => {
         let gid;
-        if (el.type === 'key' && el.index !== undefined) {
-          gid = modeKeyPos[el.index]?.groupId;
-        } else if (el.type === 'stat' && el.index !== undefined) {
-          gid = modeStatPos[el.index]?.groupId;
-        } else if (el.type === 'graph' && el.index !== undefined) {
-          gid = modeGraphPos[el.index]?.groupId;
-        } else if (el.type === 'knob' && el.index !== undefined) {
-          gid = modeKnobPos[el.index]?.groupId;
+        if (el.type === 'key') {
+          gid = modeKeyPos.find((position) => position.id === el.id)?.groupId;
+        } else if (el.type === 'stat') {
+          gid = modeStatPos.find((position) => position.id === el.id)?.groupId;
+        } else if (el.type === 'graph') {
+          gid = modeGraphPos.find((position) => position.id === el.id)?.groupId;
+        } else if (el.type === 'knob') {
+          gid = modeKnobPos.find((position) => position.id === el.id)?.groupId;
         }
         if (gid) anyInGroup = true;
         if (first) {
@@ -681,25 +534,6 @@ const Grid = ({
     return snapCursorToGrid(gridCoords.x, gridCoords.y);
   };
 
-  // 캔버스 요소 액션 (useGridCanvasActions에서 위임)
-  const {
-    deleteStatAtIndex,
-    moveStatToFront,
-    moveStatToBack,
-    moveStatForward,
-    moveStatBackward,
-    deleteGraphAtIndex,
-    moveGraphToFront,
-    moveGraphToBack,
-    moveGraphForward,
-    moveGraphBackward,
-    deleteKnobAtIndex,
-    moveKnobToFront,
-    moveKnobToBack,
-    moveKnobForward,
-    moveKnobBackward,
-  } = canvasActions;
-
   // 복제 시작은 로컬 UI 상태(duplicateState) 설정이 필요하므로 래퍼 사용
   const beginDuplicateStat = (sourceIndex: number) => {
     const result = canvasActions.beginDuplicateStat(sourceIndex);
@@ -727,7 +561,7 @@ const Grid = ({
     await pasteElements().catch(reportElementOpError);
   };
 
-  // 합성 id(`${type}-${index}`)가 아닌 안정 id를 가진 native 선택 판별
+  // 외부 선택 입력도 canonical native id 경계에서 재검증
   const isStableNativeSelection = (el: {
     type: string;
     id: string;
@@ -737,13 +571,7 @@ const Grid = ({
       el.type === 'graph' ||
       el.type === 'knob') &&
     el.id.length > 0 &&
-    !isSyntheticElementId(el.id);
-
-  const pluginZIndexesForMode = (): number[] =>
-    usePluginDisplayElementStore
-      .getState()
-      .elements.filter((el) => !el.tabId || el.tabId === selectedKeyType)
-      .map((el) => el.zIndex ?? 0);
+    isNativeElementId(el.id);
 
   const moveSelectedToFront = async () => {
     if (selectedElements.length === 0) return;
@@ -767,43 +595,7 @@ const Grid = ({
       syncSelectedElementsToOverlay();
       return;
     }
-
-    rotatePluginElementSessions(
-      selectedElements
-        .filter((element) => element.type === 'plugin')
-        .map((element) => element.id),
-    );
-
-    // id 보유 native 요소는 단일 트랜잭션 - 루프-await는 반복 사이 재정렬과
-    // 렌더 클로저 base의 상호 덮어쓰기(lost update)를 만든다
-    const idTargets: ZOrderTarget[] = [];
-    for (const el of selectedElements) {
-      if (el.type === 'plugin') {
-        usePluginDisplayElementStore.getState().bringToFront(el.id);
-        continue;
-      }
-      if (isStableNativeSelection(el)) {
-        idTargets.push({ type: el.type, id: el.id });
-        continue;
-      }
-      if (el.index === undefined) continue;
-      if (el.type === 'key') {
-        if (typeof onMoveToFront === 'function') await onMoveToFront(el.index);
-      } else if (el.type === 'stat') {
-        moveStatToFront(el.index);
-      } else if (el.type === 'graph') {
-        moveGraphToFront(el.index);
-      } else if (el.type === 'knob') {
-        moveKnobToFront(el.index);
-      }
-    }
-    if (idTargets.length > 0) {
-      await applyZOrderByIds(idTargets, 'front', pluginZIndexesForMode()).catch(
-        reportElementOpError,
-      );
-    }
-
-    syncSelectedElementsToOverlay();
+    reportElementOpError(new Error('Invalid native selection ID'));
   };
 
   const moveSelectedToBack = async () => {
@@ -829,40 +621,7 @@ const Grid = ({
       return;
     }
 
-    rotatePluginElementSessions(
-      selectedElements
-        .filter((element) => element.type === 'plugin')
-        .map((element) => element.id),
-    );
-
-    const idTargets: ZOrderTarget[] = [];
-    for (const el of selectedElements) {
-      if (el.type === 'plugin') {
-        usePluginDisplayElementStore.getState().sendToBack(el.id);
-        continue;
-      }
-      if (isStableNativeSelection(el)) {
-        idTargets.push({ type: el.type, id: el.id });
-        continue;
-      }
-      if (el.index === undefined) continue;
-      if (el.type === 'key') {
-        if (typeof onMoveToBack === 'function') await onMoveToBack(el.index);
-      } else if (el.type === 'stat') {
-        moveStatToBack(el.index);
-      } else if (el.type === 'graph') {
-        moveGraphToBack(el.index);
-      } else if (el.type === 'knob') {
-        moveKnobToBack(el.index);
-      }
-    }
-    if (idTargets.length > 0) {
-      await applyZOrderByIds(idTargets, 'back', pluginZIndexesForMode()).catch(
-        reportElementOpError,
-      );
-    }
-
-    syncSelectedElementsToOverlay();
+    reportElementOpError(new Error('Invalid native selection ID'));
   };
 
   useEffect(() => {
@@ -975,9 +734,7 @@ const Grid = ({
     } as const;
 
     const clicked = collections[type][index];
-    const nextSelection: SelectedElement[] = [
-      { type, id: selectionElementId(type, clicked, index), index },
-    ];
+    const nextSelection: SelectedElement[] = [{ type, id: clicked.id, index }];
 
     const groupId = clicked?.groupId;
     if (groupId) {
@@ -987,7 +744,7 @@ const Grid = ({
           if (p?.groupId === groupId && !(type === memberType && i === index)) {
             nextSelection.push({
               type: memberType,
-              id: selectionElementId(memberType, p, i),
+              id: p.id,
               index: i,
             });
           }
@@ -1006,9 +763,19 @@ const Grid = ({
   ) => {
     const { selectedElements: currentSelection } =
       useGridSelectionStore.getState();
+    const positionsForType =
+      type === 'key'
+        ? positions[selectedKeyType]
+        : type === 'stat'
+        ? statPositions[selectedKeyType]
+        : type === 'graph'
+        ? graphPositions[selectedKeyType]
+        : knobPositions[selectedKeyType];
+    const targetId = positionsForType?.[index]?.id;
     const isMultiMember =
       currentSelection.length > 1 &&
-      currentSelection.some((el) => el.type === type && el.index === index);
+      typeof targetId === 'string' &&
+      currentSelection.some((el) => el.type === type && el.id === targetId);
     if (!isMultiMember) {
       selectElementWithGroup(type, index);
     }
@@ -1035,7 +802,7 @@ const Grid = ({
         : type === 'graph'
         ? useGraphItemStore.getState().positions[selectedKeyType]?.[index]
         : useKnobItemStore.getState().positions[selectedKeyType]?.[index];
-    const clickedId = selectionElementId(type, clickedPosition, index);
+    const clickedId = clickedPosition.id;
     if (shouldOpenMixedSelectionMenu(clickedId)) {
       openMixedSelectionContextMenu(clientX, clientY, ref);
       return;
@@ -1087,16 +854,13 @@ const Grid = ({
 
     return positions[selectedKeyType].map(
       (position: KeyPosition, index: number) => {
-        const handlers = stableHandlers(position.id || `key-${index}`, {
+        const handlers = stableHandlers(position.id, {
           onPositionChange: (
-            targetIndex: number,
+            _targetIndex: number,
             dx: number,
             dy: number,
-            elementId?: string,
-          ) =>
-            commitElementPosition('key', elementId, dx, dy, () =>
-              onPositionChange(targetIndex, dx, dy),
-            ),
+            elementId: string,
+          ) => commitElementPosition('key', elementId, dx, dy),
           onClick: () => {
             selectElementWithGroup('key', index);
             // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
@@ -1115,11 +879,7 @@ const Grid = ({
             // 다중 선택: 기존 선택 유지하면서 추가/제거
             toggleSelection({
               type: 'key',
-              id: selectionElementId(
-                'key',
-                positions[selectedKeyType]?.[index],
-                index,
-              ),
+              id: positions[selectedKeyType][index].id,
               index,
             });
             // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
@@ -1140,11 +900,7 @@ const Grid = ({
               clearSelection();
               toggleSelection({
                 type: 'key',
-                id: selectionElementId(
-                  'key',
-                  positions[selectedKeyType]?.[index],
-                  index,
-                ),
+                id: positions[selectedKeyType][index].id,
                 index,
               });
               const pos = positions[selectedKeyType]?.[index];
@@ -1200,7 +956,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'key',
-                  id: selectionElementId('key', pos, i),
+                  id: pos.id,
                   index: i,
                 });
               }
@@ -1238,7 +994,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'stat',
-                  id: selectionElementId('stat', pos, i),
+                  id: pos.id,
                   index: i,
                 });
               }
@@ -1256,7 +1012,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'graph',
-                  id: selectionElementId('graph', pos, i),
+                  id: pos.id,
                   index: i,
                 });
               }
@@ -1274,7 +1030,7 @@ const Grid = ({
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
                   type: 'knob',
-                  id: selectionElementId('knob', pos, i),
+                  id: pos.id,
                   index: i,
                 });
               }
@@ -1292,12 +1048,9 @@ const Grid = ({
             showConfirm(
               t('confirm.removeKey', { name: displayName }),
               () => {
-                const id = position.id;
-                if (id) {
-                  void deleteElementById('key', id).catch(reportElementOpError);
-                  return;
-                }
-                onKeyDelete(index);
+                void deleteElementById('key', position.id).catch(
+                  reportElementOpError,
+                );
               },
               { confirmText: t('confirm.remove') },
             );
@@ -1318,16 +1071,16 @@ const Grid = ({
 
         return (
           <DraggableKey
-            key={position.id || `${selectedKeyType}-${index}`}
+            key={position.id}
             index={index}
-            elementId={position.id || undefined}
+            elementId={position.id}
             position={position}
             keyName={slotDisplayName(
               keyMappings[selectedKeyType]?.[index] ?? '',
             )}
             zIndex={position.zIndex ?? index}
             isSelected={selectedElements.some(
-              (el) => el.type === 'key' && el.index === index,
+              (el) => el.type === 'key' && el.id === position.id,
             )}
             selectedElements={selectedElements}
             activeTool={activeTool}
@@ -1352,37 +1105,13 @@ const Grid = ({
       index: number,
       dx: number,
       dy: number,
-      elementId?: string,
+      elementId: string,
     ) => {
-      // 합성 id는 commitElementPosition이 fallback으로 돌린다 - 기존 index
-      // 커밋을 fallback 클로저로 넘겨 무ID 요소의 저장을 유지
-      commitElementPosition('stat', elementId, dx, dy, () =>
-        legacyPositionCommit(),
-      );
-      function legacyPositionCommit() {
-        const current = useStatItemStore.getState().positions;
-        const tabPositions = current[selectedKeyType] || [];
-        const prev = tabPositions[index];
-        if (!prev) return;
-        if (prev.dx === dx && prev.dy === dy) return;
-
-        const nextTabPositions = tabPositions.map((pos, i) =>
-          i === index ? { ...pos, dx, dy } : pos,
-        );
-        const nextPositions = {
-          ...current,
-          [selectedKeyType]: nextTabPositions,
-        };
-
-        useStatItemStore.getState().setPositions(nextPositions);
-        statItemsApi.updatePositions(nextPositions).catch((error) => {
-          console.error('Failed to update stat item positions', error);
-        });
-      }
+      commitElementPosition('stat', elementId, dx, dy);
     };
 
     return items.map((position: StatItemPosition, index: number) => {
-      const handlers = stableHandlers(position.id || `stat-${index}`, {
+      const handlers = stableHandlers(position.id, {
         onPositionChange: handleStatPositionChange,
         onClick: () => {
           selectElementWithGroup('stat', index);
@@ -1391,11 +1120,8 @@ const Grid = ({
         onCtrlClick: () => {
           toggleSelection({
             type: 'stat',
-            id: selectionElementId(
-              'stat',
-              useStatItemStore.getState().positions[selectedKeyType]?.[index],
-              index,
-            ),
+            id: useStatItemStore.getState().positions[selectedKeyType][index]
+              .id,
             index,
           });
         },
@@ -1403,11 +1129,8 @@ const Grid = ({
           // 통계 요소는 범위 선택 대상이 아니므로 Ctrl+클릭과 동일하게 처리
           toggleSelection({
             type: 'stat',
-            id: selectionElementId(
-              'stat',
-              useStatItemStore.getState().positions[selectedKeyType]?.[index],
-              index,
-            ),
+            id: useStatItemStore.getState().positions[selectedKeyType][index]
+              .id,
             index,
           });
         },
@@ -1420,12 +1143,9 @@ const Grid = ({
           showConfirm(
             t('confirm.removeStat', { name: displayName }),
             () => {
-              const id = position.id;
-              if (id) {
-                void deleteElementById('stat', id).catch(reportElementOpError);
-                return;
-              }
-              deleteStatAtIndex(index);
+              void deleteElementById('stat', position.id).catch(
+                reportElementOpError,
+              );
             },
             { confirmText: t('confirm.remove') },
           );
@@ -1446,15 +1166,15 @@ const Grid = ({
 
       return (
         <DraggableKey
-          key={position.id || `stat-${selectedKeyType}-${index}`}
+          key={position.id}
           index={index}
-          elementId={position.id || `stat-${index}`}
+          elementId={position.id}
           anchorKind="stat"
           position={position}
           keyName={getStatTypeLabel(position.statType)}
           zIndex={position.zIndex ?? index}
           isSelected={selectedElements.some(
-            (el) => el.type === 'stat' && el.index === index,
+            (el) => el.type === 'stat' && el.id === position.id,
           )}
           selectedElements={selectedElements}
           activeTool={activeTool}
@@ -1478,40 +1198,16 @@ const Grid = ({
       index: number,
       dx: number,
       dy: number,
-      elementId?: string,
+      elementId: string,
     ) => {
-      // 합성 id는 commitElementPosition이 fallback으로 돌린다 - 기존 index
-      // 커밋을 fallback 클로저로 넘겨 무ID 요소의 저장을 유지
-      commitElementPosition('graph', elementId, dx, dy, () =>
-        legacyPositionCommit(),
-      );
-      function legacyPositionCommit() {
-        const current = useGraphItemStore.getState().positions;
-        const tabPositions = current[selectedKeyType] || [];
-        const prev = tabPositions[index];
-        if (!prev) return;
-        if (prev.dx === dx && prev.dy === dy) return;
-
-        const nextTabPositions = tabPositions.map((pos, i) =>
-          i === index ? { ...pos, dx, dy } : pos,
-        );
-        const nextPositions = {
-          ...current,
-          [selectedKeyType]: nextTabPositions,
-        };
-
-        useGraphItemStore.getState().setPositions(nextPositions);
-        graphItemsApi.updatePositions(nextPositions).catch((error) => {
-          console.error('Failed to update graph item positions', error);
-        });
-      }
+      commitElementPosition('graph', elementId, dx, dy);
     };
 
     return items.map((position, index) => (
       <GraphItem
-        key={position.id || `graph-${selectedKeyType}-${index}`}
+        key={position.id}
         index={index}
-        elementId={position.id || `graph-${index}`}
+        elementId={position.id}
         position={position}
         onPositionChange={handleGraphPositionChange}
         zIndex={position.zIndex ?? index}
@@ -1522,27 +1218,21 @@ const Grid = ({
         onCtrlClick={() => {
           toggleSelection({
             type: 'graph',
-            id: selectionElementId(
-              'graph',
-              useGraphItemStore.getState().positions[selectedKeyType]?.[index],
-              index,
-            ),
+            id: useGraphItemStore.getState().positions[selectedKeyType][index]
+              .id,
             index,
           });
         }}
         onShiftClick={() => {
           toggleSelection({
             type: 'graph',
-            id: selectionElementId(
-              'graph',
-              useGraphItemStore.getState().positions[selectedKeyType]?.[index],
-              index,
-            ),
+            id: useGraphItemStore.getState().positions[selectedKeyType][index]
+              .id,
             index,
           });
         }}
         isSelected={selectedElements.some(
-          (el) => el.type === 'graph' && el.index === index,
+          (el) => el.type === 'graph' && el.id === position.id,
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
@@ -1556,12 +1246,9 @@ const Grid = ({
           showConfirm(
             t('confirm.removeGraph', { name: displayName }),
             () => {
-              const id = position.id;
-              if (id) {
-                void deleteElementById('graph', id).catch(reportElementOpError);
-                return;
-              }
-              deleteGraphAtIndex(index);
+              void deleteElementById('graph', position.id).catch(
+                reportElementOpError,
+              );
             },
             { confirmText: t('confirm.remove') },
           );
@@ -1594,40 +1281,16 @@ const Grid = ({
       index: number,
       dx: number,
       dy: number,
-      elementId?: string,
+      elementId: string,
     ) => {
-      // 합성 id는 commitElementPosition이 fallback으로 돌린다 - 기존 index
-      // 커밋을 fallback 클로저로 넘겨 무ID 요소의 저장을 유지
-      commitElementPosition('knob', elementId, dx, dy, () =>
-        legacyPositionCommit(),
-      );
-      function legacyPositionCommit() {
-        const current = useKnobItemStore.getState().positions;
-        const tabPositions = current[selectedKeyType] || [];
-        const prev = tabPositions[index];
-        if (!prev) return;
-        if (prev.dx === dx && prev.dy === dy) return;
-
-        const nextTabPositions = tabPositions.map((pos, i) =>
-          i === index ? { ...pos, dx, dy } : pos,
-        );
-        const nextPositions = {
-          ...current,
-          [selectedKeyType]: nextTabPositions,
-        };
-
-        useKnobItemStore.getState().setPositions(nextPositions);
-        knobItemsApi.updatePositions(nextPositions).catch((error) => {
-          console.error('Failed to update knob item positions', error);
-        });
-      }
+      commitElementPosition('knob', elementId, dx, dy);
     };
 
     return items.map((position, index) => (
       <KnobItem
-        key={position.id || `knob-${selectedKeyType}-${index}`}
+        key={position.id}
         index={index}
-        elementId={position.id || `knob-${index}`}
+        elementId={position.id}
         position={position}
         onPositionChange={handleKnobPositionChange}
         zIndex={position.zIndex ?? index}
@@ -1638,27 +1301,21 @@ const Grid = ({
         onCtrlClick={() => {
           toggleSelection({
             type: 'knob',
-            id: selectionElementId(
-              'knob',
-              useKnobItemStore.getState().positions[selectedKeyType]?.[index],
-              index,
-            ),
+            id: useKnobItemStore.getState().positions[selectedKeyType][index]
+              .id,
             index,
           });
         }}
         onShiftClick={() => {
           toggleSelection({
             type: 'knob',
-            id: selectionElementId(
-              'knob',
-              useKnobItemStore.getState().positions[selectedKeyType]?.[index],
-              index,
-            ),
+            id: useKnobItemStore.getState().positions[selectedKeyType][index]
+              .id,
             index,
           });
         }}
         isSelected={selectedElements.some(
-          (el) => el.type === 'knob' && el.index === index,
+          (el) => el.type === 'knob' && el.id === position.id,
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
@@ -1671,12 +1328,9 @@ const Grid = ({
           showConfirm(
             t('confirm.removeKnob', { name: 'Knob' }),
             () => {
-              const id = position.id;
-              if (id) {
-                void deleteElementById('knob', id).catch(reportElementOpError);
-                return;
-              }
-              deleteKnobAtIndex(index);
+              void deleteElementById('knob', position.id).catch(
+                reportElementOpError,
+              );
             },
             { confirmText: t('confirm.remove') },
           );
@@ -1991,58 +1645,15 @@ const Grid = ({
           }
         }
 
-        let bounds = null;
-        if (el.type === 'key' && el.index !== undefined) {
-          const pos = positions[selectedKeyType]?.[el.index];
-          if (pos) {
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-          }
-        } else if (el.type === 'stat' && el.index !== undefined) {
-          const pos = statPositions?.[selectedKeyType]?.[el.index];
-          if (pos) {
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-          }
-        } else if (el.type === 'graph' && el.index !== undefined) {
-          const pos = graphPositions?.[selectedKeyType]?.[el.index];
-          if (pos) {
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 200,
-              height: pos.height || 100,
-            };
-          }
-        } else if (el.type === 'knob' && el.index !== undefined) {
-          const pos = knobPositions?.[selectedKeyType]?.[el.index];
-          if (pos) {
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-          }
-        } else if (el.type === 'plugin') {
-          const pluginEl = pluginElements.find((p) => p.fullId === el.id);
-          if (pluginEl && pluginEl.measuredSize) {
-            bounds = {
-              x: pluginEl.position.x,
-              y: pluginEl.position.y,
-              width: pluginEl.measuredSize.width,
-              height: pluginEl.measuredSize.height,
-            };
-          }
-        }
+        const bounds = getElementBounds(
+          el,
+          positions,
+          statPositions,
+          graphPositions,
+          knobPositions,
+          selectedKeyType,
+          pluginElements,
+        );
         if (!bounds) return null;
 
         // 단일 선택이고 프리뷰 bounds가 있으면 프리뷰 bounds 사용 (드래그 중 파란 선도 함께 이동)
@@ -2072,55 +1683,18 @@ const Grid = ({
       {selectedElements.length === 1 &&
         (() => {
           const el = selectedElements[0];
-          let bounds = null;
-          let elementId = null;
+          let bounds = getElementBounds(
+            el,
+            positions,
+            statPositions,
+            graphPositions,
+            knobPositions,
+            selectedKeyType,
+            pluginElements,
+          );
+          const elementId = el.id;
 
-          if (el.type === 'key' && el.index !== undefined) {
-            // 키 요소
-            const pos = positions[selectedKeyType]?.[el.index];
-            if (!pos) return null;
-
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-            elementId = selectionElementId('key', pos, el.index);
-          } else if (el.type === 'stat' && el.index !== undefined) {
-            const pos = statPositions?.[selectedKeyType]?.[el.index];
-            if (!pos) return null;
-
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-            elementId = selectionElementId('stat', pos, el.index);
-          } else if (el.type === 'graph' && el.index !== undefined) {
-            const pos = graphPositions?.[selectedKeyType]?.[el.index];
-            if (!pos) return null;
-
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 200,
-              height: pos.height || 100,
-            };
-            elementId = selectionElementId('graph', pos, el.index);
-          } else if (el.type === 'knob' && el.index !== undefined) {
-            const pos = knobPositions?.[selectedKeyType]?.[el.index];
-            if (!pos) return null;
-
-            bounds = {
-              x: pos.dx,
-              y: pos.dy,
-              width: pos.width || 60,
-              height: pos.height || 60,
-            };
-            elementId = selectionElementId('knob', pos, el.index);
-          } else if (el.type === 'plugin') {
+          if (el.type === 'plugin') {
             // 플러그인 요소 - resizable 속성 확인
             const pluginEl = pluginElements.find((p) => p.fullId === el.id);
             if (!pluginEl || !pluginEl.measuredSize) {
@@ -2137,13 +1711,15 @@ const Grid = ({
             // resizable이 true인 경우에만 리사이즈 핸들 표시
             if (!definition?.resizable) return null;
 
-            bounds = {
-              x: pluginEl.position.x,
-              y: pluginEl.position.y,
-              width: pluginEl.measuredSize.width,
-              height: pluginEl.measuredSize.height,
-            };
-            elementId = el.id;
+            bounds = getElementBounds(
+              el,
+              positions,
+              statPositions,
+              graphPositions,
+              knobPositions,
+              selectedKeyType,
+              pluginElements,
+            );
           }
 
           if (!bounds || !elementId) return null;
@@ -2254,16 +1830,11 @@ const Grid = ({
             const resolveContextTarget = (
               targetType: 'key' | 'stat' | 'graph' | 'knob',
             ): number | null => {
-              if (contextElementId) {
-                const locator = resolveElementById(
-                  targetType,
-                  contextElementId,
-                );
-                return locator && locator.mode === selectedKeyType
-                  ? locator.index
-                  : null;
-              }
-              return contextIndex;
+              if (!contextElementId) return null;
+              const locator = resolveElementById(targetType, contextElementId);
+              return locator && locator.mode === selectedKeyType
+                ? locator.index
+                : null;
             };
 
             if (contextType === 'stat') {
@@ -2280,13 +1851,10 @@ const Grid = ({
                 showConfirm(
                   t('confirm.removeStat', { name: displayName }),
                   () => {
-                    if (contextElementId) {
-                      void deleteElementById('stat', contextElementId).catch(
-                        reportElementOpError,
-                      );
-                      return;
-                    }
-                    if (statIndex != null) deleteStatAtIndex(statIndex);
+                    if (!contextElementId) return;
+                    void deleteElementById('stat', contextElementId).catch(
+                      reportElementOpError,
+                    );
                   },
                   { confirmText: t('confirm.remove') },
                 );
@@ -2299,8 +1867,6 @@ const Grid = ({
                     targets: [{ type: 'stat', id: contextElementId }],
                     action: 'front',
                   }).catch(reportElementOpError);
-                } else if (statIndex != null) {
-                  moveStatToFront(statIndex);
                 }
               } else if (id === 'sendToBack') {
                 if (contextElementId) {
@@ -2309,8 +1875,6 @@ const Grid = ({
                     targets: [{ type: 'stat', id: contextElementId }],
                     action: 'back',
                   }).catch(reportElementOpError);
-                } else if (statIndex != null) {
-                  moveStatToBack(statIndex);
                 }
               }
 
@@ -2333,13 +1897,10 @@ const Grid = ({
                 showConfirm(
                   t('confirm.removeGraph', { name: displayName }),
                   () => {
-                    if (contextElementId) {
-                      void deleteElementById('graph', contextElementId).catch(
-                        reportElementOpError,
-                      );
-                      return;
-                    }
-                    if (graphIndex != null) deleteGraphAtIndex(graphIndex);
+                    if (!contextElementId) return;
+                    void deleteElementById('graph', contextElementId).catch(
+                      reportElementOpError,
+                    );
                   },
                   { confirmText: t('confirm.remove') },
                 );
@@ -2352,8 +1913,6 @@ const Grid = ({
                     targets: [{ type: 'graph', id: contextElementId }],
                     action: 'front',
                   }).catch(reportElementOpError);
-                } else if (graphIndex != null) {
-                  moveGraphToFront(graphIndex);
                 }
               } else if (id === 'sendToBack') {
                 if (contextElementId) {
@@ -2362,8 +1921,6 @@ const Grid = ({
                     targets: [{ type: 'graph', id: contextElementId }],
                     action: 'back',
                   }).catch(reportElementOpError);
-                } else if (graphIndex != null) {
-                  moveGraphToBack(graphIndex);
                 }
               }
 
@@ -2378,13 +1935,10 @@ const Grid = ({
                 showConfirm(
                   t('confirm.removeKnob', { name: 'Knob' }),
                   () => {
-                    if (contextElementId) {
-                      void deleteElementById('knob', contextElementId).catch(
-                        reportElementOpError,
-                      );
-                      return;
-                    }
-                    if (knobIndex != null) deleteKnobAtIndex(knobIndex);
+                    if (!contextElementId) return;
+                    void deleteElementById('knob', contextElementId).catch(
+                      reportElementOpError,
+                    );
                   },
                   { confirmText: t('confirm.remove') },
                 );
@@ -2397,8 +1951,6 @@ const Grid = ({
                     targets: [{ type: 'knob', id: contextElementId }],
                     action: 'front',
                   }).catch(reportElementOpError);
-                } else if (knobIndex != null) {
-                  moveKnobToFront(knobIndex);
                 }
               } else if (id === 'sendToBack') {
                 if (contextElementId) {
@@ -2407,8 +1959,6 @@ const Grid = ({
                     targets: [{ type: 'knob', id: contextElementId }],
                     action: 'back',
                   }).catch(reportElementOpError);
-                } else if (knobIndex != null) {
-                  moveKnobToBack(knobIndex);
                 }
               }
 
@@ -2436,7 +1986,7 @@ const Grid = ({
                     keyIndex
                   ] ?? '',
                 ),
-                id: positionForContext.id ?? '',
+                id: positionForContext.id,
                 index: keyIndex,
                 position: positionForContext,
                 mode: selectedKeyType,
@@ -2475,13 +2025,10 @@ const Grid = ({
               showConfirm(
                 t('confirm.removeKey', { name: displayName }),
                 () => {
-                  if (contextElementId) {
-                    void deleteElementById('key', contextElementId).catch(
-                      reportElementOpError,
-                    );
-                    return;
-                  }
-                  if (keyIndex != null) onKeyDelete(keyIndex);
+                  if (!contextElementId) return;
+                  void deleteElementById('key', contextElementId).catch(
+                    reportElementOpError,
+                  );
                 },
                 { confirmText: t('confirm.remove') },
               );
@@ -2584,11 +2131,6 @@ const Grid = ({
                   targets: [{ type: 'key', id: contextElementId }],
                   action: 'front',
                 }).catch(reportElementOpError);
-              } else {
-                const keyIndex = resolveContextTarget('key');
-                if (keyIndex != null && typeof onMoveToFront === 'function') {
-                  onMoveToFront(keyIndex);
-                }
               }
             } else if (id === 'bringForward') {
               if (contextElementId) {
@@ -2597,11 +2139,6 @@ const Grid = ({
                   targets: [{ type: 'key', id: contextElementId }],
                   action: 'forward',
                 }).catch(reportElementOpError);
-              } else {
-                const keyIndex = resolveContextTarget('key');
-                if (keyIndex != null && typeof onMoveForward === 'function') {
-                  onMoveForward(keyIndex);
-                }
               }
             } else if (id === 'sendBackward') {
               if (contextElementId) {
@@ -2610,11 +2147,6 @@ const Grid = ({
                   targets: [{ type: 'key', id: contextElementId }],
                   action: 'backward',
                 }).catch(reportElementOpError);
-              } else {
-                const keyIndex = resolveContextTarget('key');
-                if (keyIndex != null && typeof onMoveBackward === 'function') {
-                  onMoveBackward(keyIndex);
-                }
               }
             } else if (id === 'sendToBack') {
               if (contextElementId) {
@@ -2623,11 +2155,6 @@ const Grid = ({
                   targets: [{ type: 'key', id: contextElementId }],
                   action: 'back',
                 }).catch(reportElementOpError);
-              } else {
-                const keyIndex = resolveContextTarget('key');
-                if (keyIndex != null && typeof onMoveToBack === 'function') {
-                  onMoveToBack(keyIndex);
-                }
               }
             }
             setIsContextOpen(false);
@@ -2725,21 +2252,6 @@ const Grid = ({
           }}
         />
       </div>
-      <GridKeySettingModal
-        selectedKey={selectedKey}
-        setSelectedKey={setSelectedKey}
-        currentKeyPosition={
-          selectedKey
-            ? positions[selectedKeyType]?.[selectedKey.index]
-            : undefined
-        }
-        onKeyUpdate={onKeyUpdate}
-        onKeyPreview={onKeyPreview}
-        onNoteColorPreview={onNoteColorPreview}
-        onCounterPreview={onCounterPreview}
-        shouldSkipModalAnimation={shouldSkipModalAnimation}
-        onModalAnimationConsumed={onModalAnimationConsumed}
-      />
       {/* 미니맵 */}
       {minimapEnabled && (
         <GridMinimap

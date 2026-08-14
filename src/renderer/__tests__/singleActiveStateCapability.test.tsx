@@ -96,7 +96,7 @@ describe('단일 통계 active 색 편집 차단', () => {
   });
 
   it('StyleTabContent는 키에서 통계로 바뀌면 피커를 닫고 idle 필드만 기록한다', async () => {
-    const onKeyUpdate = vi.fn();
+    const onPaintCommit = vi.fn();
     const renderStyle = (showActiveState: boolean) =>
       root.render(
         <PanelNavProvider value={navValue}>
@@ -105,8 +105,7 @@ describe('단일 통계 active 색 편집 차단', () => {
             keyPosition={keyPosition}
             keyCode={null}
             keyInfo={null}
-            onPositionChange={vi.fn()}
-            onKeyUpdate={onKeyUpdate}
+            onPaintCommit={onPaintCommit}
             shadowActiveState={showActiveState}
             showSoundControls={false}
             t={(key) => key}
@@ -129,21 +128,20 @@ describe('단일 통계 active 색 편집 차단', () => {
     expect(captured.colorPickerProps?.color).toBe('#111111');
     act(() => captured.colorPickerProps?.onColorChangeComplete('#abcdef'));
 
-    const update = onKeyUpdate.mock.calls.at(-1)?.[0];
-    expect(update.backgroundColor).toBe('#abcdef');
-    expect(update).not.toHaveProperty('activeBackgroundColor');
+    expect(onPaintCommit).toHaveBeenLastCalledWith({
+      backgroundPaint: { color: '#abcdef', gradient: null },
+    });
   });
 
   it('CounterTabContent는 키에서 통계로 바뀌면 피커를 닫고 idle 쌍만 바꾼다', async () => {
-    const onKeyUpdate = vi.fn();
+    const onCounterFillCommit = vi.fn();
     const renderCounter = (isStat: boolean) =>
       root.render(
         <PanelNavProvider value={navValue}>
           <CounterTabContent
-            keyIndex={0}
             keyPosition={keyPosition}
             isStat={isStat}
-            onKeyUpdate={onKeyUpdate}
+            onCounterFillCommit={onCounterFillCommit}
             t={(key) => key}
           />
         </PanelNavProvider>,
@@ -164,8 +162,8 @@ describe('단일 통계 active 색 편집 차단', () => {
     expect(captured.colorPickerProps?.color).toBe('#112233');
     act(() => captured.colorPickerProps?.onColorChangeComplete('#abcdef'));
 
-    const update = onKeyUpdate.mock.calls.at(-1)?.[0];
-    expect(update.counter.fill.idle).toBe('#abcdef');
-    expect(update.counter.fill.active).toBe('#445566');
+    expect(onCounterFillCommit).toHaveBeenLastCalledWith({
+      counterFillIdle: { color: '#abcdef' },
+    });
   });
 });

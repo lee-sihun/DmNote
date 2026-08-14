@@ -1,15 +1,17 @@
 import { create } from 'zustand';
-import type { KnobItemPositions } from '@src/types/key/knobs';
+import type { CanonicalEditorDocumentV1 } from '@src/types/editor';
+
+type CanonicalKnobItemPositions = CanonicalEditorDocumentV1['knobPositions'];
 
 interface KnobItemStoreState {
-  positions: KnobItemPositions;
+  positions: CanonicalKnobItemPositions;
   isLocalUpdateInProgress: boolean;
-  setPositions: (positions: KnobItemPositions) => void;
+  setPositions: (positions: CanonicalKnobItemPositions) => void;
   setLocalUpdateInProgress: (value: boolean) => void;
 }
 
 export const useKnobItemStore = create<KnobItemStoreState>((set) => ({
-  positions: {} as KnobItemPositions,
+  positions: {},
   isLocalUpdateInProgress: false,
   setPositions: (positions) => set({ positions }),
   setLocalUpdateInProgress: (value) => set({ isLocalUpdateInProgress: value }),

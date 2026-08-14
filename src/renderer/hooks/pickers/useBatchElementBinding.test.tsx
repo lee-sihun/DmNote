@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   captureBatchElementBinding,
-  LEGACY_BATCH_ELEMENT_BINDING,
   useBatchElementBinding,
   type BatchElementBinding,
 } from './useBatchElementBinding';
@@ -30,12 +29,12 @@ describe('captureBatchElementBinding', () => {
   });
 
   // 일부만 ID로 적용하고 나머지를 조용히 빠뜨리는 반쪽 적용 금지
-  it('합성 폴백 ID가 하나라도 있으면 배치 전체를 legacy로 보낸다', () => {
+  it('잘못된 ID가 하나라도 있으면 배치 전체를 비운다', () => {
     const binding = captureBatchElementBinding({
       key: [{ id: ID_A }, { id: 'key-0' }],
     });
 
-    expect(binding.binding).toBe('session-mode');
+    expect(binding.binding).toBe('element-id');
     expect(binding.selection).toEqual({});
   });
 
@@ -55,10 +54,11 @@ describe('captureBatchElementBinding', () => {
     ['nil', '00000000-0000-0000-0000-000000000000'],
     ['trimmed', ` ${ID_A}`],
     ['uppercase urn prefix', 'URN:UUID:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
-  ])('Rust가 거절하는 %s ID는 legacy로 보낸다', (_label, id) => {
-    expect(captureBatchElementBinding({ key: [{ id }] })).toBe(
-      LEGACY_BATCH_ELEMENT_BINDING,
-    );
+  ])('Rust가 거절하는 %s ID는 전체 결합을 비운다', (_label, id) => {
+    expect(captureBatchElementBinding({ key: [{ id }] })).toEqual({
+      binding: 'element-id',
+      selection: {},
+    });
   });
 });
 
@@ -96,7 +96,7 @@ describe('useBatchElementBinding', () => {
   // 배치 피커는 선택 변경에 언마운트되지 않으므로 open 시점 고정이 핵심
   it('open 시점에 1회 캡처하고 닫힐 때까지 불변으로 유지한다', () => {
     act(() => root.render(<Probe open={false} />));
-    expect(seen.latest?.binding).toBe('session-mode');
+    expect(seen.latest?.binding).toBe('element-id');
 
     act(() => root.render(<Probe open />));
     expect(seen.latest?.selection.key).toEqual([ID_A]);

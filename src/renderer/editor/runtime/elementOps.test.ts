@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
   commitGeneratedSemanticOps: vi.fn(),
   commitSemanticOps: vi.fn(),
   captureEditorDocument: vi.fn(),
-  lastAck: null as EditorDocumentV1 | null,
+  lastAck: null as CanonicalEditorDocumentV1 | null,
 }));
 
 vi.mock('./editorStateCoordinator', () => ({
@@ -110,7 +110,12 @@ import {
   enqueueEditorCompatibilityWrite,
 } from './editorCompatibilityQueue';
 
-import type { EditorDocumentV1, EditorPatchV1 } from '@src/types/editor';
+import type {
+  CanonicalEditorDocumentV1,
+  CanonicalGraphItemPosition,
+  EditorDocumentV1,
+  EditorPatchV1,
+} from '@src/types/editor';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 
 const ID_A = '11111111-1111-4111-8111-111111111111';
@@ -125,7 +130,7 @@ const keyAt = (id: string, zIndex?: number) => ({
 const graphAt = (
   id: string,
   patch: Partial<GraphItemPosition> = {},
-): GraphItemPosition => ({
+): CanonicalGraphItemPosition => ({
   ...createDefaultKeyPosition(),
   id,
   statType: 'kps',
@@ -137,10 +142,10 @@ const graphAt = (
 
 // 슬롯 시점 base. 기본은 호출 시점 스토어 - 대기 중 재정렬·삭제는 테스트가
 // slotBase로 재현한다
-let slotBase: (() => EditorDocumentV1) | null = null;
+let slotBase: (() => CanonicalEditorDocumentV1) | null = null;
 const generatedPatches: Array<EditorPatchV1 | null> = [];
 
-const documentFromStores = (): EditorDocumentV1 =>
+const documentFromStores = (): CanonicalEditorDocumentV1 =>
   ({
     schemaVersion: 1,
     keys: structuredClone(useKeyStore.getState().keyMappings),
@@ -149,7 +154,7 @@ const documentFromStores = (): EditorDocumentV1 =>
     graphPositions: structuredClone(useGraphItemStore.getState().positions),
     knobPositions: structuredClone(useKnobItemStore.getState().positions),
     layerGroups: structuredClone(useLayerGroupStore.getState().layerGroups),
-  } as unknown as EditorDocumentV1);
+  } as CanonicalEditorDocumentV1);
 
 describe('elementOps', () => {
   beforeEach(() => {
@@ -159,7 +164,9 @@ describe('elementOps', () => {
     api.lastAck = null;
     api.captureEditorDocument.mockImplementation(() => documentFromStores());
     api.commitGeneratedPatch.mockImplementation(
-      async (generate: (base: EditorDocumentV1) => EditorPatchV1 | null) => {
+      async (
+        generate: (base: CanonicalEditorDocumentV1) => EditorPatchV1 | null,
+      ) => {
         const base = (slotBase ?? documentFromStores)();
         generatedPatches.push(generate(base));
         return base;

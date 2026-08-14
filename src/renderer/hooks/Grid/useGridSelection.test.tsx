@@ -9,7 +9,7 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import type { KeyPosition } from '@src/types/key/keys';
+import type { CanonicalKeyPosition } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 import { useGridSelection } from './useGridSelection';
@@ -118,7 +118,7 @@ const keyPosition = {
   dy: 20,
   width: 60,
   height: 60,
-} as KeyPosition;
+} as CanonicalKeyPosition;
 const pluginElement = (): PluginDisplayElementInternal => ({
   id: 'element',
   fullId: 'plugin-a:element',
@@ -285,6 +285,23 @@ describe('useGridSelection compound history gesture', () => {
 
     expect(mocks.deleteLayerSelectionViaAuthority).not.toHaveBeenCalled();
     expect(mocks.runMixedDeleteIntent).not.toHaveBeenCalled();
+    expect(useGridSelectionStore.getState().selectedElements).toEqual([
+      { type: 'key', id: 'key-0', index: 0 },
+    ]);
+  });
+
+  it('main의 synthetic native 선택도 로컬과 wire 삭제를 모두 중단한다', async () => {
+    await act(async () => {
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements([{ type: 'key', id: 'key-0', index: 0 }]);
+    });
+
+    await act(async () => api.deleteSelectedElements());
+
+    expect(mocks.runMixedDeleteIntent).not.toHaveBeenCalled();
+    expect(mocks.runMixedGestureIntent).not.toHaveBeenCalled();
+    expect(mocks.deletePluginElements).not.toHaveBeenCalled();
     expect(useGridSelectionStore.getState().selectedElements).toEqual([
       { type: 'key', id: 'key-0', index: 0 },
     ]);
@@ -805,7 +822,7 @@ describe('useGridSelection compound history gesture', () => {
     expect(result.desiredPluginProjection).toHaveLength(1);
   });
 
-  it('기존 native에 synthetic ID가 하나라도 있으면 전체 legacy patch로 fallback한다', async () => {
+  it('기존 native에 invalid ID가 하나라도 있으면 paste 의도를 중단한다', async () => {
     const firstId = '10000000-0000-4000-8000-000000000023';
     const secondId = '10000000-0000-4000-8000-000000000024';
     randomUUID
@@ -829,34 +846,30 @@ describe('useGridSelection compound history gesture', () => {
         ops?: unknown[];
       };
     };
-    const result = options.generate({
-      base: {
-        schemaVersion: 1,
-        keys: { '4key': ['KeyA', 'KeyB'] },
-        keyPositions: {
-          '4key': [
-            { ...keyPosition, id: 'key-0' },
-            {
-              ...keyPosition,
-              id: firstId,
-              dx: keyPosition.dx + 20,
-              dy: keyPosition.dy + 20,
-            },
-          ],
+    expect(() =>
+      options.generate({
+        base: {
+          schemaVersion: 1,
+          keys: { '4key': ['KeyA', 'KeyB'] },
+          keyPositions: {
+            '4key': [
+              { ...keyPosition, id: 'key-0' },
+              {
+                ...keyPosition,
+                id: firstId,
+                dx: keyPosition.dx + 20,
+                dy: keyPosition.dy + 20,
+              },
+            ],
+          },
+          statPositions: {},
+          graphPositions: {},
+          knobPositions: {},
+          layerGroups: {},
         },
-        statPositions: {},
-        graphPositions: {},
-        knobPositions: {},
-        layerGroups: {},
-      },
-      pluginProjection: [],
-    });
-
-    expect(result.kind).toBe('patch');
-    expect(result.patch).toEqual(
-      expect.objectContaining({ keys: expect.any(Object) }),
-    );
-    expect(result.ops).toBeUndefined();
+        pluginProjection: [],
+      }),
+    ).toThrow('paste source document is not canonical');
   });
 
   it('paste 선택은 성공 뒤 신규 ID로 이동하고 실패하면 기존 선택을 유지한다', async () => {

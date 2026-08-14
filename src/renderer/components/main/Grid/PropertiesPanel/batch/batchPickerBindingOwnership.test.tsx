@@ -37,6 +37,7 @@ const captured = vi.hoisted(() => ({
     ) => void;
   },
   color: null as null | {
+    referenceRef?: React.RefObject<HTMLElement>;
     stateMode?: string;
     onStateModeChange?: (mode: string) => void;
     onColorChange: (color: string) => void;
@@ -281,15 +282,13 @@ vi.mock('@src/renderer/editor/runtime/editGestureController', () => ({
 }));
 
 import { PanelNavProvider } from '@components/main/Grid/PropertiesPanel/PanelNavContext';
-import { BatchKeyLikePanel } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
+import { BatchKeyLikePanel as ActualBatchKeyLikePanel } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
 import {
   BatchGraphOnlyPanel,
   BatchKnobOnlyPanel,
 } from '@components/main/Grid/PropertiesPanel/batch/BatchSelectionPanel';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from '@components/main/Grid/PropertiesPanel/batch/BatchStyleTabContent';
 import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from '@components/main/Grid/PropertiesPanel/batch/BatchCounterTabContent';
-
-const BATCH_STYLE_FONT_PAGE_KEY = 'batch-style:font';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -315,7 +314,26 @@ const shadowSpec = () => ({
   blur: 10,
 });
 
-type PanelProps = React.ComponentProps<typeof BatchKeyLikePanel>;
+type RemovedLegacyPanelProps = {
+  handleBatchCounterUpdate?: (...args: unknown[]) => void;
+  handleBatchKeyOnlyStyleChange?: (...args: unknown[]) => void;
+  handleBatchKeyOnlyStyleChangeComplete?: (...args: unknown[]) => void;
+  handleKeyOnlyStyleChangeComplete?: (...args: unknown[]) => void;
+  handleBatchStyleChange?: (...args: unknown[]) => void;
+  handleBatchStyleChangeComplete?: (...args: unknown[]) => void;
+};
+type PanelProps = React.ComponentProps<typeof ActualBatchKeyLikePanel> &
+  RemovedLegacyPanelProps;
+
+const BatchKeyLikePanel = ({
+  handleBatchCounterUpdate: _handleBatchCounterUpdate,
+  handleBatchKeyOnlyStyleChange: _handleBatchKeyOnlyStyleChange,
+  handleBatchKeyOnlyStyleChangeComplete: _handleBatchKeyOnlyStyleChangeComplete,
+  handleKeyOnlyStyleChangeComplete: _handleKeyOnlyStyleChangeComplete,
+  handleBatchStyleChange: _handleBatchStyleChange,
+  handleBatchStyleChangeComplete: _handleBatchStyleChangeComplete,
+  ...props
+}: PanelProps) => <ActualBatchKeyLikePanel {...props} />;
 
 const mixedValue = <T,>(_getter: unknown, defaultValue: T) => ({
   isMixed: false,
@@ -329,6 +347,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
   let host: HTMLDivElement;
   let pageHost: HTMLDivElement;
   let root: Root;
+  const pendingFrames = new Set<number>();
 
   const clickSoundEnabled = () => {
     const label = Array.from(host.querySelectorAll('p')).find(
@@ -355,6 +374,16 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
     expect(captured.color).not.toBeNull();
+  };
+
+  const waitForColorPicker = async (button: HTMLButtonElement) => {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+      if (captured.color?.referenceRef?.current === button) return;
+    }
+    expect(captured.color?.referenceRef?.current).toBe(button);
   };
 
   const latestCounterDropdown = (value: string) =>
@@ -522,12 +551,18 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
-      window.setTimeout(() => callback(performance.now()), 0),
-    );
-    vi.stubGlobal('cancelAnimationFrame', (id: number) =>
-      window.clearTimeout(id),
-    );
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = window.setTimeout(() => {
+        pendingFrames.delete(id);
+        callback(performance.now());
+      }, 0);
+      pendingFrames.add(id);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      pendingFrames.delete(id);
+      window.clearTimeout(id);
+    });
     captured.sound = null;
     captured.font = null;
     captured.image = null;
@@ -547,8 +582,13 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     root = createRoot(host);
   });
 
-  afterEach(() => {
-    act(() => root.unmount());
+  afterEach(async () => {
+    pendingFrames.forEach((id) => window.clearTimeout(id));
+    pendingFrames.clear();
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
     host.remove();
     pageHost.remove();
     delete window.__dmn_window_type;
@@ -742,27 +782,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(legacy).not.toHaveBeenCalled();
   });
 
-  it.each(['key-0', 'knob-0'] as const)(
-    'batch active paint relevant %s target은 whole legacy다',
-    async (id) => {
-      const type = id.startsWith('key') ? 'key' : 'knob';
-      const legacy = vi.fn();
-      useGridSelectionStore.setState({
-        selectedElements: [{ type, id, index: 0 }],
-      });
-      renderImagePanel('mixed', legacy);
-
-      await commitBackgroundPaint('active', 'active-legacy');
-
-      expect(legacy).toHaveBeenCalledWith('backgroundColor', 'active', {
-        mode: 'solid',
-        color: 'active-legacy',
-      });
-      expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
-      expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
-    },
-  );
-
   it.each(['main', 'panel'] as const)(
     '%s batch noteGlowSize는 current key subset에 gesture 없이 exact commit한다',
     (windowType) => {
@@ -889,73 +908,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(gestures.preview).not.toHaveBeenCalled();
       expect(gestures.settleCommit).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([
-    ['synthetic', 'key-0'],
-    ['empty', ''],
-  ] as const)(
-    'batch noteGlowSize relevant %s key는 whole legacy다',
-    (_label, id) => {
-      useKeyStore.setState({
-        selectedKeyType: '4key',
-        canonicalPositions: { '4key': [keyAt(id)] },
-        positions: { '4key': [keyAt(id)] },
-      });
-      useGridSelectionStore.setState({
-        selectedElements: [
-          { type: 'key', id, index: 0 },
-          { type: 'stat', id: 'stat-0', index: 0 },
-        ],
-      });
-      const legacy = vi.fn();
-      renderNotePanel(legacy);
-      const glow = captured.numbers
-        .filter((input) => input.min === 0 && input.max === 50)
-        .at(-1);
-      act(() => glow?.onChange(20.5));
-
-      expect(legacy).toHaveBeenCalledWith('noteGlowSize', 20.5);
-      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
-      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([
-    ['synthetic', 'key-0'],
-    ['empty', ''],
-  ] as const)(
-    'batch note numeric relevant %s key는 whole legacy다',
-    (_label, id) => {
-      useKeyStore.setState({
-        selectedKeyType: '4key',
-        canonicalPositions: { '4key': [keyAt(id)] },
-        positions: { '4key': [keyAt(id)] },
-      });
-      useGridSelectionStore.setState({
-        selectedElements: [
-          { type: 'key', id, index: 0 },
-          { type: 'graph', id: 'graph-0', index: 0 },
-        ],
-      });
-      const legacy = vi.fn();
-      renderNotePanel(legacy);
-      const offset = captured.optionalNumbers
-        .filter((input) => input.prefix === 'X')
-        .at(-1);
-      const radius = captured.numbers
-        .filter((input) => input.min === 1 && input.max === 100)
-        .at(-1);
-      act(() => offset?.onChange(undefined));
-      act(() => radius?.onChange(18.5));
-
-      expect(legacy.mock.calls).toEqual([
-        ['noteOffsetX', undefined],
-        ['noteBorderRadius', 18.5],
-      ]);
-      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
-      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
     },
   );
 
@@ -1096,58 +1048,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     });
     expect(gestures.preview).not.toHaveBeenCalled();
   });
-
-  it.each(['key-0', ''])(
-    'displayText mixed selection에 %j가 있으면 actual input 전체가 legacy다',
-    async (id) => {
-      const stable = keyAt(ID_A);
-      const unsupported = keyAt(id);
-      useKeyStore.setState({
-        selectedKeyType: '4key',
-        canonicalPositions: { '4key': [stable, unsupported] },
-        positions: { '4key': [stable, unsupported] },
-      });
-      useGridSelectionStore.setState({
-        selectedElements: [
-          { type: 'key', id: ID_A, index: 0 },
-          { type: 'key', id, index: 1 },
-        ],
-      });
-      const props = panelProps();
-      const preview = vi.fn();
-      const commit = vi.fn();
-      props.handleBatchStyleChange = preview;
-      props.handleBatchStyleChangeComplete = commit;
-      act(() => {
-        root.render(
-          <PanelNavProvider
-            value={{
-              activePageKey: null,
-              renderPageKey: null,
-              openPage: vi.fn(),
-              closePage: vi.fn(),
-              pageHost,
-            }}
-          >
-            <BatchKeyLikePanel {...props} />
-          </PanelNavProvider>,
-        );
-      });
-      const input = host.querySelector<HTMLInputElement>('input[type="text"]')!;
-      act(() => input.focus());
-      act(() => setInputValue(input, 'Legacy'));
-      await act(async () => {
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-      });
-      act(() => input.blur());
-
-      expect(preview).toHaveBeenCalledWith('displayText', 'Legacy');
-      expect(commit).toHaveBeenCalledWith('displayText', 'Legacy');
-      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
-      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
-    },
-  );
 
   type ClassNamePanelKind = 'mixed' | 'graph' | 'knob';
 
@@ -1310,36 +1210,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     },
   );
 
-  it.each(['mixed', 'graph', 'knob'] as const)(
-    '%s batch className relevant synthetic는 actual input 전체가 legacy다',
-    async (kind) => {
-      const ids =
-        kind === 'mixed'
-          ? [ID_A, ID_B, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'knob-0']
-          : [`${kind}-0`];
-      setClassNameTargets(kind, ids);
-      const legacyPreview = vi.fn();
-      const legacyCommit = vi.fn();
-      renderClassNamePanel(kind, legacyPreview, legacyCommit);
-      const input = host.querySelector<HTMLInputElement>(
-        'input[placeholder="className"]',
-      )!;
-
-      act(() => input.focus());
-      act(() => setInputValue(input, 'LegacyClass'));
-      await act(async () => {
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-      });
-      act(() => input.blur());
-
-      expect(legacyPreview).toHaveBeenCalledWith('className', 'LegacyClass');
-      expect(legacyCommit).toHaveBeenCalledWith('className', 'LegacyClass');
-      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
-      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
-    },
-  );
-
   it.each([
     ['main idle', 'main', 'idle'],
     ['panel active', 'panel', 'active'],
@@ -1416,63 +1286,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       }
       expect(legacyPreview).not.toHaveBeenCalled();
       expect(legacyCommit).not.toHaveBeenCalled();
-    },
-  );
-
-  it('mixed batch active font color는 non-active synthetic를 무시하고 relevant synthetic면 whole legacy다', async () => {
-    const legacyPreview = vi.fn();
-    const legacyCommit = vi.fn();
-    setClassNameTargets('mixed', [ID_A, 'stat-0', 'graph-0', ID_B]);
-    renderClassNamePanel('mixed', legacyPreview, legacyCommit);
-    await openFontColorPicker();
-    act(() => captured.color?.onStateModeChange?.('active'));
-    act(() => captured.color?.onColorChangeComplete('#112233'));
-    expect(patches.patchFontColorByTargets).toHaveBeenCalledWith(
-      [
-        { elementType: 'key', id: ID_A },
-        { elementType: 'knob', id: ID_B },
-      ],
-      { activeFontColor: '#112233' },
-      {},
-    );
-
-    vi.clearAllMocks();
-    setClassNameTargets('mixed', ['key-0', ID_A, ID_B, 'knob-0']);
-    renderClassNamePanel('mixed', legacyPreview, legacyCommit);
-    await openFontColorPicker();
-    act(() => captured.color?.onStateModeChange?.('active'));
-    act(() => captured.color?.onColorChangeComplete('#445566'));
-    expect(patches.patchFontColorByTargets).not.toHaveBeenCalled();
-    expect(patches.patchFontColorViaAuthority).not.toHaveBeenCalled();
-    expect(legacyCommit).toHaveBeenCalledWith('activeFontColor', '#445566');
-  });
-
-  it.each([
-    ['synthetic', 'stat-0'],
-    ['empty', ''],
-  ] as const)(
-    'mixed batch idle font color는 relevant %s target이면 whole legacy다',
-    async (_label, statId) => {
-      const legacyPreview = vi.fn();
-      const legacyCommit = vi.fn();
-      setClassNameTargets('mixed', [
-        ID_A,
-        statId,
-        ID_B,
-        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-      ]);
-      renderClassNamePanel('mixed', legacyPreview, legacyCommit);
-      await openFontColorPicker();
-
-      act(() => captured.color?.onColorChange('#112233'));
-      act(() => captured.color?.onColorChangeComplete('#445566'));
-
-      expect(legacyPreview).toHaveBeenCalledWith('fontColor', '#445566');
-      expect(legacyCommit).toHaveBeenCalledWith('fontColor', '#445566');
-      expect(patches.patchFontColorByTargets).not.toHaveBeenCalled();
-      expect(patches.patchFontColorViaAuthority).not.toHaveBeenCalled();
-      expect(gestures.preview).not.toHaveBeenCalled();
-      expect(gestures.settleCommit).not.toHaveBeenCalled();
     },
   );
 
@@ -1558,34 +1371,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     },
   );
 
-  it.each([
-    ['mixed', [ID_A, ID_B, 'graph-0', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc']],
-    ['graph', ['']],
-    ['knob', ['knob-0']],
-  ] as const)(
-    '%s batch numeric style relevant synthetic/empty는 whole legacy다',
-    (kind, ids) => {
-      setClassNameTargets(kind, ids);
-      const legacyPreview = vi.fn();
-      const legacyCommit = vi.fn();
-      const captureStart = captured.numbers.length;
-      renderClassNamePanel(kind, legacyPreview, legacyCommit);
-      const input = captured.numbers
-        .slice(captureStart)
-        .find(({ min, max }) => min === 0 && max === 20);
-
-      act(() => input?.onPreview?.(15));
-      act(() => input?.onChange(15));
-
-      expect(legacyPreview).toHaveBeenCalledWith('borderWidth', 15);
-      expect(legacyCommit).toHaveBeenCalledWith('borderWidth', 15);
-      expect(patches.patchDisplayTextByTargets).not.toHaveBeenCalled();
-      expect(patches.patchDisplayTextViaAuthority).not.toHaveBeenCalled();
-      expect(gestures.preview).not.toHaveBeenCalled();
-      expect(gestures.settleCommit).not.toHaveBeenCalled();
-    },
-  );
-
   it('soundVolume은 graph/knob synthetic를 무시하고 stable key subset만 쓴다', () => {
     useGridSelectionStore.setState({
       selectedElements: [
@@ -1598,65 +1383,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
     changeSoundVolume(80);
     expect(patches.patchSoundVolumeByIds).toHaveBeenCalledWith([ID_A], 80);
-  });
-
-  it.each(['key-0', ''])(
-    'soundVolume key subset에 %j가 있으면 전체 legacy다',
-    (id) => {
-      const stable = keyAt(ID_A);
-      const unsupported = keyAt(id);
-      useKeyStore.setState({
-        selectedKeyType: '4key',
-        canonicalPositions: { '4key': [stable, unsupported] },
-        positions: { '4key': [stable, unsupported] },
-      });
-      useGridSelectionStore.setState({
-        selectedElements: [
-          { type: 'key', id: ID_A, index: 0 },
-          { type: 'key', id, index: 1 },
-        ],
-      });
-      const props = panelProps();
-      const legacy = vi.fn();
-      props.handleKeyOnlyStyleChangeComplete = legacy;
-      act(() => {
-        root.render(
-          <PanelNavProvider
-            value={{
-              activePageKey: null,
-              renderPageKey: null,
-              openPage: vi.fn(),
-              closePage: vi.fn(),
-              pageHost,
-            }}
-          >
-            <BatchKeyLikePanel {...props} />
-          </PanelNavProvider>,
-        );
-      });
-
-      changeSoundVolume(80);
-      expect(legacy).toHaveBeenCalledWith('soundVolume', 80);
-      expect(patches.patchSoundVolumeByIds).not.toHaveBeenCalled();
-      expect(patches.patchSoundVolumeViaAuthority).not.toHaveBeenCalled();
-    },
-  );
-
-  it('batch counter key/stat 중 synthetic가 있으면 subset 전체 legacy다', () => {
-    selectCounterTargets(ID_A, 'stat-0');
-    const legacy = vi.fn();
-    renderCounterPanel(legacy);
-    expect(captured.animation?.completionBinding).toBe('session-mode');
-    const next = {
-      ...createDefaultKeyPosition().counter.animation,
-      presetId: 'preset-b',
-    };
-    act(() => captured.animation!.onAnimationChange(next));
-    expect(legacy).toHaveBeenCalledWith({ animation: next });
-    expect(patches.patchCounterAnimationPresetByTargets).not.toHaveBeenCalled();
-    expect(
-      patches.patchCounterAnimationPresetViaAuthority,
-    ).not.toHaveBeenCalled();
   });
 
   it.each(['main', 'panel'] as const)(
@@ -1701,28 +1427,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     },
   );
 
-  it('batch counter relevant synthetic는 두 bool 모두 whole legacy다', () => {
-    const legacy = vi.fn();
-    selectCounterTargets(ID_A, 'stat-0');
-    renderCounterPanel(legacy);
-
-    const currentCheckboxes = captured.checkboxes.slice(-2);
-    act(() => currentCheckboxes[0]?.onChange());
-    act(() => currentCheckboxes[1]?.onChange());
-    expect(legacy.mock.calls).toEqual([
-      [{ enabled: false }],
-      [
-        {
-          animation: expect.objectContaining({ enabled: true }),
-        },
-      ],
-    ]);
-    expect(patches.patchCounterEnabledByTargets).not.toHaveBeenCalled();
-    expect(
-      patches.patchCounterAnimationEnabledByTargets,
-    ).not.toHaveBeenCalled();
-  });
-
   it.each(['main', 'panel'] as const)(
     '%s batch counter layout은 current key/stat에 4 exact leaf를 적용한다',
     (windowType) => {
@@ -1761,25 +1465,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(legacy).not.toHaveBeenCalled();
     },
   );
-
-  it('batch counter layout relevant synthetic는 4 controls 모두 whole legacy다', () => {
-    const legacy = vi.fn();
-    act(() => selectCounterTargets(ID_A, 'stat-0'));
-    renderCounterPanel(legacy);
-
-    act(() => latestCounterDropdown('inside')?.onChange('outside'));
-    act(() => latestCounterDropdown('bottom')?.onChange('left'));
-    act(() => latestCounterDropdown('center')?.onChange('between'));
-    changeCounterGap(9999);
-    expect(legacy.mock.calls).toEqual([
-      [{ placement: 'outside' }],
-      [{ align: 'left' }],
-      [{ alignMode: 'between' }],
-      [{ gap: 9999 }],
-    ]);
-    expect(patches.patchCounterLayoutByTargets).not.toHaveBeenCalled();
-    expect(patches.patchCounterLayoutViaAuthority).not.toHaveBeenCalled();
-  });
 
   it.each(['main', 'panel'] as const)(
     '%s batch counter typography는 current key/stat에 5 exact leaf를 적용한다',
@@ -1830,31 +1515,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     },
   );
 
-  it('batch counter typography relevant synthetic는 5 controls 모두 whole legacy다', () => {
-    const legacy = vi.fn();
-    act(() => selectCounterTargets(ID_A, 'stat-0'));
-    renderCounterPanel(legacy);
-
-    const fontSize = captured.numbers
-      .filter((input) => input.min === 8 && input.max === 72)
-      .at(-1);
-    const fontStyle = captured.fontStyles.at(-1);
-    act(() => fontSize?.onChange(72));
-    act(() => fontStyle?.onBoldChange(true));
-    act(() => fontStyle?.onItalicChange(true));
-    act(() => fontStyle?.onUnderlineChange(true));
-    act(() => fontStyle?.onStrikethroughChange(true));
-    expect(legacy.mock.calls).toEqual([
-      [{ fontSize: 72 }],
-      [{ fontWeight: 700 }],
-      [{ fontItalic: true }],
-      [{ fontUnderline: true }],
-      [{ fontStrikethrough: true }],
-    ]);
-    expect(patches.patchCounterTypographyByTargets).not.toHaveBeenCalled();
-    expect(patches.patchCounterTypographyViaAuthority).not.toHaveBeenCalled();
-  });
-
   it.each(['main', 'panel'] as const)(
     '%s batch counter FontPicker는 open A가 아니라 최신 B key/stat targets에 적용한다',
     (windowType) => {
@@ -1890,18 +1550,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(legacy).not.toHaveBeenCalled();
     },
   );
-
-  it('batch counter FontPicker relevant synthetic는 whole legacy다', () => {
-    const legacy = vi.fn();
-    act(() => selectCounterTargets(ID_A, 'stat-0'));
-    renderCounterPanel(legacy, 'batch-counter:font');
-
-    act(() => captured.font?.onFontSelect('Counter Family'));
-
-    expect(legacy).toHaveBeenCalledWith({ fontFamily: 'Counter Family' });
-    expect(patches.patchCounterTypographyByTargets).not.toHaveBeenCalled();
-    expect(patches.patchCounterTypographyViaAuthority).not.toHaveBeenCalled();
-  });
 
   it.each(['idle', 'active'] as const)(
     'batch counter stroke %s actual ColorPicker는 drag와 final callback을 분리한다',
@@ -2150,132 +1798,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(legacy).not.toHaveBeenCalled();
   });
 
-  it.each(['main', 'panel'] as const)(
-    'batch note paint는 latest current key만 %s exact commit하고 non-key synthetic를 무시한다',
-    (windowType) => {
-      window.__dmn_window_type = windowType;
-      const renderNote = (keyId: string) => {
-        useGridSelectionStore.setState({
-          selectedElements: [
-            { type: 'key', id: keyId, index: 0 },
-            { type: 'stat', id: 'stat-0', index: 0 },
-            { type: 'graph', id: 'graph-0', index: 0 },
-            { type: 'knob', id: 'knob-0', index: 0 },
-          ],
-        });
-        const props = panelProps();
-        props.activeTab = 'note';
-        props.batchPickerFor = 'noteColor';
-        props.batchLocalOpacities = {
-          noteOpacity: 80,
-          glowOpacity: 70,
-        };
-        props.handleBatchNotePickerColorChangeComplete = (color, semantic) =>
-          semantic?.({ notePaint: { color } });
-        act(() => {
-          root.render(
-            <PanelNavProvider
-              value={{
-                activePageKey: null,
-                renderPageKey: null,
-                openPage: vi.fn(),
-                closePage: vi.fn(),
-                pageHost,
-              }}
-            >
-              <BatchKeyLikePanel {...props} />
-            </PanelNavProvider>,
-          );
-        });
-        return props;
-      };
-      renderNote(ID_A);
-      const props = renderNote(ID_B);
-
-      act(() => captured.color?.onColorChange('solid-drag'));
-      expect(patches.patchNotePaintByIds).not.toHaveBeenCalled();
-      expect(patches.patchNotePaintViaAuthority).not.toHaveBeenCalled();
-      act(() => captured.color?.onColorChangeComplete(' final note '));
-      act(() => captured.color?.onOpacityPercentChange?.(61));
-      expect(props.handleBatchKeyOnlyStyleChange).toHaveBeenCalledWith(
-        'noteOpacity',
-        61,
-      );
-      act(() => captured.color?.onOpacityPercentChangeComplete?.(62));
-
-      const writer =
-        windowType === 'panel'
-          ? patches.patchNotePaintViaAuthority
-          : patches.patchNotePaintByIds;
-      const otherWriter =
-        windowType === 'panel'
-          ? patches.patchNotePaintByIds
-          : patches.patchNotePaintViaAuthority;
-      expect(writer.mock.calls).toEqual([
-        [
-          [ID_B],
-          { notePaint: { color: ' final note ' } },
-          windowType === 'panel'
-            ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
-            : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
-        ],
-        [
-          [ID_B],
-          { notePaint: { opacity: 62 } },
-          windowType === 'panel'
-            ? 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
-            : { gestureId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' },
-        ],
-      ]);
-      expect(otherWriter).not.toHaveBeenCalled();
-      expect(gestures.settleCommit).toHaveBeenCalledTimes(2);
-      expect(
-        props.handleBatchKeyOnlyStyleChangeComplete,
-      ).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(['key-0', ''])(
-    'batch note paint relevant %j key는 whole legacy이고 semantic을 보내지 않는다',
-    (id) => {
-      useGridSelectionStore.setState({
-        selectedElements: [
-          { type: 'key', id, index: 0 },
-          { type: 'stat', id: 'stat-0', index: 0 },
-        ],
-      });
-      const props = panelProps();
-      props.activeTab = 'note';
-      props.batchPickerFor = 'glowColor';
-      props.batchLocalOpacities = { noteOpacity: 80, glowOpacity: 70 };
-      act(() => {
-        root.render(
-          <PanelNavProvider
-            value={{
-              activePageKey: null,
-              renderPageKey: null,
-              openPage: vi.fn(),
-              closePage: vi.fn(),
-              pageHost,
-            }}
-          >
-            <BatchKeyLikePanel {...props} />
-          </PanelNavProvider>,
-        );
-      });
-
-      act(() => captured.color?.onOpacityPercentChangeComplete?.(42));
-
-      expect(props.handleBatchKeyOnlyStyleChangeComplete).toHaveBeenCalledWith(
-        'noteGlowOpacity',
-        42,
-      );
-      expect(patches.patchNotePaintByIds).not.toHaveBeenCalled();
-      expect(patches.patchNotePaintViaAuthority).not.toHaveBeenCalled();
-      expect(gestures.settleCommit).not.toHaveBeenCalled();
-    },
-  );
-
   type ImagePanelKind = 'mixed' | 'graph' | 'knob';
 
   const selectImageTargets = (
@@ -2468,22 +1990,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(legacy).not.toHaveBeenCalled();
   });
 
-  it.each(['key-0', ''])(
-    'batch shadow relevant %j target은 whole legacy다',
-    (id) => {
-      const legacy = vi.fn();
-      useGridSelectionStore.setState({
-        selectedElements: [{ type: 'key', id, index: 0 }],
-      });
-      renderImagePanel('mixed', legacy);
-      commitShadow('idle', { offsetX: 12 });
-
-      expect(legacy).toHaveBeenCalledWith('idle', { offsetX: 12 });
-      expect(patches.patchShadowByTargets).not.toHaveBeenCalled();
-      expect(patches.patchShadowViaAuthority).not.toHaveBeenCalled();
-    },
-  );
-
   const commitBackgroundPaint = async (
     state: 'idle' | 'active',
     color: string,
@@ -2496,16 +2002,23 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     );
     expect(button).not.toBeNull();
     act(() => button?.click());
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 10));
-    });
+    await waitForColorPicker(button!);
     if (state === 'active') {
-      act(() => captured.color?.onStateModeChange?.('active'));
+      await act(async () => {
+        captured.color?.onStateModeChange?.('active');
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
     }
-    act(() => captured.color?.onColorChange('local-drag'));
+    await act(async () => {
+      captured.color?.onColorChange('local-drag');
+      await Promise.resolve();
+    });
     expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
     expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
-    act(() => captured.color?.onColorChangeComplete(color));
+    await act(async () => {
+      captured.color?.onColorChangeComplete(color);
+      await Promise.resolve();
+    });
   };
 
   it.each(['main', 'panel'] as const)(
@@ -2554,26 +2067,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
         },
       });
       expect(legacy).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(['key-0', ''])(
-    'batch idle paint relevant %j target은 whole legacy pair commit이다',
-    async (id) => {
-      const legacy = vi.fn();
-      useGridSelectionStore.setState({
-        selectedElements: [{ type: 'key', id, index: 0 }],
-      });
-      renderImagePanel('mixed', legacy);
-
-      await commitBackgroundPaint('idle', 'legacy-paint');
-
-      expect(legacy).toHaveBeenCalledWith('backgroundColor', 'idle', {
-        mode: 'solid',
-        color: 'legacy-paint',
-      });
-      expect(patches.patchPaintByTargets).not.toHaveBeenCalled();
-      expect(patches.patchPaintViaAuthority).not.toHaveBeenCalled();
     },
   );
 
@@ -2637,36 +2130,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     },
   );
 
-  it.each(['mixed', 'graph', 'knob'] as const)(
-    '%s batch ImagePicker에 synthetic ID가 있으면 load와 reset 전체가 legacy다',
-    (kind) => {
-      window.__dmn_window_type = 'panel';
-      selectImageTargets(kind, 'synthetic');
-      const legacy = vi.fn();
-      renderImagePanel(kind, legacy);
-
-      expect(captured.image?.completionBinding).toBe('session-mode');
-      act(() => {
-        captured.image?.onIdleImageChange('legacy.png');
-        captured.image?.onIdleImageReset();
-      });
-
-      expect(patches.patchInactiveImageByTargets).not.toHaveBeenCalled();
-      expect(patches.patchInactiveImageViaAuthority).not.toHaveBeenCalled();
-      if (kind === 'mixed') {
-        expect(legacy.mock.calls).toEqual([
-          ['inactiveImage', 'legacy.png'],
-          ['inactiveImage', ''],
-        ]);
-      } else {
-        expect(legacy.mock.calls).toEqual([
-          [{ inactiveImage: 'legacy.png' }],
-          [{ inactiveImage: '' }],
-        ]);
-      }
-    },
-  );
-
   it.each([
     ['main', 'mixed'],
     ['main', 'knob'],
@@ -2705,34 +2168,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       expect(otherWriter).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
       expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(['mixed', 'knob'] as const)(
-    '%s batch active image는 synthetic가 하나라도 있으면 load와 reset 전체가 legacy다',
-    (kind) => {
-      window.__dmn_window_type = 'panel';
-      selectImageTargets(kind, 'synthetic');
-      const legacy = vi.fn();
-      renderImagePanel(kind, legacy);
-      act(() => {
-        captured.image?.onActiveImageChange('legacy-active.png');
-        captured.image?.onActiveImageReset();
-      });
-
-      expect(patches.patchActiveImageByTargets).not.toHaveBeenCalled();
-      expect(patches.patchActiveImageViaAuthority).not.toHaveBeenCalled();
-      if (kind === 'mixed') {
-        expect(legacy.mock.calls).toEqual([
-          ['activeImage', 'legacy-active.png'],
-          ['activeImage', ''],
-        ]);
-      } else {
-        expect(legacy.mock.calls).toEqual([
-          [{ activeImage: 'legacy-active.png' }],
-          [{ activeImage: '' }],
-        ]);
-      }
     },
   );
 
@@ -2791,51 +2226,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(legacy).not.toHaveBeenCalled();
   });
 
-  it('active transparency는 relevant synthetic key가 있으면 whole legacy다', () => {
-    window.__dmn_window_type = 'panel';
-    useGridSelectionStore.setState({
-      selectedElements: [
-        { type: 'key', id: 'key-0', index: 0 },
-        { type: 'knob', id: ID_A, index: 0 },
-      ],
-    });
-    const legacy = vi.fn();
-    renderImagePanel('mixed', legacy);
-
-    act(() => captured.image?.onActiveTransparentChange?.(false));
-
-    expect(patches.patchActiveTransparentViaAuthority).not.toHaveBeenCalled();
-    expect(patches.patchActiveTransparentByTargets).not.toHaveBeenCalled();
-    expect(legacy).toHaveBeenCalledWith('activeTransparent', false);
-  });
-
-  it.each([
-    [
-      'synthetic',
-      [
-        { type: 'key' as const, id: ID_A, index: 0 },
-        { type: 'graph' as const, id: 'graph-0', index: 0 },
-      ],
-    ],
-    ['empty', [{ type: 'key' as const, id: '', index: 0 }]],
-  ] as const)(
-    'idle transparency %s selection은 semantic 없이 whole legacy다',
-    (_label, selectedElements) => {
-      window.__dmn_window_type = 'panel';
-      useGridSelectionStore.setState({
-        selectedElements: [...selectedElements],
-      });
-      const legacy = vi.fn();
-      renderImagePanel('mixed', legacy);
-
-      act(() => captured.image?.onIdleTransparentChange?.(true));
-
-      expect(patches.patchIdleTransparentViaAuthority).not.toHaveBeenCalled();
-      expect(patches.patchIdleTransparentByTargets).not.toHaveBeenCalled();
-      expect(legacy).toHaveBeenCalledWith('idleTransparent', true);
-    },
-  );
-
   it('페이지가 열려 있는 동안 동일 개수 선택 교체에도 시작 선택에 적용한다', () => {
     renderPanel({
       active: BATCH_STYLE_SOUND_PAGE_KEY,
@@ -2889,51 +2279,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
     expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
   });
 
-  it('synthetic key sound select와 clear는 key subset 전체 legacy다', () => {
-    const stable = keyAt(ID_A);
-    const synthetic = keyAt('key-0');
-    useKeyStore.setState({
-      selectedKeyType: '4key',
-      canonicalPositions: { '4key': [stable, synthetic] },
-      positions: { '4key': [stable, synthetic] },
-    });
-    useGridSelectionStore.setState({
-      selectedElements: [
-        { type: 'key', id: ID_A, index: 0 },
-        { type: 'key', id: 'key-0', index: 1 },
-      ],
-    });
-    const props = panelProps();
-    const legacy = vi.fn();
-    props.handleKeyOnlyStyleChangeComplete = legacy;
-    act(() => {
-      root.render(
-        <PanelNavProvider
-          value={{
-            activePageKey: BATCH_STYLE_SOUND_PAGE_KEY,
-            renderPageKey: BATCH_STYLE_SOUND_PAGE_KEY,
-            openPage: vi.fn(),
-            closePage: vi.fn(),
-            pageHost,
-          }}
-        >
-          <BatchKeyLikePanel {...props} />
-        </PanelNavProvider>,
-      );
-    });
-
-    expect(captured.sound?.completionBinding).toBe('session-mode');
-    act(() => captured.sound!.onSoundSelect('legacy.wav'));
-    act(() => captured.sound!.onSoundSelect(''));
-
-    expect(legacy.mock.calls).toEqual([
-      ['soundPath', 'legacy.wav'],
-      ['soundPath', ''],
-    ]);
-    expect(patches.patchSoundPathByIds).not.toHaveBeenCalled();
-    expect(patches.patchSoundPathViaAuthority).not.toHaveBeenCalled();
-  });
-
   it.each(['main', 'panel'] as const)(
     '%s soundEnabled 토글은 picker binding이 아니라 current key subset만 쓴다',
     (windowType) => {
@@ -2972,76 +2317,6 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
 
     clickSoundEnabled();
     expect(patches.patchSoundEnabledByIds).toHaveBeenCalledWith([ID_A], true);
-  });
-
-  it.each(['key-0', ''])(
-    'soundEnabled key subset에 %j가 있으면 전체 legacy다',
-    (id) => {
-      const stable = keyAt(ID_A);
-      const unsupported = keyAt(id);
-      useKeyStore.setState({
-        selectedKeyType: '4key',
-        canonicalPositions: { '4key': [stable, unsupported] },
-        positions: { '4key': [stable, unsupported] },
-      });
-      useGridSelectionStore.setState({
-        selectedElements: [
-          { type: 'key', id: ID_A, index: 0 },
-          { type: 'key', id, index: 1 },
-        ],
-      });
-      const props = panelProps();
-      const legacy = vi.fn();
-      props.handleKeyOnlyStyleChangeComplete = legacy;
-      act(() => {
-        root.render(
-          <PanelNavProvider
-            value={{
-              activePageKey: null,
-              renderPageKey: null,
-              openPage: vi.fn(),
-              closePage: vi.fn(),
-              pageHost,
-            }}
-          >
-            <BatchKeyLikePanel {...props} />
-          </PanelNavProvider>,
-        );
-      });
-
-      clickSoundEnabled();
-      expect(legacy).toHaveBeenCalledWith('soundEnabled', true);
-      expect(patches.patchSoundEnabledByIds).not.toHaveBeenCalled();
-      expect(patches.patchSoundEnabledViaAuthority).not.toHaveBeenCalled();
-    },
-  );
-
-  it('BatchStyle FontPicker 선택은 raw top-level fontFamily로 전달한다', () => {
-    const handleBatchStyleChangeComplete = vi.fn();
-    const props = panelProps();
-    props.handleBatchStyleChangeComplete = handleBatchStyleChangeComplete;
-    act(() => {
-      root.render(
-        <PanelNavProvider
-          value={{
-            activePageKey: BATCH_STYLE_FONT_PAGE_KEY,
-            renderPageKey: BATCH_STYLE_FONT_PAGE_KEY,
-            openPage: vi.fn(),
-            closePage: vi.fn(),
-            pageHost,
-          }}
-        >
-          <BatchKeyLikePanel {...props} />
-        </PanelNavProvider>,
-      );
-    });
-
-    act(() => captured.font!.onFontSelect('  Raw Family  '));
-
-    expect(handleBatchStyleChangeComplete).toHaveBeenCalledWith(
-      'fontFamily',
-      '  Raw Family  ',
-    );
   });
 
   it('exit 애니메이션 중 재열기는 새 선택을 캡처한다', () => {

@@ -2,7 +2,6 @@
  * 스마트 가이드를 위한 모든 요소의 bounds를 제공하는 훅
  */
 
-import { selectionElementId } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -34,9 +33,9 @@ const getOtherElementsSnapshot = (
 
   // 키 요소 bounds
   const keyPositions = positions[selectedKeyType] || [];
-  keyPositions.forEach((pos, index) => {
+  keyPositions.forEach((pos) => {
     if (pos.hidden) return;
-    const id = selectionElementId('key', pos, index);
+    const id = pos.id;
     if (!excludeSet.has(id)) {
       bounds.push(
         calculateBounds(pos.dx, pos.dy, pos.width || 60, pos.height || 60, id),
@@ -46,9 +45,9 @@ const getOtherElementsSnapshot = (
 
   // 통계 요소 bounds
   const stats = statPositions[selectedKeyType] || [];
-  stats.forEach((pos, index) => {
+  stats.forEach((pos) => {
     if (!pos || pos.hidden) return;
-    const id = selectionElementId('stat', pos, index);
+    const id = pos.id;
     if (!excludeSet.has(id)) {
       bounds.push(
         calculateBounds(pos.dx, pos.dy, pos.width || 60, pos.height || 60, id),
@@ -58,9 +57,9 @@ const getOtherElementsSnapshot = (
 
   // 그래프 요소 bounds
   const graphs = graphPositions[selectedKeyType] || [];
-  graphs.forEach((pos, index) => {
+  graphs.forEach((pos) => {
     if (!pos || pos.hidden) return;
-    const id = selectionElementId('graph', pos, index);
+    const id = pos.id;
     if (!excludeSet.has(id)) {
       bounds.push(
         calculateBounds(
@@ -76,9 +75,9 @@ const getOtherElementsSnapshot = (
 
   // 노브 요소 bounds
   const knobs = knobPositions[selectedKeyType] || [];
-  knobs.forEach((pos, index) => {
+  knobs.forEach((pos) => {
     if (!pos || pos.hidden) return;
-    const id = selectionElementId('knob', pos, index);
+    const id = pos.id;
     if (!excludeSet.has(id)) {
       bounds.push(
         calculateBounds(pos.dx, pos.dy, pos.width || 60, pos.height || 60, id),

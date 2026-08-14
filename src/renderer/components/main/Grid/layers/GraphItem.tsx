@@ -42,13 +42,13 @@ interface SelectedElement {
 
 interface GraphItemProps {
   index: number;
-  elementId?: string;
+  elementId: string;
   position: GraphPosition;
   onPositionChange: (
     index: number,
     dx: number,
     dy: number,
-    elementId?: string,
+    elementId: string,
   ) => void;
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
@@ -134,7 +134,11 @@ const GraphItem = ({
   const isSelectionMode = isSelected;
 
   // 편집 세션 일시 페인트 — 저장·히스토리를 거치지 않는 드래그 프리뷰
-  const previewSession = useGradientPreviewSession('graph', index, isSelected);
+  const previewSession = useGradientPreviewSession(
+    'graph',
+    elementId,
+    isSelected,
+  );
   const previewBgSpec =
     previewSession?.surface === 'background' ? previewSession.spec : null;
   const previewBorderSpec =
@@ -142,7 +146,7 @@ const GraphItem = ({
   const [uid] = useState(
     () => `graph-preview-${Math.random().toString(36).slice(2, 11)}`,
   );
-  const effectiveElementId = elementId || `graph-${index}`;
+  const effectiveElementId = elementId;
 
   const previewHistory = [...PREVIEW_HISTORY_BASE];
   const previewImageSrc =
@@ -179,8 +183,6 @@ const GraphItem = ({
     elementId: effectiveElementId,
     elementWidth: width || 200,
     elementHeight: height || 100,
-    elementType: 'graph',
-    elementIndex: index,
     selectedElements,
     getOtherElements,
     onMultiDragStart,

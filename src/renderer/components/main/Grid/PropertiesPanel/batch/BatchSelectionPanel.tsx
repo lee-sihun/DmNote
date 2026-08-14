@@ -1,21 +1,12 @@
 /* eslint-disable react-hooks/refs */
 import React from 'react';
-import type {
-  KeyPosition,
-  NoteColor,
-  KeyCounterSettings,
-} from '@src/types/key/keys';
+import type { KeyPosition, NoteColor } from '@src/types/key/keys';
 import type {
   GraphItemPosition,
   GraphItemType,
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
-import type { ElementShadowSpec } from '@src/types/key/shadows';
-import {
-  paintPropertyFields,
-  type ColorModeValue,
-  type PaintDescriptorV1,
-} from '@src/types/color';
+import { paintPropertyFields, type PaintDescriptorV1 } from '@src/types/color';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
@@ -39,7 +30,7 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import PopupExit from '@components/main/Modal/PopupExit';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 import EditSessionBoundary from '../EditSessionBoundary';
-import type { ElementIdSelection } from '@src/renderer/editor/runtime/elementPatch';
+import type { ElementIdSelection } from '@hooks/pickers/useBatchElementBinding';
 import {
   patchActiveImageByTargets,
   patchActiveTransparentByTargets,
@@ -87,10 +78,8 @@ import {
 import { usePanelNav } from '../PanelNavContext';
 import { BATCH_COUNTER_ANIMATION_PAGE_KEY } from './BatchCounterTabContent';
 import { BATCH_STYLE_SOUND_PAGE_KEY } from './BatchStyleTabContent';
-import {
-  isSyntheticElementId,
-  resolveElementById,
-} from '@src/renderer/editor/model/elementIdMap';
+import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
+import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type {
   EditorPaintPropertyPatchV1,
   EditorPreviewStylePropertyPatchV1,
@@ -98,7 +87,10 @@ import type {
   EditorNotePaintPropertyPatchV1,
   EditorCounterFillPropertyPatchV1,
   EditorFontColorPropertyPatchV1,
+  EditorElementPropertyPatchV1,
 } from '@src/types/editor';
+import { projectNotePaintPatch } from '@src/types/key/notePaint';
+import { parseAlphaPercent, toRgbHexColor } from '@utils/color/colorUtils';
 
 const NATIVE_IMAGE_TYPES = ['key', 'stat', 'graph', 'knob'] as const;
 
@@ -112,7 +104,7 @@ const createStylePropertyHandlers = (
 ) => {
   const stableTargets =
     targets.length > 0 &&
-    targets.every(({ id }) => id.length > 0 && !isSyntheticElementId(id)) &&
+    targets.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
     new Set(targets.map(({ id }) => id)).size === targets.length
       ? targets
       : null;
@@ -188,11 +180,6 @@ const createPaintCommitHandler =
       elementType: 'key' | 'stat' | 'graph' | 'knob';
       id: string;
     }[],
-    legacy: (
-      target: 'backgroundColor' | 'borderColor',
-      state: 'idle' | 'active',
-      value: ColorModeValue,
-    ) => void,
   ) =>
   (patch: EditorPaintPropertyPatchV1) => {
     const details = paintPatchDetails(patch);
@@ -203,16 +190,9 @@ const createPaintCommitHandler =
       : targets;
     const stable =
       relevant.length > 0 &&
-      relevant.every(({ id }) => id.length > 0 && !isSyntheticElementId(id)) &&
+      relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
       new Set(relevant.map(({ id }) => id)).size === relevant.length;
     if (!stable) {
-      legacy(
-        details.target,
-        details.active ? 'active' : 'idle',
-        details.descriptor.gradient
-          ? { mode: 'gradient', spec: details.descriptor.gradient }
-          : { mode: 'solid', color: details.descriptor.color },
-      );
       return;
     }
     const persisted =
@@ -228,9 +208,6 @@ const createFontColorHandlers = (
     id: string;
   }[],
   selectedKeyType: string,
-  legacyPreview: (property: keyof KeyPosition, value: unknown) => void,
-  legacyCommit: (property: keyof KeyPosition, value: unknown) => void,
-  legacyActiveCommit: (property: keyof KeyPosition, value: unknown) => void,
 ) => {
   const relevantTargets = (patch: EditorFontColorPropertyPatchV1) =>
     'activeFontColor' in patch
@@ -241,7 +218,7 @@ const createFontColorHandlers = (
   const stableTargets = (patch: EditorFontColorPropertyPatchV1) => {
     const relevant = relevantTargets(patch);
     return relevant.length > 0 &&
-      relevant.every(({ id }) => id.length > 0 && !isSyntheticElementId(id)) &&
+      relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
       new Set(relevant.map(({ id }) => id)).size === relevant.length
       ? relevant
       : null;
@@ -249,10 +226,7 @@ const createFontColorHandlers = (
   return {
     previewFontColor: (patch: EditorFontColorPropertyPatchV1) => {
       const stable = stableTargets(patch);
-      if (!stable) {
-        if ('fontColor' in patch) legacyPreview('fontColor', patch.fontColor);
-        return;
-      }
+      if (!stable) return;
       const grouped = new Map<
         'key' | 'stat' | 'graph' | 'knob',
         Array<{ index: number; patch: EditorFontColorPropertyPatchV1 }>
@@ -279,14 +253,7 @@ const createFontColorHandlers = (
     },
     commitFontColor: (patch: EditorFontColorPropertyPatchV1) => {
       const stable = stableTargets(patch);
-      if (!stable) {
-        if ('activeFontColor' in patch) {
-          legacyActiveCommit('activeFontColor', patch.activeFontColor);
-        } else {
-          legacyCommit('fontColor', patch.fontColor);
-        }
-        return;
-      }
+      if (!stable) return;
       const active = 'activeFontColor' in patch;
       const gestureId = active
         ? undefined
@@ -311,11 +278,6 @@ const createShadowCommitHandler =
       elementType: 'key' | 'stat' | 'knob';
       id: string;
     }[],
-    legacyChange: (
-      state: 'idle' | 'active',
-      patch: Partial<ElementShadowSpec>,
-    ) => void,
-    legacyEnabled: (enabled: boolean) => void,
   ) =>
   (patch: EditorShadowPropertyPatchV1) => {
     const relevant =
@@ -324,16 +286,9 @@ const createShadowCommitHandler =
         : targets;
     const stable =
       relevant.length > 0 &&
-      relevant.every(({ id }) => id.length > 0 && !isSyntheticElementId(id)) &&
+      relevant.every(({ id }) => id.length > 0 && isNativeElementId(id)) &&
       new Set(relevant.map(({ id }) => id)).size === relevant.length;
     if (!stable) {
-      if ('shadowEnabled' in patch) {
-        legacyEnabled(patch.shadowEnabled);
-      } else if ('activeShadow' in patch) {
-        legacyChange('active', patch.activeShadow);
-      } else {
-        legacyChange('idle', patch.shadow);
-      }
       return;
     }
     const persisted =
@@ -344,15 +299,9 @@ const createShadowCommitHandler =
   };
 
 const commitBoundInactiveImage = (
-  binding: 'element-id' | 'session-mode',
   selection: ElementIdSelection,
   inactiveImage: string,
-  legacy: () => void,
 ) => {
-  if (binding !== 'element-id') {
-    legacy();
-    return;
-  }
   const targets = NATIVE_IMAGE_TYPES.flatMap((elementType) =>
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
@@ -365,15 +314,9 @@ const commitBoundInactiveImage = (
 };
 
 const commitBoundActiveImage = (
-  binding: 'element-id' | 'session-mode',
   selection: ElementIdSelection,
   activeImage: string,
-  legacy: () => void,
 ) => {
-  if (binding !== 'element-id') {
-    legacy();
-    return;
-  }
   const targets = (['key', 'knob'] as const).flatMap((elementType) =>
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
@@ -386,15 +329,9 @@ const commitBoundActiveImage = (
 };
 
 const commitBoundIdleTransparent = (
-  binding: 'element-id' | 'session-mode',
   selection: ElementIdSelection,
   idleTransparent: boolean,
-  legacy: () => void,
 ) => {
-  if (binding !== 'element-id') {
-    legacy();
-    return;
-  }
   const targets = NATIVE_IMAGE_TYPES.flatMap((elementType) =>
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
@@ -407,15 +344,9 @@ const commitBoundIdleTransparent = (
 };
 
 const commitBoundActiveTransparent = (
-  binding: 'element-id' | 'session-mode',
   selection: ElementIdSelection,
   activeTransparent: boolean,
-  legacy: () => void,
 ) => {
-  if (binding !== 'element-id') {
-    legacy();
-    return;
-  }
   const targets = (['key', 'knob'] as const).flatMap((elementType) =>
     (selection[elementType] ?? []).map((id) => ({ elementType, id })),
   );
@@ -428,15 +359,9 @@ const commitBoundActiveTransparent = (
 };
 
 const commitBoundSoundPath = (
-  binding: 'element-id' | 'session-mode',
   selection: ElementIdSelection,
   soundPath: string,
-  legacy: () => void,
 ) => {
-  if (binding !== 'element-id') {
-    legacy();
-    return;
-  }
   const ids = selection.key ?? [];
   if (ids.length === 0) return;
   const persisted =
@@ -542,36 +467,12 @@ interface BatchKeyLikePanelProps {
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
-  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
-  handleBatchStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: unknown,
+  handleBatchResizePreview: (
+    dimension: 'width' | 'height',
+    value: number,
   ) => void;
-  handleBatchShadowChangeComplete: (
-    state: 'idle' | 'active',
-    patch: Partial<ElementShadowSpec>,
-  ) => void;
-  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
-  handleBatchGradientCommit?: (
-    target: 'backgroundColor' | 'borderColor',
-    state: 'idle' | 'active',
-    value: ColorModeValue,
-  ) => void;
-  handleKeyOnlyStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => void;
-  handleBatchCounterUpdate: (
-    updates: Partial<KeyCounterSettings>,
-    options?: {
-      activeStateOnly?: boolean;
-      colorState?: 'idle' | 'active';
-    },
-  ) => void;
-  handleBatchNoteColorChange: (value: NoteColor) => void;
-  handleBatchNoteColorChangeComplete: (value: NoteColor) => void;
-  handleBatchGlowColorChange: (value: NoteColor) => void;
-  handleBatchGlowColorChangeComplete: (value: NoteColor) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
+  onNoteElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   // mixed value getters
   getMixedValue: MixedValueGetter<KeyPosition>;
@@ -580,23 +481,10 @@ interface BatchKeyLikePanelProps {
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
   getMixedValueKeysOnly: MixedValueGetter<KeyPosition>;
   getMixedValueActiveCapable: MixedValueGetter<KeyPosition>;
-  handleActiveCapableStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => void;
   getSelectedKeysData: () => KeyData[];
   getSelectedGraphsData: () => KeyData[];
   getSelectedBatchStyleData: () => KeyData[];
   getSelectedKeyOnlyPositions: () => { index: number; position: KeyPosition }[];
-  // batch key-only handlers
-  handleBatchKeyOnlyStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
-  ) => void;
-  handleBatchNoteColorChangeKeysOnly: (value: NoteColor) => void;
-  handleBatchNoteColorChangeCompleteKeysOnly: (value: NoteColor) => void;
-  handleBatchGlowColorChangeKeysOnly: (value: NoteColor) => void;
-  handleBatchGlowColorChangeCompleteKeysOnly: (value: NoteColor) => void;
   // refs
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchNoteColorButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -628,10 +516,6 @@ interface BatchKeyLikePanelProps {
   handleBatchFillPickerColorChangeComplete: (
     newColor: string,
     onCounterFillCommit: (patch: EditorCounterFillPropertyPatchV1) => void,
-  ) => void;
-  handleBatchKeyOnlyStyleChange: (
-    property: keyof KeyPosition,
-    value: KeyPosition[keyof KeyPosition],
   ) => void;
   getBatchPickerColor: () => NoteColor | string;
   getBatchPickerRef: () => React.RefObject<HTMLButtonElement | null> | null;
@@ -668,35 +552,19 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchSpacingCommit,
   getBatchSpacingValue,
   handleBatchResize,
-  handleBatchStyleChange,
-  handleBatchStyleChangeComplete,
-  handleBatchShadowChangeComplete,
-  handleBatchShadowEnabledChange,
-  handleBatchGradientCommit,
-  handleKeyOnlyStyleChangeComplete,
-  handleBatchCounterUpdate,
+  handleBatchResizePreview,
+  onElementPropertyCommit,
+  onNoteElementPropertyCommit,
   handleGraphBatchSharedSetting,
   getMixedValue,
   getMixedValueBatch,
   getMixedValueGraphs,
   getMixedValueKeysOnly,
   getMixedValueActiveCapable,
-  handleActiveCapableStyleChangeComplete,
   getSelectedKeysData,
   getSelectedGraphsData,
   getSelectedBatchStyleData,
   getSelectedKeyOnlyPositions,
-  handleBatchKeyOnlyStyleChangeComplete,
-  handleBatchNoteColorChangeKeysOnly: _handleBatchNoteColorChangeKeysOnly,
-  handleBatchNoteColorChangeCompleteKeysOnly:
-    _handleBatchNoteColorChangeCompleteKeysOnly,
-  handleBatchGlowColorChangeKeysOnly: _handleBatchGlowColorChangeKeysOnly,
-  handleBatchGlowColorChangeCompleteKeysOnly:
-    _handleBatchGlowColorChangeCompleteKeysOnly,
-  handleBatchNoteColorChange: _handleBatchNoteColorChange,
-  handleBatchNoteColorChangeComplete: _handleBatchNoteColorChangeComplete,
-  handleBatchGlowColorChange: _handleBatchGlowColorChange,
-  handleBatchGlowColorChangeComplete: _handleBatchGlowColorChangeComplete,
   batchScrollRefFor,
   batchNoteColorButtonRef,
   batchGlowColorButtonRef,
@@ -719,7 +587,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchPickerColorChangeComplete,
   handleBatchNotePickerColorChangeComplete,
   handleBatchFillPickerColorChangeComplete,
-  handleBatchKeyOnlyStyleChange,
   getBatchPickerColor,
   getBatchPickerRef,
   batchColorPickerInteractiveRefs,
@@ -729,7 +596,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   t,
 }) => {
   // 피커 open 시점의 선택을 ID로 고정 - 대기 중 재정렬·모드 전환에도
-  // 완료가 시작 시점 요소들에 적용된다 (전원이 ID를 가질 때만, 아니면 legacy).
+  // 완료가 시작 시점 요소들에 적용된다
   // 결합 소유자는 이 패널이다 - EditSessionBoundary 안(탭 컴포넌트)에 두면
   // 같은 개수 선택 교체 시 리마운트로 open 중 재캡처가 일어난다
   const batchImageBinding = useBatchElementBinding(showBatchImagePicker, () =>
@@ -775,7 +642,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   ];
   const stableCounterTargets =
     counterTargets.length > 0 &&
-    counterTargets.every(({ id }) => id.length > 0 && !isSyntheticElementId(id))
+    counterTargets.every(({ id }) => id.length > 0 && isNativeElementId(id))
       ? counterTargets
       : null;
   const textPropertyTargets = selectedBatchStyleElements.map(
@@ -786,16 +653,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   );
   const { previewStyleProperty, commitStyleProperty } =
     createStylePropertyHandlers(textPropertyTargets, selectedKeyType);
-  const commitPaint = createPaintCommitHandler(
-    textPropertyTargets,
-    handleBatchGradientCommit ?? (() => undefined),
-  );
+  const commitPaint = createPaintCommitHandler(textPropertyTargets);
   const { previewFontColor, commitFontColor } = createFontColorHandlers(
     textPropertyTargets,
     selectedKeyType,
-    handleBatchStyleChange,
-    handleBatchStyleChangeComplete,
-    handleActiveCapableStyleChangeComplete,
   );
   const shadowTargets = [
     ...selectedKeyElements.map(({ id }) => ({
@@ -811,11 +672,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       id,
     })),
   ];
-  const commitShadow = createShadowCommitHandler(
-    shadowTargets,
-    handleBatchShadowChangeComplete,
-    handleBatchShadowEnabledChange ?? (() => undefined),
-  );
+  const commitShadow = createShadowCommitHandler(shadowTargets);
   const { commitStyleProperty: commitNoteStyleProperty } =
     createStylePropertyHandlers(
       selectedKeyElements.map(({ id }) => ({
@@ -828,7 +685,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const notePaintIds = selectedKeyElements.map(({ id }) => id);
   const stableNotePaintIds =
     notePaintIds.length > 0 &&
-    notePaintIds.every((id) => id.length > 0 && !isSyntheticElementId(id)) &&
+    notePaintIds.every((id) => id.length > 0 && isNativeElementId(id)) &&
     new Set(notePaintIds).size === notePaintIds.length
       ? notePaintIds
       : null;
@@ -841,6 +698,25 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             : patchNotePaintByIds(stableNotePaintIds, patch, { gestureId });
         editGestureController.settleCommit(persisted);
         void persisted.catch(reportElementOpError);
+      }
+    : undefined;
+  const previewNotePaint = stableNotePaintIds
+    ? (patch: EditorNotePaintPropertyPatchV1) => {
+        const entries: Array<{
+          index: number;
+          patch: Partial<KeyPosition>;
+        }> = [];
+        for (const id of stableNotePaintIds) {
+          const locator = resolveElementById('key', id);
+          if (!locator || locator.mode !== selectedKeyType) return;
+          entries.push({
+            index: locator.index,
+            patch: projectNotePaintPatch(patch),
+          });
+        }
+        editGestureController.preview(selectedKeyType, entries, {
+          domain: 'keyPosition',
+        });
       }
     : undefined;
   const counterFillTargets = [
@@ -858,7 +734,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const stableCounterFillTargets =
     counterFillTargets.length > 0 &&
     counterFillTargets.every(
-      ({ id }) => id.length > 0 && !isSyntheticElementId(id),
+      ({ id }) => id.length > 0 && isNativeElementId(id),
     ) &&
     new Set(counterFillTargets.map(({ id }) => id)).size ===
       counterFillTargets.length
@@ -876,7 +752,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   const soundTargets = selectedKeyElements.map(({ id }) => id);
   const stableSoundTargets =
     soundTargets.length > 0 &&
-    soundTargets.every((id) => id.length > 0 && !isSyntheticElementId(id))
+    soundTargets.every((id) => id.length > 0 && isNativeElementId(id))
       ? soundTargets
       : null;
   const commitSoundEnabled = stableSoundTargets
@@ -1308,13 +1184,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 selectedCount={selectedBatchStyleElements.length}
                 soundBinding={soundBinding}
                 onSoundPathCommit={(soundPath) =>
-                  commitBoundSoundPath(
-                    soundBinding.binding,
-                    soundBinding.selection,
-                    soundPath,
-                    () =>
-                      handleKeyOnlyStyleChangeComplete('soundPath', soundPath),
-                  )
+                  commitBoundSoundPath(soundBinding.selection, soundPath)
                 }
                 onSoundEnabledCommit={commitSoundEnabled}
                 onSoundVolumeCommit={commitSoundVolume}
@@ -1455,21 +1325,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 handleBatchSpacingCommit={handleBatchSpacingCommit}
                 batchSpacing={batchSpacing}
                 handleBatchResize={handleBatchResize}
-                handleBatchStyleChange={handleBatchStyleChange}
-                handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-                handleBatchShadowChangeComplete={
-                  handleBatchShadowChangeComplete
-                }
-                handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
-                handleBatchGradientCommit={handleBatchGradientCommit}
+                handleBatchResizePreview={handleBatchResizePreview}
+                onElementPropertyCommit={onElementPropertyCommit}
                 getKeyOnlyMixedValue={getMixedValueKeysOnly}
                 getActiveCapableMixedValue={getMixedValueActiveCapable}
-                handleActiveCapableStyleChangeComplete={
-                  handleActiveCapableStyleChangeComplete
-                }
-                handleKeyOnlyStyleChangeComplete={
-                  handleKeyOnlyStyleChangeComplete
-                }
                 showBatchImagePicker={showBatchImagePicker}
                 onToggleBatchImagePicker={() =>
                   setShowBatchImagePicker(!showBatchImagePicker)
@@ -1493,9 +1352,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               <EditSessionBoundary>
                 <BatchNoteTabContent
                   getMixedValue={getMixedValueKeysOnly}
-                  handleBatchStyleChangeComplete={
-                    handleBatchKeyOnlyStyleChangeComplete
-                  }
+                  onElementPropertyCommit={onNoteElementPropertyCommit}
                   onStylePropertyCommit={commitNoteStyleProperty}
                   getBatchNoteColorDisplay={getBatchNoteColorDisplay}
                   getBatchGlowColorDisplay={getBatchGlowColorDisplay}
@@ -1532,7 +1389,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               <BatchCounterTabContent
                 batchCounterSettings={batchCounterSettings}
                 keyVisual={batchKeyVisual}
-                handleBatchCounterUpdate={handleBatchCounterUpdate}
                 onCounterEnabledCommit={commitCounterEnabled}
                 onCounterAnimationEnabledCommit={commitCounterAnimationEnabled}
                 onCounterLayoutCommit={commitCounterLayout}
@@ -1560,7 +1416,32 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               referenceRef={getBatchPickerRef()}
               panelElement={panelElement}
               color={getBatchPickerColor()}
-              onColorChange={handleBatchPickerColorChange}
+              onColorChange={(color) => {
+                handleBatchPickerColorChange(color);
+                if (!previewNotePaint) return;
+                if (
+                  batchPickerFor === 'noteColor' &&
+                  typeof color === 'string'
+                ) {
+                  previewNotePaint({ notePaint: { color } });
+                } else if (
+                  batchPickerFor === 'glowColor' &&
+                  typeof color === 'string'
+                ) {
+                  previewNotePaint({ noteGlowPaint: { color } });
+                } else if (batchPickerFor === 'borderColor') {
+                  const raw = typeof color === 'string' ? color : undefined;
+                  previewNotePaint({
+                    noteBorderPaint: {
+                      color: toRgbHexColor(raw),
+                      opacity: parseAlphaPercent(
+                        raw,
+                        batchLocalColors.borderOpacity,
+                      ),
+                    },
+                  });
+                }
+              }}
               onColorChangeComplete={(color) => {
                 if (
                   commitNotePaint &&
@@ -1623,13 +1504,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                     ...prev,
                     noteOpacity: value,
                   }));
-                  handleBatchKeyOnlyStyleChange('noteOpacity', value);
+                  previewNotePaint?.({ notePaint: { opacity: value } });
                 } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     glowOpacity: value,
                   }));
-                  handleBatchKeyOnlyStyleChange('noteGlowOpacity', value);
+                  previewNotePaint?.({ noteGlowPaint: { opacity: value } });
                 }
               }}
               onOpacityPercentChangeComplete={(value: number) => {
@@ -1640,8 +1521,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   }));
                   if (commitNotePaint) {
                     commitNotePaint({ notePaint: { opacity: value } });
-                  } else {
-                    handleBatchKeyOnlyStyleChangeComplete('noteOpacity', value);
                   }
                 } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
@@ -1650,11 +1529,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   }));
                   if (commitNotePaint) {
                     commitNotePaint({ noteGlowPaint: { opacity: value } });
-                  } else {
-                    handleBatchKeyOnlyStyleChangeComplete(
-                      'noteGlowOpacity',
-                      value,
-                    );
                   }
                 }
               }}
@@ -1705,63 +1579,28 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               }
               completionBinding={batchImageBinding.binding}
               onIdleImageChange={(imageUrl: string) => {
-                commitBoundInactiveImage(
-                  batchImageBinding.binding,
-                  batchImageBinding.selection,
-                  imageUrl,
-                  () =>
-                    handleBatchStyleChangeComplete('inactiveImage', imageUrl),
-                );
+                commitBoundInactiveImage(batchImageBinding.selection, imageUrl);
               }}
               onActiveImageChange={(imageUrl: string) => {
-                commitBoundActiveImage(
-                  batchImageBinding.binding,
-                  batchImageBinding.selection,
-                  imageUrl,
-                  () =>
-                    handleActiveCapableStyleChangeComplete(
-                      'activeImage',
-                      imageUrl,
-                    ),
-                );
+                commitBoundActiveImage(batchImageBinding.selection, imageUrl);
               }}
               onIdleTransparentChange={(value: boolean) => {
                 commitBoundIdleTransparent(
-                  idleTransparencyBinding.binding,
                   idleTransparencyBinding.selection,
                   value,
-                  () =>
-                    handleBatchStyleChangeComplete('idleTransparent', value),
                 );
               }}
               onActiveTransparentChange={(value: boolean) => {
                 commitBoundActiveTransparent(
-                  activeTransparencyBinding.binding,
                   activeTransparencyBinding.selection,
                   value,
-                  () =>
-                    handleActiveCapableStyleChangeComplete(
-                      'activeTransparent',
-                      value,
-                    ),
                 );
               }}
               onIdleImageReset={() => {
-                commitBoundInactiveImage(
-                  batchImageBinding.binding,
-                  batchImageBinding.selection,
-                  '',
-                  () => handleBatchStyleChangeComplete('inactiveImage', ''),
-                );
+                commitBoundInactiveImage(batchImageBinding.selection, '');
               }}
               onActiveImageReset={() => {
-                commitBoundActiveImage(
-                  batchImageBinding.binding,
-                  batchImageBinding.selection,
-                  '',
-                  () =>
-                    handleActiveCapableStyleChangeComplete('activeImage', ''),
-                );
+                commitBoundActiveImage(batchImageBinding.selection, '');
               }}
               onClose={() => setShowBatchImagePicker(false)}
               showActiveState={
@@ -1807,16 +1646,11 @@ interface BatchGraphOnlyPanelProps {
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
-  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
-  handleBatchStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: unknown,
+  handleBatchResizePreview: (
+    dimension: 'width' | 'height',
+    value: number,
   ) => void;
-  handleBatchGradientCommit?: (
-    target: 'backgroundColor' | 'borderColor',
-    state: 'idle' | 'active',
-    value: ColorModeValue,
-  ) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
@@ -1850,9 +1684,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   handleBatchSpacingCommit,
   getBatchSpacingValue,
   handleBatchResize,
-  handleBatchStyleChange,
-  handleBatchStyleChangeComplete,
-  handleBatchGradientCommit,
+  handleBatchResizePreview,
+  onElementPropertyCommit,
   handleGraphBatchSharedSetting,
   getMixedValueGraphs,
   getMixedValueGraphsAsKey,
@@ -1886,7 +1719,6 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
       elementType: 'graph',
       id,
     })),
-    handleBatchGradientCommit ?? (() => undefined),
   );
 
   const graphShapeOptions = [
@@ -2113,9 +1945,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               handleBatchSpacingCommit={handleBatchSpacingCommit}
               batchSpacing={batchGraphSpacing}
               handleBatchResize={handleBatchResize}
-              handleBatchStyleChange={handleBatchStyleChange}
-              handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-              handleBatchGradientCommit={handleBatchGradientCommit}
+              handleBatchResizePreview={handleBatchResizePreview}
+              onElementPropertyCommit={onElementPropertyCommit}
               showBatchImagePicker={showBatchImagePicker}
               onToggleBatchImagePicker={() =>
                 setShowBatchImagePicker(!showBatchImagePicker)
@@ -2154,29 +1985,16 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
             }
             completionBinding={graphImageBinding.binding}
             onIdleImageChange={(imageUrl: string) => {
-              commitBoundInactiveImage(
-                graphImageBinding.binding,
-                graphImageBinding.selection,
-                imageUrl,
-                () =>
-                  handleGraphBatchSharedSetting({ inactiveImage: imageUrl }),
-              );
+              commitBoundInactiveImage(graphImageBinding.selection, imageUrl);
             }}
             onIdleTransparentChange={(value: boolean) => {
               commitBoundIdleTransparent(
-                graphTransparencyBinding.binding,
                 graphTransparencyBinding.selection,
                 value,
-                () => handleGraphBatchSharedSetting({ idleTransparent: value }),
               );
             }}
             onIdleImageReset={() => {
-              commitBoundInactiveImage(
-                graphImageBinding.binding,
-                graphImageBinding.selection,
-                '',
-                () => handleGraphBatchSharedSetting({ inactiveImage: '' }),
-              );
+              commitBoundInactiveImage(graphImageBinding.selection, '');
             }}
             onClose={() => setShowBatchImagePicker(false)}
           />
@@ -2217,21 +2035,11 @@ interface BatchKnobOnlyPanelProps {
   ) => void;
   getBatchSpacingValue: () => MixedValueResult<number>;
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
-  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
-  handleBatchStyleChangeComplete: (
-    property: keyof KeyPosition,
-    value: unknown,
+  handleBatchResizePreview: (
+    dimension: 'width' | 'height',
+    value: number,
   ) => void;
-  handleBatchShadowChangeComplete: (
-    state: 'idle' | 'active',
-    patch: Partial<ElementShadowSpec>,
-  ) => void;
-  handleBatchShadowEnabledChange?: (enabled: boolean) => void;
-  handleBatchGradientCommit?: (
-    target: 'backgroundColor' | 'borderColor',
-    state: 'idle' | 'active',
-    value: ColorModeValue,
-  ) => void;
+  onElementPropertyCommit?: (patch: EditorElementPropertyPatchV1) => void;
   handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
   getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
@@ -2265,11 +2073,8 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   handleBatchSpacingCommit,
   getBatchSpacingValue,
   handleBatchResize,
-  handleBatchStyleChange,
-  handleBatchStyleChangeComplete,
-  handleBatchShadowChangeComplete,
-  handleBatchShadowEnabledChange,
-  handleBatchGradientCommit,
+  handleBatchResizePreview,
+  onElementPropertyCommit,
   handleKnobBatchSharedSetting,
   getMixedValueKnobs,
   getMixedValueKnobsAsKey,
@@ -2303,15 +2108,12 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
       elementType: 'knob',
       id,
     })),
-    handleBatchGradientCommit ?? (() => undefined),
   );
   const commitShadow = createShadowCommitHandler(
     selectedKnobElements.map(({ id }) => ({
       elementType: 'knob',
       id,
     })),
-    handleBatchShadowChangeComplete,
-    handleBatchShadowEnabledChange ?? (() => undefined),
   );
 
   const sensitivityState = getMixedValueKnobs(
@@ -2456,11 +2258,8 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               handleBatchSpacingCommit={handleBatchSpacingCommit}
               batchSpacing={batchKnobSpacing}
               handleBatchResize={handleBatchResize}
-              handleBatchStyleChange={handleBatchStyleChange}
-              handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-              handleBatchShadowChangeComplete={handleBatchShadowChangeComplete}
-              handleBatchShadowEnabledChange={handleBatchShadowEnabledChange}
-              handleBatchGradientCommit={handleBatchGradientCommit}
+              handleBatchResizePreview={handleBatchResizePreview}
+              onElementPropertyCommit={onElementPropertyCommit}
               showBatchImagePicker={showBatchImagePicker}
               onToggleBatchImagePicker={() =>
                 setShowBatchImagePicker(!showBatchImagePicker)
@@ -2498,53 +2297,28 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
             }
             completionBinding={knobImageBinding.binding}
             onIdleImageChange={(imageUrl: string) => {
-              commitBoundInactiveImage(
-                knobImageBinding.binding,
-                knobImageBinding.selection,
-                imageUrl,
-                () => handleKnobBatchSharedSetting({ inactiveImage: imageUrl }),
-              );
+              commitBoundInactiveImage(knobImageBinding.selection, imageUrl);
             }}
             onActiveImageChange={(imageUrl: string) => {
-              commitBoundActiveImage(
-                knobImageBinding.binding,
-                knobImageBinding.selection,
-                imageUrl,
-                () => handleKnobBatchSharedSetting({ activeImage: imageUrl }),
-              );
+              commitBoundActiveImage(knobImageBinding.selection, imageUrl);
             }}
             onIdleTransparentChange={(value: boolean) => {
               commitBoundIdleTransparent(
-                knobTransparencyBinding.binding,
                 knobTransparencyBinding.selection,
                 value,
-                () => handleKnobBatchSharedSetting({ idleTransparent: value }),
               );
             }}
             onActiveTransparentChange={(value: boolean) => {
               commitBoundActiveTransparent(
-                knobTransparencyBinding.binding,
                 knobTransparencyBinding.selection,
                 value,
-                () =>
-                  handleKnobBatchSharedSetting({ activeTransparent: value }),
               );
             }}
             onIdleImageReset={() => {
-              commitBoundInactiveImage(
-                knobImageBinding.binding,
-                knobImageBinding.selection,
-                '',
-                () => handleKnobBatchSharedSetting({ inactiveImage: '' }),
-              );
+              commitBoundInactiveImage(knobImageBinding.selection, '');
             }}
             onActiveImageReset={() => {
-              commitBoundActiveImage(
-                knobImageBinding.binding,
-                knobImageBinding.selection,
-                '',
-                () => handleKnobBatchSharedSetting({ activeImage: '' }),
-              );
+              commitBoundActiveImage(knobImageBinding.selection, '');
             }}
             onClose={() => setShowBatchImagePicker(false)}
           />

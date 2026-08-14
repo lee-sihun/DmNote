@@ -48,7 +48,6 @@ import {
 } from '@components/main/Grid/PropertiesPanel/layer/layerReorderIntent';
 
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
-import { isSyntheticElementId } from '@src/renderer/editor/model/elementIdMap';
 import type { NativeElementType } from '@src/renderer/editor/model/elementIdMap';
 import {
   commitBatchGeometryByIds,
@@ -371,7 +370,7 @@ const parseLayerDeleteTargets = (
       !LAYER_DELETE_TARGET_TYPES.has(elementType) ||
       typeof id !== 'string' ||
       id.trim().length === 0 ||
-      (elementType !== 'plugin' && isSyntheticElementId(id)) ||
+      (elementType !== 'plugin' && !isNativeElementId(id)) ||
       seen.has(id)
     ) {
       return null;
@@ -411,8 +410,7 @@ const parseNativeLayerPropertyTarget = (
     typeof target.elementType !== 'string' ||
     !['key', 'stat', 'graph', 'knob'].includes(target.elementType) ||
     typeof target.id !== 'string' ||
-    target.id.trim().length === 0 ||
-    isSyntheticElementId(target.id) ||
+    !isNativeElementId(target.id) ||
     target.patch === null ||
     typeof target.patch !== 'object' ||
     Array.isArray(target.patch)
@@ -661,8 +659,7 @@ const parseNativeLayerBoundsTarget = (
     typeof target.elementType !== 'string' ||
     !['key', 'stat', 'graph', 'knob'].includes(target.elementType) ||
     typeof target.id !== 'string' ||
-    target.id.trim().length === 0 ||
-    isSyntheticElementId(target.id) ||
+    !isNativeElementId(target.id) ||
     (target.gestureId !== undefined &&
       !isCanonicalGestureId(target.gestureId)) ||
     (target.gestureId !== undefined &&
@@ -734,8 +731,7 @@ const parseBatchGeometryDescriptor = (
       typeof target.type !== 'string' ||
       !['key', 'stat', 'graph', 'knob'].includes(target.type) ||
       typeof target.id !== 'string' ||
-      target.id.length === 0 ||
-      isSyntheticElementId(target.id) ||
+      !isNativeElementId(target.id) ||
       seen.has(target.id)
     ) {
       return null;
@@ -1310,8 +1306,7 @@ const parseNativeLayerPropertyRequest = (
         elementType !== 'counter-capable' &&
         target.elementType !== elementType) ||
       typeof target.id !== 'string' ||
-      target.id.trim().length === 0 ||
-      isSyntheticElementId(target.id) ||
+      !isNativeElementId(target.id) ||
       seen.has(target.id)
     ) {
       return null;

@@ -186,7 +186,7 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.updateKeyPositions).not.toHaveBeenCalled();
   });
 
-  it('synthetic native는 기존 index writer를 유지한다', async () => {
+  it('invalid native visibility는 fail-closed로 어떤 writer도 호출하지 않는다', async () => {
     const item: LayerItem = {
       type: 'key',
       id: 'key-0',
@@ -198,7 +198,8 @@ describe('useLayerActions visibility routing', () => {
     await act(async () => actions.handleToggleVisibility(click, item));
 
     expect(mocks.patchHidden).not.toHaveBeenCalled();
-    expect(mocks.updateKeyPositions).toHaveBeenCalledOnce();
+    expect(mocks.patchPropertyViaAuthority).not.toHaveBeenCalled();
+    expect(mocks.updateKeyPositions).not.toHaveBeenCalled();
   });
 
   it('main stable group은 allHidden에서 계산한 absolute literal만 semantic helper에 넘긴다', async () => {
@@ -258,7 +259,7 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.setGroupHiddenLegacy).not.toHaveBeenCalled();
   });
 
-  it('main synthetic group은 current membership legacy helper를 한 번 호출한다', async () => {
+  it('invalid native group visibility는 fail-closed로 중단한다', async () => {
     await exposeWithItems([
       {
         type: 'key',
@@ -275,12 +276,9 @@ describe('useLayerActions visibility routing', () => {
       actions.handleToggleGroupVisibility(click, 'group-a'),
     );
 
-    expect(mocks.setGroupHiddenLegacy).toHaveBeenCalledWith(
-      '4key',
-      'group-a',
-      true,
-    );
+    expect(mocks.setGroupHiddenLegacy).not.toHaveBeenCalled();
     expect(mocks.setGroupHidden).not.toHaveBeenCalled();
+    expect(mocks.setGroupVisibilityViaAuthority).not.toHaveBeenCalled();
   });
 
   it.each(['key', 'stat', 'graph', 'knob'] as const)(
@@ -326,7 +324,7 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.updateKeyPositions).not.toHaveBeenCalled();
   });
 
-  it('synthetic native rename은 기존 index writer를 유지한다', async () => {
+  it('invalid native rename은 fail-closed로 어떤 writer도 호출하지 않는다', async () => {
     const item: LayerItem = {
       type: 'key',
       id: 'key-0',
@@ -339,7 +337,7 @@ describe('useLayerActions visibility routing', () => {
 
     expect(mocks.patchLayerName).not.toHaveBeenCalled();
     expect(mocks.patchPropertyViaAuthority).not.toHaveBeenCalled();
-    expect(mocks.updateKeyPositions).toHaveBeenCalledOnce();
+    expect(mocks.updateKeyPositions).not.toHaveBeenCalled();
   });
 
   it('stable common4 selection group create는 exact create descriptor를 쓴다', async () => {
@@ -419,7 +417,7 @@ describe('useLayerActions visibility routing', () => {
     );
   });
 
-  it('synthetic header ungroup는 whole legacy이고 semantic helper를 호출하지 않는다', async () => {
+  it('invalid native header ungroup는 fail-closed로 중단한다', async () => {
     const position = {
       id: 'key-0',
       dx: 0,
@@ -451,17 +449,13 @@ describe('useLayerActions visibility routing', () => {
 
     expect(mocks.setElementGroups).not.toHaveBeenCalled();
     expect(mocks.setElementGroupsViaAuthority).not.toHaveBeenCalled();
-    expect(mocks.commitPatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        schemaVersion: 1,
-        keyPositions: expect.any(Object),
-        layerGroups: { '4key': [] },
-      }),
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+    expect(useKeyStore.getState().canonicalPositions['4key'][0].groupId).toBe(
+      'group-a',
     );
-    expect(
-      useKeyStore.getState().canonicalPositions['4key'][0].groupId,
-    ).toBeUndefined();
-    expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([]);
+    expect(useLayerGroupStore.getState().layerGroups['4key']).toEqual([
+      { id: 'group-a', name: 'Group A' },
+    ]);
   });
 
   it('panel stable header ungroup는 authority structural route만 쓴다', async () => {

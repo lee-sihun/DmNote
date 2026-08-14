@@ -1851,6 +1851,7 @@ impl AppStore {
                 format!("editor field {field:?} changed outside the declared transaction scope"),
             ));
         }
+        crate::state::native_element_id::validate_document_element_ids(&candidate)?;
         if changed_fields.contains(&EditorField::Keys) {
             repair_selected_mode(&mut scratch);
         }
@@ -7295,6 +7296,222 @@ mod tests {
             .all(|position| uuid::Uuid::parse_str(&position.id)
                 .is_ok_and(|id| id.get_version_num() == 4)));
 
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn legacy_position_replacements_reject_noncanonical_ids_atomically() {
+        enum PositionReplacement {
+            Stat(crate::models::StatPositions),
+            Graph(crate::models::GraphPositions),
+            Knob(crate::models::KnobPositions),
+        }
+
+        fn with_raw_position_id(
+            mut payload: serde_json::Value,
+            id: Option<&str>,
+        ) -> serde_json::Value {
+            let position = payload["4key"][0]
+                .as_object_mut()
+                .expect("serialized position object");
+            match id {
+                Some(id) => {
+                    position.insert("id".to_string(), serde_json::json!(id));
+                }
+                None => {
+                    position.remove("id");
+                }
+            }
+            payload
+        }
+
+        let dir = test_directory("legacy-position-id-validation-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let baseline = store.editor_get();
+        let baseline_snapshot = store.snapshot();
+        let baseline_persist_count = store.writer.persist_count();
+        let duplicate_id = baseline.document.key_positions["4key"][0].id.clone();
+
+        let stat_payload = serde_json::to_value(HashMap::from([(
+            "4key".to_string(),
+            vec![StatPosition {
+                stat_type: StatType::Kps,
+                position: KeyPosition {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    ..KeyPosition::default()
+                },
+            }],
+        )]))
+        .unwrap();
+        let graph_payload = serde_json::to_value(HashMap::from([(
+            "4key".to_string(),
+            vec![GraphPosition {
+                stat_type: GraphStatType::Kps,
+                graph_type: GraphType::Line,
+                graph_speed: 1000,
+                graph_color: "#ffffff".to_string(),
+                show_avg_line: true,
+                position: KeyPosition {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    ..KeyPosition::default()
+                },
+            }],
+        )]))
+        .unwrap();
+        let knob_payload = serde_json::to_value(HashMap::from([(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: String::new(),
+                sensitivity: 1.0,
+                reverse: false,
+                position: KeyPosition {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    ..KeyPosition::default()
+                },
+            }],
+        )]))
+        .unwrap();
+
+        let invalid_cases = vec![
+            (
+                EditorField::StatPositions,
+                "MISSING_ELEMENT_ID",
+                PositionReplacement::Stat(
+                    serde_json::from_value(with_raw_position_id(stat_payload.clone(), None))
+                        .unwrap(),
+                ),
+            ),
+            (
+                EditorField::GraphPositions,
+                "INVALID_ELEMENT_ID",
+                PositionReplacement::Graph(
+                    serde_json::from_value(with_raw_position_id(
+                        graph_payload.clone(),
+                        Some("not-a-uuid"),
+                    ))
+                    .unwrap(),
+                ),
+            ),
+            (
+                EditorField::KnobPositions,
+                "INVALID_ELEMENT_ID",
+                PositionReplacement::Knob(
+                    serde_json::from_value(with_raw_position_id(
+                        knob_payload,
+                        Some(&uuid::Uuid::nil().to_string()),
+                    ))
+                    .unwrap(),
+                ),
+            ),
+            (
+                EditorField::StatPositions,
+                "DUPLICATE_ELEMENT_ID",
+                PositionReplacement::Stat(
+                    serde_json::from_value(with_raw_position_id(stat_payload, Some(&duplicate_id)))
+                        .unwrap(),
+                ),
+            ),
+        ];
+
+        for (field, expected_code, replacement) in invalid_cases {
+            let error = legacy_editor_commit(&store, &[field], move |data| match replacement {
+                PositionReplacement::Stat(positions) => data.stat_positions = positions,
+                PositionReplacement::Graph(positions) => data.graph_positions = positions,
+                PositionReplacement::Knob(positions) => data.knob_positions = positions,
+            })
+            .unwrap_err();
+            assert_eq!(error.error_code, EditorCommitErrorCode::ValidationFailed);
+            assert!(!error.retryable);
+            assert_eq!(
+                error.details.unwrap().validation_code.as_deref(),
+                Some(expected_code)
+            );
+            assert_eq!(store.editor_get(), baseline);
+            assert_eq!(store.snapshot(), baseline_snapshot);
+            assert_eq!(store.writer.persist_count(), baseline_persist_count);
+        }
+
+        let valid_stat_id = uuid::Uuid::new_v4().to_string();
+        let valid_stat = legacy_editor_commit(&store, &[EditorField::StatPositions], |data| {
+            data.stat_positions.insert(
+                "4key".to_string(),
+                vec![StatPosition {
+                    stat_type: StatType::Kps,
+                    position: KeyPosition {
+                        id: valid_stat_id.clone(),
+                        ..KeyPosition::default()
+                    },
+                }],
+            );
+        })
+        .unwrap();
+        assert_eq!(
+            valid_stat.result.changed_fields,
+            vec![EditorField::StatPositions]
+        );
+        assert_eq!(
+            valid_stat.document.stat_positions["4key"][0].position.id,
+            valid_stat_id
+        );
+
+        let valid_graph_id = uuid::Uuid::new_v4().to_string();
+        let valid_graph = legacy_editor_commit(&store, &[EditorField::GraphPositions], |data| {
+            data.graph_positions.insert(
+                "4key".to_string(),
+                vec![GraphPosition {
+                    stat_type: GraphStatType::Kps,
+                    graph_type: GraphType::Line,
+                    graph_speed: 1000,
+                    graph_color: "#ffffff".to_string(),
+                    show_avg_line: true,
+                    position: KeyPosition {
+                        id: valid_graph_id.clone(),
+                        ..KeyPosition::default()
+                    },
+                }],
+            );
+        })
+        .unwrap();
+        assert_eq!(
+            valid_graph.result.changed_fields,
+            vec![EditorField::GraphPositions]
+        );
+        assert_eq!(
+            valid_graph.document.graph_positions["4key"][0].position.id,
+            valid_graph_id
+        );
+
+        let valid_knob_id = uuid::Uuid::new_v4().to_string();
+        let valid_knob = legacy_editor_commit(&store, &[EditorField::KnobPositions], |data| {
+            data.knob_positions.insert(
+                "4key".to_string(),
+                vec![KnobPosition {
+                    axis_id: String::new(),
+                    sensitivity: 1.0,
+                    reverse: false,
+                    position: KeyPosition {
+                        id: valid_knob_id.clone(),
+                        ..KeyPosition::default()
+                    },
+                }],
+            );
+        })
+        .unwrap();
+        assert_eq!(
+            valid_knob.result.changed_fields,
+            vec![EditorField::KnobPositions]
+        );
+        assert_eq!(
+            valid_knob.document.knob_positions["4key"][0].position.id,
+            valid_knob_id
+        );
+
+        crate::state::native_element_id::validate_document_element_ids(
+            &store.editor_get().document,
+        )
+        .unwrap();
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -17326,8 +17543,13 @@ mod tests {
                         name: "Custom".to_string(),
                     });
                     data.keys.insert(custom_mode.clone(), vec!["KeyA".into()]);
-                    data.key_positions
-                        .insert(custom_mode.clone(), vec![KeyPosition::default()]);
+                    data.key_positions.insert(
+                        custom_mode.clone(),
+                        vec![KeyPosition {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            ..KeyPosition::default()
+                        }],
+                    );
                     data.selected_key_type = custom_mode.clone();
                     Ok(())
                 },
@@ -17376,14 +17598,14 @@ mod tests {
         mappings.get_mut("4key").unwrap().push("F5".into());
         mappings.get_mut("5key").unwrap().push(KeySlot::default());
         let mut positions = before.key_positions.clone();
-        positions
-            .get_mut("4key")
-            .unwrap()
-            .push(KeyPosition::default());
-        positions
-            .get_mut("5key")
-            .unwrap()
-            .push(KeyPosition::default());
+        positions.get_mut("4key").unwrap().push(KeyPosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            ..KeyPosition::default()
+        });
+        positions.get_mut("5key").unwrap().push(KeyPosition {
+            id: uuid::Uuid::new_v4().to_string(),
+            ..KeyPosition::default()
+        });
 
         store.writer.fail_next_persist();
         let failed_mappings = mappings.clone();
@@ -17414,7 +17636,9 @@ mod tests {
         let positions = change.document.key_positions;
         assert_eq!(store.writer.persist_count(), persist_count + 1);
         assert_eq!(keys["4key"].last().unwrap(), &KeySlot::from("F5"));
-        assert_eq!(positions["4key"].last().unwrap(), &KeyPosition::default());
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &positions["4key"].last().unwrap().id
+        ));
         assert!(keys["5key"].last().unwrap().is_unassigned());
         assert_eq!(keys["4key"].len(), positions["4key"].len());
         assert_eq!(keys["5key"].len(), positions["5key"].len());

@@ -1,11 +1,4 @@
 export {
-  persistPositionsWithSync,
-  persistMappingsAndPositions,
-  persistPositions,
-  persistPositionsWithFlag,
-} from './persistState';
-
-export {
   EditorSaveCoordinator,
   applyEditorPatch,
   createEditorCoordinator,

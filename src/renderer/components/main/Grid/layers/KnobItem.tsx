@@ -65,13 +65,13 @@ interface SelectedElement {
 
 interface KnobItemProps {
   index: number;
-  elementId?: string;
+  elementId: string;
   position: KnobPosition;
   onPositionChange: (
     index: number,
     dx: number,
     dy: number,
-    elementId?: string,
+    elementId: string,
   ) => void;
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
@@ -148,7 +148,11 @@ const KnobItem = ({
   const useInline = useInlineStyles === true;
 
   // 편집 세션 일시 페인트 — 대상 spec과 대기/입력 상태를 한 묶음으로 렌더
-  const previewSession = useGradientPreviewSession('knob', index, isSelected);
+  const previewSession = useGradientPreviewSession(
+    'knob',
+    elementId,
+    isSelected,
+  );
   const previewActive = previewSession?.stateMode === 'active';
   const bgPair = resolveStatePair(
     previewActive,
@@ -195,7 +199,7 @@ const KnobItem = ({
   );
 
   const isSelectionMode = isSelected;
-  const effectiveElementId = elementId || `knob-${index}`;
+  const effectiveElementId = elementId;
 
   const inactiveImageSrc = resolveImageSource(inactiveImage);
   const activeImageSrc = resolveImageSource(activeImage);
@@ -256,8 +260,6 @@ const KnobItem = ({
     elementId: effectiveElementId,
     elementWidth: width || 60,
     elementHeight: height || 60,
-    elementType: 'knob',
-    elementIndex: index,
     selectedElements,
     getOtherElements,
     onMultiDragStart,
