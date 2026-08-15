@@ -1339,354 +1339,390 @@ pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
             ..
         } = op
         {
-            if matches!(
-                patch,
+            // 속성 계열별 대상 타입 제약, variant 추가 시 컴파일 에러로 분류 강제
+            match patch {
+                // 그래프 전용
                 EditorElementPropertyPatchV1::GraphType(_)
-                    | EditorElementPropertyPatchV1::GraphColor(_)
-                    | EditorElementPropertyPatchV1::ShowAvgLine(_)
-                    | EditorElementPropertyPatchV1::GraphAnimationEnabled(_)
-                    | EditorElementPropertyPatchV1::GraphSpeed(_)
-            ) {
-                validate_editor_op_target_type(
-                    op_index,
-                    EditorElementTypeV1::Graph,
-                    *element_type,
-                )?;
-            } else if matches!(
-                patch,
+                | EditorElementPropertyPatchV1::GraphColor(_)
+                | EditorElementPropertyPatchV1::ShowAvgLine(_)
+                | EditorElementPropertyPatchV1::GraphAnimationEnabled(_)
+                | EditorElementPropertyPatchV1::GraphSpeed(_) => {
+                    validate_editor_op_target_type(
+                        op_index,
+                        EditorElementTypeV1::Graph,
+                        *element_type,
+                    )?;
+                }
+                // 노브 전용
                 EditorElementPropertyPatchV1::Reverse(_)
-                    | EditorElementPropertyPatchV1::Sensitivity(_)
-                    | EditorElementPropertyPatchV1::AxisId(_)
-            ) {
-                validate_editor_op_target_type(op_index, EditorElementTypeV1::Knob, *element_type)?;
-            } else if matches!(patch, EditorElementPropertyPatchV1::StatType(_)) {
-                validate_editor_op_target_type(op_index, EditorElementTypeV1::Stat, *element_type)?;
-            } else if matches!(patch, EditorElementPropertyPatchV1::ActiveShadow(_)) {
-                if !matches!(
-                    element_type,
-                    EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                ) {
-                    return Err(EditorCommitError::validation(
-                        "ELEMENT_TYPE_MISMATCH",
-                        format!("editor op {op_index} active shadow target must be key or knob"),
-                    ));
+                | EditorElementPropertyPatchV1::Sensitivity(_)
+                | EditorElementPropertyPatchV1::AxisId(_) => {
+                    validate_editor_op_target_type(
+                        op_index,
+                        EditorElementTypeV1::Knob,
+                        *element_type,
+                    )?;
                 }
-                let EditorElementPropertyPatchV1::ActiveShadow(patch) = patch else {
-                    unreachable!();
-                };
-                validate_shadow_leaf(&patch.active_shadow)?;
-            } else if matches!(
-                patch,
+                // 스탯 전용
+                EditorElementPropertyPatchV1::StatType(_) => {
+                    validate_editor_op_target_type(
+                        op_index,
+                        EditorElementTypeV1::Stat,
+                        *element_type,
+                    )?;
+                }
+                // key·knob 한정 active shadow
+                EditorElementPropertyPatchV1::ActiveShadow(patch) => {
+                    if !matches!(
+                        element_type,
+                        EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                    ) {
+                        return Err(EditorCommitError::validation(
+                            "ELEMENT_TYPE_MISMATCH",
+                            format!(
+                                "editor op {op_index} active shadow target must be key or knob"
+                            ),
+                        ));
+                    }
+                    validate_shadow_leaf(&patch.active_shadow)?;
+                }
+                // key·stat·knob 한정 shadow
                 EditorElementPropertyPatchV1::Shadow(_)
-                    | EditorElementPropertyPatchV1::ShadowEnabled(_)
-            ) {
-                if !matches!(
-                    element_type,
-                    EditorElementTypeV1::Key
-                        | EditorElementTypeV1::Stat
-                        | EditorElementTypeV1::Knob
-                ) {
-                    return Err(EditorCommitError::validation(
-                        "ELEMENT_TYPE_MISMATCH",
-                        format!("editor op {op_index} shadow target must be key, stat, or knob"),
-                    ));
+                | EditorElementPropertyPatchV1::ShadowEnabled(_) => {
+                    if !matches!(
+                        element_type,
+                        EditorElementTypeV1::Key
+                            | EditorElementTypeV1::Stat
+                            | EditorElementTypeV1::Knob
+                    ) {
+                        return Err(EditorCommitError::validation(
+                            "ELEMENT_TYPE_MISMATCH",
+                            format!(
+                                "editor op {op_index} shadow target must be key, stat, or knob"
+                            ),
+                        ));
+                    }
+                    if let EditorElementPropertyPatchV1::Shadow(patch) = patch {
+                        validate_shadow_leaf(&patch.shadow)?;
+                    }
                 }
-                if let EditorElementPropertyPatchV1::Shadow(patch) = patch {
-                    validate_shadow_leaf(&patch.shadow)?;
-                }
-            } else if matches!(
-                patch,
+                // key·knob 한정 active paint
                 EditorElementPropertyPatchV1::ActiveBackgroundPaint(_)
-                    | EditorElementPropertyPatchV1::ActiveBorderPaint(_)
-            ) {
-                if !matches!(
-                    element_type,
-                    EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                ) {
-                    return Err(EditorCommitError::validation(
-                        "ELEMENT_TYPE_MISMATCH",
-                        format!("editor op {op_index} active paint target must be key or knob"),
-                    ));
-                }
-                let descriptor = match patch {
-                    EditorElementPropertyPatchV1::ActiveBackgroundPaint(patch) => {
-                        &patch.active_background_paint
+                | EditorElementPropertyPatchV1::ActiveBorderPaint(_) => {
+                    if !matches!(
+                        element_type,
+                        EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                    ) {
+                        return Err(EditorCommitError::validation(
+                            "ELEMENT_TYPE_MISMATCH",
+                            format!("editor op {op_index} active paint target must be key or knob"),
+                        ));
                     }
-                    EditorElementPropertyPatchV1::ActiveBorderPaint(patch) => {
-                        &patch.active_border_paint
-                    }
-                    _ => unreachable!(),
-                };
-                validate_paint_descriptor(descriptor)?;
-            } else if matches!(patch, EditorElementPropertyPatchV1::ActiveFontColor(_)) {
-                if !matches!(
-                    element_type,
-                    EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                ) {
-                    return Err(EditorCommitError::validation(
-                        "ELEMENT_TYPE_MISMATCH",
-                        format!(
-                            "editor op {op_index} active font color target must be key or knob"
-                        ),
-                    ));
+                    let descriptor = match patch {
+                        EditorElementPropertyPatchV1::ActiveBackgroundPaint(patch) => {
+                            &patch.active_background_paint
+                        }
+                        EditorElementPropertyPatchV1::ActiveBorderPaint(patch) => {
+                            &patch.active_border_paint
+                        }
+                        _ => unreachable!(),
+                    };
+                    validate_paint_descriptor(descriptor)?;
                 }
-            } else if let Some(descriptor) = match patch {
+                // key·knob 한정 active font color
+                EditorElementPropertyPatchV1::ActiveFontColor(_) => {
+                    if !matches!(
+                        element_type,
+                        EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                    ) {
+                        return Err(EditorCommitError::validation(
+                            "ELEMENT_TYPE_MISMATCH",
+                            format!(
+                                "editor op {op_index} active font color target must be key or knob"
+                            ),
+                        ));
+                    }
+                }
+                // 타입 무제약, paint 값 검증만
                 EditorElementPropertyPatchV1::BackgroundPaint(patch) => {
-                    Some(&patch.background_paint)
+                    validate_paint_descriptor(&patch.background_paint)?;
                 }
-                EditorElementPropertyPatchV1::BorderPaint(patch) => Some(&patch.border_paint),
-                _ => None,
-            } {
-                validate_paint_descriptor(descriptor)?;
-            } else if matches!(
-                patch,
+                EditorElementPropertyPatchV1::BorderPaint(patch) => {
+                    validate_paint_descriptor(&patch.border_paint)?;
+                }
+                // key·knob 한정 active 이미지 상태
                 EditorElementPropertyPatchV1::ActiveImage(_)
-                    | EditorElementPropertyPatchV1::ActiveTransparent(_)
-                    | EditorElementPropertyPatchV1::ActiveImageFit(_)
-            ) {
-                if !matches!(
-                    element_type,
-                    EditorElementTypeV1::Key | EditorElementTypeV1::Knob
-                ) {
-                    return Err(EditorCommitError::validation(
-                        "ELEMENT_TYPE_MISMATCH",
-                        format!(
-                            "editor op {op_index} active image state target must be key or knob"
-                        ),
-                    ));
+                | EditorElementPropertyPatchV1::ActiveTransparent(_)
+                | EditorElementPropertyPatchV1::ActiveImageFit(_) => {
+                    if !matches!(
+                        element_type,
+                        EditorElementTypeV1::Key | EditorElementTypeV1::Knob
+                    ) {
+                        return Err(EditorCommitError::validation(
+                            "ELEMENT_TYPE_MISMATCH",
+                            format!(
+                                "editor op {op_index} active image state target must be key or knob"
+                            ),
+                        ));
+                    }
                 }
-            } else if let EditorElementPropertyPatchV1::CounterAnimationPreset(patch) = patch {
-                if !matches!(
-                    element_type,
-                    EditorElementTypeV1::Key | EditorElementTypeV1::Stat
-                ) {
-                    return Err(EditorCommitError::validation(
-                        "ELEMENT_TYPE_MISMATCH",
-                        format!(
-                            "editor op {op_index} counter animation target must be key or stat"
-                        ),
-                    ));
+                // key·stat 한정 카운터 애니메이션 프리셋
+                EditorElementPropertyPatchV1::CounterAnimationPreset(patch) => {
+                    if !matches!(
+                        element_type,
+                        EditorElementTypeV1::Key | EditorElementTypeV1::Stat
+                    ) {
+                        return Err(EditorCommitError::validation(
+                            "ELEMENT_TYPE_MISMATCH",
+                            format!(
+                                "editor op {op_index} counter animation target must be key or stat"
+                            ),
+                        ));
+                    }
+                    validate_counter_animation_preset_patch(
+                        current_store,
+                        &patch.counter_animation_preset,
+                    )?;
                 }
-                validate_counter_animation_preset_patch(
-                    current_store,
-                    &patch.counter_animation_preset,
-                )?;
-            } else if matches!(
-                patch,
+                // key·stat 한정 카운터
                 EditorElementPropertyPatchV1::CounterEnabled(_)
-                    | EditorElementPropertyPatchV1::CounterAnimationEnabled(_)
-                    | EditorElementPropertyPatchV1::CounterPlacement(_)
-                    | EditorElementPropertyPatchV1::CounterAlign(_)
-                    | EditorElementPropertyPatchV1::CounterAlignMode(_)
-                    | EditorElementPropertyPatchV1::CounterGap(_)
-                    | EditorElementPropertyPatchV1::CounterFontSize(_)
-                    | EditorElementPropertyPatchV1::CounterFontWeight(_)
-                    | EditorElementPropertyPatchV1::CounterFontItalic(_)
-                    | EditorElementPropertyPatchV1::CounterFontUnderline(_)
-                    | EditorElementPropertyPatchV1::CounterFontStrikethrough(_)
-                    | EditorElementPropertyPatchV1::CounterFontFamily(_)
-                    | EditorElementPropertyPatchV1::CounterFillIdle(_)
-                    | EditorElementPropertyPatchV1::CounterStrokeIdle(_)
-            ) {
-                if !matches!(
-                    element_type,
-                    EditorElementTypeV1::Key | EditorElementTypeV1::Stat
-                ) {
-                    return Err(EditorCommitError::validation(
-                        "ELEMENT_TYPE_MISMATCH",
-                        format!("editor op {op_index} counter target must be key or stat"),
-                    ));
-                }
-                if let EditorElementPropertyPatchV1::CounterFontSize(patch) = patch {
-                    if !(8..=72).contains(&patch.counter_font_size) {
+                | EditorElementPropertyPatchV1::CounterAnimationEnabled(_)
+                | EditorElementPropertyPatchV1::CounterPlacement(_)
+                | EditorElementPropertyPatchV1::CounterAlign(_)
+                | EditorElementPropertyPatchV1::CounterAlignMode(_)
+                | EditorElementPropertyPatchV1::CounterGap(_)
+                | EditorElementPropertyPatchV1::CounterFontSize(_)
+                | EditorElementPropertyPatchV1::CounterFontWeight(_)
+                | EditorElementPropertyPatchV1::CounterFontItalic(_)
+                | EditorElementPropertyPatchV1::CounterFontUnderline(_)
+                | EditorElementPropertyPatchV1::CounterFontStrikethrough(_)
+                | EditorElementPropertyPatchV1::CounterFontFamily(_)
+                | EditorElementPropertyPatchV1::CounterFillIdle(_)
+                | EditorElementPropertyPatchV1::CounterStrokeIdle(_) => {
+                    if !matches!(
+                        element_type,
+                        EditorElementTypeV1::Key | EditorElementTypeV1::Stat
+                    ) {
                         return Err(EditorCommitError::validation(
-                            "COUNTER_FONT_SIZE_OUT_OF_RANGE",
-                            format!(
-                                "editor op {op_index} counter font size must be between 8 and 72"
-                            ),
+                            "ELEMENT_TYPE_MISMATCH",
+                            format!("editor op {op_index} counter target must be key or stat"),
                         ));
                     }
-                }
-                if let EditorElementPropertyPatchV1::CounterFontWeight(patch) = patch {
-                    if !(100..=900).contains(&patch.counter_font_weight) {
-                        return Err(EditorCommitError::validation(
-                            "COUNTER_FONT_WEIGHT_OUT_OF_RANGE",
-                            format!(
-                                "editor op {op_index} counter font weight must be between 100 and 900"
-                            ),
-                        ));
+                    if let EditorElementPropertyPatchV1::CounterFontSize(patch) = patch {
+                        if !(8..=72).contains(&patch.counter_font_size) {
+                            return Err(EditorCommitError::validation(
+                                "COUNTER_FONT_SIZE_OUT_OF_RANGE",
+                                format!(
+                                    "editor op {op_index} counter font size must be between 8 and 72"
+                                ),
+                            ));
+                        }
+                    }
+                    if let EditorElementPropertyPatchV1::CounterFontWeight(patch) = patch {
+                        if !(100..=900).contains(&patch.counter_font_weight) {
+                            return Err(EditorCommitError::validation(
+                                "COUNTER_FONT_WEIGHT_OUT_OF_RANGE",
+                                format!(
+                                    "editor op {op_index} counter font weight must be between 100 and 900"
+                                ),
+                            ));
+                        }
+                    }
+                    if let EditorElementPropertyPatchV1::CounterFillIdle(patch) = patch {
+                        validate_counter_fill_intent(&patch.counter_fill_idle)?;
                     }
                 }
-                if let EditorElementPropertyPatchV1::CounterFillIdle(patch) = patch {
-                    validate_counter_fill_intent(&patch.counter_fill_idle)?;
-                }
-            } else if matches!(
-                patch,
+                // key 전용 카운터 active 계열
                 EditorElementPropertyPatchV1::CounterFillActive(_)
-                    | EditorElementPropertyPatchV1::CounterStrokeActive(_)
-            ) {
-                validate_editor_op_target_type(op_index, EditorElementTypeV1::Key, *element_type)?;
-                if let EditorElementPropertyPatchV1::CounterFillActive(patch) = patch {
-                    validate_counter_fill_intent(&patch.counter_fill_active)?;
+                | EditorElementPropertyPatchV1::CounterStrokeActive(_) => {
+                    validate_editor_op_target_type(
+                        op_index,
+                        EditorElementTypeV1::Key,
+                        *element_type,
+                    )?;
+                    if let EditorElementPropertyPatchV1::CounterFillActive(patch) = patch {
+                        validate_counter_fill_intent(&patch.counter_fill_active)?;
+                    }
                 }
-            } else if matches!(
-                patch,
+                // key 전용 사운드·노트
                 EditorElementPropertyPatchV1::SoundPath(_)
-                    | EditorElementPropertyPatchV1::SoundEnabled(_)
-                    | EditorElementPropertyPatchV1::SoundVolume(_)
-                    | EditorElementPropertyPatchV1::NoteEffectEnabled(_)
-                    | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
-                    | EditorElementPropertyPatchV1::NoteGlowSize(_)
-                    | EditorElementPropertyPatchV1::NotePaint(_)
-                    | EditorElementPropertyPatchV1::NoteGlowPaint(_)
-                    | EditorElementPropertyPatchV1::NoteBorderPaint(_)
-                    | EditorElementPropertyPatchV1::NoteOffsetX(_)
-                    | EditorElementPropertyPatchV1::NoteOffsetY(_)
-                    | EditorElementPropertyPatchV1::NoteWidth(_)
-                    | EditorElementPropertyPatchV1::NoteBorderWidth(_)
-                    | EditorElementPropertyPatchV1::NoteBorderRadius(_)
-                    | EditorElementPropertyPatchV1::NoteAutoYCorrection(_)
-                    | EditorElementPropertyPatchV1::NoteAlignment(_)
-                    | EditorElementPropertyPatchV1::NoteBorderSide(_)
-            ) {
-                validate_editor_op_target_type(op_index, EditorElementTypeV1::Key, *element_type)?;
-                if let EditorElementPropertyPatchV1::SoundVolume(patch) = patch {
-                    if !patch.sound_volume.is_finite()
-                        || !(0.0..=200.0).contains(&patch.sound_volume)
+                | EditorElementPropertyPatchV1::SoundEnabled(_)
+                | EditorElementPropertyPatchV1::SoundVolume(_)
+                | EditorElementPropertyPatchV1::NoteEffectEnabled(_)
+                | EditorElementPropertyPatchV1::NoteGlowEnabled(_)
+                | EditorElementPropertyPatchV1::NoteGlowSize(_)
+                | EditorElementPropertyPatchV1::NotePaint(_)
+                | EditorElementPropertyPatchV1::NoteGlowPaint(_)
+                | EditorElementPropertyPatchV1::NoteBorderPaint(_)
+                | EditorElementPropertyPatchV1::NoteOffsetX(_)
+                | EditorElementPropertyPatchV1::NoteOffsetY(_)
+                | EditorElementPropertyPatchV1::NoteWidth(_)
+                | EditorElementPropertyPatchV1::NoteBorderWidth(_)
+                | EditorElementPropertyPatchV1::NoteBorderRadius(_)
+                | EditorElementPropertyPatchV1::NoteAutoYCorrection(_)
+                | EditorElementPropertyPatchV1::NoteAlignment(_)
+                | EditorElementPropertyPatchV1::NoteBorderSide(_) => {
+                    validate_editor_op_target_type(
+                        op_index,
+                        EditorElementTypeV1::Key,
+                        *element_type,
+                    )?;
+                    if let EditorElementPropertyPatchV1::SoundVolume(patch) = patch {
+                        if !patch.sound_volume.is_finite()
+                            || !(0.0..=200.0).contains(&patch.sound_volume)
+                        {
+                            return Err(EditorCommitError::validation(
+                                "SOUND_VOLUME_OUT_OF_RANGE",
+                                format!(
+                                    "editor op {op_index} sound volume must be finite and between 0 and 200"
+                                ),
+                            ));
+                        }
+                    }
+                    if let EditorElementPropertyPatchV1::NoteGlowSize(patch) = patch {
+                        if !patch.note_glow_size.is_finite()
+                            || !(0.0..=50.0).contains(&patch.note_glow_size)
+                        {
+                            return Err(EditorCommitError::validation(
+                                "NOTE_GLOW_SIZE_OUT_OF_RANGE",
+                                format!(
+                                    "editor op {op_index} note glow size must be finite and between 0 and 50"
+                                ),
+                            ));
+                        }
+                    }
+                    match patch {
+                        EditorElementPropertyPatchV1::NotePaint(patch) => {
+                            validate_note_paint_intent(&patch.note_paint)?;
+                        }
+                        EditorElementPropertyPatchV1::NoteGlowPaint(patch) => {
+                            validate_note_paint_intent(&patch.note_glow_paint)?;
+                        }
+                        EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
+                            validate_note_border_paint(
+                                &patch.note_border_paint.color,
+                                patch.note_border_paint.opacity,
+                            )?;
+                        }
+                        _ => {}
+                    }
+                    if let EditorElementPropertyPatchV1::NoteOffsetX(patch) = patch {
+                        if patch.note_offset_x.is_some_and(|value| {
+                            !value.is_finite() || !(-500.0..=500.0).contains(&value)
+                        }) {
+                            return Err(EditorCommitError::validation(
+                                "NOTE_OFFSET_X_OUT_OF_RANGE",
+                                format!(
+                                    "editor op {op_index} note offset X must be null or finite and between -500 and 500"
+                                ),
+                            ));
+                        }
+                    }
+                    if let EditorElementPropertyPatchV1::NoteOffsetY(patch) = patch {
+                        if patch.note_offset_y.is_some_and(|value| {
+                            !value.is_finite() || !(-500.0..=500.0).contains(&value)
+                        }) {
+                            return Err(EditorCommitError::validation(
+                                "NOTE_OFFSET_Y_OUT_OF_RANGE",
+                                format!(
+                                    "editor op {op_index} note offset Y must be null or finite and between -500 and 500"
+                                ),
+                            ));
+                        }
+                    }
+                    if let EditorElementPropertyPatchV1::NoteWidth(patch) = patch {
+                        if patch
+                            .note_width
+                            .is_some_and(|value| !value.is_finite() || value <= 0.0)
+                        {
+                            return Err(EditorCommitError::validation(
+                                "NOTE_WIDTH_OUT_OF_RANGE",
+                                format!(
+                                    "editor op {op_index} note width must be null or a positive finite number"
+                                ),
+                            ));
+                        }
+                    }
+                    if let EditorElementPropertyPatchV1::NoteBorderWidth(patch) = patch {
+                        if !patch.note_border_width.is_finite()
+                            || !(0.0..=20.0).contains(&patch.note_border_width)
+                        {
+                            return Err(EditorCommitError::validation(
+                                "NOTE_BORDER_WIDTH_OUT_OF_RANGE",
+                                format!(
+                                    "editor op {op_index} note border width must be finite and between 0 and 20"
+                                ),
+                            ));
+                        }
+                    }
+                    if let EditorElementPropertyPatchV1::NoteBorderRadius(patch) = patch {
+                        if !patch.note_border_radius.is_finite()
+                            || !(1.0..=100.0).contains(&patch.note_border_radius)
+                        {
+                            return Err(EditorCommitError::validation(
+                                "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
+                                format!(
+                                    "editor op {op_index} note border radius must be finite and between 1 and 100"
+                                ),
+                            ));
+                        }
+                    }
+                }
+                // 타입 무제약, 값 범위 검증만
+                EditorElementPropertyPatchV1::BorderWidth(patch) => {
+                    if !patch.border_width.is_finite()
+                        || !(0.0..=20.0).contains(&patch.border_width)
                     {
                         return Err(EditorCommitError::validation(
-                            "SOUND_VOLUME_OUT_OF_RANGE",
+                            "BORDER_WIDTH_OUT_OF_RANGE",
                             format!(
-                                "editor op {op_index} sound volume must be finite and between 0 and 200"
+                                "editor op {op_index} border width must be finite and between 0 and 20"
                             ),
                         ));
                     }
                 }
-                if let EditorElementPropertyPatchV1::NoteGlowSize(patch) = patch {
-                    if !patch.note_glow_size.is_finite()
-                        || !(0.0..=50.0).contains(&patch.note_glow_size)
+                EditorElementPropertyPatchV1::BorderRadius(patch) => {
+                    let maximum = if matches!(element_type, EditorElementTypeV1::Knob) {
+                        999.0
+                    } else {
+                        100.0
+                    };
+                    if !patch.border_radius.is_finite()
+                        || !(0.0..=maximum).contains(&patch.border_radius)
                     {
                         return Err(EditorCommitError::validation(
-                            "NOTE_GLOW_SIZE_OUT_OF_RANGE",
+                            "BORDER_RADIUS_OUT_OF_RANGE",
                             format!(
-                                "editor op {op_index} note glow size must be finite and between 0 and 50"
+                                "editor op {op_index} border radius must be finite and between 0 and {maximum}"
                             ),
                         ));
                     }
                 }
-                match patch {
-                    EditorElementPropertyPatchV1::NotePaint(patch) => {
-                        validate_note_paint_intent(&patch.note_paint)?;
-                    }
-                    EditorElementPropertyPatchV1::NoteGlowPaint(patch) => {
-                        validate_note_paint_intent(&patch.note_glow_paint)?;
-                    }
-                    EditorElementPropertyPatchV1::NoteBorderPaint(patch) => {
-                        validate_note_border_paint(
-                            &patch.note_border_paint.color,
-                            patch.note_border_paint.opacity,
-                        )?;
-                    }
-                    _ => {}
-                }
-                if let EditorElementPropertyPatchV1::NoteOffsetX(patch) = patch {
-                    if patch.note_offset_x.is_some_and(|value| {
-                        !value.is_finite() || !(-500.0..=500.0).contains(&value)
-                    }) {
+                EditorElementPropertyPatchV1::FontSize(patch) => {
+                    if !patch.font_size.is_finite() || !(8.0..=72.0).contains(&patch.font_size) {
                         return Err(EditorCommitError::validation(
-                            "NOTE_OFFSET_X_OUT_OF_RANGE",
+                            "FONT_SIZE_OUT_OF_RANGE",
                             format!(
-                                "editor op {op_index} note offset X must be null or finite and between -500 and 500"
+                                "editor op {op_index} font size must be finite and between 8 and 72"
                             ),
                         ));
                     }
                 }
-                if let EditorElementPropertyPatchV1::NoteOffsetY(patch) = patch {
-                    if patch.note_offset_y.is_some_and(|value| {
-                        !value.is_finite() || !(-500.0..=500.0).contains(&value)
-                    }) {
-                        return Err(EditorCommitError::validation(
-                            "NOTE_OFFSET_Y_OUT_OF_RANGE",
-                            format!(
-                                "editor op {op_index} note offset Y must be null or finite and between -500 and 500"
-                            ),
-                        ));
-                    }
-                }
-                if let EditorElementPropertyPatchV1::NoteWidth(patch) = patch {
-                    if patch
-                        .note_width
-                        .is_some_and(|value| !value.is_finite() || value <= 0.0)
-                    {
-                        return Err(EditorCommitError::validation(
-                            "NOTE_WIDTH_OUT_OF_RANGE",
-                            format!(
-                                "editor op {op_index} note width must be null or a positive finite number"
-                            ),
-                        ));
-                    }
-                }
-                if let EditorElementPropertyPatchV1::NoteBorderWidth(patch) = patch {
-                    if !patch.note_border_width.is_finite()
-                        || !(0.0..=20.0).contains(&patch.note_border_width)
-                    {
-                        return Err(EditorCommitError::validation(
-                            "NOTE_BORDER_WIDTH_OUT_OF_RANGE",
-                            format!(
-                                "editor op {op_index} note border width must be finite and between 0 and 20"
-                            ),
-                        ));
-                    }
-                }
-                if let EditorElementPropertyPatchV1::NoteBorderRadius(patch) = patch {
-                    if !patch.note_border_radius.is_finite()
-                        || !(1.0..=100.0).contains(&patch.note_border_radius)
-                    {
-                        return Err(EditorCommitError::validation(
-                            "NOTE_BORDER_RADIUS_OUT_OF_RANGE",
-                            format!(
-                                "editor op {op_index} note border radius must be finite and between 1 and 100"
-                            ),
-                        ));
-                    }
-                }
-            }
-            if let EditorElementPropertyPatchV1::BorderWidth(patch) = patch {
-                if !patch.border_width.is_finite() || !(0.0..=20.0).contains(&patch.border_width) {
-                    return Err(EditorCommitError::validation(
-                        "BORDER_WIDTH_OUT_OF_RANGE",
-                        format!(
-                            "editor op {op_index} border width must be finite and between 0 and 20"
-                        ),
-                    ));
-                }
-            }
-            if let EditorElementPropertyPatchV1::BorderRadius(patch) = patch {
-                let maximum = if matches!(element_type, EditorElementTypeV1::Knob) {
-                    999.0
-                } else {
-                    100.0
-                };
-                if !patch.border_radius.is_finite()
-                    || !(0.0..=maximum).contains(&patch.border_radius)
-                {
-                    return Err(EditorCommitError::validation(
-                        "BORDER_RADIUS_OUT_OF_RANGE",
-                        format!(
-                            "editor op {op_index} border radius must be finite and between 0 and {maximum}"
-                        ),
-                    ));
-                }
-            }
-            if let EditorElementPropertyPatchV1::FontSize(patch) = patch {
-                if !patch.font_size.is_finite() || !(8.0..=72.0).contains(&patch.font_size) {
-                    return Err(EditorCommitError::validation(
-                        "FONT_SIZE_OUT_OF_RANGE",
-                        format!(
-                            "editor op {op_index} font size must be finite and between 8 and 72"
-                        ),
-                    ));
-                }
+                // 타입 무제약
+                EditorElementPropertyPatchV1::Hidden(_)
+                | EditorElementPropertyPatchV1::LayerName(_)
+                | EditorElementPropertyPatchV1::UseInlineStyles(_)
+                | EditorElementPropertyPatchV1::FontWeight(_)
+                | EditorElementPropertyPatchV1::FontItalic(_)
+                | EditorElementPropertyPatchV1::FontUnderline(_)
+                | EditorElementPropertyPatchV1::FontStrikethrough(_)
+                | EditorElementPropertyPatchV1::FontFamily(_)
+                | EditorElementPropertyPatchV1::DisplayText(_)
+                | EditorElementPropertyPatchV1::ClassName(_)
+                | EditorElementPropertyPatchV1::FontColor(_)
+                | EditorElementPropertyPatchV1::InactiveImage(_)
+                | EditorElementPropertyPatchV1::IdleTransparent(_)
+                | EditorElementPropertyPatchV1::IdleImageFit(_) => {}
             }
         }
     }
@@ -2872,6 +2908,614 @@ mod tests {
 
     fn shadow_leaf_blur(blur: f64) -> EditorShadowLeafPatchV1 {
         EditorShadowLeafPatchV1::Blur(crate::models::EditorShadowBlurLeafPatchV1 { blur })
+    }
+
+    struct PatchTargetMatrixRow {
+        name: &'static str,
+        allowed: &'static [EditorElementTypeV1],
+        patch: EditorElementPropertyPatchV1,
+    }
+
+    // 속성 계열 × elementType 허용 매트릭스 - TS validator(src/types/editor.ts)와 동일 집합
+    fn patch_target_type_matrix() -> Vec<PatchTargetMatrixRow> {
+        use crate::models::{
+            EditorNoteBorderSideV1, ImageFit, KeyCounterAlign, KeyCounterAlignMode,
+            KeyCounterPlacement, NoteAlignment, StatType,
+        };
+        use EditorElementPropertyPatchV1 as Patch;
+        use EditorElementTypeV1::{Graph, Key, Knob, Stat};
+
+        const ALL: &[EditorElementTypeV1] = &[Key, Stat, Graph, Knob];
+        const GRAPH_ONLY: &[EditorElementTypeV1] = &[Graph];
+        const KNOB_ONLY: &[EditorElementTypeV1] = &[Knob];
+        const STAT_ONLY: &[EditorElementTypeV1] = &[Stat];
+        const KEY_ONLY: &[EditorElementTypeV1] = &[Key];
+        const KEY_STAT: &[EditorElementTypeV1] = &[Key, Stat];
+        const KEY_KNOB: &[EditorElementTypeV1] = &[Key, Knob];
+        const KEY_STAT_KNOB: &[EditorElementTypeV1] = &[Key, Stat, Knob];
+
+        let row = |name, allowed, patch| PatchTargetMatrixRow {
+            name,
+            allowed,
+            patch,
+        };
+        let note_opacity = |opacity| {
+            EditorNotePaintIntentV1::Opacity(crate::models::EditorNotePaintOpacityIntentV1 {
+                opacity,
+            })
+        };
+        vec![
+            row(
+                "hidden",
+                ALL,
+                Patch::Hidden(crate::models::EditorHiddenPropertyPatchV1 { hidden: true }),
+            ),
+            row(
+                "layerName",
+                ALL,
+                Patch::LayerName(crate::models::EditorLayerNamePropertyPatchV1 {
+                    layer_name: Some("layer".to_string()),
+                }),
+            ),
+            row(
+                "graphType",
+                GRAPH_ONLY,
+                Patch::GraphType(crate::models::EditorGraphTypePropertyPatchV1 {
+                    graph_type: GraphType::Bar,
+                }),
+            ),
+            row(
+                "graphColor",
+                GRAPH_ONLY,
+                Patch::GraphColor(crate::models::EditorGraphColorPropertyPatchV1 {
+                    graph_color: "#336699".to_string(),
+                }),
+            ),
+            row(
+                "showAvgLine",
+                GRAPH_ONLY,
+                Patch::ShowAvgLine(crate::models::EditorShowAvgLinePropertyPatchV1 {
+                    show_avg_line: false,
+                }),
+            ),
+            row(
+                "graphAnimationEnabled",
+                GRAPH_ONLY,
+                Patch::GraphAnimationEnabled(
+                    crate::models::EditorGraphAnimationEnabledPropertyPatchV1 {
+                        graph_animation_enabled: true,
+                    },
+                ),
+            ),
+            row(
+                "graphSpeed",
+                GRAPH_ONLY,
+                Patch::GraphSpeed(crate::models::EditorGraphSpeedPropertyPatchV1 {
+                    graph_speed: 120,
+                }),
+            ),
+            row(
+                "reverse",
+                KNOB_ONLY,
+                Patch::Reverse(crate::models::EditorReversePropertyPatchV1 { reverse: true }),
+            ),
+            row(
+                "sensitivity",
+                KNOB_ONLY,
+                Patch::Sensitivity(crate::models::EditorSensitivityPropertyPatchV1 {
+                    sensitivity: 1.5,
+                }),
+            ),
+            row(
+                "axisId",
+                KNOB_ONLY,
+                Patch::AxisId(crate::models::EditorAxisIdPropertyPatchV1 {
+                    axis_id: "axis-2".to_string(),
+                }),
+            ),
+            row(
+                "useInlineStyles",
+                ALL,
+                Patch::UseInlineStyles(crate::models::EditorUseInlineStylesPropertyPatchV1 {
+                    use_inline_styles: true,
+                }),
+            ),
+            row(
+                "fontWeight",
+                ALL,
+                Patch::FontWeight(crate::models::EditorFontWeightPropertyPatchV1 {
+                    font_weight: 700,
+                }),
+            ),
+            row(
+                "fontItalic",
+                ALL,
+                Patch::FontItalic(crate::models::EditorFontItalicPropertyPatchV1 {
+                    font_italic: true,
+                }),
+            ),
+            row(
+                "fontUnderline",
+                ALL,
+                Patch::FontUnderline(crate::models::EditorFontUnderlinePropertyPatchV1 {
+                    font_underline: true,
+                }),
+            ),
+            row(
+                "fontStrikethrough",
+                ALL,
+                Patch::FontStrikethrough(crate::models::EditorFontStrikethroughPropertyPatchV1 {
+                    font_strikethrough: true,
+                }),
+            ),
+            row(
+                "fontFamily",
+                ALL,
+                Patch::FontFamily(crate::models::EditorFontFamilyPropertyPatchV1 {
+                    font_family: "Sans".to_string(),
+                }),
+            ),
+            row(
+                "displayText",
+                ALL,
+                Patch::DisplayText(crate::models::EditorDisplayTextPropertyPatchV1 {
+                    display_text: "A".to_string(),
+                }),
+            ),
+            row(
+                "className",
+                ALL,
+                Patch::ClassName(crate::models::EditorClassNamePropertyPatchV1 {
+                    class_name: "custom".to_string(),
+                }),
+            ),
+            row(
+                "fontColor",
+                ALL,
+                Patch::FontColor(crate::models::EditorFontColorPropertyPatchV1 {
+                    font_color: "#ffffff".to_string(),
+                }),
+            ),
+            row(
+                "activeFontColor",
+                KEY_KNOB,
+                Patch::ActiveFontColor(crate::models::EditorActiveFontColorPropertyPatchV1 {
+                    active_font_color: "#ff0000".to_string(),
+                }),
+            ),
+            row(
+                "shadow",
+                KEY_STAT_KNOB,
+                Patch::Shadow(crate::models::EditorShadowPropertyPatchV1 {
+                    shadow: shadow_leaf_color("#000000"),
+                }),
+            ),
+            row(
+                "activeShadow",
+                KEY_KNOB,
+                Patch::ActiveShadow(crate::models::EditorActiveShadowPropertyPatchV1 {
+                    active_shadow: shadow_leaf_color("#000000"),
+                }),
+            ),
+            row(
+                "shadowEnabled",
+                KEY_STAT_KNOB,
+                Patch::ShadowEnabled(crate::models::EditorShadowEnabledPropertyPatchV1 {
+                    shadow_enabled: true,
+                }),
+            ),
+            row(
+                "backgroundPaint",
+                ALL,
+                Patch::BackgroundPaint(crate::models::EditorBackgroundPaintPropertyPatchV1 {
+                    background_paint: paint_descriptor("#112233", None),
+                }),
+            ),
+            row(
+                "activeBackgroundPaint",
+                KEY_KNOB,
+                Patch::ActiveBackgroundPaint(
+                    crate::models::EditorActiveBackgroundPaintPropertyPatchV1 {
+                        active_background_paint: paint_descriptor("#112233", None),
+                    },
+                ),
+            ),
+            row(
+                "borderPaint",
+                ALL,
+                Patch::BorderPaint(crate::models::EditorBorderPaintPropertyPatchV1 {
+                    border_paint: paint_descriptor("#112233", None),
+                }),
+            ),
+            row(
+                "activeBorderPaint",
+                KEY_KNOB,
+                Patch::ActiveBorderPaint(crate::models::EditorActiveBorderPaintPropertyPatchV1 {
+                    active_border_paint: paint_descriptor("#112233", None),
+                }),
+            ),
+            row(
+                "borderWidth",
+                ALL,
+                Patch::BorderWidth(crate::models::EditorBorderWidthPropertyPatchV1 {
+                    border_width: 2.0,
+                }),
+            ),
+            row(
+                "borderRadius",
+                ALL,
+                Patch::BorderRadius(crate::models::EditorBorderRadiusPropertyPatchV1 {
+                    border_radius: 8.0,
+                }),
+            ),
+            row(
+                "fontSize",
+                ALL,
+                Patch::FontSize(crate::models::EditorFontSizePropertyPatchV1 { font_size: 16.0 }),
+            ),
+            row(
+                "inactiveImage",
+                ALL,
+                Patch::InactiveImage(crate::models::EditorInactiveImagePropertyPatchV1 {
+                    inactive_image: "idle.png".to_string(),
+                }),
+            ),
+            row(
+                "activeImage",
+                KEY_KNOB,
+                Patch::ActiveImage(crate::models::EditorActiveImagePropertyPatchV1 {
+                    active_image: "active.png".to_string(),
+                }),
+            ),
+            row(
+                "idleTransparent",
+                ALL,
+                Patch::IdleTransparent(crate::models::EditorIdleTransparentPropertyPatchV1 {
+                    idle_transparent: true,
+                }),
+            ),
+            row(
+                "activeTransparent",
+                KEY_KNOB,
+                Patch::ActiveTransparent(crate::models::EditorActiveTransparentPropertyPatchV1 {
+                    active_transparent: true,
+                }),
+            ),
+            row(
+                "idleImageFit",
+                ALL,
+                Patch::IdleImageFit(crate::models::EditorIdleImageFitPropertyPatchV1 {
+                    idle_image_fit: ImageFit::Contain,
+                }),
+            ),
+            row(
+                "activeImageFit",
+                KEY_KNOB,
+                Patch::ActiveImageFit(crate::models::EditorActiveImageFitPropertyPatchV1 {
+                    active_image_fit: ImageFit::Fill,
+                }),
+            ),
+            row(
+                "soundPath",
+                KEY_ONLY,
+                Patch::SoundPath(crate::models::EditorSoundPathPropertyPatchV1 {
+                    sound_path: "sound.mp3".to_string(),
+                }),
+            ),
+            row(
+                "soundEnabled",
+                KEY_ONLY,
+                Patch::SoundEnabled(crate::models::EditorSoundEnabledPropertyPatchV1 {
+                    sound_enabled: true,
+                }),
+            ),
+            row(
+                "soundVolume",
+                KEY_ONLY,
+                Patch::SoundVolume(crate::models::EditorSoundVolumePropertyPatchV1 {
+                    sound_volume: 80.0,
+                }),
+            ),
+            row(
+                "counterEnabled",
+                KEY_STAT,
+                Patch::CounterEnabled(crate::models::EditorCounterEnabledPropertyPatchV1 {
+                    counter_enabled: true,
+                }),
+            ),
+            row(
+                "counterAnimationEnabled",
+                KEY_STAT,
+                Patch::CounterAnimationEnabled(
+                    crate::models::EditorCounterAnimationEnabledPropertyPatchV1 {
+                        counter_animation_enabled: true,
+                    },
+                ),
+            ),
+            row(
+                "counterPlacement",
+                KEY_STAT,
+                Patch::CounterPlacement(crate::models::EditorCounterPlacementPropertyPatchV1 {
+                    counter_placement: KeyCounterPlacement::Outside,
+                }),
+            ),
+            row(
+                "counterAlign",
+                KEY_STAT,
+                Patch::CounterAlign(crate::models::EditorCounterAlignPropertyPatchV1 {
+                    counter_align: KeyCounterAlign::Top,
+                }),
+            ),
+            row(
+                "counterAlignMode",
+                KEY_STAT,
+                Patch::CounterAlignMode(crate::models::EditorCounterAlignModePropertyPatchV1 {
+                    counter_align_mode: KeyCounterAlignMode::Between,
+                }),
+            ),
+            row(
+                "counterGap",
+                KEY_STAT,
+                Patch::CounterGap(crate::models::EditorCounterGapPropertyPatchV1 {
+                    counter_gap: 4,
+                }),
+            ),
+            row(
+                "counterFontSize",
+                KEY_STAT,
+                Patch::CounterFontSize(crate::models::EditorCounterFontSizePropertyPatchV1 {
+                    counter_font_size: 14,
+                }),
+            ),
+            row(
+                "counterFontWeight",
+                KEY_STAT,
+                Patch::CounterFontWeight(crate::models::EditorCounterFontWeightPropertyPatchV1 {
+                    counter_font_weight: 500,
+                }),
+            ),
+            row(
+                "counterFontItalic",
+                KEY_STAT,
+                Patch::CounterFontItalic(crate::models::EditorCounterFontItalicPropertyPatchV1 {
+                    counter_font_italic: true,
+                }),
+            ),
+            row(
+                "counterFontUnderline",
+                KEY_STAT,
+                Patch::CounterFontUnderline(
+                    crate::models::EditorCounterFontUnderlinePropertyPatchV1 {
+                        counter_font_underline: true,
+                    },
+                ),
+            ),
+            row(
+                "counterFontStrikethrough",
+                KEY_STAT,
+                Patch::CounterFontStrikethrough(
+                    crate::models::EditorCounterFontStrikethroughPropertyPatchV1 {
+                        counter_font_strikethrough: true,
+                    },
+                ),
+            ),
+            row(
+                "counterFontFamily",
+                KEY_STAT,
+                Patch::CounterFontFamily(crate::models::EditorCounterFontFamilyPropertyPatchV1 {
+                    counter_font_family: "Sans".to_string(),
+                }),
+            ),
+            row(
+                "counterFillIdle",
+                KEY_STAT,
+                Patch::CounterFillIdle(crate::models::EditorCounterFillIdlePropertyPatchV1 {
+                    counter_fill_idle: counter_fill_solid("#ffffff"),
+                }),
+            ),
+            row(
+                "counterFillActive",
+                KEY_ONLY,
+                Patch::CounterFillActive(crate::models::EditorCounterFillActivePropertyPatchV1 {
+                    counter_fill_active: counter_fill_solid("#ffffff"),
+                }),
+            ),
+            row(
+                "counterStrokeIdle",
+                KEY_STAT,
+                Patch::CounterStrokeIdle(crate::models::EditorCounterStrokeIdlePropertyPatchV1 {
+                    counter_stroke_idle: "#000000".to_string(),
+                }),
+            ),
+            row(
+                "counterStrokeActive",
+                KEY_ONLY,
+                Patch::CounterStrokeActive(
+                    crate::models::EditorCounterStrokeActivePropertyPatchV1 {
+                        counter_stroke_active: "#000000".to_string(),
+                    },
+                ),
+            ),
+            row(
+                "counterAnimationPreset",
+                KEY_STAT,
+                Patch::CounterAnimationPreset(EditorCounterAnimationPresetPropertyPatchV1 {
+                    counter_animation_preset: EditorCounterAnimationPresetIntentV1 {
+                        preset_id: "builtin-ease-out".to_string(),
+                        apply_preset_id: None,
+                        bezier: None,
+                        scale: None,
+                        duration_ms: None,
+                    },
+                }),
+            ),
+            row(
+                "statType",
+                STAT_ONLY,
+                Patch::StatType(crate::models::EditorStatTypePropertyPatchV1 {
+                    stat_type: StatType::Total,
+                }),
+            ),
+            row(
+                "noteEffectEnabled",
+                KEY_ONLY,
+                Patch::NoteEffectEnabled(crate::models::EditorNoteEffectEnabledPropertyPatchV1 {
+                    note_effect_enabled: true,
+                }),
+            ),
+            row(
+                "noteGlowEnabled",
+                KEY_ONLY,
+                Patch::NoteGlowEnabled(crate::models::EditorNoteGlowEnabledPropertyPatchV1 {
+                    note_glow_enabled: true,
+                }),
+            ),
+            row(
+                "noteGlowSize",
+                KEY_ONLY,
+                Patch::NoteGlowSize(crate::models::EditorNoteGlowSizePropertyPatchV1 {
+                    note_glow_size: 10.0,
+                }),
+            ),
+            row(
+                "notePaint",
+                KEY_ONLY,
+                Patch::NotePaint(crate::models::EditorNotePaintPropertyPatchV1 {
+                    note_paint: note_opacity(80),
+                }),
+            ),
+            row(
+                "noteGlowPaint",
+                KEY_ONLY,
+                Patch::NoteGlowPaint(crate::models::EditorNoteGlowPaintPropertyPatchV1 {
+                    note_glow_paint: note_opacity(60),
+                }),
+            ),
+            row(
+                "noteBorderPaint",
+                KEY_ONLY,
+                Patch::NoteBorderPaint(crate::models::EditorNoteBorderPaintPropertyPatchV1 {
+                    note_border_paint: crate::models::EditorNoteBorderPaintV1 {
+                        color: "#112233".to_string(),
+                        opacity: 80,
+                    },
+                }),
+            ),
+            row(
+                "noteOffsetX",
+                KEY_ONLY,
+                Patch::NoteOffsetX(crate::models::EditorNoteOffsetXPropertyPatchV1 {
+                    note_offset_x: Some(10.0),
+                }),
+            ),
+            row(
+                "noteOffsetY",
+                KEY_ONLY,
+                Patch::NoteOffsetY(crate::models::EditorNoteOffsetYPropertyPatchV1 {
+                    note_offset_y: Some(-10.0),
+                }),
+            ),
+            row(
+                "noteWidth",
+                KEY_ONLY,
+                Patch::NoteWidth(crate::models::EditorNoteWidthPropertyPatchV1 {
+                    note_width: Some(40.0),
+                }),
+            ),
+            row(
+                "noteBorderWidth",
+                KEY_ONLY,
+                Patch::NoteBorderWidth(crate::models::EditorNoteBorderWidthPropertyPatchV1 {
+                    note_border_width: 2.0,
+                }),
+            ),
+            row(
+                "noteBorderRadius",
+                KEY_ONLY,
+                Patch::NoteBorderRadius(crate::models::EditorNoteBorderRadiusPropertyPatchV1 {
+                    note_border_radius: 8.0,
+                }),
+            ),
+            row(
+                "noteAutoYCorrection",
+                KEY_ONLY,
+                Patch::NoteAutoYCorrection(
+                    crate::models::EditorNoteAutoYCorrectionPropertyPatchV1 {
+                        note_auto_y_correction: true,
+                    },
+                ),
+            ),
+            row(
+                "noteAlignment",
+                KEY_ONLY,
+                Patch::NoteAlignment(crate::models::EditorNoteAlignmentPropertyPatchV1 {
+                    note_alignment: NoteAlignment::Left,
+                }),
+            ),
+            row(
+                "noteBorderSide",
+                KEY_ONLY,
+                Patch::NoteBorderSide(crate::models::EditorNoteBorderSidePropertyPatchV1 {
+                    note_border_side: EditorNoteBorderSideV1::Vertical,
+                }),
+            ),
+        ]
+    }
+
+    #[test]
+    fn patch_target_type_matrix_pins_all_variant_constraints() {
+        let store = store_with_every_reorder_type();
+        let target_id = |element_type: EditorElementTypeV1| match element_type {
+            EditorElementTypeV1::Key => store.key_positions["4key"][0].id.clone(),
+            EditorElementTypeV1::Stat => store.stat_positions["4key"][0].position.id.clone(),
+            EditorElementTypeV1::Graph => store.graph_positions["4key"][0].position.id.clone(),
+            EditorElementTypeV1::Knob => store.knob_positions["4key"][0].position.id.clone(),
+        };
+        let rows = patch_target_type_matrix();
+
+        // 전수 고정 - 중복 없는 71개 variant (신규 variant는 본문 match 컴파일 에러가 강제)
+        assert_eq!(rows.len(), 71);
+        let distinct = rows
+            .iter()
+            .map(|row| std::mem::discriminant(&row.patch))
+            .collect::<HashSet<_>>();
+        assert_eq!(distinct.len(), rows.len());
+
+        for row in &rows {
+            for element_type in [
+                EditorElementTypeV1::Key,
+                EditorElementTypeV1::Stat,
+                EditorElementTypeV1::Graph,
+                EditorElementTypeV1::Knob,
+            ] {
+                // 선언 타입과 실제 요소 타입을 일치시켜 계열 제약만 판정되게 고정
+                let ops = [patch_property_op(
+                    element_type,
+                    target_id(element_type),
+                    row.patch.clone(),
+                )];
+                let result = prepare_editor_ops_transition(&store, &ops);
+                if row.allowed.contains(&element_type) {
+                    // 값은 전부 유효하므로 전체 성공이 곧 타입 검증 통과 증명
+                    assert!(
+                        result.is_ok(),
+                        "{} on {element_type:?} must pass: {:?}",
+                        row.name,
+                        result.err(),
+                    );
+                } else {
+                    let Err(error) = result else {
+                        panic!("{} on {element_type:?} must be rejected", row.name);
+                    };
+                    assert_eq!(
+                        validation_code(&error),
+                        Some("ELEMENT_TYPE_MISMATCH"),
+                        "{} on {element_type:?}",
+                        row.name,
+                    );
+                }
+            }
+        }
     }
 
     #[test]
