@@ -402,7 +402,7 @@ impl AppStore {
         self.commit_locked(&mut guard, scratch, ())
     }
 
-    /// overlay·panel bounds 전용
+    /// overlay·panel 창 상태(bounds, 분리 여부) 전용
     /// 다른 데이터에는 일반 update를 사용해 성공한 저장만 committed로 공개해야 함
     pub(crate) fn update_deferred(&self, updater: impl FnOnce(&mut AppStoreData)) -> Result<()> {
         let mut guard = self.lock_for_update()?;
@@ -18347,6 +18347,45 @@ mod tests {
         assert_eq!(reopened.snapshot().panel_bounds, Some(bounds));
         reopened.flush_and_shutdown().unwrap();
         drop(reopened);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn panel_detached_persists_and_restores_across_store_reopen() {
+        let dir = test_directory("panel-detached-persist-test");
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+
+        store
+            .update_deferred(|state| state.panel_detached = true)
+            .unwrap();
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+
+        let reopened = AppStore::initialize_in_dir(&dir).unwrap();
+        assert!(reopened.snapshot().panel_detached);
+        reopened.flush_and_shutdown().unwrap();
+        drop(reopened);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    // 필드가 없는 구버전 store는 도킹 상태로 폴백
+    #[test]
+    fn panel_detached_missing_field_defaults_to_docked() {
+        let dir = test_directory("panel-detached-default-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("store.json");
+        let mut fixture = serde_json::to_value(AppStoreData::default()).unwrap();
+        assert!(fixture
+            .as_object_mut()
+            .unwrap()
+            .remove("panelDetached")
+            .is_some());
+        std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        assert!(!store.snapshot().panel_detached);
+        store.flush_and_shutdown().unwrap();
+        drop(store);
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -1947,6 +1947,9 @@ pub struct AppStoreData {
     pub overlay_bounds: Option<OverlayBounds>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel_bounds: Option<PanelBounds>,
+    /// 분리 패널 창 존재 여부 (재시작 복원용)
+    #[serde(default)]
+    pub panel_detached: bool,
     pub overlay_last_content_top_offset: Option<f64>,
     #[serde(default)]
     pub overlay_bounds_are_logical: bool,
@@ -2023,6 +2026,7 @@ impl Default for AppStoreData {
             overlay_resize_anchor: OverlayResizeAnchor::TopLeft,
             overlay_bounds: None,
             panel_bounds: None,
+            panel_detached: false,
             overlay_last_content_top_offset: None,
             overlay_bounds_are_logical: false,
             key_counter_enabled: false,

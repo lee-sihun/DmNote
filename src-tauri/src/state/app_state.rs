@@ -649,6 +649,16 @@ fn should_create_overlay_on_startup(obs_mode_enabled: bool, overlay_visible: boo
     !obs_mode_enabled && overlay_visible
 }
 
+// 트레이 시작(main_window_hidden)에서는 복원 보류 - 숨은 메인 창 의존 방지(background throttling)
+// 플래그는 유지되므로 다음 정상 기동 때 복원됨
+fn should_restore_panel_on_startup(
+    obs_mode_enabled: bool,
+    main_window_hidden: bool,
+    panel_detached: bool,
+) -> bool {
+    panel_detached && !obs_mode_enabled && !main_window_hidden
+}
+
 fn bootstrap_keyboard_state(keyboard: &KeyboardManager) -> (String, Vec<String>) {
     keyboard.current_mode_and_pressed_keys()
 }
@@ -1025,6 +1035,15 @@ impl AppState {
         let snapshot = self.store.snapshot();
         if should_create_overlay_on_startup(snapshot.obs_mode_enabled, snapshot.overlay_visible) {
             self.ensure_overlay_window(app)?;
+        }
+        if should_restore_panel_on_startup(
+            snapshot.obs_mode_enabled,
+            snapshot.main_window_hidden,
+            snapshot.panel_detached,
+        ) {
+            if let Err(err) = self.restore_panel_window_on_startup(app) {
+                log::warn!("failed to restore detached panel window: {err}");
+            }
         }
         // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
         if snapshot.developer_mode_enabled {
@@ -2866,6 +2885,15 @@ impl AppState {
                 publish_panel_visibility_transition(&self.panel_visible, app, true, None)
             })
         };
+        if result.is_ok() {
+            // 재시작 복원용 분리 상태 기록 (bounds와 같은 deferred 기록 보증 수준)
+            if let Err(err) = self
+                .store
+                .update_deferred(|data| data.panel_detached = true)
+            {
+                log::warn!("failed to record detached panel state: {err}");
+            }
+        }
         if result.is_err() && app.get_webview_window(PANEL_LABEL).is_none() {
             clear_targeted_panel_view_state(
                 &mut self.panel_view_state.lock(),
@@ -2873,6 +2901,19 @@ impl AppState {
             );
         }
         result
+    }
+
+    // 재시작 시 분리 창 재생성: 기동 시점엔 뷰 핸드오프 상태가 없어 show_panel_window를 재사용하지 않음
+    // panel_view_state가 비어 있으면 패널 엔트리가 기본 뷰로 뜨고,
+    // 저장 bounds와 모니터 보정은 create_panel_window의 resolve_panel_window_layout이 처리
+    fn restore_panel_window_on_startup(&self, app: &AppHandle) -> Result<()> {
+        let _creation_guard = self.panel_creation_lock.lock();
+        if app.get_webview_window(PANEL_LABEL).is_some() {
+            return Ok(());
+        }
+        *self.panel_destroy_reason.lock() = None;
+        self.create_panel_window(app)?;
+        publish_panel_visibility_transition(&self.panel_visible, app, true, None)
     }
 
     pub fn take_panel_view_state(&self, window_label: &str) -> Option<PanelViewState> {
@@ -2902,6 +2943,15 @@ impl AppState {
         app: &AppHandle,
         reason: PanelVisibilityReason,
     ) -> Result<()> {
+        // 도킹 상태 기록: 명시 재부착과 close-ack 타임아웃 강제 닫힘이 모두 이 경로를 지남
+        // Destroyed 핸들러에서는 기록 금지 - 종료 시 shutdown_application이 panel.destroy()를
+        // 직접 호출해 같은 핸들러로 들어오므로 분리 채 종료할 때마다 플래그가 지워짐
+        if let Err(err) = self
+            .store
+            .update_deferred(|data| data.panel_detached = false)
+        {
+            log::warn!("failed to record docked panel state: {err}");
+        }
         *self.panel_destroy_reason.lock() = Some(reason);
         let mut bounds_error = None;
         if let Some(window) = app.get_webview_window(PANEL_LABEL) {
@@ -5102,17 +5152,18 @@ mod tests {
         panel_bounds_from_sample, panel_height_bounds, publish_panel_hidden_transition,
         publish_panel_visibility_transition, publish_selection_snapshot, resolve_event_age_ms,
         resolve_panel_window_layout, run_panel_close_timeout, should_create_overlay_on_startup,
-        should_recover_keyboard_daemon, take_cancelable_editor_flush_handshake,
-        take_editor_flush_handshake, take_targeted_panel_view_state, validate_selection_session,
-        EditorFlushAcknowledge, EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest,
-        FrontendFlushAction, FrontendHistoryFlushPhase, FrontendHistoryFlushReady,
-        FrontendLifecycleAction, LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex,
-        PanelBoundsChange, PanelBoundsPersistenceController, PanelBoundsPersistenceState,
-        PanelBoundsSample, PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab,
-        PanelPropertyTab, PanelViewMode, PanelViewState, PanelViewTarget,
-        PanelVisibilityEventEmitter, PanelVisibilityPayload, PanelVisibilityReason,
-        PhysicalPosition, PhysicalSize, SelectionSessionElement, SelectionSessionSnapshot,
-        TargetedPanelViewState, HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
+        should_recover_keyboard_daemon, should_restore_panel_on_startup,
+        take_cancelable_editor_flush_handshake, take_editor_flush_handshake,
+        take_targeted_panel_view_state, validate_selection_session, EditorFlushAcknowledge,
+        EditorFlushCompletion, EditorFlushHandshake, EditorFlushRequest, FrontendFlushAction,
+        FrontendHistoryFlushPhase, FrontendHistoryFlushReady, FrontendLifecycleAction,
+        LifecycleHandshakeInstall, MonitorData, MonitorSpec, Mutex, PanelBoundsChange,
+        PanelBoundsPersistenceController, PanelBoundsPersistenceState, PanelBoundsSample,
+        PanelCloseRequestState, PanelCloseRequestedPayload, PanelLayerTab, PanelPropertyTab,
+        PanelViewMode, PanelViewState, PanelViewTarget, PanelVisibilityEventEmitter,
+        PanelVisibilityPayload, PanelVisibilityReason, PhysicalPosition, PhysicalSize,
+        SelectionSessionElement, SelectionSessionSnapshot, TargetedPanelViewState,
+        HISTORY_FRONTEND_FLUSH_INTERRUPTED, KEYBOARD_DAEMON_STABLE_RUNTIME,
         KEYBOARD_RECOVERY_DELAYS_MS, MAX_SELECTION_ELEMENTS, MAX_SELECTION_ELEMENT_TYPE_BYTES,
         MAX_SELECTION_FULL_ID_BYTES, MAX_SELECTION_GROUP_ID_BYTES, MAX_SELECTION_MODE_BYTES,
         OVERLAY_LABEL, PANEL_ENTRYPOINT, PANEL_INITIAL_HEIGHT, PANEL_LABEL, PANEL_MIN_HEIGHT,
@@ -5131,6 +5182,14 @@ mod tests {
         assert!(should_create_overlay_on_startup(false, true));
         assert!(!should_create_overlay_on_startup(true, false));
         assert!(!should_create_overlay_on_startup(true, true));
+    }
+
+    #[test]
+    fn startup_panel_restore_requires_detached_without_obs_or_tray_start() {
+        assert!(should_restore_panel_on_startup(false, false, true));
+        assert!(!should_restore_panel_on_startup(false, false, false));
+        assert!(!should_restore_panel_on_startup(true, false, true));
+        assert!(!should_restore_panel_on_startup(false, true, true));
     }
 
     #[test]
