@@ -147,6 +147,9 @@ import type {
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { computeBatchGeometryPlan } from '@src/renderer/editor/runtime/batchGeometryPlan';
+import { commitMixedBatchGeometry } from '@src/renderer/editor/runtime/mixedBatchGeometry';
+import { isPluginVisibleInMode } from '@utils/layerGroupUtils';
+import { resolveResizablePluginElementSize } from '@utils/plugin/pluginElementMeasurement';
 
 // 분리된 컴포넌트들 및 훅
 import {
@@ -164,6 +167,7 @@ import {
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
   BatchKnobOnlyPanel,
+  BatchPluginOnlyPanel,
   PluginSettingsPanelView,
   useBatchHandlers,
   usePanelScroll,
@@ -172,6 +176,7 @@ import {
   SIDE_PANEL_FRAME_CLASS,
   WINDOW_PANEL_FRAME_CLASS,
 } from './PropertiesPanel/panelChrome';
+import { resolveSelectionPanelRoute } from './PropertiesPanel/selectionPanelRoute';
 import { PanelNavProvider } from './PropertiesPanel/PanelNavContext';
 import PanelHeaderActions from './PropertiesPanel/PanelHeaderActions';
 import PanelToggleButton from './PropertiesPanel/PanelToggleButton';
@@ -220,12 +225,13 @@ const shouldNormalizePropertyTabToStyle = (
   const hasKey = elements.some((element) => element.type === 'key');
   const hasStat = elements.some((element) => element.type === 'stat');
   const hasGraph = elements.some((element) => element.type === 'graph');
-  const hasPlugin = elements.some((element) => element.type === 'plugin');
 
-  if (activeTab === TABS.NOTE && hasStat && !hasKey && !hasPlugin) {
+  // 플러그인 혼합도 native 구성 기준으로 정규화 - stat+plugin에서 NOTE 탭이
+  // 남으면 배치 패널 본문이 비어 보인다
+  if (activeTab === TABS.NOTE && hasStat && !hasKey) {
     return true;
   }
-  return hasGraph && !hasKey && !hasStat && !hasPlugin;
+  return hasGraph && !hasKey && !hasStat;
 };
 
 // 서브 페이지 exit 전환 시간 — --ui-duration-page와 동기
@@ -494,8 +500,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       null
     );
   })();
+  // plugin 단독 배치는 native 대상 0개(빈 배열)로 성립 - invalid ID가
+  // 하나라도 섞이면 null (fail-closed)
   const stableBatchGeometryTargets: BatchGeometryTarget[] | null =
-    selectedBatchStyleElements.length > 0 &&
     selectedBatchStyleElements.every(
       (element) => element.id.length > 0 && isNativeElementId(element.id),
     )
@@ -504,6 +511,36 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           id: element.id,
         }))
       : null;
+  // 혼합 선택의 plugin 기하 대상 bounds - 소실·모드 이탈이 하나라도 있으면
+  // null (fail-closed). 크기는 캔버스 렌더와 동일한 measured/estimated 폴백
+  const stablePluginGeometryElements = (() => {
+    const resolved: Array<{
+      fullId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }> = [];
+    for (const selected of selectedPluginElements) {
+      const element = pluginElements.find(
+        (candidate) => candidate.fullId === selected.id,
+      );
+      if (!element || !isPluginVisibleInMode(element, selectedKeyType)) {
+        return null;
+      }
+      const size = resolveResizablePluginElementSize(element);
+      resolved.push({
+        fullId: element.fullId,
+        x: element.position.x,
+        y: element.position.y,
+        width: size.width,
+        height: size.height,
+      });
+    }
+    return resolved;
+  })();
+  const stablePluginGeometryTargets: string[] | null =
+    stablePluginGeometryElements?.map((element) => element.fullId) ?? null;
 
   const pluginDefinitionViews = usePluginDisplayElementStore(
     (state) => state.definitionViews,
@@ -626,7 +663,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
   const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
   const selectedGroupInfo = (() => {
-    if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
+    if (selectedElements.length < 2) {
       return null;
     }
 
@@ -634,6 +671,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const statModePositions = statItemPositions[selectedKeyType] || [];
     const graphModePositions = graphItemPositions[selectedKeyType] || [];
     const knobModePositions = knobItemPositions[selectedKeyType] || [];
+    // 플러그인 소속은 현재 모드에 def가 있는 groupId만 유효 (레이어 패널과
+    // 동일 규칙)
+    const modeGroupIds = new Set(layerGroupsForMode.map((group) => group.id));
 
     let groupId: string | undefined;
 
@@ -655,6 +695,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         currentGroupId = knobModePositions.find(
           (position) => position.id === element.id,
         )?.groupId;
+      } else if (element.type === 'plugin') {
+        const pluginGroupId = pluginElements.find(
+          (candidate) => candidate.fullId === element.id,
+        )?.groupId;
+        currentGroupId =
+          pluginGroupId && modeGroupIds.has(pluginGroupId)
+            ? pluginGroupId
+            : undefined;
       } else {
         return null;
       }
@@ -673,7 +721,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       keyModePositions.filter((pos) => pos?.groupId === groupId).length +
       statModePositions.filter((pos) => pos?.groupId === groupId).length +
       graphModePositions.filter((pos) => pos?.groupId === groupId).length +
-      knobModePositions.filter((pos) => pos?.groupId === groupId).length;
+      knobModePositions.filter((pos) => pos?.groupId === groupId).length +
+      pluginElements.filter(
+        (el) =>
+          isPluginVisibleInMode(el, selectedKeyType) && el.groupId === groupId,
+      ).length;
 
     if (totalMembers < 2 || totalMembers !== selectedElements.length) {
       return null;
@@ -1224,10 +1276,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setPanelMode,
   ]);
 
-  // 다중 선택 시 패널 자동 열기
+  // 다중 선택 시 패널 자동 열기 - 개수는 native+plugin 합산
   useEffect(() => {
     if (
-      selectedBatchStyleElements.length > 1 &&
+      selectedBatchStyleElements.length + selectedPluginElements.length > 1 &&
       !isPanelVisible &&
       !manuallyClosedRef.current
     ) {
@@ -1236,6 +1288,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   }, [
     selectedBatchStyleElements.length,
+    selectedPluginElements.length,
     isPanelVisible,
     setIsPanelVisible,
     setPanelMode,
@@ -2186,8 +2239,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     graphPositions: graphItemPositions,
     selectedKeyType,
     knobPositions: knobItemPositions,
+    pluginLayoutElements: stablePluginGeometryElements,
     onStableGeometryPreview: (operation) => {
       if (!stableBatchGeometryTargets) return;
+      if (stablePluginGeometryElements === null) return;
       const targetsByKey = new Map<
         string,
         {
@@ -2215,14 +2270,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           position,
         });
       }
+      // 커밋과 같은 기준선을 쓰도록 plan 입력에는 plugin bounds를 합치되,
+      // preview 반영은 native 4 domain 전용 - 플러그인은 dial 중 정지,
+      // 커밋 시 착지 (v1). resize는 native 전용이라 plugin 미합류
+      const pluginPlanInputs =
+        operation.kind === 'resize' ? [] : stablePluginGeometryElements;
       const plan = computeBatchGeometryPlan(
-        [...targetsByKey].map(([key, { position }]) => ({
-          key,
-          x: position.dx,
-          y: position.dy,
-          width: position.width,
-          height: position.height,
-        })),
+        [
+          ...[...targetsByKey].map(([key, { position }]) => ({
+            key,
+            x: position.dx,
+            y: position.dy,
+            width: position.width,
+            height: position.height,
+          })),
+          ...pluginPlanInputs.map((element) => ({
+            key: `plugin:${element.fullId}`,
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+          })),
+        ],
         operation,
       );
       if (!plan) return;
@@ -2231,6 +2300,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         Array<{ index: number; patch: Record<string, unknown> }>
       >();
       for (const update of plan.updates) {
+        if (update.key.startsWith('plugin:')) continue;
         const target = targetsByKey.get(update.key);
         if (!target) return;
         const entries = byType.get(target.type) ?? [];
@@ -2255,6 +2325,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     },
     onStableGeometryCommit: (operation, options) => {
       if (!stableBatchGeometryTargets) return;
+      // plugin 대상 미해결 상태의 커밋은 fail-closed
+      if (stablePluginGeometryTargets === null) return;
       const descriptor: BatchGeometryDescriptor = {
         mode: selectedKeyType,
         targets: stableBatchGeometryTargets,
@@ -2265,9 +2337,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         (operation.kind === 'resize'
           ? editGestureController.activeGestureId() ?? undefined
           : undefined);
+      // 크기 일괄은 native 전용 - 플러그인 크기는 content-driven
+      const pluginTargets =
+        operation.kind === 'resize' ? [] : stablePluginGeometryTargets;
       const commit =
         window.__dmn_window_type === 'panel'
-          ? commitBatchGeometryViaAuthority(descriptor, gestureId)
+          ? commitBatchGeometryViaAuthority(
+              descriptor,
+              gestureId,
+              pluginTargets,
+            )
+          : pluginTargets.length > 0
+          ? commitMixedBatchGeometry(descriptor, pluginTargets, {
+              ...(gestureId ? { gestureId } : {}),
+            })
           : commitBatchGeometryByIds(descriptor, {
               ...(gestureId ? { gestureId } : {}),
             });
@@ -2966,17 +3049,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // ============================================================================
 
   // 캔버스 선택에 묶인 구상 패널 — 프레임(글래스) 안의 루트 페이지 콘텐츠
+  // 혼합 선택(네이티브+플러그인)은 총요소 기준으로 native 구성별 배치 패널에,
+  // 플러그인 단독 다중은 경량 기하 배치 패널에 라우트
   const renderSelectionPanelBody = () => {
+    const selectionTotalCount =
+      selectedBatchStyleElements.length + selectedPluginElements.length;
+    const route = resolveSelectionPanelRoute({
+      keyLikeCount: selectedKeyLikeElements.length,
+      graphCount: selectedGraphElements.length,
+      knobCount: selectedKnobElements.length,
+      pluginCount: selectedPluginElements.length,
+      hasSingleKeyPosition: !!singleKeyPosition,
+      hasSingleStatPosition: !!singleStatPosition,
+      hasSingleGraphPosition: !!singleGraphPosition,
+      hasSingleKnobPosition: !!singleKnobPosition,
+    });
+
     // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
-    if (
-      selectedBatchStyleElements.length > 1 &&
-      selectedPluginElements.length === 0 &&
-      (selectedKeyLikeElements.length > 0 ||
-        (selectedGraphElements.length > 0 && selectedKnobElements.length > 0))
-    ) {
+    if (route.kind === 'batchKeyLike') {
       return (
         <BatchKeyLikePanel
           setPanelElement={setPanelElement}
+          totalCount={selectionTotalCount}
           selectedBatchStyleElements={selectedBatchStyleElements}
           selectedKeyElements={selectedKeyElements}
           selectedStatElements={selectedStatElements}
@@ -3055,15 +3149,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     // 다중 선택인 경우 (노브 요소만)
-    if (
-      selectedKnobElements.length > 1 &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedGraphElements.length === 0 &&
-      selectedPluginElements.length === 0
-    ) {
+    if (route.kind === 'batchKnobOnly') {
       return (
         <BatchKnobOnlyPanel
           setPanelElement={setPanelElement}
+          totalCount={selectionTotalCount}
           selectedKnobElements={selectedKnobElements}
           selectedGroupInfo={selectedGroupInfo}
           isRenaming={isRenaming}
@@ -3100,15 +3190,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     // 다중 선택인 경우 (그래프 요소만)
-    if (
-      selectedGraphElements.length > 1 &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedKnobElements.length === 0 &&
-      selectedPluginElements.length === 0
-    ) {
+    if (route.kind === 'batchGraphOnly') {
       return (
         <BatchGraphOnlyPanel
           setPanelElement={setPanelElement}
+          totalCount={selectionTotalCount}
           selectedGraphElements={selectedGraphElements}
           selectedGroupInfo={selectedGroupInfo}
           isRenaming={isRenaming}
@@ -3144,12 +3230,34 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       );
     }
 
-    // 플러그인 요소가 선택된 경우
-    if (
-      selectedPluginElements.length > 0 &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedGraphElements.length === 0
-    ) {
+    // 플러그인 단독 다중 선택 - 정렬·분배·간격만 있는 경량 기하 배치
+    if (route.kind === 'pluginBatch') {
+      return (
+        <BatchPluginOnlyPanel
+          setPanelElement={setPanelElement}
+          totalCount={selectionTotalCount}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleBatchAlign={handleBatchAlign}
+          handleBatchDistribute={handleBatchDistribute}
+          handleBatchSpacing={handleBatchSpacing}
+          handleBatchSpacingCommit={handleBatchSpacingCommit}
+          getBatchSpacingValue={getBatchSpacingValue}
+          batchScrollRefFor={batchScrollRefFor}
+          t={t}
+        />
+      );
+    }
+
+    // 플러그인 요소만 선택된 경우
+    if (route.kind === 'plugin') {
       const pluginTitle =
         selectedPluginDefinition?.name ||
         selectedPluginElement?.definitionId ||
@@ -3182,13 +3290,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     // 단일 노브 요소 선택인 경우
-    if (
-      selectedKnobElements.length === 1 &&
-      !!singleKnobPosition &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedGraphElements.length === 0 &&
-      selectedPluginElements.length === 0
-    ) {
+    if (route.kind === 'singleKnob' && singleKnobPosition) {
       return (
         <SingleKnobPanel
           setPanelElement={setPanelElement}
@@ -3255,12 +3357,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     // 단일 그래프 요소 선택인 경우
-    if (
-      selectedGraphElements.length === 1 &&
-      !!singleGraphPosition &&
-      selectedKeyLikeElements.length === 0 &&
-      selectedPluginElements.length === 0
-    ) {
+    if (route.kind === 'singleGraph' && singleGraphPosition) {
       return (
         <SingleGraphPanel
           setPanelElement={setPanelElement}
@@ -3318,7 +3415,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     // 단일 키/통계 요소 선택인 경우
     const isSingleStat = !singleKeyPosition && !!singleStatPosition;
     const isSingleKey = !!singleKeyPosition;
-    if (!isSingleKey && !isSingleStat) {
+    if (route.kind !== 'singleKeyStat' || (!isSingleKey && !isSingleStat)) {
       return null;
     }
 

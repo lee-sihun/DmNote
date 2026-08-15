@@ -15,6 +15,7 @@ import {
 } from '@src/types/key/keys';
 import {
   PropertyRow,
+  PropertySection,
   NumberInput,
   ColorInput,
   Tabs,
@@ -24,6 +25,7 @@ import {
   TABS,
   TabType,
 } from '../index';
+import BatchGeometrySection from './BatchGeometrySection';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
@@ -397,6 +399,94 @@ const RenameIcon: React.FC = () => (
 );
 
 // ============================================================================
+// Shared batch panel header (group rename + summed count)
+// ============================================================================
+
+interface BatchPanelHeaderProps {
+  // native+plugin 합산 표시 개수
+  totalCount: number;
+  selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
+  isRenaming: boolean;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameCancelledRef: React.MutableRefObject<boolean>;
+  handleRenameCommit: (value: string) => void;
+  handleRenameCancel: () => void;
+  handleRenameStart: () => void;
+  t: (key: string) => string | undefined;
+}
+
+const BatchPanelHeader: React.FC<BatchPanelHeaderProps> = ({
+  totalCount,
+  selectedGroupInfo,
+  isRenaming,
+  renameInputRef,
+  renameValue,
+  setRenameValue,
+  renameCancelledRef,
+  handleRenameCommit,
+  handleRenameCancel,
+  handleRenameStart,
+  t,
+}) => (
+  <div className={PANEL_HEADER_CLASS}>
+    <div className="flex items-center gap-[8px]">
+      {selectedGroupInfo ? (
+        isRenaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={() => {
+              if (!renameCancelledRef.current) {
+                handleRenameCommit(renameValue);
+              }
+              renameCancelledRef.current = false;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                handleRenameCancel();
+              }
+            }}
+          />
+        ) : (
+          <div className="flex items-center gap-[4px] min-w-0">
+            <span
+              className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
+              onDoubleClick={handleRenameStart}
+              title={selectedGroupInfo.name}
+            >
+              {selectedGroupInfo.name}
+            </span>
+            <button
+              onClick={handleRenameStart}
+              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
+              title={t('contextMenu.rename') || 'Rename'}
+            >
+              <RenameIcon />
+            </button>
+          </div>
+        )
+      ) : (
+        <span className="text-fg text-label leading-none">
+          {t('propertiesPanel.multiSelection') || '다중 선택'}
+        </span>
+      )}
+      {!selectedGroupInfo && (
+        <span className="text-fg-faint text-body">({totalCount})</span>
+      )}
+    </div>
+  </div>
+);
+
+// ============================================================================
 // Mixed key-like + graph batch selection panel
 // ============================================================================
 
@@ -434,6 +524,8 @@ interface BatchLocalColors {
 
 interface BatchKeyLikePanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // native+plugin 합산 개수 - 헤더 표시·분배 게이트 (미전달 시 native 개수)
+  totalCount?: number;
   selectedBatchStyleElements: SelectedElement[];
   selectedKeyElements: SelectedElement[];
   selectedStatElements: SelectedElement[];
@@ -528,6 +620,7 @@ interface BatchKeyLikePanelProps {
 
 export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   setPanelElement,
+  totalCount,
   selectedBatchStyleElements,
   selectedKeyElements,
   selectedStatElements,
@@ -1097,63 +1190,19 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0">
-        {/* 헤더 */}
-        <div className={PANEL_HEADER_CLASS}>
-          <div className="flex items-center gap-[8px]">
-            {selectedGroupInfo ? (
-              isRenaming ? (
-                <input
-                  ref={renameInputRef}
-                  type="text"
-                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => {
-                    if (!renameCancelledRef.current) {
-                      handleRenameCommit(renameValue);
-                    }
-                    renameCancelledRef.current = false;
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      (e.target as HTMLInputElement).blur();
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      handleRenameCancel();
-                    }
-                  }}
-                />
-              ) : (
-                <div className="flex items-center gap-[4px] min-w-0">
-                  <span
-                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
-                    onDoubleClick={handleRenameStart}
-                    title={selectedGroupInfo.name}
-                  >
-                    {selectedGroupInfo.name}
-                  </span>
-                  <button
-                    onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
-                    title={t('contextMenu.rename') || 'Rename'}
-                  >
-                    <RenameIcon />
-                  </button>
-                </div>
-              )
-            ) : (
-              <span className="text-fg text-label leading-none">
-                {t('propertiesPanel.multiSelection') || '다중 선택'}
-              </span>
-            )}
-            {!selectedGroupInfo && (
-              <span className="text-fg-faint text-body">
-                ({selectedBatchStyleElements.length})
-              </span>
-            )}
-          </div>
-        </div>
+        <BatchPanelHeader
+          totalCount={totalCount ?? selectedBatchStyleElements.length}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          t={t}
+        />
 
         {/* 탭 */}
         <div className="px-[12px] pb-[12px]">
@@ -1182,6 +1231,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             <EditSessionBoundary>
               <BatchStyleTabContent
                 selectedCount={selectedBatchStyleElements.length}
+                totalCount={totalCount ?? selectedBatchStyleElements.length}
                 soundBinding={soundBinding}
                 onSoundPathCommit={(soundPath) =>
                   commitBoundSoundPath(soundBinding.selection, soundPath)
@@ -1621,6 +1671,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
 
 interface BatchGraphOnlyPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // native+plugin 합산 개수 - 헤더 표시·분배 게이트 (미전달 시 native 개수)
+  totalCount?: number;
   selectedGraphElements: SelectedElement[];
   selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
   isRenaming: boolean;
@@ -1667,6 +1719,7 @@ interface BatchGraphOnlyPanelProps {
 
 export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   setPanelElement,
+  totalCount,
   selectedGraphElements,
   selectedGroupInfo,
   isRenaming,
@@ -1755,62 +1808,19 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className={PANEL_HEADER_CLASS}>
-          <div className="flex items-center gap-[8px]">
-            {selectedGroupInfo ? (
-              isRenaming ? (
-                <input
-                  ref={renameInputRef}
-                  type="text"
-                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => {
-                    if (!renameCancelledRef.current) {
-                      handleRenameCommit(renameValue);
-                    }
-                    renameCancelledRef.current = false;
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      (e.target as HTMLInputElement).blur();
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      handleRenameCancel();
-                    }
-                  }}
-                />
-              ) : (
-                <div className="flex items-center gap-[4px] min-w-0">
-                  <span
-                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
-                    onDoubleClick={handleRenameStart}
-                    title={selectedGroupInfo.name}
-                  >
-                    {selectedGroupInfo.name}
-                  </span>
-                  <button
-                    onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
-                    title={t('contextMenu.rename') || 'Rename'}
-                  >
-                    <RenameIcon />
-                  </button>
-                </div>
-              )
-            ) : (
-              <span className="text-fg text-label leading-none">
-                {t('propertiesPanel.multiSelection') || '다중 선택'}
-              </span>
-            )}
-            {!selectedGroupInfo && (
-              <span className="text-fg-faint text-body">
-                ({selectedGraphElements.length})
-              </span>
-            )}
-          </div>
-        </div>
+        <BatchPanelHeader
+          totalCount={totalCount ?? selectedGraphElements.length}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          t={t}
+        />
       </div>
 
       <div className="flex-1 properties-panel-overlay-scroll">
@@ -1821,6 +1831,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           <EditSessionBoundary>
             <BatchStyleTabContent
               selectedCount={selectedGraphElements.length}
+              totalCount={totalCount ?? selectedGraphElements.length}
               onStylePropertyPreview={previewStyleProperty}
               onStylePropertyCommit={commitStyleProperty}
               onPaintCommit={commitPaint}
@@ -2010,6 +2021,8 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
 
 interface BatchKnobOnlyPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // native+plugin 합산 개수 - 헤더 표시·분배 게이트 (미전달 시 native 개수)
+  totalCount?: number;
   selectedKnobElements: SelectedElement[];
   selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
   isRenaming: boolean;
@@ -2056,6 +2069,7 @@ interface BatchKnobOnlyPanelProps {
 
 export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   setPanelElement,
+  totalCount,
   selectedKnobElements,
   selectedGroupInfo,
   isRenaming,
@@ -2126,62 +2140,19 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className={PANEL_HEADER_CLASS}>
-          <div className="flex items-center gap-[8px]">
-            {selectedGroupInfo ? (
-              isRenaming ? (
-                <input
-                  ref={renameInputRef}
-                  type="text"
-                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => {
-                    if (!renameCancelledRef.current) {
-                      handleRenameCommit(renameValue);
-                    }
-                    renameCancelledRef.current = false;
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      (e.target as HTMLInputElement).blur();
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      handleRenameCancel();
-                    }
-                  }}
-                />
-              ) : (
-                <div className="flex items-center gap-[4px] min-w-0">
-                  <span
-                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
-                    onDoubleClick={handleRenameStart}
-                    title={selectedGroupInfo.name}
-                  >
-                    {selectedGroupInfo.name}
-                  </span>
-                  <button
-                    onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
-                    title={t('contextMenu.rename') || 'Rename'}
-                  >
-                    <RenameIcon />
-                  </button>
-                </div>
-              )
-            ) : (
-              <span className="text-fg text-label leading-none">
-                {t('propertiesPanel.multiSelection') || '다중 선택'}
-              </span>
-            )}
-            {!selectedGroupInfo && (
-              <span className="text-fg-faint text-body">
-                ({selectedKnobElements.length})
-              </span>
-            )}
-          </div>
-        </div>
+        <BatchPanelHeader
+          totalCount={totalCount ?? selectedKnobElements.length}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          t={t}
+        />
       </div>
 
       <div className="flex-1 properties-panel-overlay-scroll">
@@ -2192,6 +2163,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
           <EditSessionBoundary>
             <BatchStyleTabContent
               selectedCount={selectedKnobElements.length}
+              totalCount={totalCount ?? selectedKnobElements.length}
               onStylePropertyPreview={previewStyleProperty}
               onStylePropertyCommit={commitStyleProperty}
               onPaintCommit={commitPaint}
@@ -2324,6 +2296,106 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
           />
         ) : null}
       </PopupExit>
+    </div>
+  );
+};
+
+// ============================================================================
+// Plugin-only batch selection panel (lightweight geometry)
+// ============================================================================
+
+interface BatchPluginOnlyPanelProps {
+  setPanelElement: (el: HTMLDivElement | null) => void;
+  // 플러그인 단독 다중 선택 개수
+  totalCount: number;
+  selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
+  isRenaming: boolean;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameCancelledRef: React.MutableRefObject<boolean>;
+  handleRenameCommit: (value: string) => void;
+  handleRenameCancel: () => void;
+  handleRenameStart: () => void;
+  handleBatchAlign: (
+    direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
+  ) => void;
+  handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
+  handleBatchSpacing: (
+    spacing: number,
+    options?: { gestureId?: string; deferSave?: boolean },
+  ) => void;
+  handleBatchSpacingCommit: (
+    spacing: number,
+    options?: { gestureId?: string; deferSave?: boolean },
+  ) => void;
+  getBatchSpacingValue: () => MixedValueResult<number>;
+  batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  t: (key: string) => string | undefined;
+}
+
+// 플러그인 크기는 content-driven이라 resize 없이 정렬·분배·간격만 노출.
+// 스타일 필드는 플러그인 스키마 소유라 배치 편집 대상이 아니다
+export const BatchPluginOnlyPanel: React.FC<BatchPluginOnlyPanelProps> = ({
+  setPanelElement,
+  totalCount,
+  selectedGroupInfo,
+  isRenaming,
+  renameInputRef,
+  renameValue,
+  setRenameValue,
+  renameCancelledRef,
+  handleRenameCommit,
+  handleRenameCancel,
+  handleRenameStart,
+  handleBatchAlign,
+  handleBatchDistribute,
+  handleBatchSpacing,
+  handleBatchSpacingCommit,
+  getBatchSpacingValue,
+  batchScrollRefFor,
+  t,
+}) => {
+  const batchPluginSpacing = getBatchSpacingValue();
+
+  return (
+    <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
+      <div className="flex-shrink-0">
+        <BatchPanelHeader
+          totalCount={totalCount}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          t={t}
+        />
+      </div>
+
+      <div className="flex-1 properties-panel-overlay-scroll">
+        <div
+          ref={batchScrollRefFor(TABS.STYLE)}
+          className="properties-panel-overlay-viewport"
+        >
+          <EditSessionBoundary>
+            <PropertySection>
+              <BatchGeometrySection
+                totalCount={totalCount}
+                handleBatchAlign={handleBatchAlign}
+                handleBatchDistribute={handleBatchDistribute}
+                handleBatchSpacing={handleBatchSpacing}
+                handleBatchSpacingCommit={handleBatchSpacingCommit}
+                batchSpacing={batchPluginSpacing}
+                t={t}
+              />
+            </PropertySection>
+          </EditSessionBoundary>
+        </div>
+      </div>
     </div>
   );
 };

@@ -314,6 +314,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
 
 interface SingleGraphPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // 혼합 선택 시 패널 본문 상단에 표시할 플러그인 개수 안내
   singleGraphPosition: GraphItemPosition;
   selectedKeyType: string;
   isRenaming: boolean;
@@ -754,6 +755,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
 
 interface SingleKnobPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // 혼합 선택 시 패널 본문 상단에 표시할 플러그인 개수 안내
   singleKnobPosition: KnobItemPosition;
   selectedKeyType: string;
   isRenaming: boolean;
@@ -1451,6 +1453,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
 interface SingleKeyStatPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
+  // 혼합 선택 시 패널 본문 상단에 표시할 플러그인 개수 안내
   isSingleStat: boolean;
   isSingleKey: boolean;
   singleKeyIndex: number | null;

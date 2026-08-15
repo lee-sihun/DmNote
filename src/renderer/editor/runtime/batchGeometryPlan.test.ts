@@ -129,4 +129,54 @@ describe('computeBatchGeometryPlan', () => {
       { key: 'moving', patch: { dx: 0 } },
     ]);
   });
+
+  // 혼합 배치 통합 지점: plan 함수는 타입 무관 - plugin bounds가 입력에
+  // 합류하면 기준선과 간격 산정에 그대로 참여한다
+  it('plugin bounds가 합류하면 정렬 기준선에 반영된다', () => {
+    const plan = computeBatchGeometryPlan(
+      [
+        element('key:native-a', 40, 0),
+        element('plugin:plugin-a::inst-1', 0, 0, 50, 50),
+      ],
+      { kind: 'align', direction: 'left' },
+    );
+
+    // plugin이 최좌측 - native가 plugin 기준선으로 이동
+    expect(patchFor(plan, 'key:native-a')).toMatchObject({ dx: 0 });
+    expect(patchFor(plan, 'plugin:plugin-a::inst-1')).toMatchObject({ dx: 0 });
+  });
+
+  it('plugin bounds가 합류하면 간격 적용과 표시값에 반영된다', () => {
+    const mixed = [
+      element('key:native-a', 0, 0),
+      element('plugin:plugin-a::inst-1', 30, 0, 50, 10),
+      element('key:native-b', 100, 0),
+    ];
+
+    const plan = computeBatchGeometryPlan(mixed, {
+      kind: 'spacing',
+      spacing: 5,
+    });
+    // native-a(0..10) → plugin(15..65) → native-b(70..80)
+    expect(patchFor(plan, 'plugin:plugin-a::inst-1')).toMatchObject({ dx: 15 });
+    expect(patchFor(plan, 'key:native-b')).toMatchObject({ dx: 70 });
+
+    expect(computeBatchSpacingValue(mixed)).toEqual({
+      isMixed: false,
+      value: 20,
+    });
+  });
+
+  it('plugin이 합류하면 native만으로 모자란 분배 최소 개수도 성립한다', () => {
+    const plan = computeBatchGeometryPlan(
+      [
+        element('key:native-a', 0, 0),
+        element('plugin:plugin-a::inst-1', 10, 0),
+        element('key:native-b', 100, 0),
+      ],
+      { kind: 'distribute', direction: 'horizontal' },
+    );
+
+    expect(patchFor(plan, 'plugin:plugin-a::inst-1')).toMatchObject({ dx: 50 });
+  });
 });

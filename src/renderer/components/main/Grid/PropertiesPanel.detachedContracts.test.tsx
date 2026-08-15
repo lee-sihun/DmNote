@@ -9,6 +9,7 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeySlotCapture } from '@hooks/useKeySlotCapture';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 
@@ -18,6 +19,7 @@ const {
   batchKeyLikePropsMock,
   batchGraphPropsMock,
   batchKnobPropsMock,
+  batchPluginPropsMock,
   batchPropsMock,
   graphUpdatePositionsMock,
   knobUpdatePositionsMock,
@@ -92,6 +94,7 @@ const {
   patchBoundsViaAuthorityMock,
   patchBatchGeometryViaAuthorityMock,
   patchBatchGeometryMock,
+  commitMixedBatchGeometryMock,
   patchGeometryMock,
   statUpdatePositionsMock,
   settleCommitMock,
@@ -104,6 +107,7 @@ const {
   batchKeyLikePropsMock: vi.fn(),
   batchGraphPropsMock: vi.fn(),
   batchKnobPropsMock: vi.fn(),
+  batchPluginPropsMock: vi.fn(),
   batchPropsMock: vi.fn(),
   graphUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   knobUpdatePositionsMock: vi.fn(() => Promise.resolve()),
@@ -180,6 +184,7 @@ const {
   patchBoundsViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchBatchGeometryViaAuthorityMock: vi.fn(() => Promise.resolve(true)),
   patchBatchGeometryMock: vi.fn(() => Promise.resolve(true)),
+  commitMixedBatchGeometryMock: vi.fn(() => Promise.resolve(true)),
   patchGeometryMock: vi.fn(() => Promise.resolve(true)),
   statUpdatePositionsMock: vi.fn(() => Promise.resolve()),
   settleCommitMock: vi.fn(),
@@ -277,6 +282,9 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpSkipped: reportElementOpSkippedMock,
 }));
+vi.mock('@src/renderer/editor/runtime/mixedBatchGeometry', () => ({
+  commitMixedBatchGeometry: commitMixedBatchGeometryMock,
+}));
 vi.mock('@api/modules/itemsApi', () => ({
   graphItemsApi: { updatePositions: graphUpdatePositionsMock },
   knobItemsApi: { updatePositions: knobUpdatePositionsMock },
@@ -328,6 +336,10 @@ vi.mock('./PropertiesPanel/index', () => {
     },
     BatchKnobOnlyPanel: (props: Record<string, unknown>) => {
       batchKnobPropsMock(props);
+      return <div />;
+    },
+    BatchPluginOnlyPanel: (props: Record<string, unknown>) => {
+      batchPluginPropsMock(props);
       return <div />;
     },
     PluginSettingsPanelView: () => <ScopeProbe id="plugin-settings" />,
@@ -402,6 +414,7 @@ const resetStores = () => {
   singleGraphPropsMock.mockClear();
   batchGraphPropsMock.mockClear();
   batchKnobPropsMock.mockClear();
+  batchPluginPropsMock.mockClear();
   batchPropsMock.mockClear();
   batchKeyLikePropsMock.mockClear();
   patchLayerNameMock.mockClear();
@@ -471,6 +484,7 @@ const resetStores = () => {
   patchBoundsViaAuthorityMock.mockClear();
   patchBatchGeometryViaAuthorityMock.mockClear();
   patchBatchGeometryMock.mockClear();
+  commitMixedBatchGeometryMock.mockClear();
   patchGeometryMock.mockClear();
   graphUpdatePositionsMock.mockClear();
   knobUpdatePositionsMock.mockClear();
@@ -531,6 +545,10 @@ const resetStores = () => {
     },
   });
   useLayerGroupStore.setState({ layerGroups: {} });
+  usePluginDisplayElementStore.setState({
+    elements: [],
+    panelElements: [],
+  } as never);
   usePropertiesPanelStore.setState({
     canvasPanelMode: 'property',
     canvasPanelActiveTab: 'layer',
@@ -859,6 +877,231 @@ describe('PropertiesPanel canonical native contract', () => {
     expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
     expect(legacyBatchStyleCommitMock).not.toHaveBeenCalled();
     expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+  });
+
+  describe('혼합 선택 batch geometry pluginTargets 결합', () => {
+    const FIRST_KEY_ID = 'a1111111-1111-4111-8111-111111111111';
+    const SECOND_KEY_ID = 'a2222222-2222-4222-8222-222222222222';
+    const PLUGIN_FULL_ID = 'plugin-a::10000000-0000-4000-8000-000000000001';
+
+    const pluginElement = () => ({
+      id: '10000000-0000-4000-8000-000000000001',
+      fullId: PLUGIN_FULL_ID,
+      pluginId: 'plugin-a',
+      definitionId: 'plugin-a',
+      position: { x: 200, y: 0 },
+      estimatedSize: { width: 50, height: 50 },
+      tabId: '4key',
+      zIndex: 0,
+    });
+
+    const installMixedSelection = (windowType: 'main' | 'panel') => {
+      const first = { ...createDefaultKeyPosition(), id: FIRST_KEY_ID };
+      const second = {
+        ...createDefaultKeyPosition(),
+        id: SECOND_KEY_ID,
+        dx: 80,
+      };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A', 'B'] },
+        positions: { '4key': [first, second] },
+        canonicalPositions: { '4key': [first, second] },
+      });
+      usePluginDisplayElementStore.setState(
+        (windowType === 'panel'
+          ? { panelElements: [pluginElement()] }
+          : { elements: [pluginElement()] }) as never,
+      );
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: FIRST_KEY_ID, index: 0 },
+          { type: 'key', id: SECOND_KEY_ID, index: 1 },
+          { type: 'plugin', id: PLUGIN_FULL_ID },
+        ],
+        selectedGroupIds: [],
+      });
+    };
+
+    const commitProps = () =>
+      batchPropsMock.mock.lastCall?.[0] as {
+        onStableGeometryCommit: (
+          operation: Record<string, unknown>,
+          options?: { gestureId?: string },
+        ) => void;
+      };
+
+    it('main 혼합 정렬은 mixed helper에 pluginTargets를 싣는다', () => {
+      installMixedSelection('main');
+      mounted = mountPanel(true);
+
+      act(() =>
+        commitProps().onStableGeometryCommit({
+          kind: 'align',
+          direction: 'left',
+        }),
+      );
+
+      expect(commitMixedBatchGeometryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: '4key',
+          targets: [
+            { type: 'key', id: FIRST_KEY_ID },
+            { type: 'key', id: SECOND_KEY_ID },
+          ],
+          operation: { kind: 'align', direction: 'left' },
+        }),
+        [PLUGIN_FULL_ID],
+        {},
+      );
+      expect(patchBatchGeometryMock).not.toHaveBeenCalled();
+      expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
+    });
+
+    it('panel 혼합 커밋은 pluginTargets를 authority payload에 싣는다', () => {
+      window.__dmn_window_type = 'panel';
+      installMixedSelection('panel');
+      mounted = mountPanel(true);
+
+      act(() =>
+        commitProps().onStableGeometryCommit({
+          kind: 'align',
+          direction: 'left',
+        }),
+      );
+
+      expect(patchBatchGeometryViaAuthorityMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: '4key',
+          targets: [
+            { type: 'key', id: FIRST_KEY_ID },
+            { type: 'key', id: SECOND_KEY_ID },
+          ],
+          operation: { kind: 'align', direction: 'left' },
+        }),
+        undefined,
+        [PLUGIN_FULL_ID],
+      );
+      expect(patchBatchGeometryMock).not.toHaveBeenCalled();
+      expect(commitMixedBatchGeometryMock).not.toHaveBeenCalled();
+    });
+
+    it('혼합 선택 resize는 native 전용 경로로 남는다', () => {
+      installMixedSelection('main');
+      mounted = mountPanel(true);
+
+      act(() =>
+        commitProps().onStableGeometryCommit(
+          { kind: 'resize', dimension: 'width', value: 91 },
+          { gestureId: 'a3333333-3333-4333-8333-333333333333' },
+        ),
+      );
+
+      expect(patchBatchGeometryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: { kind: 'resize', dimension: 'width', value: 91 },
+        }),
+        { gestureId: 'a3333333-3333-4333-8333-333333333333' },
+      );
+      expect(commitMixedBatchGeometryMock).not.toHaveBeenCalled();
+    });
+
+    it('plugin 대상 미해결(모드 이탈) 혼합 커밋은 fail-closed로 막는다', () => {
+      installMixedSelection('main');
+      const store = usePluginDisplayElementStore.getState();
+      usePluginDisplayElementStore.setState({
+        elements: [{ ...store.elements[0], tabId: '7key' }],
+      } as never);
+      mounted = mountPanel(true);
+
+      act(() =>
+        commitProps().onStableGeometryCommit({
+          kind: 'align',
+          direction: 'left',
+        }),
+      );
+
+      expect(commitMixedBatchGeometryMock).not.toHaveBeenCalled();
+      expect(patchBatchGeometryMock).not.toHaveBeenCalled();
+      expect(patchBatchGeometryViaAuthorityMock).not.toHaveBeenCalled();
+    });
+
+    it('plugin 포함 그룹 선택은 그룹 헤더 정보와 합산 개수를 전달한다', () => {
+      const first = {
+        ...createDefaultKeyPosition(),
+        id: FIRST_KEY_ID,
+        groupId: 'group-a',
+      };
+      const second = {
+        ...createDefaultKeyPosition(),
+        id: SECOND_KEY_ID,
+        dx: 80,
+        groupId: 'group-a',
+      };
+      useKeyStore.setState({
+        keyMappings: { '4key': ['A', 'B'] },
+        positions: { '4key': [first, second] },
+        canonicalPositions: { '4key': [first, second] },
+      });
+      useLayerGroupStore.setState({
+        layerGroups: { '4key': [{ id: 'group-a', name: '그룹 A' }] },
+      } as never);
+      usePluginDisplayElementStore.setState({
+        elements: [{ ...pluginElement(), groupId: 'group-a' }],
+      } as never);
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'key', id: FIRST_KEY_ID, index: 0 },
+          { type: 'key', id: SECOND_KEY_ID, index: 1 },
+          { type: 'plugin', id: PLUGIN_FULL_ID },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+
+      const props = batchKeyLikePropsMock.mock.lastCall?.[0] as {
+        selectedGroupInfo: {
+          id: string;
+          name: string;
+          memberCount: number;
+        } | null;
+        totalCount?: number;
+      };
+      expect(props.selectedGroupInfo).toEqual({
+        id: 'group-a',
+        name: '그룹 A',
+        memberCount: 3,
+      });
+      expect(props.totalCount).toBe(3);
+    });
+
+    it('plugin 단독 다중 선택은 경량 기하 배치 패널로 라우트한다', () => {
+      const secondFullId = 'plugin-a::10000000-0000-4000-8000-000000000002';
+      usePluginDisplayElementStore.setState({
+        elements: [
+          pluginElement(),
+          {
+            ...pluginElement(),
+            id: '10000000-0000-4000-8000-000000000002',
+            fullId: secondFullId,
+            position: { x: 260, y: 0 },
+          },
+        ],
+      } as never);
+      useGridSelectionStore.setState({
+        selectedElements: [
+          { type: 'plugin', id: PLUGIN_FULL_ID },
+          { type: 'plugin', id: secondFullId },
+        ],
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+
+      const props = batchPluginPropsMock.mock.lastCall?.[0] as {
+        totalCount: number;
+      };
+      expect(props.totalCount).toBe(2);
+      expect(batchKeyLikePropsMock).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -21,6 +21,14 @@ interface SelectedElement {
   id: string;
 }
 
+export interface PluginLayoutElement {
+  fullId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 interface UseBatchHandlersProps {
   selectedKeyLikeElements: SelectedElement[];
   keyPositions: Record<string, KeyPosition[] | undefined>;
@@ -28,6 +36,8 @@ interface UseBatchHandlersProps {
   graphPositions?: Record<string, GraphItemPosition[] | undefined>;
   knobPositions?: Record<string, KnobItemPosition[] | undefined>;
   selectedKeyType: string;
+  // 혼합 선택의 plugin 대상 bounds - null은 대상 미해결이라 기하 조작 전체 차단
+  pluginLayoutElements?: PluginLayoutElement[] | null;
   onStableGeometryCommit: (
     operation: BatchGeometryOperation,
     options?: BatchCommitOptions,
@@ -38,6 +48,9 @@ interface UseBatchHandlersProps {
 const getLayoutElementKey = (type: KeyLikeType, id: string): string =>
   `${type}:${id}`;
 
+const getPluginLayoutElementKey = (fullId: string): string =>
+  `plugin:${fullId}`;
+
 export function useBatchHandlers({
   selectedKeyLikeElements,
   keyPositions,
@@ -45,6 +58,7 @@ export function useBatchHandlers({
   graphPositions,
   knobPositions,
   selectedKeyType,
+  pluginLayoutElements = [],
   onStableGeometryCommit,
   onStableGeometryPreview,
 }: UseBatchHandlersProps) {
@@ -63,7 +77,11 @@ export function useBatchHandlers({
     return position?.id === id ? position : null;
   };
 
-  const getSelectedLayoutElements = () => {
+  const getSelectedLayoutElements = (
+    options: { includePlugins?: boolean } = {},
+  ) => {
+    // plugin 대상 미해결(null)은 부분 조작 대신 전체 차단 (fail-closed)
+    if (pluginLayoutElements === null) return null;
     const elements = selectedKeyLikeElements.flatMap((element) => {
       const position = getPosition(element.type, element.id);
       return position
@@ -78,11 +96,25 @@ export function useBatchHandlers({
           ]
         : [];
     });
-    return elements.length === selectedKeyLikeElements.length ? elements : null;
+    if (elements.length !== selectedKeyLikeElements.length) return null;
+    if (options.includePlugins === false) return elements;
+    return [
+      ...elements,
+      ...pluginLayoutElements.map((element) => ({
+        key: getPluginLayoutElementKey(element.fullId),
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+      })),
+    ];
   };
 
   const hasGeometryPlan = (operation: BatchGeometryOperation) => {
-    const elements = getSelectedLayoutElements();
+    // 크기 일괄은 native 전용 - 게이트도 native만으로 계산
+    const elements = getSelectedLayoutElements({
+      includePlugins: operation.kind !== 'resize',
+    });
     return (
       elements !== null &&
       computeBatchGeometryPlan(elements, operation) !== null
