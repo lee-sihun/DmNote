@@ -24,6 +24,7 @@ import type { ListItem } from '@components/main/Modal/ListPopup';
 import type { LayerItem, DisplayItem } from '../types';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
+import { reportElementOpSkipped } from '@src/renderer/editor/runtime/elementIntent';
 import {
   patchElementHiddenById,
   patchElementLayerNameById,
@@ -166,7 +167,10 @@ export function useLayerActions({
     }
 
     if (item.type === 'plugin') {
-      setPluginElementsHidden([{ fullId: item.id, hidden: !item.hidden }]);
+      const applied = await setPluginElementsHidden([
+        { fullId: item.id, hidden: !item.hidden },
+      ]);
+      if (!applied) reportElementOpSkipped('panel plugin visibility toggle');
     }
   };
 

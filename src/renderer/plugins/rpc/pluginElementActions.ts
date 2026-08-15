@@ -205,6 +205,15 @@ const drainQueue = async (): Promise<boolean> => {
       op.resolvePayload?.(outcome.response.payload ?? null);
       continue;
     }
+    // 신원 소실은 같은 payload 재전송으로 회복 불가 - 재시도 없이 실패 확정
+    if (outcome.kind === 'error' && outcome.errorCode === 'ELEMENT_NOT_FOUND') {
+      console.error(`Plugin RPC ${op.operation} failed: ${outcome.errorCode}`);
+      succeeded = false;
+      op.resolve?.(false);
+      op.resolvePayload?.(null);
+      requestFreshSnapshot();
+      continue;
+    }
     if (op.retryPolicy === 'none') {
       succeeded = false;
       op.resolve?.(false);
@@ -362,7 +371,11 @@ const delegate = (
       return;
     }
   }
-  outboundQueue.push({ operation, payload });
+  outboundQueue.push({
+    operation,
+    payload,
+    authorityGeneration: getPluginAuthorityGeneration(),
+  });
   void ensureQueueDrain();
 };
 
@@ -1078,17 +1091,27 @@ export const drainPendingPluginElementWrites = async (): Promise<boolean> => {
 /** 가시성 일괄 변경 */
 export const setPluginElementsHidden = (
   targets: Array<{ fullId: string; hidden: boolean }>,
-): void => {
-  if (targets.length === 0) return;
+): Promise<boolean> => {
+  if (targets.length === 0) return Promise.resolve(true);
   if (isPanelWindow()) {
-    delegate(PLUGIN_RPC_OPERATIONS.setHidden, { targets });
-    return;
+    const authorityGeneration = getPluginAuthorityGeneration();
+    return new Promise((resolve) => {
+      outboundQueue.push({
+        operation: PLUGIN_RPC_OPERATIONS.setHidden,
+        payload: { targets: targets.map((target) => ({ ...target })) },
+        authorityGeneration,
+        retryPolicy: 'default',
+        resolve,
+      });
+      void ensureQueueDrain();
+    });
   }
   rotateTargetPluginSessions(targets.map(({ fullId }) => fullId));
   const store = usePluginDisplayElementStore.getState();
   targets.forEach(({ fullId, hidden }) => {
     store.updateElement(fullId, { hidden });
   });
+  return Promise.resolve(true);
 };
 
 /** 요소 삭제 */

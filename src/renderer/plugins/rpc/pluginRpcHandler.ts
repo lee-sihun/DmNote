@@ -1832,13 +1832,14 @@ const commitPersistedElementUpdates = async (
 ): Promise<string | null> => {
   const store = usePluginDisplayElementStore.getState();
   const updatesByPlugin = new Map<string, PersistedElementUpdate[]>();
-  updates.forEach((update) => {
+  // 대상 소실은 부분 적용 대신 전체 거절 - update 경로와 동일 계약
+  for (const update of updates) {
     const target = store.elements.find((el) => el.fullId === update.fullId);
-    if (!target) return;
+    if (!target) return 'ELEMENT_NOT_FOUND';
     const pluginUpdates = updatesByPlugin.get(target.pluginId) ?? [];
     pluginUpdates.push(update);
     updatesByPlugin.set(target.pluginId, pluginUpdates);
-  });
+  }
 
   const gestureIds = new Map<string, string>();
   updatesByPlugin.forEach((_, pluginId) => {
@@ -1849,6 +1850,11 @@ const commitPersistedElementUpdates = async (
     const errorCode = await enqueuePluginInstancesCommit(pluginId, async () => {
       if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
       const liveStore = usePluginDisplayElementStore.getState();
+      // 큐 대기 중 재주입으로 신원이 갈린 대상은 거절 (update 슬롯 재검증과 동일)
+      const liveFullIds = new Set(liveStore.elements.map((el) => el.fullId));
+      if (pluginUpdates.some(({ fullId }) => !liveFullIds.has(fullId))) {
+        return 'ELEMENT_NOT_FOUND';
+      }
       const patchesById = new Map(
         pluginUpdates.map(({ fullId, patch }) => [fullId, patch]),
       );
@@ -1998,7 +2004,14 @@ const executePersistedOperation = async (
   if (operation === PLUGIN_RPC_OPERATIONS.remove) {
     const fullIds = asStringArray(payload.fullIds);
     if (!fullIds) return 'INVALID_PAYLOAD';
-    const targets = store.elements.filter((el) => fullIds.includes(el.fullId));
+    const byId = new Map(store.elements.map((el) => [el.fullId, el]));
+    // 대상 소실은 부분 적용 대신 전체 거절 - update 경로와 동일 계약
+    const targets: PluginDisplayElementInternal[] = [];
+    for (const fullId of fullIds) {
+      const target = byId.get(fullId);
+      if (!target) return 'ELEMENT_NOT_FOUND';
+      targets.push(target);
+    }
     const byDefinition = new Map<string, string>();
     targets.forEach((el) => byDefinition.set(el.definitionId, el.pluginId));
     const gestureIds = new Map<string, string>();
@@ -2010,11 +2023,21 @@ const executePersistedOperation = async (
 
     // 플러그인 단위로 commit 성공 직후 projection 적용 - 부분 실패도 플러그인별 정합 유지
     for (const [definitionId, pluginId] of byDefinition) {
+      const defTargetIds = targets
+        .filter((el) => el.definitionId === definitionId)
+        .map((el) => el.fullId);
       const errorCode = await enqueuePluginInstancesCommit(
         pluginId,
         async () => {
           if (!generationLive()) return 'AUTHORITY_GENERATION_STALE';
           const currentStore = usePluginDisplayElementStore.getState();
+          // 큐 대기 중 재주입으로 신원이 갈린 대상은 거절 (update 슬롯 재검증과 동일)
+          const liveFullIds = new Set(
+            currentStore.elements.map((el) => el.fullId),
+          );
+          if (defTargetIds.some((fullId) => !liveFullIds.has(fullId))) {
+            return 'ELEMENT_NOT_FOUND';
+          }
           const remainingForDef = currentStore.elements.filter(
             (el) =>
               el.definitionId === definitionId && !fullIds.includes(el.fullId),

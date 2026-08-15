@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   ),
   commit: vi.fn(),
   updateElement: vi.fn(),
+  setElements: vi.fn(),
   applyProjection: vi.fn((_pluginId: string, apply: () => void) => apply()),
   rotateEditSession: vi.fn((pluginId: string) => `gesture-${pluginId}`),
   flushPanelModel: vi.fn(),
@@ -277,6 +278,7 @@ vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
     getState: () => ({
       elements: mocks.elements,
       updateElement: mocks.updateElement,
+      setElements: mocks.setElements,
     }),
   },
 }));
@@ -286,15 +288,28 @@ vi.mock('@plugins/runtime/displayElement/instancesUndoSync', () => ({
   notePluginInstancesMutation: vi.fn(),
 }));
 
-vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
-  clearPluginInstancesEditSessions: vi.fn(),
-  enqueuePluginInstancesCommit: (
-    _pluginId: string,
-    task: () => Promise<unknown>,
-  ) => task(),
-  rotatePluginInstancesEditSession: mocks.rotateEditSession,
-  touchPluginInstancesEditSession: vi.fn(() => 'touched-gesture'),
-}));
+vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => {
+  // 실제 큐와 같은 플러그인별 직렬화 - 큐 대기 중 소실 재검증 테스트에 필요
+  const queues = new Map<string, Promise<unknown>>();
+  return {
+    clearPluginInstancesEditSessions: vi.fn(),
+    enqueuePluginInstancesCommit: (
+      pluginId: string,
+      task: () => Promise<unknown>,
+    ) => {
+      const next = (queues.get(pluginId) ?? Promise.resolve()).then(() =>
+        task(),
+      );
+      queues.set(
+        pluginId,
+        next.catch(() => undefined),
+      );
+      return next;
+    },
+    rotatePluginInstancesEditSession: mocks.rotateEditSession,
+    touchPluginInstancesEditSession: vi.fn(() => 'touched-gesture'),
+  };
+});
 
 vi.mock('@plugins/runtime/displayElement/instanceLifecycle', () => ({
   normalizePluginInstanceTabId: (tabId?: string) => tabId ?? '4key',
@@ -521,6 +536,12 @@ describe('plugin panel persisted element mutations', () => {
         );
       },
     );
+    mocks.setElements.mockReset();
+    mocks.setElements.mockImplementation(
+      (elements: Array<Record<string, unknown>>) => {
+        mocks.elements = elements;
+      },
+    );
 
     const { initPluginRpcHandler } = await import('./pluginRpcHandler');
     initPluginRpcHandler();
@@ -734,6 +755,142 @@ describe('plugin panel persisted element mutations', () => {
       ok: false,
       error: { code: 'INVALID_PAYLOAD' },
     });
+  });
+
+  it.each([
+    [
+      'elements:setHidden',
+      { targets: [{ fullId: 'plugin-a:ghost', hidden: true }] },
+    ],
+    [
+      'elements:setZIndexes',
+      { entries: [{ fullId: 'plugin-a:ghost', zIndex: 9 }] },
+    ],
+    ['elements:delete', { fullIds: ['plugin-a:ghost'] }],
+  ])(
+    '%s는 존재하지 않는 fullId를 ELEMENT_NOT_FOUND로 거절한다',
+    async (operation, payload) => {
+      mocks.requestListener?.(envelope(operation, payload));
+
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'ELEMENT_NOT_FOUND' },
+      });
+      expect(mocks.commit).not.toHaveBeenCalled();
+      expect(mocks.rotateEditSession).not.toHaveBeenCalled();
+      expect(mocks.flushPanelModel).not.toHaveBeenCalled();
+      expect(mocks.updateElement).not.toHaveBeenCalled();
+      expect(mocks.setElements).not.toHaveBeenCalled();
+      expect(mocks.applyProjection).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      'elements:setHidden',
+      {
+        targets: [
+          { fullId: 'plugin-a:one', hidden: true },
+          { fullId: 'plugin-a:ghost', hidden: true },
+        ],
+      },
+    ],
+    [
+      'elements:setZIndexes',
+      {
+        entries: [
+          { fullId: 'plugin-a:one', zIndex: 5 },
+          { fullId: 'plugin-a:ghost', zIndex: 6 },
+        ],
+      },
+    ],
+    ['elements:delete', { fullIds: ['plugin-a:one', 'plugin-a:ghost'] }],
+  ])('%s 부분 매치 배치는 전체를 거절한다', async (operation, payload) => {
+    mocks.requestListener?.(envelope(operation, payload));
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'ELEMENT_NOT_FOUND' },
+    });
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.rotateEditSession).not.toHaveBeenCalled();
+    expect(mocks.flushPanelModel).not.toHaveBeenCalled();
+    expect(mocks.updateElement).not.toHaveBeenCalled();
+    expect(mocks.setElements).not.toHaveBeenCalled();
+    expect(mocks.applyProjection).not.toHaveBeenCalled();
+  });
+
+  it('큐 대기 중 대상이 사라지면 commit 없이 거절한다', async () => {
+    let resolveFirstCommit!: (value: Record<string, unknown>) => void;
+    mocks.commit.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirstCommit = resolve;
+      }),
+    );
+
+    // 선행 op이 commit pending으로 플러그인 큐를 점유
+    mocks.requestListener?.(
+      envelope('elements:setHidden', {
+        targets: [{ fullId: 'plugin-a:one', hidden: true }],
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+
+    // 후행 op은 접수를 통과하고 슬롯 대기
+    mocks.requestListener?.(
+      envelope('elements:delete', { fullIds: ['plugin-a:one'] }),
+    );
+
+    // 큐 대기 중 대상 소실 후 선행 commit 완료
+    mocks.elements = [];
+    resolveFirstCommit({ modelRevision: 12, changed: true });
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledTimes(2));
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.respond.mock.calls[1]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'ELEMENT_NOT_FOUND' },
+    });
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    expect(mocks.setElements).not.toHaveBeenCalled();
+  });
+
+  it('elements:delete 전량 매치는 remaining instances로 commit한다', async () => {
+    mocks.elements = [
+      ...mocks.elements,
+      {
+        fullId: 'plugin-a:two',
+        definitionId: 'plugin-a',
+        pluginId: 'plugin-a',
+        position: { x: 30, y: 40 },
+        settings: { enabled: false },
+        measuredSize: { width: 50, height: 40 },
+        tabId: '4key',
+        hidden: true,
+        zIndex: 2,
+      },
+    ];
+    mocks.commit.mockResolvedValue({ modelRevision: 12, changed: true });
+
+    mocks.requestListener?.(
+      envelope('elements:delete', { fullIds: ['plugin-a:one'] }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-a');
+    expect(mocks.commit.mock.calls[0]?.[0]).toMatchObject({
+      pluginId: 'plugin-a',
+      gestureId: 'gesture-plugin-a',
+      instances: [{ position: { x: 30, y: 40 }, hidden: true, zIndex: 2 }],
+    });
+    expect(mocks.applyProjection).toHaveBeenCalledOnce();
+    expect(mocks.setElements).toHaveBeenCalledWith([
+      expect.objectContaining({ fullId: 'plugin-a:two' }),
+    ]);
   });
 
   it('레이어 삭제는 stable descriptor만 공용 main 실행기에 전달한다', async () => {

@@ -2460,6 +2460,84 @@ describe('plugin element panel queue', () => {
   });
 
   it.each([
+    [
+      'elements:update',
+      { fullId: 'plugin-a:one', patch: { position: { x: 1 } } },
+      () => actions.updatePluginElement('plugin-a:one', { position: { x: 1 } }),
+    ],
+    [
+      'elements:delete',
+      { fullIds: ['plugin-a:one'] },
+      () => actions.deletePluginElements(['plugin-a:one']),
+    ],
+    [
+      'elements:setZIndexes',
+      { entries: [{ fullId: 'plugin-a:one', zIndex: 3 }] },
+      () =>
+        actions.setPluginElementZIndexes([
+          { fullId: 'plugin-a:one', zIndex: 3 },
+        ]),
+    ],
+  ])(
+    'delegate %s는 접수 시점 generation을 싣는다',
+    async (operation, payload, run) => {
+      mocks.sendPluginRpc.mockResolvedValue({
+        kind: 'ok',
+        response: { modelRevision: 1 },
+      });
+
+      run();
+
+      await vi.waitFor(() =>
+        expect(mocks.sendPluginRpc).toHaveBeenCalledOnce(),
+      );
+      expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+        operation,
+        payload,
+        0,
+        7,
+      );
+    },
+  );
+
+  it('ELEMENT_NOT_FOUND는 재시도 없이 실패로 확정한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({
+      kind: 'error',
+      errorCode: 'ELEMENT_NOT_FOUND',
+      response: { modelRevision: 2 },
+    });
+
+    await expect(
+      actions.setPluginElementsHidden([
+        { fullId: 'plugin-a:ghost', hidden: true },
+      ]),
+    ).resolves.toBe(false);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledOnce();
+    expect(mocks.sendBridgeMessageBestEffort).toHaveBeenCalledOnce();
+  });
+
+  it('setPluginElementsHidden 패널 경로는 결과 boolean을 반환한다', async () => {
+    mocks.sendPluginRpc.mockResolvedValueOnce({
+      kind: 'ok',
+      response: { modelRevision: 1 },
+    });
+
+    await expect(
+      actions.setPluginElementsHidden([
+        { fullId: 'plugin-a:one', hidden: true },
+      ]),
+    ).resolves.toBe(true);
+
+    expect(mocks.sendPluginRpc).toHaveBeenCalledWith(
+      'elements:setHidden',
+      { targets: [{ fullId: 'plugin-a:one', hidden: true }] },
+      0,
+      7,
+    );
+  });
+
+  it.each([
     { kind: 'unknown' },
     { kind: 'error', errorCode: 'MODEL_REVISION_STALE' },
   ])('레이어 재정렬 $kind 결과는 자동 재실행하지 않는다', async (outcome) => {

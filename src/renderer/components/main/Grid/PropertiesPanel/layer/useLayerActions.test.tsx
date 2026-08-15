@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   renameLayerGroup: vi.fn(() => Promise.resolve(true)),
   setElementGroupsViaAuthority: vi.fn(() => Promise.resolve(true)),
   renameLayerGroupViaAuthority: vi.fn(() => Promise.resolve(true)),
+  setPluginHidden: vi.fn(() => Promise.resolve(true)),
+  reportSkipped: vi.fn(),
   updateKeyPositions: vi.fn(() => Promise.resolve()),
   commitPatch: vi.fn(() => Promise.resolve()),
 }));
@@ -39,7 +41,10 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
   setLayerGroupVisibilityViaAuthority: mocks.setGroupVisibilityViaAuthority,
   setElementGroupsViaAuthority: mocks.setElementGroupsViaAuthority,
   renameLayerGroupViaAuthority: mocks.renameLayerGroupViaAuthority,
-  setPluginElementsHidden: vi.fn(),
+  setPluginElementsHidden: mocks.setPluginHidden,
+}));
+vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+  reportElementOpSkipped: mocks.reportSkipped,
 }));
 vi.mock('@api/modules/keysApi', () => ({
   keysApi: { updatePositions: mocks.updateKeyPositions },
@@ -95,6 +100,8 @@ describe('useLayerActions visibility routing', () => {
     mocks.renameLayerGroup.mockClear();
     mocks.setElementGroupsViaAuthority.mockClear();
     mocks.renameLayerGroupViaAuthority.mockClear();
+    mocks.setPluginHidden.mockClear();
+    mocks.reportSkipped.mockClear();
     mocks.updateKeyPositions.mockClear();
     mocks.commitPatch.mockClear();
     useKeyStore.setState({
@@ -200,6 +207,42 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.patchHidden).not.toHaveBeenCalled();
     expect(mocks.patchPropertyViaAuthority).not.toHaveBeenCalled();
     expect(mocks.updateKeyPositions).not.toHaveBeenCalled();
+  });
+
+  it('플러그인 가시성 토글 실패는 fail-closed로 기록한다', async () => {
+    window.__dmn_window_type = 'panel';
+    mocks.setPluginHidden.mockResolvedValueOnce(false);
+    const item: LayerItem = {
+      type: 'plugin',
+      id: 'plugin-a:one',
+      name: 'plugin',
+      zIndex: 0,
+      hidden: false,
+    };
+    await act(async () => actions.handleToggleVisibility(click, item));
+
+    expect(mocks.setPluginHidden).toHaveBeenCalledWith([
+      { fullId: 'plugin-a:one', hidden: true },
+    ]);
+    expect(mocks.reportSkipped).toHaveBeenCalledWith(
+      'panel plugin visibility toggle',
+    );
+  });
+
+  it('플러그인 가시성 토글 성공은 fail-closed 기록을 남기지 않는다', async () => {
+    const item: LayerItem = {
+      type: 'plugin',
+      id: 'plugin-a:one',
+      name: 'plugin',
+      zIndex: 0,
+      hidden: true,
+    };
+    await act(async () => actions.handleToggleVisibility(click, item));
+
+    expect(mocks.setPluginHidden).toHaveBeenCalledWith([
+      { fullId: 'plugin-a:one', hidden: false },
+    ]);
+    expect(mocks.reportSkipped).not.toHaveBeenCalled();
   });
 
   it('main stable group은 allHidden에서 계산한 absolute literal만 semantic helper에 넘긴다', async () => {
