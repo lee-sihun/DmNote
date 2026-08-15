@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { isMac } from '@utils/core/platform';
 import { slotCanonical } from '@utils/keySlot';
@@ -1510,20 +1510,34 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     }
   };
 
+  // 문자열 템플릿(레거시) __html 래퍼를 값 기준으로 고정.
+  // React 19는 {__html} 객체 identity가 바뀌면 내용이 같아도 innerHTML을 다시 설정해
+  // 내부 노드를 전부 교체한다 - 프레스 중 재렌더(isDragging 등)가 클릭 대상 노드를
+  // detach시켜 브라우저가 click 디스패치를 포기하고 선택 클릭이 유실되는 것을 차단
+  const legacyHtml = renderedContent
+    ? typeof renderedContent === 'string'
+      ? renderedContent
+      : null
+    : element.html || null;
+  const legacyHtmlProp = useMemo(
+    () => (legacyHtml === null ? null : { __html: legacyHtml }),
+    [legacyHtml],
+  );
+
   // 렌더링 로직
   const renderContent = (): React.ReactNode => {
     if (renderedContent) {
       // 템플릿 결과가 문자열인 경우 (레거시)
-      if (typeof renderedContent === 'string') {
-        return <div dangerouslySetInnerHTML={{ __html: renderedContent }} />;
+      if (legacyHtmlProp) {
+        return <div dangerouslySetInnerHTML={legacyHtmlProp} />;
       }
       // React Element인 경우 (DisplayElementTemplateResult -> ReactNode)
       return renderedContent as unknown as React.ReactNode;
     }
 
     // 템플릿이 없고 html 속성만 있는 경우 (레거시)
-    if (element.html) {
-      return <div dangerouslySetInnerHTML={{ __html: element.html }} />;
+    if (legacyHtmlProp) {
+      return <div dangerouslySetInnerHTML={legacyHtmlProp} />;
     }
 
     return null;
