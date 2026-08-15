@@ -950,7 +950,14 @@ const applySemanticOps = (
             if ('statType' in op.patch) {
               return { ...position, statType: op.patch.statType };
             }
-            return { ...position, hidden: op.patch.hidden };
+            if ('hidden' in op.patch) {
+              return { ...position, hidden: op.patch.hidden };
+            }
+            // 속성 arm 누락을 컴파일 시점에 잡는다. Rust 적용부는 exhaustive
+            // match라 누락이 컴파일 오류지만 이 체인은 폴백으로 흘렀다
+            const unhandled: never = op.patch;
+            void unhandled;
+            return position;
           }),
         } as never;
         break;
