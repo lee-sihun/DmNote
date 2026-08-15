@@ -65,7 +65,7 @@ const ALLOWED_WS_COMMANDS: &[&str] = &[
     "plugin_storage_remove",
     "plugin_storage_keys",
     "plugin_storage_has_data",
-    "plugin_storage_clear_by_prefix",
+    // 파괴적 bulk 삭제는 plugin_storage_clear와 동일하게 원격 차단
 ];
 
 fn is_allowed_command(command: &str) -> bool {
@@ -1382,10 +1382,11 @@ mod tests {
 
     #[test]
     fn websocket_allowlist_uses_exact_matching() {
-        assert_eq!(ALLOWED_WS_COMMANDS.len(), 31);
+        assert_eq!(ALLOWED_WS_COMMANDS.len(), 30);
         assert!(is_allowed_command("app_bootstrap"));
         assert!(is_allowed_command("editor_get"));
-        assert!(is_allowed_command("plugin_storage_clear_by_prefix"));
+        assert!(!is_allowed_command("plugin_storage_clear"));
+        assert!(!is_allowed_command("plugin_storage_clear_by_prefix"));
         assert!(!is_allowed_command("editor_commit"));
         assert!(!is_allowed_command("settings_update"));
         assert!(!is_allowed_command("keys_update"));

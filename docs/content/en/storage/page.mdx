@@ -66,6 +66,11 @@ Delete all data stored by this plugin.
 await dmn.plugin.storage.clear();
 ```
 
+<Callout type="info">
+  Not available in the OBS browser source runtime. Destructive bulk deletes are
+  blocked for remote clients.
+</Callout>
+
 ### keys()
 
 Get list of all keys stored by this plugin.
@@ -92,6 +97,11 @@ Delete all data starting with a specific prefix.
 const deletedCount = await dmn.plugin.storage.clearByPrefix("cache-");
 console.log("Deleted count:", deletedCount);
 ```
+
+<Callout type="info">
+  Not available in the OBS browser source runtime. Destructive bulk deletes are
+  blocked for remote clients.
+</Callout>
 
 ## Usage Patterns
 
