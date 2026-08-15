@@ -82,7 +82,7 @@ console.log(revision, document.keyPositions);
 
 ## 변경 사항 원자적 커밋
 
-### `dmn.editor.commit(request): Promise<EditorCommitResult>`
+### `dmn.editor.commit(request): Promise<EditorPluginCommitResult>`
 
 `baseRevision`의 문서에 `changes`를 합치고, 완성된 문서를 검증한 다음, 포함된
 모든 컬렉션을 한 번의 원자적 교체로 함께 저장합니다. 커밋이 거절되면 일부만
@@ -107,7 +107,7 @@ interface EditorCommitRequest {
   changes: EditorPatchV1;
 }
 
-interface EditorCommitResult {
+interface EditorPluginCommitResult {
   revision: number;
   changedFields: EditorField[];
 }
@@ -125,6 +125,12 @@ const result = await dmn.editor.commit({
 
 console.log('커밋된 revision:', result.revision);
 ```
+
+요청에는 위에 표시된 여섯 개의 키 `baseRevision`, `mutationId`, `changes`,
+`gestureId`, `gestureIds`, `multiKey`만 사용할 수 있습니다. 그 외의 키가 있으면
+백엔드에 도달하기 전에 `TypeError`로 거절되며, JSON 직렬화할 수 없는 객체도
+같습니다. 이 거절에는 `errorCode`가 없으므로 `errorCode`만으로 분기하는
+처리기는 이 오류를 구분하지 못합니다.
 
 `mutationId`는 64바이트 이하의 UUID 문자열이어야 합니다. 현재 앱 프로세스에서
 최근 요청을 같은 ID로 재시도하면 중복 적용되지 않습니다. 이 메모리 내 중복
