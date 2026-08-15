@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 use crate::{
     commands::editor::state::emit_best_effort,
-    errors::CmdResult,
+    errors::{CmdResult, CommandError},
     models::{
         PluginGroupRefsSnapshot, PluginInstancesChangedPayload, PluginInstancesCommitRequest,
         PluginInstancesCommitResult, PluginInstancesReconcileRequest, PluginInstancesSnapshot,
@@ -24,7 +24,7 @@ fn plugin_mutation_source<'a>(
     authority_generation: u64,
     rpc_request_id: Option<&str>,
     direct_window_label: &'a str,
-) -> Result<&'a str, String> {
+) -> CmdResult<&'a str> {
     let Some(request_id) = rpc_request_id else {
         return Ok(direct_window_label);
     };
@@ -36,7 +36,7 @@ fn plugin_mutation_source<'a>(
             authority_generation,
         )
     {
-        return Err("PLUGIN_RPC_REQUEST_NOT_FOUND".to_string());
+        return Err(CommandError::msg("PLUGIN_RPC_REQUEST_NOT_FOUND"));
     }
     Ok(PANEL_WINDOW_LABEL)
 }
@@ -108,8 +108,11 @@ fn finish_plugin_instances_commit(
 pub fn plugin_instances_get(
     state: State<'_, AppState>,
     plugin_id: String,
-) -> Result<PluginInstancesSnapshot, String> {
-    let (instances, model_revision) = state.store.plugin_instances_get(&plugin_id)?;
+) -> CmdResult<PluginInstancesSnapshot> {
+    let (instances, model_revision) = state
+        .store
+        .plugin_instances_get(&plugin_id)
+        .map_err(CommandError::msg)?;
     let snapshot = PluginInstancesSnapshot {
         plugin_id,
         instances,
@@ -117,11 +120,11 @@ pub fn plugin_instances_get(
         authority_generation: state.plugin_authority().generation(),
     };
     if serde_json::to_vec(&snapshot)
-        .map_err(|error| format!("INVALID_PLUGIN_INSTANCES_SNAPSHOT:{error}"))?
+        .map_err(|error| CommandError::msg(format!("INVALID_PLUGIN_INSTANCES_SNAPSHOT:{error}")))?
         .len()
         > crate::state::plugin::MAX_PLUGIN_INSTANCES_REQUEST_BYTES
     {
-        return Err("PLUGIN_INSTANCES_SNAPSHOT_TOO_LARGE".to_string());
+        return Err(CommandError::msg("PLUGIN_INSTANCES_SNAPSHOT_TOO_LARGE"));
     }
     Ok(snapshot)
 }
@@ -166,14 +169,15 @@ pub fn plugin_instances_commit(
     window: WebviewWindow,
     request: PluginInstancesCommitRequest,
     rpc_request_id: Option<String>,
-) -> Result<PluginInstancesCommitResult, String> {
-    crate::state::plugin::validate_plugin_instances_request(&request)?;
+) -> CmdResult<PluginInstancesCommitResult> {
+    crate::state::plugin::validate_plugin_instances_request(&request).map_err(CommandError::msg)?;
     if window.label() != MAIN_WINDOW_LABEL {
-        return Err("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED".to_string());
+        return Err(CommandError::msg("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED"));
     }
     let authority = state
         .plugin_authority()
-        .admit(request.authority_generation)?;
+        .admit(request.authority_generation)
+        .map_err(CommandError::msg)?;
     let source_window_label = plugin_mutation_source(
         state.plugin_rpc_router(),
         authority.generation(),
@@ -182,11 +186,12 @@ pub fn plugin_instances_commit(
     )?;
     let admission = state
         .admit_frontend_history_mutation(source_window_label)
-        .map_err(|_| "HISTORY_IN_PROGRESS".to_string())?;
+        .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
     let mutation_id = request.mutation_id.clone();
     let committed = state
         .store
-        .commit_plugin_instances_with_admission(request, admission)?;
+        .commit_plugin_instances_with_admission(request, admission)
+        .map_err(CommandError::msg)?;
     Ok(finish_plugin_instances_commit(
         &app,
         mutation_id,
@@ -201,21 +206,24 @@ pub fn plugin_instances_reconcile(
     app: AppHandle,
     window: WebviewWindow,
     request: PluginInstancesReconcileRequest,
-) -> Result<PluginInstancesCommitResult, String> {
-    crate::state::plugin::validate_plugin_instances_reconcile_request(&request)?;
+) -> CmdResult<PluginInstancesCommitResult> {
+    crate::state::plugin::validate_plugin_instances_reconcile_request(&request)
+        .map_err(CommandError::msg)?;
     if window.label() != MAIN_WINDOW_LABEL {
-        return Err("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED".to_string());
+        return Err(CommandError::msg("PLUGIN_INSTANCE_MUTATION_NOT_ALLOWED"));
     }
     let authority = state
         .plugin_authority()
-        .admit(request.authority_generation)?;
+        .admit(request.authority_generation)
+        .map_err(CommandError::msg)?;
     let admission = state
         .admit_frontend_history_mutation(window.label())
-        .map_err(|_| "HISTORY_IN_PROGRESS".to_string())?;
+        .map_err(|_| CommandError::msg("HISTORY_IN_PROGRESS"))?;
     let mutation_id = request.mutation_id.clone();
     let committed = state
         .store
-        .reconcile_plugin_instances_with_admission(request, admission)?;
+        .reconcile_plugin_instances_with_admission(request, admission)
+        .map_err(CommandError::msg)?;
     Ok(finish_plugin_instances_commit(
         &app,
         mutation_id,
@@ -362,7 +370,8 @@ mod tests {
                 Some("00000000-0000-0000-0000-000000000002"),
                 MAIN_WINDOW_LABEL,
             )
-            .unwrap_err(),
+            .unwrap_err()
+            .to_string(),
             "PLUGIN_RPC_REQUEST_NOT_FOUND"
         );
 
@@ -380,7 +389,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            plugin_mutation_source(&router, 7, Some(&request_id), MAIN_WINDOW_LABEL).unwrap_err(),
+            plugin_mutation_source(&router, 7, Some(&request_id), MAIN_WINDOW_LABEL)
+                .unwrap_err()
+                .to_string(),
             "PLUGIN_RPC_REQUEST_NOT_FOUND"
         );
     }

@@ -5,6 +5,7 @@ use crate::{
     commands::{
         keys::keys::CustomTabChangePayload, plugin::instances::publish_plugin_instances_changed,
     },
+    errors::{CmdResult, CommandError},
     models::{AppStoreData, CustomCss, CustomJs, HistoryStatus, PluginInstancesChangedPayload},
     services::preview_broker::PreviewBroker,
     state::{
@@ -27,12 +28,15 @@ pub async fn history_undo(
     broker: State<'_, PreviewBroker>,
     app: AppHandle,
     operation_id: String,
-) -> Result<HistoryStatus, String> {
+) -> CmdResult<HistoryStatus> {
     validate_history_operation_id(&operation_id)?;
-    let flush = state.request_frontend_history_flush(app.clone(), &operation_id)?;
+    let flush = state
+        .request_frontend_history_flush(app.clone(), &operation_id)
+        .map_err(CommandError::msg)?;
     let mut flush = flush
         .await
-        .map_err(|_| "HISTORY_FRONTEND_FLUSH_DROPPED".to_string())??;
+        .map_err(|_| CommandError::msg("HISTORY_FRONTEND_FLUSH_DROPPED"))?
+        .map_err(CommandError::msg)?;
     let result = run_history_operation(
         state.inner(),
         broker.inner(),
@@ -51,12 +55,15 @@ pub async fn history_redo(
     broker: State<'_, PreviewBroker>,
     app: AppHandle,
     operation_id: String,
-) -> Result<HistoryStatus, String> {
+) -> CmdResult<HistoryStatus> {
     validate_history_operation_id(&operation_id)?;
-    let flush = state.request_frontend_history_flush(app.clone(), &operation_id)?;
+    let flush = state
+        .request_frontend_history_flush(app.clone(), &operation_id)
+        .map_err(CommandError::msg)?;
     let mut flush = flush
         .await
-        .map_err(|_| "HISTORY_FRONTEND_FLUSH_DROPPED".to_string())??;
+        .map_err(|_| CommandError::msg("HISTORY_FRONTEND_FLUSH_DROPPED"))?
+        .map_err(CommandError::msg)?;
     let result = run_history_operation(
         state.inner(),
         broker.inner(),
@@ -69,9 +76,9 @@ pub async fn history_redo(
     result
 }
 
-fn validate_history_operation_id(operation_id: &str) -> Result<(), String> {
+fn validate_history_operation_id(operation_id: &str) -> CmdResult<()> {
     if operation_id.len() > 64 || uuid::Uuid::parse_str(operation_id).is_err() {
-        return Err("INVALID_HISTORY_OPERATION_ID".to_string());
+        return Err(CommandError::msg("INVALID_HISTORY_OPERATION_ID"));
     }
     Ok(())
 }
@@ -83,7 +90,7 @@ fn run_history_operation(
     operation_id: &str,
     direction: HistoryDirection,
     barrier: HistoryBarrierLease,
-) -> Result<HistoryStatus, String> {
+) -> CmdResult<HistoryStatus> {
     let busy_status = state.store.history_status();
     emit_best_effort(app, "history:status", &busy_status);
     state.begin_counter_history_barrier();
@@ -219,7 +226,7 @@ fn run_history_operation(
         Err(error) => {
             let status = state.store.history_status();
             emit_best_effort(app, "history:status", &status);
-            Err(error)
+            Err(CommandError::msg(error))
         }
     }
 }
