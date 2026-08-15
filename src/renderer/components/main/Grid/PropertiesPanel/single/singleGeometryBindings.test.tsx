@@ -131,13 +131,9 @@ const captured = vi.hoisted(() => ({
     pageHost: null as HTMLElement | null,
   },
 }));
-const elementPatch = vi.hoisted(() => ({
-  applyElementPatchById: vi.fn(async () => true),
-}));
-
-vi.mock('@src/renderer/editor/runtime/elementPatch', () => elementPatch);
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
+  reportElementOpSkipped: vi.fn(),
 }));
 
 vi.mock('../PropertyInputs', async (importOriginal) => {
@@ -380,7 +376,6 @@ describe('single geometry input bindings', () => {
     captured.nav.activePageKey = null;
     captured.nav.renderPageKey = null;
     captured.nav.pageHost = null;
-    elementPatch.applyElementPatchById.mockClear();
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);

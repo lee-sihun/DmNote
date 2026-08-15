@@ -81,8 +81,7 @@ const captured = vi.hoisted(() => ({
 }));
 
 const patches = vi.hoisted(() => ({
-  applyElementPatchesById: vi.fn(async () => 1),
-  applyElementPatchById: vi.fn(async () => true),
+  onElementPropertyCommit: vi.fn(),
   patchInactiveImageByTargets: vi.fn(async () => true),
   patchInactiveImageViaAuthority: vi.fn(async () => true),
   patchActiveImageByTargets: vi.fn(async () => true),
@@ -130,7 +129,6 @@ const gestures = vi.hoisted(() => ({
   activeGestureId: vi.fn(() => 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementPatch', () => patches);
 vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchActiveImageByTargets: patches.patchActiveImageByTargets,
   patchInactiveImageByTargets: patches.patchInactiveImageByTargets,
@@ -181,6 +179,7 @@ vi.mock('@plugins/rpc/pluginElementActions', () => ({
 }));
 vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
   reportElementOpError: vi.fn(),
+  reportElementOpSkipped: vi.fn(),
 }));
 vi.mock('@contexts/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -452,6 +451,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       handleBatchSpacingCommit: vi.fn(),
       getBatchSpacingValue: () => ({ isMixed: false, value: 0 }),
       handleBatchResize: vi.fn(),
+      onElementPropertyCommit: patches.onElementPropertyCommit,
       handleBatchStyleChange: vi.fn(),
       handleBatchStyleChangeComplete: vi.fn(),
       handleBatchShadowChangeComplete: vi.fn(),
@@ -2107,7 +2107,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       ]);
       expect(otherWriter).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
-      expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
+      expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
     },
   );
 
@@ -2167,7 +2167,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       ]);
       expect(otherWriter).not.toHaveBeenCalled();
       expect(legacy).not.toHaveBeenCalled();
-      expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
+      expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
     },
   );
 
@@ -2253,7 +2253,8 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       [[ID_A], 'second.wav'],
       [[ID_A], ''],
     ]);
-    expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
+    expect(patches.patchSoundPathViaAuthority).not.toHaveBeenCalled();
+    expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
   });
 
   it('panel sound select와 clear는 open 시점 key ID를 authority에만 보낸다', () => {
@@ -2276,7 +2277,7 @@ describe('배치 피커 결합 소유권 (프로덕션 배선)', () => {
       [[ID_A], ''],
     ]);
     expect(patches.patchSoundPathByIds).not.toHaveBeenCalled();
-    expect(patches.applyElementPatchesById).not.toHaveBeenCalled();
+    expect(patches.onElementPropertyCommit).not.toHaveBeenCalled();
   });
 
   it.each(['main', 'panel'] as const)(
