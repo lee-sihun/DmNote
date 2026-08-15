@@ -1043,16 +1043,8 @@ const Grid = ({
           onMultiDragStart: beginSelectedPluginInstancesDrag,
           onMultiDragEnd: commitSelectedElementsDrag,
           onEraserClick: () => {
-            const slot = keyMappings[selectedKeyType]?.[index] ?? '';
-            const displayName = slotDisplayName(slot);
-            showConfirm(
-              t('confirm.removeKey', { name: displayName }),
-              () => {
-                void deleteElementById('key', position.id).catch(
-                  reportElementOpError,
-                );
-              },
-              { confirmText: t('confirm.remove') },
+            void deleteElementById('key', position.id).catch(
+              reportElementOpError,
             );
           },
           onContextMenu: (e: React.MouseEvent) => {
@@ -1139,15 +1131,8 @@ const Grid = ({
         onMultiDragStart: beginSelectedPluginInstancesDrag,
         onMultiDragEnd: commitSelectedElementsDrag,
         onEraserClick: () => {
-          const displayName = getStatTypeLabel(position.statType);
-          showConfirm(
-            t('confirm.removeStat', { name: displayName }),
-            () => {
-              void deleteElementById('stat', position.id).catch(
-                reportElementOpError,
-              );
-            },
-            { confirmText: t('confirm.remove') },
+          void deleteElementById('stat', position.id).catch(
+            reportElementOpError,
           );
         },
         onContextMenu: (e: React.MouseEvent) => {
@@ -1242,15 +1227,8 @@ const Grid = ({
         onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
-          const displayName = getStatTypeLabel(position.statType);
-          showConfirm(
-            t('confirm.removeGraph', { name: displayName }),
-            () => {
-              void deleteElementById('graph', position.id).catch(
-                reportElementOpError,
-              );
-            },
-            { confirmText: t('confirm.remove') },
+          void deleteElementById('graph', position.id).catch(
+            reportElementOpError,
           );
         }}
         onContextMenu={(e) => {
@@ -1325,14 +1303,8 @@ const Grid = ({
         onMultiDragEnd={commitSelectedElementsDrag}
         activeTool={activeTool}
         onEraserClick={() => {
-          showConfirm(
-            t('confirm.removeKnob', { name: 'Knob' }),
-            () => {
-              void deleteElementById('knob', position.id).catch(
-                reportElementOpError,
-              );
-            },
-            { confirmText: t('confirm.remove') },
+          void deleteElementById('knob', position.id).catch(
+            reportElementOpError,
           );
         }}
         onContextMenu={(e) => {
@@ -1839,25 +1811,13 @@ const Grid = ({
 
             if (contextType === 'stat') {
               const statIndex = resolveContextTarget('stat');
-              const pos =
-                statIndex != null
-                  ? useStatItemStore.getState().positions?.[selectedKeyType]?.[
-                      statIndex
-                    ] || null
-                  : null;
-              const displayName = pos ? getStatTypeLabel(pos.statType) : '';
 
               if (id === 'delete') {
-                showConfirm(
-                  t('confirm.removeStat', { name: displayName }),
-                  () => {
-                    if (!contextElementId) return;
-                    void deleteElementById('stat', contextElementId).catch(
-                      reportElementOpError,
-                    );
-                  },
-                  { confirmText: t('confirm.remove') },
-                );
+                if (contextElementId) {
+                  void deleteElementById('stat', contextElementId).catch(
+                    reportElementOpError,
+                  );
+                }
               } else if (id === 'duplicate') {
                 if (statIndex != null) beginDuplicateStat(statIndex);
               } else if (id === 'bringToFront') {
@@ -1885,25 +1845,13 @@ const Grid = ({
 
             if (contextType === 'graph') {
               const graphIndex = resolveContextTarget('graph');
-              const pos =
-                graphIndex != null
-                  ? useGraphItemStore.getState().positions?.[selectedKeyType]?.[
-                      graphIndex
-                    ] || null
-                  : null;
-              const displayName = pos ? getStatTypeLabel(pos.statType) : '';
 
               if (id === 'delete') {
-                showConfirm(
-                  t('confirm.removeGraph', { name: displayName }),
-                  () => {
-                    if (!contextElementId) return;
-                    void deleteElementById('graph', contextElementId).catch(
-                      reportElementOpError,
-                    );
-                  },
-                  { confirmText: t('confirm.remove') },
-                );
+                if (contextElementId) {
+                  void deleteElementById('graph', contextElementId).catch(
+                    reportElementOpError,
+                  );
+                }
               } else if (id === 'duplicate') {
                 if (graphIndex != null) beginDuplicateGraph(graphIndex);
               } else if (id === 'bringToFront') {
@@ -1932,16 +1880,11 @@ const Grid = ({
             if (contextType === 'knob') {
               const knobIndex = resolveContextTarget('knob');
               if (id === 'delete') {
-                showConfirm(
-                  t('confirm.removeKnob', { name: 'Knob' }),
-                  () => {
-                    if (!contextElementId) return;
-                    void deleteElementById('knob', contextElementId).catch(
-                      reportElementOpError,
-                    );
-                  },
-                  { confirmText: t('confirm.remove') },
-                );
+                if (contextElementId) {
+                  void deleteElementById('knob', contextElementId).catch(
+                    reportElementOpError,
+                  );
+                }
               } else if (id === 'duplicate') {
                 if (knobIndex != null) beginDuplicateKnob(knobIndex);
               } else if (id === 'bringToFront') {
@@ -2016,22 +1959,11 @@ const Grid = ({
 
             // 기본 메뉴 처리
             if (id === 'delete') {
-              const keyIndex = resolveContextTarget('key');
-              const slot =
-                keyIndex != null
-                  ? keyMappings[selectedKeyType]?.[keyIndex] ?? ''
-                  : '';
-              const displayName = slotDisplayName(slot);
-              showConfirm(
-                t('confirm.removeKey', { name: displayName }),
-                () => {
-                  if (!contextElementId) return;
-                  void deleteElementById('key', contextElementId).catch(
-                    reportElementOpError,
-                  );
-                },
-                { confirmText: t('confirm.remove') },
-              );
+              if (contextElementId) {
+                void deleteElementById('key', contextElementId).catch(
+                  reportElementOpError,
+                );
+              }
             } else if (id === 'duplicate') {
               const keyIndex = resolveContextTarget('key');
               const sourceSlot =

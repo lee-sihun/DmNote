@@ -279,12 +279,7 @@
     "resetCurrentTab": "重置此标签页的设置?",
     "resetCountersCurrentTab": "重置此标签页的计数器?",
     "resetKeyCounter": "重置 [{{name}}] 键的计数器?",
-    "reset": "重置",
-    "removeKey": "移除 [{{name}}] 键?",
-    "removeStat": "移除 [{{name}}] 统计?",
-    "removeGraph": "移除 [{{name}}] 图表?",
-    "removeKnob": "移除 [{{name}}] 旋钮?",
-    "remove": "移除"
+    "reset": "重置"
   },
   "tabs": {
     "title": "自定义标签页",

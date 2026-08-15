@@ -279,12 +279,7 @@
     "resetCurrentTab": "Сбросить эту вкладку?",
     "resetCountersCurrentTab": "Сбросить счётчики вкладки?",
     "resetKeyCounter": "Сбросить счётчик [{{name}}]?",
-    "reset": "Сброс",
-    "removeKey": "Удалить клавишу [{{name}}]?",
-    "removeStat": "Удалить стат. [{{name}}]?",
-    "removeGraph": "Удалить график [{{name}}]?",
-    "removeKnob": "Удалить ручку [{{name}}]?",
-    "remove": "Удалить"
+    "reset": "Сброс"
   },
   "tabs": {
     "title": "Пользовательские вкладки",

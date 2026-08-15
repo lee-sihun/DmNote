@@ -279,12 +279,7 @@
     "resetCurrentTab": "Reset settings for this tab?",
     "resetCountersCurrentTab": "Reset counters for this tab?",
     "resetKeyCounter": "Reset counter for [{{name}}] key?",
-    "reset": "Reset",
-    "removeKey": "Remove key [{{name}}]?",
-    "removeStat": "Remove stat [{{name}}]?",
-    "removeGraph": "Remove graph [{{name}}]?",
-    "removeKnob": "Remove knob [{{name}}]?",
-    "remove": "Remove"
+    "reset": "Reset"
   },
   "tabs": {
     "title": "Custom tabs",

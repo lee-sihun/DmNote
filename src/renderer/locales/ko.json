@@ -279,12 +279,7 @@
     "resetCurrentTab": "현재 탭의 설정을 초기화하시겠습니까?",
     "resetCountersCurrentTab": "현재 탭의 카운터를 초기화하시겠습니까?",
     "resetKeyCounter": "[{{name}}] 키의 카운터를 초기화하시겠습니까?",
-    "reset": "초기화",
-    "removeKey": "[{{name}}] 키를 제거하시겠습니까?",
-    "removeStat": "[{{name}}] 통계 항목을 제거하시겠습니까?",
-    "removeGraph": "[{{name}}] 그래프를 제거하시겠습니까?",
-    "removeKnob": "[{{name}}] 노브를 제거하시겠습니까?",
-    "remove": "제거하기"
+    "reset": "초기화"
   },
   "tabs": {
     "title": "커스텀 탭",
