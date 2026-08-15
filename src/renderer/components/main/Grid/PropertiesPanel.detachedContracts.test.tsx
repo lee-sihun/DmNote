@@ -99,6 +99,7 @@ const {
   singleGraphPropsMock,
   singleKeyStatPropsMock,
   singleKnobPropsMock,
+  reportElementOpSkippedMock,
 } = vi.hoisted(() => ({
   batchKeyLikePropsMock: vi.fn(),
   batchGraphPropsMock: vi.fn(),
@@ -186,6 +187,7 @@ const {
   singleGraphPropsMock: vi.fn(),
   singleKeyStatPropsMock: vi.fn(),
   singleKnobPropsMock: vi.fn(),
+  reportElementOpSkippedMock: vi.fn(),
 }));
 
 vi.mock('@contexts/useTranslation', () => ({
@@ -271,6 +273,9 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   patchStatTypeById: patchStatTypeMock,
   patchUseInlineStylesById: patchUseInlineStylesMock,
   patchUseInlineStylesByTargets: patchUseInlineStylesTargetsMock,
+}));
+vi.mock('@src/renderer/editor/runtime/elementIntent', () => ({
+  reportElementOpSkipped: reportElementOpSkippedMock,
 }));
 vi.mock('@api/modules/itemsApi', () => ({
   graphItemsApi: { updatePositions: graphUpdatePositionsMock },
@@ -473,6 +478,7 @@ const resetStores = () => {
   legacyBatchStyleCommitMock.mockClear();
   legacyBatchCounterUpdateMock.mockClear();
   singleKnobPropsMock.mockClear();
+  reportElementOpSkippedMock.mockClear();
   statUpdatePositionsMock.mockClear();
   useKeyStore.setState({
     selectedKeyType: '4key',
@@ -721,6 +727,68 @@ describe('PropertiesPanel canonical native contract', () => {
       expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
       expect(statUpdatePositionsMock).not.toHaveBeenCalled();
       expect(keyLegacyUpdateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['graph', 'knob'] as const)(
+    '미지원 %s batch 속성은 full-record 저장 없이 fail-closed로 기록한다',
+    (type) => {
+      const ids = [
+        `91111111-1111-4111-8111-11111111111${type === 'graph' ? '1' : '3'}`,
+        `92222222-2222-4222-8222-22222222222${type === 'graph' ? '2' : '4'}`,
+      ];
+      const base = createDefaultKeyPosition();
+      if (type === 'graph') {
+        useGraphItemStore.setState({
+          positions: {
+            '4key': ids.map((id) => ({
+              ...base,
+              id,
+              statType: 'kps',
+              graphType: 'line',
+              graphSpeed: 1,
+              graphColor: '#ffffff',
+            })),
+          },
+        });
+      } else {
+        useKnobItemStore.setState({
+          positions: {
+            '4key': ids.map((id, index) => ({
+              ...base,
+              id,
+              axisId: `HIDA:test-${index}`,
+              sensitivity: 1,
+              reverse: false,
+            })),
+          },
+        });
+      }
+      useGridSelectionStore.setState({
+        selectedElements: ids.map((id, index) => ({ type, id, index })),
+        selectedGroupIds: [],
+      });
+      mounted = mountPanel(true);
+      const props = (
+        type === 'graph' ? batchGraphPropsMock : batchKnobPropsMock
+      ).mock.lastCall?.[0] as {
+        handleGraphBatchSharedSetting?: (updates: { dx: number }) => void;
+        handleKnobBatchSharedSetting?: (updates: { dx: number }) => void;
+      };
+
+      act(() => {
+        if (type === 'graph') {
+          props.handleGraphBatchSharedSetting?.({ dx: 17 });
+        } else {
+          props.handleKnobBatchSharedSetting?.({ dx: 17 });
+        }
+      });
+
+      expect(reportElementOpSkippedMock).toHaveBeenCalledWith(
+        `batch ${type} property (unsupported payload or invalid target)`,
+      );
+      expect(graphUpdatePositionsMock).not.toHaveBeenCalled();
+      expect(knobUpdatePositionsMock).not.toHaveBeenCalled();
     },
   );
 

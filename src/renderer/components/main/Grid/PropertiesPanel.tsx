@@ -180,6 +180,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
 import { EditSessionScope } from '@src/renderer/contexts/EditSessionScope';
 import { projectNotePaintPatch } from '@src/types/key/notePaint';
+import { reportElementOpSkipped } from '@src/renderer/editor/runtime/elementIntent';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
@@ -1437,20 +1438,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleTogglePanel();
   });
 
-  const handleKnobBatchUpdate = (
-    updates: Array<{ index: number } & Partial<KnobItemPosition>>,
-    _options?: { deferSave?: boolean },
-  ) => {
-    void updates;
-  };
-
-  const handleGraphBatchUpdate = (
-    updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-    _options?: { deferSave?: boolean },
-  ) => {
-    void updates;
-  };
-
   const commitSingleGeometry = (
     type: EditorElementTypeV1,
     id: string,
@@ -2469,12 +2456,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       });
       return;
     }
-    const batchUpdates = selectedGraphElements
-      .filter((el) => el.index !== undefined)
-      .map((el) => ({ index: el.index!, ...updates })) as Array<
-      { index: number } & Partial<GraphItemPosition>
-    >;
-    handleGraphBatchUpdate(batchUpdates);
+    reportElementOpSkipped(
+      'batch graph property (unsupported payload or invalid target)',
+    );
   };
 
   const handleKnobBatchSharedSetting = (updates: Partial<KnobItemPosition>) => {
@@ -2494,12 +2478,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       });
       return;
     }
-    const batchUpdates = selectedKnobElements
-      .filter((el) => el.index !== undefined)
-      .map((el) => ({ index: el.index!, ...updates })) as Array<
-      { index: number } & Partial<KnobItemPosition>
-    >;
-    handleKnobBatchUpdate(batchUpdates);
+    reportElementOpSkipped(
+      'batch knob property (unsupported payload or invalid target)',
+    );
   };
 
   // 정규화 진단 리포터 — 플러그인·키당 1회만 기록, empty-state 단락 경로의
