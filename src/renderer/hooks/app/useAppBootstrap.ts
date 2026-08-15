@@ -42,6 +42,7 @@ import {
   notePanelVisibilityForSettingsSession,
 } from '@plugins/rpc/pluginSettingsSession';
 import { initPluginInstancesUndoSync } from '@plugins/runtime/displayElement/instancesUndoSync';
+import { initPluginGroupRefsMirror } from '@plugins/runtime/pluginGroupRefsMirror';
 import { historyApi } from '@api/modules/historyApi';
 import {
   useHistoryStatusStore,
@@ -875,6 +876,11 @@ export function useAppBootstrap() {
       window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
         ? initPluginInstancesUndoSync()
         : null;
+    // 미로드 플러그인 저장 인스턴스의 그룹 참조 미러 - normalize 모집단 정합
+    const stopPluginGroupRefsMirror =
+      window.__dmn_runtime !== 'obs' && window.__dmn_window_type === 'main'
+        ? initPluginGroupRefsMirror()
+        : null;
 
     const unsubscribers = [
       editorCoordinator.subscribe(handleEditorCoordinatorState),
@@ -1125,6 +1131,7 @@ export function useAppBootstrap() {
       stopPluginRpcHandler?.();
       stopPluginSettingsSessionHost?.();
       stopPluginInstancesUndoSync?.();
+      stopPluginGroupRefsMirror?.();
       unsubscribers.forEach((unsubscribe) => {
         try {
           unsubscribe();

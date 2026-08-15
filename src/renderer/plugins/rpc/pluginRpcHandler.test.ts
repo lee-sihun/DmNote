@@ -40,6 +40,13 @@ const mocks = vi.hoisted(() => ({
     (_descriptor?: unknown, _options?: { preflight?: () => void }) =>
       Promise.resolve(true),
   ),
+  commitMixedBatchGeometry: vi.fn(
+    (
+      _descriptor?: unknown,
+      _pluginTargets?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
   setLayerGroupHidden: vi.fn(
     (
       _mode?: unknown,
@@ -53,6 +60,23 @@ const mocks = vi.hoisted(() => ({
       _mode?: unknown,
       _targets?: unknown,
       _targetGroup?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
+  setMixedElementGroups: vi.fn(
+    (
+      _mode?: unknown,
+      _targets?: unknown,
+      _pluginTargets?: unknown,
+      _targetGroup?: unknown,
+      _options?: { preflight?: () => void },
+    ) => Promise.resolve(true),
+  ),
+  setMixedGroupHidden: vi.fn(
+    (
+      _mode?: unknown,
+      _groupId?: unknown,
+      _hidden?: unknown,
       _options?: { preflight?: () => void },
     ) => Promise.resolve(true),
   ),
@@ -371,6 +395,15 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
   renameLayerGroupById: mocks.renameLayerGroup,
 }));
 
+vi.mock('@src/renderer/editor/runtime/mixedElementGroups', () => ({
+  setMixedElementGroups: mocks.setMixedElementGroups,
+  setMixedLayerGroupHidden: mocks.setMixedGroupHidden,
+}));
+
+vi.mock('@src/renderer/editor/runtime/mixedBatchGeometry', () => ({
+  commitMixedBatchGeometry: mocks.commitMixedBatchGeometry,
+}));
+
 vi.mock('@api/modules/resourceApi', () => ({
   counterAnimationApi: {
     update: mocks.updateCounterAnimation,
@@ -443,10 +476,16 @@ describe('plugin panel persisted element mutations', () => {
     mocks.commitElementGeometry.mockResolvedValue(true);
     mocks.commitBatchGeometry.mockReset();
     mocks.commitBatchGeometry.mockResolvedValue(true);
+    mocks.commitMixedBatchGeometry.mockReset();
+    mocks.commitMixedBatchGeometry.mockResolvedValue(true);
     mocks.setLayerGroupHidden.mockReset();
     mocks.setLayerGroupHidden.mockResolvedValue(true);
     mocks.setElementGroups.mockReset();
     mocks.setElementGroups.mockResolvedValue(true);
+    mocks.setMixedElementGroups.mockReset();
+    mocks.setMixedElementGroups.mockResolvedValue(true);
+    mocks.setMixedGroupHidden.mockReset();
+    mocks.setMixedGroupHidden.mockResolvedValue(true);
     mocks.renameLayerGroup.mockReset();
     mocks.renameLayerGroup.mockResolvedValue(true);
     mocks.patchGraphTypes.mockReset();
@@ -891,6 +930,24 @@ describe('plugin panel persisted element mutations', () => {
     expect(mocks.setElements).toHaveBeenCalledWith([
       expect.objectContaining({ fullId: 'plugin-a:two' }),
     ]);
+  });
+
+  it('persisted mutation commit 스냅샷은 요소 id를 instanceId로 싣는다', async () => {
+    const instanceId = '50000000-0000-4000-8000-000000000001';
+    mocks.elements = [{ ...mocks.elements[0], id: instanceId }];
+    mocks.commit.mockResolvedValue({ modelRevision: 12, changed: true });
+
+    mocks.requestListener?.(
+      envelope('elements:setHidden', {
+        targets: [{ fullId: 'plugin-a:one', hidden: true }],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit.mock.calls[0]?.[0]).toMatchObject({
+      pluginId: 'plugin-a',
+      instances: [{ instanceId, hidden: true }],
+    });
   });
 
   it('레이어 삭제는 stable descriptor만 공용 main 실행기에 전달한다', async () => {
@@ -4350,6 +4407,239 @@ describe('plugin panel persisted element mutations', () => {
     });
   });
 
+  it('batch geometry pluginTargets payload는 mixed helper로 라우팅한다', async () => {
+    const gestureId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const descriptor = {
+      mode: '4key',
+      targets: [
+        { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      ],
+      operation: { kind: 'align', direction: 'left' },
+    };
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', {
+        descriptor,
+        gestureId,
+        pluginTargets: ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitMixedBatchGeometry).toHaveBeenCalledWith(
+      descriptor,
+      ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      expect.objectContaining({
+        gestureId,
+        preflight: expect.any(Function),
+      }),
+    );
+    expect(mocks.commitBatchGeometry).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('batch geometry 구 payload는 native helper 하위 호환으로 남는다', async () => {
+    const descriptor = {
+      mode: '4key',
+      targets: [
+        { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+      ],
+      operation: { kind: 'align', direction: 'left' },
+    };
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', { descriptor }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitBatchGeometry).toHaveBeenCalledOnce();
+    expect(mocks.commitMixedBatchGeometry).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('빈 pluginTargets 배열은 native helper로 라우팅한다', async () => {
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', {
+        descriptor: {
+          mode: '4key',
+          targets: [
+            { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+            { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+          ],
+          operation: { kind: 'align', direction: 'left' },
+        },
+        pluginTargets: [],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitBatchGeometry).toHaveBeenCalledOnce();
+    expect(mocks.commitMixedBatchGeometry).not.toHaveBeenCalled();
+  });
+
+  it('최소 개수는 native+plugin 합산으로 판정한다', async () => {
+    // native 1개 정렬은 단독으로는 미달 - plugin 1개 합류로 성립
+    const descriptor = {
+      mode: '4key',
+      targets: [{ type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
+      operation: { kind: 'align', direction: 'left' },
+    };
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', {
+        descriptor,
+        pluginTargets: ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitMixedBatchGeometry).toHaveBeenCalledWith(
+      descriptor,
+      ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      expect.objectContaining({ preflight: expect.any(Function) }),
+    );
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('빈 native targets는 pluginTargets 2개 이상이면 수용한다', async () => {
+    // plugin 단독 배치 - 분리 패널 파리티
+    const descriptor = {
+      mode: '4key',
+      targets: [],
+      operation: { kind: 'align', direction: 'left' },
+    };
+    const pluginTargets = [
+      'plugin-a::10000000-0000-4000-8000-000000000001',
+      'plugin-a::10000000-0000-4000-8000-000000000002',
+    ];
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', { descriptor, pluginTargets }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitMixedBatchGeometry).toHaveBeenCalledWith(
+      descriptor,
+      pluginTargets,
+      expect.objectContaining({ preflight: expect.any(Function) }),
+    );
+    expect(mocks.commitBatchGeometry).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ['1개', ['plugin-a::10000000-0000-4000-8000-000000000001']],
+    ['0개', []],
+  ] as const)(
+    '빈 native targets에 pluginTargets %s는 실행 전에 거절한다',
+    async (_label, pluginTargets) => {
+      mocks.requestListener?.(
+        envelope('layers:setBatchGeometry', {
+          descriptor: {
+            mode: '4key',
+            targets: [],
+            operation: { kind: 'align', direction: 'left' },
+          },
+          pluginTargets,
+        }),
+      );
+
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.commitBatchGeometry).not.toHaveBeenCalled();
+      expect(mocks.commitMixedBatchGeometry).not.toHaveBeenCalled();
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+    },
+  );
+
+  it.each([
+    ['non-string', [1]],
+    ['blank', ['  ']],
+    ['duplicate', ['plugin-a::one', 'plugin-a::one']],
+    [
+      'over limit',
+      Array.from({ length: 4097 }, (_, index) => `plugin-a::${index}`),
+    ],
+    ['object shape', { fullId: 'plugin-a::one' }],
+  ] as const)(
+    'batch geometry %s pluginTargets payload는 실행 전에 거절한다',
+    async (_label, pluginTargets) => {
+      mocks.requestListener?.(
+        envelope('layers:setBatchGeometry', {
+          descriptor: {
+            mode: '4key',
+            targets: [
+              { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+              { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+            ],
+            operation: { kind: 'align', direction: 'left' },
+          },
+          pluginTargets,
+        }),
+      );
+
+      await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+      expect(mocks.commitBatchGeometry).not.toHaveBeenCalled();
+      expect(mocks.commitMixedBatchGeometry).not.toHaveBeenCalled();
+      expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_PAYLOAD' },
+      });
+    },
+  );
+
+  it('resize에 pluginTargets가 섞이면 실행 전에 거절한다', async () => {
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', {
+        descriptor: {
+          mode: '4key',
+          targets: [
+            { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+          ],
+          operation: { kind: 'resize', dimension: 'width', value: 91 },
+        },
+        pluginTargets: ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.commitBatchGeometry).not.toHaveBeenCalled();
+    expect(mocks.commitMixedBatchGeometry).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_PAYLOAD' },
+    });
+  });
+
+  it('mixed batch geometry는 main 직렬 슬롯 진입 전에 generation을 다시 검사한다', async () => {
+    mocks.commitMixedBatchGeometry.mockImplementationOnce(
+      async (_descriptor, _pluginTargets, options) => {
+        mocks.authorityGeneration = 8;
+        (options as { preflight?: () => void })?.preflight?.();
+        return true;
+      },
+    );
+    mocks.requestListener?.(
+      envelope('layers:setBatchGeometry', {
+        descriptor: {
+          mode: '4key',
+          targets: [
+            { type: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+            { type: 'stat', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+          ],
+          operation: { kind: 'align', direction: 'left' },
+        },
+        pluginTargets: ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
+      ok: false,
+      error: { code: 'AUTHORITY_GENERATION_STALE' },
+    });
+  });
+
   it('group visibility는 exact descriptor와 slot preflight를 main helper에 전달한다', async () => {
     mocks.requestListener?.(
       envelope('layers:setGroupVisibility', {
@@ -4360,12 +4650,14 @@ describe('plugin panel persisted element mutations', () => {
     );
 
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
-    expect(mocks.setLayerGroupHidden).toHaveBeenCalledWith(
+    // 플러그인 멤버 혼합 판정은 mixed 진입점이 수행 - native-only는 내부 위임
+    expect(mocks.setMixedGroupHidden).toHaveBeenCalledWith(
       '4key',
       'group-a',
       true,
       { preflight: expect.any(Function) },
     );
+    expect(mocks.setLayerGroupHidden).not.toHaveBeenCalled();
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
 
@@ -4410,6 +4702,50 @@ describe('plugin panel persisted element mutations', () => {
       'After',
       { preflight: expect.any(Function) },
     );
+  });
+
+  it('pluginTargets payload는 mixed helper로 라우팅한다', async () => {
+    const targets = [
+      { elementType: 'key', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+    ];
+    mocks.requestListener?.(
+      envelope('layers:setElementGroups', {
+        mode: '4key',
+        targets,
+        targetGroup: { kind: 'create', id: 'group-a', name: 'Group A' },
+        pluginTargets: ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.setMixedElementGroups).toHaveBeenCalledWith(
+      '4key',
+      targets,
+      ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      { kind: 'create', id: 'group-a', name: 'Group A' },
+      { preflight: expect.any(Function) },
+    );
+    expect(mocks.setElementGroups).not.toHaveBeenCalled();
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+  });
+
+  it('빈 native targets는 pluginTargets가 있을 때만 수용한다', async () => {
+    mocks.requestListener?.(
+      envelope('layers:setElementGroups', {
+        mode: '4key',
+        targets: [],
+        targetGroup: null,
+        pluginTargets: ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.setMixedElementGroups).toHaveBeenCalledWith(
+      '4key',
+      [],
+      ['plugin-a::10000000-0000-4000-8000-000000000001'],
+      null,
+      { preflight: expect.any(Function) },
+    );
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
   });
 
   it.each([
@@ -4525,6 +4861,31 @@ describe('plugin panel persisted element mutations', () => {
       },
     ],
     [
+      'empty targets with empty pluginTargets',
+      'layers:setElementGroups',
+      { mode: '4key', targets: [], targetGroup: null, pluginTargets: [] },
+    ],
+    [
+      'non-string pluginTargets',
+      'layers:setElementGroups',
+      { mode: '4key', targets: [], targetGroup: null, pluginTargets: [1] },
+    ],
+    [
+      'duplicate pluginTargets',
+      'layers:setElementGroups',
+      {
+        mode: '4key',
+        targets: [],
+        targetGroup: null,
+        pluginTargets: ['plugin-a::one', 'plugin-a::one'],
+      },
+    ],
+    [
+      'blank pluginTarget',
+      'layers:setElementGroups',
+      { mode: '4key', targets: [], targetGroup: null, pluginTargets: ['  '] },
+    ],
+    [
       'rename wrong name type',
       'layers:renameGroup',
       { mode: '4key', groupId: 'group-a', name: 1 },
@@ -4535,6 +4896,7 @@ describe('plugin panel persisted element mutations', () => {
       mocks.requestListener?.(envelope(operation, payload as never));
       await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
       expect(mocks.setElementGroups).not.toHaveBeenCalled();
+      expect(mocks.setMixedElementGroups).not.toHaveBeenCalled();
       expect(mocks.renameLayerGroup).not.toHaveBeenCalled();
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
         ok: false,
@@ -4645,6 +5007,7 @@ describe('plugin panel persisted element mutations', () => {
     mocks.requestListener?.(envelope('layers:setGroupVisibility', payload));
 
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.setMixedGroupHidden).not.toHaveBeenCalled();
     expect(mocks.setLayerGroupHidden).not.toHaveBeenCalled();
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({
       ok: false,
@@ -4653,7 +5016,7 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it('group visibility는 slot 직전 generation 변경을 거절한다', async () => {
-    mocks.setLayerGroupHidden.mockImplementationOnce(
+    mocks.setMixedGroupHidden.mockImplementationOnce(
       async (_mode, _groupId, _hidden, options) => {
         mocks.authorityGeneration = 8;
         options?.preflight?.();
@@ -4677,7 +5040,7 @@ describe('plugin panel persisted element mutations', () => {
 
   it('group visibility는 완료 전에 generation이 바뀌면 stale로 응답한다', async () => {
     let resolveGroup!: (value: boolean) => void;
-    mocks.setLayerGroupHidden.mockReturnValueOnce(
+    mocks.setMixedGroupHidden.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveGroup = resolve;
       }),
@@ -4690,7 +5053,7 @@ describe('plugin panel persisted element mutations', () => {
       }),
     );
     await vi.waitFor(() =>
-      expect(mocks.setLayerGroupHidden).toHaveBeenCalledOnce(),
+      expect(mocks.setMixedGroupHidden).toHaveBeenCalledOnce(),
     );
     mocks.authorityGeneration = 8;
     resolveGroup(true);
@@ -4703,7 +5066,7 @@ describe('plugin panel persisted element mutations', () => {
   });
 
   it('group visibility unsupported false는 성공으로 숨기지 않는다', async () => {
-    mocks.setLayerGroupHidden.mockResolvedValueOnce(false);
+    mocks.setMixedGroupHidden.mockResolvedValueOnce(false);
     mocks.requestListener?.(
       envelope('layers:setGroupVisibility', {
         mode: '4key',

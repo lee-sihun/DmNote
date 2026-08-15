@@ -19,6 +19,7 @@ import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElemen
 import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 import {
   buildLayerItemsForMode,
+  isPluginGroupMemberInMode,
   isPluginVisibleInMode,
 } from '@utils/layerGroupUtils';
 import { buildDisplayItems } from './layerPanelModel';
@@ -218,9 +219,10 @@ const reorderAtDisplayIndex = (
       if (index !== -1) insertionIndex = index;
     }
   }
+  // 플러그인도 그룹 소속 이동에 참여 - op는 native만, 플러그인 소속은
+  // desired projection(pluginChanges)이 운반한다
   const groupIdByMovedId = new Map<string, string | undefined>();
   const updatedMoving = moving.map((item) => {
-    if (item.type === 'plugin') return item;
     const groupId =
       preserveFullGroups && item.groupId && isFullGroupMoved(item.groupId)
         ? item.groupId
@@ -245,6 +247,11 @@ const modelFrom = (
   pluginElements: readonly PluginDisplayElementInternal[],
   collapsedGroupIds: readonly string[],
 ): { items: LayerItem[]; display: DisplayItem[] } => {
+  // 패널 표시 모델과 동일하게 현재 모드 def가 없는 groupId는 무소속 취급 -
+  // dangling 소속이 유령 헤더 행을 만들어 앵커 해석이 어긋나는 것을 방지
+  const validGroupIds = new Set(
+    (document.layerGroups[mode] ?? []).map((group) => group.id),
+  );
   const items = buildLayerItemsForMode(
     mode,
     document.keyPositions,
@@ -255,6 +262,10 @@ const modelFrom = (
   ).map(
     (item): LayerItem => ({
       ...item,
+      groupId:
+        item.groupId && validGroupIds.has(item.groupId)
+          ? item.groupId
+          : undefined,
       name: item.id,
       hidden: false,
     }),
@@ -376,40 +387,64 @@ const desiredPluginsFromPlan = (
   });
   return pluginProjection.map((element) => {
     if (!isPluginVisibleInMode(element, mode)) return element;
+    let next = element;
     const zIndex = zById.get(element.fullId);
-    return zIndex === undefined || zIndex === element.zIndex
-      ? element
-      : { ...element, zIndex };
+    if (zIndex !== undefined && zIndex !== element.zIndex) {
+      next = { ...next, zIndex };
+    }
+    // 그룹 소속 이동 반영 - 저장 규칙 밖 모드의 소속 변경은 dangling이 되므로 제외
+    if (
+      plan.groupIdByMovedId.has(element.fullId) &&
+      isPluginGroupMemberInMode(element, mode)
+    ) {
+      const groupId = plan.groupIdByMovedId.get(element.fullId);
+      if (groupId !== next.groupId) {
+        next = { ...next, groupId };
+      }
+    }
+    return next;
   });
 };
 
-const applyPluginZIndexesEagerly = (
+interface PluginEagerFieldEntry {
+  fullId: string;
+  field: 'zIndex' | 'groupId';
+  before: number | string | undefined;
+  expected: number | string | undefined;
+}
+
+// zIndex·groupId eager 반영 - 필드별 CAS receipt로 롤백
+const applyPluginLayerFieldsEagerly = (
   desired: readonly PluginDisplayElementInternal[],
 ): ElementIntentReceipt | null => {
   const desiredById = new Map(
     desired.map((element) => [element.fullId, element]),
   );
   const store = usePluginDisplayElementStore.getState();
-  const entries: Array<{
-    fullId: string;
-    before: number | undefined;
-    expected: number;
-  }> = [];
+  const entries: PluginEagerFieldEntry[] = [];
   const next = store.elements.map((element) => {
     const target = desiredById.get(element.fullId);
-    if (
-      !target ||
-      target.zIndex === element.zIndex ||
-      target.zIndex === undefined
-    ) {
-      return element;
+    if (!target) return element;
+    let updated = element;
+    if (target.zIndex !== undefined && target.zIndex !== element.zIndex) {
+      entries.push({
+        fullId: element.fullId,
+        field: 'zIndex',
+        before: element.zIndex,
+        expected: target.zIndex,
+      });
+      updated = { ...updated, zIndex: target.zIndex };
     }
-    entries.push({
-      fullId: element.fullId,
-      before: element.zIndex,
-      expected: target.zIndex,
-    });
-    return { ...element, zIndex: target.zIndex };
+    if (target.groupId !== element.groupId) {
+      entries.push({
+        fullId: element.fullId,
+        field: 'groupId',
+        before: element.groupId,
+        expected: target.groupId,
+      });
+      updated = { ...updated, groupId: target.groupId };
+    }
+    return updated;
   });
   if (entries.length === 0) return null;
   try {
@@ -427,13 +462,27 @@ const applyPluginZIndexesEagerly = (
   return {
     rollback: () => {
       const currentStore = usePluginDisplayElementStore.getState();
-      const beforeById = new Map(entries.map((entry) => [entry.fullId, entry]));
+      const entriesById = new Map<string, PluginEagerFieldEntry[]>();
+      entries.forEach((entry) => {
+        const list = entriesById.get(entry.fullId) ?? [];
+        list.push(entry);
+        entriesById.set(entry.fullId, list);
+      });
       let touched = false;
       const restored = currentStore.elements.map((element) => {
-        const entry = beforeById.get(element.fullId);
-        if (!entry || element.zIndex !== entry.expected) return element;
-        touched = true;
-        return { ...element, zIndex: entry.before };
+        const list = entriesById.get(element.fullId);
+        if (!list) return element;
+        let nextElement = element;
+        for (const entry of list) {
+          // CAS: 우리가 쓴 값 그대로일 때만 복원
+          const currentValue = (nextElement as Record<string, unknown>)[
+            entry.field
+          ];
+          if (currentValue !== entry.expected) continue;
+          nextElement = { ...nextElement, [entry.field]: entry.before };
+          touched = true;
+        }
+        return nextElement;
       });
       if (touched) currentStore.setElements(restored);
     },
@@ -508,7 +557,7 @@ export const commitLayerDropIntent = async (
     receipt = applyPropertyIntentsEagerly(nativeIntents);
     receipt = combineReceipts(
       receipt,
-      applyPluginZIndexesEagerly(initialDesiredPlugins),
+      applyPluginLayerFieldsEagerly(initialDesiredPlugins),
     );
     runnerStarted = true;
     await runMixedGestureElementIntent({

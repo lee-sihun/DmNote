@@ -23,6 +23,7 @@ interface BuildLayerItemsParams {
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
   pluginElements: PluginPanelElementView[];
+  layerGroupsForMode: LayerGroupDef[];
 }
 
 export function buildLayerItems({
@@ -33,6 +34,7 @@ export function buildLayerItems({
   graphPositions,
   knobPositions,
   pluginElements,
+  layerGroupsForMode,
 }: BuildLayerItemsParams): LayerItem[] {
   const items: LayerItem[] = [];
 
@@ -111,7 +113,9 @@ export function buildLayerItems({
     });
   });
 
-  // 플러그인 아이템
+  // 플러그인 아이템 - 그룹은 모드 스코프라 현재 모드에 def가 있는 groupId만
+  // 노출 (dangling group_id의 유령 헤더 방지)
+  const validGroupIds = new Set(layerGroupsForMode.map((group) => group.id));
   pluginElements
     .filter((el) => isPluginVisibleInMode(el, selectedKeyType))
     .forEach((el) => {
@@ -121,7 +125,8 @@ export function buildLayerItems({
         name: el.definitionId || 'Plugin',
         zIndex: el.zIndex ?? 0,
         hidden: !!el.hidden,
-        groupId: undefined,
+        groupId:
+          el.groupId && validGroupIds.has(el.groupId) ? el.groupId : undefined,
       });
     });
 

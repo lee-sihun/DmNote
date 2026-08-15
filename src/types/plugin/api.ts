@@ -694,6 +694,7 @@ export type PluginPanelElementView = Pick<
   | 'width'
   | 'height'
   | 'tabId'
+  | 'groupId'
 >;
 
 /**

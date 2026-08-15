@@ -4,7 +4,11 @@ import {
   type MixedIntentGeneration,
 } from '@plugins/runtime/displayElement/gestureTransaction';
 
-import { isElementIntentAbort, reportElementOpSkipped } from './elementIntent';
+import {
+  ElementIntentAbort,
+  isElementIntentAbort,
+  reportElementOpSkipped,
+} from './elementIntent';
 import { commitSemanticOps } from './editorSemanticOps';
 import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 
@@ -87,20 +91,35 @@ export const runMixedElementDeleteIntent = async (options: {
       gestureId: options.gestureId,
       initialPluginIds: options.pluginIds,
       pluginScope: () => options.pluginIds,
-      generate: ({ pluginProjection }) => ({
-        kind: 'ops',
-        ops: options.ops,
-        desiredPluginProjection: pluginProjection.filter(
-          (element) => !deleted.has(element.fullId),
-        ),
-      }),
+      generate: ({ pluginProjection }) => {
+        // diff-patch undo는 같은 fullId를 되살린다 - 소멸 대상의 재출현은
+        // undo 환생 신호라 무음 재삭제 대신 전체 중단한다
+        if (pluginProjection.some((element) => deleted.has(element.fullId))) {
+          throw new ElementIntentAbort('mixed delete settlement');
+        }
+        return {
+          kind: 'ops',
+          ops: options.ops,
+          desiredPluginProjection: pluginProjection.filter(
+            (element) => !deleted.has(element.fullId),
+          ),
+        };
+      },
       onEnrolled,
-      onFailureBeforeSettle: () => {
-        if (!enrolled) rollbackOnce();
+      onFailureBeforeSettle: (error) => {
+        // 전체 중단은 편입 후에도 eager를 복원해야 환생분이 살아남는다 -
+        // staged 해제 전 동기 복원 (runMixedGestureElementIntent와 동일 규약)
+        if (!enrolled || isElementIntentAbort(error)) rollbackOnce();
       },
       expectedAuthorityGeneration: options.expectedAuthorityGeneration,
     });
   } catch (error) {
+    if (isElementIntentAbort(error)) {
+      // 중단은 오류가 아니라 fail-closed 무커밋 - receipt 복원 후 skip 관측
+      rollbackOnce();
+      reportElementOpSkipped('mixed delete settlement');
+      return;
+    }
     if (!enrolled) rollbackOnce();
     throw error;
   }
@@ -212,9 +231,11 @@ export const applyPluginRemovalEagerly = (
       const store = usePluginDisplayElementStore.getState();
       const current = [...store.elements];
       const present = new Set(current.map((element) => element.fullId));
-      // 재주입(undo·재로드)은 같은 definition에 캡처 시점에 없던 fullId를
-      // 만든다. 그 위에 캡처본을 되살리면 같은 논리 요소가 두 벌이 되므로
-      // 외부 개입 감지 시 복원을 포기한다 - canonical이 진실을 소유
+      // diff-patch 재주입은 fullId를 보존하므로 이 감지는 undo 경로에선
+      // 발화하지 않는다 - undo가 같은 fullId를 이미 되살린 경우는 아래
+      // present 중복 검사가 이중 재삽입을 막는다. 플러그인 리로드 등으로
+      // 캡처 시점에 없던 fullId가 출현한 경우만 복원을 포기한다 -
+      // canonical이 진실을 소유
       const reinjected = current.some(
         (element) =>
           element.definitionId &&

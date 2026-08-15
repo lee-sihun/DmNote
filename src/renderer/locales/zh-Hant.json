@@ -357,8 +357,7 @@
   },
   "layerGroup": {
     "defaultName": "群組",
-    "newGroup": "新群組",
-    "pluginNotIncluded": "插件元素未被納入群組。"
+    "newGroup": "新群組"
   },
   "noteColor": {
     "color": "顏色",

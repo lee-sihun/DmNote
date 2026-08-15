@@ -70,7 +70,7 @@ pub(crate) fn is_valid_element_id(id: &str) -> bool {
     Uuid::parse_str(id).is_ok_and(|id| !id.is_nil())
 }
 
-fn new_unique_id(reserved: &mut HashSet<String>) -> String {
+pub(crate) fn new_unique_id(reserved: &mut HashSet<String>) -> String {
     loop {
         let id = Uuid::new_v4().to_string();
         if reserved.insert(id.clone()) {

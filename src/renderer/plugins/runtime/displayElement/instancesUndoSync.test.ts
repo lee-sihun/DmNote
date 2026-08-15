@@ -83,7 +83,8 @@ describe('canonical 재주입 후 선택 정리', () => {
     ]);
     const unregister = registerPluginInstancesReapplier(pluginId, 'def-a', {
       cancelPendingSave: vi.fn(),
-      // 재주입은 fullId를 새로 발급 - 옛 요소를 새 요소로 통째 교체
+      // diff 적용은 생존 fullId를 보존한다 - 스냅샷에 없는 옛 요소만 소멸하고
+      // 신규가 추가된 상황 (소멸 fullId를 쥔 선택이 prune 대상)
       reapply: () => {
         usePluginDisplayElementStore.setState({
           elements: [pluginElement(pluginId, 'new')],
@@ -97,6 +98,35 @@ describe('canonical 재주입 후 선택 정리', () => {
     expect(useGridSelectionStore.getState().selectedElements).toEqual([
       { type: 'key', id: '11111111-1111-4111-8111-111111111111', index: 0 },
     ]);
+    unregister();
+  });
+
+  it('생존 fullId를 보존한 diff 재적용은 선택을 유지한다', async () => {
+    const pluginId = 'plugin-prune-kept';
+    usePluginDisplayElementStore.setState({
+      elements: [pluginElement(pluginId, 'kept')],
+    });
+    useGridSelectionStore
+      .getState()
+      .setSelectedElements([{ type: 'plugin', id: `${pluginId}:kept` }]);
+    const reference = useGridSelectionStore.getState().selectedElements;
+    const unregister = registerPluginInstancesReapplier(pluginId, 'def-kept', {
+      cancelPendingSave: vi.fn(),
+      // diff 적용: 같은 fullId가 생존하고 소유 필드만 갱신된 상황
+      reapply: () => {
+        usePluginDisplayElementStore.setState({
+          elements: [
+            { ...pluginElement(pluginId, 'kept'), position: { x: 9, y: 9 } },
+          ],
+        });
+      },
+    });
+    instancesGetMock.mockResolvedValue({ modelRevision: 5, instances: [] });
+
+    await applyCanonicalPluginInstances(pluginId);
+
+    // prune no-op - 생존 fullId를 쥔 선택이 그대로 유지된다
+    expect(useGridSelectionStore.getState().selectedElements).toBe(reference);
     unregister();
   });
 

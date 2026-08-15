@@ -30,6 +30,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
@@ -58,7 +59,6 @@ import KnobItem from '../layers/KnobItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
-  type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
 import { openPropertiesPanelForSelection } from '@stores/grid/usePanelWindowStore';
 import { useUIStore } from '@stores/useUIStore';
@@ -101,6 +101,7 @@ import {
   groupSelectedElements,
   ungroupSelectedElements,
 } from '@utils/grid/groupActions';
+import { expandGroupSelection } from '@utils/grid/groupSelection';
 import {
   composePreviewPositions,
   getPreviewOverlayVersion,
@@ -419,7 +420,6 @@ const Grid = ({
     onMoveForward: handleSelectedMoveForward,
     onMoveBackward: handleSelectedMoveBackward,
     newGroupLabel: t('layerGroup.newGroup') || 'New Group',
-    pluginExclusionNotice: t('layerGroup.pluginNotIncluded'),
   });
 
   // 키 컨텍스트 메뉴
@@ -467,6 +467,11 @@ const Grid = ({
       let firstGroupId;
       let first = true;
 
+      const modeGroupIds = new Set(
+        (useLayerGroupStore.getState().layerGroups[selectedKeyType] || []).map(
+          (group) => group.id,
+        ),
+      );
       selectedElements.forEach((el) => {
         let gid;
         if (el.type === 'key') {
@@ -477,6 +482,15 @@ const Grid = ({
           gid = modeGraphPos.find((position) => position.id === el.id)?.groupId;
         } else if (el.type === 'knob') {
           gid = modeKnobPos.find((position) => position.id === el.id)?.groupId;
+        } else if (el.type === 'plugin') {
+          // 플러그인 소속도 그룹 메뉴 판정에 포함 - 모드 def가 있는 것만 유효
+          const pluginGroupId = usePluginDisplayElementStore
+            .getState()
+            .elements.find((candidate) => candidate.fullId === el.id)?.groupId;
+          gid =
+            pluginGroupId && modeGroupIds.has(pluginGroupId)
+              ? pluginGroupId
+              : undefined;
         }
         if (gid) anyInGroup = true;
         if (first) {
@@ -489,11 +503,10 @@ const Grid = ({
         // 모두 같은 그룹 → 그룹 해제만
         items.push({ id: 'ungroupSelected', label: t('contextMenu.ungroup') });
       } else if (!anyInGroup) {
-        // 그룹 없음 → 그룹화만 (플러그인만 선택이면 비활성)
+        // 그룹 없음 → 그룹화만
         items.push({
           id: 'groupSelected',
           label: t('contextMenu.groupSelected'),
-          disabled: !selectedElements.some((el) => el.type !== 'plugin'),
         });
       } else {
         // 혼합 → 둘 다
@@ -736,23 +749,20 @@ const Grid = ({
     } as const;
 
     const clicked = collections[type][index];
-    const nextSelection: SelectedElement[] = [{ type, id: clicked.id, index }];
-
-    const groupId = clicked?.groupId;
-    if (groupId) {
-      // 같은 그룹의 모든 요소 선택
-      (['key', 'stat', 'graph', 'knob'] as const).forEach((memberType) => {
-        collections[memberType].forEach((p, i) => {
-          if (p?.groupId === groupId && !(type === memberType && i === index)) {
-            nextSelection.push({
-              type: memberType,
-              id: p.id,
-              index: i,
-            });
-          }
-        });
-      });
-    }
+    // 같은 그룹의 native·플러그인 멤버 전체 확장 (공용 헬퍼)
+    const nextSelection = expandGroupSelection(
+      { type, id: clicked.id, index },
+      {
+        mode: selectedKeyType,
+        keyPositions: collections.key,
+        statPositions: collections.stat,
+        graphPositions: collections.graph,
+        knobPositions: collections.knob,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+        modeGroups:
+          useLayerGroupStore.getState().layerGroups[selectedKeyType] || [],
+      },
+    );
     // 그룹 멤버 수와 무관하게 선택 Store 알림·React render를 1회로 유지
     setSelectedElements(nextSelection);
   };
@@ -1784,7 +1794,6 @@ const Grid = ({
                   selectedKeyType,
                   selectedElements,
                   t('layerGroup.newGroup') || 'New Group',
-                  t('layerGroup.pluginNotIncluded'),
                 );
               } else if (id === 'ungroupSelected') {
                 await ungroupSelectedElements(

@@ -184,6 +184,10 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
     let id_backfill = super::native_element_id::backfill_store_element_ids(&mut state);
     needs_persist |= id_backfill.changed;
     repaired |= id_backfill.repaired || explicit_invalid_element_id;
+    // 플러그인 인스턴스 ID backfill도 recovery 합류 이후에 수행
+    let plugin_id_backfill = super::plugin::backfill_plugin_instance_ids(&mut state);
+    needs_persist |= plugin_id_backfill.changed;
+    repaired |= plugin_id_backfill.repaired;
     if needs_persist {
         log::info!(
             "[Store] Persisting migrated store file at {}",
@@ -2201,6 +2205,290 @@ mod tests {
             &crate::models::EditorDocumentV1::from_store(&loaded.data),
         )
         .unwrap();
+        let _ = std::fs::remove_file(path);
+    }
+
+    fn saved_plugin_instance_json(x: f64, instance_id: Option<&str>) -> serde_json::Value {
+        let mut instance = serde_json::json!({
+            "position": { "x": x, "y": 2.0 },
+            "tabId": "4key"
+        });
+        if let Some(id) = instance_id {
+            instance["instanceId"] = serde_json::json!(id);
+        }
+        instance
+    }
+
+    fn stored_plugin_instance_ids(data: &AppStoreData, plugin_id: &str) -> Vec<String> {
+        data.plugin_data[&format!("plugin_data_{plugin_id}/instances")]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|instance| instance["instanceId"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn plugin_backfill_fixture_path(label: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "dmnote-plugin-instance-backfill-{label}-{}.json",
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    #[test]
+    fn backfill_plugin_instances_assigns_unique_ids_and_reload_preserves_them() {
+        let path = plugin_backfill_fixture_path("assign");
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let raw_object = raw.as_object_mut().unwrap();
+        raw_object.insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([
+                saved_plugin_instance_json(1.0, None),
+                saved_plugin_instance_json(2.0, None)
+            ]),
+        );
+        raw_object.insert(
+            "plugin_data_beta/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(3.0, None)]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+        let alpha_ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        let beta_ids = stored_plugin_instance_ids(&loaded.data, "beta");
+        let all_ids = alpha_ids.iter().chain(&beta_ids).collect::<Vec<_>>();
+        assert_eq!(all_ids.len(), 3);
+        assert!(all_ids
+            .iter()
+            .all(|id| crate::state::native_element_id::is_valid_element_id(id)));
+        assert_eq!(
+            all_ids
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            3
+        );
+
+        // 멱등: 영속 후 재로드에서 같은 ID 유지, 추가 변경 없음
+        std::fs::write(&path, serde_json::to_vec_pretty(&loaded.data).unwrap()).unwrap();
+        let reloaded = load_store_from_path(&path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert!(!reloaded.repaired);
+        assert_eq!(
+            stored_plugin_instance_ids(&reloaded.data, "alpha"),
+            alpha_ids
+        );
+        assert_eq!(stored_plugin_instance_ids(&reloaded.data, "beta"), beta_ids);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_preserves_existing_valid_ids() {
+        let path = plugin_backfill_fixture_path("partial");
+        let existing_id = uuid::Uuid::new_v4().to_string();
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        raw.as_object_mut().unwrap().insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([
+                saved_plugin_instance_json(1.0, Some(&existing_id)),
+                saved_plugin_instance_json(2.0, None)
+            ]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+        let ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        assert_eq!(ids[0], existing_id);
+        assert_ne!(ids[1], existing_id);
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &ids[1]
+        ));
+        // 값 필드와 순서 보존
+        let instances = loaded.data.plugin_data["plugin_data_alpha/instances"]
+            .as_array()
+            .unwrap();
+        assert_eq!(instances[0]["position"]["x"], 1.0);
+        assert_eq!(instances[1]["position"]["x"], 2.0);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_reissues_invalid_ids_as_repair() {
+        for invalid_id in ["not-a-uuid".to_string(), uuid::Uuid::nil().to_string()] {
+            let path = plugin_backfill_fixture_path("invalid");
+            let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+            raw.as_object_mut().unwrap().insert(
+                "plugin_data_alpha/instances".to_string(),
+                serde_json::json!([saved_plugin_instance_json(1.0, Some(&invalid_id))]),
+            );
+            std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+            let loaded = load_store_from_path(&path).unwrap();
+            assert!(loaded.needs_persist);
+            assert!(loaded.repaired);
+            let ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+            assert_ne!(ids[0], invalid_id);
+            assert!(crate::state::native_element_id::is_valid_element_id(
+                &ids[0]
+            ));
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn backfill_plugin_instances_repairs_in_plugin_duplicates_only() {
+        let path = plugin_backfill_fixture_path("duplicate");
+        let shared_id = uuid::Uuid::new_v4().to_string();
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let raw_object = raw.as_object_mut().unwrap();
+        raw_object.insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([
+                saved_plugin_instance_json(1.0, Some(&shared_id)),
+                saved_plugin_instance_json(2.0, Some(&shared_id))
+            ]),
+        );
+        raw_object.insert(
+            "plugin_data_beta/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(3.0, Some(&shared_id))]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        // 유일성은 커밋 검증과 같은 플러그인 키 단위 - alpha 내 중복만 수리,
+        // 교차 중복인 beta[0]은 합법이라 보존
+        let alpha_ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        let beta_ids = stored_plugin_instance_ids(&loaded.data, "beta");
+        assert_eq!(alpha_ids[0], shared_id);
+        assert_ne!(alpha_ids[1], shared_id);
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &alpha_ids[1]
+        ));
+        assert_eq!(beta_ids, vec![shared_id]);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_preserves_cross_plugin_duplicates_untouched() {
+        let path = plugin_backfill_fixture_path("cross");
+        let shared_id = uuid::Uuid::new_v4().to_string();
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let raw_object = raw.as_object_mut().unwrap();
+        raw_object.insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(1.0, Some(&shared_id))]),
+        );
+        raw_object.insert(
+            "plugin_data_beta/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(2.0, Some(&shared_id))]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        // 교차 플러그인 중복만으로는 수리 대상이 아니다 - 불필요한 백업과
+        // sweep 스킵을 유발하지 않게 무변경
+        assert!(!loaded.needs_persist);
+        assert!(!loaded.repaired);
+        assert_eq!(
+            stored_plugin_instance_ids(&loaded.data, "alpha"),
+            vec![shared_id.clone()]
+        );
+        assert_eq!(
+            stored_plugin_instance_ids(&loaded.data, "beta"),
+            vec![shared_id]
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_skips_undecodable_values_and_processes_the_rest() {
+        let path = plugin_backfill_fixture_path("undecodable");
+        let not_an_array = serde_json::json!({ "not": "array" });
+        let unknown_field = serde_json::json!([{
+            "position": { "x": 1.0, "y": 2.0 },
+            "tabId": "4key",
+            "handler": true
+        }]);
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        let raw_object = raw.as_object_mut().unwrap();
+        raw_object.insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(1.0, None)]),
+        );
+        raw_object.insert(
+            "plugin_data_broken/instances".to_string(),
+            not_an_array.clone(),
+        );
+        raw_object.insert(
+            "plugin_data_weird/instances".to_string(),
+            unknown_field.clone(),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(!loaded.repaired);
+        let alpha_ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &alpha_ids[0]
+        ));
+        // decode 불가 키는 원본 Value 그대로 보존 (런타임 read의 fail-closed에 위임)
+        assert_eq!(
+            loaded.data.plugin_data["plugin_data_broken/instances"],
+            not_an_array
+        );
+        assert_eq!(
+            loaded.data.plugin_data["plugin_data_weird/instances"],
+            unknown_field
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_runs_after_field_recovery() {
+        let path = plugin_backfill_fixture_path("recovery");
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        raw["statPositions"]["4key"][0]["dx"] = serde_json::json!("broken");
+        raw.as_object_mut().unwrap().insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([saved_plugin_instance_json(1.0, None)]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(loaded.needs_persist);
+        assert!(loaded.repaired);
+        let ids = stored_plugin_instance_ids(&loaded.data, "alpha");
+        assert_eq!(ids.len(), 1);
+        assert!(crate::state::native_element_id::is_valid_element_id(
+            &ids[0]
+        ));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn backfill_plugin_instances_leaves_empty_arrays_untouched() {
+        let path = plugin_backfill_fixture_path("empty");
+        let mut raw = serde_json::to_value(store_with_each_native_collection()).unwrap();
+        raw.as_object_mut().unwrap().insert(
+            "plugin_data_alpha/instances".to_string(),
+            serde_json::json!([]),
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(!loaded.needs_persist);
+        assert!(!loaded.repaired);
+        assert_eq!(
+            loaded.data.plugin_data["plugin_data_alpha/instances"],
+            serde_json::json!([])
+        );
         let _ = std::fs::remove_file(path);
     }
 

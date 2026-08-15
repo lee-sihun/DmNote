@@ -63,6 +63,10 @@ vi.mock('@utils/plugin/bridgeMessages', () => ({
 
 vi.mock('@plugins/runtime/displayElement/instancesCommitQueue', () => ({
   rotatePluginInstancesEditSession: rotateSessionMock,
+  // 혼합 이동의 사전 staging이 실제 gestureTransaction을 타는 경로용 무상태 stub
+  getStagedPluginInstancesGestureId: () => undefined,
+  stagePluginInstancesGesture: vi.fn(),
+  unstagePluginInstancesGesture: vi.fn(),
 }));
 
 vi.mock('@utils/core/platform', () => ({ isMac: () => false }));

@@ -377,16 +377,32 @@ export function useGridSelection({
 
     // 플러그인 요소 배치 업데이트
     const pluginUpdates = selectedElements.filter((el) => el.type === 'plugin');
+    let stagedBeforeEagerWrite = false;
     if (pluginUpdates.length > 0) {
       if (gestureId) {
         const selectedPluginIds = new Set(
           pluginUpdates.map((element) => element.id),
         );
-        new Set(
-          currentPluginElements
-            .filter((element) => selectedPluginIds.has(element.fullId))
-            .map((element) => element.pluginId),
-        ).forEach((pluginId) => {
+        const movedPluginIds = [
+          ...new Set(
+            currentPluginElements
+              .filter((element) => selectedPluginIds.has(element.fullId))
+              .map((element) => element.pluginId),
+          ),
+        ];
+        const hasNativeUpdates =
+          keyUpdates.length > 0 ||
+          statUpdates.length > 0 ||
+          graphUpdates.length > 0 ||
+          knobUpdates.length > 0;
+        // 혼합 이동은 staging을 eager 쓰기 앞에 세운다 - 쓰기 시점에 예약되는
+        // debounce 커밋이 settle의 gesture 커밋보다 먼저 착지하면 같은
+        // 제스처의 히스토리가 두 엔트리로 쪼개진다
+        if (syncToOverlay && hasNativeUpdates && movedPluginIds.length > 0) {
+          beginMixedGestureTransaction(gestureId, movedPluginIds);
+          stagedBeforeEagerWrite = true;
+        }
+        movedPluginIds.forEach((pluginId) => {
           rotatePluginInstancesEditSession(pluginId, gestureId);
         });
       }
@@ -413,6 +429,11 @@ export function useGridSelection({
 
     if (syncToOverlay) {
       syncSelectedElementsToOverlay(gestureId);
+      // settle이 mixed 커밋을 시작하지 못한 경로의 사전 staging 정산 -
+      // 커밋이 소유권을 가져간 staged는 건드리지 않는다
+      if (stagedBeforeEagerWrite && gestureId) {
+        cancelUncommittedMixedGestureTransaction(gestureId);
+      }
     }
   };
 
@@ -648,14 +669,18 @@ export function useGridSelection({
       }
     }
 
-    // plugin fullId 사전 동결 - eager 루프 생성은 retry·receipt를 비결정적으로 만든다
+    // plugin id·fullId 사전 동결 - eager 루프 생성은 retry·receipt를 비결정적으로
+    // 만든다. 붙여넣기는 새 인스턴스이므로 id 재발급 - 복사 원본 id를 유지하면
+    // 영구 instanceId가 중복되어 백엔드 커밋이 거절된다
     const frozenPluginElements: PluginDisplayElementInternal[] =
-      pluginPayloads.map((element) => ({
-        ...element,
-        fullId: `${element.pluginId}:${element.id}:${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 11)}`,
-      }));
+      pluginPayloads.map((element) => {
+        const id = crypto.randomUUID();
+        return {
+          ...element,
+          id,
+          fullId: `${element.pluginId}::${id}`,
+        };
+      });
     const pluginIdsToAdd = [
       ...new Set(frozenPluginElements.map((element) => element.pluginId)),
     ];

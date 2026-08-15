@@ -446,6 +446,8 @@ export const patchNativeLayerBoundsViaAuthority = (
 export const commitBatchGeometryViaAuthority = (
   descriptor: NativeLayerBatchGeometryDescriptor,
   gestureId?: string,
+  // 플러그인 fullId 대상 - 미전달(구 payload)은 native 전용 하위 호환
+  pluginTargets: readonly string[] = [],
 ): Promise<boolean> => {
   const authorityGeneration = getPluginAuthorityGeneration();
   return new Promise((resolve) => {
@@ -454,6 +456,9 @@ export const commitBatchGeometryViaAuthority = (
       payload: {
         descriptor: structuredClone(descriptor),
         ...(gestureId ? { gestureId } : {}),
+        ...(pluginTargets.length > 0
+          ? { pluginTargets: [...pluginTargets] }
+          : {}),
       },
       authorityGeneration,
       retryPolicy: 'none',
@@ -485,6 +490,8 @@ export const setElementGroupsViaAuthority = (
   mode: string,
   targets: readonly ElementGroupTarget[],
   targetGroup: TargetLayerGroup | null,
+  // 플러그인 fullId 대상 - 미전달(구 payload)은 native 전용 하위 호환
+  pluginTargets: readonly string[] = [],
 ): Promise<boolean> => {
   const authorityGeneration = getPluginAuthorityGeneration();
   return new Promise((resolve) => {
@@ -494,6 +501,9 @@ export const setElementGroupsViaAuthority = (
         mode,
         targets: targets.map((target) => ({ ...target })),
         targetGroup: targetGroup ? { ...targetGroup } : null,
+        ...(pluginTargets.length > 0
+          ? { pluginTargets: [...pluginTargets] }
+          : {}),
       },
       authorityGeneration,
       retryPolicy: 'staleOnly',

@@ -244,18 +244,19 @@ describe('commitMixedGestureIntent', () => {
   });
 
   it('삭제 ops는 재주입된 대상을 desired에서 제거하고 신규 요소를 보존한다', async () => {
+    // 요소 id = 저장 instanceId(UUID), fullId = pluginId::instanceId
     const target = {
-      fullId: 'plugin-a:target',
+      fullId: 'plugin-a::30000000-0000-4000-8000-000000000001',
       definitionId: 'plugin-a',
       zIndex: 0,
     };
     const survivor = {
-      fullId: 'plugin-a:survivor',
+      fullId: 'plugin-a::30000000-0000-4000-8000-000000000002',
       definitionId: 'plugin-a',
       zIndex: 1,
     };
     const newcomer = {
-      fullId: 'plugin-a:new',
+      fullId: 'plugin-a::30000000-0000-4000-8000-000000000003',
       definitionId: 'plugin-a',
       zIndex: 2,
     };
@@ -305,7 +306,9 @@ describe('commitMixedGestureIntent', () => {
         pluginChanges: [
           {
             pluginId: 'plugin-a',
-            instances: ['plugin-a:plugin-a:survivor:1'],
+            instances: [
+              'plugin-a:plugin-a::30000000-0000-4000-8000-000000000002:1',
+            ],
           },
         ],
       }),
@@ -473,6 +476,37 @@ describe('commitMixedGestureIntent', () => {
     expect(aligned[0].state?.tick).toBe(99);
   });
 
+  it('groupId도 영속 필드로 3-way 정렬되어 main store에 반영된다', async () => {
+    mocks.elements = [
+      {
+        fullId: 'plugin-a:one',
+        definitionId: 'plugin-a',
+        zIndex: 0,
+        groupId: undefined,
+      },
+    ];
+    await commitMixedGestureIntent({
+      gestureId: 'gesture-group-align',
+      initialPluginIds: ['plugin-a'],
+      pluginScope: () => ['plugin-a'],
+      generate: ({ pluginProjection }) => ({
+        kind: 'patch',
+        patch: { schemaVersion: 1 },
+        desiredPluginProjection: pluginProjection.map((element) => ({
+          ...element,
+          groupId: 'group-a',
+        })),
+      }),
+    });
+
+    // PERSISTED_FIELDS에 groupId 누락 시 커밋 후 main store 미반영
+    expect(mocks.setElements).toHaveBeenCalledTimes(1);
+    const [aligned] = mocks.setElements.mock.calls[0] as unknown as [
+      Array<{ fullId: string; groupId?: string }>,
+    ];
+    expect(aligned[0].groupId).toBe('group-a');
+  });
+
   it('봉인 이후 병행 편집된 요소는 desired 정렬이 덮어쓰지 않는다', async () => {
     mocks.elements = [
       { fullId: 'plugin-a:one', definitionId: 'plugin-a', zIndex: 0 },
@@ -508,14 +542,17 @@ describe('commitMixedGestureIntent', () => {
   });
 
   it('desired 정렬은 커밋된 삭제를 적용하고 봉인 후 신규 요소는 보존한다', async () => {
+    // 요소 id = 저장 instanceId(UUID), fullId = pluginId::instanceId
+    const goneFullId = 'plugin-a::30000000-0000-4000-8000-000000000011';
+    const newFullId = 'plugin-a::30000000-0000-4000-8000-000000000012';
     mocks.elements = [
-      { fullId: 'plugin-a:gone', definitionId: 'plugin-a', zIndex: 0 },
+      { fullId: goneFullId, definitionId: 'plugin-a', zIndex: 0 },
     ];
-    // commit IPC 사이: 삭제 대상이 재주입되고 봉인 후 신규 요소도 등장
+    // commit IPC 사이: 삭제 대상이 같은 fullId로 재주입되고 봉인 후 신규도 등장
     mocks.gestureCommit.mockImplementationOnce(async () => {
       mocks.elements = [
-        { fullId: 'plugin-a:gone', definitionId: 'plugin-a', zIndex: 0 },
-        { fullId: 'plugin-a:new', definitionId: 'plugin-a', zIndex: 3 },
+        { fullId: goneFullId, definitionId: 'plugin-a', zIndex: 0 },
+        { fullId: newFullId, definitionId: 'plugin-a', zIndex: 3 },
       ];
       return {
         editorRevision: 1,
@@ -542,8 +579,8 @@ describe('commitMixedGestureIntent', () => {
     ];
     const ids = aligned.map((element) => element.fullId);
     // 커밋된 삭제 적용 + 봉인 후 신규 보존
-    expect(ids).not.toContain('plugin-a:gone');
-    expect(ids).toContain('plugin-a:new');
+    expect(ids).not.toContain(goneFullId);
+    expect(ids).toContain(newFullId);
   });
 
   it('편입 후 실패는 onFailureBeforeSettle에 알리고 canonical pull 후 settle한다', async () => {

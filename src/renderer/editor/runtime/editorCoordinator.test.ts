@@ -25,6 +25,7 @@ import {
   enqueueEditorCompatibilityOperation,
   enqueueEditorCompatibilityWrite,
 } from './editorCompatibilityQueue';
+import { registerStoredPluginGroupRefsProvider } from './pluginGroupMembers';
 
 import type {
   EditorCommitError,
@@ -342,6 +343,7 @@ const applyOpsForTest = (
         graphPositions: next.graphPositions,
         knobPositions: next.knobPositions,
         layerGroups: next.layerGroups,
+        pluginElements: [],
       });
       if (projected) {
         next.keyPositions = projected.keyPositions;
@@ -5190,6 +5192,44 @@ describe('commitSemanticOpsInternal', () => {
       harness.coordinator.commitSemanticOpsInternal([deleteElementOp(id)]),
     ).rejects.toBeInstanceOf(EditorProtocolError);
     harness.coordinator.stop();
+  });
+
+  // F1 재현 회귀: 백엔드는 store의 전 plugin_data 인스턴스로 그룹 생존을 판정하므로
+  // 미로드 플러그인이 유일 멤버로 남는 그룹은 delete 후에도 잔존한다. 프론트 replay가
+  // store 미러 없이 그룹 소멸을 예측하면 changedFields 불일치로 EditorProtocolError
+  it('미로드 플러그인이 유일 멤버로 남는 그룹은 delete replay가 생존을 예측한다', async () => {
+    const id = '00000000-0000-4000-8000-000000000093';
+    const base = withStableId(id);
+    base.keyPositions['4key'][0].groupId = 'group-a';
+    base.layerGroups = { '4key': [{ id: 'group-a', name: 'Group A' }] };
+    registerStoredPluginGroupRefsProvider(() => ({
+      'idle-plugin': { '4key': ['group-a'] },
+    }));
+    try {
+      const harness = createHarness(base);
+      await harness.coordinator.start();
+      // 백엔드 판정 - store의 플러그인 참조 덕에 그룹 생존, layerGroups 미변경
+      harness.transport.commitMock.mockResolvedValueOnce({
+        revision: 1,
+        changedFields: ['keys', 'keyPositions'],
+        opResults: [{ status: 'applied' }],
+      });
+
+      const outcome = await harness.coordinator.commitSemanticOpsInternal([
+        deleteElementOp(id),
+      ]);
+
+      expect(outcome.opResults).toEqual([{ status: 'applied' }]);
+      expect(outcome.document.layerGroups['4key']).toEqual([
+        { id: 'group-a', name: 'Group A' },
+      ]);
+      expect(harness.getLocal().layerGroups['4key']).toEqual([
+        { id: 'group-a', name: 'Group A' },
+      ]);
+      harness.coordinator.stop();
+    } finally {
+      registerStoredPluginGroupRefsProvider(() => ({}));
+    }
   });
 
   it('다중 delete의 targetMissing은 생존 삭제 뒤 canonical로 정렬한다', async () => {

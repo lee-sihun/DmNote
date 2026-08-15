@@ -82,8 +82,12 @@ import {
   patchUseInlineStylesByTargets,
   renameLayerGroupById,
   setElementGroupsByTargets,
-  setLayerGroupHidden,
 } from '@src/renderer/editor/runtime/elementOps';
+import {
+  setMixedElementGroups,
+  setMixedLayerGroupHidden,
+} from '@src/renderer/editor/runtime/mixedElementGroups';
+import { commitMixedBatchGeometry } from '@src/renderer/editor/runtime/mixedBatchGeometry';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import type {
   BatchGeometryDescriptor,
@@ -687,16 +691,38 @@ const parseNativeLayerBoundsTarget = (
 
 const parseBatchGeometryDescriptor = (
   payload: Record<string, unknown>,
-): { descriptor: BatchGeometryDescriptor; gestureId?: string } | null => {
+): {
+  descriptor: BatchGeometryDescriptor;
+  pluginTargets: string[];
+  gestureId?: string;
+} | null => {
+  // pluginTargets는 신 payload 전용 - 없는 구 payload는 native 전용 하위 호환
+  const hasPluginTargets = Object.prototype.hasOwnProperty.call(
+    payload,
+    'pluginTargets',
+  );
+  const allowedKeys = hasPluginTargets
+    ? ['descriptor', 'gestureId', 'pluginTargets']
+    : ['descriptor', 'gestureId'];
   const payloadKeys = Object.keys(payload);
   if (
-    (payloadKeys.length !== 1 && payloadKeys.length !== 2) ||
     !('descriptor' in payload) ||
-    payloadKeys.some((key) => !['descriptor', 'gestureId'].includes(key)) ||
+    payloadKeys.some((key) => !allowedKeys.includes(key)) ||
     ('gestureId' in payload && !isCanonicalGestureId(payload.gestureId)) ||
     payload.descriptor === null ||
     typeof payload.descriptor !== 'object' ||
     Array.isArray(payload.descriptor)
+  ) {
+    return null;
+  }
+  const pluginTargets = hasPluginTargets
+    ? asStringArray(payload.pluginTargets)
+    : [];
+  if (
+    !pluginTargets ||
+    pluginTargets.length > MAX_LAYER_RPC_TARGETS ||
+    pluginTargets.some((fullId) => fullId.trim().length === 0) ||
+    new Set(pluginTargets).size !== pluginTargets.length
   ) {
     return null;
   }
@@ -707,7 +733,8 @@ const parseBatchGeometryDescriptor = (
     descriptor.mode.length === 0 ||
     new TextEncoder().encode(descriptor.mode).length > 128 ||
     !Array.isArray(descriptor.targets) ||
-    descriptor.targets.length === 0 ||
+    // native 0개는 plugin 단독 배치(plugin 2개 이상)일 때만 허용
+    (descriptor.targets.length === 0 && pluginTargets.length < 2) ||
     descriptor.targets.length > MAX_LAYER_RPC_TARGETS ||
     descriptor.operation === null ||
     typeof descriptor.operation !== 'object' ||
@@ -760,15 +787,19 @@ const parseBatchGeometryDescriptor = (
       Number.isFinite(operation.value) &&
       operation.value > 0);
   if (!validOperation) return null;
+  // 크기 일괄은 native 전용 - 플러그인 크기는 content-driven (fail-closed)
+  if (operation.kind === 'resize' && pluginTargets.length > 0) return null;
   const minimum =
     operation.kind === 'distribute' ? 3 : operation.kind === 'resize' ? 1 : 2;
-  if (targets.length < minimum) return null;
+  // 최소 개수는 native+plugin 합산 - 혼합 참여로 native만으로 모자라도 성립
+  if (targets.length + pluginTargets.length < minimum) return null;
   return {
     descriptor: {
       mode: descriptor.mode,
       targets,
       operation: operation as BatchGeometryDescriptor['operation'],
     },
+    pluginTargets,
     ...(typeof payload.gestureId === 'string'
       ? { gestureId: payload.gestureId }
       : {}),
@@ -1513,20 +1544,47 @@ const parseSetElementGroups = (
 ): {
   mode: string;
   targets: Array<{ elementType: NativeElementType; id: string }>;
+  pluginTargets: string[];
   targetGroup:
     | { kind: 'existing'; id: string }
     | { kind: 'create'; id: string; name: string }
     | null;
 } | null => {
+  // pluginTargets는 신 payload 전용 - 없는 구 payload는 native 전용 하위 호환
+  const hasPluginTargets = Object.prototype.hasOwnProperty.call(
+    payload,
+    'pluginTargets',
+  );
   if (
-    !hasExactKeys(payload, ['mode', 'targets', 'targetGroup']) ||
+    !(hasPluginTargets
+      ? hasExactKeys(payload, [
+          'mode',
+          'targets',
+          'targetGroup',
+          'pluginTargets',
+        ])
+      : hasExactKeys(payload, ['mode', 'targets', 'targetGroup'])) ||
     typeof payload.mode !== 'string' ||
     payload.mode.length === 0 ||
     textBytes(payload.mode) > MAX_LAYER_MODE_BYTES ||
     !Array.isArray(payload.targets) ||
-    payload.targets.length === 0 ||
     payload.targets.length > MAX_LAYER_RPC_TARGETS
   ) {
+    return null;
+  }
+  const pluginTargets = hasPluginTargets
+    ? asStringArray(payload.pluginTargets)
+    : [];
+  if (
+    !pluginTargets ||
+    pluginTargets.length > MAX_LAYER_RPC_TARGETS ||
+    pluginTargets.some((fullId) => fullId.trim().length === 0) ||
+    new Set(pluginTargets).size !== pluginTargets.length
+  ) {
+    return null;
+  }
+  // 빈 native targets는 plugin 대상이 있을 때만 의미가 있다
+  if (payload.targets.length === 0 && pluginTargets.length === 0) {
     return null;
   }
   const targets: Array<{ elementType: NativeElementType; id: string }> = [];
@@ -1572,7 +1630,7 @@ const parseSetElementGroups = (
       ? { kind: 'create', id: group.id, name: group.name as string }
       : { kind: 'existing', id: group.id };
   }
-  return { mode: payload.mode, targets, targetGroup };
+  return { mode: payload.mode, targets, pluginTargets, targetGroup };
 };
 
 const parseRenameLayerGroup = (
@@ -1759,6 +1817,7 @@ const PERSISTED_PATCH_KEYS = new Set([
   'tabId',
   'hidden',
   'zIndex',
+  'groupId',
 ]);
 
 const MIN_PLUGIN_Z_INDEX = -2_147_483_648;
@@ -1773,12 +1832,14 @@ const isValidPluginZIndex = (value: unknown): value is number =>
 
 const toSavedInstances = (elements: PluginDisplayElementInternal[]) =>
   elements.map((el) => ({
+    instanceId: el.id,
     position: el.position,
     settings: el.settings as Record<string, unknown> | undefined,
     measuredSize: el.measuredSize,
     tabId: normalizePluginInstanceTabId(el.tabId),
     hidden: el.hidden === true,
     zIndex: el.zIndex,
+    groupId: el.groupId,
   }));
 
 /**
@@ -2672,12 +2733,20 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       },
     };
     const persisted = setRequest
-      ? setElementGroupsByTargets(
-          setRequest.mode,
-          setRequest.targets,
-          setRequest.targetGroup,
-          options,
-        )
+      ? setRequest.pluginTargets.length > 0
+        ? setMixedElementGroups(
+            setRequest.mode,
+            setRequest.targets,
+            setRequest.pluginTargets,
+            setRequest.targetGroup,
+            options,
+          )
+        : setElementGroupsByTargets(
+            setRequest.mode,
+            setRequest.targets,
+            setRequest.targetGroup,
+            options,
+          )
       : renameLayerGroupById(
           renameRequest!.mode,
           renameRequest!.groupId,
@@ -2720,13 +2789,19 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
       return;
     }
-    void setLayerGroupHidden(request.mode, request.groupId, request.hidden, {
-      preflight: () => {
-        if (!generationLive()) {
-          throw new Error('plugin authority generation changed');
-        }
+    // 플러그인 멤버가 섞인 그룹은 mixed 진입점이 단일 게스처로 정산
+    void setMixedLayerGroupHidden(
+      request.mode,
+      request.groupId,
+      request.hidden,
+      {
+        preflight: () => {
+          if (!generationLive()) {
+            throw new Error('plugin authority generation changed');
+          }
+        },
       },
-    })
+    )
       .then((applied) => {
         if (!generationLive()) {
           respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
@@ -2806,14 +2881,24 @@ const handleRequest = (envelope: PluginRpcRequestEnvelope) => {
       respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));
       return;
     }
-    void commitBatchGeometryByIds(request.descriptor, {
+    const batchGeometryOptions = {
       ...(request.gestureId ? { gestureId: request.gestureId } : {}),
       preflight: () => {
         if (!generationLive()) {
           throw new Error('plugin authority generation changed');
         }
       },
-    })
+    };
+    // 플러그인 대상이 있으면 mixed 진입점이 단일 게스처로 정산
+    const batchGeometryCommit =
+      request.pluginTargets.length > 0
+        ? commitMixedBatchGeometry(
+            request.descriptor,
+            request.pluginTargets,
+            batchGeometryOptions,
+          )
+        : commitBatchGeometryByIds(request.descriptor, batchGeometryOptions);
+    void batchGeometryCommit
       .then(() => {
         if (!generationLive()) {
           respond(failure(envelope.requestId, 'AUTHORITY_GENERATION_STALE'));

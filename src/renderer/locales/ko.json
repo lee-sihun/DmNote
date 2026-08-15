@@ -357,8 +357,7 @@
   },
   "layerGroup": {
     "defaultName": "그룹",
-    "newGroup": "새 그룹",
-    "pluginNotIncluded": "플러그인 요소는 그룹에 포함되지 않았습니다."
+    "newGroup": "새 그룹"
   },
   "noteColor": {
     "color": "색상",

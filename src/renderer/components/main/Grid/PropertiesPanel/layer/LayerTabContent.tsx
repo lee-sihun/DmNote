@@ -193,6 +193,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     lenisRef(node);
   };
 
+  // 레이어 그룹 스토어
+  const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
+  const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
+  const collapsedGroups = useLayerGroupStore((state) => state.collapsedGroups);
+  const toggleCollapsed = useLayerGroupStore((state) => state.toggleCollapsed);
+
   // 레이어 아이템 목록
   const layerItems = buildLayerItems({
     selectedKeyType,
@@ -202,13 +208,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     graphPositions,
     knobPositions,
     pluginElements,
+    layerGroupsForMode,
   });
-
-  // 레이어 그룹 스토어
-  const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
-  const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
-  const collapsedGroups = useLayerGroupStore((state) => state.collapsedGroups);
-  const toggleCollapsed = useLayerGroupStore((state) => state.toggleCollapsed);
 
   // 디스플레이 아이템
   const displayItems = buildDisplayItems({
@@ -271,6 +272,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   // 재정렬을 한 렌더 늦게 본다
   const buildLiveLayerModel = () => {
     const keyState = useKeyStore.getState();
+    const liveGroupState = useLayerGroupStore.getState();
     const liveLayerItems = buildLayerItems({
       selectedKeyType,
       positions: keyState.canonicalPositions,
@@ -278,7 +280,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       statPositions: useStatItemStore.getState().positions,
       graphPositions: useGraphItemStore.getState().positions,
       knobPositions: useKnobItemStore.getState().positions,
-      pluginElements: usePluginDisplayElementStore.getState().elements,
+      // 패널 창의 elements는 항상 비어 있으므로 창별 미러 셀렉터를 경유한다
+      pluginElements: selectPropertyPanelPluginElements(
+        usePluginDisplayElementStore.getState(),
+      ),
+      layerGroupsForMode: liveGroupState.layerGroups[selectedKeyType] || [],
     });
     const groupState = useLayerGroupStore.getState();
     const liveDisplayItems = buildDisplayItems({

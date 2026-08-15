@@ -130,3 +130,84 @@ describe('display element discrete edit boundaries', () => {
     expect(mocks.removeElement).toHaveBeenCalledWith('plugin-a::missing');
   });
 });
+
+describe('display element instance id issuance', () => {
+  const UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const SAVED_INSTANCE_ID = '30000000-0000-4000-8000-000000000001';
+
+  beforeEach(() => {
+    window.__dmn_window_type = 'main';
+    window.__dmn_current_plugin_id = 'plugin-a';
+    mocks.elements = [];
+    mocks.addElement.mockReset();
+    mocks.rotateEditSession.mockReset();
+  });
+
+  const addedElement = (index = 0) =>
+    mocks.addElement.mock.calls[index]?.[0] as {
+      id: string;
+      fullId: string;
+    };
+
+  it('instanceId 미지정 시 UUID를 새로 발급한다', () => {
+    displayElementApi.add({
+      html: '<div />',
+      position: { x: 0, y: 0 },
+    } as Parameters<typeof displayElementApi.add>[0]);
+
+    const element = addedElement();
+    expect(element.id).toMatch(UUID_PATTERN);
+    expect(element.fullId).toBe(`plugin-a::${element.id}`);
+  });
+
+  it('내부 복원 add는 저장된 instanceId를 요소 id로 사용한다', () => {
+    addDisplayElementInternal({
+      html: '<div />',
+      position: { x: 0, y: 0 },
+      instanceId: SAVED_INSTANCE_ID,
+    } as Parameters<typeof addDisplayElementInternal>[0]);
+
+    const element = addedElement();
+    expect(element.id).toBe(SAVED_INSTANCE_ID);
+    expect(element.fullId).toBe(`plugin-a::${SAVED_INSTANCE_ID}`);
+  });
+
+  it('플러그인 공개 add가 넘긴 instanceId는 무시하고 새로 발급한다', () => {
+    displayElementApi.add({
+      html: '<div />',
+      position: { x: 0, y: 0 },
+      instanceId: SAVED_INSTANCE_ID,
+    } as unknown as Parameters<typeof displayElementApi.add>[0]);
+
+    const element = addedElement();
+    expect(element.id).not.toBe(SAVED_INSTANCE_ID);
+    expect(element.id).toMatch(UUID_PATTERN);
+    // 지정값은 요소 속성으로도 남기지 않는다
+    expect('instanceId' in (element as Record<string, unknown>)).toBe(false);
+  });
+
+  it('플러그인 공개 add가 넘긴 groupId는 무시한다', () => {
+    displayElementApi.add({
+      html: '<div />',
+      position: { x: 0, y: 0 },
+      groupId: 'group-a',
+    } as unknown as Parameters<typeof displayElementApi.add>[0]);
+
+    // 저장 규칙 밖 dangling 소속 차단 - 속성 자체를 남기지 않는다
+    const element = addedElement() as Record<string, unknown>;
+    expect('groupId' in element).toBe(false);
+  });
+
+  it('내부 복원 add는 저장된 groupId 소속을 통과시킨다', () => {
+    addDisplayElementInternal({
+      html: '<div />',
+      position: { x: 0, y: 0 },
+      instanceId: SAVED_INSTANCE_ID,
+      groupId: 'group-a',
+    } as Parameters<typeof addDisplayElementInternal>[0]);
+
+    const element = addedElement() as Record<string, unknown>;
+    expect(element.groupId).toBe('group-a');
+  });
+});

@@ -4,6 +4,7 @@ import {
   projectLayerGroupRename,
   projectStableElementGroups,
 } from '@utils/layerGroupUtils';
+import { currentPluginGroupMembers } from './pluginGroupMembers';
 import {
   inheritedPaintMaterialization,
   paintPropertyFields,
@@ -471,6 +472,7 @@ const applySemanticOps = (
           graphPositions: next.graphPositions,
           knobPositions: next.knobPositions,
           layerGroups: next.layerGroups,
+          pluginElements: currentPluginGroupMembers(),
         });
         next.keyPositions = normalized.keyPositions;
         next.statPositions = normalized.statPositions;
@@ -491,6 +493,7 @@ const applySemanticOps = (
         graphPositions: next.graphPositions,
         knobPositions: next.knobPositions,
         layerGroups: next.layerGroups,
+        pluginElements: currentPluginGroupMembers(),
       });
       if (!projected) return;
       next.keyPositions = projected.keyPositions;
@@ -1012,6 +1015,7 @@ const applySemanticOps = (
         graphPositions: next.graphPositions,
         knobPositions: next.knobPositions,
         layerGroups: next.layerGroups,
+        pluginElements: currentPluginGroupMembers(),
       });
       next.keyPositions = normalized.keyPositions;
       next.statPositions = normalized.statPositions;

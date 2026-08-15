@@ -440,6 +440,30 @@ describe('useGridSelection compound history gesture', () => {
     expect(mocks.cancelUncommittedMixedGesture).toHaveBeenCalledWith(gestureId);
   });
 
+  it('플러그인 paste는 id를 재발급해 재붙여넣기에도 instanceId가 중복되지 않는다', async () => {
+    let serial = 0;
+    randomUUID.mockImplementation(
+      () => `70000000-0000-4000-8000-${String(++serial).padStart(12, '0')}`,
+    );
+    act(() => {
+      useGridSelectionStore
+        .getState()
+        .setClipboard([{ type: 'plugin', element: pluginClipboardElement() }]);
+    });
+
+    await act(async () => api.pasteElements());
+    await act(async () => api.pasteElements());
+
+    const elements = usePluginDisplayElementStore.getState().elements;
+    expect(elements).toHaveLength(3);
+    for (const pasted of elements.slice(1)) {
+      expect(pasted.id).not.toBe('element');
+      expect(pasted.fullId).toBe(`plugin-a::${pasted.id}`);
+    }
+    // 원본·1차·2차 모두 서로 다른 id
+    expect(new Set(elements.map((element) => element.id)).size).toBe(3);
+  });
+
   it('안정 id 이동 정산은 기하 의도 커밋에 gestureId를 전달한다', async () => {
     await act(async () => {
       useGridSelectionStore
@@ -620,8 +644,16 @@ describe('useGridSelection compound history gesture', () => {
     expect(kept.dy).toBe(keyPosition.dy);
   });
 
-  it('플러그인 전용 삭제 정산은 재주입된 projection에서 중단한다', async () => {
+  it('플러그인 전용 삭제 정산은 환생·낯선 fullId projection에서 중단한다', async () => {
+    const survivor: PluginDisplayElementInternal = {
+      ...pluginElement(),
+      id: 'survivor',
+      fullId: 'plugin-a:survivor',
+    };
     await act(async () => {
+      usePluginDisplayElementStore.setState({
+        elements: [pluginElement(), survivor],
+      });
       useGridSelectionStore
         .getState()
         .setSelectedElements([{ type: 'plugin', id: 'plugin-a:element' }]);
@@ -638,16 +670,27 @@ describe('useGridSelection compound history gesture', () => {
       }) => { kind: string };
     };
 
-    // 동결 시점에 알던 요소가 그대로면 정상 정산
+    // eager 제거가 반영된 projection이면 이미 의도 달성 - 무커밋 정산
     expect(
-      options.generate({ base: {}, pluginProjection: [pluginElement()] }).kind,
-    ).toBe('patch');
+      options.generate({ base: {}, pluginProjection: [survivor] }).kind,
+    ).toBe('satisfied');
 
-    // 재주입으로 낯선 fullId가 보이면 성공 위장 대신 중단한다
+    // diff-patch undo가 소멸 대상을 같은 fullId로 되살린 환생 - 재삭제 대신 중단
     expect(() =>
       options.generate({
         base: {},
-        pluginProjection: [{ ...pluginElement(), fullId: 'plugin-a::regen-1' }],
+        pluginProjection: [survivor, pluginElement()],
+      }),
+    ).toThrow(ElementIntentAbort);
+
+    // 낯선 fullId 출현(플러그인 리로드 등)도 성공 위장 대신 중단한다
+    expect(() =>
+      options.generate({
+        base: {},
+        pluginProjection: [
+          survivor,
+          { ...pluginElement(), fullId: 'plugin-a::regen-1' },
+        ],
       }),
     ).toThrow(ElementIntentAbort);
   });

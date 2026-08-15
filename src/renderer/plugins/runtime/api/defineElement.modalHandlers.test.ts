@@ -15,12 +15,13 @@ const pluginHandlerKeys = () =>
   );
 
 describe('defineElement modal handler lifecycle', () => {
+  const cleanups: Array<() => void> = [];
+
   beforeEach(() => {
     window.__dmn_current_plugin_id = 'plugin-a';
-    window.__dmn_window_type = 'overlay';
+    window.__dmn_window_type = 'main';
     handlerRegistry.clear();
     clearComponentHandlers('plugin-a');
-    window.__dmn_element_restorers = new Map();
     usePluginDisplayElementStore.setState({
       elements: [],
       definitions: new Map(),
@@ -28,10 +29,15 @@ describe('defineElement modal handler lifecycle', () => {
   });
 
   afterEach(() => {
+    while (cleanups.length > 0) cleanups.pop()?.();
     handlerRegistry.clear();
     clearComponentHandlers('plugin-a');
+    usePluginDisplayElementStore.setState({
+      elements: [],
+      definitions: new Map(),
+    });
     delete window.__dmn_current_plugin_id;
-    delete window.__dmn_element_restorers;
+    delete window.__dmn_window_type;
   });
 
   it('instance modal close와 reject 뒤 transient handler만 정리한다', async () => {
@@ -51,6 +57,10 @@ describe('defineElement modal handler lifecycle', () => {
     } as unknown as PluginDisplayElementInternal;
     usePluginDisplayElementStore.setState({ elements: [element] });
 
+    let menuItem:
+      | { onClick: (context: unknown) => unknown | Promise<unknown> }
+      | undefined;
+    const addElement = vi.fn();
     createDefineElement({
       pluginId: 'plugin-a',
       api: {
@@ -58,11 +68,20 @@ describe('defineElement modal handler lifecycle', () => {
         ui: {
           dialog: { custom },
           components: { checkbox: createCheckbox },
-          displayElement: { update: vi.fn() },
+          displayElement: { update: vi.fn(), add: addElement },
+          contextMenu: {
+            addGridMenuItem: vi.fn(
+              (item: { onClick: (context: unknown) => unknown }) => {
+                menuItem = item;
+                return 'menu-1';
+              },
+            ),
+            removeMenuItem: vi.fn(),
+          },
         },
       },
       namespacedStorage: { get: vi.fn().mockResolvedValue(null) },
-      registerCleanup: vi.fn(),
+      registerCleanup: (cleanup: () => void) => cleanups.push(cleanup),
       wrapFunctionWithContext: (fn) => fn,
       isReloading: () => false,
       waitForReloadEnd: vi.fn().mockResolvedValue(undefined),
@@ -76,11 +95,17 @@ describe('defineElement modal handler lifecycle', () => {
       template: () => '',
     });
 
-    const restore = window.__dmn_element_restorers?.get('plugin-a');
-    const restored = restore?.(element);
-    const persistentId = restored?._onClickId;
-    expect(persistentId).toBeTypeOf('string');
-    const click = handlerRegistry.get(persistentId!);
+    // 생성 메뉴가 add config에 싣는 영구 onClick 핸들러를 획득해 등록
+    await menuItem?.onClick({ position: { dx: 0, dy: 0 } });
+    const addConfig = addElement.mock.calls[0]?.[0] as {
+      onClick?: (event: Event) => unknown;
+    };
+    expect(addConfig?.onClick).toBeTypeOf('function');
+    const persistentId = handlerRegistry.register(
+      'plugin-a',
+      addConfig.onClick as never,
+    );
+    const click = handlerRegistry.get(persistentId);
     const event = {
       currentTarget: { getAttribute: () => element.fullId },
     } as unknown as Event;
@@ -91,6 +116,6 @@ describe('defineElement modal handler lifecycle', () => {
 
     await expect(click?.(event)).rejects.toThrow('dialog failed');
     expect(pluginHandlerKeys()).toEqual([persistentId]);
-    expect(handlerRegistry.get(persistentId!)).toBe(click);
+    expect(handlerRegistry.get(persistentId)).toBe(click);
   });
 });

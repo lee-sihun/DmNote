@@ -353,6 +353,7 @@ export const commitMixedGestureIntent = (options: {
           'tabId',
           'hidden',
           'zIndex',
+          'groupId',
         ] as const;
         const desired = lastGeneration?.desiredPluginProjection;
         if (desired) {

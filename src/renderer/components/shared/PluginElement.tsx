@@ -47,6 +47,7 @@ import {
 } from '@plugins/runtime/displayElement/instancesCommitQueue';
 import { commitStableLayerZOrder } from '@src/renderer/editor/runtime/layerZOrderIntent';
 import { reportElementOpError } from '@src/renderer/editor/runtime/elementIntent';
+import { expandGroupSelectionFromStores } from '@utils/grid/groupSelection';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
@@ -1302,10 +1303,15 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
     const settingsUI = definition?.settingsUI ?? 'panel';
     if (windowType === 'main' && settingsUI !== 'modal') {
       e.stopPropagation();
-      useGridSelectionStore.getState().selectElement({
-        type: 'plugin',
-        id: element.fullId,
-      });
+      // 그룹 멤버면 그룹 전체 선택 (native 클릭과 동일 의미론)
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements(
+          expandGroupSelectionFromStores(
+            { type: 'plugin', id: element.fullId },
+            useKeyStore.getState().selectedKeyType,
+          ),
+        );
       // 마지막 선택 요소 좌표 저장
       if (element.measuredSize) {
         useGridSelectionStore.getState().setLastSelectedKeyBounds({
@@ -1352,10 +1358,15 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       currentSelection.length > 1 &&
       currentSelection.some((el) => el.id === element.fullId);
     if (!isMultiMember) {
-      useGridSelectionStore.getState().selectElement({
-        type: 'plugin',
-        id: element.fullId,
-      });
+      // native 더블클릭과 동일하게 그룹 멤버 전체 선택 후 편집 진입
+      useGridSelectionStore
+        .getState()
+        .setSelectedElements(
+          expandGroupSelectionFromStores(
+            { type: 'plugin', id: element.fullId },
+            useKeyStore.getState().selectedKeyType,
+          ),
+        );
     }
     openPropertiesPanelForSelection();
   };

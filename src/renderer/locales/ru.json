@@ -357,8 +357,7 @@
   },
   "layerGroup": {
     "defaultName": "Группа",
-    "newGroup": "Новая группа",
-    "pluginNotIncluded": "Элементы плагинов не были включены в группу."
+    "newGroup": "Новая группа"
   },
   "noteColor": {
     "color": "Цвет",

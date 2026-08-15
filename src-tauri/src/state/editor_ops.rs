@@ -18,6 +18,7 @@ use crate::{
 use super::editor::{
     validate_document_transition, validate_editor_op_bounds, validate_editor_op_target_type,
 };
+use super::plugin::{plugin_group_refs_from_store, PluginGroupRefs};
 
 #[derive(Debug)]
 pub(crate) struct PreparedEditorOpsTransition {
@@ -959,6 +960,7 @@ fn apply_frozen_insert(
     Ok((candidate, EditorOpResultStatusV1::Applied))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_reorder(
     current: &EditorDocumentV1,
     locations: &HashMap<String, ElementLocation>,
@@ -966,6 +968,7 @@ fn apply_reorder(
     complete_mode_order: bool,
     z_updates: &[EditorZUpdateV1],
     group_updates: &[EditorGroupUpdateV1],
+    plugin_group_refs: &PluginGroupRefs,
 ) -> Result<(EditorDocumentV1, EditorOpResultStatusV1), EditorCommitError> {
     for update in z_updates {
         let Some(location) = locations.get(&update.id) else {
@@ -1066,7 +1069,11 @@ fn apply_reorder(
     }
     if complete_mode_order {
         let before = candidate.layer_groups.get(mode).map_or(0, Vec::len);
-        remove_empty_layer_groups(&mut candidate, &HashSet::from([mode.to_string()]));
+        remove_empty_layer_groups(
+            &mut candidate,
+            &HashSet::from([mode.to_string()]),
+            plugin_group_refs,
+        );
         changed |= candidate.layer_groups.get(mode).map_or(0, Vec::len) != before;
     }
 
@@ -1086,6 +1093,7 @@ fn apply_set_element_groups(
     mode: &str,
     targets: &[EditorElementGroupTargetV1],
     target_group: &Option<EditorTargetGroupV1>,
+    plugin_group_refs: &PluginGroupRefs,
 ) -> Result<(EditorDocumentV1, EditorOpResultStatusV1), EditorCommitError> {
     let mut target_missing = false;
     for target in targets {
@@ -1149,7 +1157,11 @@ fn apply_set_element_groups(
             position.group_id = next_group_id.cloned();
         }
     }
-    remove_empty_layer_groups(&mut candidate, &HashSet::from([mode.to_string()]));
+    remove_empty_layer_groups(
+        &mut candidate,
+        &HashSet::from([mode.to_string()]),
+        plugin_group_refs,
+    );
 
     let status = if candidate == *current {
         EditorOpResultStatusV1::NoChange
@@ -1237,7 +1249,11 @@ fn delete_elements(
     }
 }
 
-fn remove_empty_layer_groups(document: &mut EditorDocumentV1, affected_modes: &HashSet<String>) {
+fn remove_empty_layer_groups(
+    document: &mut EditorDocumentV1,
+    affected_modes: &HashSet<String>,
+    plugin_group_refs: &PluginGroupRefs,
+) {
     for mode in affected_modes {
         let mut referenced_group_ids = HashSet::new();
         let mut collect = |group_id: Option<&str>| {
@@ -1257,15 +1273,33 @@ fn remove_empty_layer_groups(document: &mut EditorDocumentV1, affected_modes: &H
         for position in document.knob_positions.get(mode).into_iter().flatten() {
             collect(position.position.group_id.as_deref());
         }
+        // 플러그인 멤버만 남은 그룹도 생존 - 참조 집합은 커밋 후 상태 기준
+        // (gesture는 요청 동봉 plugin_changes, editor 단독은 store decode)
+        let plugin_refs = plugin_group_refs.get(mode);
         if let Some(groups) = document.layer_groups.get_mut(mode) {
-            groups.retain(|group| referenced_group_ids.contains(&group.id));
+            groups.retain(|group| {
+                referenced_group_ids.contains(&group.id)
+                    || plugin_refs.is_some_and(|refs| refs.contains(&group.id))
+            });
         }
     }
 }
 
+// editor 단독 commit: 플러그인 그룹 참조를 store 인스턴스 decode로 파생
 pub(crate) fn prepare_editor_ops_transition(
     current_store: &AppStoreData,
     ops: &[EditorOpV1],
+) -> Result<PreparedEditorOpsTransition, EditorCommitError> {
+    let plugin_group_refs = plugin_group_refs_from_store(current_store, &HashSet::new());
+    prepare_editor_ops_transition_with_plugin_refs(current_store, ops, &plugin_group_refs)
+}
+
+// gesture 경로 전용: editor op 적용이 pluginChanges보다 먼저 실행되므로
+// 요청 동봉 plugin_changes에서 파생한 참조 집합을 우선 사용해야 한다
+pub(crate) fn prepare_editor_ops_transition_with_plugin_refs(
+    current_store: &AppStoreData,
+    ops: &[EditorOpV1],
+    plugin_group_refs: &PluginGroupRefs,
 ) -> Result<PreparedEditorOpsTransition, EditorCommitError> {
     let current = EditorDocumentV1::from_store(current_store);
     let locations = build_element_locator(&current)?;
@@ -2504,6 +2538,7 @@ pub(crate) fn prepare_editor_ops_transition(
                     *complete_mode_order,
                     z_updates,
                     group_updates,
+                    plugin_group_refs,
                 )?;
                 candidate = next;
                 op_results.push(EditorOpResultV1 {
@@ -2516,8 +2551,14 @@ pub(crate) fn prepare_editor_ops_transition(
                 targets,
                 target_group,
             } => {
-                let (next, status) =
-                    apply_set_element_groups(&candidate, &locations, mode, targets, target_group)?;
+                let (next, status) = apply_set_element_groups(
+                    &candidate,
+                    &locations,
+                    mode,
+                    targets,
+                    target_group,
+                    plugin_group_refs,
+                )?;
                 candidate = next;
                 op_results.push(EditorOpResultV1 {
                     status,
@@ -2539,7 +2580,7 @@ pub(crate) fn prepare_editor_ops_transition(
         }
     }
     delete_elements(&mut candidate, &delete_ids);
-    remove_empty_layer_groups(&mut candidate, &delete_modes);
+    remove_empty_layer_groups(&mut candidate, &delete_modes, plugin_group_refs);
 
     let mut scratch = current_store.clone();
     candidate.apply_to_store(&mut scratch);

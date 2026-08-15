@@ -322,6 +322,102 @@ describe('layer reorder slot generation', () => {
     ]);
   });
 
+  it('그룹 드롭은 plugin groupId를 eager와 desired에 반영하고 receipt는 CAS 복원한다', async () => {
+    installDocument(
+      documentWith(
+        [{ id: ID_A, zIndex: 2, groupId: 'group-a' }],
+        [{ id: 'group-a', name: 'A' }],
+      ),
+    );
+    usePluginDisplayElementStore.setState({
+      elements: [plugin('plugin:one', 1, '4key')],
+    });
+
+    await commitLayerDropIntent({
+      kind: 'items',
+      mode: '4key',
+      collapsedGroupIds: [],
+      draggedIds: ['plugin:one'],
+      anchors: {
+        toDisplayIndex: 1,
+        targetGroupId: 'group-a',
+        anchorHeaderGroupId: 'group-a',
+      },
+      preserveFullGroups: false,
+    });
+
+    // eager: plugin 소속이 스토어에 즉시 반영
+    expect(usePluginDisplayElementStore.getState().elements[0]?.groupId).toBe(
+      'group-a',
+    );
+
+    const options = mocks.runMixed.mock.calls[0]?.[0];
+    const generation = options.generate({
+      base: documentWith(
+        [{ id: ID_A, zIndex: 2, groupId: 'group-a' }],
+        [{ id: 'group-a', name: 'A' }],
+      ),
+      pluginProjection: [plugin('plugin:one', 1, '4key')],
+    });
+    const desired =
+      generation.desiredPluginProjection as PluginDisplayElementInternal[];
+    expect(
+      desired.find((element) => element.fullId === 'plugin:one')?.groupId,
+    ).toBe('group-a');
+    // op는 native만 운반 - plugin 소속은 desired projection(pluginChanges) 몫
+    expect(generation.ops[0].groupUpdates).toEqual([]);
+
+    // receipt CAS: 우리가 쓴 값 그대로일 때만 복원
+    options.receipt.rollback();
+    expect(
+      usePluginDisplayElementStore.getState().elements[0]?.groupId,
+    ).toBeUndefined();
+  });
+
+  it('저장 규칙 밖 모드의 plugin에는 그룹 소속을 부여하지 않는다', async () => {
+    installDocument(
+      documentWith(
+        [{ id: ID_A, zIndex: 2, groupId: 'group-a' }],
+        [{ id: 'group-a', name: 'A' }],
+      ),
+    );
+    // tabId 미지정 - 표시상 모든 모드에 보이지만 저장은 4key 소속.
+    // 4key 그룹 소속을 가진 채 7key에서 드래그해도 소속이 지워지면 안 된다
+    const globalPlugin = {
+      ...plugin('plugin:global', 1),
+      groupId: 'group-a',
+    } as PluginDisplayElementInternal;
+    usePluginDisplayElementStore.setState({ elements: [globalPlugin] });
+
+    await commitLayerDropIntent({
+      kind: 'items',
+      mode: '7key',
+      collapsedGroupIds: [],
+      draggedIds: ['plugin:global'],
+      anchors: {
+        toDisplayIndex: 1,
+        targetGroupId: undefined,
+        boundary: 'bottom',
+      },
+      preserveFullGroups: false,
+    });
+
+    const options = mocks.runMixed.mock.calls[0]?.[0];
+    const generation = options.generate({
+      base: documentWith([]),
+      pluginProjection: [globalPlugin],
+    });
+    const desired =
+      generation.desiredPluginProjection as PluginDisplayElementInternal[];
+    // 저장 규칙(4key) 밖 모드의 드롭은 groupId를 건드리지 않는다 (z 재부여만)
+    expect(
+      desired.find((element) => element.fullId === 'plugin:global')?.groupId,
+    ).toBe('group-a');
+    expect(usePluginDisplayElementStore.getState().elements[0]?.groupId).toBe(
+      'group-a',
+    );
+  });
+
   it('초기 eager를 적용하고 실패 receipt는 자기 값만 복원한다', async () => {
     installDocument(
       documentWith(

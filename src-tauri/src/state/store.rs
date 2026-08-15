@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     path::{Component, Path, PathBuf},
     sync::{mpsc, Arc},
@@ -31,7 +31,9 @@ use super::editor::{
     validate_history_restore_metadata, validate_paired_update, validate_request_envelope,
     RequestFingerprint, MUTATION_ACK_CAPACITY,
 };
-use super::editor_ops::prepare_editor_ops_transition;
+use super::editor_ops::{
+    prepare_editor_ops_transition, prepare_editor_ops_transition_with_plugin_refs,
+};
 use super::gesture::validate_gesture_commit_request;
 use super::history::{
     CustomTabsHistorySnapshot, HistoryAdmissionGate, HistoryAdmissionLease, HistoryDirection,
@@ -46,9 +48,12 @@ use super::migration::{
     rehome_foreign_asset_references,
 };
 use super::plugin::{
-    decode_plugin_instances, encode_plugin_instances, normalize_plugin_instance_tab_id,
-    plugin_instances_storage_key, validate_plugin_id, validate_plugin_instances_reconcile_request,
-    validate_plugin_instances_request,
+    add_plugin_group_refs, decode_plugin_instances, encode_plugin_instances,
+    for_each_stored_plugin_instances, is_plugin_instances_storage_key,
+    normalize_plugin_instance_tab_id, plugin_group_refs_from_store,
+    plugin_id_from_instances_storage_key, plugin_instances_storage_key, validate_plugin_id,
+    validate_plugin_instances_reconcile_request, validate_plugin_instances_request,
+    PluginGroupRefs,
 };
 
 const TRASH_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -1135,7 +1140,23 @@ impl AppStore {
                     prepare_editor_patch_transition(&current_store, changes, &touched_fields)?;
                 (current, candidate, scratch, changed_fields, None)
             } else if let Some(ops) = request.editor_ops.as_ref() {
-                let transition = prepare_editor_ops_transition(&current_store, ops)?;
+                // editor op 적용이 pluginChanges보다 먼저다 - 그룹 생존 판정은
+                // 요청 동봉 plugin_changes(커밋 후 상태)를 우선, 미동봉 플러그인만 store
+                let request_plugin_ids = request
+                    .plugin_changes
+                    .iter()
+                    .map(|change| change.plugin_id.as_str())
+                    .collect::<HashSet<_>>();
+                let mut plugin_group_refs =
+                    plugin_group_refs_from_store(&current_store, &request_plugin_ids);
+                for change in &request.plugin_changes {
+                    add_plugin_group_refs(&mut plugin_group_refs, &change.instances);
+                }
+                let transition = prepare_editor_ops_transition_with_plugin_refs(
+                    &current_store,
+                    ops,
+                    &plugin_group_refs,
+                )?;
                 (
                     transition.current,
                     transition.candidate,
@@ -2002,6 +2023,22 @@ impl AppStore {
         let instances =
             decode_plugin_instances(guard.data.plugin_data.get(&key))?.unwrap_or_default();
         Ok((instances, guard.plugin_model_revision))
+    }
+
+    // 전 플러그인 저장 인스턴스의 그룹 참조를 pluginId 구분 유지로 수집 - 미로드
+    // 플러그인 포함. 순회·관대 decode 규칙은 for_each_stored_plugin_instances가
+    // 단일 소스 (병합 소비가 플러그인 단위라 수집 형태만 다름)
+    pub(crate) fn plugin_group_refs_by_plugin(&self) -> (HashMap<String, PluginGroupRefs>, u64) {
+        let guard = self.state.read();
+        let mut refs_by_plugin: HashMap<String, PluginGroupRefs> = HashMap::new();
+        for_each_stored_plugin_instances(&guard.data, |plugin_id, instances| {
+            let mut refs = PluginGroupRefs::new();
+            add_plugin_group_refs(&mut refs, &instances);
+            if !refs.is_empty() {
+                refs_by_plugin.insert(plugin_id.to_string(), refs);
+            }
+        });
+        (refs_by_plugin, guard.plugin_model_revision)
     }
 
     #[cfg(test)]
@@ -2957,16 +2994,6 @@ fn next_plugin_model_revision(current: u64) -> Result<u64, String> {
         .checked_add(1)
         .filter(|revision| *revision <= crate::state::editor::MAX_SAFE_EDITOR_REVISION)
         .ok_or_else(|| "PLUGIN_MODEL_REVISION_OUT_OF_RANGE".to_string())
-}
-
-fn plugin_id_from_instances_storage_key(key: &str) -> Option<&str> {
-    key.strip_prefix("plugin_data_")
-        .and_then(|key| key.strip_suffix("/instances"))
-        .filter(|plugin_id| !plugin_id.is_empty())
-}
-
-fn is_plugin_instances_storage_key(key: &str) -> bool {
-    plugin_id_from_instances_storage_key(key).is_some()
 }
 
 fn collect_plugin_instance_ids<'a>(keys: impl Iterator<Item = &'a str>) -> Vec<String> {
@@ -4455,12 +4482,18 @@ mod tests {
 
     fn saved_plugin_instance(x: f64) -> SavedPluginInstance {
         SavedPluginInstance {
+            // x 파생 결정적 ID - 같은 x는 같은 인스턴스라는 동등성 단언 유지
+            instance_id: Some(format!(
+                "00000000-0000-4000-8000-{:012x}",
+                (x * 1000.0) as u64
+            )),
             position: PluginPoint { x, y: 20.0 },
             settings: None,
             measured_size: None,
             tab_id: Some("4key".to_string()),
             hidden: false,
             z_index: None,
+            group_id: None,
         }
     }
 
@@ -4695,6 +4728,73 @@ mod tests {
     }
 
     #[test]
+    fn plugin_instance_identity_fields_survive_commit_and_restart() {
+        let dir = test_directory("plugin-instance-identity-restart-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut expected = saved_plugin_instance(15.0);
+        expected.instance_id = Some(uuid::Uuid::new_v4().to_string());
+        expected.group_id = Some("layer-group".to_string());
+        let committed = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![expected.clone()],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(committed);
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![expected.clone()]
+        );
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+
+        let restored = AppStore::initialize_in_dir(&dir).unwrap();
+        assert_eq!(
+            restored.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![expected]
+        );
+
+        restored.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_instances_allow_same_instance_id_across_plugins() {
+        // instance_id 유일성은 플러그인 단위 네임스페이스 - fullId가 pluginId로
+        // 접두되므로 서로 다른 플러그인 간 같은 ID는 충돌하지 않는다
+        let dir = test_directory("plugin-instance-cross-plugin-id-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let mut instance = saved_plugin_instance(10.0);
+        instance.instance_id = Some(uuid::Uuid::new_v4().to_string());
+
+        for plugin_id in ["demo-plugin", "other-plugin"] {
+            let committed = store
+                .commit_plugin_instances(plugin_instances_request(
+                    plugin_id,
+                    vec![instance.clone()],
+                    uuid::Uuid::new_v4().to_string(),
+                    None,
+                    Some(store.plugin_model_revision()),
+                ))
+                .unwrap();
+            assert!(committed.outcome.changed);
+            drop(committed);
+            assert_eq!(
+                store.plugin_instances_get(plugin_id).unwrap().0,
+                vec![instance.clone()]
+            );
+        }
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn plugin_instances_history_budget_truncates_after_successful_commit() {
         let dir = test_directory("plugin-instances-budget-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -4897,6 +4997,270 @@ mod tests {
         drop(redo_barrier);
 
         store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn empty_targets_group_create_op(group_id: &str, name: &str) -> EditorOpV1 {
+        EditorOpV1::SetElementGroups {
+            mode: "4key".to_string(),
+            targets: Vec::new(),
+            target_group: Some(crate::models::EditorTargetGroupV1::Create {
+                id: group_id.to_string(),
+                name: name.to_string(),
+            }),
+        }
+    }
+
+    #[test]
+    fn plugin_only_group_survives_gesture_and_editor_normalize() {
+        let dir = test_directory("plugin-group-survival-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+
+        // gesture 동봉: 빈 native targets op가 def를 만들고, 생존 판정은
+        // 요청 동봉 plugin_changes의 group_id를 쓴다 (store 값은 아직 무소속)
+        let mut grouped = saved_plugin_instance(10.0);
+        grouped.group_id = Some("plugin-group".to_string());
+        let committed = store
+            .commit_gesture(gesture_ops_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::new_v4().to_string(),
+                vec![empty_targets_group_create_op(
+                    "plugin-group",
+                    "Plugin Group",
+                )],
+                "demo-plugin",
+                vec![grouped.clone()],
+            ))
+            .unwrap();
+        assert_eq!(
+            committed.outcome.result.changed_fields,
+            vec![EditorField::LayerGroups]
+        );
+        drop(committed);
+        assert_eq!(
+            store.editor_get().document.layer_groups["4key"],
+            vec![crate::models::LayerGroupDef {
+                id: "plugin-group".to_string(),
+                name: "Plugin Group".to_string(),
+            }]
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![grouped.clone()]
+        );
+
+        // editor 단독 commit: normalize가 store 인스턴스 decode의 group_id
+        // 참조로 def를 보존한다 (플러그인만 남은 그룹 생존)
+        let victim_id = store.editor_get().document.key_positions["4key"][0]
+            .id
+            .clone();
+        store
+            .commit_editor_document(editor_ops_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![EditorOpV1::DeleteElement {
+                    element_type: EditorElementTypeV1::Key,
+                    id: victim_id,
+                }],
+            ))
+            .unwrap();
+        assert_eq!(
+            store.editor_get().document.layer_groups["4key"],
+            vec![crate::models::LayerGroupDef {
+                id: "plugin-group".to_string(),
+                name: "Plugin Group".to_string(),
+            }]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn gesture_group_membership_undo_restores_editor_and_plugin_atomically() {
+        let dir = test_directory("plugin-group-compound-undo-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+
+        // 선행: 무소속 인스턴스 저장 (히스토리 1)
+        let seeded = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(seeded);
+
+        // 그룹화: def 생성 + 플러그인 소속 부여를 같은 gestureId 커밋에 결합
+        let mut grouped = saved_plugin_instance(10.0);
+        grouped.group_id = Some("plugin-group".to_string());
+        let committed = store
+            .commit_gesture(gesture_ops_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                uuid::Uuid::new_v4().to_string(),
+                vec![empty_targets_group_create_op(
+                    "plugin-group",
+                    "Plugin Group",
+                )],
+                "demo-plugin",
+                vec![grouped.clone()],
+            ))
+            .unwrap();
+        drop(committed);
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![grouped.clone()]
+        );
+
+        // undo 1회로 layerGroups와 plugin group_id가 원자 복원
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(undo_barrier);
+        assert!(store
+            .editor_get()
+            .document
+            .layer_groups
+            .get("4key")
+            .is_none_or(|groups| groups.is_empty()));
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(10.0)]
+        );
+
+        // redo 1회로 동반 복귀
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(redo_barrier);
+        assert_eq!(
+            store.editor_get().document.layer_groups["4key"],
+            vec![crate::models::LayerGroupDef {
+                id: "plugin-group".to_string(),
+                name: "Plugin Group".to_string(),
+            }]
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![grouped]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dangling_plugin_group_id_neither_blocks_commits_nor_resurrects_groups() {
+        let dir = test_directory("plugin-group-dangling-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+
+        // def 없는 group_id 저장 수용 (그룹 존재 검증은 도메인 결합 회피로 미수행)
+        let mut dangling = saved_plugin_instance(10.0);
+        dangling.group_id = Some("missing-group".to_string());
+        let committed = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![dangling.clone()],
+                uuid::Uuid::new_v4().to_string(),
+                None,
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(committed);
+
+        // normalize 경유 editor 커밋이 막히지 않고, 없는 def를 만들지도 않는다
+        let victim_id = store.editor_get().document.key_positions["4key"][0]
+            .id
+            .clone();
+        store
+            .commit_editor_document(editor_ops_request(
+                store.editor_get().revision,
+                uuid::Uuid::new_v4().to_string(),
+                vec![EditorOpV1::DeleteElement {
+                    element_type: EditorElementTypeV1::Key,
+                    id: victim_id,
+                }],
+            ))
+            .unwrap();
+        assert!(store
+            .editor_get()
+            .document
+            .layer_groups
+            .get("4key")
+            .is_none_or(|groups| groups.is_empty()));
+        // dangling group_id는 읽기 가드가 무해화 - 저장 값은 보존
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![dangling]
+        );
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn plugin_group_refs_by_plugin_includes_unloaded_data_and_skips_broken_keys() {
+        let dir = test_directory("plugin-group-refs-by-plugin-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut data = initialize_default_state();
+
+        // 미로드 플러그인 시나리오 - 런타임 등록 없이 저장 데이터만 존재.
+        // tab 미지정 인스턴스는 4key로 normalize
+        let mut first = saved_plugin_instance(10.0);
+        first.group_id = Some("group-a".to_string());
+        let mut second = saved_plugin_instance(20.0);
+        second.tab_id = None;
+        second.group_id = Some("group-b".to_string());
+        let mut third = saved_plugin_instance(30.0);
+        third.tab_id = Some("6key".to_string());
+        third.group_id = Some("group-c".to_string());
+        let ungrouped = saved_plugin_instance(40.0);
+        data.plugin_data.insert(
+            super::plugin_instances_storage_key("grouped-plugin"),
+            serde_json::to_value(vec![first, second, third, ungrouped]).unwrap(),
+        );
+        // 그룹 참조 없는 플러그인은 결과에서 제외
+        data.plugin_data.insert(
+            super::plugin_instances_storage_key("plain-plugin"),
+            serde_json::to_value(vec![saved_plugin_instance(50.0)]).unwrap(),
+        );
+        // 형태가 깨진 인스턴스 키는 집계만 skip
+        data.plugin_data.insert(
+            super::plugin_instances_storage_key("broken-plugin"),
+            json!({ "not": "an array" }),
+        );
+        // 인스턴스 예약 키가 아닌 plugin_data는 무시
+        data.plugin_data.insert(
+            "plugin_data_grouped-plugin/settings".to_string(),
+            json!({ "groupId": "not-a-ref" }),
+        );
+        let store = AppStore::new(dir.join("store.json"), data, false).unwrap();
+
+        let (refs, model_revision) = store.plugin_group_refs_by_plugin();
+        assert_eq!(model_revision, store.plugin_model_revision());
+        assert_eq!(refs.len(), 1);
+        let grouped = &refs["grouped-plugin"];
+        assert_eq!(
+            grouped["4key"],
+            HashSet::from(["group-a".to_string(), "group-b".to_string()])
+        );
+        assert_eq!(grouped["6key"], HashSet::from(["group-c".to_string()]));
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -6628,6 +6992,203 @@ mod tests {
             .0
             .is_empty());
         drop(undo_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn early_plugin_commit_and_gesture_commit_share_one_undo_step() {
+        let dir = test_directory("early-plugin-gesture-merge-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        // 디바운스 plugin 커밋이 gesture 커밋보다 먼저 착지한 순서
+        let plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id.clone()),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(plugin);
+        let committed = store
+            .commit_gesture(gesture_request(
+                &store,
+                gesture_id,
+                position_patch(&store, initial_x + 40.0),
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+            ))
+            .unwrap();
+        drop(committed);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x + 40.0
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(10.0)]
+        );
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(!store.history_status().can_undo);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&redo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x + 40.0
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(10.0)]
+        );
+        assert!(!store.history_status().can_redo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn early_plugin_commit_with_a_different_gesture_stays_a_separate_undo_step() {
+        let dir = test_directory("early-plugin-other-gesture-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+
+        let plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(uuid::Uuid::new_v4().to_string()),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(plugin);
+        let committed = store
+            .commit_gesture(gesture_request(
+                &store,
+                uuid::Uuid::new_v4().to_string(),
+                position_patch(&store, initial_x + 40.0),
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+            ))
+            .unwrap();
+        drop(committed);
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let first_undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&first_undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &first_undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(10.0)]
+        );
+
+        let second_undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&second_undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &second_undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(!store.history_status().can_undo);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn gesture_merge_with_a_reverted_plugin_state_keeps_one_undo_step() {
+        let dir = test_directory("gesture-merge-reverted-plugin-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let initial_x = store.editor_get().document.key_positions["4key"][0].dx;
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        let plugin = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(10.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id.clone()),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        drop(plugin);
+        // gesture 커밋이 plugin을 선행 커밋 이전 상태로 되돌리는 net-zero 조합
+        let committed = store
+            .commit_gesture(gesture_request(
+                &store,
+                gesture_id,
+                position_patch(&store, initial_x + 40.0),
+                "demo-plugin",
+                Vec::new(),
+            ))
+            .unwrap();
+        drop(committed);
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let barrier = gate.close(&undo_id).unwrap();
+        store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        drop(barrier);
+        assert_eq!(
+            store.editor_get().document.key_positions["4key"][0].dx,
+            initial_x
+        );
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(!store.history_status().can_undo);
 
         store.flush_and_shutdown().unwrap();
         let _ = std::fs::remove_dir_all(dir);

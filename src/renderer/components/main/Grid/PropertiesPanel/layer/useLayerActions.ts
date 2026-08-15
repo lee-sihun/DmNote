@@ -29,9 +29,15 @@ import {
   patchElementHiddenById,
   patchElementLayerNameById,
   renameLayerGroupById,
-  setElementGroupsByTargets,
-  setLayerGroupHidden,
 } from '@src/renderer/editor/runtime/elementOps';
+import {
+  setMixedElementGroups,
+  setMixedLayerGroupHidden,
+} from '@src/renderer/editor/runtime/mixedElementGroups';
+import {
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
 import {
   resolveElementById,
   type NativeElementType,
@@ -69,9 +75,18 @@ const stableSelectionGroupId = (
       element.type === 'graph' ||
       element.type === 'knob',
   );
-  if (native.length === 0 || native.some(({ id }) => !isNativeElementId(id))) {
+  const plugin = elements.filter((element) => element.type === 'plugin');
+  if (
+    (native.length === 0 && plugin.length === 0) ||
+    native.some(({ id }) => !isNativeElementId(id))
+  ) {
     return { stable: false };
   }
+  const modeGroupIds = new Set(
+    (useLayerGroupStore.getState().layerGroups[mode] ?? []).map(
+      (group) => group.id,
+    ),
+  );
   const groupIds = new Set<string>();
   for (const element of native) {
     const locator = resolveElementById(element.type, element.id);
@@ -86,6 +101,17 @@ const stableSelectionGroupId = (
         : useKnobItemStore.getState().positions;
     const groupId = record[mode]?.[locator.index]?.groupId;
     if (groupId) groupIds.add(groupId);
+  }
+  // 플러그인 소속도 단일 그룹 판정에 포함 - 모드 def가 있는 groupId만 유효.
+  // 패널 창의 elements는 항상 비어 있으므로 창별 미러 셀렉터를 경유한다
+  const pluginElements = selectPropertyPanelPluginElements(
+    usePluginDisplayElementStore.getState(),
+  );
+  for (const element of plugin) {
+    const groupId = pluginElements.find(
+      (candidate) => candidate.fullId === element.id,
+    )?.groupId;
+    if (groupId && modeGroupIds.has(groupId)) groupIds.add(groupId);
   }
   return groupIds.size === 1
     ? { stable: true, groupId: [...groupIds][0] }
@@ -190,9 +216,20 @@ export function useLayerActions({
 
     const allHidden = children.every((c) => c.hidden);
     const newHidden = !allHidden;
+    const nativeChildren = children.filter((child) => child.type !== 'plugin');
+    const pluginTargets = children
+      .filter((child) => child.type === 'plugin')
+      .map((child) => ({ fullId: child.id, hidden: newHidden }));
 
     try {
       if (window.__dmn_window_type === 'panel') {
+        if (nativeChildren.length === 0) {
+          // plugin-only 그룹 - editor 변경이 없어 단일 plugin 커밋으로 충분
+          await setPluginElementsHidden(pluginTargets);
+          return;
+        }
+        // native+plugin은 main authority가 단일 게스처로 정산 - 별도
+        // plugin 커밋을 보내면 히스토리가 2엔트리로 갈라진다
         await setLayerGroupVisibilityViaAuthority(
           selectedKeyType,
           groupId,
@@ -200,14 +237,11 @@ export function useLayerActions({
         );
         return;
       }
-      if (
-        children.some(
-          (child) => child.type !== 'plugin' && !isNativeElementId(child.id),
-        )
-      ) {
+      if (nativeChildren.some((child) => !isNativeElementId(child.id))) {
         return;
       }
-      await setLayerGroupHidden(selectedKeyType, groupId, newHidden);
+      // 혼합·plugin-only 분기는 mixed 진입점이 판정 (native-only는 위임)
+      await setMixedLayerGroupHidden(selectedKeyType, groupId, newHidden);
     } catch (error) {
       console.error('Failed to toggle group visibility', error);
     }
@@ -297,10 +331,15 @@ export function useLayerActions({
           ? [{ elementType: element.type, id: element.id }]
           : [],
     );
-    if (nativeTargets.length === 0) return false;
+    const pluginTargets = selectedForUpdate
+      .filter((element) => element.type === 'plugin')
+      .map((element) => element.id);
+    if (nativeTargets.length === 0 && pluginTargets.length === 0) return false;
     const stableTargets =
       nativeTargets.every(({ id }) => isNativeElementId(id)) &&
-      new Set(nativeTargets.map(({ id }) => id)).size === nativeTargets.length;
+      new Set(nativeTargets.map(({ id }) => id)).size ===
+        nativeTargets.length &&
+      new Set(pluginTargets).size === pluginTargets.length;
     if (stableTargets) {
       let targetGroup: EditorTargetLayerGroupV1 | null = null;
       if (targetGroupId) {
@@ -322,10 +361,12 @@ export function useLayerActions({
             selectedKeyType,
             nativeTargets,
             targetGroup,
+            pluginTargets,
           )
-        : setElementGroupsByTargets(
+        : setMixedElementGroups(
             selectedKeyType,
             nativeTargets,
+            pluginTargets,
             targetGroup,
           );
     }
@@ -353,11 +394,9 @@ export function useLayerActions({
     ];
 
     if (selectedElements.length >= 2 && !contextMenuItem?.groupId) {
-      // 플러그인만 선택이면 그룹화 비활성
       items.push({
         id: 'groupSelected',
         label: t('contextMenu.groupSelected') || 'Group',
-        disabled: !selectedElements.some((el) => el.type !== 'plugin'),
       });
     }
 
@@ -509,9 +548,8 @@ export function useLayerActions({
       if (!stableGroup.stable) return;
       const singleGroupId = stableGroup.groupId;
 
-      let changed = false;
       if (singleGroupId) {
-        changed = await setGroupIdOnSelected(singleGroupId);
+        await setGroupIdOnSelected(singleGroupId);
       } else {
         const groupId = crypto.randomUUID();
         const groupName = buildNextLayerGroupName(
@@ -523,18 +561,10 @@ export function useLayerActions({
           [selectedKeyType]: [...modeGroups, { id: groupId, name: groupName }],
         };
 
-        changed = await setGroupIdOnSelected(groupId, undefined, {
+        await setGroupIdOnSelected(groupId, undefined, {
           historyLayerGroups: currentGroups,
           layerGroupsForNormalization: nextGroups,
         });
-      }
-
-      // 플러그인은 groupId 스키마가 없어 그룹 대상에서 제외 - 혼합 선택 성공 시 1회 알림
-      if (
-        changed &&
-        selectedElements.some((element) => element.type === 'plugin')
-      ) {
-        window.__dmn_showAlert?.(t('layerGroup.pluginNotIncluded'));
       }
 
       setContextMenuOpen(false);
@@ -543,21 +573,24 @@ export function useLayerActions({
 
     // 그룹에서 제거
     if (itemId === 'removeFromGroup') {
-      if (
-        contextMenuItem &&
-        contextMenuItem.type !== 'plugin' &&
-        isNativeElementId(contextMenuItem.id)
-      ) {
-        const elements: SelectedElement[] = [
-          {
-            type: contextMenuItem.type,
-            id: contextMenuItem.id,
-            index: contextMenuItem.index,
-          },
-        ];
-        await setGroupIdOnSelected(undefined, elements);
-        onSelectionFromPanel?.();
-        useGridSelectionStore.getState().clearSelection();
+      if (contextMenuItem) {
+        const elements: SelectedElement[] =
+          contextMenuItem.type === 'plugin'
+            ? [{ type: 'plugin', id: contextMenuItem.id }]
+            : isNativeElementId(contextMenuItem.id)
+            ? [
+                {
+                  type: contextMenuItem.type,
+                  id: contextMenuItem.id,
+                  index: contextMenuItem.index,
+                },
+              ]
+            : [];
+        if (elements.length > 0) {
+          await setGroupIdOnSelected(undefined, elements);
+          onSelectionFromPanel?.();
+          useGridSelectionStore.getState().clearSelection();
+        }
       }
       setContextMenuOpen(false);
       return;

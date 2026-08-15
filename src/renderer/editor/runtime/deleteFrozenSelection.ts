@@ -209,6 +209,12 @@ export const deleteFrozenSelection = async (
     }
     let layerGroups = document.layerGroups;
     let groupsChanged = false;
+    // 삭제 후 남는 플러그인만 그룹 생존에 기여 - 삭제 대상 포함 집계는
+    // 백엔드(plugin_changes 반영)와 어긋나 빈 그룹을 되살린다
+    const deletedPluginIds = new Set(pluginFullIds);
+    const remainingPluginElements = usePluginDisplayElementStore
+      .getState()
+      .elements.filter((element) => !deletedPluginIds.has(element.fullId));
     for (const mode of affectedModes) {
       const normalized = normalizeLayerGroupsForMode({
         mode,
@@ -217,6 +223,7 @@ export const deleteFrozenSelection = async (
         graphPositions: next.graphPositions as never,
         knobPositions: next.knobPositions as never,
         layerGroups: layerGroups as never,
+        pluginElements: remainingPluginElements,
       });
       next.keyPositions = normalized.keyPositions as never;
       next.statPositions = normalized.statPositions as never;
@@ -323,12 +330,19 @@ export const deleteFrozenSelection = async (
           // 여기는 stableTargets가 빈 plugin 전용 경로다. native 삭제 대상이
           // 없어 editor patch는 항상 비고, plugin projection만 정산한다
           generate: ({ pluginProjection }) => {
-            // 동결 이후 재주입으로 신원이 갈렸으면 삭제 대상 매칭 자체가
-            // 무의미하다 - 성공 위장 대신 중단해 skip 관측에 맡긴다
+            // 동결 이후 낯선 fullId 출현(플러그인 리로드 등)은 신원이 갈린
+            // 것이다 - 성공 위장 대신 중단해 skip 관측에 맡긴다 (방어 존치)
             if (
               pluginProjection.some(
                 (element) => !sealedKnownFullIds.has(element.fullId),
               )
+            ) {
+              throw new ElementIntentAbort('batch delete settlement');
+            }
+            // diff-patch undo는 같은 fullId를 되살린다 - 소멸 대상의 재출현은
+            // undo 환생 신호라 재삭제 정산 대신 중단한다
+            if (
+              pluginProjection.some((element) => deleted.has(element.fullId))
             ) {
               throw new ElementIntentAbort('batch delete settlement');
             }

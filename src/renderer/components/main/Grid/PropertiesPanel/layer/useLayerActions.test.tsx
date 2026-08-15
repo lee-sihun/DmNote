@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
 import type { LayerItem } from '../types';
 
@@ -16,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   setGroupHidden: vi.fn(() => Promise.resolve(true)),
   setGroupHiddenLegacy: vi.fn(() => Promise.resolve(true)),
   setElementGroups: vi.fn(() => Promise.resolve(true)),
+  setMixedElementGroups: vi.fn(() => Promise.resolve(true)),
+  setMixedGroupHidden: vi.fn(() => Promise.resolve(true)),
   renameLayerGroup: vi.fn(() => Promise.resolve(true)),
   setElementGroupsViaAuthority: vi.fn(() => Promise.resolve(true)),
   renameLayerGroupViaAuthority: vi.fn(() => Promise.resolve(true)),
@@ -35,6 +38,10 @@ vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
 }));
 vi.mock('@src/renderer/editor/runtime/deleteFrozenSelection', () => ({
   deleteFrozenSelection: vi.fn(),
+}));
+vi.mock('@src/renderer/editor/runtime/mixedElementGroups', () => ({
+  setMixedElementGroups: mocks.setMixedElementGroups,
+  setMixedLayerGroupHidden: mocks.setMixedGroupHidden,
 }));
 vi.mock('@plugins/rpc/pluginElementActions', () => ({
   patchNativeLayerPropertyViaAuthority: mocks.patchPropertyViaAuthority,
@@ -97,6 +104,10 @@ describe('useLayerActions visibility routing', () => {
     mocks.setGroupHidden.mockClear();
     mocks.setGroupHiddenLegacy.mockClear();
     mocks.setElementGroups.mockClear();
+    mocks.setMixedElementGroups.mockClear();
+    mocks.setMixedElementGroups.mockResolvedValue(true);
+    mocks.setMixedGroupHidden.mockClear();
+    mocks.setMixedGroupHidden.mockResolvedValue(true);
     mocks.renameLayerGroup.mockClear();
     mocks.setElementGroupsViaAuthority.mockClear();
     mocks.renameLayerGroupViaAuthority.mockClear();
@@ -113,6 +124,10 @@ describe('useLayerActions visibility routing', () => {
       } as never,
     });
     useLayerGroupStore.setState({ layerGroups: {} });
+    usePluginDisplayElementStore.setState({
+      elements: [],
+      panelElements: [],
+    });
     useGridSelectionStore.setState({
       selectedElements: [],
       selectedGroupIds: [],
@@ -271,7 +286,12 @@ describe('useLayerActions visibility routing', () => {
       actions.handleToggleGroupVisibility(click, 'group-a'),
     );
 
-    expect(mocks.setGroupHidden).toHaveBeenCalledWith('4key', 'group-a', false);
+    expect(mocks.setMixedGroupHidden).toHaveBeenCalledWith(
+      '4key',
+      'group-a',
+      false,
+    );
+    expect(mocks.setGroupHidden).not.toHaveBeenCalled();
     expect(mocks.setGroupHiddenLegacy).not.toHaveBeenCalled();
   });
 
@@ -300,6 +320,7 @@ describe('useLayerActions visibility routing', () => {
     );
     expect(mocks.setGroupHidden).not.toHaveBeenCalled();
     expect(mocks.setGroupHiddenLegacy).not.toHaveBeenCalled();
+    expect(mocks.setMixedGroupHidden).not.toHaveBeenCalled();
   });
 
   it('invalid native group visibility는 fail-closed로 중단한다', async () => {
@@ -322,6 +343,7 @@ describe('useLayerActions visibility routing', () => {
     expect(mocks.setGroupHiddenLegacy).not.toHaveBeenCalled();
     expect(mocks.setGroupHidden).not.toHaveBeenCalled();
     expect(mocks.setGroupVisibilityViaAuthority).not.toHaveBeenCalled();
+    expect(mocks.setMixedGroupHidden).not.toHaveBeenCalled();
   });
 
   it.each(['key', 'stat', 'graph', 'knob'] as const)(
@@ -411,12 +433,13 @@ describe('useLayerActions visibility routing', () => {
       ),
     );
 
-    expect(mocks.setElementGroups).toHaveBeenCalledWith(
+    expect(mocks.setMixedElementGroups).toHaveBeenCalledWith(
       '4key',
       [
         { elementType: 'key', id: STABLE_ID },
         { elementType: 'stat', id: statId },
       ],
+      [],
       {
         kind: 'create',
         id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -450,12 +473,13 @@ describe('useLayerActions visibility routing', () => {
     act(() => actions.setContextMenuGroupId('group-a'));
     await act(async () => actions.handleContextMenuSelect('ungroup'));
 
-    expect(mocks.setElementGroups).toHaveBeenCalledWith(
+    expect(mocks.setMixedElementGroups).toHaveBeenCalledWith(
       '4key',
       [
         { elementType: 'key', id: STABLE_ID },
         { elementType: 'stat', id: statId },
       ],
+      [],
       null,
     );
   });
@@ -491,6 +515,7 @@ describe('useLayerActions visibility routing', () => {
     await act(async () => actions.handleContextMenuSelect('ungroup'));
 
     expect(mocks.setElementGroups).not.toHaveBeenCalled();
+    expect(mocks.setMixedElementGroups).not.toHaveBeenCalled();
     expect(mocks.setElementGroupsViaAuthority).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
     expect(useKeyStore.getState().canonicalPositions['4key'][0].groupId).toBe(
@@ -521,12 +546,13 @@ describe('useLayerActions visibility routing', () => {
       '4key',
       [{ elementType: 'key', id: STABLE_ID }],
       null,
+      [],
     );
-    expect(mocks.setElementGroups).not.toHaveBeenCalled();
+    expect(mocks.setMixedElementGroups).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
-  it('plugin-only 다중 선택은 groupSelected 메뉴 항목을 비활성화한다', async () => {
+  it('plugin-only 다중 선택도 groupSelected 메뉴 항목을 활성화한다', async () => {
     useGridSelectionStore.setState({
       selectedElements: [
         { type: 'plugin', id: 'plugin-a:item' },
@@ -538,7 +564,8 @@ describe('useLayerActions visibility routing', () => {
     const pluginOnlyItem = actions.contextMenuItems.find(
       (item) => item.id === 'groupSelected',
     );
-    expect(pluginOnlyItem?.disabled).toBe(true);
+    expect(pluginOnlyItem).toBeDefined();
+    expect(pluginOnlyItem?.disabled).toBeUndefined();
 
     useGridSelectionStore.setState({
       selectedElements: [
@@ -551,7 +578,239 @@ describe('useLayerActions visibility routing', () => {
     const mixedItem = actions.contextMenuItems.find(
       (item) => item.id === 'groupSelected',
     );
-    expect(mixedItem?.disabled).toBe(false);
+    expect(mixedItem).toBeDefined();
+    expect(mixedItem?.disabled).toBeUndefined();
+  });
+
+  it('plugin 자식이 있는 header ungroup은 mixed 진입점에 fullId를 함께 보낸다', async () => {
+    await exposeWithItems([
+      {
+        type: 'key',
+        id: STABLE_ID,
+        index: 0,
+        name: 'A',
+        zIndex: 1,
+        hidden: false,
+        groupId: 'group-a',
+      },
+      {
+        type: 'plugin',
+        id: 'plugin-a::11111111-1111-4111-8111-111111111111',
+        name: 'P',
+        zIndex: 0,
+        hidden: false,
+        groupId: 'group-a',
+      },
+    ]);
+    act(() => actions.setContextMenuGroupId('group-a'));
+    await act(async () => actions.handleContextMenuSelect('ungroup'));
+
+    expect(mocks.setMixedElementGroups).toHaveBeenCalledWith(
+      '4key',
+      [{ elementType: 'key', id: STABLE_ID }],
+      ['plugin-a::11111111-1111-4111-8111-111111111111'],
+      null,
+    );
+  });
+
+  it('main groupSelected는 plugin 소속 그룹을 재사용한다', async () => {
+    const pluginFullId = 'plugin-a::11111111-1111-4111-8111-111111111111';
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+    usePluginDisplayElementStore.setState({
+      elements: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          fullId: pluginFullId,
+          pluginId: 'plugin-a',
+          definitionId: 'plugin-a',
+          position: { x: 0, y: 0 },
+          tabId: '4key',
+          groupId: 'group-a',
+        } as never,
+      ],
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: STABLE_ID, index: 0 },
+        { type: 'plugin', id: pluginFullId },
+      ],
+    });
+
+    await act(async () => actions.handleContextMenuSelect('groupSelected'));
+
+    // 무소속 native + 그룹 G 소속 plugin은 G 재사용 - 새 그룹 생성 아님
+    expect(mocks.setMixedElementGroups).toHaveBeenCalledWith(
+      '4key',
+      [{ elementType: 'key', id: STABLE_ID }],
+      [pluginFullId],
+      { kind: 'existing', id: 'group-a' },
+    );
+  });
+
+  it('panel groupSelected는 panelElements 미러에서 plugin 소속을 읽어 그룹을 재사용한다', async () => {
+    window.__dmn_window_type = 'panel';
+    const pluginFullId = 'plugin-a::11111111-1111-4111-8111-111111111111';
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: 'group-a', name: 'Group A' }] },
+    });
+    // 패널 창은 elements가 항상 비어 있다 - 미러만 소속을 안다
+    usePluginDisplayElementStore.setState({
+      elements: [],
+      panelElements: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          fullId: pluginFullId,
+          pluginId: 'plugin-a',
+          definitionId: 'plugin-a',
+          position: { x: 0, y: 0 },
+          tabId: '4key',
+          groupId: 'group-a',
+        } as never,
+      ],
+    });
+    useGridSelectionStore.setState({
+      selectedElements: [
+        { type: 'key', id: STABLE_ID, index: 0 },
+        { type: 'plugin', id: pluginFullId },
+      ],
+    });
+
+    await act(async () => actions.handleContextMenuSelect('groupSelected'));
+
+    expect(mocks.setElementGroupsViaAuthority).toHaveBeenCalledWith(
+      '4key',
+      [{ elementType: 'key', id: STABLE_ID }],
+      { kind: 'existing', id: 'group-a' },
+      [pluginFullId],
+    );
+    expect(mocks.setMixedElementGroups).not.toHaveBeenCalled();
+  });
+
+  it('main 혼합 그룹 가시성 토글은 mixed 진입점 단일 호출로 원자 위임한다', async () => {
+    await exposeWithItems([
+      {
+        type: 'key',
+        id: STABLE_ID,
+        index: 0,
+        name: 'A',
+        zIndex: 1,
+        hidden: false,
+        groupId: 'group-a',
+      },
+      {
+        type: 'plugin',
+        id: 'plugin-a::11111111-1111-4111-8111-111111111111',
+        name: 'P',
+        zIndex: 0,
+        hidden: false,
+        groupId: 'group-a',
+      },
+    ]);
+
+    await act(async () =>
+      actions.handleToggleGroupVisibility(click, 'group-a'),
+    );
+
+    expect(mocks.setMixedGroupHidden).toHaveBeenCalledTimes(1);
+    expect(mocks.setMixedGroupHidden).toHaveBeenCalledWith(
+      '4key',
+      'group-a',
+      true,
+    );
+    // 별도 plugin 커밋 없음 - 히스토리가 2엔트리로 갈라지지 않는다
+    expect(mocks.setPluginHidden).not.toHaveBeenCalled();
+    expect(mocks.setGroupHidden).not.toHaveBeenCalled();
+  });
+
+  it('main plugin-only 그룹 가시성 토글도 mixed 진입점이 판정한다', async () => {
+    await exposeWithItems([
+      {
+        type: 'plugin',
+        id: 'plugin-a::11111111-1111-4111-8111-111111111111',
+        name: 'P',
+        zIndex: 0,
+        hidden: true,
+        groupId: 'group-a',
+      },
+    ]);
+
+    await act(async () =>
+      actions.handleToggleGroupVisibility(click, 'group-a'),
+    );
+
+    expect(mocks.setMixedGroupHidden).toHaveBeenCalledWith(
+      '4key',
+      'group-a',
+      false,
+    );
+    expect(mocks.setGroupHidden).not.toHaveBeenCalled();
+    expect(mocks.setPluginHidden).not.toHaveBeenCalled();
+  });
+
+  it('panel 혼합 그룹 가시성 토글은 authority 단일 위임으로 분리 커밋을 내지 않는다', async () => {
+    window.__dmn_window_type = 'panel';
+    await exposeWithItems([
+      {
+        type: 'key',
+        id: STABLE_ID,
+        index: 0,
+        name: 'A',
+        zIndex: 1,
+        hidden: false,
+        groupId: 'group-a',
+      },
+      {
+        type: 'plugin',
+        id: 'plugin-a::11111111-1111-4111-8111-111111111111',
+        name: 'P',
+        zIndex: 0,
+        hidden: false,
+        groupId: 'group-a',
+      },
+    ]);
+
+    await act(async () =>
+      actions.handleToggleGroupVisibility(click, 'group-a'),
+    );
+
+    expect(mocks.setGroupVisibilityViaAuthority).toHaveBeenCalledTimes(1);
+    expect(mocks.setGroupVisibilityViaAuthority).toHaveBeenCalledWith(
+      '4key',
+      'group-a',
+      true,
+    );
+    // main authority가 단일 게스처로 정산 - panel의 별도 plugin 커밋 금지
+    expect(mocks.setPluginHidden).not.toHaveBeenCalled();
+    expect(mocks.setMixedGroupHidden).not.toHaveBeenCalled();
+  });
+
+  it('panel plugin-only 그룹 가시성 토글은 plugin hidden 커밋만 보낸다', async () => {
+    window.__dmn_window_type = 'panel';
+    await exposeWithItems([
+      {
+        type: 'plugin',
+        id: 'plugin-a::11111111-1111-4111-8111-111111111111',
+        name: 'P',
+        zIndex: 0,
+        hidden: true,
+        groupId: 'group-a',
+      },
+    ]);
+
+    await act(async () =>
+      actions.handleToggleGroupVisibility(click, 'group-a'),
+    );
+
+    expect(mocks.setPluginHidden).toHaveBeenCalledWith([
+      {
+        fullId: 'plugin-a::11111111-1111-4111-8111-111111111111',
+        hidden: false,
+      },
+    ]);
+    expect(mocks.setGroupVisibilityViaAuthority).not.toHaveBeenCalled();
+    expect(mocks.setMixedGroupHidden).not.toHaveBeenCalled();
   });
 
   it('group rename은 main과 panel dedicated semantic route를 쓴다', async () => {

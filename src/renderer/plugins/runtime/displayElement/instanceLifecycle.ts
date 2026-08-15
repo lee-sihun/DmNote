@@ -79,6 +79,7 @@ export const createPluginInstanceSaveBarrier = (
     cancelRestoration,
     failRestoration,
     finishRestoration,
+    isRestoring: () => isRestoring,
     runRestoreMutation,
     shouldSave,
   };

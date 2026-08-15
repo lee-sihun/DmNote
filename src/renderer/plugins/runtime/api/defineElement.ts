@@ -11,6 +11,7 @@ import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {
   addDisplayElementInternal,
   removeDisplayElementsInternal,
+  type InternalDisplayElementConfig,
 } from '../displayElement/displayElementApi';
 import {
   notePluginInstancesMutation,
@@ -66,12 +67,16 @@ import type { SettingsState } from '@src/types/settings/settings';
 import { trackEditorWrite } from '@src/renderer/editor/runtime/editorWriteBarrier';
 
 export interface SavedInstance {
+  // 영구 인스턴스 ID - backfill 전 구데이터는 없을 수 있음
+  instanceId?: string;
   position: { x: number; y: number };
   settings?: Record<string, string | number | boolean>;
   measuredSize?: { width: number; height: number };
   tabId?: string;
   hidden?: boolean;
   zIndex?: number;
+  // 레이어 그룹 소속 - normalize된 tabId 모드의 그룹만 유효
+  groupId?: string;
 }
 
 export const buildSavedPluginInstances = (
@@ -81,12 +86,14 @@ export const buildSavedPluginInstances = (
   elements
     .filter((element) => element.definitionId === definitionId)
     .map((element) => ({
+      instanceId: element.id,
       position: element.position,
       settings: element.settings as SavedInstance['settings'],
       measuredSize: element.measuredSize,
       tabId: normalizePluginInstanceTabId(element.tabId),
       hidden: element.hidden === true,
       zIndex: element.zIndex,
+      groupId: element.groupId,
     }));
 
 interface DefineElementDependencies {
@@ -890,47 +897,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       });
     }
 
-    // Undo/Redo를 위한 요소 복원 함수 등록
-    const restoreElementForUndo = (
-      savedElement: PluginDisplayElementInternal,
-    ) => {
-      const previousPluginId = window.__dmn_current_plugin_id;
-      window.__dmn_current_plugin_id = pluginId;
-
-      try {
-        const onClickId = useModalSettings
-          ? handlerRegistry.register(pluginId, handleElementClick)
-          : undefined;
-
-        const restoredElement = {
-          ...savedElement,
-          onClick: onClickId,
-          _onClickId: onClickId,
-          contextMenu: {
-            enableDelete: true,
-            deleteLabel: definition.contextMenu?.delete || '삭제',
-            customItems: buildCustomContextMenuItems(),
-          },
-        };
-
-        return restoredElement;
-      } finally {
-        window.__dmn_current_plugin_id = previousPluginId;
-      }
-    };
-
-    // 전역에 복원 함수 등록
-    if (!window.__dmn_element_restorers) {
-      window.__dmn_element_restorers = new Map();
-    }
-    window.__dmn_element_restorers.set(defId, restoreElementForUndo);
-
-    // 플러그인 클린업 시 복원 함수 제거
-    registerCleanup(() => {
-      window.__dmn_element_restorers?.delete(defId);
-    });
-
-    // 저장 스냅샷을 화면 요소로 재주입 - 초기 복원과 undo 재결합이 공유
+    // 저장 스냅샷을 화면 요소에 diff 적용 - 초기 복원과 undo 재결합이 공유.
+    // 생존 fullId는 canonical 소유 필드만 갱신하므로 핸들·모달·선택이 유지됨
     const applyInstancesSnapshot = (
       savedInstances: SavedInstance[],
       readiness: 'ready' | 'failed',
@@ -961,51 +929,135 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           });
         }
 
-        instancesToRestore.forEach((instance) => {
-          // 비동기 복원 중 플러그인 컨텍스트 재설정
-          window.__dmn_current_plugin_id = pluginId;
+        // backfill 전 무ID 항목은 diff 신원이 없음 - 그 스냅샷만 전량 재주입 폴백
+        const canDiff = instancesToRestore.every(
+          (instance) =>
+            typeof instance.instanceId === 'string' &&
+            instance.instanceId.length > 0,
+        );
 
-          addDisplayElementInternal({
-            html: '<!-- plugin-element -->',
+        // 기대 fullId 집합 - 폴백은 빈 집합이라 소멸 단계가 전량 제거
+        const expectedFullIds = new Set(
+          canDiff
+            ? instancesToRestore.map(
+                (instance) => `${pluginId}::${instance.instanceId}`,
+              )
+            : [],
+        );
+
+        // 소멸: 이 definition 요소 중 기대 밖 fullId 제거.
+        // 초기 복원 창(barrier 복원 완료 전)에서는 스킵 - define 직후 추가된
+        // 요소(barrier가 flush 대기 중인 편집)를 지우면 flush 커밋에서 조용히
+        // 소실된다. 복원 완료 후 reapply와 실패 복원은 canonical이 진실이라
+        // 소멸 유지
+        const preserveRestoreWindowAdds =
+          readiness === 'ready' && instanceSaveBarrier.isRestoring();
+        if (!preserveRestoreWindowAdds) {
+          const staleFullIds = usePluginDisplayElementStore
+            .getState()
+            .elements.filter(
+              (element) =>
+                element.definitionId === defId &&
+                !expectedFullIds.has(element.fullId),
+            )
+            .map((element) => element.fullId);
+          if (staleFullIds.length > 0) {
+            removeDisplayElementsInternal(staleFullIds);
+          }
+        }
+
+        const survivingFullIds = new Set(
+          usePluginDisplayElementStore
+            .getState()
+            .elements.filter((element) => element.definitionId === defId)
+            .map((element) => element.fullId),
+        );
+
+        instancesToRestore.forEach((instance) => {
+          const fullId = canDiff ? `${pluginId}::${instance.instanceId}` : null;
+          // canonical 소유 7필드 (PERSISTED_FIELDS와 동일 범위)
+          const persistedFields = {
             position: instance.position,
-            draggable: true,
-            definitionId: defId,
             settings: omitLayoutSettingValues(
               definition.settings,
               instance.settings || { ...defaultSettings },
             ) as Record<string, string | number | boolean>,
-            state: definition.previewState || {},
             measuredSize: instance.measuredSize,
             tabId: normalizePluginInstanceTabId(instance.tabId),
             hidden: instance.hidden ?? false,
             zIndex: instance.zIndex,
+            groupId: instance.groupId,
+          };
+
+          if (fullId && survivingFullIds.has(fullId)) {
+            // 생존: 소유 필드만 갱신 - html·state·핸들러는 렌더러 소유라 불변
+            usePluginDisplayElementStore
+              .getState()
+              .updateElement(fullId, persistedFields);
+            return;
+          }
+
+          // 비동기 복원 중 플러그인 컨텍스트 재설정
+          window.__dmn_current_plugin_id = pluginId;
+
+          // 신규: 저장된 영구 ID로 재주입 (무ID는 새 UUID 발급)
+          addDisplayElementInternal({
+            html: '<!-- plugin-element -->',
+            instanceId: instance.instanceId,
+            draggable: true,
+            definitionId: defId,
+            state: definition.previewState || {},
             onClick: useModalSettings ? handleElementClick : undefined,
             contextMenu: {
               enableDelete: true,
               deleteLabel: definition.contextMenu?.delete || '삭제',
               customItems: buildCustomContextMenuItems(),
             },
-          } as unknown as PluginDisplayElementConfig);
+            ...persistedFields,
+          } as unknown as InternalDisplayElementConfig);
         });
+
+        // buildSavedPluginInstances가 순서 민감 - def 블록을 스냅샷 순서로 재배열
+        if (canDiff) {
+          const state = usePluginDisplayElementStore.getState();
+          const byFullId = new Map(
+            state.elements
+              .filter((element) => element.definitionId === defId)
+              .map((element) => [element.fullId, element]),
+          );
+          const ordered = instancesToRestore
+            .map((instance) =>
+              byFullId.get(`${pluginId}::${instance.instanceId}`),
+            )
+            .filter(
+              (element): element is PluginDisplayElementInternal =>
+                element !== undefined,
+            );
+          let cursor = 0;
+          let orderChanged = false;
+          const reordered = state.elements.map((element) => {
+            if (element.definitionId !== defId) return element;
+            // 복원 창에서 소멸을 스킵한 기대 밖 요소는 제자리 유지
+            if (!expectedFullIds.has(element.fullId)) return element;
+            const replacement = ordered[cursor] ?? element;
+            cursor += 1;
+            if (replacement !== element) orderChanged = true;
+            return replacement;
+          });
+          if (orderChanged) {
+            state.setElements(reordered);
+          }
+        }
       });
     };
 
     if (window.__dmn_window_type === 'main') {
-      // undo/redo의 canonical 재결합 - 현 요소 제거 후 스냅샷 재주입
+      // undo/redo의 canonical 재결합 - diff 적용기가 소멸·생존·신규를 정산
       registerCleanup(
         registerPluginInstancesReapplier(pluginId, defId, {
           // 이벤트 도착 즉시 호출 - 낡은 메모리를 커밋할 pending 저장 차단
           cancelPendingSave: () => cancelPendingInstanceSave(),
           reapply: (instances) => {
-            instanceSaveBarrier.runRestoreMutation(() => {
-              const currentIds = usePluginDisplayElementStore
-                .getState()
-                .elements.filter((el) => el.definitionId === defId)
-                .map((el) => el.fullId);
-              if (currentIds.length > 0) {
-                removeDisplayElementsInternal(currentIds);
-              }
-            });
             applyInstancesSnapshot(instances as SavedInstance[], 'ready');
           },
         }),

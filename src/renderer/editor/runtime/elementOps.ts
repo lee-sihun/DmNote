@@ -4,6 +4,7 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
 import { resolveElementById } from '../model/elementIdMap';
 import { isNativeElementId } from '../model/elementId';
@@ -197,6 +198,7 @@ export const deleteElementById = (
       graphPositions: useGraphItemStore.getState().positions,
       knobPositions: useKnobItemStore.getState().positions,
       layerGroups: useLayerGroupStore.getState().layerGroups,
+      pluginElements: usePluginDisplayElementStore.getState().elements,
     });
     if (normalized.positionsChanged) {
       keyState.setKeyMappingsAndPositions(
@@ -951,6 +953,7 @@ export const setElementGroupsByTargets = (
     targets,
     targetGroup,
     ...before,
+    pluginElements: usePluginDisplayElementStore.getState().elements,
   });
   if (!projected) return Promise.resolve(false);
   if (projected.changed) {

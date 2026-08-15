@@ -6,11 +6,26 @@ import type {
   CanonicalEditorDocumentV1,
 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import { normalizePluginInstanceTabId } from '@plugins/runtime/displayElement/instanceLifecycle';
 
 export const isPluginVisibleInMode = (
   element: Pick<PluginDisplayElementInternal, 'tabId'>,
   mode: string,
 ): boolean => !element.tabId || element.tabId === mode;
+
+/** 그룹 멤버 집계용 플러그인 요소 최소 형태 (내부 요소·패널 뷰 공용) */
+export type PluginGroupMemberLike = Pick<
+  PluginDisplayElementInternal,
+  'tabId' | 'groupId'
+>;
+
+// 플러그인 그룹 멤버십의 모드 판정 - 저장 규칙(tab_id normalize)과 동일.
+// Rust remove_empty_layer_groups의 판정과 반드시 일치해야 커밋마다
+// 가짜 diff가 생기지 않는다 (드리프트 금지)
+export const isPluginGroupMemberInMode = (
+  element: Pick<PluginDisplayElementInternal, 'tabId'>,
+  mode: string,
+): boolean => normalizePluginInstanceTabId(element.tabId) === mode;
 
 type Groupable = SelectedElement & {
   type: 'key' | 'stat' | 'graph' | 'knob';
@@ -55,6 +70,7 @@ function collectModeGroupMemberCounts(
   statPositions: CanonicalEditorDocumentV1['statPositions'],
   graphPositions: CanonicalEditorDocumentV1['graphPositions'],
   knobPositions: CanonicalEditorDocumentV1['knobPositions'],
+  pluginElements: readonly PluginGroupMemberLike[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
   const add = (groupId?: string) => {
@@ -66,6 +82,10 @@ function collectModeGroupMemberCounts(
   (statPositions[mode] || []).forEach((pos) => add(pos?.groupId));
   (graphPositions[mode] || []).forEach((pos) => add(pos?.groupId));
   (knobPositions[mode] || []).forEach((pos) => add(pos?.groupId));
+  // 플러그인 멤버도 그룹 생존에 기여 - 모드 판정은 저장 규칙과 동일
+  pluginElements.forEach((element) => {
+    if (isPluginGroupMemberInMode(element, mode)) add(element.groupId);
+  });
 
   return counts;
 }
@@ -239,6 +259,8 @@ export function projectStableElementGroups(params: {
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
   layerGroups: LayerGroups;
+  // normalize의 플러그인 멤버 집계 - 혼합 그룹화는 최종 소속 상태를 전달
+  pluginElements: readonly PluginGroupMemberLike[];
 }): StableElementGroupProjection | null {
   const {
     mode,
@@ -249,6 +271,7 @@ export function projectStableElementGroups(params: {
     graphPositions,
     knobPositions,
     layerGroups,
+    pluginElements,
   } = params;
   const records = {
     key: keyPositions,
@@ -311,6 +334,7 @@ export function projectStableElementGroups(params: {
       ? grouped.knobPositions
       : knobPositions,
     layerGroups: nextLayerGroups,
+    pluginElements,
   });
   return {
     keyPositions: normalized.keyPositions,
@@ -360,6 +384,8 @@ export function normalizeLayerGroupsForMode(params: {
   graphPositions: CanonicalEditorDocumentV1['graphPositions'];
   knobPositions: CanonicalEditorDocumentV1['knobPositions'];
   layerGroups: LayerGroups;
+  // 플러그인 멤버 집계 - Rust remove_empty_layer_groups와 동일 규칙 필수
+  pluginElements: readonly PluginGroupMemberLike[];
 }): NormalizeLayerGroupsResult {
   const {
     mode,
@@ -368,6 +394,7 @@ export function normalizeLayerGroupsForMode(params: {
     graphPositions,
     knobPositions,
     layerGroups,
+    pluginElements,
   } = params;
 
   const currentModeGroups = layerGroups[mode] || [];
@@ -386,6 +413,7 @@ export function normalizeLayerGroupsForMode(params: {
     statPositions,
     graphPositions,
     knobPositions,
+    pluginElements,
   );
   const groupsToDissolve = new Set<string>();
 
@@ -441,6 +469,7 @@ export function normalizeLayerGroupsForMode(params: {
     positionsChanged ? nextStatPositions : statPositions,
     positionsChanged ? nextGraphPositions : graphPositions,
     positionsChanged ? nextKnobPositions : knobPositions,
+    pluginElements,
   );
   const nextModeGroups = currentModeGroups.filter(
     (group) => (finalCounts.get(group.id) || 0) >= 1,

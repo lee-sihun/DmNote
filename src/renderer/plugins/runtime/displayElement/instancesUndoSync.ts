@@ -73,7 +73,7 @@ export const applyCommittedPluginInstancesProjection = (
 // plugin별 적용 revision 단조 - 연속 undo/redo에서 늦은 pull의 역행 방지
 const appliedRevisions = new Map<string, number>();
 
-/** canonical pull 후 등록된 정의별 재주입 - undo 재결합과 실패 복구가 공유 */
+/** canonical pull 후 등록된 정의별 diff 적용 - undo 재결합과 실패 복구가 공유 */
 export const applyCanonicalPluginInstances = async (
   pluginId: string,
   force = false,
@@ -89,7 +89,8 @@ export const applyCanonicalPluginInstances = async (
   for (const handlers of byDef.values()) {
     handlers.reapply(snapshot.instances);
   }
-  // 재주입은 fullId를 새로 발급 - 옛 fullId를 쥔 선택은 죽은 참조가 됨
+  // diff-patch 재주입은 생존 fullId를 보존한다 - prune은 스냅샷 밖으로
+  // 소멸한 fullId를 쥔 선택만 정밀 정리하고 생존 선택은 그대로 유지된다
   pruneStalePluginSelection(
     new Set(
       usePluginDisplayElementStore

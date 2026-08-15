@@ -1,8 +1,5 @@
 import type { HostGlobalApi } from '@src/renderer/api/hostGlobalApi';
-import type {
-  DMNoteAPI,
-  PluginDisplayElementInternal,
-} from '@src/types/plugin/api';
+import type { DMNoteAPI } from '@src/types/plugin/api';
 
 declare global {
   interface Window {
@@ -54,10 +51,6 @@ declare global {
       id?: string;
       referenceElement?: HTMLElement;
     };
-    __dmn_element_restorers?: Map<
-      string,
-      (el: PluginDisplayElementInternal) => PluginDisplayElementInternal
-    >;
     __dmn_plugin_messages?: Record<
       string,
       Record<string, Record<string, string>>

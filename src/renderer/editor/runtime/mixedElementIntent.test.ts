@@ -1,12 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  commitMixed: vi.fn(),
-  commitMixedIntent: vi.fn(),
-  commitSemantic: vi.fn(),
-  reportSkipped: vi.fn(),
-  authorityGeneration: 7,
-}));
+const mocks = vi.hoisted(() => {
+  class TestIntentAbort extends Error {
+    constructor(reason: string) {
+      super(reason);
+      this.name = 'ElementIntentAbort';
+    }
+  }
+  return {
+    commitMixed: vi.fn(),
+    commitMixedIntent: vi.fn(),
+    commitSemantic: vi.fn(),
+    reportSkipped: vi.fn(),
+    authorityGeneration: 7,
+    TestIntentAbort,
+  };
+});
 
 vi.mock('@plugins/runtime/displayElement/gestureTransaction', () => ({
   commitMixedGestureTransaction: mocks.commitMixed,
@@ -17,14 +26,10 @@ vi.mock('./editorSemanticOps', () => ({
   commitSemanticOps: mocks.commitSemantic,
 }));
 
-class TestIntentAbort extends Error {
-  constructor(reason: string) {
-    super(reason);
-    this.name = 'ElementIntentAbort';
-  }
-}
+const TestIntentAbort = mocks.TestIntentAbort;
 
 vi.mock('./elementIntent', () => ({
+  ElementIntentAbort: mocks.TestIntentAbort,
   reportElementOpSkipped: mocks.reportSkipped,
   isElementIntentAbort: (error: unknown) =>
     error instanceof Error && error.name === 'ElementIntentAbort',
@@ -179,7 +184,7 @@ describe('혼합 의도 러너 receipt 소유권', () => {
     expect(rollback).toHaveBeenCalledOnce();
   });
 
-  it('삭제 의도는 재주입 대상을 거르고 봉인 뒤 신규 요소를 보존한다', async () => {
+  it('삭제 의도는 소멸 대상이 반영된 projection을 그대로 싣는다', async () => {
     const rollback = vi.fn();
     const ops = [
       {
@@ -189,10 +194,11 @@ describe('혼합 의도 러너 receipt 소유권', () => {
       },
     ];
     mocks.commitMixedIntent.mockImplementationOnce(async (options) => {
+      // eager 제거가 반영된 정상 projection - 봉인 뒤 신규 요소는 보존
       const generation = options.generate({
         base: {} as EditorDocumentV1,
         pluginProjection: [
-          { fullId: 'plugin-a:gone', definitionId: 'plugin-a' },
+          { fullId: 'plugin-a:survivor', definitionId: 'plugin-a' },
           { fullId: 'plugin-a:new', definitionId: 'plugin-a' },
         ],
       });
@@ -200,6 +206,7 @@ describe('혼합 의도 러너 receipt 소유권', () => {
         kind: 'ops',
         ops,
         desiredPluginProjection: [
+          { fullId: 'plugin-a:survivor', definitionId: 'plugin-a' },
           { fullId: 'plugin-a:new', definitionId: 'plugin-a' },
         ],
       });
@@ -222,6 +229,65 @@ describe('혼합 의도 러너 receipt 소유권', () => {
       }),
     );
     expect(rollback).not.toHaveBeenCalled();
+  });
+
+  it('소멸 대상이 projection에 재출현하면 중단하고 receipt 복원과 skip을 관측한다', async () => {
+    const rollback = vi.fn();
+    mocks.commitMixedIntent.mockImplementationOnce(async (options) => {
+      try {
+        // diff-patch undo가 삭제 대상을 같은 fullId로 되살린 환생 상황
+        options.generate({
+          base: {} as EditorDocumentV1,
+          pluginProjection: [
+            { fullId: 'plugin-a:gone', definitionId: 'plugin-a' },
+          ],
+        });
+      } catch (error) {
+        options.onFailureBeforeSettle?.(error);
+        throw error;
+      }
+    });
+
+    await runMixedElementDeleteIntent({
+      gestureId: 'gesture-delete',
+      pluginIds: ['plugin-a'],
+      deletedPluginFullIds: ['plugin-a:gone'],
+      ops: [],
+      receipt: { rollback },
+    });
+
+    // 환생분 재삭제 금지 - eager 복원은 정확히 1회, 오류 대신 skip 관측
+    expect(rollback).toHaveBeenCalledTimes(1);
+    expect(mocks.reportSkipped).toHaveBeenCalledWith('mixed delete settlement');
+  });
+
+  it('편입 후 환생 중단도 receipt를 복원하고 정상 종료한다', async () => {
+    const rollback = vi.fn();
+    mocks.commitMixedIntent.mockImplementationOnce(async (options) => {
+      options.onEnrolled?.();
+      try {
+        options.generate({
+          base: {} as EditorDocumentV1,
+          pluginProjection: [
+            { fullId: 'plugin-a:gone', definitionId: 'plugin-a' },
+          ],
+        });
+      } catch (error) {
+        options.onFailureBeforeSettle?.(error);
+        throw error;
+      }
+    });
+
+    await runMixedElementDeleteIntent({
+      gestureId: 'gesture-delete',
+      pluginIds: ['plugin-a'],
+      deletedPluginFullIds: ['plugin-a:gone'],
+      ops: [],
+      receipt: { rollback },
+    });
+
+    expect(rollback).toHaveBeenCalledTimes(1);
+    expect(mocks.reportSkipped).toHaveBeenCalledWith('mixed delete settlement');
   });
 
   it('plugin scope가 빈 삭제는 semantic 재시도 경로로 보낸다', async () => {
@@ -485,7 +551,8 @@ describe('applyPluginRemovalEagerly 유령 복원 방지', () => {
       );
     });
 
-    // undo 재주입이 전 요소를 새 fullId로 갈아끼운 상황
+    // 플러그인 리로드 등으로 전 요소가 새 fullId로 갈린 상황
+    // (diff-patch undo는 fullId를 보존하므로 이 감지를 발화시키지 않는다)
     usePluginDisplayElementStore.setState({
       elements: [
         elementOf('plugin-a::element-9', 'plugin-a'),
@@ -499,6 +566,33 @@ describe('applyPluginRemovalEagerly 유령 복원 방지', () => {
     expect(
       usePluginDisplayElementStore.getState().elements.map((e) => e.fullId),
     ).toEqual(['plugin-a::element-9', 'plugin-a::element-10']);
+  });
+
+  it('undo가 같은 fullId를 이미 되살렸으면 rollback이 중복 삽입하지 않는다', () => {
+    const receipt = applyPluginRemovalEagerly(['plugin-a::element-1'], () => {
+      const store = usePluginDisplayElementStore.getState();
+      store.setElements(
+        store.elements.filter(
+          (element) => element.fullId !== 'plugin-a::element-1',
+        ),
+        { skipSync: true } as never,
+      );
+    });
+
+    // diff-patch undo가 삭제 대상을 같은 fullId로 이미 복원한 상황
+    usePluginDisplayElementStore.setState({
+      elements: [
+        elementOf('plugin-a::element-1', 'plugin-a'),
+        elementOf('plugin-a::element-2', 'plugin-a'),
+      ],
+    });
+
+    receipt?.rollback();
+
+    // present 중복 검사가 재삽입을 막아 한 벌만 남는다
+    expect(
+      usePluginDisplayElementStore.getState().elements.map((e) => e.fullId),
+    ).toEqual(['plugin-a::element-1', 'plugin-a::element-2']);
   });
 
   it('다른 definition의 신규 요소는 복원을 막지 않는다', () => {

@@ -27,6 +27,13 @@ import type {
   PluginDisplayElementInternal,
 } from '@src/types/plugin/api';
 
+// 런타임 내부(복원·재주입) 전용 config - 저장된 영구 instanceId를 요소 id로
+// 지정하고 groupId 소속을 함께 복원
+export type InternalDisplayElementConfig = PluginDisplayElementConfig & {
+  instanceId?: string;
+  groupId?: string;
+};
+
 let internalAddDepth = 0;
 
 /**
@@ -98,17 +105,20 @@ export const displayElementApi = {
       rotatePluginInstancesEditSession(pluginId);
     }
 
-    const id = `element-${Date.now()}-${Math.random()
-      .toString(36)
-      .substring(7)}`;
-    const fullId = `${pluginId}::${id}`;
-
     const {
       template,
       state: initialState,
       html: initialHtml,
+      instanceId,
+      groupId,
       ...elementOptions
-    } = element;
+    } = element as InternalDisplayElementConfig;
+
+    // 영구 instanceId를 요소 id로 사용 - 지정 수용은 내부 복원 경로만
+    // (플러그인이 넘긴 값은 무시 - 중복·비정형 ID는 백엔드 커밋이 거절됨)
+    const id =
+      internalAddDepth > 0 && instanceId ? instanceId : crypto.randomUUID();
+    const fullId = `${pluginId}::${id}`;
 
     const currentTabId =
       elementOptions.tabId || useKeyStore.getState().selectedKeyType;
@@ -147,6 +157,9 @@ export const displayElementApi = {
 
     const internalElement: PluginDisplayElementInternal = {
       ...elementOptions,
+      // 그룹 소속 지정 수용도 내부 복원 경로만 - 공개 add의 임의 groupId는
+      // 저장 규칙 밖 dangling 소속이 되므로 무시
+      ...(internalAddDepth > 0 && groupId !== undefined ? { groupId } : {}),
       html: htmlContent,
       id,
       pluginId,
@@ -383,7 +396,7 @@ export const displayElementApi = {
 };
 
 const addDisplayElementInternal = (
-  element: PluginDisplayElementConfig,
+  element: InternalDisplayElementConfig,
 ): DisplayElementInstance => {
   internalAddDepth += 1;
   try {

@@ -9,17 +9,28 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import { setElementGroupsByTargets } from '@src/renderer/editor/runtime/elementOps';
+import {
+  selectPropertyPanelPluginElements,
+  usePluginDisplayElementStore,
+} from '@stores/plugin/usePluginDisplayElementStore';
+import { setMixedElementGroups } from '@src/renderer/editor/runtime/mixedElementGroups';
 import { setElementGroupsViaAuthority } from '@plugins/rpc/pluginElementActions';
 import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { resolveElementById } from '@src/renderer/editor/model/elementIdMap';
 import { buildNextLayerGroupName } from '@utils/layerGroupUtils';
 import type { EditorElementGroupTargetV1 } from '@src/types/editor';
 
-const stableGroupTargets = (
+interface SplitGroupTargets {
+  native: EditorElementGroupTargetV1[];
+  // 플러그인은 fullId 대상 - 소속 저장은 pluginChanges가 운반
+  plugin: string[];
+}
+
+// 대상 분리만 담당 - 소실·모드 이탈 검증은 커밋 진입점이 fail-closed로 수행
+const splitGroupTargets = (
   elements: readonly SelectedElement[],
-): EditorElementGroupTargetV1[] | null => {
-  const targets = elements.flatMap((element) =>
+): SplitGroupTargets | null => {
+  const native = elements.flatMap((element) =>
     element.type === 'key' ||
     element.type === 'stat' ||
     element.type === 'graph' ||
@@ -27,14 +38,20 @@ const stableGroupTargets = (
       ? [{ elementType: element.type, id: element.id }]
       : [],
   );
-  if (targets.length === 0) return [];
-  return targets.every(({ id }) => isNativeElementId(id)) &&
-    new Set(targets.map(({ id }) => id)).size === targets.length
-    ? targets
-    : null;
+  const plugin = elements
+    .filter((element) => element.type === 'plugin')
+    .map((element) => element.id);
+  if (
+    !native.every(({ id }) => isNativeElementId(id)) ||
+    new Set(native.map(({ id }) => id)).size !== native.length ||
+    new Set(plugin).size !== plugin.length
+  ) {
+    return null;
+  }
+  return { native, plugin };
 };
 
-const currentGroupId = (
+const currentNativeGroupId = (
   mode: string,
   target: EditorElementGroupTargetV1,
 ): string | undefined => {
@@ -51,27 +68,64 @@ const currentGroupId = (
   return record[mode]?.[locator.index]?.groupId;
 };
 
+const currentPluginGroupId = (
+  mode: string,
+  fullId: string,
+): string | undefined => {
+  // 패널 창의 elements는 항상 비어 있으므로 창별 미러 셀렉터를 경유한다
+  const element = selectPropertyPanelPluginElements(
+    usePluginDisplayElementStore.getState(),
+  ).find((candidate) => candidate.fullId === fullId);
+  if (!element?.groupId) return undefined;
+  // 현재 모드에 def가 있는 groupId만 유효 (읽기 가드와 동일 규칙)
+  return (useLayerGroupStore.getState().layerGroups[mode] ?? []).some(
+    (group) => group.id === element.groupId,
+  )
+    ? element.groupId
+    : undefined;
+};
+
+const dispatchGroupChange = (
+  mode: string,
+  targets: SplitGroupTargets,
+  targetGroup:
+    | { kind: 'existing'; id: string }
+    | { kind: 'create'; id: string; name: string }
+    | null,
+): Promise<boolean> =>
+  window.__dmn_window_type === 'panel'
+    ? setElementGroupsViaAuthority(
+        mode,
+        targets.native,
+        targetGroup,
+        targets.plugin,
+      )
+    : setMixedElementGroups(mode, targets.native, targets.plugin, targetGroup);
+
 /**
- * 선택된 요소들을 그룹화
- * @param pluginExclusionNotice 혼합 선택 성공 시 플러그인 제외 알림 문구 (미전달 시 무알림)
+ * 선택된 요소들을 그룹화 (native+plugin 혼합 지원)
  * @returns 변경이 있었는지 여부
  */
 export async function groupSelectedElements(
   selectedKeyType: string,
   selectedElements: SelectedElement[],
   newGroupLabel: string,
-  pluginExclusionNotice?: string,
 ): Promise<boolean> {
   if (selectedElements.length === 0) return false;
 
-  const stableTargets = stableGroupTargets(selectedElements);
-  if (stableTargets?.length === 0) return false;
-  if (!stableTargets) return false;
+  const targets = splitGroupTargets(selectedElements);
+  if (!targets || (targets.native.length === 0 && targets.plugin.length === 0))
+    return false;
   const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
   const groupIds = new Set(
-    stableTargets
-      .map((target) => currentGroupId(selectedKeyType, target))
-      .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    [
+      ...targets.native.map((target) =>
+        currentNativeGroupId(selectedKeyType, target),
+      ),
+      ...targets.plugin.map((fullId) =>
+        currentPluginGroupId(selectedKeyType, fullId),
+      ),
+    ].filter((id): id is string => typeof id === 'string' && id.length > 0),
   );
   const existingId = groupIds.size === 1 ? [...groupIds][0] : undefined;
   const targetGroup = existingId
@@ -84,18 +138,7 @@ export async function groupSelectedElements(
           currentLayerGroups[selectedKeyType] ?? [],
         ),
       } as const);
-  const changed = await (window.__dmn_window_type === 'panel'
-    ? setElementGroupsViaAuthority(selectedKeyType, stableTargets, targetGroup)
-    : setElementGroupsByTargets(selectedKeyType, stableTargets, targetGroup));
-  // 플러그인은 groupId 스키마가 없어 그룹 대상에서 제외 - 혼합 선택 성공 시 1회 알림
-  if (
-    changed &&
-    pluginExclusionNotice &&
-    selectedElements.some((element) => element.type === 'plugin')
-  ) {
-    window.__dmn_showAlert?.(pluginExclusionNotice);
-  }
-  return changed;
+  return dispatchGroupChange(selectedKeyType, targets, targetGroup);
 }
 
 /**
@@ -108,10 +151,8 @@ export async function ungroupSelectedElements(
 ): Promise<boolean> {
   if (selectedElements.length === 0) return false;
 
-  const stableTargets = stableGroupTargets(selectedElements);
-  if (stableTargets?.length === 0) return false;
-  if (!stableTargets) return false;
-  return window.__dmn_window_type === 'panel'
-    ? setElementGroupsViaAuthority(selectedKeyType, stableTargets, null)
-    : setElementGroupsByTargets(selectedKeyType, stableTargets, null);
+  const targets = splitGroupTargets(selectedElements);
+  if (!targets || (targets.native.length === 0 && targets.plugin.length === 0))
+    return false;
+  return dispatchGroupChange(selectedKeyType, targets, null);
 }

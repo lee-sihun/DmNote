@@ -31,7 +31,8 @@ const MAX_RENDER_ITEMS: usize = 4_096;
 pub(crate) const MAX_EDITOR_OPS: usize = 4_096;
 const MAX_LAYER_GROUPS: usize = 4_096;
 const MAX_KEY_LABEL_BYTES: usize = 1_024;
-const MAX_GROUP_ID_BYTES: usize = 256;
+// plugin group_id 검증(state/plugin.rs)도 이 상한을 공유 - 레이어 그룹 id 참조라 동일 규칙
+pub(crate) const MAX_GROUP_ID_BYTES: usize = 256;
 const MAX_GROUP_NAME_BYTES: usize = 1_024;
 const MAX_ABS_COORDINATE: f64 = 32_768.0;
 const MAX_DIMENSION: f64 = 32_768.0;
@@ -708,11 +709,14 @@ fn validate_group_structural_envelope(
             target_group,
         } => {
             validate_mode(mode)?;
-            if !(1..=MAX_RENDER_ITEMS).contains(&targets.len()) {
+            // 빈 targets 허용 - plugin-only 그룹 편집은 그룹 def 생성·정리를
+            // native 대상 없이 editor op에 실어야 한다 (플러그인 소속은 동반
+            // plugin_changes가 운반)
+            if targets.len() > MAX_RENDER_ITEMS {
                 return Err(EditorCommitError::validation(
                     "INVALID_ELEMENT_GROUP_TARGET_COUNT",
                     format!(
-                        "setElementGroups targets must contain between 1 and {MAX_RENDER_ITEMS} entries"
+                        "setElementGroups targets must contain at most {MAX_RENDER_ITEMS} entries"
                     ),
                 ));
             }
@@ -3546,15 +3550,13 @@ mod tests {
             assert_eq!(validation_code(&error), Some("INVALID_REQUEST_PAYLOAD"));
         }
 
+        // 빈 native targets 허용 - plugin-only 그룹 편집이 def 생성·정리를 실어야 함
         let empty = EditorOpV1::SetElementGroups {
             mode: "4key".to_string(),
             targets: Vec::new(),
             target_group: None,
         };
-        assert_eq!(
-            validation_code(&validate_request_envelope(&ops_request(vec![empty])).unwrap_err()),
-            Some("INVALID_ELEMENT_GROUP_TARGET_COUNT")
-        );
+        validate_request_envelope(&ops_request(vec![empty])).unwrap();
         let at_limit = EditorOpV1::SetElementGroups {
             mode: "4key".to_string(),
             targets: (0..MAX_RENDER_ITEMS)
