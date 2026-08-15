@@ -65,6 +65,13 @@ export const useSelectionDrag = ({
   const activePointerIdRef = useRef<number | null>(null);
   const activeCleanupRef = useRef<(() => void) | null>(null);
 
+  // 소비자는 enabled와 같은 조건으로 handlePointerDown을 조건부 부착한다 -
+  // 비활성화(선택 해제)되면 press가 훅을 거치지 않아 표식 소비가 끊기므로,
+  // 여기서 청소하지 않으면 낡은 표식이 이후 클릭을 계속 삼킨다
+  useEffect(() => {
+    if (!enabled) lastPressMovedRef.current = false;
+  }, [enabled]);
+
   const beginPointerDrag = (
     event: React.PointerEvent<HTMLElement> | PointerEvent,
     dragTarget: HTMLElement,
@@ -105,8 +112,6 @@ export const useSelectionDrag = ({
     let finishGesture: (() => void) | null = null;
 
     activePointerIdRef.current = pointerId;
-    movedDuringPressRef.current = lastPressMovedRef.current;
-    lastPressMovedRef.current = false;
     dragTarget.setPointerCapture(pointerId);
     dragTarget.style.userSelect = 'none';
 
@@ -312,6 +317,17 @@ export const useSelectionDrag = ({
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    // 직전 press의 실이동 표식은 이번 press가 소비한다. 드래그 세션을 못
+    // 여는 press(선택 해제로 enabled=false 등)에서 남겨두면 표식이 낡은
+    // 채 유지되어 이후 정상 클릭이 가드에 삼켜진다 (선택 씹힘)
+    if (
+      event.button === 0 &&
+      event.isPrimary &&
+      activePointerIdRef.current === null
+    ) {
+      movedDuringPressRef.current = lastPressMovedRef.current;
+      lastPressMovedRef.current = false;
+    }
     beginPointerDrag(event, event.currentTarget);
   };
 

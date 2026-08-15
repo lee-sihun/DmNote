@@ -62,6 +62,7 @@ vi.mock('@utils/grid/smartGuides', async (importOriginal) => {
 });
 
 interface HarnessProps {
+  enabled?: boolean;
   onClick: () => void;
   onMovedCheck: (moved: boolean) => void;
   onPressMovedCheck?: (moved: boolean) => void;
@@ -71,6 +72,7 @@ interface HarnessProps {
 }
 
 const Harness = ({
+  enabled = true,
   onClick,
   onMovedCheck,
   onPressMovedCheck,
@@ -80,7 +82,7 @@ const Harness = ({
 }: HarnessProps) => {
   const { handlePointerDown, movedDuringPressRef, pressMovedRef } =
     useSelectionDrag({
-      enabled: true,
+      enabled,
       zoom: 1,
       startX: 0,
       startY: 0,
@@ -97,7 +99,8 @@ const Harness = ({
   return (
     <div
       data-testid="selection-drag"
-      onPointerDown={handlePointerDown}
+      // 프로덕션 미러: 선택 드래그 핸들러는 enabled 조건일 때만 부착된다
+      onPointerDown={enabled ? handlePointerDown : undefined}
       onClick={() => {
         onPressMovedCheck?.(pressMovedRef.current);
         onClick();
@@ -605,6 +608,48 @@ describe('pressMovedRef 클릭 가드 계약', () => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     // 이동 없는 다음 press - 거짓이어야 정상 클릭이 통과한다
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointerup'));
+    });
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(pressMovedChecks).toEqual([true, false]);
+  });
+
+  it('드래그 후 enabled가 꺼져도 다음 press가 표식을 소비한다', async () => {
+    const pressMovedChecks: boolean[] = [];
+    const renderWith = async (enabled: boolean) => {
+      await act(async () => {
+        root.render(
+          <Harness
+            enabled={enabled}
+            onClick={() => {}}
+            onMovedCheck={() => {}}
+            onPressMovedCheck={(moved) => pressMovedChecks.push(moved)}
+            onMultiDragStart={() => {}}
+            onMultiDrag={() => {}}
+            onMultiDragEnd={() => {}}
+          />,
+        );
+      });
+      return host.querySelector<HTMLElement>('[data-testid="selection-drag"]')!;
+    };
+
+    // 선택 모드에서 드래그 - 실이동 표식이 참으로 남는다
+    let element = await renderWith(true);
+    await act(async () => {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', { clientX: 8 }));
+      flushRaf();
+      element.dispatchEvent(pointerEvent('pointerup', { clientX: 8 }));
+    });
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // 선택 해제(enabled=false)로 핸들러가 떨어진 뒤의 일반 클릭 - press가
+    // 훅을 거치지 않아도 비활성화 청소가 표식을 지워 클릭이 삼켜지지
+    // 않아야 한다 (선택 씹힘 회귀)
+    element = await renderWith(false);
     await act(async () => {
       element.dispatchEvent(pointerEvent('pointerdown'));
       element.dispatchEvent(pointerEvent('pointerup'));
