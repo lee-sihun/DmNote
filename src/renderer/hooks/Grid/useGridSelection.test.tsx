@@ -18,7 +18,6 @@ import { ElementIntentAbort } from '@src/renderer/editor/runtime/elementIntent';
 
 const mocks = vi.hoisted(() => ({
   commitGeometry: vi.fn(() => Promise.resolve(1)),
-  runMixedIntent: vi.fn(() => Promise.resolve()),
   lastAck: null as unknown,
   pluginAdditionThrows: false,
   commitGeneratedPatch: vi.fn(
@@ -84,7 +83,6 @@ vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
     options.mutate();
     return { rollback: vi.fn() };
   },
-  runMixedElementIntent: mocks.runMixedIntent,
   runMixedGestureElementIntent: mocks.runMixedGestureIntent,
   runMixedElementDeleteIntent: mocks.runMixedDeleteIntent,
 }));
@@ -166,7 +164,6 @@ describe('useGridSelection compound history gesture', () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     mocks.commitPatch.mockClear();
     mocks.commitGeometry.mockClear();
-    mocks.runMixedIntent.mockClear();
     mocks.commitGeneratedPatch.mockClear();
     mocks.pluginAdditionThrows = false;
     mocks.lastAck = null;
