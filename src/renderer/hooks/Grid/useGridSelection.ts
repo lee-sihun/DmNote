@@ -56,6 +56,7 @@ import { isNativeElementId } from '@src/renderer/editor/model/elementId';
 import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { rotatePluginInstancesEditSession } from '@plugins/runtime/displayElement/instancesCommitQueue';
+import { reissueDisplayElementHandlers } from '@plugins/runtime/displayElement/displayElementApi';
 import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
 import {
   beginMixedGestureTransaction,
@@ -669,14 +670,59 @@ export function useGridSelection({
       }
     }
 
+    // maxInstances 사전 검증 - add 경로(생성 메뉴)와 동일하게 상한 도달 시
+    // 거부·경고. 혼합 선택도 destructive 관례(부분 성공 금지)에 따라 전체 중단
+    const frozenInstanceCaps: Array<{
+      definitionId: string;
+      pluginId: string;
+      maxInstances: number;
+      pastedCount: number;
+    }> = [];
+    if (pluginPayloads.length > 0) {
+      const pastedCountByDefinition = new Map<string, number>();
+      for (const element of pluginPayloads) {
+        if (!element.definitionId) continue;
+        pastedCountByDefinition.set(
+          element.definitionId,
+          (pastedCountByDefinition.get(element.definitionId) ?? 0) + 1,
+        );
+      }
+      const { definitions, elements: currentElements } =
+        usePluginDisplayElementStore.getState();
+      for (const [definitionId, pastedCount] of pastedCountByDefinition) {
+        const definition = definitions.get(definitionId);
+        const maxInstances = definition?.maxInstances;
+        if (!definition || !maxInstances || maxInstances <= 0) continue;
+        frozenInstanceCaps.push({
+          definitionId,
+          pluginId: definition.pluginId,
+          maxInstances,
+          pastedCount,
+        });
+        const currentCount = currentElements.filter(
+          (element) =>
+            element.definitionId === definitionId &&
+            element.tabId === selectedKeyType,
+        ).length;
+        if (currentCount + pastedCount > maxInstances) {
+          console.warn(
+            `[Plugin ${definition.pluginId}] Max instances (${maxInstances}) reached for ${definitionId} in tab ${selectedKeyType}`,
+          );
+          reportElementOpSkipped('paste max instances');
+          return;
+        }
+      }
+    }
+
     // plugin id·fullId 사전 동결 - eager 루프 생성은 retry·receipt를 비결정적으로
     // 만든다. 붙여넣기는 새 인스턴스이므로 id 재발급 - 복사 원본 id를 유지하면
-    // 영구 instanceId가 중복되어 백엔드 커밋이 거절된다
+    // 영구 instanceId가 중복되어 백엔드 커밋이 거절된다. 핸들러 등록도 원본과
+    // 공유하지 않도록 재발급 - _onXxxId 공유는 한쪽 제거가 다른 쪽을 죽인다
     const frozenPluginElements: PluginDisplayElementInternal[] =
       pluginPayloads.map((element) => {
         const id = crypto.randomUUID();
         return {
-          ...element,
+          ...reissueDisplayElementHandlers(element),
           id,
           fullId: `${element.pluginId}::${id}`,
         };
@@ -926,6 +972,18 @@ export function useGridSelection({
         appended = true;
       }
       const combinedProjection = [...projection, ...appendedPlugins];
+
+      // 상한 재검증 - 동결과 정산 사이 추가된 인스턴스와의 TOCTOU 차단.
+      // 초과는 부분 성공 대신 전체 중단 (사전 검증과 동일한 fail-closed)
+      for (const cap of frozenInstanceCaps) {
+        const count = combinedProjection.filter(
+          (element) =>
+            element.definitionId === cap.definitionId && element.tabId === mode,
+        ).length;
+        if (count > cap.maxInstances) {
+          throw new ElementIntentAbort('paste max instances exceeded');
+        }
+      }
 
       // 결합 순서 재구성 + 동결 앵커 재해석 (소실 시 최상단 fallback)
       const allItems = buildLayerItemsForMode(

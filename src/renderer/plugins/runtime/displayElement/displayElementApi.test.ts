@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   rotateEditSession: vi.fn(),
   flushEditSession: vi.fn(),
   unregisterInstance: vi.fn(),
+  handlerGet: vi.fn(),
+  handlerRegister: vi.fn(),
+  handlerUnregister: vi.fn(),
 }));
 
 vi.mock('@stores/plugin/usePluginDisplayElementStore', () => ({
@@ -49,8 +52,9 @@ vi.mock('@utils/plugin/pluginI18n', () => ({
 }));
 vi.mock('../handlers', () => ({
   handlerRegistry: {
-    register: vi.fn(),
-    unregister: vi.fn(),
+    register: mocks.handlerRegister,
+    unregister: mocks.handlerUnregister,
+    get: mocks.handlerGet,
   },
 }));
 vi.mock('./instanceRegistry', () => ({
@@ -74,6 +78,7 @@ vi.mock('./instancesCommitQueue', () => ({
 import {
   addDisplayElementInternal,
   displayElementApi,
+  reissueDisplayElementHandlers,
 } from './displayElementApi';
 
 describe('display element discrete edit boundaries', () => {
@@ -176,6 +181,89 @@ describe('display element discrete edit boundaries', () => {
     expect(mocks.flushEditSession.mock.invocationCallOrder[0]).toBeGreaterThan(
       mocks.removeElement.mock.invocationCallOrder[1],
     );
+  });
+});
+
+describe('display element handler reissue', () => {
+  beforeEach(() => {
+    mocks.handlerGet.mockReset();
+    mocks.handlerRegister.mockReset();
+    mocks.handlerUnregister.mockReset();
+  });
+
+  const baseElement = () => ({
+    pluginId: 'plugin-a',
+    onClick: 'owned-click' as string | undefined,
+    _onClickId: 'owned-click' as string | undefined,
+    onPositionChange: undefined,
+    onDelete: undefined,
+    _onPositionChangeId: undefined,
+    _onDeleteId: undefined,
+  });
+
+  it('소유 등록이 살아 있으면 같은 콜백을 새 id로 재등록한다', () => {
+    const callback = vi.fn();
+    mocks.handlerGet.mockReturnValue(callback);
+    mocks.handlerRegister.mockReturnValue('reissued-click');
+
+    const copy = reissueDisplayElementHandlers(baseElement());
+
+    expect(mocks.handlerRegister).toHaveBeenCalledWith('plugin-a', callback);
+    expect(copy._onClickId).toBe('reissued-click');
+    expect(copy.onClick).toBe('reissued-click');
+  });
+
+  it('원본 등록이 이미 해제됐으면 dangling 참조 없이 핸들러를 비운다', () => {
+    mocks.handlerGet.mockReturnValue(undefined);
+
+    const copy = reissueDisplayElementHandlers(baseElement());
+
+    expect(mocks.handlerRegister).not.toHaveBeenCalled();
+    expect(copy._onClickId).toBeUndefined();
+    expect(copy.onClick).toBeUndefined();
+  });
+
+  it('소유 등록이 없는 문자열 핸들러는 그대로 둔다', () => {
+    const copy = reissueDisplayElementHandlers({
+      ...baseElement(),
+      onClick: 'plugin-managed-handler',
+      _onClickId: undefined,
+    });
+
+    expect(mocks.handlerGet).not.toHaveBeenCalled();
+    expect(mocks.handlerRegister).not.toHaveBeenCalled();
+    expect(copy.onClick).toBe('plugin-managed-handler');
+    expect(copy._onClickId).toBeUndefined();
+  });
+
+  it('세 핸들러 쌍을 각각 독립으로 재발급한다', () => {
+    const clickFn = vi.fn();
+    const deleteFn = vi.fn();
+    mocks.handlerGet.mockImplementation((id: unknown) =>
+      id === 'owned-click'
+        ? clickFn
+        : id === 'owned-delete'
+        ? deleteFn
+        : undefined,
+    );
+    let serial = 0;
+    mocks.handlerRegister.mockImplementation(() => `reissued-${++serial}`);
+
+    const copy = reissueDisplayElementHandlers({
+      ...baseElement(),
+      onPositionChange: 'owned-move' as string | undefined,
+      _onPositionChangeId: 'owned-move' as string | undefined,
+      onDelete: 'owned-delete' as string | undefined,
+      _onDeleteId: 'owned-delete' as string | undefined,
+    });
+
+    expect(copy._onClickId).toBe('reissued-1');
+    expect(copy.onClick).toBe('reissued-1');
+    // 등록이 사라진 move 쌍만 비움
+    expect(copy._onPositionChangeId).toBeUndefined();
+    expect(copy.onPositionChange).toBeUndefined();
+    expect(copy._onDeleteId).toBe('reissued-2');
+    expect(copy.onDelete).toBe('reissued-2');
   });
 });
 

@@ -10,7 +10,11 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import type { CanonicalKeyPosition } from '@src/types/editor';
-import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import type {
+  PluginDefinitionInternal,
+  PluginDisplayElementInternal,
+} from '@src/types/plugin/api';
+import { handlerRegistry } from '@plugins/runtime/handlers';
 
 import { useGridSelection } from './useGridSelection';
 import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozenSelection';
@@ -189,7 +193,10 @@ describe('useGridSelection compound history gesture', () => {
     useGraphItemStore.setState({ positions: {} });
     useKnobItemStore.setState({ positions: {} });
     useLayerGroupStore.setState({ layerGroups: {} });
-    usePluginDisplayElementStore.setState({ elements: [pluginElement()] });
+    usePluginDisplayElementStore.setState({
+      elements: [pluginElement()],
+      definitions: new Map(),
+    });
     useGridSelectionStore.getState().clearSelection();
     window.__dmn_window_type = 'main';
 
@@ -459,6 +466,158 @@ describe('useGridSelection compound history gesture', () => {
     }
     // 원본·1차·2차 모두 서로 다른 id
     expect(new Set(elements.map((element) => element.id)).size).toBe(3);
+  });
+
+  it('플러그인 paste는 핸들러 등록을 재발급해 원본과 공유하지 않는다', async () => {
+    const onClick = vi.fn();
+    const originalHandlerId = handlerRegistry.register('plugin-a', onClick);
+    const original: PluginDisplayElementInternal = {
+      ...pluginElement(),
+      onClick: originalHandlerId,
+      _onClickId: originalHandlerId,
+    };
+    usePluginDisplayElementStore.setState({ elements: [original] });
+    act(() => {
+      const { fullId: _fullId, ...clipboardElement } = original;
+      useGridSelectionStore
+        .getState()
+        .setClipboard([{ type: 'plugin', element: clipboardElement }]);
+    });
+
+    await act(async () => api.pasteElements());
+
+    const elements = usePluginDisplayElementStore.getState().elements;
+    expect(elements).toHaveLength(2);
+    const pasted = elements[1];
+    expect(pasted._onClickId).toBeDefined();
+    expect(pasted._onClickId).not.toBe(originalHandlerId);
+    expect(pasted.onClick).toBe(pasted._onClickId);
+    // 같은 콜백을 새 등록으로 - 원본 등록이 해제돼도 복제는 동작
+    expect(handlerRegistry.get(pasted._onClickId!)).toBe(onClick);
+    handlerRegistry.unregister(originalHandlerId);
+    expect(handlerRegistry.get(pasted._onClickId!)).toBe(onClick);
+    // 원본 요소의 등록 참조는 그대로
+    expect(elements[0]._onClickId).toBe(originalHandlerId);
+    handlerRegistry.unregister(pasted._onClickId!);
+  });
+
+  const cappedDefinition = (maxInstances: number): PluginDefinitionInternal =>
+    ({
+      id: 'plugin-a',
+      pluginId: 'plugin-a',
+      name: 'Panel',
+      maxInstances,
+      template: () => '',
+    } as PluginDefinitionInternal);
+
+  it('paste는 definition 상한 도달 시 add 경로처럼 전체 거부한다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    usePluginDisplayElementStore.setState({
+      elements: [{ ...pluginElement(), definitionId: 'plugin-a' }],
+      definitions: new Map([['plugin-a', cappedDefinition(1)]]),
+    });
+    act(() => {
+      useGridSelectionStore.getState().setClipboard([
+        {
+          type: 'plugin',
+          element: { ...pluginClipboardElement(), definitionId: 'plugin-a' },
+        },
+      ]);
+    });
+
+    await act(async () => api.pasteElements());
+
+    expect(usePluginDisplayElementStore.getState().elements).toHaveLength(1);
+    expect(mocks.runMixedGestureIntent).not.toHaveBeenCalled();
+    expect(mocks.beginMixedGesture).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      '[Plugin plugin-a] Max instances (1) reached for plugin-a in tab 4key',
+    );
+    warn.mockRestore();
+  });
+
+  it('혼합 paste에서 플러그인만 상한 초과여도 키까지 전체 중단한다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    usePluginDisplayElementStore.setState({
+      elements: [{ ...pluginElement(), definitionId: 'plugin-a' }],
+      definitions: new Map([['plugin-a', cappedDefinition(1)]]),
+    });
+    act(() => {
+      useGridSelectionStore.getState().setClipboard([
+        { type: 'key', keyCode: 'KeyB', position: keyPosition },
+        {
+          type: 'plugin',
+          element: { ...pluginClipboardElement(), definitionId: 'plugin-a' },
+        },
+      ]);
+    });
+
+    await act(async () => api.pasteElements());
+
+    // destructive 혼합 관례 - 부분 성공(키만 생성) 없이 무커밋
+    expect(useKeyStore.getState().keyMappings['4key']).toEqual(['KeyA']);
+    expect(useKeyStore.getState().canonicalPositions['4key']).toHaveLength(1);
+    expect(usePluginDisplayElementStore.getState().elements).toHaveLength(1);
+    expect(mocks.runMixedGestureIntent).not.toHaveBeenCalled();
+    expect(mocks.commitPatch).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      '[Plugin plugin-a] Max instances (1) reached for plugin-a in tab 4key',
+    );
+    warn.mockRestore();
+  });
+
+  it('paste 정산은 동결 이후 늘어난 인스턴스로 상한을 넘으면 중단한다', async () => {
+    usePluginDisplayElementStore.setState({
+      elements: [{ ...pluginElement(), definitionId: 'plugin-a' }],
+      definitions: new Map([['plugin-a', cappedDefinition(2)]]),
+    });
+    act(() => {
+      useGridSelectionStore.getState().setClipboard([
+        {
+          type: 'plugin',
+          element: { ...pluginClipboardElement(), definitionId: 'plugin-a' },
+        },
+      ]);
+    });
+
+    await act(async () => api.pasteElements());
+
+    expect(mocks.runMixedGestureIntent).toHaveBeenCalledTimes(1);
+    const options = (
+      mocks.runMixedGestureIntent.mock.calls[0] as unknown[]
+    )[0] as {
+      generate: (context: {
+        base: unknown;
+        pluginProjection: unknown[];
+      }) => unknown;
+    };
+    const base = {
+      schemaVersion: 1,
+      keys: { '4key': [] },
+      keyPositions: { '4key': [] },
+      statPositions: {},
+      graphPositions: {},
+      knobPositions: {},
+      layerGroups: {},
+    };
+    const [existing, pasted] = usePluginDisplayElementStore.getState().elements;
+    // 동결 시점엔 상한 안(1+1<=2)이지만 정산 projection에 제3의 인스턴스 출현
+    const concurrent = {
+      ...pluginElement(),
+      id: 'concurrent',
+      fullId: 'plugin-a::concurrent',
+      definitionId: 'plugin-a',
+    };
+    expect(() =>
+      options.generate({
+        base,
+        pluginProjection: [existing, concurrent, pasted],
+      }),
+    ).toThrowError(/paste max instances exceeded/);
+    // 동시 추가가 없으면 통과
+    expect(() =>
+      options.generate({ base, pluginProjection: [existing, pasted] }),
+    ).not.toThrow();
   });
 
   it('안정 id 이동 정산은 기하 의도 커밋에 gestureId를 전달한다', async () => {

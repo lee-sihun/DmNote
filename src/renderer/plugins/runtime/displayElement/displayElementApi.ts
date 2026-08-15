@@ -60,6 +60,60 @@ const removeDisplayElementInternal = (fullId: string): void => {
   store.removeElement(fullId);
 };
 
+// paste 복제 전용 핸들러 재발급 - _onXxxId는 dispose가 등록 해제까지 소유하는
+// 참조라 복제와 공유하면 한쪽 제거가 다른 쪽 핸들러를 죽인다. 같은 함수를
+// 새 id로 재등록해 생명주기를 분리하고, 원본 등록이 이미 해제된 경우는
+// dangling 참조 대신 핸들러 없는 복제로 정리한다
+export const reissueDisplayElementHandlers = <
+  T extends Pick<
+    PluginDisplayElementInternal,
+    | 'pluginId'
+    | 'onClick'
+    | 'onPositionChange'
+    | 'onDelete'
+    | '_onClickId'
+    | '_onPositionChangeId'
+    | '_onDeleteId'
+  >,
+>(
+  element: T,
+): T => {
+  const reissue = <V>(
+    handlerRef: V | string | undefined,
+    ownedId: string | undefined,
+  ): { handlerRef: V | string | undefined; ownedId: string | undefined } => {
+    // 소유 등록이 없으면 재발급 대상 아님 (플러그인이 직접 관리하는 문자열 참조 등)
+    if (!ownedId) return { handlerRef, ownedId };
+    const handler = handlerRegistry.get(ownedId);
+    if (!handler) {
+      return {
+        handlerRef: handlerRef === ownedId ? undefined : handlerRef,
+        ownedId: undefined,
+      };
+    }
+    const newId = handlerRegistry.register(element.pluginId, handler);
+    return {
+      handlerRef: handlerRef === ownedId ? newId : handlerRef,
+      ownedId: newId,
+    };
+  };
+  const onClick = reissue(element.onClick, element._onClickId);
+  const onPositionChange = reissue(
+    element.onPositionChange,
+    element._onPositionChangeId,
+  );
+  const onDelete = reissue(element.onDelete, element._onDeleteId);
+  return {
+    ...element,
+    onClick: onClick.handlerRef,
+    onPositionChange: onPositionChange.handlerRef,
+    onDelete: onDelete.handlerRef,
+    _onClickId: onClick.ownedId,
+    _onPositionChangeId: onPositionChange.ownedId,
+    _onDeleteId: onDelete.ownedId,
+  } as T;
+};
+
 const removeDisplayElementsInternal = (fullIds: readonly string[]): void => {
   const ids = new Set(fullIds);
   if (ids.size === 0) return;
