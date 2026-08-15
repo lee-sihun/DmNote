@@ -25,27 +25,20 @@ const { commitPatchMock, rotateSessionMock, sendBridgeMessageMock } =
 vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   editorCoordinator: {
     commitPatch: commitPatchMock,
-    // 안정 id 기하 정산은 generator 경로 - gestureId 기록만 동일 recorder로
-    commitGeneratedPatch: vi.fn(
-      (
-        _generate: unknown,
-        meta?: { gestureId?: string; onEnrolled?: () => void },
-      ) => {
-        meta?.onEnrolled?.();
-        commitPatchMock({ schemaVersion: 1 }, { gestureId: meta?.gestureId });
-        return Promise.resolve({});
-      },
-    ),
     getState: () => ({ lastAck: null }),
   },
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
+vi.mock('@src/renderer/editor/runtime/editorSemanticOps', () => ({
   // 게스처 버스트 검증 대상은 gestureId 운반 - 동기 recorder로 기록
-  commitSelectedGeometryByIds: vi.fn(
-    (targets: unknown[], gestureId?: string) => {
-      commitPatchMock({ schemaVersion: 1 }, { gestureId });
-      return Promise.resolve(targets.length);
+  commitGeneratedSemanticOps: vi.fn(
+    (
+      _generate: unknown,
+      meta?: { gestureId?: string; onEnrolled?: () => void },
+    ) => {
+      meta?.onEnrolled?.();
+      commitPatchMock({ schemaVersion: 1 }, { gestureId: meta?.gestureId });
+      return Promise.resolve({ document: null, opResults: [] });
     },
   ),
 }));

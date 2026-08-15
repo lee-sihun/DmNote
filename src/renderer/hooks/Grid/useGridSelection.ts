@@ -26,7 +26,7 @@ import {
   buildLayerItemsForMode,
   applyZIndexToLayerOrder,
 } from '@utils/layerGroupUtils';
-import { commitSelectedGeometryByIds } from '@src/renderer/editor/runtime/elementOps';
+import { commitGeneratedSemanticOps } from '@src/renderer/editor/runtime/editorSemanticOps';
 import {
   ElementIntentAbort,
   applySealedSliceMutation,
@@ -145,7 +145,7 @@ export function useGridSelection({
     if (nativeTargets.length > 0) {
       if (!allStableIds) {
         reportElementOpSkipped('invalid native selection settlement');
-      } else if (gestureId && isMixed) {
+      } else {
         // 이동 정산은 dx·dy만 동결 - width·height까지 실으면 병행 리사이즈를
         // 되돌린다. wire는 슬롯 generator가 최신 base에 id 의도를 재적용
         const geometryIntents: PropertyIntents = new Map(
@@ -220,33 +220,59 @@ export function useGridSelection({
             }
           }
         }
-        void runMixedGestureElementIntent({
-          gestureId,
-          initialPluginIds: pluginIds,
-          // 이동 정산은 plugin 요소를 추가·제거하지 않아 scope가 고정이다
-          pluginScope: () => pluginIds,
-          receipt: createPropertyReceipt(receiptEntries),
-          generate: ({ base }) => {
-            const ops = generateGeometryIntentOps(base, geometryIntents);
-            // 전량 소실은 무커밋 - abort가 receipt 복원과 skip 관측을 소유한다
-            if (ops.length === 0) {
-              throw new ElementIntentAbort('mixed selection settlement');
-            }
-            return { kind: 'ops', ops };
-          },
-          skipContext: 'mixed selection settlement',
-        }).catch((error: Error) => {
-          console.error('Failed to persist selected element positions', error);
-        });
-      } else {
-        void commitSelectedGeometryByIds(nativeTargets, gestureId).catch(
-          (error: Error) => {
+        const receipt = createPropertyReceipt(receiptEntries);
+        if (gestureId && isMixed) {
+          void runMixedGestureElementIntent({
+            gestureId,
+            initialPluginIds: pluginIds,
+            // 이동 정산은 plugin 요소를 추가·제거하지 않아 scope가 고정이다
+            pluginScope: () => pluginIds,
+            receipt,
+            generate: ({ base }) => {
+              const ops = generateGeometryIntentOps(base, geometryIntents);
+              // 전량 소실은 무커밋 - abort가 receipt 복원과 skip 관측을 소유한다
+              if (ops.length === 0) {
+                throw new ElementIntentAbort('mixed selection settlement');
+              }
+              return { kind: 'ops', ops };
+            },
+            skipContext: 'mixed selection settlement',
+          }).catch((error: Error) => {
             console.error(
               'Failed to persist selected element positions',
               error,
             );
-          },
-        );
+          });
+        } else {
+          // native 단독 정산도 같은 setBounds ops 경로 - 전량 소실은 null
+          // 무커밋 후 receipt 복원, 실패는 편입 전에만 복원 (mixed와 동일 규약)
+          let enrolled = false;
+          void commitGeneratedSemanticOps(
+            (base) => {
+              const ops = generateGeometryIntentOps(base, geometryIntents);
+              return ops.length > 0 ? ops : null;
+            },
+            {
+              ...(gestureId ? { gestureId } : {}),
+              onEnrolled: () => {
+                enrolled = true;
+              },
+            },
+          )
+            .then((outcome) => {
+              if (!outcome) {
+                receipt?.rollback();
+                reportElementOpSkipped('native selection settlement');
+              }
+            })
+            .catch((error: Error) => {
+              if (!enrolled) receipt?.rollback();
+              console.error(
+                'Failed to persist selected element positions',
+                error,
+              );
+            });
+        }
       }
     }
 

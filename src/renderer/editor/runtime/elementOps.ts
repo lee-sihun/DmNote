@@ -23,8 +23,6 @@ import {
 import {
   applyPropertyIntentsEagerly,
   createPropertyReceipt,
-  intentPatch,
-  runElementIntent,
   type ElementIntentReceipt,
   type PropertyIntents,
 } from './elementIntent';
@@ -65,7 +63,6 @@ import type {
   EditorElementGroupTargetV1,
   EditorTargetLayerGroupV1,
   EditorOpV1,
-  EditorPatchV1,
 } from '@src/types/editor';
 import {
   isEditorPaintPropertyPatchV1,
@@ -593,15 +590,6 @@ export const placeDuplicatedKnob = (
       zIndex,
     },
   });
-
-// z-order: 모드 전역(4 컬렉션 + 외부 플러그인 z) 기준으로 대상 id들에
-// 새 zIndex를 선택 순서대로 할당하는 단일 트랜잭션. 루프-await로 요소마다
-// 따로 커밋하면 렌더 클로저 base가 서로를 덮는다 (플러그인 없이 재현되는
-// lost update). 플러그인 요소는 편집 문서 밖이라 이 op에 결합하지 않는다
-interface ZOrderTarget {
-  type: NativeElementType;
-  id: string;
-}
 
 const FIELD_BY_TYPE: Record<
   NativeElementType,
@@ -2789,75 +2777,6 @@ export const commitElementGeometryById = (
       if (!enrolled) receipt?.rollback();
       throw error;
     });
-};
-
-export const commitSelectedGeometryByIds = (
-  targets: readonly ZOrderTarget[],
-  gestureId?: string,
-  // 이동 경로는 dx·dy만 - 크기까지 항상 실으면 병행 크기 변경을 되돌린다.
-  // 리사이즈 종료만 width·height를 명시적으로 포함한다
-  fields: readonly GeometryField[] = ['dx', 'dy'],
-): Promise<number> => {
-  const intents = new Map<
-    NativeElementType,
-    Map<string, Partial<Record<GeometryField, number>>>
-  >();
-  for (const target of targets) {
-    if (!target.id) continue;
-    const locator = resolveElementById(target.type, target.id);
-    if (!locator) continue;
-    const record =
-      target.type === 'key'
-        ? (useKeyStore.getState().canonicalPositions as unknown as LooseRecord)
-        : target.type === 'stat'
-        ? (useStatItemStore.getState().positions as unknown as LooseRecord)
-        : target.type === 'graph'
-        ? (useGraphItemStore.getState().positions as unknown as LooseRecord)
-        : (useKnobItemStore.getState().positions as unknown as LooseRecord);
-    const position = record[locator.mode]?.[locator.index];
-    if (!position) continue;
-    const byId = intents.get(target.type) ?? new Map();
-    const intent: Partial<Record<GeometryField, number>> = {};
-    for (const field of fields) {
-      const value = position[field];
-      if (typeof value === 'number') intent[field] = value;
-    }
-    byId.set(target.id, intent);
-    intents.set(target.type, byId);
-  }
-  if (intents.size === 0) return Promise.resolve(0);
-
-  let applied = 0;
-  return runElementIntent({
-    // 드래그가 이미 스토어에 최종값을 반영했으므로 eager 없음 - 실패 시
-    // 남는 값은 드래그 산출물이며 수용된 낙관 의미론(V-5)을 따른다
-    applyEager: () => null,
-    generate: (base) => {
-      const patch: EditorPatchV1 = { schemaVersion: 1 };
-      let touchedAny = false;
-      for (const [type, byId] of intents) {
-        const field = FIELD_BY_TYPE[type];
-        const record = base[field] as unknown as LooseRecord;
-        let touched = 0;
-        const next: LooseRecord = {};
-        for (const [mode, list] of Object.entries(record)) {
-          next[mode] = list.map((position) => {
-            const id = position.id;
-            if (typeof id !== 'string' || !byId.has(id)) return position;
-            touched += 1;
-            return { ...position, ...byId.get(id) };
-          });
-        }
-        if (touched > 0) {
-          patch[field] = next as never;
-          applied += touched;
-          touchedAny = true;
-        }
-      }
-      return intentPatch(touchedAny ? patch : null);
-    },
-    ...(gestureId ? { gestureId } : {}),
-  }).then((result) => (result.committed ? applied : 0));
 };
 
 // 리사이즈 완료 전용: 시작 시 동결한 대상 id들에 최종 bounds를 하나의

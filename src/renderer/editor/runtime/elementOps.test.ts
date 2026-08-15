@@ -41,7 +41,6 @@ import {
   commitElementGeometryById,
   commitElementBoundsById,
   commitSingleElementBoundsById,
-  commitSelectedGeometryByIds,
   deleteElementById,
   placeDuplicatedKey,
   placeDuplicatedGraph,
@@ -131,7 +130,6 @@ const graphAt = (
 // 슬롯 시점 base. 기본은 호출 시점 스토어 - 대기 중 재정렬·삭제는 테스트가
 // slotBase로 재현한다
 let slotBase: (() => CanonicalEditorDocumentV1) | null = null;
-const generatedPatches: Array<EditorPatchV1 | null> = [];
 
 const documentFromStores = (): CanonicalEditorDocumentV1 =>
   ({
@@ -148,15 +146,15 @@ describe('elementOps', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     slotBase = null;
-    generatedPatches.length = 0;
     api.lastAck = null;
     api.captureEditorDocument.mockImplementation(() => documentFromStores());
+    // legacy patch generator 경로는 미사용 가드 - 호출 시 base만 돌려준다
     api.commitGeneratedPatch.mockImplementation(
       async (
         generate: (base: CanonicalEditorDocumentV1) => EditorPatchV1 | null,
       ) => {
         const base = (slotBase ?? documentFromStores)();
-        generatedPatches.push(generate(base));
+        generate(base);
         return base;
       },
     );
@@ -461,41 +459,6 @@ describe('elementOps', () => {
     expect(api.commitGeneratedPatch).not.toHaveBeenCalled();
   });
 
-  it('다중 정산은 기하만 실어 base의 무관 필드 재작성을 보존한다', async () => {
-    // 호출 시점 스토어: 드래그 결과 dx=50. base(슬롯 시점)에는 그 사이
-    // 배타 mutation이 재작성한 counter preset(Q)이 있다
-    useKeyStore.setState({
-      canonicalPositions: {
-        '4key': [{ ...keyAt(ID_A), dx: 50 }, keyAt(ID_B)],
-      },
-      positions: { '4key': [{ ...keyAt(ID_A), dx: 50 }, keyAt(ID_B)] },
-    });
-    slotBase = () => {
-      const base = documentFromStores();
-      base.keyPositions = {
-        '4key': [
-          { ...keyAt(ID_A), dx: 0, inactiveImage: 'rewritten-by-mutation.png' },
-          keyAt(ID_B),
-        ],
-      } as never;
-      return base;
-    };
-
-    const applied = await commitSelectedGeometryByIds(
-      [{ type: 'key', id: ID_A }],
-      'gesture-sync',
-    );
-
-    expect(applied).toBe(1);
-    expect(api.commitGeneratedPatch.mock.calls[0][1]).toMatchObject({
-      gestureId: 'gesture-sync',
-    });
-    const record = generatedPatches[0]?.keyPositions?.['4key'];
-    // 기하는 의도값, mutation이 재작성한 필드는 base 값 유지
-    expect(record?.[0].dx).toBe(50);
-    expect(record?.[0].inactiveImage).toBe('rewritten-by-mutation.png');
-  });
-
   it('단일 축 기하는 슬롯 최신 base의 나머지 bounds를 보존한다', async () => {
     const base = documentFromStores();
     base.keyPositions = {
@@ -582,54 +545,6 @@ describe('elementOps', () => {
     expect(useKeyStore.getState().canonicalPositions['4key'][0].height).toBe(
       before,
     );
-  });
-
-  it('리사이즈 정산은 크기 필드까지 의도에 싣는다', async () => {
-    useKeyStore.setState({
-      canonicalPositions: {
-        '4key': [{ ...keyAt(ID_A), dx: 5, width: 90, height: 80 }],
-      },
-      positions: {
-        '4key': [{ ...keyAt(ID_A), dx: 5, width: 90, height: 80 }],
-      },
-    });
-    const pre = documentFromStores();
-    pre.keyPositions = {
-      '4key': [{ ...keyAt(ID_A), dx: 0, width: 60, height: 60 }],
-    } as never;
-    slotBase = () => pre;
-
-    await commitSelectedGeometryByIds([{ type: 'key', id: ID_A }], undefined, [
-      'dx',
-      'dy',
-      'width',
-      'height',
-    ]);
-
-    const record = generatedPatches[0]?.keyPositions?.['4key'];
-    expect(record?.[0]).toMatchObject({ dx: 5, width: 90, height: 80 });
-  });
-
-  it('이동 정산은 크기 필드를 싣지 않는다', async () => {
-    useKeyStore.setState({
-      canonicalPositions: {
-        '4key': [{ ...keyAt(ID_A), dx: 5, width: 90 }],
-      },
-      positions: { '4key': [{ ...keyAt(ID_A), dx: 5, width: 90 }] },
-    });
-    const pre = documentFromStores();
-    // 병행 크기 변경이 base에 정산된 상황
-    pre.keyPositions = {
-      '4key': [{ ...keyAt(ID_A), dx: 0, width: 120 }],
-    } as never;
-    slotBase = () => pre;
-
-    await commitSelectedGeometryByIds([{ type: 'key', id: ID_A }]);
-
-    const record = generatedPatches[0]?.keyPositions?.['4key'];
-    expect(record?.[0].dx).toBe(5);
-    // 병행 크기 변경 보존
-    expect(record?.[0].width).toBe(120);
   });
 
   it('배치 정렬은 stable ID 전 대상을 N setBounds로 한 번에 생성한다', async () => {
@@ -1266,21 +1181,6 @@ describe('elementOps', () => {
     ).rejects.toThrow('preflight');
 
     expect(useLayerGroupStore.getState().layerGroups).toBe(before);
-  });
-
-  it('다중 정산 대상이 전부 사라졌으면 커밋하지 않는다', async () => {
-    slotBase = () => {
-      const base = documentFromStores();
-      base.keyPositions = { '4key': [keyAt(ID_B)] } as never;
-      return base;
-    };
-
-    const applied = await commitSelectedGeometryByIds([
-      { type: 'key', id: ID_A },
-    ]);
-
-    expect(applied).toBe(0);
-    expect(generatedPatches).toEqual([null]);
   });
 
   it('단일 bounds op의 편입 전 실패는 4필드를 CAS 복원한다', async () => {

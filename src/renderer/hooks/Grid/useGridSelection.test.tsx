@@ -21,7 +21,15 @@ import { deleteFrozenSelection } from '@src/renderer/editor/runtime/deleteFrozen
 import { ElementIntentAbort } from '@src/renderer/editor/runtime/elementIntent';
 
 const mocks = vi.hoisted(() => ({
-  commitGeometry: vi.fn(() => Promise.resolve(1)),
+  commitGeneratedSemanticOps: vi.fn(
+    (
+      _generate: (base: unknown) => unknown,
+      meta?: { gestureId?: string; onEnrolled?: () => void },
+    ) => {
+      meta?.onEnrolled?.();
+      return Promise.resolve({ document: null, opResults: [] });
+    },
+  ),
   lastAck: null as unknown,
   pluginAdditionThrows: false,
   commitGeneratedPatch: vi.fn(
@@ -60,8 +68,8 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
   },
 }));
 
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
-  commitSelectedGeometryByIds: mocks.commitGeometry,
+vi.mock('@src/renderer/editor/runtime/editorSemanticOps', () => ({
+  commitGeneratedSemanticOps: mocks.commitGeneratedSemanticOps,
 }));
 
 vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
@@ -167,7 +175,7 @@ describe('useGridSelection compound history gesture', () => {
     originalWindowType = window.__dmn_window_type;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     mocks.commitPatch.mockClear();
-    mocks.commitGeometry.mockClear();
+    mocks.commitGeneratedSemanticOps.mockClear();
     mocks.commitGeneratedPatch.mockClear();
     mocks.pluginAdditionThrows = false;
     mocks.lastAck = null;
@@ -620,20 +628,142 @@ describe('useGridSelection compound history gesture', () => {
     ).not.toThrow();
   });
 
-  it('안정 id 이동 정산은 기하 의도 커밋에 gestureId를 전달한다', async () => {
+  // native 단독 이동 정산 계약. 전환 고정: 레거시 슬롯 재생성(runElementIntent
+  // 경유 commitGeneratedPatch)이 아니라 semantic ops 경로로만 나감을 단언한다
+  const settleNativeMove = async (settleGestureId?: string) => {
     await act(async () => {
       useGridSelectionStore
         .getState()
         .setSelectedElements([{ type: 'key', id: STABLE_KEY_ID, index: 0 }]);
     });
-    api.syncSelectedElementsToOverlay(gestureId);
+    api.syncSelectedElementsToOverlay(settleGestureId);
+    expect(mocks.commitGeneratedSemanticOps).toHaveBeenCalledTimes(1);
+    return mocks.commitGeneratedSemanticOps.mock.calls[0] as unknown as [
+      (base: unknown) => Array<Record<string, unknown>> | null,
+      { gestureId?: string; onEnrolled?: () => void } | undefined,
+    ];
+  };
 
-    expect(mocks.commitGeometry).toHaveBeenCalledTimes(1);
-    expect(mocks.commitGeometry).toHaveBeenCalledWith(
-      [{ type: 'key', id: STABLE_KEY_ID }],
-      gestureId,
-    );
+  it('안정 id native 정산은 semantic ops 커밋에 gestureId를 싣는다', async () => {
+    const [, meta] = await settleNativeMove(gestureId);
+
+    expect(meta?.gestureId).toBe(gestureId);
+    // 전환 고정 - 레거시 patch generator·full-record 커밋 미사용
+    expect(mocks.commitGeneratedPatch).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
+    expect(mocks.runMixedGestureIntent).not.toHaveBeenCalled();
+  });
+
+  it('native 정산 op은 dx·dy만 의도로 싣고 크기는 슬롯 base 값을 따른다', async () => {
+    act(() => {
+      useKeyStore.setState({
+        positions: { '4key': [{ ...keyPosition, dx: 111, dy: 222 }] },
+        canonicalPositions: { '4key': [{ ...keyPosition, dx: 111, dy: 222 }] },
+      });
+    });
+    const [generate] = await settleNativeMove(gestureId);
+
+    // 병행 리사이즈가 슬롯 안에서 먼저 착지한 상황
+    const ops = generate(
+      baseWith({ ...keyPosition, dx: 0, dy: 0, width: 999, height: 888 }),
+    );
+
+    expect(ops).toEqual([
+      {
+        kind: 'setBounds',
+        elementType: 'key',
+        id: STABLE_KEY_ID,
+        // 이동 정산이 병행 리사이즈 결과를 되돌리지 않는다
+        bounds: { dx: 111, dy: 222, width: 999, height: 888 },
+      },
+    ]);
+  });
+
+  it('gestureId 없는 native 정산도 같은 ops 경로를 탄다', async () => {
+    const [generate, meta] = await settleNativeMove();
+
+    expect(meta?.gestureId).toBeUndefined();
+    expect(generate(baseWith({ ...keyPosition }))).toEqual([
+      expect.objectContaining({ kind: 'setBounds', id: STABLE_KEY_ID }),
+    ]);
+  });
+
+  it('native 정산 전량 소실은 null 무커밋으로 receipt를 복원한다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.lastAck = baseWith({ ...keyPosition, dx: 1, dy: 2 });
+    act(() => {
+      useKeyStore.setState({
+        positions: { '4key': [{ ...keyPosition, dx: 55, dy: 66 }] },
+        canonicalPositions: { '4key': [{ ...keyPosition, dx: 55, dy: 66 }] },
+      });
+    });
+    let generatedNull: unknown = 'unset';
+    mocks.commitGeneratedSemanticOps.mockImplementationOnce((generate) => {
+      // 슬롯 base에서 대상이 사라진 상황 - generator가 null로 무커밋 판정
+      generatedNull = generate(
+        baseWith({
+          ...keyPosition,
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        }),
+      );
+      return Promise.resolve(null);
+    });
+
+    await act(async () => {
+      await settleNativeMove(gestureId);
+    });
+
+    expect(generatedNull).toBeNull();
+    // eager 값이 그대로면 lastAck 값으로 복원한다
+    const restored = useKeyStore.getState().positions['4key'][0];
+    expect(restored.dx).toBe(1);
+    expect(restored.dy).toBe(2);
+    warn.mockRestore();
+  });
+
+  it('native 정산은 편입 전 실패만 receipt를 복원한다', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.lastAck = baseWith({ ...keyPosition, dx: 1, dy: 2 });
+    act(() => {
+      useKeyStore.setState({
+        positions: { '4key': [{ ...keyPosition, dx: 55, dy: 66 }] },
+        canonicalPositions: { '4key': [{ ...keyPosition, dx: 55, dy: 66 }] },
+      });
+    });
+    mocks.commitGeneratedSemanticOps.mockImplementationOnce(() =>
+      Promise.reject(new Error('start failed')),
+    );
+
+    await act(async () => {
+      await settleNativeMove(gestureId);
+    });
+
+    expect(useKeyStore.getState().positions['4key'][0]).toMatchObject({
+      dx: 1,
+      dy: 2,
+    });
+
+    // 편입 후 실패는 pendingLocal 재시도·lastAck 적용이 소유 - 복원 금지
+    act(() => {
+      useKeyStore.setState({
+        positions: { '4key': [{ ...keyPosition, dx: 55, dy: 66 }] },
+        canonicalPositions: { '4key': [{ ...keyPosition, dx: 55, dy: 66 }] },
+      });
+    });
+    mocks.commitGeneratedSemanticOps.mockClear();
+    mocks.commitGeneratedSemanticOps.mockImplementationOnce((_g, meta) => {
+      meta?.onEnrolled?.();
+      return Promise.reject(new Error('commit failed'));
+    });
+    await act(async () => {
+      await settleNativeMove(gestureId);
+    });
+
+    expect(useKeyStore.getState().positions['4key'][0]).toMatchObject({
+      dx: 55,
+      dy: 66,
+    });
+    error.mockRestore();
   });
 
   // 혼합 이동 정산 wire 계약. mock 호출 인자만 보는 라우팅 테스트와 달리
@@ -683,7 +813,7 @@ describe('useGridSelection compound history gesture', () => {
     // 이동은 plugin 요소를 추가·제거하지 않아 scope가 고정이다
     expect(options.pluginScope([])).toEqual(['plugin-a']);
     expect(options.skipContext).toBe('mixed selection settlement');
-    expect(mocks.commitGeometry).not.toHaveBeenCalled();
+    expect(mocks.commitGeneratedSemanticOps).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 
@@ -854,7 +984,7 @@ describe('useGridSelection compound history gesture', () => {
   it('빈 선택 정산은 editor를 커밋하지 않는다', () => {
     api.syncSelectedElementsToOverlay(gestureId);
 
-    expect(mocks.commitGeometry).not.toHaveBeenCalled();
+    expect(mocks.commitGeneratedSemanticOps).not.toHaveBeenCalled();
     expect(mocks.commitPatch).not.toHaveBeenCalled();
   });
 

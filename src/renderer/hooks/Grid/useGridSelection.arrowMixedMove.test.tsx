@@ -23,7 +23,6 @@ import { useGridSelection } from './useGridSelection';
 
 const mocks = vi.hoisted(() => ({
   order: [] as string[],
-  commitGeometry: vi.fn(() => Promise.resolve(1)),
   lastAck: null as unknown,
   runMixedGestureIntent: vi.fn((_options: unknown) =>
     Promise.resolve({ committed: true, satisfied: true }),
@@ -44,10 +43,6 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
     commitPatch: mocks.commitPatch,
     getState: () => ({ lastAck: mocks.lastAck }),
   },
-}));
-
-vi.mock('@src/renderer/editor/runtime/elementOps', () => ({
-  commitSelectedGeometryByIds: mocks.commitGeometry,
 }));
 
 vi.mock('@src/renderer/editor/runtime/mixedElementIntent', () => ({
@@ -154,7 +149,6 @@ describe('useGridSelection 화살표 혼합 이동 staging 순서', () => {
     originalWindowType = window.__dmn_window_type;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     mocks.order.length = 0;
-    mocks.commitGeometry.mockClear();
     mocks.lastAck = null;
     mocks.runMixedGestureIntent.mockClear();
     mocks.runMixedDeleteIntent.mockClear();
