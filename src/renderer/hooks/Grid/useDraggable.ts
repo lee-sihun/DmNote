@@ -48,6 +48,9 @@ interface UseDraggableReturn {
   recentPressMovedRef: RefObject<boolean>;
 }
 
+// 드래그 세션 동안 body에 붙는 전역 grabbing 클래스 (main.css)
+const DRAG_CURSOR_CLASS = 'dmn-dragging';
+
 // 위치 클램핑 함수
 const clampPosition = (value: number): number => {
   return Math.min(Math.max(value, MIN_GRID_POSITION), MAX_GRID_POSITION);
@@ -110,7 +113,8 @@ export const useDraggable = ({
     ((excludeId: string) => ElementBounds[]) | null
   >(getOtherElements);
   const disabledRef = useRef<boolean>(disabled);
-  const previousBodyCursorRef = useRef<string | null>(null);
+  // 이 인스턴스가 붙인 body 클래스만 제거 (다른 세션의 클래스 오제거 방지)
+  const dragCursorAppliedRef = useRef(false);
   // 진행 중 드래그 세션 존재 여부 — 트랙패드 이중 press가 세션을 겹쳐 시작하면
   // 먼저 끝난 세션의 정리 코드가 커서·리스너를 지워 남은 세션이 오염됨
   const activeDragRef = useRef(false);
@@ -154,19 +158,18 @@ export const useDraggable = ({
     setNode(nodeEle);
   };
 
-  const restoreBodyCursor = () => {
+  const applyDragCursor = () => {
     if (typeof document === 'undefined') return;
-    if (previousBodyCursorRef.current === null) return;
-    document.body.style.cursor = previousBodyCursorRef.current;
-    previousBodyCursorRef.current = null;
+    if (dragCursorAppliedRef.current) return;
+    document.body.classList.add(DRAG_CURSOR_CLASS);
+    dragCursorAppliedRef.current = true;
   };
 
-  const setBodyCursor = (cursor: string) => {
+  const clearDragCursor = () => {
     if (typeof document === 'undefined') return;
-    if (previousBodyCursorRef.current === null) {
-      previousBodyCursorRef.current = document.body.style.cursor || '';
-    }
-    document.body.style.cursor = cursor;
+    if (!dragCursorAppliedRef.current) return;
+    document.body.classList.remove(DRAG_CURSOR_CLASS);
+    dragCursorAppliedRef.current = false;
   };
 
   const handlePointerDown = (e: PointerEvent) => {
@@ -206,9 +209,9 @@ export const useDraggable = ({
     recentPressMovedRef.current = movedThisPressRef.current;
     movedThisPressRef.current = false;
 
-    // 잡는 동안만 grabbing — 호버 커서 변경 없음. WKWebView가 hover 중
-    // CSS 커서 갱신을 놓치는 문제로 CSS :hover/:active 대신 JS 인라인 유지
-    dragTarget.style.cursor = 'grabbing';
+    // press부터 세션 종료까지 body 클래스로 전역 grabbing (호버 커서 변경 없음)
+    // WKWebView가 hover 중 CSS :active 커서 갱신을 놓치는 문제로 JS 토글 병행
+    applyDragCursor();
 
     // 현재 줌/팬 값 캡처
     const currentZoom = zoomRef.current;
@@ -254,7 +257,6 @@ export const useDraggable = ({
         (deltaX > dragThresholdRef.current || deltaY > dragThresholdRef.current)
       ) {
         actuallyDragging = true;
-        setBodyCursor('grabbing');
         // 실제 드래그가 시작될 때만 최적화 적용
         dragTarget.style.userSelect = 'none';
         // 드래그 시작 시 애니메이션 비활성화
@@ -431,7 +433,7 @@ export const useDraggable = ({
       if (pointerId !== null && dragTarget.hasPointerCapture(pointerId)) {
         dragTarget.releasePointerCapture(pointerId);
       }
-      restoreBodyCursor();
+      clearDragCursor();
 
       dragTarget.removeEventListener('pointermove', handlePointerMove);
       dragTarget.removeEventListener('pointerup', handlePointerEnd);
@@ -446,7 +448,6 @@ export const useDraggable = ({
 
       // 실제 드래그가 발생했을 때만 복구
       if (actuallyDragging) {
-        dragTarget.style.cursor = '';
         dragTarget.style.userSelect = 'auto';
         // 드래그 종료 시 애니메이션 복원
         useGridSelectionStore.getState().setDraggingOrResizing(false);
@@ -463,8 +464,6 @@ export const useDraggable = ({
           pendingInitialSyncRef.current = null;
         }
       } else {
-        // 클릭만 했을 경우 커서만 복구
-        dragTarget.style.cursor = '';
         // 커밋이 없으므로 드래그 중 유예된 외부 동기화를 지금 반영
         const pendingSync = pendingInitialSyncRef.current;
         if (pendingSync) {
@@ -503,7 +502,7 @@ export const useDraggable = ({
   useEffect(() => {
     return () => {
       activeDragCleanupRef.current?.();
-      restoreBodyCursor();
+      clearDragCursor();
     };
   }, []);
 

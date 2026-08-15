@@ -96,6 +96,9 @@ const Harness = ({
   );
 };
 
+// main.css의 body.dmn-dragging 규칙과 결합되는 클래스 계약
+const DRAG_CLASS = 'dmn-dragging';
+
 describe('useDraggable pointer contract', () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -170,7 +173,7 @@ describe('useDraggable pointer contract', () => {
     onPositionChange = vi.fn();
     clearGuides.mockClear();
     setDraggingOrResizing.mockClear();
-    document.body.style.cursor = '';
+    document.body.classList.remove(DRAG_CLASS);
     releaseDragSession();
   });
 
@@ -313,7 +316,7 @@ describe('useDraggable pointer contract', () => {
     expect(onPositionChange).toHaveBeenCalledTimes(1);
   });
 
-  it('ends on blur and restores both element and body cursors', async () => {
+  it('ends on blur and clears the drag cursor class', async () => {
     const cleanup = vi.fn();
     onDragStart.mockReturnValue(cleanup);
     const element = await renderHarness();
@@ -323,15 +326,76 @@ describe('useDraggable pointer contract', () => {
       dispatchPointer(element, 'pointermove', { clientX: 11 });
       flushRaf();
     });
-    expect(element.style.cursor).toBe('grabbing');
-    expect(document.body.style.cursor).toBe('grabbing');
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(true);
 
     await act(async () => window.dispatchEvent(new Event('blur')));
 
-    expect(element.style.cursor).toBe('');
-    expect(document.body.style.cursor).toBe('');
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(false);
     expect(onPositionChange).toHaveBeenCalledTimes(1);
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('press에서 드래그 커서 클래스를 붙이고 정지 릴리즈에 제거한다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+    });
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(true);
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerup');
+    });
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(false);
+  });
+
+  it('드래그 정상 종료에 드래그 커서 클래스를 제거한다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointermove', { clientX: 11 });
+      flushRaf();
+    });
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(true);
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerup', { clientX: 11 });
+    });
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(false);
+    expect(onPositionChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('pointercancel 취소 경로에서도 드래그 커서 클래스를 제거한다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointermove', { clientX: 11 });
+      flushRaf();
+    });
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(true);
+
+    await act(async () => {
+      dispatchPointer(element, 'pointercancel', { clientX: 11 });
+    });
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(false);
+  });
+
+  it('active drag 중 unmount에도 드래그 커서 클래스를 제거한다', async () => {
+    const element = await renderHarness();
+
+    await act(async () => {
+      dispatchPointer(element, 'pointerdown');
+      dispatchPointer(element, 'pointermove', { clientX: 11 });
+      flushRaf();
+    });
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(true);
+
+    await act(async () => {
+      root.render(null);
+    });
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(false);
   });
 
   it('active drag를 unmount할 때 gesture cleanup을 한 번 실행한다', async () => {
@@ -357,7 +421,7 @@ describe('useDraggable pointer contract', () => {
       dispatchPointer(element, 'pointerdown', { isPrimary: false });
     });
 
-    expect(element.style.cursor).toBe('');
+    expect(document.body.classList.contains(DRAG_CLASS)).toBe(false);
     expect(setDraggingOrResizing).not.toHaveBeenCalled();
   });
 

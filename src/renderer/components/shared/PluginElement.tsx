@@ -51,6 +51,8 @@ import { expandGroupSelectionFromStores } from '@utils/grid/groupSelection';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
+// scoped 플러그인 shadow tree에 주입되는 커서 정책 스타일 식별자
+const SHADOW_CURSOR_STYLE_ATTR = 'data-dmn-cursor-policy';
 
 /**
  * 리사이즈 앵커에 따라 크기 변경 시 위치 보정값 계산
@@ -523,6 +525,17 @@ const PluginElementImpl: React.FC<PluginElementProps> = ({
       }
     }
   }, [element.scoped, element.fullId, shadowRoot]);
+
+  // 메인 창 한정 shadow tree 커서 정책 주입
+  // 문서 규칙(.dmn-grabbable *)은 shadow 경계를 못 넘으므로 내부에서 상속을 강제
+  useEffect(() => {
+    if (windowType !== 'main' || !shadowRoot) return;
+    if (shadowRoot.querySelector(`style[${SHADOW_CURSOR_STYLE_ATTR}]`)) return;
+    const style = document.createElement('style');
+    style.setAttribute(SHADOW_CURSOR_STYLE_ATTR, '');
+    style.textContent = '* { cursor: inherit !important; }';
+    shadowRoot.prepend(style);
+  }, [windowType, shadowRoot]);
 
   // 템플릿 렌더링 결과 계산
   const renderedContent = (() => {
