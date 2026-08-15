@@ -46,6 +46,7 @@ import {
   runMixedGestureElementIntent,
 } from './mixedElementIntent';
 
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
 import type { EditorDocumentV1 } from '@src/types/editor';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import type { MixedIntentGeneration } from '@plugins/runtime/displayElement/gestureTransaction';
@@ -66,7 +67,7 @@ describe('혼합 의도 러너 receipt 소유권', () => {
     mocks.commitMixed.mockImplementation(
       async (_gestureId, mutation, _ids, meta: Meta) => {
         expect(mutation).toEqual({
-          opsVersion: 1,
+          opsVersion: EDITOR_OPS_VERSION,
           ops: [
             {
               kind: 'setBounds',

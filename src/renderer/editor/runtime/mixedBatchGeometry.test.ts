@@ -8,6 +8,7 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 const mocks = vi.hoisted(() => ({
@@ -59,7 +60,7 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
           editorBaseRevision: number;
           mutationId: string;
           editorChanges?: unknown;
-          editorOpsVersion?: 1;
+          editorOpsVersion?: typeof EDITOR_OPS_VERSION;
           editorOps?: unknown[];
         }) => Promise<unknown>,
         meta?: { onEnrolled?: () => void; prepare?: () => Promise<void> },
@@ -97,7 +98,7 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
           mutationId: 'mutation-1',
           ...(isOps
             ? {
-                editorOpsVersion: 1,
+                editorOpsVersion: EDITOR_OPS_VERSION,
                 editorOps: (mutation as unknown as { ops: unknown[] }).ops,
               }
             : mutation

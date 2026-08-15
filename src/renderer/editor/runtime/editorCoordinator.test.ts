@@ -7,6 +7,7 @@ import {
 
 import {
   EDITOR_FIELDS,
+  EDITOR_OPS_VERSION,
   EditorProtocolError,
   assertCanonicalEditorDocument,
   assertEditorGetResult,
@@ -1411,7 +1412,7 @@ describe('EditorSaveCoordinator', () => {
 
     await harness.coordinator.commitGesture(
       {
-        opsVersion: 1,
+        opsVersion: EDITOR_OPS_VERSION,
         ops: [
           {
             kind: 'setBounds',
@@ -1458,7 +1459,7 @@ describe('EditorSaveCoordinator', () => {
 
     await harness.coordinator.commitGesture(
       {
-        opsVersion: 1,
+        opsVersion: EDITOR_OPS_VERSION,
         ops: [
           {
             kind: 'setBounds',
@@ -1490,7 +1491,7 @@ describe('EditorSaveCoordinator', () => {
 
     await harness.coordinator.commitGesture(
       {
-        opsVersion: 1,
+        opsVersion: EDITOR_OPS_VERSION,
         ops: [
           {
             kind: 'setBounds',
@@ -5286,7 +5287,7 @@ describe('commitSemanticOpsInternal', () => {
     expect(harness.transport.getMock).toHaveBeenCalledOnce();
     expect(harness.transport.commitMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        opsVersion: 1,
+        opsVersion: EDITOR_OPS_VERSION,
         ops: [setBoundsOp(id)],
       }),
     );
@@ -5363,7 +5364,7 @@ describe('commitSemanticOpsInternal', () => {
 
     expect(harness.transport.commitMock).toHaveBeenCalledOnce();
     expect(harness.transport.commitMock.mock.calls[0][0]).toMatchObject({
-      opsVersion: 1,
+      opsVersion: EDITOR_OPS_VERSION,
       ops: [setBoundsOp(id)],
     });
     harness.coordinator.stop();
@@ -6261,13 +6262,13 @@ describe('정산 슬롯 낙관 재적용 CAS', () => {
     const hold = await holdSlotOpen(harness, ['B']);
 
     const gesture = harness.coordinator.commitGesture(
-      { opsVersion: 1, ops: [setBoundsOp(DEFAULT_KEY_ID)] },
+      { opsVersion: EDITOR_OPS_VERSION, ops: [setBoundsOp(DEFAULT_KEY_ID)] },
       'gesture-cas',
       async (context) =>
         harness.transport.commit({
           baseRevision: context.editorBaseRevision,
           mutationId: context.mutationId,
-          opsVersion: 1,
+          opsVersion: EDITOR_OPS_VERSION,
           ops: context.editorOps!,
         }),
     );

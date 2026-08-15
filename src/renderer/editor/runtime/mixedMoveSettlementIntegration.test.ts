@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
 import type { EditorDocumentV1, EditorOpV1 } from '@src/types/editor';
 
 // gestureApi 내부 타입이라 테스트에서 필요한 형태만 좁게 선언한다
@@ -175,7 +176,7 @@ describe('혼합 이동 정산 배선 통합', () => {
     const request = (gestureCalls[0][1] as { request: GestureCommitRequest })
       .request;
     // 자사 전용 op wire가 gesture 커맨드로 나간다
-    expect(request.editorOpsVersion).toBe(1);
+    expect(request.editorOpsVersion).toBe(EDITOR_OPS_VERSION);
     expect(request.editorOps).toEqual([
       {
         kind: 'setBounds',

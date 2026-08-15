@@ -4,7 +4,7 @@ const runtime = vi.hoisted(() => ({ invoke: vi.fn() }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: runtime.invoke }));
 
-import { EditorProtocolError } from '@src/types/editor';
+import { EDITOR_OPS_VERSION, EditorProtocolError } from '@src/types/editor';
 import { gestureApi, type GestureCommitRequest } from './gestureApi';
 
 const baseRequest = {
@@ -29,7 +29,7 @@ describe('gestureApi semantic op protocol', () => {
   it('ordered editorOpResults와 changedFields가 맞는 응답만 수용한다', async () => {
     const request: GestureCommitRequest = {
       ...baseRequest,
-      editorOpsVersion: 1,
+      editorOpsVersion: EDITOR_OPS_VERSION,
       editorOps: [
         {
           kind: 'setBounds',
@@ -58,7 +58,7 @@ describe('gestureApi semantic op protocol', () => {
   it('ops 결과 누락과 changedFields 불일치를 거절한다', async () => {
     const request: GestureCommitRequest = {
       ...baseRequest,
-      editorOpsVersion: 1,
+      editorOpsVersion: EDITOR_OPS_VERSION,
       editorOps: [
         {
           kind: 'setBounds',

@@ -31,6 +31,7 @@ import { isEditorShadowPropertyPatchV1 } from '@src/types/editor';
 import {
   EDITOR_COMMIT_SCHEMA_VERSION,
   EDITOR_FIELDS,
+  EDITOR_OPS_VERSION,
   EDITOR_SCHEMA_VERSION,
   EditorProtocolError,
   assertEditorCommitResult,
@@ -114,7 +115,7 @@ export type EditorPatchGenerator = (
 ) => EditorPatchV1 | null;
 
 export interface EditorGestureOpsMutation {
-  opsVersion: 1;
+  opsVersion: typeof EDITOR_OPS_VERSION;
   ops: readonly EditorOpV1[];
 }
 
@@ -1561,7 +1562,7 @@ export class EditorSaveCoordinator {
       const request: EditorCommitRequest = {
         baseRevision,
         mutationId,
-        opsVersion: 1,
+        opsVersion: EDITOR_OPS_VERSION,
         ops,
         ...(meta.gestureId ? { gestureId: meta.gestureId } : {}),
       };
@@ -2329,7 +2330,7 @@ export class EditorSaveCoordinator {
         mutationId,
         // 게스처 커밋도 자사 전용 경로라 v2
         ...(ops
-          ? { editorOpsVersion: 1 as const, editorOps: ops }
+          ? { editorOpsVersion: EDITOR_OPS_VERSION, editorOps: ops }
           : requestFields.length > 0
           ? {
               editorChanges: patchForFields(

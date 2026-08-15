@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { drainEditorWrites } from '@src/renderer/editor/runtime/editorWriteBarrier';
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
 import {
   beginMixedGestureTransaction,
   cancelMixedGestureTransaction,
@@ -296,7 +297,7 @@ describe('mixed gesture transaction lifecycle', () => {
         coordinatorResult = await commit({
           editorBaseRevision: 2,
           mutationId: 'mutation-ops',
-          editorOpsVersion: 1,
+          editorOpsVersion: EDITOR_OPS_VERSION,
           editorOps: [
             {
               kind: 'setBounds',
@@ -325,7 +326,7 @@ describe('mixed gesture transaction lifecycle', () => {
     await commitMixedGestureTransaction(
       gestureId,
       {
-        opsVersion: 1,
+        opsVersion: EDITOR_OPS_VERSION,
         ops: [
           {
             kind: 'setBounds',
@@ -340,7 +341,7 @@ describe('mixed gesture transaction lifecycle', () => {
 
     expect(mocks.commitApi).toHaveBeenCalledWith(
       expect.objectContaining({
-        editorOpsVersion: 1,
+        editorOpsVersion: EDITOR_OPS_VERSION,
         editorOps: [expect.objectContaining({ id: 'id-a' })],
         pluginChanges: [expect.objectContaining({ pluginId: 'plugin-a' })],
       }),

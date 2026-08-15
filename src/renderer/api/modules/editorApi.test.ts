@@ -6,6 +6,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: runtime.invoke }));
 
 import { createDefaultKeyPosition } from '@src/renderer/editor/model/keys';
 import {
+  EDITOR_OPS_VERSION,
   EditorProtocolError,
   assertEditorCommittedEvent,
   assertEditorOpsV1,
@@ -51,7 +52,7 @@ describe('editorCommitRaw semantic op protocol', () => {
     const request = {
       baseRevision: 0,
       mutationId: '00000000-0000-4000-8000-000000000001',
-      opsVersion: 1 as const,
+      opsVersion: EDITOR_OPS_VERSION,
       ops: [
         {
           kind: 'setBounds' as const,
@@ -91,7 +92,7 @@ describe('editorCommitRaw semantic op protocol', () => {
       editorCommitRaw({
         baseRevision: 0,
         mutationId: '00000000-0000-4000-8000-000000000004',
-        opsVersion: 1,
+        opsVersion: EDITOR_OPS_VERSION,
         ops: [
           {
             kind: 'setBounds',
@@ -952,7 +953,7 @@ describe('editorCommitRaw semantic op protocol', () => {
     const request = {
       baseRevision: 0,
       mutationId: '00000000-0000-4000-8000-000000000010',
-      opsVersion: 1 as const,
+      opsVersion: EDITOR_OPS_VERSION,
       ops: [
         {
           kind: 'insertFrozenElements' as const,

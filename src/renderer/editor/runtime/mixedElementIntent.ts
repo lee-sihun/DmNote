@@ -14,6 +14,8 @@ import { getPluginAuthorityGeneration } from '@plugins/rpc/pluginRpcClient';
 
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
+
 import type { CanonicalEditorDocumentV1, EditorOpV1 } from '@src/types/editor';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
@@ -38,7 +40,7 @@ export const runMixedElementOpsIntent = async (options: {
     } else {
       await commitMixedGestureTransaction(
         options.gestureId,
-        { opsVersion: 1, ops: options.ops },
+        { opsVersion: EDITOR_OPS_VERSION, ops: options.ops },
         options.pluginIds,
         { onEnrolled },
       );

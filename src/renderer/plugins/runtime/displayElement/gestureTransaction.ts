@@ -25,6 +25,7 @@ import {
   unstagePluginInstancesGesture,
 } from './instancesCommitQueue';
 import { schedulePluginPanelModelSync } from '@utils/plugin/panelModelSync';
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
 
 import type {
   EditorGestureOpsMutation,
@@ -246,7 +247,10 @@ export const commitMixedGestureIntent = (options: {
           lastGeneration = generation;
           if (generation.kind === 'patch') return generation.patch ?? null;
           if (generation.kind === 'ops') {
-            return { opsVersion: 1, ops: generation.ops ?? [] };
+            return {
+              opsVersion: EDITOR_OPS_VERSION,
+              ops: generation.ops ?? [],
+            };
           }
           return null;
         },

@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import type { ElementBounds } from '@utils/grid/smartGuides';
 import { useGridResize } from './useGridResize';
@@ -344,7 +345,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
       pluginGestureIds[0],
       {
-        opsVersion: 1,
+        opsVersion: EDITOR_OPS_VERSION,
         ops: [
           {
             kind: 'setBounds',
@@ -418,7 +419,7 @@ describe('useGridResize plugin gesture lifecycle', () => {
     expect(mocks.commitMixedGesture).toHaveBeenCalledWith(
       pluginGestureIds[0],
       {
-        opsVersion: 1,
+        opsVersion: EDITOR_OPS_VERSION,
         ops: [
           {
             kind: 'setBounds',

@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
 import type { EditorDocumentV1, EditorOpV1 } from '@src/types/editor';
 
 // 실제 드래그 제스처(pointer 이벤트)부터 IPC 경계까지 한 번에 태운다.
@@ -278,7 +279,7 @@ describe('혼합 선택 드래그 정산 전 구간', () => {
     ).request;
 
     expect(request.gestureId).toBe(GESTURE_ID);
-    expect(request.editorOpsVersion).toBe(1);
+    expect(request.editorOpsVersion).toBe(EDITOR_OPS_VERSION);
     expect(request.editorChanges).toBeUndefined();
     expect(request.editorOps).toHaveLength(1);
     const op = request.editorOps![0] as Extract<

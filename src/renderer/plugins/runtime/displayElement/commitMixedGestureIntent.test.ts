@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { EDITOR_OPS_VERSION } from '@src/types/editor';
+
 const mocks = vi.hoisted(() => ({
   drainQueues: vi.fn(() => Promise.resolve()),
   stageGesture: vi.fn(),
@@ -57,7 +59,7 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
           editorBaseRevision: number;
           mutationId: string;
           editorChanges?: unknown;
-          editorOpsVersion?: 1;
+          editorOpsVersion?: typeof EDITOR_OPS_VERSION;
           editorOps?: unknown[];
         }) => Promise<unknown>,
         meta?: { onEnrolled?: () => void; prepare?: () => Promise<void> },
@@ -77,7 +79,7 @@ vi.mock('@src/renderer/editor/runtime/editorStateCoordinator', () => ({
           mutationId: 'mutation-1',
           ...(isOps
             ? {
-                editorOpsVersion: 1,
+                editorOpsVersion: EDITOR_OPS_VERSION,
                 editorOps: (mutation as unknown as { ops: unknown[] }).ops,
               }
             : mutation
@@ -295,7 +297,7 @@ describe('commitMixedGestureIntent', () => {
 
     expect(mocks.gestureCommit).toHaveBeenCalledWith(
       expect.objectContaining({
-        editorOpsVersion: 1,
+        editorOpsVersion: EDITOR_OPS_VERSION,
         editorOps: [
           {
             kind: 'deleteElement',
@@ -411,7 +413,7 @@ describe('commitMixedGestureIntent', () => {
     expect(mocks.editorCommit).not.toHaveBeenCalled();
     expect(mocks.gestureCommit).toHaveBeenCalledWith(
       expect.objectContaining({
-        editorOpsVersion: 1,
+        editorOpsVersion: EDITOR_OPS_VERSION,
         editorOps: [expect.objectContaining({ kind: 'insertFrozenElements' })],
         pluginChanges: [
           {
