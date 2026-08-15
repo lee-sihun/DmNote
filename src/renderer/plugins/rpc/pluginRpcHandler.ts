@@ -1890,6 +1890,7 @@ const commitPersistedElementUpdates = async (
   requestGeneration: number,
   rpcRequestId: string,
   generationLive: () => boolean,
+  sharedGestureId: string,
 ): Promise<string | null> => {
   const store = usePluginDisplayElementStore.getState();
   const updatesByPlugin = new Map<string, PersistedElementUpdate[]>();
@@ -1904,7 +1905,10 @@ const commitPersistedElementUpdates = async (
 
   const gestureIds = new Map<string, string>();
   updatesByPlugin.forEach((_, pluginId) => {
-    gestureIds.set(pluginId, rotatePluginInstancesEditSession(pluginId));
+    gestureIds.set(
+      pluginId,
+      rotatePluginInstancesEditSession(pluginId, sharedGestureId),
+    );
   });
 
   for (const [pluginId, pluginUpdates] of updatesByPlugin) {
@@ -1988,6 +1992,8 @@ const executePersistedOperation = async (
       requestGeneration,
       rpcRequestId,
       generationLive,
+      // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
+      crypto.randomUUID(),
     );
   }
 
@@ -2012,6 +2018,8 @@ const executePersistedOperation = async (
       requestGeneration,
       rpcRequestId,
       generationLive,
+      // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
+      crypto.randomUUID(),
     );
   }
 
@@ -2075,10 +2083,15 @@ const executePersistedOperation = async (
     }
     const byDefinition = new Map<string, string>();
     targets.forEach((el) => byDefinition.set(el.definitionId, el.pluginId));
+    // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
+    const sharedGestureId = crypto.randomUUID();
     const gestureIds = new Map<string, string>();
     byDefinition.forEach((pluginId) => {
       if (!gestureIds.has(pluginId)) {
-        gestureIds.set(pluginId, rotatePluginInstancesEditSession(pluginId));
+        gestureIds.set(
+          pluginId,
+          rotatePluginInstancesEditSession(pluginId, sharedGestureId),
+        );
       }
     });
 

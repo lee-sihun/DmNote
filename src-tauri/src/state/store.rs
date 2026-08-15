@@ -5000,6 +5000,101 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[test]
+    fn plugin_only_cross_plugin_gesture_merges_into_one_undo_step() {
+        let dir = test_directory("cross-plugin-gesture-history-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let gesture_id = uuid::Uuid::new_v4().to_string();
+
+        // editor 선행 커밋 없이 plugin 커밋 2건만 같은 gestureId로 순차 도착
+        let first = store
+            .commit_plugin_instances(plugin_instances_request(
+                "demo-plugin",
+                vec![saved_plugin_instance(42.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id.clone()),
+                Some(store.plugin_model_revision()),
+            ))
+            .unwrap();
+        let first_revision = first.outcome.model_revision;
+        assert_eq!(
+            first
+                .outcome
+                .history_status
+                .as_ref()
+                .unwrap()
+                .history_revision,
+            1
+        );
+        drop(first);
+        let second = store
+            .commit_plugin_instances(plugin_instances_request(
+                "second-plugin",
+                vec![saved_plugin_instance(84.0)],
+                uuid::Uuid::new_v4().to_string(),
+                Some(gesture_id),
+                Some(first_revision),
+            ))
+            .unwrap();
+        // 크로스 플러그인 병합 - 히스토리 엔트리는 한 줄 유지
+        assert_eq!(
+            second
+                .outcome
+                .history_status
+                .as_ref()
+                .unwrap()
+                .history_revision,
+            1
+        );
+        drop(second);
+
+        let gate = store.history_gate();
+        let counters = store.snapshot().key_counters;
+        let undo_id = uuid::Uuid::new_v4().to_string();
+        let undo_barrier = gate.close(&undo_id).unwrap();
+        let undo = store
+            .apply_history_operation(HistoryDirection::Undo, &undo_id, &counters, || {})
+            .unwrap();
+        assert!(store
+            .plugin_instances_get("demo-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(store
+            .plugin_instances_get("second-plugin")
+            .unwrap()
+            .0
+            .is_empty());
+        assert!(!undo.status.can_undo);
+        assert!(undo.status.can_redo);
+        assert!(matches!(
+            undo.aux_change,
+            Some(HistoryAuxChange::PluginElementsBatch { ref plugin_ids, .. })
+                if plugin_ids == &["demo-plugin".to_string(), "second-plugin".to_string()]
+        ));
+        drop(undo_barrier);
+
+        let redo_id = uuid::Uuid::new_v4().to_string();
+        let redo_barrier = gate.close(&redo_id).unwrap();
+        let redo = store
+            .apply_history_operation(HistoryDirection::Redo, &redo_id, &counters, || {})
+            .unwrap();
+        assert_eq!(
+            store.plugin_instances_get("demo-plugin").unwrap().0,
+            vec![saved_plugin_instance(42.0)]
+        );
+        assert_eq!(
+            store.plugin_instances_get("second-plugin").unwrap().0,
+            vec![saved_plugin_instance(84.0)]
+        );
+        assert!(redo.status.can_undo);
+        drop(redo_barrier);
+
+        store.flush_and_shutdown().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     fn empty_targets_group_create_op(group_id: &str, name: &str) -> EditorOpV1 {
         EditorOpV1::SetElementGroups {
             mode: "4key".to_string(),

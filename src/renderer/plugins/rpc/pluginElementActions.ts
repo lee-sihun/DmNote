@@ -1120,8 +1120,10 @@ export const setPluginElementsHidden = (
       void ensureQueueDrain();
     });
   }
+  // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
   const pluginIds = rotateTargetPluginSessions(
     targets.map(({ fullId }) => fullId),
+    crypto.randomUUID(),
   );
   const store = usePluginDisplayElementStore.getState();
   targets.forEach(({ fullId, hidden }) => {
@@ -1177,7 +1179,11 @@ export const setPluginElementZIndexes = (
     delegate(PLUGIN_RPC_OPERATIONS.setZIndexes, { entries });
     return;
   }
-  rotateTargetPluginSessions(entries.map(({ fullId }) => fullId));
+  // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
+  rotateTargetPluginSessions(
+    entries.map(({ fullId }) => fullId),
+    crypto.randomUUID(),
+  );
   const store = usePluginDisplayElementStore.getState();
   entries.forEach(({ fullId, zIndex }) => {
     store.updateElement(fullId, { zIndex });

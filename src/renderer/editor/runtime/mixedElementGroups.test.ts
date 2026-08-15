@@ -524,9 +524,49 @@ describe('setMixedLayerGroupHidden', () => {
     expect(usePluginDisplayElementStore.getState().elements[0].hidden).toBe(
       true,
     );
-    expect(mocks.rotateSession).toHaveBeenCalledWith('plugin-a');
+    expect(mocks.rotateSession).toHaveBeenCalledWith(
+      'plugin-a',
+      expect.any(String),
+    );
     expect(mocks.gestureCommit).not.toHaveBeenCalled();
     expect(mocks.setLayerGroupHidden).not.toHaveBeenCalled();
+  });
+
+  it('plugin-only 그룹의 다중 플러그인 토글은 공유 gestureId로 세션을 분리한다', async () => {
+    const secondInstanceId = '20000000-0000-4000-8000-000000000002';
+    usePluginDisplayElementStore.setState({
+      elements: [
+        pluginElement({ groupId: GROUP_ID }),
+        pluginElement({
+          id: secondInstanceId,
+          fullId: `plugin-b::${secondInstanceId}`,
+          pluginId: 'plugin-b',
+          definitionId: 'plugin-b',
+          groupId: GROUP_ID,
+        }),
+      ],
+    });
+    useLayerGroupStore.setState({
+      layerGroups: { '4key': [{ id: GROUP_ID, name: 'Group 1' }] },
+    });
+
+    await expect(
+      setMixedLayerGroupHidden('4key', GROUP_ID, true),
+    ).resolves.toBe(true);
+
+    expect(mocks.rotateSession).toHaveBeenCalledTimes(2);
+    const [firstCall, secondCall] = mocks.rotateSession.mock.calls as Array<
+      [string, string]
+    >;
+    expect(firstCall).toEqual(['plugin-a', expect.any(String)]);
+    // undo 1회 복원의 전제 - 두 플러그인이 같은 gestureId를 공유
+    expect(secondCall).toEqual(['plugin-b', firstCall[1]]);
+    expect(
+      usePluginDisplayElementStore
+        .getState()
+        .elements.map(({ hidden }) => hidden),
+    ).toEqual([true, true]);
+    expect(mocks.gestureCommit).not.toHaveBeenCalled();
   });
 
   it('canonical ID가 아닌 native 멤버가 섞이면 fail-closed로 중단한다', async () => {

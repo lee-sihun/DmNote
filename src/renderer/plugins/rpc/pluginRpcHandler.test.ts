@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   updateElement: vi.fn(),
   setElements: vi.fn(),
   applyProjection: vi.fn((_pluginId: string, apply: () => void) => apply()),
-  rotateEditSession: vi.fn((pluginId: string) => `gesture-${pluginId}`),
+  rotateEditSession: vi.fn(
+    (pluginId: string, _gestureId?: string) => `gesture-${pluginId}`,
+  ),
   flushPanelModel: vi.fn(),
   deleteFrozenSelection: vi.fn(() => Promise.resolve()),
   commitLayerDropIntent: vi.fn(() => Promise.resolve()),
@@ -612,7 +614,7 @@ describe('plugin panel persisted element mutations', () => {
       await vi.waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
       expect(mocks.updateElement).not.toHaveBeenCalled();
       expect(mocks.respond).not.toHaveBeenCalled();
-      expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-a');
+      expect(mocks.rotateEditSession.mock.calls[0]?.[0]).toBe('plugin-a');
 
       const request = mocks.commit.mock.calls[0]?.[0];
       expect(request).toMatchObject({
@@ -637,6 +639,111 @@ describe('plugin panel persisted element mutations', () => {
       expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
     },
   );
+
+  it('elements:setHidden 다중 플러그인은 공유 gestureId로 세션을 분리한다', async () => {
+    mocks.elements = [
+      ...mocks.elements,
+      {
+        fullId: 'plugin-b:one',
+        definitionId: 'plugin-b',
+        pluginId: 'plugin-b',
+        position: { x: 5, y: 6 },
+        settings: {},
+        measuredSize: { width: 40, height: 30 },
+        tabId: '4key',
+        hidden: false,
+        zIndex: 3,
+      },
+    ];
+    mocks.commit.mockResolvedValue({ modelRevision: 12, changed: true });
+
+    mocks.requestListener?.(
+      envelope('elements:setHidden', {
+        targets: [
+          { fullId: 'plugin-a:one', hidden: true },
+          { fullId: 'plugin-b:one', hidden: true },
+        ],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.rotateEditSession).toHaveBeenCalledTimes(2);
+    const [firstCall, secondCall] = mocks.rotateEditSession.mock.calls;
+    expect(firstCall).toEqual(['plugin-a', expect.any(String)]);
+    // undo 1회 복원의 전제 - 두 플러그인이 같은 gestureId를 공유
+    expect(secondCall).toEqual(['plugin-b', firstCall?.[1]]);
+    expect(mocks.commit).toHaveBeenCalledTimes(2);
+  });
+
+  it('elements:setZIndexes 다중 플러그인은 공유 gestureId로 세션을 분리한다', async () => {
+    mocks.elements = [
+      ...mocks.elements,
+      {
+        fullId: 'plugin-b:one',
+        definitionId: 'plugin-b',
+        pluginId: 'plugin-b',
+        position: { x: 5, y: 6 },
+        settings: {},
+        measuredSize: { width: 40, height: 30 },
+        tabId: '4key',
+        hidden: false,
+        zIndex: 3,
+      },
+    ];
+    mocks.commit.mockResolvedValue({ modelRevision: 12, changed: true });
+
+    mocks.requestListener?.(
+      envelope('elements:setZIndexes', {
+        entries: [
+          { fullId: 'plugin-a:one', zIndex: 7 },
+          { fullId: 'plugin-b:one', zIndex: 8 },
+        ],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.rotateEditSession).toHaveBeenCalledTimes(2);
+    const [firstCall, secondCall] = mocks.rotateEditSession.mock.calls;
+    expect(firstCall).toEqual(['plugin-a', expect.any(String)]);
+    // undo 1회 복원의 전제 - 두 플러그인이 같은 gestureId를 공유
+    expect(secondCall).toEqual(['plugin-b', firstCall?.[1]]);
+    expect(mocks.commit).toHaveBeenCalledTimes(2);
+  });
+
+  it('elements:delete 다중 플러그인은 공유 gestureId로 세션을 분리한다', async () => {
+    mocks.elements = [
+      ...mocks.elements,
+      {
+        fullId: 'plugin-b:one',
+        definitionId: 'plugin-b',
+        pluginId: 'plugin-b',
+        position: { x: 5, y: 6 },
+        settings: {},
+        measuredSize: { width: 40, height: 30 },
+        tabId: '4key',
+        hidden: false,
+        zIndex: 3,
+      },
+    ];
+    mocks.commit.mockResolvedValue({ modelRevision: 12, changed: true });
+
+    mocks.requestListener?.(
+      envelope('elements:delete', {
+        fullIds: ['plugin-a:one', 'plugin-b:one'],
+      }),
+    );
+
+    await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
+    expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
+    expect(mocks.rotateEditSession).toHaveBeenCalledTimes(2);
+    const [firstCall, secondCall] = mocks.rotateEditSession.mock.calls;
+    expect(firstCall).toEqual(['plugin-a', expect.any(String)]);
+    // undo 1회 복원의 전제 - 두 플러그인이 같은 gestureId를 공유
+    expect(secondCall).toEqual(['plugin-b', firstCall?.[1]]);
+    expect(mocks.commit).toHaveBeenCalledTimes(2);
+  });
 
   it('shadow batch는 exact one-leaf와 slot preflight를 전용 helper에 전달한다', async () => {
     const targets = [
@@ -920,7 +1027,7 @@ describe('plugin panel persisted element mutations', () => {
     await vi.waitFor(() => expect(mocks.respond).toHaveBeenCalledOnce());
     expect(mocks.respond.mock.calls[0]?.[1]).toMatchObject({ ok: true });
     expect(mocks.commit).toHaveBeenCalledOnce();
-    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-a');
+    expect(mocks.rotateEditSession.mock.calls[0]?.[0]).toBe('plugin-a');
     expect(mocks.commit.mock.calls[0]?.[0]).toMatchObject({
       pluginId: 'plugin-a',
       gestureId: 'gesture-plugin-a',

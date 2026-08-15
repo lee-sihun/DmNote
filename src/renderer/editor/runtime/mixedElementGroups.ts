@@ -431,8 +431,10 @@ export const setMixedLayerGroupHidden = (
     // plugin-only 그룹 - editor 변경이 없어 단일 plugin 커밋으로 충분
     const runPluginOnly = async (): Promise<boolean> => {
       options.preflight?.();
+      // 공유 gestureId - 플러그인별 커밋이 히스토리 한 엔트리로 병합
+      const gestureId = crypto.randomUUID();
       pluginIds.forEach((pluginId) =>
-        rotatePluginInstancesEditSession(pluginId),
+        rotatePluginInstancesEditSession(pluginId, gestureId),
       );
       const store = usePluginDisplayElementStore.getState();
       targetedFullIds.forEach((fullId) => {

@@ -2601,7 +2601,7 @@ describe('plugin element panel queue', () => {
     ]);
   });
 
-  it('main의 가시성 변경은 대상 플러그인별 세션을 먼저 분리한다', () => {
+  it('main의 가시성 변경은 대상 플러그인 전부를 공유 gestureId 세션으로 분리한다', () => {
     window.__dmn_window_type = 'main';
     mocks.elements = [
       { fullId: 'plugin-a:one', pluginId: 'plugin-a' },
@@ -2616,8 +2616,12 @@ describe('plugin element panel queue', () => {
     ]);
 
     expect(mocks.rotateEditSession).toHaveBeenCalledTimes(2);
-    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-a');
-    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-b');
+    const [firstCall, secondCall] = mocks.rotateEditSession.mock.calls as Array<
+      [string, string]
+    >;
+    expect(firstCall).toEqual(['plugin-a', expect.any(String)]);
+    // undo 1회 복원의 전제 - 두 플러그인이 같은 gestureId를 공유
+    expect(secondCall).toEqual(['plugin-b', firstCall[1]]);
     expect(mocks.rotateEditSession.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.updateElement.mock.invocationCallOrder[0]!,
     );
@@ -2648,7 +2652,7 @@ describe('plugin element panel queue', () => {
     );
   });
 
-  it('main의 레이어 순서 변경은 대상 플러그인별 세션을 먼저 분리한다', () => {
+  it('main의 레이어 순서 변경은 대상 플러그인 전부를 공유 gestureId 세션으로 분리한다', () => {
     window.__dmn_window_type = 'main';
     mocks.elements = [
       { fullId: 'plugin-a:one', pluginId: 'plugin-a' },
@@ -2661,8 +2665,12 @@ describe('plugin element panel queue', () => {
     ]);
 
     expect(mocks.rotateEditSession).toHaveBeenCalledTimes(2);
-    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-a');
-    expect(mocks.rotateEditSession).toHaveBeenCalledWith('plugin-b');
+    const [firstCall, secondCall] = mocks.rotateEditSession.mock.calls as Array<
+      [string, string]
+    >;
+    expect(firstCall).toEqual(['plugin-a', expect.any(String)]);
+    // undo 1회 복원의 전제 - 두 플러그인이 같은 gestureId를 공유
+    expect(secondCall).toEqual(['plugin-b', firstCall[1]]);
     expect(mocks.rotateEditSession.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.updateElement.mock.invocationCallOrder[0]!,
     );
